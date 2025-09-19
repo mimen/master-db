@@ -27,13 +27,13 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // Start with just tasks and projects
-  todoist_tasks: defineTable({
+  // Start with just items and projects
+  todoist_items: defineTable({
     todoist_id: v.string(),
     content: v.string(),
     project_id: v.optional(v.string()),
-    is_completed: v.boolean(),
-    created_at: v.string(),
+    checked: v.number(), // 0 = unchecked, 1 = checked
+    added_at: v.string(),
     sync_version: v.number(),
   }).index("by_todoist_id", ["todoist_id"]),
 
@@ -70,8 +70,8 @@ export const runInitialSync = action({
     // Initialize sync state
     await ctx.runMutation(internal.todoist.mutations.initializeSyncState);
 
-    // Perform full sync
-    const response = await fetch("https://api.todoist.com/sync/v9/sync", {
+    // Perform full sync using API v1
+    const response = await fetch("https://api.todoist.com/api/v1/sync", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -79,7 +79,7 @@ export const runInitialSync = action({
       },
       body: JSON.stringify({
         sync_token: "*",
-        resource_types: ["projects", "items"],
+        resource_types: ["projects", "items", "labels", "sections", "notes", "reminders"],
       }),
     });
 
@@ -97,11 +97,11 @@ export const runInitialSync = action({
       });
     }
 
-    // Store tasks
-    console.log(`Syncing ${syncData.items.length} tasks...`);
+    // Store items
+    console.log(`Syncing ${syncData.items.length} items...`);
     for (const item of syncData.items) {
-      await ctx.runMutation(internal.todoist.mutations.upsertTask, {
-        task: item,
+      await ctx.runMutation(internal.todoist.mutations.upsertItem, {
+        item: item,
       });
     }
 
@@ -112,7 +112,7 @@ export const runInitialSync = action({
 
     return {
       projectsCount: syncData.projects.length,
-      tasksCount: syncData.items.length,
+      itemsCount: syncData.items.length,
       syncToken: syncData.sync_token,
     };
   },
@@ -132,7 +132,7 @@ npx convex run todoist:initialSync:runInitialSync
 - [ ] Convex project created and running
 - [ ] Environment variables configured
 - [ ] Initial sync imports all projects
-- [ ] Initial sync imports all tasks
+- [ ] Initial sync imports all items
 - [ ] Sync token stored correctly
 - [ ] Data visible in Convex dashboard
 
@@ -146,7 +146,7 @@ Add all entities from PRD:
 - Labels  
 - Notes
 - Reminders
-- Completed fields for tasks
+- Completed fields for items
 - All project fields
 
 ### 2.2 Implement Sync Helpers
@@ -177,13 +177,13 @@ export const performIncrementalSync = action({
 
 ## Phase 3: CRUD Operations via API (Day 5-6)
 
-### 3.1 Task Operations
+### 3.1 Item Operations
 ```typescript
 // convex/todoist/actions.ts
-export const createTask = action({...});
-export const updateTask = action({...});
-export const completeTask = action({...});
-export const deleteTask = action({...});
+export const createItem = action({...});
+export const updateItem = action({...});
+export const completeItem = action({...});
+export const deleteItem = action({...});
 ```
 
 ### 3.2 Project Operations
@@ -196,14 +196,14 @@ export const archiveProject = action({...});
 ### 3.3 Test UI Commands
 Create simple test commands:
 ```bash
-# Create a test task
-npx convex run todoist:actions:createTask '{"content": "Test task from Convex"}'
+# Create a test item
+npx convex run todoist:actions:createItem '{"content": "Test item from Convex"}'
 ```
 
 ### Verification Checklist:
-- [ ] Create task works and stores immediately
-- [ ] Update task works
-- [ ] Complete task works
+- [ ] Create item works and stores immediately
+- [ ] Update item works
+- [ ] Complete item works
 - [ ] All operations update Convex DB
 
 ---
@@ -283,8 +283,8 @@ export default crons;
 ### 6.1 Common Queries
 ```typescript
 // convex/todoist/queries.ts
-export const getActiveTasks = query({...});
-export const getTasksByProject = query({...});
+export const getActiveItems = query({...});
+export const getItemsByProject = query({...});
 export const getProjectWithStats = query({...});
 ```
 
@@ -306,14 +306,14 @@ export const getProjectWithStats = query({...});
 ```typescript
 // app/page.tsx
 export default function HomePage() {
-  const tasks = useQuery(api.todoist.queries.getActiveTasks);
+  const items = useQuery(api.todoist.queries.getActiveItems);
   const projects = useQuery(api.todoist.queries.getProjects);
-  // Basic task list UI
+  // Basic item list UI
 }
 ```
 
 ### 7.2 Real-time Updates
-- Live task updates
+- Live item updates
 - Sync status indicator
 - Error notifications
 
@@ -363,9 +363,9 @@ npx convex deploy
 - Webhook processing
 
 ### End-to-End Tests
-- Create task in UI → Appears in Todoist
-- Create task in Todoist → Appears in UI
-- Complete task → Syncs both ways
+- Create item in UI → Appears in Todoist
+- Create item in Todoist → Appears in UI
+- Complete item → Syncs both ways
 
 ---
 

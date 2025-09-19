@@ -40,14 +40,19 @@ This system maintains real-time synchronization through webhooks with hourly per
    # Add your TODOIST_API_TOKEN
    ```
 
-4. **Start development**
+4. **Start Convex development**
    ```bash
-   npx convex dev
+   bunx convex dev
    ```
+   
+   When prompted:
+   - Enter a project name (e.g., "personal-master-db")
+   - Select your team or create a new one
+   - The deployment URL will be automatically saved
 
-5. **Run initial sync**
+5. **Run initial sync** (in a new terminal)
    ```bash
-   npx convex run todoist:initialSync:runInitialSync
+   bun run sync:initial
    ```
 
 ## Project Structure

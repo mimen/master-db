@@ -1,0 +1,19 @@
+{
+  "name": "personal-master-db",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "convex dev",
+    "build": "tsc --noEmit",
+    "sync:initial": "convex run todoist/initialSync:runInitialSync"
+  },
+  "dependencies": {
+    "convex": "^1.27.1",
+    "dotenv": "^17.2.2",
+    "zod": "^4.1.9"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}

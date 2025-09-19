@@ -86,8 +86,8 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // Todoist Tasks
-  todoist_tasks: defineTable({
+  // Todoist Items (tasks)
+  todoist_items: defineTable({
     // Todoist fields
     todoist_id: v.string(),
     content: v.string(),
@@ -97,7 +97,7 @@ export default defineSchema({
     section_id: v.optional(v.string()),
     section_name: v.optional(v.string()), // Denormalized
     parent_id: v.optional(v.string()),
-    order: v.number(),
+    child_order: v.number(),
     priority: v.number(),
     due: v.optional(v.object({
       date: v.string(),
@@ -114,10 +114,9 @@ export default defineSchema({
     assignee_id: v.optional(v.string()),
     assigner_id: v.optional(v.string()),
     comment_count: v.number(),
-    is_completed: v.boolean(),
-    completed_at: v.optional(v.string()),
-    created_at: v.string(),
-    updated_at: v.string(),
+    // computed from checked field
+    added_at: v.string(),
+    checked: v.number(), // 0 = unchecked, 1 = checked
     
     // Sync metadata
     is_deleted: v.boolean(),
@@ -128,7 +127,7 @@ export default defineSchema({
     .index("by_project", ["project_id"])
     .index("by_completed", ["is_completed"])
     .index("by_updated", ["updated_at"])
-    .index("active_tasks", ["is_deleted", "is_completed"]),
+    .index("active_items", ["is_deleted", "checked"]),
 
   // Todoist Projects
   todoist_projects: defineTable({
@@ -269,8 +268,7 @@ export default defineSchema({
 ```typescript
 // convex/todoist/lib/client.ts
 export class TodoistClient {
-  private baseUrl = "https://api.todoist.com";
-  private syncUrl = "https://api.todoist.com/sync/v9";
+  private syncUrl = "https://api.todoist.com/api/v1";
   private token: string;
 
   constructor(token: string) {
@@ -297,24 +295,11 @@ export class TodoistClient {
     return response.json();
   }
 
-  // REST API methods
-  createTask(task: any) {
-    return this.request(`${this.baseUrl}/rest/v2/tasks`, {
+  // Command-based operations
+  executeCommands(commands: any[]) {
+    return this.request(`${this.syncUrl}/sync`, {
       method: "POST",
-      body: JSON.stringify(task),
-    });
-  }
-
-  updateTask(taskId: string, updates: any) {
-    return this.request(`${this.baseUrl}/rest/v2/tasks/${taskId}`, {
-      method: "POST",
-      body: JSON.stringify(updates),
-    });
-  }
-
-  completeTask(taskId: string) {
-    return this.request(`${this.baseUrl}/rest/v2/tasks/${taskId}/close`, {
-      method: "POST",
+      body: JSON.stringify({ commands }),
     });
   }
 
@@ -324,7 +309,7 @@ export class TodoistClient {
       method: "POST",
       body: JSON.stringify({
         sync_token: syncToken,
-        resource_types: ["projects", "items"],
+        resource_types: ["projects", "items", "labels", "sections", "notes", "reminders"],
       }),
     });
   }
@@ -346,7 +331,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { TodoistClient } from "./lib/client";
 
-// Create task via Todoist API
+// Create task via Todoist API v1 commands
 export const createTask = action({
   args: {
     content: v.string(),
@@ -357,37 +342,61 @@ export const createTask = action({
   },
   handler: async (ctx, args) => {
     const client = new TodoistClient(process.env.TODOIST_API_TOKEN!);
+    const tempId = crypto.randomUUID();
+    const uuid = crypto.randomUUID();
     
-    // 1. Call Todoist API
-    const task = await client.createTask({
+    // 1. Call Todoist API with command
+    const response = await client.executeCommands([{
+      type: "item_add",
+      temp_id: tempId,
+      uuid: uuid,
+      args: {
+        content: args.content,
+        project_id: args.projectId,
+        priority: args.priority || 1,
+        due: args.due ? { date: args.due.date } : undefined,
+        labels: args.labels || [],
+      },
+    }]);
+
+    // 2. Get the real ID from temp_id_mapping
+    const realId = response.temp_id_mapping[tempId];
+    const task = {
+      id: realId,
       content: args.content,
       project_id: args.projectId,
-      priority: args.priority || 1,
-      due_date: args.due?.date,
-      labels: args.labels || [],
+      // ... other fields will be populated by the sync
+    };
+
+    // 3. Store in Convex IMMEDIATELY (don't wait for webhook)
+    await ctx.runMutation(internal.todoist.mutations.upsertItemFromApi, {
+      item: task,
     });
 
-    // 2. Store in Convex IMMEDIATELY (don't wait for webhook)
-    await ctx.runMutation(internal.todoist.mutations.upsertTaskFromApi, {
-      task,
-    });
-
-    // 3. Return to UI for immediate update
+    // 4. Return to UI for immediate update
     return task;
     
-    // 4. Webhook will fire milliseconds later as confirmation
-    // 5. Hourly sync will catch this if both above fail
+    // 5. Webhook will fire milliseconds later as confirmation
+    // 6. Hourly sync will catch this if both above fail
   },
 });
 
-// Complete task via Todoist API
+// Complete task via Todoist API v1 commands
 export const completeTask = action({
   args: { todoistId: v.string() },
   handler: async (ctx, args) => {
     const client = new TodoistClient(process.env.TODOIST_API_TOKEN!);
-    await client.completeTask(args.todoistId);
+    const uuid = crypto.randomUUID();
     
-    await ctx.runMutation(internal.todoist.mutations.markTaskCompleted, {
+    await client.executeCommands([{
+      type: "item_complete",
+      uuid: uuid,
+      args: {
+        id: args.todoistId,
+      },
+    }]);
+    
+    await ctx.runMutation(internal.todoist.mutations.markItemCompleted, {
       todoistId: args.todoistId,
     });
   },
@@ -416,8 +425,8 @@ export const performIncrementalSync = action({
       if (syncData.items?.length > 0) {
         const chunks = chunkArray(syncData.items, 100);
         for (const chunk of chunks) {
-          await ctx.runMutation(internal.todoist.mutations.upsertTasks, {
-            tasks: chunk,
+          await ctx.runMutation(internal.todoist.mutations.upsertItems, {
+            items: chunk,
           });
         }
       }
@@ -519,7 +528,7 @@ export const performIncrementalSync = internalMutation({
       // Process tasks (items)
       if (syncData.items) {
         for (const item of syncData.items) {
-          await upsertTask(ctx, item);
+          await upsertItem(ctx, item);
         }
       }
 
@@ -563,18 +572,18 @@ export const performIncrementalSync = internalMutation({
 });
 
 // Idempotent upsert functions with sync_version checking
-export const upsertTaskFromApi = internalMutation({
-  args: { task: v.any() },
-  handler: async (ctx, { task }) => {
-    await upsertTask(ctx, task);
+export const upsertItemFromApi = internalMutation({
+  args: { item: v.any() },
+  handler: async (ctx, { item }) => {
+    await upsertItem(ctx, item);
   },
 });
 
-export const upsertTasks = internalMutation({
-  args: { tasks: v.array(v.any()) },
-  handler: async (ctx, { tasks }) => {
-    for (const task of tasks) {
-      await upsertTask(ctx, task);
+export const upsertItems = internalMutation({
+  args: { items: v.array(v.any()) },
+  handler: async (ctx, { items }) => {
+    for (const item of items) {
+      await upsertItem(ctx, item);
     }
   },
 });
@@ -630,14 +639,14 @@ async function upsertProject(ctx: any, project: any) {
   }
 }
 
-async function upsertTask(ctx: any, item: any) {
+async function upsertItem(ctx: any, item: any) {
   const existing = await ctx.db
-    .query("todoist_tasks")
+    .query("todoist_items")
     .withIndex("by_todoist_id", q => q.eq("todoist_id", item.id))
     .first();
 
   // Skip if we already have this version or newer
-  if (existing && existing.sync_version >= item.sync_version) {
+  if (existing && existing.sync_version >= item.v) {
     return;
   }
 
@@ -661,7 +670,7 @@ async function upsertTask(ctx: any, item: any) {
     sectionName = section?.name;
   }
 
-  const taskData = {
+  const itemData = {
     todoist_id: item.id,
     content: item.content,
     description: item.description,
@@ -670,27 +679,25 @@ async function upsertTask(ctx: any, item: any) {
     section_id: item.section_id,
     section_name: sectionName,
     parent_id: item.parent_id,
-    order: item.child_order,
+    child_order: item.child_order,
     priority: item.priority,
     due: item.due,
     deadline: item.deadline,
     labels: item.labels || [],
-    assignee_id: item.assignee_id,
-    assigner_id: item.assigner_id,
+    assignee_id: item.assigned_by_uid,
+    assigner_id: item.added_by_uid,
     comment_count: item.comment_count || 0,
-    is_completed: item.completed || false,
-    completed_at: item.completed_at,
-    created_at: item.added_at,
-    updated_at: item.updated_at || item.added_at,
-    is_deleted: item.is_deleted || false,
+    checked: item.checked || 0,
+    added_at: item.added_at,
+    is_deleted: item.is_deleted || 0,
     last_synced: new Date().toISOString(),
-    sync_version: item.sync_version || 0,
+    sync_version: item.v || 0,
   };
 
   if (existing) {
-    await ctx.db.patch(existing._id, taskData);
+    await ctx.db.patch(existing._id, itemData);
   } else {
-    await ctx.db.insert("todoist_tasks", taskData);
+    await ctx.db.insert("todoist_items", itemData);
   }
 }
 
@@ -819,10 +826,10 @@ export const processWebhookEvent = mutation({
       switch (event.event_type) {
         case "item:added":
         case "item:updated":
-          await upsertTask(ctx, event.payload);
+          await upsertItem(ctx, event.payload);
           break;
         case "item:deleted":
-          await softDeleteTask(ctx, event.payload.id);
+          await softDeleteItem(ctx, event.payload.id);
           break;
         case "project:added":
         case "project:updated":
@@ -852,16 +859,16 @@ export const processWebhookEvent = mutation({
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-// Get active tasks
-export const getActiveTasks = query({
+// Get active items
+export const getActiveItems = query({
   args: {
     projectId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     let query = ctx.db
-      .query("todoist_tasks")
-      .withIndex("active_tasks", q => 
-        q.eq("is_deleted", false).eq("is_completed", false)
+      .query("todoist_items")
+      .withIndex("active_items", q => 
+        q.eq("is_deleted", 0).eq("checked", 0)
       );
 
     if (args.projectId) {
@@ -896,13 +903,13 @@ export const getProjects = query({
 ```typescript
 // convex/todoist/sync.test.ts
 import { expect, test } from "vitest";
-import { upsertTask, upsertProject } from "./sync";
+import { upsertItem, upsertProject } from "./sync";
 
-test("upsertTask creates new task", async () => {
+test("upsertItem creates new item", async () => {
   // Test implementation
 });
 
-test("upsertTask updates existing task", async () => {
+test("upsertItem updates existing item", async () => {
   // Test implementation
 });
 
@@ -1099,26 +1106,26 @@ COMPLETE DATA FLOW:
 While denormalized data is stored for performance, you can add computed properties at query time:
 
 ```typescript
-// Get task with full project details
-export const getTaskWithProject = query({
-  args: { taskId: v.id("todoist_tasks") },
-  handler: async (ctx, { taskId }) => {
-    const task = await ctx.db.get(taskId);
-    if (!task?.project_id) return task;
+// Get item with full project details
+export const getItemWithProject = query({
+  args: { itemId: v.id("todoist_items") },
+  handler: async (ctx, { itemId }) => {
+    const item = await ctx.db.get(itemId);
+    if (!item?.project_id) return item;
     
     const project = await ctx.db
       .query("todoist_projects")
-      .withIndex("by_todoist_id", q => q.eq("todoist_id", task.project_id))
+      .withIndex("by_todoist_id", q => q.eq("todoist_id", item.project_id))
       .first();
       
     return {
-      ...task,
+      ...item,
       project, // Full project object
     };
   },
 });
 
-// Get project with task statistics
+// Get project with item statistics
 export const getProjectWithStats = query({
   args: { projectId: v.string() },
   handler: async (ctx, { projectId }) => {
@@ -1127,17 +1134,17 @@ export const getProjectWithStats = query({
       .withIndex("by_todoist_id", q => q.eq("todoist_id", projectId))
       .first();
       
-    const tasks = await ctx.db
-      .query("todoist_tasks")
+    const items = await ctx.db
+      .query("todoist_items")
       .withIndex("by_project", q => q.eq("project_id", projectId))
       .collect();
       
     return {
       ...project,
       stats: {
-        total: tasks.length,
-        completed: tasks.filter(t => t.is_completed).length,
-        active: tasks.filter(t => !t.is_completed && !t.is_deleted).length,
+        total: items.length,
+        completed: items.filter(i => i.checked === 1).length,
+        active: items.filter(i => i.checked === 0 && i.is_deleted === 0).length,
       },
     };
   },
