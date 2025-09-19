@@ -29,3 +29,48 @@ export const all = mutation({
     };
   },
 });
+
+export const items = mutation({
+  handler: async (ctx) => {
+    const items = await ctx.db.query("todoist_items").collect();
+    for (const item of items) {
+      await ctx.db.delete(item._id);
+    }
+
+    console.log(`Cleared ${items.length} items`);
+    
+    return {
+      itemsDeleted: items.length,
+    };
+  },
+});
+
+export const projects = mutation({
+  handler: async (ctx) => {
+    const projects = await ctx.db.query("todoist_projects").collect();
+    for (const project of projects) {
+      await ctx.db.delete(project._id);
+    }
+
+    console.log(`Cleared ${projects.length} projects`);
+    
+    return {
+      projectsDeleted: projects.length,
+    };
+  },
+});
+
+export const syncState = mutation({
+  handler: async (ctx) => {
+    const syncStates = await ctx.db.query("sync_state").collect();
+    for (const state of syncStates) {
+      await ctx.db.delete(state._id);
+    }
+
+    console.log(`Cleared ${syncStates.length} sync states`);
+    
+    return {
+      syncStatesDeleted: syncStates.length,
+    };
+  },
+});
