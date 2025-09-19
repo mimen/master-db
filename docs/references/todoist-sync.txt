@@ -1,0 +1,1153 @@
+================
+CODE SNIPPETS
+================
+TITLE: Read Resources Example Response
+DESCRIPTION: An example JSON response when requesting all user resources from the Todoist Sync API.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: json
+CODE:
+```
+{
+  "completed_info": [ ... ],
+  "collaborators": [ ... ],
+  "collaborator_states": [ ... ],
+  "day_orders": { ... },
+  "filters": [ ... ],
+  "full_sync": true,
+  "items": [ ... ],
+  "labels": [ ... ],
+  "live_notifications": [ ... ],
+  "live_notifications_last_read_id": "0",
+  "locations": [ ... ],
+  "notes": [ ... ],
+  "project_notes": [ ... ],
+  "projects": [ ... ],
+  "reminders": [ ... ],
+  "sections": [ ... ],
+  "stats": { ... },
+  "settings_notifications": { ... },
+  "sync_token": "TnYUZEpuzf2FMA9qzyY3j4xky6dXiYejmSO85S5paZ_a9y1FI85mBbIWZGpW",
+  "temp_id_mapping": { ... },
+  "user": { ... },
+  "user_plan_limits": { ... },
+  "user_settings": { ... },
+  "workspace_users": [ ... ]
+}
+```
+
+--------------------------------
+
+TITLE: Read Resources Example Request
+DESCRIPTION: An example of how to make a curl request to the Todoist Sync API to read all user resources.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: shell
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d sync_token='*' \
+    -d resource_types='["all"]'
+```
+
+--------------------------------
+
+TITLE: Todoist Sync API - Write Resources Response Example
+DESCRIPTION: Provides an example of a successful response from the Todoist Sync API after writing resources, showing the sync_token, sync_status, and temp_id_mapping.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: JSON
+CODE:
+```
+{
+  "sync_token": "cdTUEvJoChiaMysD7vJ14UnhN-FRdP-IS3aisOUpl3aGlIQA9qosBgvMmhbn",
+  "sync_status": {"ed1ce597-e4c7-4a88-ba48-e048d827c067": "ok"},
+  "temp_id_mapping": {"381e601f-0ef3-4ed6-bf95-58f896d1a314": "6HWcc9PJCvPjCxC9"}
+}
+
+```
+
+--------------------------------
+
+TITLE: Add Task URL Scheme Example
+DESCRIPTION: Example of how to use the `todoist://addtask` URL scheme to pre-fill the add task view with content, date, and priority.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: URL
+CODE:
+```
+todoist://addtask?content=mytask&date=tomorrow&priority=4
+```
+
+--------------------------------
+
+TITLE: Todoist API v1 Import Project From File cURL Example
+DESCRIPTION: Example using cURL to import a project from a file, demonstrating the necessary headers (Authorization) and form data fields (project_id, file).
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: curl
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/templates/import_into_project_from_file \
+       -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+       -F project_id=6XGgm6PHrGgMpCFX \
+       -F file=@example.csv
+```
+
+--------------------------------
+
+TITLE: Todoist API Sync Response Example
+DESCRIPTION: Example response from the Todoist Sync API after batching commands, showing sync status for each command, temporary ID mapping, and full sync status.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: json
+CODE:
+```
+{
+  "sync_status": {
+    "2c0f6e03-c372-46ba-8e85-d94af56abcf3": "ok",
+    "49ede211-12f3-42e9-8345-4c0d2b29c08d": "ok",
+    "d0a1666b-d615-4250-aac5-65c7ea89091a": "ok",
+    "46619250-ae02-4ab0-bd31-3c9ab0307e53": "ok"
+  },
+  "temp_id_mapping": {
+    "8a23c8cb-1d76-469d-a2c0-80a28b3ea6f6": "6X6HrfVQvQq5WCXH",
+    "0a57a3db-2ff1-4d2d-adf6-12490c13c712": "6X6HrhXfQ9857XVG",
+    "bf087eaf-aea9-4cb1-ab57-85188a2d428f": "6X6HrjHFgc3jQM8H",
+    "ef3d840e-84c9-4433-9a32-86ae9a1e7d42": "6X6HrmjgW88crvMC"
+  },
+  "full_sync": true,
+  "sync_token": "GSg4kDBAKWU7TZA_a-gcuSpxmO1lXT5bhLqUGd1F-AH69_qKEdkN_fJoBq3c"
+}
+```
+
+--------------------------------
+
+TITLE: Todoist Project Object Example
+DESCRIPTION: An example of the data structure for a project object in the Todoist API.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Project Object:
+  id: "6Jf8VQXxpwv56VQ7"
+  name: "Shopping List"
+  description: "Stuff to buy"
+  workspace_id: 12345
+  is_invite_only: false
+  status: "IN_PROGRESS"
+  is_link_sharing_enabled: true
+  collaborator_role_default: "READ_WRITE"
+  color: "lime_green"
+  parent_id: null
+  child_order: 1
+  is_collapsed: false
+  shared: false
+  can_assign_tasks: false
+  is_deleted: false
+  is_archived: false
+  is_favorite: false
+  is_frozen: false
+  view_style: "list"
+  role: "READ_WRITE"
+  inbox_project: true
+  folder_id: null
+  created_at: "2023-07-13T10:20:59Z"
+  updated_at: "2024-12-10T13:27:29Z"
+  is_pending_default_collaborator_invites: false
+```
+
+--------------------------------
+
+TITLE: Open Specific Project URL Scheme Example
+DESCRIPTION: Example of using the `todoist://project?id={id}` URL scheme to open a specific project within the Todoist application.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: URL
+CODE:
+```
+todoist://project?id=128501470
+```
+
+--------------------------------
+
+TITLE: User Settings Object Example
+DESCRIPTION: An example JSON object representing a user's settings, including preferences for reminder notifications (push, desktop, email) and completion sounds on different platforms.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: json
+CODE:
+```
+{
+    "reminder_push": true,
+    "reminder_desktop": true,
+    "reminder_email": true,
+    "completed_sound_desktop": true,
+    "completed_sound_mobile": true
+}
+```
+
+--------------------------------
+
+TITLE: Todoist Sync API - Write Resources Example
+DESCRIPTION: Demonstrates how to create a project using the Todoist Sync API with a cURL request, including the necessary authorization and command payload.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "project_add",
+        "temp_id": "381e601f-0ef3-4ed6-bf95-58f896d1a314",
+        "uuid": "ed1ce597-e4c7-4a88-ba48-e048d827c067",
+        "args": {
+            "name": "Shopping List",
+            "color": "berry_red"
+        }
+    }]'
+
+```
+
+--------------------------------
+
+TITLE: Todoist User Settings Object Example
+DESCRIPTION: An example JSON object representing user settings in Todoist. This includes preferences for reminder notifications (push, desktop, email) and sounds for completed tasks on desktop and mobile.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: JSON
+CODE:
+```
+{
+    "reminder_push": true,
+    "reminder_desktop": true,
+    "reminder_email": true,
+    "completed_sound_desktop": true,
+    "completed_sound_mobile": true
+}
+```
+
+--------------------------------
+
+TITLE: Open Specific Label URL Scheme Example
+DESCRIPTION: Example of using the `todoist://label?name={name}` URL scheme to open a specific label within the Todoist application.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: URL
+CODE:
+```
+todoist://label?name=Urgent
+```
+
+--------------------------------
+
+TITLE: Todoist API v1 - Update Project Response Example
+DESCRIPTION: Example response from the Todoist API after updating a project. It shows the sync status for the executed command, indicating success or failure.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+{
+  "sync_status": {
+    "1ca42128-d12f-4a66-8413-4d6ff2838fde": "ok"
+  }
+}
+
+```
+
+--------------------------------
+
+TITLE: Todoist Sync API Write Operations
+DESCRIPTION: Demonstrates how to write resources to Todoist using the Sync API. It includes an example of creating a project with a `project_add` command and the expected response format.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+To write to your user's Todoist resources, make a Sync API request with the following parameters:
+
+Parameters:
+commands _JSON_ | Required: Yes | A JSON array of Command objects. Each command will be processed in the specified order.
+
+Command object:
+Field | Description
+---|---
+type _String_ | The type of the command.
+args _Object_ | The parameters of the command.
+uuid _String_ | Command UUID. More details about this below.
+temp_id _String_ | Temporary resource ID, Optional. Only specified for commands that create a new resource (e.g. `item_add` command). More details about this below.
+```
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "project_add",
+        "temp_id": "381e601f-0ef3-4ed6-bf95-58f896d1a314",
+        "uuid": "ed1ce597-e4c7-4a88-ba48-e048d827c067",
+        "args": {
+            "name": "Shopping List",
+            "color": "berry_red"
+        }
+    }]'
+```
+
+LANGUAGE: APIDOC
+CODE:
+```
+Example response:
+{
+  "sync_token": "cdTUEvJoChiaMysD7vJ14UnhN-FRdP-IS3aisOUpl3aGlIQA9qosBgvMmhbn",
+  "sync_status": {"ed1ce597-e4c7-4a88-ba48-e048d827c067": "ok"},
+  "temp_id_mapping": {"381e601f-0ef3-4ed6-bf95-58f896d1a314": "6HWcc9PJCvPjCxC9"}
+}
+```
+
+--------------------------------
+
+TITLE: Example cURL Request to Update a Workspace
+DESCRIPTION: Shows an example of updating an existing Todoist workspace using cURL. This includes specifying the workspace ID and changing its description.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "workspace_update",
+        "temp_id": "4ff1e388-5ca6-453a-b0e8-662ebf373b6b",
+        "uuid": "32774db9-a1da-4550-8d9d-910372124fa4",
+        "args": {
+            "id": "12345",
+            "description": "Where magic happens"
+        }
+    }]'
+
+```
+
+--------------------------------
+
+TITLE: Todoist API v1 - Share Project Command
+DESCRIPTION: Demonstrates how to share a project with another user using the Todoist API's sync endpoint. Includes example request and response, and details command arguments.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Share a project with another user.
+
+When sharing a teams project:
+Workspace projects with `is_invite_only` set to true can only be shared by workspace admins, or by project members with `ADMIN` or `CREATOR` role. Other users will get a “forbidden” error. The role for the new collaborator cannot be greater than the role of the person sharing the project.
+
+Command arguments:
+  project_id (String, Required): The project to be shared.
+  email (String, Required): The user email with whom to share the project.
+  role (String, Optional): The role of the new collaborator in the workspace project. If missing, the workspace `collaborator_role_default` will be used. Only used for teams.
+```
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "share_project",
+        "temp_id": "854be9cd-965f-4ddd-a07e-6a1d4a6e6f7a",
+        "uuid": "fe6637e3-03ce-4236-a202-8b28de2c8372",
+        "args": {
+            "project_id": "6H2c63wj7x9hFJfX",
+            "email": "you@example.com"
+        }
+    }]'
+```
+
+LANGUAGE: JSON
+CODE:
+```
+{
+  "sync_status": {"fe6637e3-03ce-4236-a202-8b28de2c8372": "ok"}
+}
+```
+
+--------------------------------
+
+TITLE: Todoist API Live Notification Examples
+DESCRIPTION: Provides examples of JSON payloads for various live notification types in the Todoist API. These notifications inform clients about real-time changes within a Todoist project or account.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Todoist API Live Notifications:
+
+This section provides examples of the JSON structure for various live notification types received from the Todoist API. These notifications are used to inform clients about real-time events and changes within their Todoist account.
+
+**Notification Types and Structures:**
+
+1.  **share_invitation_sent**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `invitation_id`: ID of the invitation.
+    *   `invitation_secret`: Secret key for the invitation.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "share_invitation_sent".
+    *   `seq_no`: Sequence number for ordering notifications.
+    *   `state`: Current state of the invitation (e.g., "accepted").
+
+2.  **share_invitation_accepted**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `invitation_id`: ID of the invitation.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "share_invitation_accepted".
+    *   `project_id`: ID of the project the invitation was for.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+3.  **share_invitation_rejected**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `invitation_id`: ID of the invitation.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "share_invitation_rejected".
+    *   `project_id`: ID of the project the invitation was for.
+    *   `reject_email`: Email address that rejected the invitation.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+4.  **user_left_project**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "user_left_project".
+    *   `project_id`: ID of the project the user left.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+5.  **user_removed_from_project**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "user_removed_from_project".
+    *   `project_id`: ID of the project the user was removed from.
+    *   `removed_name`: Name of the user who was removed.
+    *   `removed_uid`: User ID of the removed user.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+6.  **item_assigned**
+    *   `assigned_by_uid`: User ID of the person who assigned the item.
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `item_content`: Content of the assigned item.
+    *   `item_id`: ID of the assigned item.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "item_assigned".
+    *   `project_id`: ID of the project the item belongs to.
+    *   `responsible_uid`: User ID of the person the item is assigned to.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+7.  **item_completed**
+    *   `assigned_by_uid`: User ID of the person who assigned the item.
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `item_content`: Content of the completed item.
+    *   `item_id`: ID of the completed item.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "item_completed".
+    *   `project_id`: ID of the project the item belongs to.
+    *   `responsible_uid`: User ID of the person the item was assigned to.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+8.  **item_uncompleted**
+    *   `assigned_by_uid`: User ID of the person who assigned the item.
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `item_id`: ID of the uncompleted item.
+    *   `item_content`: Content of the uncompleted item.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "item_uncompleted".
+    *   `project_id`: ID of the project the item belongs to.
+    *   `responsible_uid`: User ID of the person the item was assigned to.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+9.  **note_added**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `id`: Unique ID of the notification.
+    *   `item_id`: ID of the item the note was added to.
+    *   `note_content`: Content of the added note.
+    *   `note_id`: ID of the added note.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "note_added".
+    *   `project_id`: ID of the project the note belongs to.
+    *   `seq_no`: Sequence number for ordering notifications.
+
+10. **daily_goal_reached**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `count`: Number of items completed towards the goal.
+    *   `goal`: The daily goal value.
+    *   `id`: Unique ID of the notification.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "daily_goal_reached".
+    *   `seq_no`: Sequence number for ordering notifications.
+
+11. **weekly_goal_reached**
+    *   `created_at`: Timestamp of notification creation.
+    *   `is_unread`: Boolean indicating if the notification is unread.
+    *   `from_uid`: User ID of the sender.
+    *   `count`: Number of items completed towards the goal.
+    *   `goal`: The weekly goal value.
+    *   `id`: Unique ID of the notification.
+    *   `notification_key`: A key associated with the notification.
+    *   `notification_type`: Set to "weekly_goal_reached".
+    *   `seq_no`: Sequence number for ordering notifications.
+
+**Example Payload for `share_invitation_sent`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "1",
+    "invitation_id": "456",
+    "invitation_secret": "abcdefghijklmno",
+    "notification_key": "notification_123",
+    "notification_type": "share_invitation_sent",
+    "seq_no": 12345567890,
+    "state": "accepted"
+}
+```
+
+**Example Payload for `share_invitation_accepted`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "2",
+    "invitation_id": "456",
+    "notification_key": "notification_123",
+    "notification_type": "share_invitation_accepted",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `share_invitation_rejected`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "3",
+    "invitation_id": "456",
+    "notification_key": "notification_123",
+    "notification_type": "share_invitation_rejected",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "reject_email": "me@example.com",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `user_left_project`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "4",
+    "notification_key": "notification_123",
+    "notification_type": "user_left_project",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `user_removed_from_project`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "5",
+    "notification_key": "notification_123",
+    "notification_type": "user_removed_from_project",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "removed_name": "Example User",
+    "removed_uid": "2671366",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `item_assigned`:**
+```json
+{
+    "assigned_by_uid": "2671362",
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "6",
+    "item_content": "NewTask",
+    "item_id": "6X7gfV9G7rWm5hW8",
+    "notification_key": "notification_123",
+    "notification_type": "item_assigned",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "responsible_uid": "2671355",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `item_completed`:**
+```json
+{
+    "assigned_by_uid": "2671362",
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "7",
+    "item_content": "NewTask",
+    "item_id": "6X7gfV9G7rWm5hW8",
+    "notification_key": "notification_123",
+    "notification_type": "item_completed",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "responsible_uid": "2671355",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `item_uncompleted`:**
+```json
+{
+    "assigned_by_uid": "2671362",
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "8",
+    "item_id": "6X7gfV9G7rWm5hW8",
+    "item_content": "NewTask",
+    "notification_key": "notification_123",
+    "notification_type": "item_uncompleted",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "responsible_uid": "321",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `note_added`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "id": "9",
+    "item_id": "6X7gfV9G7rWm5hW8",
+    "note_content": "NewTask",
+    "note_id": "6X7jp7j8x7JhWFC3",
+    "notification_key": "notification_123",
+    "notification_type": "note_added",
+    "project_id": "6Jf8VQXxpwv56VQ7",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `daily_goal_reached`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "count": 5,
+    "goal": 5,
+    "id": "18",
+    "notification_key": "notification_123",
+    "notification_type": "daily_goal_reached",
+    "seq_no": 1234567890
+}
+```
+
+**Example Payload for `weekly_goal_reached`:**
+```json
+{
+    "created_at": "2021-05-10T09:59:36.000000Z",
+    "is_unread": false,
+    "from_uid": "2671362",
+    "count": 50,
+    "goal": 50,
+    "id": "19",
+    "notification_key": "notification_123",
+    "notification_type": "weekly_goal_reached",
+    "seq_no": 1234567890
+}
+```
+```
+
+--------------------------------
+
+TITLE: Todoist URL Schemes - Project Management
+DESCRIPTION: Details URL schemes for project management, including opening the projects view and opening a specific project by its ID. Includes an example and parameter explanation.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Scheme | Description
+---|---
+todoist://projects | Opens the projects view (shows all projects).
+todoist://project?id={id} | Opens a specific project by ID.
+
+The `todoist://project` scheme accepts the following required value:
+Value | Description
+---|---
+id _Integer_ | The ID of the project to view. If the ID doesn't exist, you don't have access to the project, or the value is empty, an alert will be showed and the user will be redirected to the projects view.
+
+> Example of opening a specific project:
+```
+todoist://project?id=128501470
+```
+```
+
+--------------------------------
+
+TITLE: Add Todoist Project using API
+DESCRIPTION: Demonstrates how to add a new project to Todoist using the API's sync endpoint. Includes example request and response structures.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[\
+    {\
+        "type": "project_add",\
+        "temp_id": "4ff1e388-5ca6-453a-b0e8-662ebf373b6b",\
+        "uuid": "32774db9-a1da-4550-8d9d-910372124fa4",\
+        "args": {\
+            "name": "Shopping List"\
+        }\
+    }]'
+
+```
+
+LANGUAGE: APIDOC
+CODE:
+```
+Example response:
+{
+  ... 
+  "sync_status": {"32774db9-a1da-4550-8d9d-910372124fa4": "ok"},
+  "temp_id_mapping": {"4ff1e388-5ca6-453a-b0e8-662ebf373b6b": "6Jf8VQXxpwv56VQ7"},
+  ...
+}
+
+Add a new project.
+```
+
+--------------------------------
+
+TITLE: Todoist API CORS Example
+DESCRIPTION: Demonstrates how to make a request to the Todoist API with CORS headers, showing a sample request and the expected successful response with CORS headers.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -H "Origin: http://example.com"
+
+HTTP/1.1 200 OK
+Access-Control-Allow-Credentials: false
+Access-Control-Allow-Origin: *
+
+```
+
+--------------------------------
+
+TITLE: Update User Properties API Example
+DESCRIPTION: Demonstrates how to update user properties such as email and password using the Todoist API v1 sync endpoint. Includes example request and response.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Update user's properties
+
+User states:
+- `unverified`: Users that have just signed up. Cannot use social features.
+- `verified`: Users that have verified themselves (e.g., via email link or social signup).
+- `blocked`: Users that have failed to verify themselves in 7 days. Restricted usage.
+- `legacy`: Users that signed up before August, 2022.
+
+Weekly Goal:
+- `weekly_goal` (Integer): The target number of tasks to complete per week.
+
+Example update user request:
+```bash
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "user_update",
+        "uuid": "52f83009-7e27-4b9f-9943-1c5e3d1e6889",
+        "args": {
+            "current_password": "fke4iorij",
+            "email": "mynewemail@example.com"
+        }
+    }]
+'
+```
+
+Example response:
+```json
+{
+  ...,
+  "sync_status": {"52f83009-7e27-4b9f-9943-1c5e3d1e6889": "ok"},
+  ...
+}
+```
+```
+
+--------------------------------
+
+TITLE: CORS Headers Example
+DESCRIPTION: Demonstrates the Cross-Origin Resource Sharing (CORS) headers for API requests. This example shows a curl request to the sync endpoint with an Authorization and Origin header, and the expected successful response headers including Access-Control-Allow-Origin.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: shell
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -H "Origin: http://example.com"
+
+HTTP/1.1 200 OK
+Access-Control-Allow-Credentials: false
+Access-Control-Allow-Origin: *
+
+```
+
+--------------------------------
+
+TITLE: Todoist API v1 - Update Project Request Example
+DESCRIPTION: Example cURL command to update a project in Todoist via the API. It demonstrates the structure of the API request, including the endpoint, authorization header, and the commands payload with project update details.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands=[
+    {
+        "type": "project_update",
+        "uuid": "1ca42128-d12f-4a66-8413-4d6ff2838fde",
+        "args": {
+            "id": "6Jf8VQXxpwv56VQ7",
+            "name": "Shopping"
+        }
+    }]
+
+```
+
+--------------------------------
+
+TITLE: Todoist API: View Options Object Example
+DESCRIPTION: Provides an example structure for defining view options within the Todoist API. This object can specify various display and filtering preferences, such as view type, sorting, filtering criteria, and calendar settings.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: JSON
+CODE:
+```
+{
+    "view_type": "project",
+    "object_id": "6Jf8VQXxpwv56VQ7",
+    "filtered_by": "!assigned",
+    "grouped_by": "priority",
+    "sorted_by": "added_date",
+    "sort_order": "asc",
+    "show_completed_tasks": false,
+    "view_mode": "calendar",
+    "calendar_settings": { "layout": "month" },
+    "is_deleted": false,
+    "deadline": "no deadline"
+}
+```
+
+--------------------------------
+
+TITLE: Clear Locations Request Example
+DESCRIPTION: Example of how to clear all locations using the Todoist API v1 sync endpoint with a cURL command.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[{"type": "clear_locations", "uuid": "d285ae02-80c6-477c-bfa9-45272d7bddfb", "args": {}}]'
+```
+
+--------------------------------
+
+TITLE: Example cURL Request to Add a Workspace
+DESCRIPTION: Demonstrates how to add a new workspace to Todoist using a cURL command. Includes authorization header and the 'workspace_add' command with necessary arguments.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "workspace_add",
+        "temp_id": "4ff1e388-5ca6-453a-b0e8-662ebf373b6b",
+        "uuid": "32774db9-a1da-4550-8d9d-910372124fa4",
+        "args": {
+            "name": "Fellowship Workspace"
+        }
+    }]'
+
+```
+
+--------------------------------
+
+TITLE: Todoist API: Update Project Request Example
+DESCRIPTION: Example cURL command to update a project in the Todoist API, specifying the project ID and a new name.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands=[
+    {
+        "type": "project_update",
+        "uuid": "1ca42128-d12f-4a66-8413-4d6ff2838fde",
+        "args": {
+            "id": "6Jf8VQXxpwv56VQ7",
+            "name": "Shopping"
+        }
+    }]
+
+```
+
+--------------------------------
+
+TITLE: Todoist Location Object Example
+DESCRIPTION: An example of the data structure for a location object used in Todoist reminders.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Location Object:
+  An ordered array representing a location.
+  Index 0: Name of the location (String).
+  Index 1: Location latitude (String).
+  Index 2: Location longitude (String).
+```
+
+--------------------------------
+
+TITLE: Todoist API v1 Get Project Endpoint
+DESCRIPTION: Documentation for the GET /api/v1/projects/{project_id} endpoint, used to retrieve a specific project's details. It specifies path parameters, possible responses, and the URL.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+GET /api/v1/projects/{project_id}
+URL: https://api.todoist.com/api/v1/projects/{project_id}
+
+Description: Returns a project object related to the given ID.
+
+Path Parameters:
+  project_id (string or integer, required): Project Id
+
+Responses:
+  200: Successful Response
+  400: Bad Request
+  401: Unauthorized
+  403: Forbidden
+  404: Not Found
+```
+
+--------------------------------
+
+TITLE: Example cURL Request to Leave a Workspace
+DESCRIPTION: Illustrates how to leave a Todoist workspace using a cURL command, by providing the workspace ID in the request.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: bash
+CODE:
+```
+$ curl https://api.todoist.com/api/v1/sync \
+    -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+    -d commands='[
+    {
+        "type": "workspace_leave",
+        "temp_id": "4ff1e388-5ca6-453a-b0e8-662ebf373b6b",
+        "uuid": "32774db9-a1da-4550-8d9d-910372124fa4",
+        "args": {
+            "id": "6X6WMMqgq2PWxjCX"
+        }
+    }]'
+
+```
+
+--------------------------------
+
+TITLE: Todoist Deadlines
+DESCRIPTION: Deadlines can be set on tasks to differentiate between start and completion dates. They support non-recurring dates without time components. This section includes an example of a deadline object and how to create or update deadlines.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Example deadline object:
+{
+    "date": "2016-12-01",
+    "lang": "en"
+}
+
+Properties:
+- date (string): Deadline in the format of `YYYY-MM-DD` ([RFC 3339]).
+- lang (string): Language used to parse the deadline content. Valid languages include: `en`, `da`, `pl`, `zh`, `ko`, `de`, `pt`, `ja`, `it`, `fr`, `sv`, `ru`, `es`, `nl`, `fi`, `nb`, `tw`.
+
+Create or update deadline:
+Input example:
+"deadline": {"date":  "2024-01-25", "lang": "en"}
+
+Output example:
+"deadline": {
+    "date": "2024-01-25",
+    "lang": "en"
+}
+```
+
+--------------------------------
+
+TITLE: Todoist URL Schemes - Label Management
+DESCRIPTION: Details URL schemes for label management, including opening the labels view and opening a specific label by its name. Includes an example and parameter explanation.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: APIDOC
+CODE:
+```
+Scheme | Description
+---|---
+todoist://labels | Opens the labels view (shows all labels)
+todoist://label?name={name} | Opens a specific label by name.
+
+The `todoist://label` scheme accepts the following required value:
+Value | Description
+---|---
+name _String_ | The name of the label to view. If the label doesn't exist, you don't have access to the label, or the value is empty, an alert will be shown.
+
+> Example of opening a specific label:
+```
+todoist://label?name=Urgent
+```
+```
+
+--------------------------------
+
+TITLE: Batch Commands with Todoist API
+DESCRIPTION: Example of batching multiple commands, such as adding a project and items, into a single API request using the Todoist Sync API. This reduces network calls and helps avoid rate limiting.
+
+SOURCE: https://developer.todoist.com/api/v1/index
+
+LANGUAGE: curl
+CODE:
+```
+curl https://api.todoist.com/api/v1/sync \
+  -H "Authorization: Bearer 0123456789abcdef0123456789abcdef01234567" \
+  -d commands='[
+  {
+    "type": "project_add",
+    "temp_id": "0a57a3db-2ff1-4d2d-adf6-12490c13c712",
+    "uuid": "2c0f6e03-c372-46ba-8e85-d94af56abcf3",
+    "args": { "name": "Shopping List" }
+  },
+  {
+    "type": "item_add",
+    "temp_id": "ef3d840e-84c9-4433-9a32-86ae9a1e7d42",
+    "uuid": "49ede211-12f3-42e9-8345-4c0d2b29c08d",
+    "args": { "content": "Buy Milk", "project_id": "0a57a3db-2ff1-4d2d-adf6-12490c13c712" }
+  },
+  {
+    "type": "item_add",
+    "temp_id": "8a23c8cb-1d76-469d-a2c0-80a28b3ea6f6",
+    "uuid": "46619250-ae02-4ab0-bd31-3c9ab0307e53",
+    "args": { "content": "Buy Coffee", "project_id": "0a57a3db-2ff1-4d2d-adf6-12490c13c712" }
+  },
+  {
+    "type": "item_add",
+    "temp_id": "bf087eaf-aea9-4cb1-ab57-85188a2d428f",
+    "uuid": "d0a1666b-d615-4250-aac5-65c7ea89091a",
+    "args": { "content": "Buy Sugar", "project_id": "0a57a3db-2ff1-4d2d-adf6-12490c13c712" }
+  }]
+'
+```
