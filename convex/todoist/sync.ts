@@ -4,11 +4,13 @@ import { internal } from "../_generated/api";
 export const performIncrementalSync = action({
   handler: async (ctx) => {
     console.log("Starting incremental Todoist sync...");
+    const startTime = Date.now();
     
-    const token = process.env.TODOIST_API_TOKEN;
-    if (!token) {
-      throw new Error("TODOIST_API_TOKEN not configured");
-    }
+    try {
+      const token = process.env.TODOIST_API_TOKEN;
+      if (!token) {
+        throw new Error("TODOIST_API_TOKEN not configured");
+      }
 
     // Get current sync state
     const syncState = await ctx.runQuery(internal.todoist.queries.getSyncState);
@@ -122,5 +124,9 @@ export const performIncrementalSync = action({
       syncToken: syncData.sync_token,
       fullSync: false,
     };
+    } catch (error) {
+      console.error("Sync failed:", error);
+      throw error;
+    }
   },
 });

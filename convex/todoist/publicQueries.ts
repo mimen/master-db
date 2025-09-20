@@ -64,14 +64,17 @@ export const getSyncStatus = query({
       .filter((q) => q.eq(q.field("service"), "todoist"))
       .first();
       
-    const itemCount = await ctx.db.query("todoist_items").collect();
-    const projectCount = await ctx.db.query("todoist_projects").collect();
+    const items = await ctx.db.query("todoist_items").collect();
+    const projects = await ctx.db.query("todoist_projects").collect();
     
     return {
-      lastSync: syncState?.last_full_sync,
+      lastFullSync: syncState?.last_full_sync,
+      lastIncrementalSync: syncState?.last_incremental_sync,
       syncToken: syncState?.last_sync_token,
-      itemCount: itemCount.length,
-      projectCount: projectCount.length,
+      itemCount: items.length,
+      activeItemCount: items.filter(i => i.checked === 0 && i.is_deleted === 0).length,
+      projectCount: projects.length,
+      activeProjectCount: projects.filter(p => p.is_deleted === 0).length,
     };
   },
 });
