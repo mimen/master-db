@@ -170,11 +170,12 @@ export const updateTask = action({
         args: updateArgs,
       }]);
 
-      // Update in Convex
+      // Update in Convex - remove the id field from updates
+      const { id, ...updateFields } = updateArgs;
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
         updates: {
-          ...updateArgs,
+          ...updateFields,
           sync_version: Date.now(),
         },
       });
@@ -334,14 +335,19 @@ export const moveTask = action({
         },
       }]);
 
-      // Update in Convex
+      // Update in Convex - don't set section_id if not provided
+      const updates: any = {
+        project_id: args.projectId,
+        sync_version: Date.now(),
+      };
+      
+      if (args.sectionId) {
+        updates.section_id = args.sectionId;
+      }
+      
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
-        updates: {
-          project_id: args.projectId,
-          section_id: args.sectionId || null,
-          sync_version: Date.now(),
-        },
+        updates,
       });
 
       return { success: true, data: response };
