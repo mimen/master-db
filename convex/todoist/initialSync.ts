@@ -3,7 +3,7 @@ import { internal } from "../_generated/api";
 
 export const runInitialSync = action({
   handler: async (ctx) => {
-    console.log("Starting initial Todoist sync using API v1...");
+    console.log("Starting initial Todoist sync...");
     
     const token = process.env.TODOIST_API_TOKEN;
     if (!token) {
@@ -13,7 +13,7 @@ export const runInitialSync = action({
     // Initialize sync state
     await ctx.runMutation(internal.todoist.mutations.initializeSyncState);
 
-    // Perform full sync using API v1
+    // Perform full sync
     const response = await fetch("https://api.todoist.com/api/v1/sync", {
       method: "POST",
       headers: {

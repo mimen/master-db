@@ -19,7 +19,7 @@ export const performIncrementalSync = action({
       return ctx.runAction(internal.todoist.initialSync.runInitialSync);
     }
 
-    // Perform incremental sync
+    // Perform incremental sync using API v1
     const response = await fetch("https://api.todoist.com/api/v1/sync", {
       method: "POST",
       headers: {

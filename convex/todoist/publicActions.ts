@@ -7,7 +7,7 @@ type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; code?: string };
 
-// Helper to create Todoist API client
+// Helper to create Todoist API v1 client
 const getTodoistClient = () => {
   const token = process.env.TODOIST_API_TOKEN;
   if (!token) {
@@ -15,14 +15,17 @@ const getTodoistClient = () => {
   }
   
   return {
-    async request(endpoint: string, options: RequestInit = {}) {
-      const response = await fetch(`https://api.todoist.com/rest/v2/${endpoint}`, {
-        ...options,
+    // Execute commands via API v1 sync endpoint
+    async executeCommands(commands: any[]) {
+      const response = await fetch("https://api.todoist.com/api/v1/sync", {
+        method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json",
-          ...options.headers,
         },
+        body: JSON.stringify({
+          commands,
+        }),
       });
 
       if (!response.ok) {
@@ -30,7 +33,14 @@ const getTodoistClient = () => {
         throw new Error(`Todoist API error ${response.status}: ${error}`);
       }
 
-      return response.json();
+      const result = await response.json();
+      
+      // Check sync status
+      if (result.sync_status && Object.values(result.sync_status).some((status: any) => status !== "ok")) {
+        throw new Error(`Sync command failed: ${JSON.stringify(result.sync_status)}`);
+      }
+
+      return result;
     }
   };
 };
@@ -54,47 +64,60 @@ export const createTask = action({
   handler: async (ctx, args): Promise<ActionResponse<any>> => {
     try {
       const client = getTodoistClient();
+      const tempId = crypto.randomUUID();
+      const commandId = crypto.randomUUID();
       
-      // Call Todoist API
-      const task = await client.request("tasks", {
-        method: "POST",
-        body: JSON.stringify({
+      // Build command args
+      const commandArgs: any = {
+        content: args.content,
+        priority: args.priority || 1,
+      };
+
+      if (args.projectId) commandArgs.project_id = args.projectId;
+      if (args.sectionId) commandArgs.section_id = args.sectionId;
+      if (args.labels?.length) commandArgs.labels = args.labels;
+      if (args.description) commandArgs.description = args.description;
+      if (args.due) {
+        if (args.due.string) commandArgs.due_string = args.due.string;
+        else if (args.due.datetime) commandArgs.due_datetime = args.due.datetime;
+        else if (args.due.date) commandArgs.due_date = args.due.date;
+      }
+
+      // Execute command via Sync API v1
+      const response = await client.executeCommands([{
+        type: "item_add",
+        temp_id: tempId,
+        uuid: commandId,
+        args: commandArgs,
+      }]);
+
+      // Get the real ID from temp_id_mapping
+      const realId = response.temp_id_mapping?.[tempId];
+      if (!realId) {
+        throw new Error("Failed to get task ID from response");
+      }
+
+      // Store in Convex - we'll get full details from next sync
+      await ctx.runMutation(internal.todoist.mutations.upsertItem, {
+        item: {
+          id: realId,
           content: args.content,
           project_id: args.projectId,
           section_id: args.sectionId,
           priority: args.priority || 1,
-          due_date: args.due?.date,
-          due_string: args.due?.string,
-          due_datetime: args.due?.datetime,
           labels: args.labels || [],
           description: args.description,
-        }),
-      });
-
-      // Store in Convex immediately
-      await ctx.runMutation(internal.todoist.mutations.upsertItem, {
-        item: {
-          id: task.id,
-          content: task.content,
-          project_id: task.project_id,
-          section_id: task.section_id,
-          priority: task.priority,
-          due: task.due,
-          labels: task.labels,
-          description: task.description,
           checked: 0,
           is_deleted: 0,
-          child_order: task.order,
-          parent_id: task.parent_id,
-          assignee_id: task.assignee_id,
-          assigner_id: task.assigner_id,
-          comment_count: task.comment_count,
-          added_at: task.created_at,
-          sync_version: Date.now(), // Use timestamp as version
+          child_order: 0,
+          comment_count: 0,
+          added_at: new Date().toISOString(),
+          user_id: "current",
+          sync_version: Date.now(),
         },
       });
 
-      return { success: true, data: task };
+      return { success: true, data: { id: realId, ...commandArgs } };
     } catch (error: any) {
       console.error("Failed to create task:", error);
       return {
@@ -124,35 +147,39 @@ export const updateTask = action({
   handler: async (ctx, args): Promise<ActionResponse<any>> => {
     try {
       const client = getTodoistClient();
+      const commandId = crypto.randomUUID();
       
-      // Build update payload
-      const updates: any = {};
-      if (args.content !== undefined) updates.content = args.content;
-      if (args.priority !== undefined) updates.priority = args.priority;
-      if (args.due !== undefined) {
-        updates.due_date = args.due.date;
-        if (args.due.string) updates.due_string = args.due.string;
-        if (args.due.datetime) updates.due_datetime = args.due.datetime;
+      // Build update args
+      const updateArgs: any = {
+        id: args.todoistId,
+      };
+      if (args.content !== undefined) updateArgs.content = args.content;
+      if (args.priority !== undefined) updateArgs.priority = args.priority;
+      if (args.labels !== undefined) updateArgs.labels = args.labels;
+      if (args.description !== undefined) updateArgs.description = args.description;
+      if (args.due) {
+        if (args.due.string) updateArgs.due_string = args.due.string;
+        else if (args.due.datetime) updateArgs.due_datetime = args.due.datetime;
+        else if (args.due.date) updateArgs.due_date = args.due.date;
       }
-      if (args.labels !== undefined) updates.labels = args.labels;
-      if (args.description !== undefined) updates.description = args.description;
 
-      // Call Todoist API
-      const task = await client.request(`tasks/${args.todoistId}`, {
-        method: "POST",
-        body: JSON.stringify(updates),
-      });
+      // Execute command via Sync API v1
+      const response = await client.executeCommands([{
+        type: "item_update",
+        uuid: commandId,
+        args: updateArgs,
+      }]);
 
       // Update in Convex
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
         updates: {
-          ...updates,
+          ...updateArgs,
           sync_version: Date.now(),
         },
       });
 
-      return { success: true, data: task };
+      return { success: true, data: updateArgs };
     } catch (error: any) {
       console.error("Failed to update task:", error);
       return {
@@ -172,11 +199,16 @@ export const completeTask = action({
   handler: async (ctx, args): Promise<ActionResponse<void>> => {
     try {
       const client = getTodoistClient();
+      const commandId = crypto.randomUUID();
       
-      // Call Todoist API to close task
-      await client.request(`tasks/${args.todoistId}/close`, {
-        method: "POST",
-      });
+      // Execute command via API v1
+      await client.executeCommands([{
+        type: "item_complete",
+        uuid: commandId,
+        args: {
+          id: args.todoistId,
+        },
+      }]);
 
       // Update in Convex
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
@@ -207,11 +239,16 @@ export const reopenTask = action({
   handler: async (ctx, args): Promise<ActionResponse<void>> => {
     try {
       const client = getTodoistClient();
+      const commandId = crypto.randomUUID();
       
-      // Call Todoist API to reopen task
-      await client.request(`tasks/${args.todoistId}/reopen`, {
-        method: "POST",
-      });
+      // Execute command via API v1
+      await client.executeCommands([{
+        type: "item_uncomplete",
+        uuid: commandId,
+        args: {
+          id: args.todoistId,
+        },
+      }]);
 
       // Update in Convex
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
@@ -242,11 +279,16 @@ export const deleteTask = action({
   handler: async (ctx, args): Promise<ActionResponse<void>> => {
     try {
       const client = getTodoistClient();
+      const commandId = crypto.randomUUID();
       
-      // Call Todoist API to delete task
-      await client.request(`tasks/${args.todoistId}`, {
-        method: "DELETE",
-      });
+      // Execute command via API v1
+      await client.executeCommands([{
+        type: "item_delete",
+        uuid: commandId,
+        args: {
+          id: args.todoistId,
+        },
+      }]);
 
       // Soft delete in Convex
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
@@ -279,15 +321,18 @@ export const moveTask = action({
   handler: async (ctx, args): Promise<ActionResponse<any>> => {
     try {
       const client = getTodoistClient();
+      const commandId = crypto.randomUUID();
       
-      // Call Todoist API
-      const task = await client.request(`tasks/${args.todoistId}`, {
-        method: "POST",
-        body: JSON.stringify({
+      // Execute command via API v1
+      const response = await client.executeCommands([{
+        type: "item_move",
+        uuid: commandId,
+        args: {
+          id: args.todoistId,
           project_id: args.projectId,
-          section_id: args.sectionId || null,
-        }),
-      });
+          section_id: args.sectionId,
+        },
+      }]);
 
       // Update in Convex
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
@@ -299,7 +344,7 @@ export const moveTask = action({
         },
       });
 
-      return { success: true, data: task };
+      return { success: true, data: response };
     } catch (error: any) {
       console.error("Failed to move task:", error);
       return {
@@ -318,16 +363,22 @@ export const completeMultipleTasks = action({
   },
   handler: async (ctx, args): Promise<ActionResponse<{ completed: string[]; failed: string[] }>> => {
     const client = getTodoistClient();
-    const completed: string[] = [];
-    const failed: string[] = [];
+    
+    try {
+      // Build batch commands
+      const commands = args.todoistIds.map(todoistId => ({
+        type: "item_complete",
+        uuid: crypto.randomUUID(),
+        args: {
+          id: todoistId,
+        },
+      }));
 
-    // Process each task
-    for (const todoistId of args.todoistIds) {
-      try {
-        await client.request(`tasks/${todoistId}/close`, {
-          method: "POST",
-        });
-
+      // Execute all commands at once
+      const response = await client.executeCommands(commands);
+      
+      // Update all items in Convex
+      for (const todoistId of args.todoistIds) {
         await ctx.runMutation(internal.todoist.mutations.updateItem, {
           todoistId,
           updates: {
@@ -335,22 +386,16 @@ export const completeMultipleTasks = action({
             sync_version: Date.now(),
           },
         });
-
-        completed.push(todoistId);
-      } catch (error) {
-        console.error(`Failed to complete task ${todoistId}:`, error);
-        failed.push(todoistId);
       }
-    }
 
-    if (failed.length > 0) {
+      return { success: true, data: { completed: args.todoistIds, failed: [] } };
+    } catch (error: any) {
+      console.error("Failed to complete tasks:", error);
       return {
         success: false,
-        error: `Failed to complete ${failed.length} task(s)`,
-        code: "BATCH_COMPLETE_PARTIAL_FAILURE",
+        error: "Failed to complete tasks. Please try again.",
+        code: "BATCH_COMPLETE_FAILED",
       };
     }
-
-    return { success: true, data: { completed, failed } };
   },
 });

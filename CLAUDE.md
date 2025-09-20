@@ -173,6 +173,19 @@ export const syncWithRetry = action({
 ### Architecture Overview
 Todoist serves as our first integration, establishing patterns for future services.
 
+### CRITICAL: Todoist API Version
+**ONLY USE TODOIST API v1** - This is the current supported API!
+
+- **API v1**: `https://api.todoist.com/api/v1/*` ✅ **CURRENT API - USE THIS**
+- **Sync API v9**: `https://api.todoist.com/sync/v9/*` ❌ **DEPRECATED - DO NOT USE**
+- **REST API v2**: `https://api.todoist.com/rest/v2/*` ❌ **DEPRECATED - DO NOT USE**
+
+The current API v1 uses:
+- Base URL: `https://api.todoist.com/api/v1`
+- Sync endpoint: `https://api.todoist.com/api/v1/sync`
+- Authentication: Bearer token in Authorization header
+- Commands: `item_add`, `item_update`, `item_complete`, `item_delete`, etc.
+
 ### Sync Architecture
 Three-layer redundancy ensures data integrity:
 1. **API Response Storage**: Immediate write after successful API calls
