@@ -74,7 +74,20 @@ export const searchItemByContent = query({
       completed_at: item.completed_at,
       priority: item.priority,
       due: item.due,
+      labels: item.labels,
     }));
+  },
+});
+
+export const getItemByTodoistId = query({
+  args: { todoistId: v.string() },
+  handler: async (ctx, { todoistId }) => {
+    const item = await ctx.db
+      .query("todoist_items")
+      .withIndex("by_todoist_id", (q) => q.eq("todoist_id", todoistId))
+      .first();
+    
+    return item;
   },
 });
 
@@ -125,6 +138,67 @@ export const getProjectByName = query({
       is_favorite: project.is_favorite,
       color: project.color,
       sync_version: project.sync_version,
+    }));
+  },
+});
+
+export const getLabelByName = query({
+  args: { name: v.string() },
+  handler: async (ctx, { name }) => {
+    const labels = await ctx.db
+      .query("todoist_labels")
+      .collect();
+    
+    const matches = labels.filter(label => 
+      label.name.toLowerCase().includes(name.toLowerCase())
+    );
+    
+    return matches.map(label => ({
+      todoist_id: label.todoist_id,
+      name: label.name,
+      color: label.color,
+      is_deleted: label.is_deleted,
+      is_favorite: label.is_favorite,
+      sync_version: label.sync_version,
+    }));
+  },
+});
+
+export const getDeletedLabels = query({
+  handler: async (ctx) => {
+    const labels = await ctx.db
+      .query("todoist_labels")
+      .filter(q => q.eq(q.field("is_deleted"), 1))
+      .collect();
+    
+    return labels.map(label => ({
+      todoist_id: label.todoist_id,
+      name: label.name,
+      is_deleted: label.is_deleted,
+      sync_version: label.sync_version,
+    }));
+  },
+});
+
+export const getSectionByName = query({
+  args: { name: v.string() },
+  handler: async (ctx, { name }) => {
+    const sections = await ctx.db
+      .query("todoist_sections")
+      .collect();
+    
+    const matches = sections.filter(section => 
+      section.name.toLowerCase().includes(name.toLowerCase())
+    );
+    
+    return matches.map(section => ({
+      todoist_id: section.todoist_id,
+      name: section.name,
+      project_id: section.project_id,
+      section_order: section.section_order,
+      is_deleted: section.is_deleted,
+      is_archived: section.is_archived,
+      sync_version: section.sync_version,
     }));
   },
 });
