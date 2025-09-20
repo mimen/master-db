@@ -1,19 +1,23 @@
 import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
 
-export const runInitialSync = action({
+export const performIncrementalSync = action({
   handler: async (ctx) => {
-    console.log("Starting initial Todoist sync using API v1...");
+    console.log("Starting incremental Todoist sync...");
     
     const token = process.env.TODOIST_API_TOKEN;
     if (!token) {
       throw new Error("TODOIST_API_TOKEN not configured");
     }
 
-    // Initialize sync state
-    await ctx.runMutation(internal.todoist.mutations.initializeSyncState);
+    // Get current sync state
+    const syncState = await ctx.runQuery(internal.todoist.queries.getSyncState);
+    if (!syncState?.last_sync_token) {
+      console.log("No sync token found, running initial sync instead");
+      return ctx.runAction(internal.todoist.initialSync.runInitialSync);
+    }
 
-    // Perform full sync using API v1
+    // Perform incremental sync
     const response = await fetch("https://api.todoist.com/api/v1/sync", {
       method: "POST",
       headers: {
@@ -21,7 +25,7 @@ export const runInitialSync = action({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        sync_token: "*",
+        sync_token: syncState.last_sync_token,
         resource_types: ["projects", "items", "labels", "sections", "notes", "reminders"],
       }),
     });
@@ -32,63 +36,77 @@ export const runInitialSync = action({
 
     const syncData = await response.json();
 
-    // Store projects
-    if (syncData.projects) {
-      console.log(`Syncing ${syncData.projects.length} projects...`);
+    // Check if this is a full sync
+    if (syncData.full_sync) {
+      console.log("Full sync required by Todoist");
+      return ctx.runAction(internal.todoist.initialSync.runInitialSync);
+    }
+
+    let changeCount = 0;
+
+    // Process projects
+    if (syncData.projects && syncData.projects.length > 0) {
+      console.log(`Processing ${syncData.projects.length} project changes...`);
       for (const project of syncData.projects) {
         await ctx.runMutation(internal.todoist.mutations.upsertProject, {
           project,
         });
+        changeCount++;
       }
     }
 
-    // Store sections
-    if (syncData.sections) {
-      console.log(`Syncing ${syncData.sections.length} sections...`);
+    // Process sections
+    if (syncData.sections && syncData.sections.length > 0) {
+      console.log(`Processing ${syncData.sections.length} section changes...`);
       for (const section of syncData.sections) {
         await ctx.runMutation(internal.todoist.mutations.upsertSection, {
           section,
         });
+        changeCount++;
       }
     }
 
-    // Store labels
-    if (syncData.labels) {
-      console.log(`Syncing ${syncData.labels.length} labels...`);
+    // Process labels
+    if (syncData.labels && syncData.labels.length > 0) {
+      console.log(`Processing ${syncData.labels.length} label changes...`);
       for (const label of syncData.labels) {
         await ctx.runMutation(internal.todoist.mutations.upsertLabel, {
           label,
         });
+        changeCount++;
       }
     }
 
-    // Store items
-    if (syncData.items) {
-      console.log(`Syncing ${syncData.items.length} items...`);
+    // Process items
+    if (syncData.items && syncData.items.length > 0) {
+      console.log(`Processing ${syncData.items.length} item changes...`);
       for (const item of syncData.items) {
         await ctx.runMutation(internal.todoist.mutations.upsertItem, {
           item,
         });
+        changeCount++;
       }
     }
 
-    // Store notes
-    if (syncData.notes) {
-      console.log(`Syncing ${syncData.notes.length} notes...`);
+    // Process notes
+    if (syncData.notes && syncData.notes.length > 0) {
+      console.log(`Processing ${syncData.notes.length} note changes...`);
       for (const note of syncData.notes) {
         await ctx.runMutation(internal.todoist.mutations.upsertNote, {
           note,
         });
+        changeCount++;
       }
     }
 
-    // Store reminders
-    if (syncData.reminders) {
-      console.log(`Syncing ${syncData.reminders.length} reminders...`);
+    // Process reminders
+    if (syncData.reminders && syncData.reminders.length > 0) {
+      console.log(`Processing ${syncData.reminders.length} reminder changes...`);
       for (const reminder of syncData.reminders) {
         await ctx.runMutation(internal.todoist.mutations.upsertReminder, {
           reminder,
         });
+        changeCount++;
       }
     }
 
@@ -97,14 +115,12 @@ export const runInitialSync = action({
       token: syncData.sync_token,
     });
 
+    console.log(`Incremental sync complete: ${changeCount} changes processed`);
+
     return {
-      projectsCount: syncData.projects?.length || 0,
-      itemsCount: syncData.items?.length || 0,
-      sectionsCount: syncData.sections?.length || 0,
-      labelsCount: syncData.labels?.length || 0,
-      notesCount: syncData.notes?.length || 0,
-      remindersCount: syncData.reminders?.length || 0,
+      changeCount,
       syncToken: syncData.sync_token,
+      fullSync: false,
     };
   },
 });
