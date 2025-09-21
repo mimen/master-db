@@ -9,20 +9,25 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 export const moveTask = action({
   args: {
     todoistId: v.string(),
-    projectId: v.string(),
+    projectId: v.optional(v.string()),
     sectionId: v.optional(v.string()),
+    parentId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ActionResponse<Task[]>> => {
     try {
       const client = getTodoistClient();
 
-      // Build move args for SDK
-      const moveArgs: MoveTaskArgs = {
-        projectId: args.projectId,
-      };
+      // Build move args for SDK - must provide exactly one destination
+      let moveArgs: MoveTaskArgs;
 
       if (args.sectionId) {
-        moveArgs.sectionId = args.sectionId;
+        moveArgs = { sectionId: args.sectionId };
+      } else if (args.parentId) {
+        moveArgs = { parentId: args.parentId };
+      } else if (args.projectId) {
+        moveArgs = { projectId: args.projectId };
+      } else {
+        throw new Error("Must provide either projectId, sectionId, or parentId");
       }
 
       // Move task using SDK
@@ -37,6 +42,7 @@ export const moveTask = action({
           updates: {
             project_id: task.projectId,
             section_id: task.sectionId,
+            parent_id: task.parentId || null,
             updated_at: task.updatedAt || new Date().toISOString(),
             sync_version: Date.now(),
           },

@@ -1,9 +1,8 @@
-import { v } from "convex/values";
-
 import { internalMutation } from "../../_generated/server";
+import { syncReminderSchema } from "../types/syncApi";
 
 export const upsertReminder = internalMutation({
-  args: { reminder: v.any() },
+  args: { reminder: syncReminderSchema },
   handler: async (ctx, { reminder }) => {
     const existing = await ctx.db
       .query("todoist_reminders")

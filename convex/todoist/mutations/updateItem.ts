@@ -2,10 +2,35 @@ import { v } from "convex/values";
 
 import { internalMutation } from "../../_generated/server";
 
+// Schema for partial updates to a Todoist item
+const itemUpdateSchema = v.object({
+  content: v.optional(v.string()),
+  description: v.optional(v.string()),
+  project_id: v.optional(v.string()),
+  section_id: v.optional(v.string()),
+  priority: v.optional(v.number()),
+  due: v.optional(v.union(
+    v.null(),
+    v.object({
+      date: v.string(),
+      is_recurring: v.optional(v.boolean()),
+      string: v.optional(v.string()),
+      datetime: v.optional(v.string()),
+      timezone: v.optional(v.string()),
+    })
+  )),
+  labels: v.optional(v.array(v.string())),
+  checked: v.optional(v.number()),
+  is_deleted: v.optional(v.number()),
+  completed_at: v.optional(v.union(v.string(), v.null())),
+  updated_at: v.optional(v.string()),
+  sync_version: v.optional(v.number()),
+});
+
 export const updateItem = internalMutation({
   args: {
     todoistId: v.string(),
-    updates: v.any(),
+    updates: itemUpdateSchema,
   },
   handler: async (ctx, { todoistId, updates }) => {
     const existing = await ctx.db

@@ -1,9 +1,8 @@
-import { v } from "convex/values";
-
 import { internalMutation } from "../../_generated/server";
+import { syncLabelSchema } from "../types/syncApi";
 
 export const upsertLabel = internalMutation({
-  args: { label: v.any() },
+  args: { label: syncLabelSchema },
   handler: async (ctx, { label }) => {
     const existing = await ctx.db
       .query("todoist_labels")

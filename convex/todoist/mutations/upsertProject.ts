@@ -1,9 +1,8 @@
-import { v } from "convex/values";
-
 import { internalMutation } from "../../_generated/server";
+import { syncProjectSchema } from "../types/syncApi";
 
 export const upsertProject = internalMutation({
-  args: { project: v.any() },
+  args: { project: syncProjectSchema },
   handler: async (ctx, { project }) => {
     const existing = await ctx.db
       .query("todoist_projects")

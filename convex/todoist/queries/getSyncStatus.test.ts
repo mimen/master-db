@@ -34,8 +34,8 @@ describe('getSyncStatus', () => {
 
   test('handles empty database', () => {
     const syncState = null;
-    const items: any[] = [];
-    const projects: any[] = [];
+    const items: ReturnType<typeof createMockTodoistItem>[] = [];
+    const projects: ReturnType<typeof createMockProject>[] = [];
 
     const result = {
       lastFullSync: syncState?.last_full_sync,

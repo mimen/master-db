@@ -37,7 +37,7 @@ describe('getProjectWithItemCount', () => {
 
   test('handles empty project with no items', () => {
     const project = createMockProject({ todoist_id: 'empty-proj' });
-    const items: any[] = [];
+    const items: ReturnType<typeof createMockTodoistItem>[] = [];
 
     const projectItems = items.filter(i => i.project_id === 'empty-proj');
     const result = {

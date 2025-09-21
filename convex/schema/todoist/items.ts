@@ -1,6 +1,15 @@
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// Due date schema matching Todoist Sync API structure
+const dueSchema = v.object({
+  date: v.string(),
+  is_recurring: v.optional(v.boolean()),
+  string: v.optional(v.string()),
+  datetime: v.optional(v.string()),
+  timezone: v.optional(v.string()),
+});
+
 export const todoist_items = defineTable({
   todoist_id: v.string(),
   content: v.string(),
@@ -10,7 +19,7 @@ export const todoist_items = defineTable({
   parent_id: v.optional(v.string()),
   child_order: v.number(),
   priority: v.number(),
-  due: v.optional(v.any()),
+  due: v.optional(dueSchema),
   labels: v.array(v.string()),
   assignee_id: v.optional(v.string()),
   assigner_id: v.optional(v.string()),

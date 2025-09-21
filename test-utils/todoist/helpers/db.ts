@@ -1,4 +1,4 @@
-import type { Task, PersonalProject, WorkspaceProject, Section, Label } from "@doist/todoist-api-typescript";
+import type { Task, PersonalProject, WorkspaceProject, Section } from "@doist/todoist-api-typescript";
 import { ConvexTestingHelper } from 'convex-test';
 
 type TodoistItem = Partial<Task>;

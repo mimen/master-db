@@ -1,9 +1,8 @@
-import { v } from "convex/values";
-
 import { internalMutation } from "../../_generated/server";
+import { syncSectionSchema } from "../types/syncApi";
 
 export const upsertSection = internalMutation({
-  args: { section: v.any() },
+  args: { section: syncSectionSchema },
   handler: async (ctx, { section }) => {
     const existing = await ctx.db
       .query("todoist_sections")

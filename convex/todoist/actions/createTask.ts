@@ -35,14 +35,16 @@ export const createTask = action({
         description: args.description,
       };
 
-      // Handle due date
+      // Handle due date - must provide at most one of dueDate or dueDatetime
       if (args.due) {
         if (args.due.string) {
           taskArgs.dueString = args.due.string;
         } else if (args.due.datetime) {
-          taskArgs.dueDatetime = args.due.datetime;
+          // Use spread to create new object with only dueDatetime
+          Object.assign(taskArgs, { dueDatetime: args.due.datetime });
         } else if (args.due.date) {
-          taskArgs.dueDate = args.due.date;
+          // Use spread to create new object with only dueDate
+          Object.assign(taskArgs, { dueDate: args.due.date });
         }
       }
 

@@ -1,9 +1,8 @@
-import { v } from "convex/values";
-
 import { internalMutation } from "../../_generated/server";
+import { syncNoteSchema } from "../types/syncApi";
 
 export const upsertNote = internalMutation({
-  args: { note: v.any() },
+  args: { note: syncNoteSchema },
   handler: async (ctx, { note }) => {
     const existing = await ctx.db
       .query("todoist_notes")

@@ -32,14 +32,16 @@ export const updateTask = action({
       if (args.labels !== undefined) updateArgs.labels = args.labels;
       if (args.description !== undefined) updateArgs.description = args.description;
 
-      // Handle due date
+      // Handle due date - must provide at most one of dueDate or dueDatetime
       if (args.due) {
         if (args.due.string) {
           updateArgs.dueString = args.due.string;
         } else if (args.due.datetime) {
-          updateArgs.dueDatetime = args.due.datetime;
+          // Use Object.assign to ensure type compatibility
+          Object.assign(updateArgs, { dueDatetime: args.due.datetime });
         } else if (args.due.date) {
-          updateArgs.dueDate = args.due.date;
+          // Use Object.assign to ensure type compatibility
+          Object.assign(updateArgs, { dueDate: args.due.date });
         }
       }
 
