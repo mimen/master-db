@@ -1,0 +1,36 @@
+import { internalMutation } from "../../_generated/server";
+import { v } from "convex/values";
+
+export const upsertProject = internalMutation({
+  args: { project: v.any() },
+  handler: async (ctx, { project }) => {
+    const existing = await ctx.db
+      .query("todoist_projects")
+      .withIndex("by_todoist_id", (q) => q.eq("todoist_id", project.id))
+      .first();
+
+    // Use updated_at as version since Sync API v1 doesn't provide version field
+    const currentVersion = project.updated_at ? new Date(project.updated_at).getTime() : Date.now();
+
+    const projectData = {
+      todoist_id: project.id,
+      name: project.name,
+      color: project.color,
+      parent_id: project.parent_id || undefined,
+      child_order: project.child_order || 0,
+      is_deleted: project.is_deleted ? 1 : 0,
+      is_archived: project.is_archived ? 1 : 0,
+      is_favorite: project.is_favorite ? 1 : 0,
+      view_style: project.view_style || "list",
+      sync_version: currentVersion,
+    };
+
+    if (existing) {
+      if (existing.sync_version < projectData.sync_version) {
+        await ctx.db.patch(existing._id, projectData);
+      }
+    } else {
+      await ctx.db.insert("todoist_projects", projectData);
+    }
+  },
+});
