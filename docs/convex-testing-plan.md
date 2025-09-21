@@ -37,27 +37,61 @@ export default defineConfig({
 
 ## Phase 2: Test Organization Structure (15 minutes)
 
-### 2.1 Folder Structure - One Test File Per Source File
+### Test Location Best Practices for Convex
+
+Based on official Convex documentation and community practices:
+1. **Tests SHOULD be inside the convex/ folder** - This is the standard pattern
+2. **Test files end with `.test.ts`** - Convex and Vitest will recognize these
+3. **Two valid organization patterns**:
+   - **Alongside source**: `createTask.ts` and `createTask.test.ts` in same folder
+   - **In tests subfolder**: Tests grouped in subdirectories (though we prefer alongside)
+4. **Both patterns work** - Choose based on team preference
+
+### 2.1 Folder Structure - Tests Alongside Source Files
 ```
 convex/
   todoist/
-    queries.ts
-    mutations.ts
-    publicQueries.ts
-    publicActions.ts
-    debug.ts
-    __tests__/
-      queries.test.ts         # Tests for queries.ts
-      mutations.test.ts       # Tests for mutations.ts
-      publicQueries.test.ts   # Tests for publicQueries.ts
-      publicActions.test.ts   # Tests for publicActions.ts
-      debug.test.ts          # Tests for debug.ts
-      __fixtures__/          # Shared test data
+    actions/                    # Public actions
+      createTask.ts
+      createTask.test.ts        # Test alongside source
+      updateTask.ts
+      updateTask.test.ts
+      completeTask.ts
+      completeTask.test.ts
+      utils/
+        todoistClient.ts
+    mutations/                  # Internal mutations  
+      upsertItem.ts
+      upsertItem.test.ts       
+      updateItem.ts
+      updateItem.test.ts
+      upsertProject.ts
+      upsertProject.test.ts
+    queries/                    # Public queries
+      getActiveItems.ts
+      getActiveItems.test.ts
+      getProjects.ts
+      getProjects.test.ts
+      getProjectWithItemCount.ts
+      getProjectWithItemCount.test.ts
+    internal/                   # Internal queries
+      getSyncState.ts
+      getSyncState.test.ts
+    sync/                       # Sync actions
+      performIncrementalSync.ts
+      performIncrementalSync.test.ts
+      runInitialSync.ts
+      runInitialSync.test.ts
+    test-utils/                 # Shared test resources only
+      fixtures/                 # Test data factories
         items.ts
         projects.ts
-      __helpers__/           # Test utilities
+        sections.ts
+        labels.ts
+      helpers/                  # Test utilities
         db.ts
         mocks.ts
+        setup.ts
 ```
 
 ### 2.2 Naming Convention
@@ -67,62 +101,74 @@ convex/
 
 ### 2.3 Example Test File Structure
 ```typescript
-// convex/todoist/__tests__/publicQueries.test.ts
+// convex/todoist/queries/getActiveItems.test.ts
 import { describe, test, expect, beforeEach } from 'vitest';
 import { convexTest } from 'convex-test';
 import { api } from '../../_generated/api';
 import schema from '../../schema';
-import { createMockTodoistItem } from './__fixtures__/items';
+import { createMockTodoistItem } from '../test-utils/fixtures/items';
 
-describe('todoist/publicQueries', () => {
+describe('todoist/queries/getActiveItems', () => {
   let t: ReturnType<typeof convexTest>;
   
   beforeEach(() => {
     t = convexTest(schema);
   });
 
-  describe('getActiveItems', () => {
-    test('returns only unchecked, non-deleted items', async () => {
-      // Setup test data
-      await t.run(async (ctx) => {
-        await ctx.db.insert('todoist_items', createMockTodoistItem({
-          todoist_id: '1',
-          content: 'Active task',
-          checked: 0,
-          is_deleted: 0,
-        }));
-        
-        await ctx.db.insert('todoist_items', createMockTodoistItem({
-          todoist_id: '2',
-          content: 'Completed task',
-          checked: 1,
-          is_deleted: 0,
-        }));
-      });
+  test('returns only unchecked, non-deleted items', async () => {
+    // Setup test data
+    await t.run(async (ctx) => {
+      await ctx.db.insert('todoist_items', createMockTodoistItem({
+        todoist_id: '1',
+        content: 'Active task',
+        checked: 0,
+        is_deleted: 0,
+      }));
       
-      // Execute and verify
-      const result = await t.query(api.todoist.publicQueries.getActiveItems);
-      expect(result).toHaveLength(1);
-      expect(result[0].content).toBe('Active task');
+      await ctx.db.insert('todoist_items', createMockTodoistItem({
+        todoist_id: '2',
+        content: 'Completed task',
+        checked: 1,
+        is_deleted: 0,
+      }));
     });
-
-    test('excludes soft-deleted items', async () => {
-      // Test soft deletion behavior
-    });
-
-    test('orders by priority and child_order', async () => {
-      // Test ordering logic
-    });
+    
+    // Execute and verify
+    const result = await t.query(api.todoist.queries.getActiveItems.getActiveItems);
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe('Active task');
   });
 
-  describe('getItemById', () => {
-    test('returns item when found', async () => {
-      // Test happy path
+  test('filters by projectId when provided', async () => {
+    // Setup test data
+    await t.run(async (ctx) => {
+      await ctx.db.insert('todoist_items', createMockTodoistItem({
+        todoist_id: '1',
+        content: 'Project A task',
+        project_id: 'project-a',
+        checked: 0,
+        is_deleted: 0,
+      }));
+      
+      await ctx.db.insert('todoist_items', createMockTodoistItem({
+        todoist_id: '2',
+        content: 'Project B task',
+        project_id: 'project-b',
+        checked: 0,
+        is_deleted: 0,
+      }));
     });
+    
+    // Execute with projectId filter
+    const result = await t.query(api.todoist.queries.getActiveItems.getActiveItems, {
+      projectId: 'project-a'
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe('Project A task');
+  });
 
-    test('returns null when not found', async () => {
-      // Test not found case
-    });
+  test('orders by child_order', async () => {
+    // Test ordering logic
   });
 });
 ```
@@ -131,7 +177,7 @@ describe('todoist/publicQueries', () => {
 
 ### 3.1 Test Fixtures Organization
 ```typescript
-// convex/todoist/__tests__/__fixtures__/items.ts
+// convex/todoist/test-utils/fixtures/items.ts
 export function createMockTodoistItem(overrides = {}) {
   return {
     todoist_id: '123',
@@ -158,7 +204,7 @@ export function createMockTodoistItem(overrides = {}) {
   };
 }
 
-// convex/todoist/__tests__/__fixtures__/projects.ts
+// convex/todoist/test-utils/fixtures/projects.ts
 export function createMockProject(overrides = {}) {
   return {
     todoist_id: 'project-123',
@@ -182,7 +228,7 @@ export function createMockProject(overrides = {}) {
 
 ### 3.2 Test Helper Utilities
 ```typescript
-// convex/todoist/__tests__/__helpers__/db.ts
+// convex/todoist/test-utils/helpers/db.ts
 import { ConvexTestingHelper } from 'convex-test';
 
 export async function seedDatabase(t: ConvexTestingHelper, data: {
@@ -227,15 +273,15 @@ export async function cleanDatabase(t: ConvexTestingHelper) {
 
 ### 3.3 Complete Test File Example
 ```typescript
-// convex/todoist/__tests__/mutations.test.ts
+// convex/todoist/mutations/upsertItem.test.ts
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { convexTest } from 'convex-test';
 import { internal } from '../../_generated/api';
 import schema from '../../schema';
-import { createMockTodoistItem } from './__fixtures__/items';
-import { seedDatabase, cleanDatabase } from './__helpers__/db';
+import { createMockTodoistItem } from '../test-utils/fixtures/items';
+import { seedDatabase, cleanDatabase } from '../test-utils/helpers/db';
 
-describe('todoist/mutations', () => {
+describe('todoist/mutations/upsertItem', () => {
   let t: ReturnType<typeof convexTest>;
   
   beforeEach(() => {
@@ -253,7 +299,7 @@ describe('todoist/mutations', () => {
         content: 'Brand new task',
       });
       
-      await t.mutation(internal.todoist.mutations.upsertItem, {
+      await t.mutation(internal.todoist.mutations.upsertItem.upsertItem, {
         item: mockItem
       });
       
@@ -278,11 +324,12 @@ describe('todoist/mutations', () => {
       });
       
       // Update the item
-      await t.mutation(internal.todoist.mutations.upsertItem, {
+      await t.mutation(internal.todoist.mutations.upsertItem.upsertItem, {
         item: createMockTodoistItem({
           todoist_id: 'existing-123',
           content: 'Updated content',
           checked: 1,
+          sync_version: 2,
         })
       });
       
@@ -358,8 +405,8 @@ jobs:
 bun add -D vitest @vitest/ui convex-test @edge-runtime/vm
 
 # 2. Create first test file
-mkdir -p convex/todoist/__tests__
-touch convex/todoist/__tests__/queries.test.ts
+mkdir -p convex/todoist/test-utils/fixtures
+touch convex/todoist/queries/getActiveItems.test.ts
 
 # 3. Run tests
 bun test
@@ -370,36 +417,33 @@ bun test:watch
 
 ## Recommended Convex File Organization
 
-### Standard Convex Pattern - One Function Per File
+### Standard Convex Pattern - One Function Per File with Tests Alongside
 ```
 convex/
   todoist/
     queries/                    # Public queries (one per file)
-      getActiveItems.ts        
+      getActiveItems.ts
+      getActiveItems.test.ts    # Test right next to source        
       getProjects.ts
+      getProjects.test.ts
       getProjectWithItemCount.ts
-      __tests__/
-        getActiveItems.test.ts
-        getProjects.test.ts
-        getProjectWithItemCount.test.ts
+      getProjectWithItemCount.test.ts
     
     mutations/                  # Internal mutations
       upsertItem.ts
+      upsertItem.test.ts
       upsertProject.ts
+      upsertProject.test.ts
       softDeleteItem.ts
-      __tests__/
-        upsertItem.test.ts
-        upsertProject.test.ts
-        softDeleteItem.test.ts
+      softDeleteItem.test.ts
     
     actions/                    # Public actions (API calls)
       createTask.ts
+      createTask.test.ts
       updateTask.ts
+      updateTask.test.ts
       completeTask.ts
-      __tests__/
-        createTask.test.ts
-        updateTask.test.ts
-        completeTask.test.ts
+      completeTask.test.ts
     
     internal/                   # Internal actions/queries
       sync/
@@ -409,12 +453,12 @@ convex/
         getRecentWebhooks.ts
         clearAllData.ts
     
-    __tests__/                  # Shared test utilities
-      __fixtures__/
+    test-utils/                 # Shared test utilities
+      fixtures/
         items.ts
         projects.ts
         sections.ts
-      __helpers__/
+      helpers/
         db.ts
         mocks.ts
     
@@ -426,8 +470,8 @@ convex/
   crons.ts                      # Cron jobs
   
   # Global test utilities
-  __tests__/
-    __helpers__/
+  test-utils/
+    helpers/
       convex.ts                # Global test helpers
       testSchema.ts            # Test-specific schema helpers
       
@@ -470,18 +514,39 @@ export const getActiveItems = query({
 ```
 
 ```typescript
-// convex/todoist/queries/__tests__/getActiveItems.test.ts
+// convex/todoist/queries/getActiveItems.test.ts
 import { describe, test, expect } from 'vitest';
 import { convexTest } from 'convex-test';
-import { api } from '../../../_generated/api';
-import schema from '../../../schema';
-import { createMockTodoistItem } from '../../__tests__/__fixtures__/items';
+import { api } from '../../_generated/api';
+import schema from '../../schema';
+import { createMockTodoistItem } from '../test-utils/fixtures/items';
 
 describe('getActiveItems', () => {
   test('returns only active, non-deleted items', async () => {
     const t = convexTest(schema);
     
-    // Test implementation
+    // Seed test data
+    await t.run(async (ctx) => {
+      await ctx.db.insert('todoist_items', createMockTodoistItem({
+        todoist_id: '1',
+        content: 'Active task',
+        checked: 0,
+        is_deleted: 0,
+      }));
+      
+      await ctx.db.insert('todoist_items', createMockTodoistItem({
+        todoist_id: '2',
+        content: 'Deleted task',
+        checked: 0,
+        is_deleted: 1,
+      }));
+    });
+    
+    // Test the query
+    const result = await t.query(api.todoist.queries.getActiveItems.getActiveItems, {});
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe('Active task');
   });
   
   test('filters by projectId when provided', async () => {
@@ -509,8 +574,8 @@ export * from './mutations/upsertItem';
 ### 1. File Organization Rules
 - **One test file per source file** - Never mix tests for different source files
 - **Mirror the source structure** - Test files follow exact same hierarchy
-- **Shared fixtures in `__fixtures__`** - Reusable test data factories
-- **Test helpers in `__helpers__`** - Database utilities, custom assertions
+- **Shared fixtures in `fixtures/`** - Reusable test data factories
+- **Test helpers in `helpers/`** - Database utilities, custom assertions
 
 ### 2. Test Isolation
 - Each test file should be completely independent
