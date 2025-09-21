@@ -1,5 +1,4 @@
-import { randomUUID } from "crypto";
-
+import type { Task, UpdateTaskArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -21,44 +20,54 @@ export const updateTask = action({
     labels: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<ActionResponse<any>> => {
+  handler: async (ctx, args): Promise<ActionResponse<Task>> => {
     try {
       const client = getTodoistClient();
-      const commandId = randomUUID();
 
-      // Build update args
-      const updateArgs: any = {
-        id: args.todoistId,
-      };
+      // Build UpdateTaskArgs for the SDK
+      const updateArgs: UpdateTaskArgs = {};
+
       if (args.content !== undefined) updateArgs.content = args.content;
       if (args.priority !== undefined) updateArgs.priority = args.priority;
       if (args.labels !== undefined) updateArgs.labels = args.labels;
       if (args.description !== undefined) updateArgs.description = args.description;
+
+      // Handle due date
       if (args.due) {
-        if (args.due.string) updateArgs.due_string = args.due.string;
-        else if (args.due.datetime) updateArgs.due_datetime = args.due.datetime;
-        else if (args.due.date) updateArgs.due_date = args.due.date;
+        if (args.due.string) {
+          updateArgs.dueString = args.due.string;
+        } else if (args.due.datetime) {
+          updateArgs.dueDatetime = args.due.datetime;
+        } else if (args.due.date) {
+          updateArgs.dueDate = args.due.date;
+        }
       }
 
-      // Execute command via Sync API v1
-      await client.executeCommands([{
-        type: "item_update",
-        uuid: commandId,
-        args: updateArgs,
-      }]);
+      // Update task using SDK
+      const task = await client.updateTask(args.todoistId, updateArgs);
 
-      // Update in Convex - remove the id field from updates
-      const { id: _id, ...updateFields } = updateArgs;
+      // Update in Convex with the response
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
         updates: {
-          ...updateFields,
+          content: task.content,
+          description: task.description,
+          priority: task.priority,
+          labels: task.labels,
+          due: task.due ? {
+            date: task.due.date,
+            is_recurring: task.due.isRecurring,
+            string: task.due.string,
+            datetime: task.due.datetime,
+            timezone: task.due.timezone,
+          } : null,
+          updated_at: task.updatedAt || new Date().toISOString(),
           sync_version: Date.now(),
         },
       });
 
-      return { success: true, data: updateArgs };
-    } catch (error: any) {
+      return { success: true, data: task };
+    } catch (error) {
       console.error("Failed to update task:", error);
       return {
         success: false,

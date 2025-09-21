@@ -1,5 +1,4 @@
-import { randomUUID } from "crypto";
-
+import type { Task, MoveTaskArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -13,39 +12,39 @@ export const moveTask = action({
     projectId: v.string(),
     sectionId: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<ActionResponse<any>> => {
+  handler: async (ctx, args): Promise<ActionResponse<Task[]>> => {
     try {
       const client = getTodoistClient();
-      const commandId = randomUUID();
 
-      // Execute command via API v1
-      const response = await client.executeCommands([{
-        type: "item_move",
-        uuid: commandId,
-        args: {
-          id: args.todoistId,
-          project_id: args.projectId,
-          section_id: args.sectionId,
-        },
-      }]);
-
-      // Update in Convex - don't set section_id if not provided
-      const updates: any = {
-        project_id: args.projectId,
-        sync_version: Date.now(),
+      // Build move args for SDK
+      const moveArgs: MoveTaskArgs = {
+        projectId: args.projectId,
       };
 
       if (args.sectionId) {
-        updates.section_id = args.sectionId;
+        moveArgs.sectionId = args.sectionId;
       }
 
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
-        todoistId: args.todoistId,
-        updates,
-      });
+      // Move task using SDK
+      const tasks = await client.moveTasks([args.todoistId], moveArgs);
 
-      return { success: true, data: response };
-    } catch (error: any) {
+      if (tasks && tasks.length > 0) {
+        const task = tasks[0];
+
+        // Update in Convex
+        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+          todoistId: args.todoistId,
+          updates: {
+            project_id: task.projectId,
+            section_id: task.sectionId,
+            updated_at: task.updatedAt || new Date().toISOString(),
+            sync_version: Date.now(),
+          },
+        });
+      }
+
+      return { success: true, data: tasks };
+    } catch (error) {
       console.error("Failed to move task:", error);
       return {
         success: false,

@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -11,31 +9,27 @@ export const reopenTask = action({
   args: {
     todoistId: v.string(),
   },
-  handler: async (ctx, args): Promise<ActionResponse<void>> => {
+  handler: async (ctx, args): Promise<ActionResponse<boolean>> => {
     try {
       const client = getTodoistClient();
-      const commandId = randomUUID();
 
-      // Execute command via API v1
-      await client.executeCommands([{
-        type: "item_uncomplete",
-        uuid: commandId,
-        args: {
-          id: args.todoistId,
-        },
-      }]);
+      // Reopen task using SDK
+      const success = await client.reopenTask(args.todoistId);
 
-      // Update in Convex
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
-        todoistId: args.todoistId,
-        updates: {
-          checked: 0,
-          sync_version: Date.now(),
-        },
-      });
+      if (success) {
+        // Update in Convex
+        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+          todoistId: args.todoistId,
+          updates: {
+            checked: 0,
+            completed_at: null,
+            sync_version: Date.now(),
+          },
+        });
+      }
 
-      return { success: true, data: undefined };
-    } catch (error: any) {
+      return { success: true, data: success };
+    } catch (error) {
       console.error("Failed to reopen task:", error);
       return {
         success: false,

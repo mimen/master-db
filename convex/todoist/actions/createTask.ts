@@ -1,5 +1,4 @@
-import { randomUUID } from "crypto";
-
+import type { Task, AddTaskArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -22,64 +21,68 @@ export const createTask = action({
     labels: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<ActionResponse<any>> => {
+  handler: async (ctx, args): Promise<ActionResponse<Task>> => {
     try {
       const client = getTodoistClient();
-      const tempId = randomUUID();
-      const commandId = randomUUID();
 
-      // Build command args
-      const commandArgs: any = {
+      // Build AddTaskArgs for the SDK
+      const taskArgs: AddTaskArgs = {
         content: args.content,
-        priority: args.priority || 1,
+        priority: args.priority,
+        projectId: args.projectId,
+        sectionId: args.sectionId,
+        labels: args.labels,
+        description: args.description,
       };
 
-      if (args.projectId) commandArgs.project_id = args.projectId;
-      if (args.sectionId) commandArgs.section_id = args.sectionId;
-      if (args.labels?.length) commandArgs.labels = args.labels;
-      if (args.description) commandArgs.description = args.description;
+      // Handle due date
       if (args.due) {
-        if (args.due.string) commandArgs.due_string = args.due.string;
-        else if (args.due.datetime) commandArgs.due_datetime = args.due.datetime;
-        else if (args.due.date) commandArgs.due_date = args.due.date;
+        if (args.due.string) {
+          taskArgs.dueString = args.due.string;
+        } else if (args.due.datetime) {
+          taskArgs.dueDatetime = args.due.datetime;
+        } else if (args.due.date) {
+          taskArgs.dueDate = args.due.date;
+        }
       }
 
-      // Execute command via Sync API v1
-      const response = await client.executeCommands([{
-        type: "item_add",
-        temp_id: tempId,
-        uuid: commandId,
-        args: commandArgs,
-      }]);
+      // Create task using SDK
+      const task = await client.addTask(taskArgs);
 
-      // Get the real ID from temp_id_mapping
-      const realId = response.temp_id_mapping?.[tempId];
-      if (!realId) {
-        throw new Error("Failed to get task ID from response");
-      }
-
-      // Store in Convex - we'll get full details from next sync
+      // Store in Convex
       await ctx.runMutation(internal.todoist.mutations.upsertItem, {
         item: {
-          id: realId,
-          content: args.content,
-          project_id: args.projectId,
-          section_id: args.sectionId,
-          priority: args.priority || 1,
-          labels: args.labels || [],
-          description: args.description,
-          checked: 0,
-          is_deleted: 0,
-          child_order: 0,
-          comment_count: 0,
-          added_at: new Date().toISOString(),
-          user_id: "current",
+          id: task.id,
+          content: task.content,
+          description: task.description,
+          project_id: task.projectId,
+          section_id: task.sectionId,
+          parent_id: task.parentId,
+          child_order: task.childOrder,
+          priority: task.priority,
+          due: task.due ? {
+            date: task.due.date,
+            is_recurring: task.due.isRecurring,
+            string: task.due.string,
+            datetime: task.due.datetime,
+            timezone: task.due.timezone,
+          } : null,
+          labels: task.labels,
+          assignee_id: task.responsibleUid,
+          assigner_id: task.assignedByUid,
+          comment_count: task.noteCount,
+          checked: task.checked ? 1 : 0,
+          is_deleted: task.isDeleted ? 1 : 0,
+          added_at: task.addedAt || new Date().toISOString(),
+          added_by_uid: task.addedByUid,
+          completed_at: task.completedAt,
+          updated_at: task.updatedAt || new Date().toISOString(),
           sync_version: Date.now(),
         },
       });
 
-      return { success: true, data: { id: realId, ...commandArgs } };
-    } catch (error: any) {
+      return { success: true, data: task };
+    } catch (error) {
       console.error("Failed to create task:", error);
       return {
         success: false,

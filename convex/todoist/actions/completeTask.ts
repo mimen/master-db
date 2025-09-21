@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -11,30 +9,26 @@ export const completeTask = action({
   args: {
     todoistId: v.string(),
   },
-  handler: async (ctx, args): Promise<ActionResponse<void>> => {
+  handler: async (ctx, args): Promise<ActionResponse<boolean>> => {
     try {
       const client = getTodoistClient();
-      const commandId = randomUUID();
 
-      // Execute command via API v1
-      await client.executeCommands([{
-        type: "item_complete",
-        uuid: commandId,
-        args: {
-          id: args.todoistId,
-        },
-      }]);
+      // Complete task using SDK
+      const success = await client.closeTask(args.todoistId);
 
-      // Update in Convex
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
-        todoistId: args.todoistId,
-        updates: {
-          checked: 1,
-          sync_version: Date.now(),
-        },
-      });
+      if (success) {
+        // Update in Convex
+        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+          todoistId: args.todoistId,
+          updates: {
+            checked: 1,
+            completed_at: new Date().toISOString(),
+            sync_version: Date.now(),
+          },
+        });
+      }
 
-      return { success: true, data: undefined };
+      return { success: true, data: success };
     } catch (error) {
       console.error("Failed to complete task:", error);
       return {

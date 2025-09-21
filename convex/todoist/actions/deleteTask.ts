@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -11,31 +9,26 @@ export const deleteTask = action({
   args: {
     todoistId: v.string(),
   },
-  handler: async (ctx, args): Promise<ActionResponse<void>> => {
+  handler: async (ctx, args): Promise<ActionResponse<boolean>> => {
     try {
       const client = getTodoistClient();
-      const commandId = randomUUID();
 
-      // Execute command via API v1
-      await client.executeCommands([{
-        type: "item_delete",
-        uuid: commandId,
-        args: {
-          id: args.todoistId,
-        },
-      }]);
+      // Delete task using SDK
+      const success = await client.deleteTask(args.todoistId);
 
-      // Soft delete in Convex
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
-        todoistId: args.todoistId,
-        updates: {
-          is_deleted: 1,
-          sync_version: Date.now(),
-        },
-      });
+      if (success) {
+        // Mark as deleted in Convex
+        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+          todoistId: args.todoistId,
+          updates: {
+            is_deleted: 1,
+            sync_version: Date.now(),
+          },
+        });
+      }
 
-      return { success: true, data: undefined };
-    } catch (error: any) {
+      return { success: true, data: success };
+    } catch (error) {
       console.error("Failed to delete task:", error);
       return {
         success: false,

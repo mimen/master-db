@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -13,32 +11,39 @@ export const completeMultipleTasks = action({
   },
   handler: async (ctx, args): Promise<ActionResponse<{ completed: string[]; failed: string[] }>> => {
     const client = getTodoistClient();
+    const completed: string[] = [];
+    const failed: string[] = [];
 
     try {
-      // Build batch commands
-      const commands = args.todoistIds.map(todoistId => ({
-        type: "item_complete",
-        uuid: randomUUID(),
-        args: {
-          id: todoistId,
-        },
-      }));
-
-      // Execute all commands at once
-      await client.executeCommands(commands);
-
-      // Update all items in Convex
+      // Complete each task individually using SDK
       for (const todoistId of args.todoistIds) {
-        await ctx.runMutation(internal.todoist.mutations.updateItem, {
-          todoistId,
-          updates: {
-            checked: 1,
-            sync_version: Date.now(),
-          },
-        });
+        try {
+          const success = await client.closeTask(todoistId);
+
+          if (success) {
+            // Update in Convex
+            await ctx.runMutation(internal.todoist.mutations.updateItem, {
+              todoistId,
+              updates: {
+                checked: 1,
+                completed_at: new Date().toISOString(),
+                sync_version: Date.now(),
+              },
+            });
+            completed.push(todoistId);
+          } else {
+            failed.push(todoistId);
+          }
+        } catch (error) {
+          console.error(`Failed to complete task ${todoistId}:`, error);
+          failed.push(todoistId);
+        }
       }
 
-      return { success: true, data: { completed: args.todoistIds, failed: [] } };
+      return {
+        success: true,
+        data: { completed, failed }
+      };
     } catch (error) {
       console.error("Failed to complete tasks:", error);
       return {
