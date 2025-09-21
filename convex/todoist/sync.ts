@@ -37,6 +37,18 @@ export const performIncrementalSync = action({
     }
 
     const syncData = await response.json();
+    
+    // Debug: Log the entire API response
+    console.log("Todoist API sync response:", JSON.stringify({
+      sync_token: syncData.sync_token?.substring(0, 20) + "...",
+      full_sync: syncData.full_sync,
+      projects_count: syncData.projects?.length || 0,
+      items_count: syncData.items?.length || 0,
+      sections_count: syncData.sections?.length || 0,
+      labels_count: syncData.labels?.length || 0,
+      notes_count: syncData.notes?.length || 0,
+      reminders_count: syncData.reminders?.length || 0,
+    }));
 
     // Check if this is a full sync
     if (syncData.full_sync) {
