@@ -1,5 +1,5 @@
 // Type for consistent API responses
-export type ActionResponse<T> = 
+export type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; code?: string };
 
@@ -9,7 +9,7 @@ export const getTodoistClient = () => {
   if (!token) {
     throw new Error("TODOIST_API_TOKEN not configured");
   }
-  
+
   return {
     // Execute commands via API v1 sync endpoint
     async executeCommands(commands: any[]) {
@@ -30,7 +30,7 @@ export const getTodoistClient = () => {
       }
 
       const result = await response.json();
-      
+
       // Check sync status
       if (result.sync_status && Object.values(result.sync_status).some((status: any) => status !== "ok")) {
         throw new Error(`Sync command failed: ${JSON.stringify(result.sync_status)}`);

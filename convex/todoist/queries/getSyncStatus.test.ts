@@ -11,9 +11,9 @@ describe('getSyncStatus', () => {
       createMockTodoistItem({ checked: 0, is_deleted: 1 }), // Deleted
       createMockTodoistItem({ checked: 0, is_deleted: 0 }), // Active
     ];
-    
+
     const activeItemCount = items.filter(i => i.checked === 0 && i.is_deleted === 0).length;
-    
+
     expect(activeItemCount).toBe(2);
     expect(items.length).toBe(4);
   });
@@ -25,9 +25,9 @@ describe('getSyncStatus', () => {
       createMockProject({ is_deleted: 0 }), // Active
       createMockProject({ is_deleted: 0 }), // Active
     ];
-    
+
     const activeProjectCount = projects.filter(p => p.is_deleted === 0).length;
-    
+
     expect(activeProjectCount).toBe(3);
     expect(projects.length).toBe(4);
   });
@@ -36,7 +36,7 @@ describe('getSyncStatus', () => {
     const syncState = null;
     const items: any[] = [];
     const projects: any[] = [];
-    
+
     const result = {
       lastFullSync: syncState?.last_full_sync,
       lastIncrementalSync: syncState?.last_incremental_sync,
@@ -46,7 +46,7 @@ describe('getSyncStatus', () => {
       projectCount: projects.length,
       activeProjectCount: projects.filter(p => p.is_deleted === 0).length,
     };
-    
+
     expect(result.lastFullSync).toBeUndefined();
     expect(result.itemCount).toBe(0);
     expect(result.activeItemCount).toBe(0);

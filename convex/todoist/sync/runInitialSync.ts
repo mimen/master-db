@@ -29,7 +29,7 @@ export const runInitialSync = action({
     }
 
     const syncData = await response.json();
-    
+
     // Save all projects
     if (syncData.projects) {
       for (const project of syncData.projects) {

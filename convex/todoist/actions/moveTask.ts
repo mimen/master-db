@@ -17,7 +17,7 @@ export const moveTask = action({
     try {
       const client = getTodoistClient();
       const commandId = randomUUID();
-      
+
       // Execute command via API v1
       const response = await client.executeCommands([{
         type: "item_move",
@@ -34,11 +34,11 @@ export const moveTask = action({
         project_id: args.projectId,
         sync_version: Date.now(),
       };
-      
+
       if (args.sectionId) {
         updates.section_id = args.sectionId;
       }
-      
+
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
         updates,

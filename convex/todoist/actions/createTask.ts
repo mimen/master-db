@@ -27,7 +27,7 @@ export const createTask = action({
       const client = getTodoistClient();
       const tempId = randomUUID();
       const commandId = randomUUID();
-      
+
       // Build command args
       const commandArgs: any = {
         content: args.content,

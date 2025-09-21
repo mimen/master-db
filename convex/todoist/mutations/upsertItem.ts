@@ -12,7 +12,7 @@ export const upsertItem = internalMutation({
 
     // Use updated_at as version since Sync API v1 doesn't provide version field
     const currentVersion = item.updated_at ? new Date(item.updated_at).getTime() : Date.now();
-    
+
     const itemData = {
       todoist_id: item.id,
       content: item.content,

@@ -9,10 +9,10 @@ import * as todoist from "./schema/todoist";
 export default defineSchema({
   // Todoist tables
   ...todoist,
-  
+
   // Sync management
   sync_state,
-  
+
   // Future integrations can add their tables here:
   // ...googleCalendar,
   // ...beeper,

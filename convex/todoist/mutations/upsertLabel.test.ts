@@ -10,7 +10,7 @@ describe('upsertLabel', () => {
       is_deleted: false,
       is_favorite: true
     };
-    
+
     const labelData = {
       todoist_id: todoistLabel.id,
       name: todoistLabel.name,
@@ -20,7 +20,7 @@ describe('upsertLabel', () => {
       is_favorite: todoistLabel.is_favorite ? 1 : 0,
       sync_version: Date.now(),
     };
-    
+
     expect(labelData.todoist_id).toBe('label-123');
     expect(labelData.name).toBe('urgent');
     expect(labelData.color).toBe('red');
@@ -35,7 +35,7 @@ describe('upsertLabel', () => {
       name: 'work',
       color: 'blue'
     };
-    
+
     const labelData = {
       todoist_id: labelWithoutOrder.id,
       name: labelWithoutOrder.name,
@@ -45,7 +45,7 @@ describe('upsertLabel', () => {
       is_favorite: 0,
       sync_version: Date.now(),
     };
-    
+
     expect(labelData.item_order).toBe(0);
   });
 
@@ -54,20 +54,20 @@ describe('upsertLabel', () => {
       sync_version: 1000,
       name: 'existing'
     };
-    
+
     const olderUpdate = {
       sync_version: 500,
       name: 'older'
     };
-    
+
     const newerUpdate = {
       sync_version: 1500,
       name: 'newer'
     };
-    
+
     // Older update should be skipped
     expect(olderUpdate.sync_version < existingLabel.sync_version).toBe(true);
-    
+
     // Newer update should be applied
     expect(newerUpdate.sync_version > existingLabel.sync_version).toBe(true);
   });

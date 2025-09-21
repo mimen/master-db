@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
 
 export const updateItem = internalMutation({
-  args: { 
+  args: {
     todoistId: v.string(),
     updates: v.any(),
   },
@@ -12,12 +12,12 @@ export const updateItem = internalMutation({
       .query("todoist_items")
       .withIndex("by_todoist_id", (q) => q.eq("todoist_id", todoistId))
       .first();
-      
+
     if (!existing) {
       console.error(`Item not found: ${todoistId}`);
       return;
     }
-    
+
     // Apply updates
     await ctx.db.patch(existing._id, updates);
   },

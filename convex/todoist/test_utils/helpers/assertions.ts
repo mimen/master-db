@@ -32,7 +32,7 @@ export function assertValidPriority(priority: any) {
 
 export function assertValidColor(color: any) {
   const validColors = [
-    'berry_red', 'light_blue', 'red', 'blue', 'orange', 
+    'berry_red', 'light_blue', 'red', 'blue', 'orange',
     'grape', 'yellow', 'violet', 'olive_green', 'lavender',
     'lime_green', 'magenta', 'green', 'salmon', 'mint_green',
     'charcoal', 'teal', 'grey', 'sky_blue'

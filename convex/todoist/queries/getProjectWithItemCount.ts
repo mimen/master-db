@@ -11,14 +11,14 @@ export const getProjectWithItemCount = query({
       .query("todoist_projects")
       .filter((q) => q.eq(q.field("todoist_id"), projectId))
       .first();
-      
+
     if (!project) return null;
-    
+
     const items = await ctx.db
       .query("todoist_items")
       .filter((q) => q.eq(q.field("project_id"), projectId))
       .collect();
-      
+
     return {
       ...project,
       itemCount: items.length,

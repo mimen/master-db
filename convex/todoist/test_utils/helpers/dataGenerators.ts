@@ -12,30 +12,30 @@ export function generateRandomContent(type: 'task' | 'note' | 'project' = 'task'
     note: ['Note:', 'Remember:', 'Important:', 'TODO:', 'FYI:'],
     project: ['Project', 'Initiative', 'Sprint', 'Feature', 'Module']
   };
-  
+
   const subjects = {
     task: ['report', 'presentation', 'code', 'documentation', 'meeting notes'],
     note: ['deadline tomorrow', 'meeting at 3pm', 'follow up required', 'waiting for approval'],
     project: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon']
   };
-  
+
   const prefix = prefixes[type][Math.floor(Math.random() * prefixes[type].length)];
   const subject = subjects[type][Math.floor(Math.random() * subjects[type].length)];
-  
+
   return `${prefix} ${subject}`;
 }
 
 export function generateRandomLabels(count = 0): string[] {
   const allLabels = ['urgent', 'work', 'personal', 'home', 'shopping', 'health', 'finance', 'travel'];
   const labels: string[] = [];
-  
+
   for (let i = 0; i < count && i < allLabels.length; i++) {
     const randomIndex = Math.floor(Math.random() * allLabels.length);
     if (!labels.includes(allLabels[randomIndex])) {
       labels.push(allLabels[randomIndex]);
     }
   }
-  
+
   return labels;
 }
 

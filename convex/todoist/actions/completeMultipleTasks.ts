@@ -13,7 +13,7 @@ export const completeMultipleTasks = action({
   },
   handler: async (ctx, args): Promise<ActionResponse<{ completed: string[]; failed: string[] }>> => {
     const client = getTodoistClient();
-    
+
     try {
       // Build batch commands
       const commands = args.todoistIds.map(todoistId => ({
@@ -26,7 +26,7 @@ export const completeMultipleTasks = action({
 
       // Execute all commands at once
       await client.executeCommands(commands);
-      
+
       // Update all items in Convex
       for (const todoistId of args.todoistIds) {
         await ctx.runMutation(internal.todoist.mutations.updateItem, {

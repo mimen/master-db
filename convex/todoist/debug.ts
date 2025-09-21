@@ -7,10 +7,10 @@ export const getRecentlyModifiedItems = query({
     const items = await ctx.db
       .query("todoist_items")
       .collect();
-    
+
     // Sort by sync_version descending to see most recently modified
     const sorted = items.sort((a, b) => b.sync_version - a.sync_version);
-    
+
     // Return top 10
     return sorted.slice(0, 10).map(item => ({
       content: item.content,
@@ -28,7 +28,7 @@ export const getCompletedItems = query({
       .query("todoist_items")
       .filter(q => q.eq(q.field("checked"), 1))
       .collect();
-    
+
     return items.map(item => ({
       content: item.content,
       checked: item.checked,
@@ -44,7 +44,7 @@ export const getDeletedItems = query({
       .query("todoist_items")
       .filter(q => q.eq(q.field("is_deleted"), 1))
       .collect();
-    
+
     return items.map(item => ({
       content: item.content,
       checked: item.checked,
@@ -60,11 +60,11 @@ export const searchItemByContent = query({
     const items = await ctx.db
       .query("todoist_items")
       .collect();
-    
-    const matches = items.filter(item => 
+
+    const matches = items.filter(item =>
       item.content.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
+
     return matches.map(item => ({
       content: item.content,
       description: item.description,
@@ -87,7 +87,7 @@ export const getItemByTodoistId = query({
       .query("todoist_items")
       .withIndex("by_todoist_id", (q) => q.eq("todoist_id", todoistId))
       .first();
-    
+
     return item;
   },
 });
@@ -95,7 +95,7 @@ export const getItemByTodoistId = query({
 export const getItemStats = query({
   handler: async (ctx) => {
     const items = await ctx.db.query("todoist_items").collect();
-    
+
     return {
       total: items.length,
       checked: items.filter(i => i.checked === 1).length,
@@ -112,7 +112,7 @@ export const getRawSyncData = query({
       .query("sync_state")
       .withIndex("by_service", (q) => q.eq("service", "todoist"))
       .first();
-    
+
     return {
       currentSyncToken: syncState?.last_sync_token,
       lastFullSync: syncState?.last_full_sync,
@@ -127,11 +127,11 @@ export const getProjectByName = query({
     const projects = await ctx.db
       .query("todoist_projects")
       .collect();
-    
-    const matches = projects.filter(project => 
+
+    const matches = projects.filter(project =>
       project.name.toLowerCase().includes(name.toLowerCase())
     );
-    
+
     return matches.map(project => ({
       todoist_id: project.todoist_id,
       name: project.name,
@@ -149,11 +149,11 @@ export const getLabelByName = query({
     const labels = await ctx.db
       .query("todoist_labels")
       .collect();
-    
-    const matches = labels.filter(label => 
+
+    const matches = labels.filter(label =>
       label.name.toLowerCase().includes(name.toLowerCase())
     );
-    
+
     return matches.map(label => ({
       todoist_id: label.todoist_id,
       name: label.name,
@@ -171,7 +171,7 @@ export const getDeletedLabels = query({
       .query("todoist_labels")
       .filter(q => q.eq(q.field("is_deleted"), 1))
       .collect();
-    
+
     return labels.map(label => ({
       todoist_id: label.todoist_id,
       name: label.name,
@@ -187,11 +187,11 @@ export const getSectionByName = query({
     const sections = await ctx.db
       .query("todoist_sections")
       .collect();
-    
-    const matches = sections.filter(section => 
+
+    const matches = sections.filter(section =>
       section.name.toLowerCase().includes(name.toLowerCase())
     );
-    
+
     return matches.map(section => ({
       todoist_id: section.todoist_id,
       name: section.name,

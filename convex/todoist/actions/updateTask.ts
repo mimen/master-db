@@ -25,7 +25,7 @@ export const updateTask = action({
     try {
       const client = getTodoistClient();
       const commandId = randomUUID();
-      
+
       // Build update args
       const updateArgs: any = {
         id: args.todoistId,

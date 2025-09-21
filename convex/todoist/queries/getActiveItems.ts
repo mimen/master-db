@@ -16,7 +16,7 @@ export const getActiveItems = query({
     }
 
     const items = await q.collect();
-    
+
     // Sort by child_order
     return items.sort((a, b) => a.child_order - b.child_order);
   },

@@ -11,13 +11,13 @@ export async function seedDatabase(t: ConvexTestingHelper, data: {
         await ctx.db.insert('todoist_projects', project);
       }
     }
-    
+
     if (data.sections) {
       for (const section of data.sections) {
         await ctx.db.insert('todoist_sections', section);
       }
     }
-    
+
     if (data.items) {
       for (const item of data.items) {
         await ctx.db.insert('todoist_items', item);
@@ -37,7 +37,7 @@ export async function cleanDatabase(t: ConvexTestingHelper) {
       'todoist_notes',
       'todoist_reminders'
     ];
-    
+
     for (const table of tables) {
       const items = await ctx.db.query(table).collect();
       for (const item of items) {

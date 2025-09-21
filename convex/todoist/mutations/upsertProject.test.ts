@@ -14,9 +14,9 @@ describe('upsertProject', () => {
       view_style: 'board',
       updated_at: '2024-01-01T00:00:00Z'
     };
-    
+
     const currentVersion = new Date(todoistProject.updated_at).getTime();
-    
+
     const projectData = {
       todoist_id: todoistProject.id,
       name: todoistProject.name,
@@ -29,7 +29,7 @@ describe('upsertProject', () => {
       view_style: todoistProject.view_style || "list",
       sync_version: currentVersion,
     };
-    
+
     expect(projectData.todoist_id).toBe('proj-123');
     expect(projectData.name).toBe('Test Project');
     expect(projectData.is_deleted).toBe(0);
@@ -44,7 +44,7 @@ describe('upsertProject', () => {
       name: 'Minimal Project',
       color: 'red'
     };
-    
+
     const projectData = {
       todoist_id: minimalProject.id,
       name: minimalProject.name,
@@ -57,7 +57,7 @@ describe('upsertProject', () => {
       view_style: "list",
       sync_version: Date.now(),
     };
-    
+
     expect(projectData.parent_id).toBeUndefined();
     expect(projectData.child_order).toBe(0);
     expect(projectData.view_style).toBe('list');
@@ -67,10 +67,10 @@ describe('upsertProject', () => {
     const existingVersion = 1000;
     const newVersion = 2000;
     const oldVersion = 500;
-    
+
     // Newer version should update
     expect(newVersion > existingVersion).toBe(true);
-    
+
     // Older version should NOT update
     expect(oldVersion < existingVersion).toBe(true);
   });

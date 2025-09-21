@@ -10,7 +10,7 @@ describe('upsertSection', () => {
       is_deleted: false,
       is_archived: false
     };
-    
+
     const sectionData = {
       todoist_id: todoistSection.id,
       name: todoistSection.name,
@@ -20,7 +20,7 @@ describe('upsertSection', () => {
       is_archived: todoistSection.is_archived ? 1 : 0,
       sync_version: Date.now(),
     };
-    
+
     expect(sectionData.todoist_id).toBe('section-123');
     expect(sectionData.name).toBe('Test Section');
     expect(sectionData.project_id).toBe('proj-123');
@@ -35,7 +35,7 @@ describe('upsertSection', () => {
       name: 'No Order Section',
       project_id: 'proj-123'
     };
-    
+
     const sectionData = {
       todoist_id: sectionWithoutOrder.id,
       name: sectionWithoutOrder.name,
@@ -45,7 +45,7 @@ describe('upsertSection', () => {
       is_archived: 0,
       sync_version: Date.now(),
     };
-    
+
     expect(sectionData.section_order).toBe(0);
   });
 
@@ -57,7 +57,7 @@ describe('upsertSection', () => {
       is_deleted: true,
       is_archived: true
     };
-    
+
     const sectionData = {
       todoist_id: deletedSection.id,
       name: deletedSection.name,
@@ -67,7 +67,7 @@ describe('upsertSection', () => {
       is_archived: deletedSection.is_archived ? 1 : 0,
       sync_version: Date.now(),
     };
-    
+
     expect(sectionData.is_deleted).toBe(1);
     expect(sectionData.is_archived).toBe(1);
   });

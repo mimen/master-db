@@ -15,7 +15,7 @@ export const reopenTask = action({
     try {
       const client = getTodoistClient();
       const commandId = randomUUID();
-      
+
       // Execute command via API v1
       await client.executeCommands([{
         type: "item_uncomplete",

@@ -10,10 +10,10 @@ describe('getProjects', () => {
       createMockProject({ sync_version: 1, name: 'First' }),
       createMockProject({ sync_version: 2, name: 'Second' }),
     ];
-    
+
     // Test the sorting logic
     const sorted = projects.sort((a, b) => a.sync_version - b.sync_version);
-    
+
     expect(sorted[0].name).toBe('First');
     expect(sorted[1].name).toBe('Second');
     expect(sorted[2].name).toBe('Third');
@@ -21,10 +21,10 @@ describe('getProjects', () => {
 
   test('returns empty array when no projects exist', () => {
     const projects: any[] = [];
-    
+
     // Test edge case
     const sorted = projects.sort((a, b) => a.sync_version - b.sync_version);
-    
+
     expect(sorted).toEqual([]);
   });
 });

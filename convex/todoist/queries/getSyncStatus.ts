@@ -6,10 +6,10 @@ export const getSyncStatus = query({
       .query("sync_state")
       .filter((q) => q.eq(q.field("service"), "todoist"))
       .first();
-      
+
     const items = await ctx.db.query("todoist_items").collect();
     const projects = await ctx.db.query("todoist_projects").collect();
-    
+
     return {
       lastFullSync: syncState?.last_full_sync,
       lastIncrementalSync: syncState?.last_incremental_sync,
