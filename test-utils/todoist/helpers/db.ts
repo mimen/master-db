@@ -1,9 +1,14 @@
+import type { Task, PersonalProject, WorkspaceProject, Section, Label } from "@doist/todoist-api-typescript";
 import { ConvexTestingHelper } from 'convex-test';
 
+type TodoistItem = Partial<Task>;
+type TodoistProject = Partial<PersonalProject | WorkspaceProject>;
+type TodoistSection = Partial<Section>;
+
 export async function seedDatabase(t: ConvexTestingHelper, data: {
-  items?: any[],
-  projects?: any[],
-  sections?: any[]
+  items?: TodoistItem[],
+  projects?: TodoistProject[],
+  sections?: TodoistSection[]
 }) {
   await t.run(async (ctx) => {
     if (data.projects) {

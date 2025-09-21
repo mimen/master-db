@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 
-import { createMockProject } from '../test_utils/fixtures/projects';
+import { createMockProject } from '../../../test-utils/todoist/fixtures/projects';
 
 // Since convex-test has issues with Bun, we'll test the business logic
 describe('getProjects', () => {
@@ -20,7 +20,7 @@ describe('getProjects', () => {
   });
 
   test('returns empty array when no projects exist', () => {
-    const projects: any[] = [];
+    const projects: Record<string, unknown>[] = [];
 
     // Test edge case
     const sorted = projects.sort((a, b) => a.sync_version - b.sync_version);
