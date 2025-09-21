@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "convex dev",
     "build": "tsc --noEmit",
-    "sync:initial": "convex run todoist/initialSync:runInitialSync"
+    "sync:initial": "convex run todoist/sync:runInitialSync",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "convex": "^1.27.1",
@@ -13,7 +16,11 @@
     "zod": "^4.1.9"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@types/node": "^24.5.2",
-    "typescript": "^5.9.2"
+    "@vitest/ui": "^3.2.4",
+    "convex-test": "^0.0.38",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   }
 }

@@ -6,7 +6,7 @@ const crons = cronJobs();
 // Run incremental sync every 5 minutes
 crons.interval(
   "todoist-incremental-sync",
-  { minutes: 5 },
+  { minutes: 10 },
   api.todoist.sync.performIncrementalSync
 );
 
