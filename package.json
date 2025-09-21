@@ -2,9 +2,13 @@
   "name": "personal-master-db",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "convex dev",
     "build": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "typecheck": "tsc --noEmit",
     "sync:initial": "convex run todoist/sync:runInitialSync",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -17,9 +21,15 @@
   },
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
+    "@eslint/js": "^9.36.0",
     "@types/node": "^24.5.2",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
     "@vitest/ui": "^3.2.4",
     "convex-test": "^0.0.38",
+    "eslint": "^9.36.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }
