@@ -49,6 +49,8 @@ export default [
         },
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-multiple-empty-lines': ['error', { max: 1, maxEOF: 1, maxBOF: 0 }],
+      'no-trailing-spaces': ['error', { skipBlankLines: false, ignoreComments: false }],
     },
     settings: {
       'import/resolver': {

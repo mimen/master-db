@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest';
-import { createMockProject } from '../test_utils/fixtures/projects';
+
 import { createMockTodoistItem } from '../test_utils/fixtures/items';
+import { createMockProject } from '../test_utils/fixtures/projects';
 
 describe('getProjectWithItemCount', () => {
   test('calculates item counts correctly', () => {

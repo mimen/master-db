@@ -44,8 +44,6 @@ export const all = mutation({
       await ctx.db.delete(state._id);
     }
 
-    console.log(`Cleared ${items.length} items, ${projects.length} projects, ${sections.length} sections, ${labels.length} labels, ${notes.length} notes, ${reminders.length} reminders, and ${syncStates.length} sync states`);
-    
     return {
       itemsDeleted: items.length,
       projectsDeleted: projects.length,
@@ -65,8 +63,6 @@ export const items = mutation({
       await ctx.db.delete(item._id);
     }
 
-    console.log(`Cleared ${items.length} items`);
-    
     return {
       itemsDeleted: items.length,
     };
@@ -80,8 +76,6 @@ export const projects = mutation({
       await ctx.db.delete(project._id);
     }
 
-    console.log(`Cleared ${projects.length} projects`);
-    
     return {
       projectsDeleted: projects.length,
     };
@@ -95,8 +89,6 @@ export const syncState = mutation({
       await ctx.db.delete(state._id);
     }
 
-    console.log(`Cleared ${syncStates.length} sync states`);
-    
     return {
       syncStatesDeleted: syncStates.length,
     };

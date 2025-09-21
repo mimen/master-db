@@ -1,6 +1,10 @@
-import { action } from "../../_generated/server";
+import { randomUUID } from "crypto";
+
 import { v } from "convex/values";
+
 import { internal } from "../../_generated/api";
+import { action } from "../../_generated/server";
+
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
 export const completeMultipleTasks = action({
@@ -14,14 +18,14 @@ export const completeMultipleTasks = action({
       // Build batch commands
       const commands = args.todoistIds.map(todoistId => ({
         type: "item_complete",
-        uuid: crypto.randomUUID(),
+        uuid: randomUUID(),
         args: {
           id: todoistId,
         },
       }));
 
       // Execute all commands at once
-      const response = await client.executeCommands(commands);
+      await client.executeCommands(commands);
       
       // Update all items in Convex
       for (const todoistId of args.todoistIds) {
@@ -35,7 +39,7 @@ export const completeMultipleTasks = action({
       }
 
       return { success: true, data: { completed: args.todoistIds, failed: [] } };
-    } catch (error: any) {
+    } catch (error) {
       console.error("Failed to complete tasks:", error);
       return {
         success: false,

@@ -1,10 +1,10 @@
 import { defineSchema } from "convex/server";
 
 // Service table definitions
+import { sync_state } from "./schema/sync/syncState";
 import * as todoist from "./schema/todoist";
 
 // Sync management tables
-import { sync_state } from "./schema/sync/syncState";
 
 export default defineSchema({
   // Todoist tables

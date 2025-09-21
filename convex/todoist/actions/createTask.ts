@@ -1,6 +1,10 @@
-import { action } from "../../_generated/server";
+import { randomUUID } from "crypto";
+
 import { v } from "convex/values";
+
 import { internal } from "../../_generated/api";
+import { action } from "../../_generated/server";
+
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
 export const createTask = action({
@@ -21,8 +25,8 @@ export const createTask = action({
   handler: async (ctx, args): Promise<ActionResponse<any>> => {
     try {
       const client = getTodoistClient();
-      const tempId = crypto.randomUUID();
-      const commandId = crypto.randomUUID();
+      const tempId = randomUUID();
+      const commandId = randomUUID();
       
       // Build command args
       const commandArgs: any = {

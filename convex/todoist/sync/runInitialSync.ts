@@ -1,10 +1,8 @@
-import { action } from "../../_generated/server";
 import { internal } from "../../_generated/api";
+import { action } from "../../_generated/server";
 
 export const runInitialSync = action({
   handler: async (ctx) => {
-    console.log("Starting initial Todoist sync...");
-    
     const token = process.env.TODOIST_API_TOKEN;
     if (!token) {
       throw new Error("TODOIST_API_TOKEN not configured");
@@ -31,10 +29,9 @@ export const runInitialSync = action({
     }
 
     const syncData = await response.json();
-
-    // Store projects
+    
+    // Save all projects
     if (syncData.projects) {
-      console.log(`Syncing ${syncData.projects.length} projects...`);
       for (const project of syncData.projects) {
         await ctx.runMutation(internal.todoist.mutations.upsertProject, {
           project,
@@ -42,9 +39,8 @@ export const runInitialSync = action({
       }
     }
 
-    // Store sections
+    // Save all sections
     if (syncData.sections) {
-      console.log(`Syncing ${syncData.sections.length} sections...`);
       for (const section of syncData.sections) {
         await ctx.runMutation(internal.todoist.mutations.upsertSection, {
           section,
@@ -52,9 +48,8 @@ export const runInitialSync = action({
       }
     }
 
-    // Store labels
+    // Save all labels
     if (syncData.labels) {
-      console.log(`Syncing ${syncData.labels.length} labels...`);
       for (const label of syncData.labels) {
         await ctx.runMutation(internal.todoist.mutations.upsertLabel, {
           label,
@@ -62,9 +57,8 @@ export const runInitialSync = action({
       }
     }
 
-    // Store items
+    // Save all items
     if (syncData.items) {
-      console.log(`Syncing ${syncData.items.length} items...`);
       for (const item of syncData.items) {
         await ctx.runMutation(internal.todoist.mutations.upsertItem, {
           item,
@@ -72,9 +66,8 @@ export const runInitialSync = action({
       }
     }
 
-    // Store notes
+    // Save all notes
     if (syncData.notes) {
-      console.log(`Syncing ${syncData.notes.length} notes...`);
       for (const note of syncData.notes) {
         await ctx.runMutation(internal.todoist.mutations.upsertNote, {
           note,
@@ -82,9 +75,8 @@ export const runInitialSync = action({
       }
     }
 
-    // Store reminders
+    // Save all reminders
     if (syncData.reminders) {
-      console.log(`Syncing ${syncData.reminders.length} reminders...`);
       for (const reminder of syncData.reminders) {
         await ctx.runMutation(internal.todoist.mutations.upsertReminder, {
           reminder,
@@ -98,12 +90,12 @@ export const runInitialSync = action({
     });
 
     return {
-      projectsCount: syncData.projects?.length || 0,
-      itemsCount: syncData.items?.length || 0,
-      sectionsCount: syncData.sections?.length || 0,
-      labelsCount: syncData.labels?.length || 0,
-      notesCount: syncData.notes?.length || 0,
-      remindersCount: syncData.reminders?.length || 0,
+      projects: syncData.projects?.length || 0,
+      sections: syncData.sections?.length || 0,
+      labels: syncData.labels?.length || 0,
+      items: syncData.items?.length || 0,
+      notes: syncData.notes?.length || 0,
+      reminders: syncData.reminders?.length || 0,
       syncToken: syncData.sync_token,
     };
   },

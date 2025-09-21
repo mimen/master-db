@@ -1,6 +1,10 @@
-import { action } from "../../_generated/server";
+import { randomUUID } from "crypto";
+
 import { v } from "convex/values";
+
 import { internal } from "../../_generated/api";
+import { action } from "../../_generated/server";
+
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
 export const reopenTask = action({
@@ -10,7 +14,7 @@ export const reopenTask = action({
   handler: async (ctx, args): Promise<ActionResponse<void>> => {
     try {
       const client = getTodoistClient();
-      const commandId = crypto.randomUUID();
+      const commandId = randomUUID();
       
       // Execute command via API v1
       await client.executeCommands([{

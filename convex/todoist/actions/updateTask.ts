@@ -1,6 +1,10 @@
-import { action } from "../../_generated/server";
+import { randomUUID } from "crypto";
+
 import { v } from "convex/values";
+
 import { internal } from "../../_generated/api";
+import { action } from "../../_generated/server";
+
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
 export const updateTask = action({
@@ -20,7 +24,7 @@ export const updateTask = action({
   handler: async (ctx, args): Promise<ActionResponse<any>> => {
     try {
       const client = getTodoistClient();
-      const commandId = crypto.randomUUID();
+      const commandId = randomUUID();
       
       // Build update args
       const updateArgs: any = {
@@ -37,14 +41,14 @@ export const updateTask = action({
       }
 
       // Execute command via Sync API v1
-      const response = await client.executeCommands([{
+      await client.executeCommands([{
         type: "item_update",
         uuid: commandId,
         args: updateArgs,
       }]);
 
       // Update in Convex - remove the id field from updates
-      const { id, ...updateFields } = updateArgs;
+      const { id: _id, ...updateFields } = updateArgs;
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
         updates: {
