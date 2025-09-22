@@ -12,6 +12,9 @@ export { deleteProject } from "./actions/deleteProject";
 export { createSection } from "./actions/createSection";
 export { updateSection } from "./actions/updateSection";
 export { deleteSection } from "./actions/deleteSection";
+export { createLabel } from "./actions/createLabel";
+export { updateLabel } from "./actions/updateLabel";
+export { deleteLabel } from "./actions/deleteLabel";
 export { refreshProjectMetadata } from "./actions/refreshProjectMetadata";
 export { clearAllData } from "./actions/clearAllData";
 export {
