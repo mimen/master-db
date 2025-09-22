@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 
-import { applyGlobalFilters } from "../helpers/globalFilters";
 import { createMockTodoistItemDB } from "../../../test-utils/todoist/fixtures/items";
+import { applyGlobalFilters } from "../helpers/globalFilters";
 
 // Test business logic directly since convex-test has issues with Bun
 describe('getActiveItems with global filters', () => {
@@ -12,7 +12,7 @@ describe('getActiveItems with global filters', () => {
     ];
 
     const filtered = applyGlobalFilters(items, {});
-    
+
     expect(filtered).toHaveLength(1);
     expect(filtered[0].content).toBe("Regular task");
   });
@@ -24,30 +24,30 @@ describe('getActiveItems with global filters', () => {
     ];
 
     const filtered = applyGlobalFilters(items, {});
-    
+
     expect(filtered).toHaveLength(1);
     expect(filtered[0].todoist_id).toBe("2");
   });
 
   test('respects assignee filter', () => {
     const items = [
-      createMockTodoistItemDB({ 
-        todoist_id: "1", 
+      createMockTodoistItemDB({
+        todoist_id: "1",
         content: "Unassigned task",
         assignee_id: null,
-        user_id: "test-user" 
+        user_id: "test-user"
       }),
-      createMockTodoistItemDB({ 
-        todoist_id: "2", 
+      createMockTodoistItemDB({
+        todoist_id: "2",
         content: "Assigned to me",
         assignee_id: "test-user",
-        user_id: "test-user" 
+        user_id: "test-user"
       }),
-      createMockTodoistItemDB({ 
-        todoist_id: "3", 
+      createMockTodoistItemDB({
+        todoist_id: "3",
         content: "Assigned to other",
         assignee_id: "other-user",
-        user_id: "other-user" 
+        user_id: "other-user"
       }),
     ];
 

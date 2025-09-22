@@ -47,7 +47,7 @@ export const updateProjectMetadata = action({
       last_updated: Date.now(),
       sync_version: Date.now(),
     };
-    
+
     // Only add optional fields if they have values
     if (args.priority !== undefined) metadataData.priority = args.priority;
     if (args.scheduledDate !== undefined) metadataData.scheduled_date = args.scheduledDate;
@@ -69,7 +69,7 @@ export const updateProjectMetadata = action({
         api.todoist.queries.getProjectMetadata.getProjectMetadata,
         { projectId: args.projectId }
       );
-      
+
       return {
         success: true,
         action: "updated" as const,
@@ -88,7 +88,7 @@ export const updateProjectMetadata = action({
         api.todoist.queries.getProjectMetadata.getProjectMetadata,
         { projectId: args.projectId }
       );
-      
+
       return {
         success: true,
         action: "created" as const,
