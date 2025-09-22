@@ -44,12 +44,16 @@ export const updateItem = internalMutation({
     }
 
     // Filter out null values and convert them to undefined for patch
-    const patchUpdates: any = { ...updates };
-    if (patchUpdates.due === null) {
-      delete patchUpdates.due;
-    }
-    if (patchUpdates.completed_at === null) {
-      delete patchUpdates.completed_at;
+    // Build a clean update object without null values
+    // Note: We use 'any' here because we're dynamically filtering properties
+    // and TypeScript can't track the resulting type through Object.entries
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patchUpdates: any = {};
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== null) {
+        patchUpdates[key] = value;
+      }
     }
 
     // Apply updates

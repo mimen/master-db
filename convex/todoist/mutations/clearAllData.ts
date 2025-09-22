@@ -6,7 +6,7 @@ export const clearAllData = internalMutation({
     // Get all todoist-related tables
     const tables = [
       "todoist_items",
-      "todoist_projects", 
+      "todoist_projects",
       "todoist_sections",
       "todoist_labels",
       "todoist_notes",
@@ -15,22 +15,25 @@ export const clearAllData = internalMutation({
       "todoist_reminders",
       "todoist_sync_state"
     ];
-    
+
     // Clear each table
     for (const table of tables) {
-      console.log(`Clearing table: ${table}`);
-      
+      console.warn(`Clearing table: ${table}`);
+
       // Get all documents from the table
+      // Note: We use 'any' here because we're iterating over multiple table names
+      // and TypeScript can't verify all tables exist in the schema
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const documents = await ctx.db.query(table as any).collect();
-      
+
       // Delete each document
       for (const doc of documents) {
         await ctx.db.delete(doc._id);
       }
-      
-      console.log(`Cleared ${documents.length} documents from ${table}`);
+
+      console.warn(`Cleared ${documents.length} documents from ${table}`);
     }
-    
+
     return { success: true };
   },
 });
