@@ -100,6 +100,257 @@ Always include:
 const example: any = dynamicValue;
 ```
 
+## Schema Change Guide
+
+### Complete Checklist for Schema Changes
+
+When making any change to the database schema, follow this exact process:
+
+#### 1. Update Schema Definition
+```bash
+# Edit the schema file
+convex/schema/[service]/[table].ts
+
+# Example fields to add:
+- Required field: v.string()
+- Optional field: v.optional(v.string())
+- Nullable field: v.union(v.string(), v.null())
+- Optional nullable: v.optional(v.union(v.string(), v.null()))
+```
+
+#### 2. Update Related Types
+```bash
+# Check and update:
+1. convex/[service]/types/syncApi.ts - Add to sync schemas
+2. convex/[service]/types/sdk.ts - Add to SDK type mappings
+3. Any interfaces or type definitions using the table
+```
+
+#### 3. Update Mutations
+```bash
+# Files to check:
+- convex/[service]/mutations/upsert[Entity].ts
+- convex/[service]/mutations/update[Entity].ts
+- convex/[service]/mutations/create[Entity].ts
+
+# Add new fields to:
+- Mutation argument schemas
+- Field mappings
+- Default values for required fields
+```
+
+#### 4. Update Sync Operations
+```bash
+# Files to modify:
+- convex/[service]/sync/runInitialSync.ts
+- convex/[service]/sync/performIncrementalSync.ts
+
+# Add field mappings in the extraction sections:
+const item = {
+  id: rawItem.id,
+  new_field: rawItem.new_field || "default_value",
+  // ...
+};
+```
+
+#### 5. Generate TypeScript Types
+```bash
+# This happens automatically when convex dev is running
+# But verify by checking:
+convex/_generated/dataModel.d.ts
+
+# Types should auto-update when you save schema changes
+```
+
+#### 6. Test the Changes
+```bash
+# 1. Clear existing data if schema is incompatible
+npx convex run todoist:actions.clearAllData
+
+# 2. Run initial sync to populate with new schema
+npx convex run todoist:sync.runInitialSync
+
+# 3. Test mutations with new fields
+npx convex run todoist:actions.createTask '{"content": "Test", "new_field": "value"}'
+
+# 4. Verify queries return new fields
+npx convex run todoist:queries.getActiveItems
+```
+
+#### 7. Type Check Everything
+```bash
+# Must pass with zero errors
+bun tsc
+
+# Common issues:
+- Missing fields in mutations
+- Type mismatches in sync operations
+- Incorrect optional/nullable definitions
+```
+
+#### 8. Fix Linting Issues
+```bash
+# Auto-fix what's possible
+bun run lint:fix
+
+# Manual fix remaining issues
+bun run lint
+
+# Common issues:
+- Import order
+- Trailing spaces
+- Unused imports
+```
+
+#### 9. Run Tests
+```bash
+# Ensure all tests pass
+bun test
+
+# If tests fail due to schema:
+- Update test fixtures
+- Add new field to test data
+- Update type assertions
+```
+
+### Example: Adding a "tags" Field
+
+```typescript
+// 1. convex/schema/todoist/items.ts
+export const todoistItemSchema = {
+  // ... existing fields
+  tags: v.optional(v.array(v.string())), // NEW
+};
+
+// 2. convex/todoist/types/syncApi.ts
+export const syncItemSchema = v.object({
+  // ... existing fields
+  tags: v.optional(v.array(v.string())), // NEW
+});
+
+// 3. convex/todoist/sync/runInitialSync.ts
+const item = {
+  // ... existing fields
+  tags: rawItem.tags || [], // NEW with default
+};
+
+// 4. convex/todoist/mutations/upsertItem.ts
+const itemSchema = v.object({
+  // ... existing fields
+  tags: v.optional(v.array(v.string())), // NEW
+});
+
+// 5. Test it
+npx convex run todoist:actions.createTask '{"content": "Test", "tags": ["important", "work"]}'
+```
+
+### Common Pitfalls
+
+1. **Forgetting sync operations** - Always update both runInitialSync and performIncrementalSync
+2. **Type mismatches** - Ensure consistency between schema, sync types, and mutations
+3. **Missing defaults** - Provide sensible defaults for new required fields
+4. **Index updates** - Add new indexes if you'll query by the new field
+5. **Breaking changes** - Consider data migration if changing existing fields
+
+### Quick Commands Reference
+```bash
+# Development cycle
+npx convex dev          # Start dev server (auto-generates types)
+bun tsc                 # Check TypeScript
+bun run lint:fix        # Fix linting
+bun test                # Run tests
+
+# Testing schema changes
+npx convex run todoist:actions.clearAllData    # Clear data
+npx convex run todoist:sync.runInitialSync     # Re-sync with new schema
+npx convex logs                                 # Check for errors
+```
+
+### Schema Migration Strategies
+
+#### For Development
+```bash
+# Simple approach - clear and re-sync
+npx convex run todoist:actions.clearAllData
+npx convex run todoist:sync.runInitialSync
+```
+
+#### For Production (when we get there)
+```typescript
+// Create a migration mutation
+export const migrateAddTagsField = internalMutation({
+  handler: async (ctx) => {
+    const items = await ctx.db.query("todoist_items").collect();
+    
+    for (const item of items) {
+      if (!item.tags) {
+        await ctx.db.patch(item._id, { tags: [] });
+      }
+    }
+    
+    return { migrated: items.length };
+  },
+});
+
+// Run it once
+npx convex run todoist:migrations.migrateAddTagsField
+```
+
+### Validation Checklist
+
+Before considering a schema change complete:
+
+- [ ] Schema file updated
+- [ ] Sync types updated
+- [ ] All mutations handle new field
+- [ ] Sync operations map the field
+- [ ] TypeScript compiles (`bun tsc`)
+- [ ] Linting passes (`bun run lint`)
+- [ ] Tests pass (`bun test`)
+- [ ] Manual test with real data
+- [ ] Queries return new field correctly
+- [ ] No runtime errors in logs
+
+### Troubleshooting Schema Changes
+
+#### "Field not found" errors
+```bash
+# Check if types are generated
+cat convex/_generated/dataModel.d.ts | grep new_field
+
+# If not there, restart convex dev
+npx convex dev
+```
+
+#### Type errors in mutations
+```typescript
+// Ensure field is in both places:
+// 1. Schema definition (convex/schema/[service]/[table].ts)
+// 2. Mutation arg schema (convex/[service]/mutations/[mutation].ts)
+```
+
+#### Data not syncing with new field
+```bash
+# Check sync logs for the field
+npx convex logs | grep new_field
+
+# Verify field mapping in sync operations
+# Both runInitialSync.ts and performIncrementalSync.ts
+```
+
+#### Runtime validation errors
+```bash
+# Common issue: required field without default
+# Solution: Make field optional or provide default in sync
+
+# Bad:
+new_field: rawItem.new_field  // Fails if undefined
+
+# Good:
+new_field: rawItem.new_field || "default"
+new_field: v.optional(v.string())  // Make optional
+```
+
 ## Core Data Layer Principles
 
 ### 1. Redundant Sync Architecture
