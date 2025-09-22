@@ -38,7 +38,7 @@ describe('getSyncStatus', () => {
       last_incremental_sync?: string;
       last_sync_token?: string;
     } | null;
-    
+
     const syncState = null as SyncState;
     const items: ReturnType<typeof createMockTodoistItem>[] = [];
     const projects: ReturnType<typeof createMockProject>[] = [];

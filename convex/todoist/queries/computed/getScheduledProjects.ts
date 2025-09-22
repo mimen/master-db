@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+
 import { query } from "../../../_generated/server";
 
 export const getScheduledProjects = query({
@@ -12,53 +13,53 @@ export const getScheduledProjects = query({
       .query("todoist_project_metadata")
       .withIndex("by_scheduled")
       .collect();
-    
+
     // Filter by date range if provided
     let filteredMetadata = metadataWithDates.filter(m => m.scheduled_date);
-    
+
     if (args.from) {
       filteredMetadata = filteredMetadata.filter(
         m => m.scheduled_date! >= args.from!
       );
     }
-    
+
     if (args.to) {
       filteredMetadata = filteredMetadata.filter(
         m => m.scheduled_date! <= args.to!
       );
     }
-    
+
     if (filteredMetadata.length === 0) {
       return [];
     }
-    
+
     // Get the projects
     const projectIds = filteredMetadata.map(m => m.project_id);
     const projects = await ctx.db
       .query("todoist_projects")
-      .filter(q => 
+      .filter(q =>
         q.and(
           q.eq(q.field("is_deleted"), 0),
           q.eq(q.field("is_archived"), 0)
         )
       )
       .collect();
-    
+
     // Filter to only scheduled projects
-    const scheduledProjects = projects.filter(p => 
+    const scheduledProjects = projects.filter(p =>
       projectIds.includes(p.todoist_id)
     );
-    
+
     // Create metadata lookup
     const metadataByProjectId = new Map(
       filteredMetadata.map(m => [m.project_id, m])
     );
-    
+
     // Return projects sorted by scheduled date
     return scheduledProjects
       .map(project => {
         const metadata = metadataByProjectId.get(project.todoist_id)!;
-        
+
         return {
           ...project,
           metadata: {
@@ -69,7 +70,7 @@ export const getScheduledProjects = query({
           computed: {
             daysUntilDue: metadata.scheduled_date
               ? Math.ceil(
-                  (new Date(metadata.scheduled_date).getTime() - Date.now()) / 
+                  (new Date(metadata.scheduled_date).getTime() - Date.now()) /
                   (1000 * 60 * 60 * 24)
                 )
               : null,

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+
 import { internalMutation } from "../../../_generated/server";
 
 /**
@@ -17,27 +18,27 @@ export const extractProjectMetadata = internalMutation({
 
     // Collect all items first (we'll filter in memory for complex conditions)
     const allItems = await itemsQuery.collect();
-    
+
     // Filter for metadata tasks
     const metadataTasks = allItems.filter(item => {
       // Check if specific project requested
       if (args.projectId && item.project_id !== args.projectId) {
         return false;
       }
-      
+
       // Check if it's a metadata task
       const hasMetadataLabel = item.labels.includes("project-metadata");
       const startsWithAsterisk = item.content.startsWith("*");
-      
+
       return hasMetadataLabel || startsWithAsterisk;
     });
 
     // Group by project
     const tasksByProject = new Map<string, typeof metadataTasks[0]>();
-    
+
     for (const task of metadataTasks) {
       if (!task.project_id) continue;
-      
+
       // Keep the most recently updated task per project
       const existing = tasksByProject.get(task.project_id);
       if (!existing || (task.sync_version > existing.sync_version)) {
@@ -52,7 +53,7 @@ export const extractProjectMetadata = internalMutation({
         .query("todoist_projects")
         .filter(q => q.eq(q.field("todoist_id"), projectId))
         .first();
-      
+
       if (!project) continue;
 
       // Check for existing metadata

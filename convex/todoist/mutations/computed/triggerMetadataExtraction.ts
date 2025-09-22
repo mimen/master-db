@@ -1,5 +1,5 @@
-import { internalMutation } from "../../../_generated/server";
 import { internal } from "../../../_generated/api";
+import { internalMutation } from "../../../_generated/server";
 
 /**
  * Triggers metadata extraction after sync operations.
@@ -9,7 +9,7 @@ export const triggerMetadataExtraction = internalMutation({
   handler: async (ctx) => {
     // Schedule the extraction to run asynchronously
     await ctx.scheduler.runAfter(0, internal.todoist.mutations.extractProjectMetadata, {});
-    
+
     return { scheduled: true };
   },
 });

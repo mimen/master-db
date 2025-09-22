@@ -11,7 +11,7 @@ export const upsertNote = internalMutation({
 
     // Use timestamp as version since Sync API v1 doesn't provide version field for notes
     const currentVersion = Date.now();
-    
+
     const noteData = {
       todoist_id: note.id,
       item_id: note.item_id,

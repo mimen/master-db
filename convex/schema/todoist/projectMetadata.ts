@@ -4,16 +4,16 @@ import { v } from "convex/values";
 export const todoist_project_metadata = defineTable({
   // Reference to the project
   project_id: v.string(), // todoist_id of the project
-  
+
   // Metadata fields extracted from special tasks
   priority: v.optional(v.number()), // 1-4
   scheduled_date: v.optional(v.string()), // ISO date string
   description: v.optional(v.string()),
-  
+
   // Tracking
   source_task_id: v.optional(v.string()), // todoist_id of the metadata task
   last_updated: v.number(), // timestamp
-  
+
   // Sync tracking
   sync_version: v.number(),
 })

@@ -11,7 +11,7 @@ export const upsertReminder = internalMutation({
 
     // Use timestamp as version since Sync API v1 doesn't provide version field
     const currentVersion = Date.now();
-    
+
     const reminderData = {
       todoist_id: reminder.id,
       item_id: reminder.item_id,

@@ -1,6 +1,8 @@
 import { v } from "convex/values";
-import { action } from "../../_generated/server";
+
 import { internal } from "../../_generated/api";
+import { action } from "../../_generated/server";
+
 import type { ActionResponse } from "./utils/todoistClient";
 
 type RefreshResult = {
@@ -19,7 +21,7 @@ export const refreshProjectMetadata = action({
         internal.todoist.mutations.extractProjectMetadata,
         { projectId: args.projectId }
       );
-      
+
       return {
         success: true,
         data: result as RefreshResult,

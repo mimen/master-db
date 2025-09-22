@@ -1,9 +1,9 @@
 import type { Task, PersonalProject, WorkspaceProject, Section } from "@doist/todoist-api-typescript";
 // import { ConvexTestingHelper } from 'convex-test';
 
-type TodoistItem = Partial<Task>;
-type TodoistProject = Partial<PersonalProject | WorkspaceProject>;
-type TodoistSection = Partial<Section>;
+type _TodoistItem = Partial<Task>;
+type _TodoistProject = Partial<PersonalProject | WorkspaceProject>;
+type _TodoistSection = Partial<Section>;
 
 // TODO: Re-enable when convex-test is available
 /*
