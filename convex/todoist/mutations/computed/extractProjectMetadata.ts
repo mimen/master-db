@@ -62,11 +62,20 @@ export const extractProjectMetadata = internalMutation({
         .withIndex("by_project", q => q.eq("project_id", projectId))
         .first();
 
+      // Determine project type from labels
+      let projectType: "area-of-responsibility" | "project-type" | undefined;
+      if (task.labels.includes("area-of-responsibility")) {
+        projectType = "area-of-responsibility";
+      } else if (task.labels.includes("project-type")) {
+        projectType = "project-type";
+      }
+
       const metadataData = {
         project_id: projectId,
         priority: task.priority,
         scheduled_date: task.due?.date,
         description: task.description,
+        project_type: projectType,
         source_task_id: task.todoist_id,
         last_updated: Date.now(),
         sync_version: Date.now(),

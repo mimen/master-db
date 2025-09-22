@@ -3,6 +3,9 @@
 // Basic queries
 export { getActiveItems } from "./queries/getActiveItems";
 export { getProjects } from "./queries/getProjects";
+export { getProject } from "./queries/getProject";
+export { getAllProjects } from "./queries/getAllProjects";
+export { getProjectMetadata } from "./queries/getProjectMetadata";
 export { getProjectWithItemCount } from "./queries/getProjectWithItemCount";
 export { getSyncStatus } from "./queries/getSyncStatus";
 

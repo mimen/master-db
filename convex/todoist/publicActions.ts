@@ -8,3 +8,12 @@ export { moveTask } from "./actions/moveTask";
 export { completeMultipleTasks } from "./actions/completeMultipleTasks";
 export { refreshProjectMetadata } from "./actions/refreshProjectMetadata";
 export { clearAllData } from "./actions/clearAllData";
+export {
+  updateProjectMetadata,
+  batchUpdateProjectMetadata,
+  resetProjectMetadata
+} from "./actions/updateProjectMetadata";
+export {
+  ensureAllProjectsHaveMetadata,
+  ensureProjectHasMetadata
+} from "./actions/ensureProjectMetadata";
