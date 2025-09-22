@@ -11,12 +11,12 @@ export const getAllProjects = query({
       .query("todoist_projects")
       .filter(q => q.eq(q.field("is_deleted"), 0))
       .collect();
-    
+
     // Apply limit if specified
     if (args.limit && args.limit > 0) {
       return projects.slice(0, args.limit);
     }
-    
+
     return projects;
   },
 });

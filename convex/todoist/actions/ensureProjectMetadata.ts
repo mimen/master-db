@@ -18,7 +18,7 @@ export const ensureAllProjectsHaveMetadata = action({
     errors: { projectId: string; error: string }[];
   }> => {
     // Get all projects
-    const projects = await ctx.runQuery(api.todoist.queries.getAllProjects.getAllProjects);
+    const projects = await ctx.runQuery(api.todoist.queries.getAllProjects.getAllProjects, {});
 
     const results = {
       totalProjects: projects.length,
@@ -76,7 +76,7 @@ export const ensureProjectHasMetadata = action({
   }> => {
     // Check if metadata exists
     const metadata = await ctx.runQuery(
-      internal.todoist.queries.internal.getProjectMetadata,
+      api.todoist.queries.getProjectMetadata.getProjectMetadata,
       { projectId: args.projectId }
     );
 

@@ -39,7 +39,7 @@ export const createComment = action({
       const client = getTodoistClient();
 
       // Build AddCommentArgs for the SDK
-      const commentArgs: AddCommentArgs = args.taskId 
+      const commentArgs: AddCommentArgs = args.taskId
         ? {
             content: args.content,
             taskId: args.taskId,

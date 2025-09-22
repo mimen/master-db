@@ -21,7 +21,7 @@ export const updateProjectMetadata = mutation({
   },
   handler: async (ctx, args) => {
     // Build the patch object, converting null to undefined to remove fields
-    const patchData: any = {
+    const patchData: Record<string, unknown> = {
       project_id: args.updates.project_id,
       last_updated: args.updates.last_updated,
       sync_version: args.updates.sync_version,

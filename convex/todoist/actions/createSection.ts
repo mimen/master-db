@@ -32,7 +32,7 @@ export const createSection = action({
           id: section.id,
           name: section.name,
           project_id: section.projectId,
-          section_order: section.order || 0,
+          section_order: section.sectionOrder || 0,
           is_deleted: 0,
           is_archived: 0,
         },

@@ -18,7 +18,7 @@ export const refreshProjectMetadata = action({
     try {
       // Run the extraction
       const result = await ctx.runMutation(
-        internal.todoist.mutations.computed.extractProjectMetadata,
+        internal.todoist.mutations.extractProjectMetadata,
         { projectId: args.projectId }
       );
 
