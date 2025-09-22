@@ -22,3 +22,14 @@ export function createMockTodoistItem(overrides = {}) {
     ...overrides,
   };
 }
+
+// Mock for database record (includes Convex fields)
+export function createMockTodoistItemDB(overrides: any = {}) {
+  const base = createMockTodoistItem(overrides);
+  return {
+    _id: `test-${Date.now()}-${Math.random()}` as any,
+    _creationTime: Date.now(),
+    ...base,
+    ...overrides,
+  };
+}
