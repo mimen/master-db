@@ -139,7 +139,20 @@ convex/schema/[service]/[table].ts
 - Default values for required fields
 ```
 
-#### 4. Update Sync Operations
+#### 4. Update Barrel Files
+```bash
+# If you created new mutation/query/action files, add them to barrel exports:
+- convex/[service]/mutations.ts - Export new mutation functions
+- convex/[service]/queries.ts - Export new query functions  
+- convex/[service]/publicActions.ts - Export new public actions
+- convex/[service]/publicQueries.ts - Export new public queries
+
+# Example for a new mutation:
+// convex/[service]/mutations.ts
+export { upsertNewEntity } from "./mutations/upsertNewEntity";
+```
+
+#### 5. Update Sync Operations
 ```bash
 # Files to modify:
 - convex/[service]/sync/runInitialSync.ts
@@ -153,7 +166,7 @@ const item = {
 };
 ```
 
-#### 5. Generate TypeScript Types
+#### 6. Generate TypeScript Types
 ```bash
 # This happens automatically when convex dev is running
 # But verify by checking:
@@ -162,7 +175,7 @@ convex/_generated/dataModel.d.ts
 # Types should auto-update when you save schema changes
 ```
 
-#### 6. Test the Changes
+#### 7. Test the Changes
 ```bash
 # 1. Clear existing data if schema is incompatible
 npx convex run todoist:actions.clearAllData
@@ -177,7 +190,7 @@ npx convex run todoist:actions.createTask '{"content": "Test", "new_field": "val
 npx convex run todoist:queries.getActiveItems
 ```
 
-#### 7. Type Check Everything
+#### 8. Type Check Everything
 ```bash
 # Must pass with zero errors
 bun tsc
@@ -188,7 +201,7 @@ bun tsc
 - Incorrect optional/nullable definitions
 ```
 
-#### 8. Fix Linting Issues
+#### 9. Fix Linting Issues
 ```bash
 # Auto-fix what's possible
 bun run lint:fix
@@ -202,7 +215,7 @@ bun run lint
 - Unused imports
 ```
 
-#### 9. Run Tests
+#### 10. Run Tests
 ```bash
 # Ensure all tests pass
 bun test
@@ -228,19 +241,22 @@ export const syncItemSchema = v.object({
   tags: v.optional(v.array(v.string())), // NEW
 });
 
-// 3. convex/todoist/sync/runInitialSync.ts
-const item = {
-  // ... existing fields
-  tags: rawItem.tags || [], // NEW with default
-};
-
-// 4. convex/todoist/mutations/upsertItem.ts
+// 3. convex/todoist/mutations/upsertItem.ts
 const itemSchema = v.object({
   // ... existing fields
   tags: v.optional(v.array(v.string())), // NEW
 });
 
-// 5. Test it
+// 4. convex/todoist/mutations.ts (if creating new mutation file)
+export { upsertItemWithTags } from "./mutations/upsertItemWithTags";
+
+// 5. convex/todoist/sync/runInitialSync.ts
+const item = {
+  // ... existing fields
+  tags: rawItem.tags || [], // NEW with default
+};
+
+// 6. Test it
 npx convex run todoist:actions.createTask '{"content": "Test", "tags": ["important", "work"]}'
 ```
 
@@ -251,6 +267,7 @@ npx convex run todoist:actions.createTask '{"content": "Test", "tags": ["importa
 3. **Missing defaults** - Provide sensible defaults for new required fields
 4. **Index updates** - Add new indexes if you'll query by the new field
 5. **Breaking changes** - Consider data migration if changing existing fields
+6. **Barrel file exports** - Remember to export new mutations/queries from barrel files or they won't be accessible
 
 ### Quick Commands Reference
 ```bash
@@ -303,6 +320,7 @@ Before considering a schema change complete:
 - [ ] Schema file updated
 - [ ] Sync types updated
 - [ ] All mutations handle new field
+- [ ] Barrel files export new mutations/queries
 - [ ] Sync operations map the field
 - [ ] TypeScript compiles (`bun tsc`)
 - [ ] Linting passes (`bun run lint`)
