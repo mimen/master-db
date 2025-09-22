@@ -1,4 +1,4 @@
-import { internalQuery } from "../../_generated/server";
+import { internalQuery } from "../../../_generated/server";
 
 export const getSyncState = internalQuery({
   handler: async (ctx) => {

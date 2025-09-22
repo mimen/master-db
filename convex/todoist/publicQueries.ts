@@ -10,6 +10,6 @@ export { getProjectWithItemCount } from "./queries/getProjectWithItemCount";
 export { getSyncStatus } from "./queries/getSyncStatus";
 
 // Computed queries
-export { getProjectsWithMetadata } from "./queries/computed/getProjectsWithMetadata";
-export { getProjectsByPriority } from "./queries/computed/getProjectsByPriority";
-export { getScheduledProjects } from "./queries/computed/getScheduledProjects";
+export { getProjectsWithMetadata } from "./computed/queries/getProjectsWithMetadata";
+export { getProjectsByPriority } from "./computed/queries/getProjectsByPriority";
+export { getScheduledProjects } from "./computed/queries/getScheduledProjects";

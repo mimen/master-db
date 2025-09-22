@@ -9,7 +9,10 @@ export { upsertReminder } from "./mutations/upsertReminder";
 export { updateSyncToken } from "./mutations/updateSyncToken";
 export { updateItem } from "./mutations/updateItem";
 export { clearAllData } from "./mutations/clearAllData";
+export { createProjectMetadata } from "./mutations/createProjectMetadata";
+export { updateProjectMetadata } from "./mutations/updateProjectMetadata";
+export { resetProjectMetadata } from "./mutations/resetProjectMetadata";
 
 // Computed mutations
-export { extractProjectMetadata } from "./mutations/computed/extractProjectMetadata";
-export { triggerMetadataExtraction } from "./mutations/computed/triggerMetadataExtraction";
+export { extractProjectMetadata } from "./computed/mutations/extractProjectMetadata";
+export { triggerMetadataExtraction } from "./computed/mutations/triggerMetadataExtraction";
