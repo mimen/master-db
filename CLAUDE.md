@@ -28,6 +28,78 @@ Each data integration is developed and maintained **separately** with emphasis o
 - Service-specific error handling
 - Modular architecture that doesn't affect other integrations
 
+## Code Quality Standards
+
+### CRITICAL: Before Any Commit or PR
+All code must pass these checks without errors:
+
+1. **TypeScript Compilation**: `bun tsc` must pass with zero errors
+2. **Linting**: `bun run lint` must pass with zero errors
+3. **Tests**: `bun test` must pass all test suites
+
+### Type Safety Requirements
+- **NEVER use `any` type** - it bypasses all type checking
+- **MINIMIZE use of `unknown`** - only use when type truly can't be known (e.g., external API responses)
+- **AVOID type assertions** - prefer type guards and proper inference
+- **NO `@ts-ignore` or `@ts-expect-error`** - fix the underlying issue
+- **Use strict TypeScript config** - all strict flags enabled
+
+### Type Safety Progression
+```typescript
+// ❌ WORST: Never use any
+const data: any = response;
+
+// ⚠️ BETTER: Use unknown for truly dynamic data
+const data: unknown = response;
+if (typeof data === 'object' && data !== null && 'id' in data) {
+  // Type guard to narrow the type
+}
+
+// ✅ BEST: Define proper types
+interface ApiResponse {
+  id: string;
+  // ... other fields
+}
+const data = response as ApiResponse; // Only if you're certain
+
+// ✅ BEST: Use discriminated unions for variants
+type TableName = "todoist_items" | "todoist_projects" | "todoist_sections";
+const table: TableName = "todoist_items";
+
+// ✅ BEST: Define specific types for dynamic objects
+interface TaskUpdates {
+  content?: string;
+  priority?: number;
+  due?: DueDate | null;
+}
+const updates: TaskUpdates = {};
+```
+
+### When `unknown` is Acceptable
+1. **External API responses** before validation
+2. **Error handling** for catch blocks
+3. **Legacy code migration** as a stepping stone from `any`
+4. **Type guards** before narrowing to specific types
+
+### When to Avoid `unknown`
+1. **Internal functions** - always define proper types
+2. **Database schemas** - use Convex validators
+3. **Component props** - use explicit interfaces
+4. **Return types** - be specific about what you return
+
+### When `any` is Acceptable (With ESLint Disable)
+Only use `any` with explicit justification and ESLint disable comment:
+1. **Dynamic table queries** - when iterating over table names dynamically
+2. **Object filtering** - when TypeScript can't track dynamic property removal
+3. **Third-party integrations** - when types are truly unknowable
+
+Always include:
+```typescript
+// Note: Explain why any is necessary here
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const example: any = dynamicValue;
+```
+
 ## Core Data Layer Principles
 
 ### 1. Redundant Sync Architecture
