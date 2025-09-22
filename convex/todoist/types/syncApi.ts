@@ -29,6 +29,7 @@ export const syncItemSchema = v.object({
   assigned_by_uid: v.optional(v.union(v.string(), v.null())),
   added_by_uid: v.optional(v.union(v.string(), v.null())),
   comment_count: v.optional(v.number()),
+  note_count: v.optional(v.number()), // Alternative field name sometimes used by API
   checked: v.optional(v.union(v.boolean(), v.number())),
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
   added_at: v.optional(v.union(v.string(), v.null())),
@@ -63,6 +64,7 @@ export const syncSectionSchema = v.object({
   is_archived: v.optional(v.union(v.boolean(), v.number())),
   date_archived: v.optional(v.string()),
   date_added: v.optional(v.string()),
+  added_at: v.optional(v.string()), // Alternative field name sometimes used by API
   user_id: v.optional(v.string()),
 });
 

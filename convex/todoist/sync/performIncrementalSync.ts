@@ -76,7 +76,7 @@ export const performIncrementalSync = action({
             is_favorite: rawProject.is_favorite,
             view_style: rawProject.view_style,
           };
-          
+
           await ctx.runMutation(internal.todoist.mutations.upsertProject, {
             project,
           });
@@ -97,10 +97,10 @@ export const performIncrementalSync = action({
             is_deleted: rawSection.is_deleted,
             is_archived: rawSection.is_archived,
             date_archived: rawSection.date_archived,
-            date_added: rawSection.date_added || rawSection.added_at,
+            date_added: rawSection.date_added || rawSection.added_at || "",
             user_id: rawSection.user_id,
           };
-          
+
           await ctx.runMutation(internal.todoist.mutations.upsertSection, {
             section,
           });
@@ -141,7 +141,7 @@ export const performIncrementalSync = action({
             labels: rawItem.labels,
             assigned_by_uid: rawItem.assigned_by_uid,
             added_by_uid: rawItem.added_by_uid || "",
-            comment_count: rawItem.comment_count || rawItem.note_count,
+            comment_count: rawItem.comment_count || rawItem.note_count || 0,
             checked: rawItem.checked,
             is_deleted: rawItem.is_deleted,
             added_at: rawItem.added_at || new Date().toISOString(),
@@ -149,7 +149,7 @@ export const performIncrementalSync = action({
             updated_at: rawItem.updated_at || new Date().toISOString(),
             user_id: rawItem.user_id || "",
           };
-          
+
           await ctx.runMutation(internal.todoist.mutations.upsertItem, {
             item,
           });
@@ -179,7 +179,7 @@ export const performIncrementalSync = action({
             posted_at: rawNote.posted_at,
             reactions: rawNote.reactions,
           };
-          
+
           await ctx.runMutation(internal.todoist.mutations.upsertNote, {
             note,
           });

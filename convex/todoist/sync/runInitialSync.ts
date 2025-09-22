@@ -53,7 +53,7 @@ export const runInitialSync = action({
           is_favorite: rawProject.is_favorite,
           view_style: rawProject.view_style,
         };
-        
+
         await ctx.runMutation(internal.todoist.mutations.upsertProject, {
           project,
         });
@@ -76,7 +76,7 @@ export const runInitialSync = action({
           date_added: rawSection.date_added || rawSection.added_at,
           user_id: rawSection.user_id,
         };
-        
+
         await ctx.runMutation(internal.todoist.mutations.upsertSection, {
           section,
         });
@@ -123,7 +123,7 @@ export const runInitialSync = action({
           updated_at: rawItem.updated_at || new Date().toISOString(),
           user_id: rawItem.user_id || "",
         };
-        
+
         await ctx.runMutation(internal.todoist.mutations.upsertItem, {
           item,
         });
@@ -152,7 +152,7 @@ export const runInitialSync = action({
           posted_at: rawNote.posted_at,
           reactions: rawNote.reactions,
         };
-        
+
         await ctx.runMutation(internal.todoist.mutations.upsertNote, {
           note,
         });
@@ -173,7 +173,7 @@ export const runInitialSync = action({
       token: syncData.sync_token,
     });
 
-    const changeCount = 
+    const changeCount =
       (syncData.projects?.length || 0) +
       (syncData.sections?.length || 0) +
       (syncData.labels?.length || 0) +
