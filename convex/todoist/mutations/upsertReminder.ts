@@ -9,6 +9,9 @@ export const upsertReminder = internalMutation({
       .withIndex("by_todoist_id", (q) => q.eq("todoist_id", reminder.id))
       .first();
 
+    // Use timestamp as version since Sync API v1 doesn't provide version field
+    const currentVersion = Date.now();
+    
     const reminderData = {
       todoist_id: reminder.id,
       item_id: reminder.item_id,
@@ -16,7 +19,7 @@ export const upsertReminder = internalMutation({
       due: reminder.due,
       mm_offset: reminder.mm_offset || undefined,
       is_deleted: reminder.is_deleted ? 1 : 0,
-      sync_version: reminder.v || 0,
+      sync_version: currentVersion,
     };
 
     if (existing) {

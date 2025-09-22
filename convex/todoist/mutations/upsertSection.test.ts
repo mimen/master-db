@@ -30,7 +30,12 @@ describe('upsertSection', () => {
   });
 
   test('handles default section_order', () => {
-    const sectionWithoutOrder = {
+    const sectionWithoutOrder: {
+      id: string;
+      name: string;
+      project_id: string;
+      section_order?: number;
+    } = {
       id: 'section-no-order',
       name: 'No Order Section',
       project_id: 'proj-123'

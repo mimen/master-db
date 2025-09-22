@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, Infer } from "convex/values";
 
 /**
  * Todoist Sync API v1 type schemas
@@ -110,10 +110,10 @@ export const syncReminderSchema = v.object({
 });
 
 // Type inference helpers for TypeScript
-export type SyncDue = v.InferInput<typeof syncDueSchema>;
-export type SyncItem = v.InferInput<typeof syncItemSchema>;
-export type SyncProject = v.InferInput<typeof syncProjectSchema>;
-export type SyncSection = v.InferInput<typeof syncSectionSchema>;
-export type SyncLabel = v.InferInput<typeof syncLabelSchema>;
-export type SyncNote = v.InferInput<typeof syncNoteSchema>;
-export type SyncReminder = v.InferInput<typeof syncReminderSchema>;
+export type SyncDue = Infer<typeof syncDueSchema>;
+export type SyncItem = Infer<typeof syncItemSchema>;
+export type SyncProject = Infer<typeof syncProjectSchema>;
+export type SyncSection = Infer<typeof syncSectionSchema>;
+export type SyncLabel = Infer<typeof syncLabelSchema>;
+export type SyncNote = Infer<typeof syncNoteSchema>;
+export type SyncReminder = Infer<typeof syncReminderSchema>;

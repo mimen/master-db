@@ -1,8 +1,26 @@
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { action } from "../../_generated/server";
+import type { SyncItem, SyncProject, SyncSection, SyncLabel, SyncNote, SyncReminder } from "../types/syncApi";
+
+type SyncResult = {
+  changeCount: number;
+  syncToken: string;
+  fullSync: boolean;
+};
+
+type SyncResponse = {
+  sync_token: string;
+  full_sync?: boolean;
+  projects?: SyncProject[];
+  items?: SyncItem[];
+  labels?: SyncLabel[];
+  sections?: SyncSection[];
+  notes?: SyncNote[];
+  reminders?: SyncReminder[];
+};
 
 export const performIncrementalSync = action({
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<SyncResult | void> => {
     try {
       const token = process.env.TODOIST_API_TOKEN;
       if (!token) {
@@ -12,7 +30,7 @@ export const performIncrementalSync = action({
       // Get current sync state
       const syncState = await ctx.runQuery(internal.todoist.queries.getSyncState);
       if (!syncState?.last_sync_token) {
-        return ctx.runAction(internal.todoist.sync.runInitialSync);
+        return ctx.runAction(api.todoist.sync.runInitialSync);
       }
 
       // Perform incremental sync using API v1
@@ -32,11 +50,11 @@ export const performIncrementalSync = action({
         throw new Error(`Todoist API error: ${response.status}`);
       }
 
-      const syncData = await response.json();
+      const syncData: SyncResponse = await response.json();
 
       // Check if this is a full sync
       if (syncData.full_sync) {
-        return ctx.runAction(internal.todoist.sync.runInitialSync);
+        return ctx.runAction(api.todoist.sync.runInitialSync);
       }
 
       let changeCount = 0;

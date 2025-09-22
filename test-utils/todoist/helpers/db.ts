@@ -1,10 +1,12 @@
 import type { Task, PersonalProject, WorkspaceProject, Section } from "@doist/todoist-api-typescript";
-import { ConvexTestingHelper } from 'convex-test';
+// import { ConvexTestingHelper } from 'convex-test';
 
 type TodoistItem = Partial<Task>;
 type TodoistProject = Partial<PersonalProject | WorkspaceProject>;
 type TodoistSection = Partial<Section>;
 
+// TODO: Re-enable when convex-test is available
+/*
 export async function seedDatabase(t: ConvexTestingHelper, data: {
   items?: TodoistItem[],
   projects?: TodoistProject[],
@@ -51,3 +53,4 @@ export async function cleanDatabase(t: ConvexTestingHelper) {
     }
   });
 }
+*/

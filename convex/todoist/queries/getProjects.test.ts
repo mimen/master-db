@@ -20,7 +20,7 @@ describe('getProjects', () => {
   });
 
   test('returns empty array when no projects exist', () => {
-    const projects: Record<string, unknown>[] = [];
+    const projects: Array<{ sync_version: number }> = [];
 
     // Test edge case
     const sorted = projects.sort((a, b) => a.sync_version - b.sync_version);

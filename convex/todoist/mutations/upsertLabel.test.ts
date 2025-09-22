@@ -30,7 +30,12 @@ describe('upsertLabel', () => {
   });
 
   test('handles default item_order', () => {
-    const labelWithoutOrder = {
+    const labelWithoutOrder: {
+      id: string;
+      name: string;
+      color: string;
+      item_order?: number;
+    } = {
       id: 'label-no-order',
       name: 'work',
       color: 'blue'

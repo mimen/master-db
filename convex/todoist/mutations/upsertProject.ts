@@ -9,13 +9,13 @@ export const upsertProject = internalMutation({
       .withIndex("by_todoist_id", (q) => q.eq("todoist_id", project.id))
       .first();
 
-    // Use updated_at as version since Sync API v1 doesn't provide version field
-    const currentVersion = project.updated_at ? new Date(project.updated_at).getTime() : Date.now();
+    // Use timestamp as version since Sync API v1 doesn't provide version field
+    const currentVersion = Date.now();
 
     const projectData = {
       todoist_id: project.id,
       name: project.name,
-      color: project.color,
+      color: project.color || "charcoal", // Default to charcoal if no color provided
       parent_id: project.parent_id || undefined,
       child_order: project.child_order || 0,
       is_deleted: project.is_deleted ? 1 : 0,

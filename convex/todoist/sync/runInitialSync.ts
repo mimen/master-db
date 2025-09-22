@@ -1,8 +1,14 @@
 import { internal } from "../../_generated/api";
 import { action } from "../../_generated/server";
 
+type SyncResult = {
+  changeCount: number;
+  syncToken: string;
+  fullSync: boolean;
+};
+
 export const runInitialSync = action({
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<SyncResult> => {
     const token = process.env.TODOIST_API_TOKEN;
     if (!token) {
       throw new Error("TODOIST_API_TOKEN not configured");
@@ -89,14 +95,18 @@ export const runInitialSync = action({
       token: syncData.sync_token,
     });
 
+    const changeCount = 
+      (syncData.projects?.length || 0) +
+      (syncData.sections?.length || 0) +
+      (syncData.labels?.length || 0) +
+      (syncData.items?.length || 0) +
+      (syncData.notes?.length || 0) +
+      (syncData.reminders?.length || 0);
+
     return {
-      projects: syncData.projects?.length || 0,
-      sections: syncData.sections?.length || 0,
-      labels: syncData.labels?.length || 0,
-      items: syncData.items?.length || 0,
-      notes: syncData.notes?.length || 0,
-      reminders: syncData.reminders?.length || 0,
+      changeCount,
       syncToken: syncData.sync_token,
+      fullSync: true,
     };
   },
 });

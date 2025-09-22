@@ -33,7 +33,13 @@ describe('getSyncStatus', () => {
   });
 
   test('handles empty database', () => {
-    const syncState = null;
+    type SyncState = {
+      last_full_sync?: string;
+      last_incremental_sync?: string;
+      last_sync_token?: string;
+    } | null;
+    
+    const syncState = null as SyncState;
     const items: ReturnType<typeof createMockTodoistItem>[] = [];
     const projects: ReturnType<typeof createMockProject>[] = [];
 

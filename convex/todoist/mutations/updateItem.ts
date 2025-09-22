@@ -43,7 +43,16 @@ export const updateItem = internalMutation({
       return;
     }
 
+    // Filter out null values and convert them to undefined for patch
+    const patchUpdates: any = { ...updates };
+    if (patchUpdates.due === null) {
+      delete patchUpdates.due;
+    }
+    if (patchUpdates.completed_at === null) {
+      delete patchUpdates.completed_at;
+    }
+
     // Apply updates
-    await ctx.db.patch(existing._id, updates);
+    await ctx.db.patch(existing._id, patchUpdates);
   },
 });

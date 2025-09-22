@@ -9,6 +9,9 @@ export const upsertNote = internalMutation({
       .withIndex("by_todoist_id", (q) => q.eq("todoist_id", note.id))
       .first();
 
+    // Use timestamp as version since Sync API v1 doesn't provide version field for notes
+    const currentVersion = Date.now();
+    
     const noteData = {
       todoist_id: note.id,
       item_id: note.item_id,
@@ -16,8 +19,8 @@ export const upsertNote = internalMutation({
       content: note.content,
       posted_uid: note.posted_uid,
       is_deleted: note.is_deleted ? 1 : 0,
-      posted_at: note.posted_at || note.posted || new Date().toISOString(),
-      sync_version: note.v || 0,
+      posted_at: note.posted_at,
+      sync_version: currentVersion,
     };
 
     if (existing) {

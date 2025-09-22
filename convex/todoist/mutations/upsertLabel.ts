@@ -15,7 +15,7 @@ export const upsertLabel = internalMutation({
     const labelData = {
       todoist_id: label.id,
       name: label.name,
-      color: label.color,
+      color: label.color || "charcoal", // Default to charcoal if no color provided
       item_order: label.item_order || 0,
       is_deleted: label.is_deleted ? 1 : 0,
       is_favorite: label.is_favorite ? 1 : 0,
