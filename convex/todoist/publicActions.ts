@@ -9,6 +9,9 @@ export { completeMultipleTasks } from "./actions/completeMultipleTasks";
 export { createProject } from "./actions/createProject";
 export { updateProject } from "./actions/updateProject";
 export { deleteProject } from "./actions/deleteProject";
+export { createSection } from "./actions/createSection";
+export { updateSection } from "./actions/updateSection";
+export { deleteSection } from "./actions/deleteSection";
 export { refreshProjectMetadata } from "./actions/refreshProjectMetadata";
 export { clearAllData } from "./actions/clearAllData";
 export {
