@@ -24,15 +24,27 @@ export const duplicateTask = action({
       const originalTask = await client.getTask(args.taskId);
       
       // Build the new task args by copying from original
-      const newTaskArgs = {
+      const newTaskArgs: any = {
         content: args.options?.newContent || originalTask.content + " (copy)",
         projectId: args.options?.projectId || originalTask.projectId,
-        sectionId: args.options?.sectionId !== undefined ? args.options.sectionId : originalTask.sectionId,
-        parentId: args.options?.parentId !== undefined ? args.options.parentId : originalTask.parentId,
         priority: originalTask.priority,
         labels: originalTask.labels,
         description: originalTask.description,
       };
+      
+      // Only add sectionId if it's not null
+      if (args.options?.sectionId !== undefined) {
+        newTaskArgs.sectionId = args.options.sectionId || undefined;
+      } else if (originalTask.sectionId) {
+        newTaskArgs.sectionId = originalTask.sectionId;
+      }
+      
+      // Only add parentId if it's not null
+      if (args.options?.parentId !== undefined) {
+        newTaskArgs.parentId = args.options.parentId || undefined;
+      } else if (originalTask.parentId) {
+        newTaskArgs.parentId = originalTask.parentId;
+      }
 
       // Handle due date if present
       if (originalTask.due) {

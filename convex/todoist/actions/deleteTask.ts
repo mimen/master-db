@@ -7,19 +7,19 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
 export const deleteTask = action({
   args: {
-    todoistId: v.string(),
+    taskId: v.string(),
   },
   handler: async (ctx, args): Promise<ActionResponse<boolean>> => {
     try {
       const client = getTodoistClient();
 
       // Delete task using SDK
-      const success = await client.deleteTask(args.todoistId);
+      const success = await client.deleteTask(args.taskId);
 
       if (success) {
         // Mark as deleted in Convex
         await ctx.runMutation(internal.todoist.mutations.updateItem, {
-          todoistId: args.todoistId,
+          todoistId: args.taskId,
           updates: {
             is_deleted: 1,
             sync_version: Date.now(),
