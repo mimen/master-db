@@ -5,6 +5,7 @@ export { completeTask } from "./actions/completeTask";
 export { reopenTask } from "./actions/reopenTask";
 export { deleteTask } from "./actions/deleteTask";
 export { moveTask } from "./actions/moveTask";
+export { duplicateTask } from "./actions/duplicateTask";
 export { completeMultipleTasks } from "./actions/completeMultipleTasks";
 export { createProject } from "./actions/createProject";
 export { updateProject } from "./actions/updateProject";
