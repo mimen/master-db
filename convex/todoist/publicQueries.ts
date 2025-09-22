@@ -8,6 +8,7 @@ export { getAllProjects } from "./queries/getAllProjects";
 export { getProjectMetadata } from "./queries/getProjectMetadata";
 export { getProjectWithItemCount } from "./queries/getProjectWithItemCount";
 export { getSyncStatus } from "./queries/getSyncStatus";
+export { getProjectTaskCounts } from "./queries/getProjectTaskCounts";
 
 // Computed queries
 export { getProjectsWithMetadata } from "./computed/queries/getProjectsWithMetadata";

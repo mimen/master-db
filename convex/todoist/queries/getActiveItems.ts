@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { query } from "../../_generated/server";
-import { applyGlobalFilters, type AssigneeFilterType } from "../helpers/globalFilters";
+import { applyGlobalFilters } from "../helpers/globalFilters";
 
 /**
  * Get active Todoist items with global filters applied.
@@ -23,7 +23,7 @@ export const getActiveItems = query({
     ),
   },
   handler: async (ctx, args) => {
-    // Get raw data directly
+    // Get raw data directly (internal query logic embedded for now)
     let q = ctx.db
       .query("todoist_items")
       .filter((q) => q.eq(q.field("checked"), 0))
@@ -47,8 +47,8 @@ export const getActiveItems = query({
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
 
-    // Use provided filter or default to 'not-assigned-to-others'
-    const effectiveAssigneeFilter = args.assigneeFilter as AssigneeFilterType | undefined;
+    // Use provided assignee filter or default to 'not-assigned-to-others'
+    const effectiveAssigneeFilter = args.assigneeFilter || 'not-assigned-to-others';
 
     // Apply global filters
     return applyGlobalFilters(limitedItems, {
