@@ -8,3 +8,7 @@ export { upsertNote } from "./mutations/upsertNote";
 export { upsertReminder } from "./mutations/upsertReminder";
 export { updateSyncToken } from "./mutations/updateSyncToken";
 export { updateItem } from "./mutations/updateItem";
+
+// Computed mutations
+export { extractProjectMetadata } from "./mutations/computed/extractProjectMetadata";
+export { triggerMetadataExtraction } from "./mutations/computed/triggerMetadataExtraction";

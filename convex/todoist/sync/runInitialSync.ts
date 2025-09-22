@@ -103,6 +103,11 @@ export const runInitialSync = action({
       (syncData.notes?.length || 0) +
       (syncData.reminders?.length || 0);
 
+    // Trigger metadata extraction if we synced items
+    if (syncData.items?.length) {
+      await ctx.runMutation(internal.todoist.mutations.triggerMetadataExtraction);
+    }
+
     return {
       changeCount,
       syncToken: syncData.sync_token,

@@ -6,3 +6,4 @@ export { reopenTask } from "./actions/reopenTask";
 export { deleteTask } from "./actions/deleteTask";
 export { moveTask } from "./actions/moveTask";
 export { completeMultipleTasks } from "./actions/completeMultipleTasks";
+export { refreshProjectMetadata } from "./actions/refreshProjectMetadata";

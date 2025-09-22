@@ -21,9 +21,12 @@ The integration uses three distinct type systems:
 todoist/
 ├── actions/              # Public API actions using Todoist SDK
 ├── mutations/            # Internal database mutations
+│   └── computed/        # Computed property mutations
 ├── queries/              # Public query functions
+│   └── computed/        # Queries with computed properties
 ├── sync/                 # Sync orchestration
 ├── types/                # Type definitions
+├── helpers/              # Utility functions
 ├── publicActions.ts      # Barrel exports for actions
 ├── publicQueries.ts      # Barrel exports for queries
 └── CLAUDE.md            # This file
@@ -202,6 +205,65 @@ internal.todoist.sync.performIncrementalSync()
 2. Run `npx convex dev` to generate types
 3. Update sync types in `types/syncApi.ts`
 
+## Computed Properties System
+
+### Overview
+The integration includes a computed properties system that extracts metadata from special Todoist tasks and pre-populates it for efficient querying.
+
+### How It Works
+1. **Metadata Tasks**: Tasks with `project-metadata` label or starting with `*` are treated as metadata carriers
+2. **Extraction**: After sync operations, metadata is extracted and stored in `todoist_project_metadata` table
+3. **Computed Queries**: Special queries return projects enriched with metadata and computed properties
+
+### Usage Examples
+
+```typescript
+// Get all projects with metadata and stats
+const projects = await api.todoist.queries.getProjectsWithMetadata();
+
+// Get high-priority projects
+const urgent = await api.todoist.queries.getProjectsByPriority({ 
+  priority: 1,
+  includeStats: true 
+});
+
+// Get scheduled projects in date range
+const scheduled = await api.todoist.queries.getScheduledProjects({
+  from: "2024-01-01",
+  to: "2024-01-31"
+});
+
+// Manually refresh metadata
+await api.todoist.actions.refreshProjectMetadata({ 
+  projectId: "optional-specific-project" 
+});
+```
+
+### Returned Data Structure
+```typescript
+{
+  ...project,                    // All base Todoist fields
+  metadata: {                    // Extracted metadata
+    priority?: number,
+    scheduledDate?: string,
+    description?: string,
+    sourceTaskId?: string,
+    lastUpdated?: number
+  },
+  stats: {                       // Calculated statistics
+    itemCount: number,
+    activeCount: number,
+    completedCount: number
+  },
+  computed: {                    // Computed properties
+    isScheduled: boolean,
+    isHighPriority: boolean,
+    completionRate: number | null,
+    hasActiveItems: boolean
+  }
+}
+```
+
 ## Important Notes
 
 - **NEVER** use deprecated APIs (v2, v9)
@@ -209,3 +271,4 @@ internal.todoist.sync.performIncrementalSync()
 - **PREFER** SDK methods over raw API calls
 - **MAINTAIN** three-layer sync redundancy
 - **TEST** webhook signatures in production
+- **EXTRACT** metadata after sync operations for computed properties

@@ -124,6 +124,11 @@ export const performIncrementalSync = action({
         token: syncData.sync_token,
       });
 
+      // Trigger metadata extraction if we synced items
+      if (syncData.items && syncData.items.length > 0) {
+        await ctx.runMutation(internal.todoist.mutations.triggerMetadataExtraction);
+      }
+
       return {
         changeCount,
         syncToken: syncData.sync_token,
