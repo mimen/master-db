@@ -6,8 +6,9 @@ const dueSchema = v.object({
   date: v.string(),
   is_recurring: v.optional(v.boolean()),
   string: v.optional(v.string()),
+  lang: v.optional(v.string()),
   datetime: v.optional(v.string()),
-  timezone: v.optional(v.string()),
+  timezone: v.optional(v.union(v.string(), v.null())),
 });
 
 export const todoist_items = defineTable({
@@ -28,6 +29,7 @@ export const todoist_items = defineTable({
   is_deleted: v.number(),
   added_at: v.string(),
   completed_at: v.optional(v.string()),
+  updated_at: v.optional(v.string()),
   user_id: v.string(),
   sync_version: v.number(),
 })

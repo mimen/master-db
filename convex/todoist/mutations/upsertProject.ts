@@ -16,7 +16,7 @@ export const upsertProject = internalMutation({
       todoist_id: project.id,
       name: project.name,
       color: project.color || "charcoal", // Default to charcoal if no color provided
-      parent_id: project.parent_id || undefined,
+      parent_id: project.parent_id === null ? undefined : project.parent_id,
       child_order: project.child_order || 0,
       is_deleted: project.is_deleted ? 1 : 0,
       is_archived: project.is_archived ? 1 : 0,

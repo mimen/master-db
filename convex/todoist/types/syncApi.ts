@@ -11,7 +11,7 @@ export const syncDueSchema = v.object({
   is_recurring: v.optional(v.boolean()),
   string: v.optional(v.string()),
   datetime: v.optional(v.string()),
-  timezone: v.optional(v.string()),
+  timezone: v.optional(v.union(v.string(), v.null())),
 });
 
 // Item (task) structure from Sync API
@@ -19,22 +19,22 @@ export const syncItemSchema = v.object({
   id: v.string(),
   content: v.string(),
   description: v.optional(v.string()),
-  project_id: v.optional(v.string()),
-  section_id: v.optional(v.string()),
-  parent_id: v.optional(v.string()),
+  project_id: v.optional(v.union(v.string(), v.null())),
+  section_id: v.optional(v.union(v.string(), v.null())),
+  parent_id: v.optional(v.union(v.string(), v.null())),
   child_order: v.optional(v.number()),
   priority: v.optional(v.number()),
-  due: v.optional(syncDueSchema),
+  due: v.optional(v.union(syncDueSchema, v.null())),
   labels: v.optional(v.array(v.string())),
-  assigned_by_uid: v.optional(v.string()),
-  added_by_uid: v.optional(v.string()),
+  assigned_by_uid: v.optional(v.union(v.string(), v.null())),
+  added_by_uid: v.optional(v.union(v.string(), v.null())),
   comment_count: v.optional(v.number()),
   checked: v.optional(v.union(v.boolean(), v.number())),
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
-  added_at: v.optional(v.string()),
-  completed_at: v.optional(v.string()),
-  updated_at: v.optional(v.string()),
-  user_id: v.optional(v.string()),
+  added_at: v.optional(v.union(v.string(), v.null())),
+  completed_at: v.optional(v.union(v.string(), v.null())),
+  updated_at: v.optional(v.union(v.string(), v.null())),
+  user_id: v.optional(v.union(v.string(), v.null())),
 });
 
 // Project structure from Sync API
@@ -42,7 +42,7 @@ export const syncProjectSchema = v.object({
   id: v.string(),
   name: v.string(),
   color: v.optional(v.string()),
-  parent_id: v.optional(v.string()),
+  parent_id: v.optional(v.union(v.string(), v.null())),
   child_order: v.optional(v.number()),
   collapsed: v.optional(v.boolean()),
   shared: v.optional(v.boolean()),
@@ -83,17 +83,17 @@ export const syncNoteSchema = v.object({
   item_id: v.string(),
   project_id: v.optional(v.string()),
   content: v.string(),
-  file_attachment: v.optional(v.object({
+  file_attachment: v.optional(v.union(v.object({
     file_name: v.string(),
     file_size: v.number(),
     file_type: v.string(),
     file_url: v.string(),
     upload_state: v.string(),
-  })),
-  uids_to_notify: v.optional(v.array(v.string())),
+  }), v.null())),
+  uids_to_notify: v.optional(v.union(v.array(v.string()), v.null())),
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
   posted_at: v.string(),
-  reactions: v.optional(v.record(v.string(), v.array(v.string()))),
+  reactions: v.optional(v.union(v.record(v.string(), v.array(v.string())), v.null())),
 });
 
 // Reminder structure from Sync API
