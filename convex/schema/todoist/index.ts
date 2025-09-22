@@ -5,3 +5,4 @@ export { todoist_sections } from "./sections";
 export { todoist_labels } from "./labels";
 export { todoist_notes } from "./notes";
 export { todoist_reminders } from "./reminders";
+export { todoist_project_metadata } from "./projectMetadata";
