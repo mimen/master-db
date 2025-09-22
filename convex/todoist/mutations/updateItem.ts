@@ -16,7 +16,7 @@ const itemUpdateSchema = v.object({
       is_recurring: v.optional(v.boolean()),
       string: v.optional(v.string()),
       datetime: v.optional(v.string()),
-      timezone: v.optional(v.string()),
+      timezone: v.optional(v.union(v.string(), v.null())),
     })
   )),
   labels: v.optional(v.array(v.string())),

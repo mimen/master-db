@@ -57,10 +57,10 @@ export const updateTask = action({
           priority: task.priority,
           labels: task.labels,
           due: task.due ? {
-            date: task.due.date,
+            date: task.due.date.split('T')[0], // Extract just the date part
             is_recurring: task.due.isRecurring,
             string: task.due.string,
-            datetime: task.due.datetime,
+            datetime: task.due.datetime || (task.due.date.includes('T') ? task.due.date : undefined),
             timezone: task.due.timezone,
           } : null,
           updated_at: task.updatedAt || new Date().toISOString(),

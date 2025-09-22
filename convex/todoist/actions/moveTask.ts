@@ -37,15 +37,25 @@ export const moveTask = action({
         const task = tasks[0];
 
         // Update in Convex
+        const updates: any = {
+          project_id: task.projectId,
+          updated_at: task.updatedAt || new Date().toISOString(),
+          sync_version: Date.now(),
+        };
+        
+        // Only include section_id if it's not null
+        if (task.sectionId !== null && task.sectionId !== undefined) {
+          updates.section_id = task.sectionId;
+        }
+        
+        // Only include parent_id if it's not null
+        if (task.parentId !== null && task.parentId !== undefined) {
+          updates.parent_id = task.parentId;
+        }
+        
         await ctx.runMutation(internal.todoist.mutations.updateItem, {
           todoistId: args.todoistId,
-          updates: {
-            project_id: task.projectId,
-            section_id: task.sectionId,
-            parent_id: task.parentId || null,
-            updated_at: task.updatedAt || new Date().toISOString(),
-            sync_version: Date.now(),
-          },
+          updates,
         });
       }
 
