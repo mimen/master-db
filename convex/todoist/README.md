@@ -114,25 +114,25 @@ test("transforms API response to database format", () => {
 ### Debugging Sync Issues
 ```bash
 # Check sync status
-npx convex run todoist:queries.getSyncStatus
+bunx convex run todoist:queries.getSyncStatus
 
 # View recent errors
-npx convex run todoist:monitoring.getRecentErrors
+bunx convex run todoist:monitoring.getRecentErrors
 
 # Force manual sync
-npx convex run todoist:sync.performIncrementalSync
+bunx convex run todoist:sync.performIncrementalSync
 ```
 
 ### Manual Data Operations
 ```bash
 # Clear all data (development only)
-npx convex run todoist:actions.clearAllData
+bunx convex run todoist:actions.clearAllData
 
 # Run initial sync
-npx convex run todoist:sync.runInitialSync
+bunx convex run todoist:sync.runInitialSync
 
 # Refresh project metadata
-npx convex run todoist:actions.refreshProjectMetadata
+bunx convex run todoist:actions.refreshProjectMetadata
 ```
 
 For detailed architecture, error handling, and troubleshooting information, see the main project documentation.

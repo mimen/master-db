@@ -13,7 +13,7 @@ This project is optimized for agentic development patterns where AI agents can v
 bun tsc && bun run lint && bun test
 
 # 3. Test with real data
-npx convex run todoist:sync.performIncrementalSync
+bunx convex run todoist:sync.performIncrementalSync
 
 # 4. Validate with MCP server (if available)
 # Use Todoist MCP to verify changes match expectations
@@ -52,12 +52,12 @@ bun test  # All tests must pass
 ### 4. Live System Validation
 ```bash
 # Test sync operations
-npx convex run todoist:sync.runInitialSync
-npx convex run todoist:queries.getSyncStatus
+bunx convex run todoist:sync.runInitialSync
+bunx convex run todoist:queries.getSyncStatus
 
 # Test specific operations
-npx convex run todoist:actions.createTask '{"content": "Test task"}'
-npx convex run todoist:queries.getActiveItems
+bunx convex run todoist:actions.createTask '{"content": "Test task"}'
+bunx convex run todoist:queries.getActiveItems
 
 # Validate with MCP server
 # Use mcp__todoist-mcp__get-tasks to verify data matches
@@ -85,8 +85,8 @@ Use the Todoist MCP server (already configured in Claude):
 bun tsc  # Check for type errors
 
 # 4. Test with real data
-npx convex run todoist:actions.clearAllData
-npx convex run todoist:sync.runInitialSync
+bunx convex run todoist:actions.clearAllData
+bunx convex run todoist:sync.runInitialSync
 
 # 5. Verify in Convex dashboard
 # Check data appears correctly
@@ -108,14 +108,14 @@ bun run lint && bun test
 ### Debugging Loop
 ```bash
 # Check what's broken
-npx convex run todoist:queries.getSyncStatus
+bunx convex run todoist:queries.getSyncStatus
 
 # View detailed errors
 npx convex logs | tail -20
 
 # Reset if needed
-npx convex run todoist:actions.clearAllData
-npx convex run todoist:sync.runInitialSync
+bunx convex run todoist:actions.clearAllData
+bunx convex run todoist:sync.runInitialSync
 
 # Validate fix
 bun tsc && bun run lint && bun test
@@ -131,7 +131,7 @@ bun tsc && bun run lint && bun test
 ### Validation Before Commit
 ```bash
 # Complete validation before any commit
-bun tsc && bun run lint && bun test && npx convex run todoist:queries.getSyncStatus
+bun tsc && bun run lint && bun test && bunx convex run todoist:queries.getSyncStatus
 ```
 
 ### Testing Changes
@@ -162,17 +162,17 @@ export const newAction = action({
 });
 
 // 2. Test it
-npx convex run todoist:actions.newAction '{"content": "test"}'
+bunx convex run todoist:actions.newAction '{"content": "test"}'
 
 // 3. Validate side effects
-npx convex run todoist:queries.getActiveItems
+bunx convex run todoist:queries.getActiveItems
 ```
 
 ### Schema Validation
 ```bash
 # After schema changes, always:
-npx convex run todoist:actions.clearAllData
-npx convex run todoist:sync.runInitialSync
+bunx convex run todoist:actions.clearAllData
+bunx convex run todoist:sync.runInitialSync
 
 # Check data in dashboard
 # Run tests to ensure compatibility
@@ -192,7 +192,7 @@ bun run lint || exit 1
 bun test || exit 1
 
 echo "Testing sync health..."
-npx convex run todoist:queries.getSyncStatus || exit 1
+bunx convex run todoist:queries.getSyncStatus || exit 1
 
 echo "All validations passed!"
 ```
@@ -213,7 +213,7 @@ echo "🧪 Testing..."
 bun test
 
 echo "🔄 Sync validation..."
-npx convex run todoist:queries.getSyncStatus
+bunx convex run todoist:queries.getSyncStatus
 
 echo "✅ All validation complete!"
 ```

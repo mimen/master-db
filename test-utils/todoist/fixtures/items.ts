@@ -1,4 +1,6 @@
-export function createMockTodoistItem(overrides = {}) {
+import { Id } from "../../../convex/_generated/dataModel";
+
+export function createMockTodoistItem(overrides: Record<string, unknown> = {}) {
   return {
     todoist_id: '123',
     content: 'Test task',
@@ -24,10 +26,10 @@ export function createMockTodoistItem(overrides = {}) {
 }
 
 // Mock for database record (includes Convex fields)
-export function createMockTodoistItemDB(overrides: any = {}) {
+export function createMockTodoistItemDB(overrides: Record<string, unknown> = {}) {
   const base = createMockTodoistItem(overrides);
   return {
-    _id: `test-${Date.now()}-${Math.random()}` as any,
+    _id: `test-${Date.now()}-${Math.random()}` as Id<"todoist_items">,
     _creationTime: Date.now(),
     ...base,
     ...overrides,

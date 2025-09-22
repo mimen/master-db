@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { api } from "../../_generated/api";
 import { action } from "../../_generated/server";
-import type { ProjectMetadata } from "../types/projectMetadata";
+import type { ProjectMetadata, ProjectMetadataInput } from "../types/projectMetadata";
 
 /**
  * Upserts project metadata for a given project.
@@ -42,7 +42,7 @@ export const updateProjectMetadata = action({
       { projectId: args.projectId }
     );
 
-    const metadataData: any = {
+    const metadataData: ProjectMetadataInput = {
       project_id: args.projectId,
       last_updated: Date.now(),
       sync_version: Date.now(),
