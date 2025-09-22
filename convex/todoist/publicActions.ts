@@ -15,6 +15,9 @@ export { deleteSection } from "./actions/deleteSection";
 export { createLabel } from "./actions/createLabel";
 export { updateLabel } from "./actions/updateLabel";
 export { deleteLabel } from "./actions/deleteLabel";
+export { createComment } from "./actions/createComment";
+export { updateComment } from "./actions/updateComment";
+export { deleteComment } from "./actions/deleteComment";
 export { refreshProjectMetadata } from "./actions/refreshProjectMetadata";
 export { clearAllData } from "./actions/clearAllData";
 export {
