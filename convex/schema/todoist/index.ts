@@ -6,3 +6,4 @@ export { todoist_labels } from "./labels";
 export { todoist_notes } from "./notes";
 export { todoist_reminders } from "./reminders";
 export { todoist_project_metadata } from "./projectMetadata";
+export { todoist_collaborators } from "./collaborators";

@@ -29,7 +29,7 @@ export const getProjectTaskCounts = query({
     const projectCounts = projects.map(project => {
       const rawCount = rawActiveItems.filter(item => item.project_id === project.todoist_id).length;
       const filteredCount = filteredItems.filter(item => item.project_id === project.todoist_id).length;
-      
+
       return {
         projectId: project.todoist_id,
         projectName: project.name,

@@ -14,6 +14,18 @@ export const syncDueSchema = v.object({
   timezone: v.optional(v.union(v.string(), v.null())),
 });
 
+// Deadline schema for non-recurring dates without time
+const syncDeadlineSchema = v.object({
+  date: v.string(), // YYYY-MM-DD format
+  lang: v.string(),
+});
+
+// Duration schema for task duration
+const syncDurationSchema = v.object({
+  amount: v.number(),
+  unit: v.string(), // "minute" or "day"
+});
+
 // Item (task) structure from Sync API
 export const syncItemSchema = v.object({
   id: v.string(),
@@ -25,15 +37,20 @@ export const syncItemSchema = v.object({
   child_order: v.optional(v.number()),
   priority: v.optional(v.number()),
   due: v.optional(v.union(syncDueSchema, v.null())),
+  deadline: v.optional(v.union(syncDeadlineSchema, v.null())),
+  duration: v.optional(v.union(syncDurationSchema, v.null())),
   labels: v.optional(v.array(v.string())),
   assigned_by_uid: v.optional(v.union(v.string(), v.null())),
   added_by_uid: v.optional(v.union(v.string(), v.null())),
+  responsible_uid: v.optional(v.union(v.string(), v.null())),
   comment_count: v.optional(v.number()),
   note_count: v.optional(v.number()), // Alternative field name sometimes used by API
   checked: v.optional(v.union(v.boolean(), v.number())),
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
   added_at: v.optional(v.union(v.string(), v.null())),
+  date_added: v.optional(v.union(v.string(), v.null())),
   completed_at: v.optional(v.union(v.string(), v.null())),
+  date_completed: v.optional(v.union(v.string(), v.null())),
   updated_at: v.optional(v.union(v.string(), v.null())),
   user_id: v.optional(v.union(v.string(), v.null())),
 });
@@ -51,6 +68,8 @@ export const syncProjectSchema = v.object({
   is_archived: v.optional(v.union(v.boolean(), v.number())),
   is_favorite: v.optional(v.union(v.boolean(), v.number())),
   view_style: v.optional(v.string()),
+  created_at: v.optional(v.string()),
+  updated_at: v.optional(v.string()),
 });
 
 // Section structure from Sync API

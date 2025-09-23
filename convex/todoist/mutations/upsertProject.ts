@@ -22,6 +22,8 @@ export const upsertProject = internalMutation({
       is_archived: project.is_archived ? 1 : 0,
       is_favorite: project.is_favorite ? 1 : 0,
       view_style: project.view_style || "list",
+      created_at: project.created_at || new Date().toISOString(),
+      updated_at: project.updated_at || new Date().toISOString(),
       sync_version: currentVersion,
     };
 

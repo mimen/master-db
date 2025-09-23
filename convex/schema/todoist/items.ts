@@ -11,6 +11,18 @@ const dueSchema = v.object({
   timezone: v.optional(v.union(v.string(), v.null())),
 });
 
+// Deadline schema for non-recurring dates without time
+const deadlineSchema = v.object({
+  date: v.string(), // YYYY-MM-DD format
+  lang: v.string(),
+});
+
+// Duration schema for task duration
+const durationSchema = v.object({
+  amount: v.number(),
+  unit: v.string(), // "minute" or "day"
+});
+
 export const todoist_items = defineTable({
   todoist_id: v.string(),
   content: v.string(),
@@ -21,14 +33,19 @@ export const todoist_items = defineTable({
   child_order: v.number(),
   priority: v.number(),
   due: v.optional(dueSchema),
+  deadline: v.optional(deadlineSchema),
+  duration: v.optional(durationSchema),
   labels: v.array(v.string()),
   assignee_id: v.optional(v.string()),
   assigner_id: v.optional(v.string()),
+  responsible_uid: v.optional(v.string()),
   comment_count: v.number(),
   checked: v.number(), // 0 = unchecked, 1 = checked
   is_deleted: v.number(),
   added_at: v.string(),
+  date_added: v.optional(v.string()),
   completed_at: v.optional(v.string()),
+  date_completed: v.optional(v.string()),
   updated_at: v.optional(v.string()),
   user_id: v.string(),
   sync_version: v.number(),
