@@ -16,8 +16,8 @@ function createMockItem(overrides: Partial<Doc<"todoist_items">>): Doc<"todoist_
     priority: 1,
     labels: [],
     comment_count: 0,
-    checked: 0,
-    is_deleted: 0,
+    checked: false,
+    is_deleted: false,
     added_at: new Date().toISOString(),
     user_id: "user-1",
     sync_version: 1,
@@ -55,21 +55,21 @@ describe('applyGlobalFilters', () => {
   describe('completed items filtering', () => {
     test('excludes completed items by default', () => {
       const items = [
-        createMockItem({ checked: 0 }),
-        createMockItem({ checked: 1 }),
-        createMockItem({ checked: 0 }),
+        createMockItem({ checked: false }),
+        createMockItem({ checked: true }),
+        createMockItem({ checked: false }),
       ];
 
       const filtered = applyGlobalFilters(items);
 
       expect(filtered).toHaveLength(2);
-      expect(filtered.every(item => item.checked === 0)).toBe(true);
+      expect(filtered.every(item => item.checked === false)).toBe(true);
     });
 
     test('includes completed items when includeCompleted is true', () => {
       const items = [
-        createMockItem({ checked: 0 }),
-        createMockItem({ checked: 1 }),
+        createMockItem({ checked: false }),
+        createMockItem({ checked: true }),
       ];
 
       const filtered = applyGlobalFilters(items, { includeCompleted: true });
@@ -186,8 +186,8 @@ describe('applyGlobalFilters', () => {
   describe('combined filters', () => {
     test('applies all filters together', () => {
       const items = [
-        createMockItem({ content: '* Metadata', checked: 0 }),
-        createMockItem({ content: 'Task 1', checked: 1 }),
+        createMockItem({ content: '* Metadata', checked: false }),
+        createMockItem({ content: 'Task 1', checked: true }),
         createMockItem({ content: 'Task 2', labels: ['project-metadata'] }),
         createMockItem({ content: 'Task 3', assignee_id: 'other-user' }),
         createMockItem({ content: 'Good task', assignee_id: 'user-123' }),
@@ -207,7 +207,7 @@ describe('TodoistFilterBuilder', () => {
   test('chains multiple filters correctly', () => {
     const items = [
       createMockItem({ content: '* Metadata', labels: ['urgent'] }),
-      createMockItem({ content: 'Task 1', checked: 1 }),
+      createMockItem({ content: 'Task 1', checked: true }),
       createMockItem({ content: 'Task 2', labels: ['excluded'] }),
       createMockItem({ content: 'Good task' }),
     ];

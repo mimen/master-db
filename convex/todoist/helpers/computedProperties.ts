@@ -39,8 +39,8 @@ export function calculateProjectStats(
 
   return {
     itemCount: projectItems.length,
-    activeCount: projectItems.filter(i => i.checked === 0).length,
-    completedCount: projectItems.filter(i => i.checked === 1).length,
+    activeCount: projectItems.filter(i => i.checked === false).length,
+    completedCount: projectItems.filter(i => i.checked === true).length,
   };
 }
 

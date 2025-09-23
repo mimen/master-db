@@ -7,12 +7,12 @@ describe('getProjectWithItemCount', () => {
   test('calculates item counts correctly', () => {
     const project = createMockProject({ todoist_id: 'proj-1' });
     const items = [
-      createMockTodoistItem({ project_id: 'proj-1', checked: 0 }),
-      createMockTodoistItem({ project_id: 'proj-1', checked: 0 }),
-      createMockTodoistItem({ project_id: 'proj-1', checked: 1 }),
-      createMockTodoistItem({ project_id: 'proj-1', checked: 1 }),
-      createMockTodoistItem({ project_id: 'proj-1', checked: 1 }),
-      createMockTodoistItem({ project_id: 'proj-2', checked: 0 }), // Different project
+      createMockTodoistItem({ project_id: 'proj-1', checked: false }),
+      createMockTodoistItem({ project_id: 'proj-1', checked: false }),
+      createMockTodoistItem({ project_id: 'proj-1', checked: true }),
+      createMockTodoistItem({ project_id: 'proj-1', checked: true }),
+      createMockTodoistItem({ project_id: 'proj-1', checked: true }),
+      createMockTodoistItem({ project_id: 'proj-2', checked: false }), // Different project
     ];
 
     // Simulate the counting logic
@@ -20,8 +20,8 @@ describe('getProjectWithItemCount', () => {
     const result = {
       ...project,
       itemCount: projectItems.length,
-      completedCount: projectItems.filter(i => i.checked === 1).length,
-      activeCount: projectItems.filter(i => i.checked === 0).length,
+      completedCount: projectItems.filter(i => i.checked === true).length,
+      activeCount: projectItems.filter(i => i.checked === false).length,
     };
 
     expect(result.itemCount).toBe(5);
@@ -43,8 +43,8 @@ describe('getProjectWithItemCount', () => {
     const result = {
       ...project,
       itemCount: projectItems.length,
-      completedCount: projectItems.filter(i => i.checked === 1).length,
-      activeCount: projectItems.filter(i => i.checked === 0).length,
+      completedCount: projectItems.filter(i => i.checked === true).length,
+      activeCount: projectItems.filter(i => i.checked === false).length,
     };
 
     expect(result.itemCount).toBe(0);

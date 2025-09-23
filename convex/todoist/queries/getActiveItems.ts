@@ -123,8 +123,8 @@ export const getActiveItems = query({
     // Get raw data directly (internal query logic embedded for now)
     let q = ctx.db
       .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), 0))
-      .filter((q) => q.eq(q.field("is_deleted"), 0));
+      .filter((q) => q.eq(q.field("checked"), false))
+      .filter((q) => q.eq(q.field("is_deleted"), false));
 
     if (args.projectId) {
       q = q.filter((q) => q.eq(q.field("project_id"), args.projectId));

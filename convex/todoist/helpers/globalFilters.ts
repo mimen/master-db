@@ -44,7 +44,7 @@ export function applyGlobalFilters(
     }
 
     // 2. Completed items filter
-    if (!includeCompleted && item.checked === 1) {
+    if (!includeCompleted && item.checked === true) {
       return false;
     }
 
@@ -94,7 +94,7 @@ export class TodoistFilterBuilder {
   }
 
   excludeCompleted(): this {
-    this.filters.push(item => item.checked === 0);
+    this.filters.push(item => item.checked === false);
     return this;
   }
 

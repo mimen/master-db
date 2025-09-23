@@ -9,7 +9,7 @@ export const getAllProjects = query({
   handler: async (ctx, args) => {
     const projects = await ctx.db
       .query("todoist_projects")
-      .filter(q => q.eq(q.field("is_deleted"), 0))
+      .filter(q => q.eq(q.field("is_deleted"), false))
       .collect();
 
     // Apply limit if specified

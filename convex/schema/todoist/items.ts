@@ -40,8 +40,8 @@ export const todoist_items = defineTable({
   assigner_id: v.optional(v.string()),
   responsible_uid: v.optional(v.string()),
   comment_count: v.number(),
-  checked: v.number(), // 0 = unchecked, 1 = checked
-  is_deleted: v.number(),
+  checked: v.boolean(), // false = unchecked, true = checked
+  is_deleted: v.boolean(),
   added_at: v.string(),
   date_added: v.optional(v.string()),
   completed_at: v.optional(v.string()),

@@ -39,8 +39,8 @@ export const getScheduledProjects = query({
       .query("todoist_projects")
       .filter(q =>
         q.and(
-          q.eq(q.field("is_deleted"), 0),
-          q.eq(q.field("is_archived"), 0)
+          q.eq(q.field("is_deleted"), false),
+          q.eq(q.field("is_archived"), false)
         )
       )
       .collect();

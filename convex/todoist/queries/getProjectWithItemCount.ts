@@ -22,8 +22,8 @@ export const getProjectWithItemCount = query({
     return {
       ...project,
       itemCount: items.length,
-      completedCount: items.filter(i => i.checked === 1).length,
-      activeCount: items.filter(i => i.checked === 0).length,
+      completedCount: items.filter(i => i.checked === true).length,
+      activeCount: items.filter(i => i.checked === false).length,
     };
   },
 });

@@ -5,9 +5,9 @@ export const todoist_labels = defineTable({
   todoist_id: v.string(),
   name: v.string(),
   color: v.string(),
-  item_order: v.number(),
-  is_deleted: v.number(),
-  is_favorite: v.number(),
+  order: v.number(), // Changed from item_order to match API
+  is_deleted: v.boolean(), // Changed from number to boolean
+  is_favorite: v.boolean(), // Changed from number to boolean
   sync_version: v.number(),
 })
   .index("by_todoist_id", ["todoist_id"])

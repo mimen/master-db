@@ -14,7 +14,7 @@ export const extractProjectMetadata = internalMutation({
     // Build query for metadata tasks
     let itemsQuery = ctx.db
       .query("todoist_items")
-      .filter(q => q.eq(q.field("is_deleted"), 0));
+      .filter(q => q.eq(q.field("is_deleted"), false));
 
     // Collect all items first (we'll filter in memory for complex conditions)
     const allItems = await itemsQuery.collect();

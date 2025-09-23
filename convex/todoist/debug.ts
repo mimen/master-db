@@ -26,7 +26,7 @@ export const getCompletedItems = query({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("todoist_items")
-      .filter(q => q.eq(q.field("checked"), 1))
+      .filter(q => q.eq(q.field("checked"), true))
       .collect();
 
     return items.map(item => ({
@@ -42,7 +42,7 @@ export const getDeletedItems = query({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("todoist_items")
-      .filter(q => q.eq(q.field("is_deleted"), 1))
+      .filter(q => q.eq(q.field("is_deleted"), true))
       .collect();
 
     return items.map(item => ({
@@ -98,10 +98,10 @@ export const getItemStats = query({
 
     return {
       total: items.length,
-      checked: items.filter(i => i.checked === 1).length,
-      unchecked: items.filter(i => i.checked === 0).length,
-      deleted: items.filter(i => i.is_deleted === 1).length,
-      active: items.filter(i => i.checked === 0 && i.is_deleted === 0).length,
+      checked: items.filter(i => i.checked === true).length,
+      unchecked: items.filter(i => i.checked === false).length,
+      deleted: items.filter(i => i.is_deleted === true).length,
+      active: items.filter(i => i.checked === false && i.is_deleted === false).length,
     };
   },
 });
@@ -169,7 +169,7 @@ export const getDeletedLabels = query({
   handler: async (ctx) => {
     const labels = await ctx.db
       .query("todoist_labels")
-      .filter(q => q.eq(q.field("is_deleted"), 1))
+      .filter(q => q.eq(q.field("is_deleted"), true))
       .collect();
 
     return labels.map(label => ({

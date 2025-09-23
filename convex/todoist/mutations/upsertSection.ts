@@ -17,8 +17,9 @@ export const upsertSection = internalMutation({
       name: section.name,
       project_id: section.project_id,
       section_order: section.section_order || 0,
-      is_deleted: section.is_deleted ? 1 : 0,
-      is_archived: section.is_archived ? 1 : 0,
+      collapsed: section.collapsed,
+      is_deleted: Boolean(section.is_deleted), // Convert to boolean
+      is_archived: Boolean(section.is_archived), // Convert to boolean
       sync_version: currentVersion,
     };
 

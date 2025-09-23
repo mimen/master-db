@@ -24,8 +24,8 @@ export const getProjectsByPriority = query({
       .query("todoist_projects")
       .filter(q =>
         q.and(
-          q.eq(q.field("is_deleted"), 0),
-          q.eq(q.field("is_archived"), 0)
+          q.eq(q.field("is_deleted"), false),
+          q.eq(q.field("is_archived"), false)
         )
       )
       .collect();
@@ -50,7 +50,7 @@ export const getProjectsByPriority = query({
     if (args.includeStats) {
       const allItems = await ctx.db
         .query("todoist_items")
-        .filter(q => q.eq(q.field("is_deleted"), 0))
+        .filter(q => q.eq(q.field("is_deleted"), false))
         .collect();
 
       for (const project of projectsWithPriority) {
@@ -59,8 +59,8 @@ export const getProjectsByPriority = query({
         );
         statsByProjectId.set(project.todoist_id, {
           itemCount: projectItems.length,
-          activeCount: projectItems.filter(i => i.checked === 0).length,
-          completedCount: projectItems.filter(i => i.checked === 1).length,
+          activeCount: projectItems.filter(i => i.checked === false).length,
+          completedCount: projectItems.filter(i => i.checked === true).length,
         });
       }
     }

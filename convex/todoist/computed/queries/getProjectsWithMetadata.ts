@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
 import { query } from "../../../_generated/server";
+import { applyGlobalFilters } from "../../helpers/globalFilters";
 
 export const getProjectsWithMetadata = query({
   args: {
@@ -13,10 +14,10 @@ export const getProjectsWithMetadata = query({
 
     // Apply filters
     if (!args.includeDeleted) {
-      projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_deleted"), 0));
+      projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_deleted"), false));
     }
     if (!args.includeArchived) {
-      projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_archived"), 0));
+      projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_archived"), false));
     }
 
     const projects = await projectsQuery.collect();
@@ -35,8 +36,22 @@ export const getProjectsWithMetadata = query({
     const projectIds = projects.map(p => p.todoist_id);
     const allItems = await ctx.db
       .query("todoist_items")
-      .filter(q => q.eq(q.field("is_deleted"), 0))
+      .filter(q => q.eq(q.field("is_deleted"), false))
       .collect();
+
+    // Get all active items and apply global filters once
+    const allActiveItems = allItems.filter(item => item.checked === false);
+    
+    // Get current user ID for assignee filtering (same as getActiveItems)
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject;
+    
+    const filteredActiveItems = applyGlobalFilters(allActiveItems, {
+      assigneeFilter: 'not-assigned-to-others', // Use same default as getActiveItems
+      currentUserId: userId, // Pass the user ID context
+      includeCompleted: false, // We're already filtering to active items
+      includeStarPrefix: false // Exclude metadata tasks (those starting with *)
+    });
 
     // Calculate stats for each project
     const statsByProjectId = new Map<string, {
@@ -47,10 +62,12 @@ export const getProjectsWithMetadata = query({
 
     for (const projectId of projectIds) {
       const projectItems = allItems.filter(item => item.project_id === projectId);
+      const filteredProjectActiveItems = filteredActiveItems.filter(item => item.project_id === projectId);
+      
       statsByProjectId.set(projectId, {
         itemCount: projectItems.length,
-        activeCount: projectItems.filter(i => i.checked === 0).length,
-        completedCount: projectItems.filter(i => i.checked === 1).length,
+        activeCount: filteredProjectActiveItems.length, // Use filtered count for active tasks
+        completedCount: projectItems.filter(i => i.checked === true).length,
       });
     }
 

@@ -26,6 +26,6 @@ export { getScheduledProjects } from "./computed/queries/getScheduledProjects";
 
 // Prioritized Queue queries
 export { getPriorityQueue } from "./queries/getPriorityQueue";
-export { getFocusedTasks } from "./queries/getFocusedTasks"; 
+export { getFocusedTasks } from "./queries/getFocusedTasks";
 export { getContextBatch } from "./queries/getContextBatch";
 export { getQueueState } from "./queries/getQueueState";

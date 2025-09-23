@@ -6,8 +6,9 @@ export const todoist_sections = defineTable({
   name: v.string(),
   project_id: v.string(),
   section_order: v.number(),
-  is_deleted: v.number(),
-  is_archived: v.number(),
+  collapsed: v.optional(v.boolean()), // Added missing field
+  is_deleted: v.boolean(), // Changed from number to boolean
+  is_archived: v.boolean(), // Changed from number to boolean
   sync_version: v.number(),
 })
   .index("by_todoist_id", ["todoist_id"])

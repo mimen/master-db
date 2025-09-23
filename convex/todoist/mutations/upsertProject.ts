@@ -18,10 +18,18 @@ export const upsertProject = internalMutation({
       color: project.color || "charcoal", // Default to charcoal if no color provided
       parent_id: project.parent_id === null ? undefined : project.parent_id,
       child_order: project.child_order || 0,
-      is_deleted: project.is_deleted ? 1 : 0,
-      is_archived: project.is_archived ? 1 : 0,
-      is_favorite: project.is_favorite ? 1 : 0,
+      collapsed: project.collapsed,
+      shared: project.shared,
+      is_deleted: Boolean(project.is_deleted), // Convert to boolean
+      is_archived: Boolean(project.is_archived), // Convert to boolean
+      is_favorite: Boolean(project.is_favorite), // Convert to boolean
       view_style: project.view_style || "list",
+      // Note: Some fields like description, can_assign_tasks, etc. are only available in v1 API
+      // They won't be in the sync API, so we'll leave them undefined for sync operations
+      description: undefined, // Will be filled by v1 API calls if needed
+      can_assign_tasks: undefined, // Will be filled by v1 API calls if needed
+      is_shared: undefined, // Will be filled by v1 API calls if needed
+      inbox_project: undefined, // Will be filled by v1 API calls if needed
       created_at: project.created_at || new Date().toISOString(),
       updated_at: project.updated_at || new Date().toISOString(),
       sync_version: currentVersion,

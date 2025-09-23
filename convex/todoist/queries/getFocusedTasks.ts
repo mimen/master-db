@@ -1,7 +1,8 @@
 import { v } from "convex/values";
+
 import { query } from "../../_generated/server";
-import { processQueue } from "../helpers/queueEngine";
 import { applyGlobalFilters } from "../helpers/globalFilters";
+import { processQueue } from "../helpers/queueEngine";
 
 /**
  * Get intelligently filtered and prioritized tasks based on context and timeframe
@@ -11,7 +12,7 @@ export const getFocusedTasks = query({
   args: {
     context: v.optional(v.union(
       v.literal("work"),
-      v.literal("personal"), 
+      v.literal("personal"),
       v.literal("errands"),
       v.literal("all")
     )),
@@ -29,21 +30,21 @@ export const getFocusedTasks = query({
     const timeframe = args.timeframe || "today";
     const limit = args.limit || 10;
     const includeAssignedToOthers = args.include_assigned_to_others || false;
-    
+
     // Get all active items
     const allItems = await ctx.db
       .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), 0))
-      .filter((q) => q.eq(q.field("is_deleted"), 0))
+      .filter((q) => q.eq(q.field("checked"), false))
+      .filter((q) => q.eq(q.field("is_deleted"), false))
       .collect();
-    
+
     // Get current user ID for assignee filtering
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
-    
+
     // Build filters based on context
     const filters = [];
-    
+
     // Context-based filtering
     if (context !== "all") {
       const contextLabels = {
@@ -51,7 +52,7 @@ export const getFocusedTasks = query({
         personal: ["personal", "home", "family", "health"],
         errands: ["errands", "shopping", "phone", "admin", "quick"],
       };
-      
+
       const labels = contextLabels[context as keyof typeof contextLabels] || [];
       if (labels.length > 0) {
         filters.push({
@@ -61,7 +62,7 @@ export const getFocusedTasks = query({
         });
       }
     }
-    
+
     // Timeframe-based filtering
     switch (timeframe) {
       case "overdue":
@@ -88,10 +89,10 @@ export const getFocusedTasks = query({
         break;
       // "all" means no time filtering
     }
-    
+
     // Smart ordering based on context and timeframe
     const ordering = [];
-    
+
     if (timeframe === "overdue") {
       // For overdue: priority first, then how overdue
       ordering.push(
@@ -112,13 +113,13 @@ export const getFocusedTasks = query({
         { field: "childOrder", direction: "asc" as const }
       );
     }
-    
+
     const queueConfig = {
       filters,
       ordering,
       maxTasks: limit,
     };
-    
+
     // Special handling for "today" to include overdue items
     let processedItems;
     if (timeframe === "today") {
@@ -131,20 +132,20 @@ export const getFocusedTasks = query({
         ordering,
         maxTasks: Math.ceil(limit * 0.4), // 40% for overdue
       };
-      
+
       // Get today items
       const todayConfig = {
         ...queueConfig,
         maxTasks: Math.ceil(limit * 0.6), // 60% for today
       };
-      
+
       const overdueItems = processQueue(allItems, overdueConfig, userId);
       const todayItems = processQueue(allItems, todayConfig, userId);
-      
+
       // Combine and deduplicate
       const seenIds = new Set<string>();
       processedItems = [];
-      
+
       // Add overdue first
       for (const item of overdueItems) {
         if (!seenIds.has(item.todoist_id)) {
@@ -152,7 +153,7 @@ export const getFocusedTasks = query({
           seenIds.add(item.todoist_id);
         }
       }
-      
+
       // Add today items
       for (const item of todayItems) {
         if (!seenIds.has(item.todoist_id) && processedItems.length < limit) {
@@ -163,10 +164,10 @@ export const getFocusedTasks = query({
     } else {
       processedItems = processQueue(allItems, queueConfig, userId);
     }
-    
+
     // Apply global filters
     const assigneeFilter = includeAssignedToOthers ? 'all' : 'not-assigned-to-others';
-    
+
     return applyGlobalFilters(processedItems, {
       assigneeFilter,
       currentUserId: userId,

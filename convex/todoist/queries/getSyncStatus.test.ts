@@ -6,13 +6,13 @@ import { createMockProject } from '../../../test-utils/todoist/fixtures/projects
 describe('getSyncStatus', () => {
   test('counts active items correctly', () => {
     const items = [
-      createMockTodoistItem({ checked: 0, is_deleted: 0 }), // Active
-      createMockTodoistItem({ checked: 1, is_deleted: 0 }), // Completed
-      createMockTodoistItem({ checked: 0, is_deleted: 1 }), // Deleted
-      createMockTodoistItem({ checked: 0, is_deleted: 0 }), // Active
+      createMockTodoistItem({ checked: false, is_deleted: false }), // Active
+      createMockTodoistItem({ checked: true, is_deleted: false }), // Completed
+      createMockTodoistItem({ checked: false, is_deleted: true }), // Deleted
+      createMockTodoistItem({ checked: false, is_deleted: false }), // Active
     ];
 
-    const activeItemCount = items.filter(i => i.checked === 0 && i.is_deleted === 0).length;
+    const activeItemCount = items.filter(i => i.checked === false && i.is_deleted === false).length;
 
     expect(activeItemCount).toBe(2);
     expect(items.length).toBe(4);
@@ -20,13 +20,13 @@ describe('getSyncStatus', () => {
 
   test('counts active projects correctly', () => {
     const projects = [
-      createMockProject({ is_deleted: 0 }), // Active
-      createMockProject({ is_deleted: 1 }), // Deleted
-      createMockProject({ is_deleted: 0 }), // Active
-      createMockProject({ is_deleted: 0 }), // Active
+      createMockProject({ is_deleted: false }), // Active
+      createMockProject({ is_deleted: true }), // Deleted
+      createMockProject({ is_deleted: false }), // Active
+      createMockProject({ is_deleted: false }), // Active
     ];
 
-    const activeProjectCount = projects.filter(p => p.is_deleted === 0).length;
+    const activeProjectCount = projects.filter(p => p.is_deleted === false).length;
 
     expect(activeProjectCount).toBe(3);
     expect(projects.length).toBe(4);
@@ -48,9 +48,9 @@ describe('getSyncStatus', () => {
       lastIncrementalSync: syncState?.last_incremental_sync,
       syncToken: syncState?.last_sync_token,
       itemCount: items.length,
-      activeItemCount: items.filter(i => i.checked === 0 && i.is_deleted === 0).length,
+      activeItemCount: items.filter(i => i.checked === false && i.is_deleted === false).length,
       projectCount: projects.length,
-      activeProjectCount: projects.filter(p => p.is_deleted === 0).length,
+      activeProjectCount: projects.filter(p => p.is_deleted === false).length,
     };
 
     expect(result.lastFullSync).toBeUndefined();

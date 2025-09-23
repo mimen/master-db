@@ -1,7 +1,8 @@
 import { v } from "convex/values";
+
 import { query } from "../../_generated/server";
-import { processQueue } from "../helpers/queueEngine";
 import { applyGlobalFilters } from "../helpers/globalFilters";
+import { processQueue } from "../helpers/queueEngine";
 
 /**
  * Group similar tasks by context to minimize context switching
@@ -25,18 +26,18 @@ export const getContextBatch = query({
     const contextType = args.context_type;
     const includeLowPriority = args.include_low_priority || false;
     const maxTasks = args.max_tasks || 8;
-    
+
     // Get all active items
     const allItems = await ctx.db
       .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), 0))
-      .filter((q) => q.eq(q.field("is_deleted"), 0))
+      .filter((q) => q.eq(q.field("checked"), false))
+      .filter((q) => q.eq(q.field("is_deleted"), false))
       .collect();
-    
+
     // Get current user ID for assignee filtering
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
-    
+
     // Define context-specific label mappings
     const contextLabels = {
       calls: ["call", "phone", "meeting", "video", "zoom", "interview"],
@@ -46,10 +47,10 @@ export const getContextBatch = query({
       creative: ["creative", "design", "writing", "brainstorm", "plan", "research"],
       development: ["code", "dev", "programming", "debug", "review", "deploy"],
     };
-    
+
     // Build filters
     const filters = [];
-    
+
     // Context-specific label filtering
     if (contextType !== "all") {
       const labels = contextLabels[contextType as keyof typeof contextLabels] || [];
@@ -61,7 +62,7 @@ export const getContextBatch = query({
         });
       }
     }
-    
+
     // Priority filtering
     if (!includeLowPriority) {
       filters.push({
@@ -70,10 +71,10 @@ export const getContextBatch = query({
         mode: "include" as const,
       });
     }
-    
+
     // Context-specific ordering
     let ordering;
-    
+
     if (contextType === "calls" || contextType === "emails") {
       // For communication: prioritize by urgency and due dates
       ordering = [
@@ -102,16 +103,16 @@ export const getContextBatch = query({
         { field: "childOrder", direction: "asc" as const },
       ];
     }
-    
+
     const queueConfig = {
       filters,
       ordering,
       maxTasks,
     };
-    
+
     // Process the queue
     const processedItems = processQueue(allItems, queueConfig, userId);
-    
+
     // Apply global filters (excluding assignee filter to keep team tasks for context batching)
     return applyGlobalFilters(processedItems, {
       assigneeFilter: 'all', // Include all tasks for context batching

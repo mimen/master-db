@@ -10,14 +10,14 @@ export const getProjectTaskCounts = query({
     // Get all active items
     const rawActiveItems = await ctx.db
       .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), 0))
-      .filter((q) => q.eq(q.field("is_deleted"), 0))
+      .filter((q) => q.eq(q.field("checked"), false))
+      .filter((q) => q.eq(q.field("is_deleted"), false))
       .collect();
 
     // Get all projects
     const projects = await ctx.db
       .query("todoist_projects")
-      .filter((q) => q.eq(q.field("is_deleted"), 0))
+      .filter((q) => q.eq(q.field("is_deleted"), false))
       .collect();
 
     // Apply global filters

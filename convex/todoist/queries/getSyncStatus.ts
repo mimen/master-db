@@ -15,9 +15,9 @@ export const getSyncStatus = query({
       lastIncrementalSync: syncState?.last_incremental_sync,
       syncToken: syncState?.last_sync_token,
       itemCount: items.length,
-      activeItemCount: items.filter(i => i.checked === 0 && i.is_deleted === 0).length,
+      activeItemCount: items.filter(i => i.checked === false && i.is_deleted === false).length,
       projectCount: projects.length,
-      activeProjectCount: projects.filter(p => p.is_deleted === 0).length,
+      activeProjectCount: projects.filter(p => p.is_deleted === false).length,
     };
   },
 });

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+
 import { mutation } from "../../_generated/server";
 
 /**
@@ -16,17 +17,17 @@ export const createQueueState = mutation({
       throw new Error("Not authenticated");
     }
     const userId = identity.subject;
-    
+
     const now = new Date().toISOString();
-    
+
     // Check if there's already an active queue state for this user
     const existingState = await ctx.db
       .query("todoist_queue_states")
-      .withIndex("by_user_and_queue", (q) => 
+      .withIndex("by_user_and_queue", (q) =>
         q.eq("userId", userId).eq("queueId", args.queueId)
       )
       .first();
-    
+
     const queueStateData = {
       userId,
       queueId: args.queueId,
@@ -41,7 +42,7 @@ export const createQueueState = mutation({
       lastAccessedAt: now,
       updatedAt: now,
     };
-    
+
     if (existingState) {
       // Update existing state
       await ctx.db.patch(existingState._id, {

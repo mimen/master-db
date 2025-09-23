@@ -10,14 +10,14 @@ const filterSchema = v.union(
     projectIds: v.array(v.string()),
     includeSubprojects: v.optional(v.boolean()),
   }),
-  // Priority filter  
+  // Priority filter
   v.object({
     type: v.literal("priority"),
     mode: v.optional(v.union(v.literal("include"), v.literal("exclude"))),
     priorities: v.array(v.number()), // [1,2,3,4]
     minPriority: v.optional(v.number()),
   }),
-  // Project Priority filter  
+  // Project Priority filter
   v.object({
     type: v.literal("projectPriority"),
     mode: v.optional(v.union(v.literal("include"), v.literal("exclude"))),
@@ -36,7 +36,7 @@ const filterSchema = v.union(
     mode: v.optional(v.union(v.literal("include"), v.literal("exclude"))),
     range: v.union(
       v.literal("overdue"),
-      v.literal("today"), 
+      v.literal("today"),
       v.literal("tomorrow"),
       v.literal("next7days"),
       v.literal("future"),
@@ -92,7 +92,7 @@ const orderingRuleSchema = v.object({
 const groupingConfigSchema = v.object({
   field: v.union(
     v.literal("projectId"),
-    v.literal("priority"), 
+    v.literal("priority"),
     v.literal("dueDate"),
     v.literal("section")
   ),
@@ -105,21 +105,21 @@ export const todoist_queue_configs = defineTable({
   name: v.string(),
   description: v.optional(v.string()),
   userId: v.string(), // Owner of this queue configuration
-  
+
   // Core queue configuration
   filters: v.array(filterSchema),
   ordering: v.array(orderingRuleSchema),
   grouping: v.optional(groupingConfigSchema),
-  
+
   // Queue behavior settings
   maxTasks: v.optional(v.number()), // Limit queue size
   defaultTimeFrame: v.optional(v.string()), // "today", "week", etc.
-  
+
   // UI preferences
   showProgressIndicator: v.optional(v.boolean()),
   enableBatching: v.optional(v.boolean()),
   breakReminders: v.optional(v.array(v.number())), // Task counts to show breaks
-  
+
   // Metadata
   isDefault: v.optional(v.boolean()),
   isActive: v.optional(v.boolean()),
