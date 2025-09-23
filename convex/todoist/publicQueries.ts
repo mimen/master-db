@@ -10,6 +10,14 @@ export { getProjectWithItemCount } from "./queries/getProjectWithItemCount";
 export { getSyncStatus } from "./queries/getSyncStatus";
 export { getProjectTaskCounts } from "./queries/getProjectTaskCounts";
 
+// Time-based queries
+export { getOverdueItems } from "./queries/getOverdueItems";
+export { getDueTodayItems } from "./queries/getDueTodayItems";
+export { getDueTomorrowItems } from "./queries/getDueTomorrowItems";
+export { getDueNext7DaysItems } from "./queries/getDueNext7DaysItems";
+export { getDueFutureItems } from "./queries/getDueFutureItems";
+export { getNoDueDateItems } from "./queries/getNoDueDateItems";
+
 // Computed queries
 export { getProjectsWithMetadata } from "./computed/queries/getProjectsWithMetadata";
 export { getProjectsByPriority } from "./computed/queries/getProjectsByPriority";
