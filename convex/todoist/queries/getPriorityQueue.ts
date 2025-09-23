@@ -24,6 +24,17 @@ export const getPriorityQueue = query({
       .filter((q) => q.eq(q.field("is_deleted"), 0))
       .collect();
     
+    // Get project metadata for project priorities
+    const projectMetadata = await ctx.db
+      .query("todoist_project_metadata")
+      .collect();
+    
+    // Create project metadata map for efficient lookup
+    const projectMetadataMap = new Map();
+    for (const metadata of projectMetadata) {
+      projectMetadataMap.set(metadata.project_id, metadata);
+    }
+    
     // Get current user ID for assignee filtering
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
@@ -60,77 +71,150 @@ export const getPriorityQueue = query({
       maxTasks,
     };
     
-    // Process items through multiple priority segments
-    const segments = [
-      // Segment 1: Overdue high priority
-      {
-        ...queueConfig,
-        filters: [
-          { type: "custom" as const, condition: "overdue" },
-          { type: "priority" as const, minPriority: 3 }, // P1, P2, P3
-        ],
-      },
-      // Segment 2: Due today high priority
-      {
-        ...queueConfig,
-        filters: [
-          { type: "date" as const, range: "today" as const },
-          { type: "priority" as const, minPriority: 2 }, // P1, P2
-        ],
-      },
-      // Segment 3: Due tomorrow P1 only
-      {
-        ...queueConfig,
-        filters: [
-          { type: "date" as const, range: "tomorrow" as const },
-          { type: "priority" as const, priorities: [4] }, // P1 only (4 is highest)
-        ],
-      },
-    ];
+    // Get all projects for name lookup first
+    const allProjects = await ctx.db
+      .query("todoist_projects")
+      .filter((q) => q.eq(q.field("is_deleted"), 0))
+      .collect();
     
-    let priorityItems: typeof allItems = [];
+    const projectMap = new Map();
+    for (const project of allProjects) {
+      projectMap.set(project.todoist_id, project);
+    }
+    
+    // Get P1 projects (priority 4) to create individual segments for each
+    const p1Projects = projectMetadata.filter(meta => meta.priority === 4);
+    const p2Projects = projectMetadata.filter(meta => meta.priority === 3);
+    
+    // Build dynamic segments - each P1 project gets its own segment
+    const segments = [];
+    
+    // First: Individual segment for each P1 project
+    for (const p1Project of p1Projects) {
+      const project = projectMap.get(p1Project.project_id);
+      const projectName = project?.name || "Unknown Project";
+      
+      segments.push({
+        name: projectName,
+        filters: [
+          { type: "project" as const, projectIds: [p1Project.project_id] },
+        ],
+        ordering: [
+          { field: "priority", direction: "desc" as const },
+          { field: "dueDate", direction: "asc" as const, nullsFirst: false },
+          { field: "childOrder", direction: "asc" as const },
+        ],
+        maxTasks: Math.max(3, Math.ceil(maxTasks * 0.60 / p1Projects.length)), // Distribute 60% among P1 projects
+      });
+    }
+    
+    // Second: P2 projects combined
+    if (p2Projects.length > 0) {
+      segments.push({
+        name: "P2 Projects",
+        filters: [
+          { type: "projectPriority" as const, priorities: [3] }, // P2 projects only
+        ],
+        ordering: [
+          { field: "priority", direction: "desc" as const },
+          { field: "dueDate", direction: "asc" as const, nullsFirst: false },
+          { field: "childOrder", direction: "asc" as const },
+        ],
+        maxTasks: Math.ceil(maxTasks * 0.25), // Reserve 25% for P2 projects
+      });
+    }
+    
+    // Third: High priority tasks from any project (fallback)
+    segments.push({
+      name: "Other High Priority",
+      filters: [
+        { type: "priority" as const, minPriority: 3 }, // P1, P2, P3 task priority
+      ],
+      ordering: [
+        { field: "priority", direction: "desc" as const },
+        { field: "projectPriority", direction: "desc" as const },
+        { field: "dueDate", direction: "asc" as const, nullsFirst: false },
+      ],
+      maxTasks: Math.ceil(maxTasks * 0.15), // Reserve 15% for other high priority tasks
+    });
+    
+    interface QueueItem {
+      task: typeof allItems[0];
+      segment: string;
+      projectName?: string;
+    }
+    
+    const priorityItems: QueueItem[] = [];
     const seenIds = new Set<string>();
     
     // Process each segment until we have enough tasks
     for (const segmentConfig of segments) {
       if (priorityItems.length >= maxTasks) break;
       
-      const segmentItems = processQueue(allItems, segmentConfig, userId);
+      const segmentItems = processQueue(allItems, segmentConfig, userId, projectMetadataMap);
       
-      // Add unique items from this segment
+      // Add unique items from this segment with grouping info
       for (const item of segmentItems) {
         if (!seenIds.has(item.todoist_id) && priorityItems.length < maxTasks) {
-          priorityItems.push(item);
+          const project = projectMap.get(item.project_id);
+          priorityItems.push({
+            task: item,
+            segment: segmentConfig.name || "Unknown",
+            projectName: project?.name || "Unknown Project",
+          });
           seenIds.add(item.todoist_id);
         }
       }
     }
     
-    // If we still need more items, add other high-priority items
+    // If we still need more items, add other high-priority items with project priority consideration
     if (priorityItems.length < maxTasks) {
       const fillConfig = {
+        name: "Fill - High Priority",
         filters: [
-          { type: "priority" as const, minPriority: 2 },
+          { type: "priority" as const, minPriority: 2 }, // P1, P2 and above
         ],
         ordering: [
+          { field: "projectPriority", direction: "desc" as const },
           { field: "priority", direction: "desc" as const },
           { field: "dueDate", direction: "asc" as const, nullsFirst: false },
         ],
         maxTasks: maxTasks - priorityItems.length,
       };
       
-      const fillItems = processQueue(allItems, fillConfig, userId)
+      const fillItems = processQueue(allItems, fillConfig, userId, projectMetadataMap)
         .filter(item => !seenIds.has(item.todoist_id));
       
-      priorityItems.push(...fillItems);
+      // Add fill items with grouping info
+      for (const item of fillItems) {
+        if (priorityItems.length >= maxTasks) break;
+        const project = projectMap.get(item.project_id);
+        priorityItems.push({
+          task: item,
+          segment: "Fill - High Priority",
+          projectName: project?.name || "Unknown Project",
+        });
+      }
     }
     
-    // Apply global filters
+    // Apply global filters to just the tasks
     const assigneeFilter = includeAssignedToOthers ? 'all' : 'not-assigned-to-others';
-    
-    return applyGlobalFilters(priorityItems, {
+    const tasksOnly = priorityItems.map(item => item.task);
+    const filteredTasks = applyGlobalFilters(tasksOnly, {
       assigneeFilter,
       currentUserId: userId,
     });
+    
+    // Return tasks with grouping information preserved
+    const filteredTaskIds = new Set(filteredTasks.map(task => task.todoist_id));
+    const result = priorityItems
+      .filter(item => filteredTaskIds.has(item.task.todoist_id))
+      .map(item => ({
+        ...item.task,
+        _queueSegment: item.segment,
+        _projectName: item.projectName,
+      }));
+    
+    return result;
   },
 });

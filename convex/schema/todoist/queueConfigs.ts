@@ -17,6 +17,13 @@ const filterSchema = v.union(
     priorities: v.array(v.number()), // [1,2,3,4]
     minPriority: v.optional(v.number()),
   }),
+  // Project Priority filter  
+  v.object({
+    type: v.literal("projectPriority"),
+    mode: v.optional(v.union(v.literal("include"), v.literal("exclude"))),
+    priorities: v.array(v.number()), // [1,2,3,4]
+    minPriority: v.optional(v.number()),
+  }),
   // Label filter
   v.object({
     type: v.literal("label"),

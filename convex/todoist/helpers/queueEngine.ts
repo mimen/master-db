@@ -2,7 +2,7 @@ import { Doc } from "../../_generated/dataModel";
 
 // Type definitions for queue processing
 export interface QueueFilter {
-  type: "project" | "priority" | "label" | "date" | "custom" | "assignee";
+  type: "project" | "priority" | "label" | "date" | "custom" | "assignee" | "projectPriority";
   mode?: "include" | "exclude";
   [key: string]: any;
 }
@@ -187,11 +187,33 @@ const applyAssigneeFilter = (items: Doc<"todoist_items">[], filter: QueueFilter,
     : items.filter(item => !matchesFilter(item));
 };
 
+const applyProjectPriorityFilter = (items: Doc<"todoist_items">[], filter: QueueFilter, projectMetadata?: Map<string, any>): Doc<"todoist_items">[] => {
+  const { priorities, minPriority, mode = "include" } = filter;
+  
+  const matchesFilter = (item: Doc<"todoist_items">) => {
+    const metadata = projectMetadata?.get(item.project_id || "");
+    const projectPriority = metadata?.priority || 0;
+    
+    if (priorities && priorities.length > 0) {
+      return priorities.includes(projectPriority);
+    }
+    if (minPriority !== undefined) {
+      return projectPriority >= minPriority;
+    }
+    return true;
+  };
+  
+  return mode === "include"
+    ? items.filter(matchesFilter)
+    : items.filter(item => !matchesFilter(item));
+};
+
 // Main filter application function
 export const applyQueueFilters = (
   items: Doc<"todoist_items">[],
   filters: QueueFilter[],
-  currentUserId?: string
+  currentUserId?: string,
+  projectMetadata?: Map<string, any>
 ): Doc<"todoist_items">[] => {
   let filteredItems = items;
   
@@ -214,6 +236,9 @@ export const applyQueueFilters = (
         break;
       case "assignee":
         filteredItems = applyAssigneeFilter(filteredItems, filter, currentUserId);
+        break;
+      case "projectPriority":
+        filteredItems = applyProjectPriorityFilter(filteredItems, filter, projectMetadata);
         break;
     }
   }
@@ -295,7 +320,7 @@ export const processQueue = (
   projectMetadata?: Map<string, any>
 ): Doc<"todoist_items">[] => {
   // Apply filters
-  let processedItems = applyQueueFilters(items, config.filters, currentUserId);
+  let processedItems = applyQueueFilters(items, config.filters, currentUserId, projectMetadata);
   
   // Apply ordering
   processedItems = applyQueueOrdering(processedItems, config.ordering, projectMetadata);
