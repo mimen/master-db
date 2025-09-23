@@ -11,8 +11,8 @@ export const todoist_projects = defineTable({
   is_archived: v.number(),
   is_favorite: v.number(),
   view_style: v.string(),
-  created_at: v.string(),
-  updated_at: v.string(),
+  created_at: v.optional(v.string()),
+  updated_at: v.optional(v.string()),
   sync_version: v.number(),
 })
   .index("by_todoist_id", ["todoist_id"])

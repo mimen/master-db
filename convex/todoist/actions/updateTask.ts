@@ -19,6 +19,8 @@ export const updateTask = action({
     })),
     labels: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
+    deadlineDate: v.optional(v.string()),
+    deadlineLang: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ActionResponse<Task>> => {
     try {
@@ -45,6 +47,14 @@ export const updateTask = action({
         }
       }
 
+      // Handle deadline updates
+      if (args.deadlineDate) {
+        updateArgs.deadlineDate = args.deadlineDate;
+        if (args.deadlineLang) {
+          updateArgs.deadlineLang = args.deadlineLang;
+        }
+      }
+
       // Update task using SDK
       const task = await client.updateTask(args.todoistId, updateArgs);
 
@@ -62,6 +72,10 @@ export const updateTask = action({
             string: task.due.string,
             datetime: task.due.datetime || (task.due.date.includes('T') ? task.due.date : undefined),
             timezone: task.due.timezone,
+          } : null,
+          deadline: task.deadline ? {
+            date: task.deadline.date,
+            lang: task.deadline.lang,
           } : null,
           updated_at: task.updatedAt || new Date().toISOString(),
           sync_version: Date.now(),

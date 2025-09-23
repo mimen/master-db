@@ -20,6 +20,8 @@ export const createTask = action({
     })),
     labels: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
+    deadlineDate: v.optional(v.string()),
+    deadlineLang: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ActionResponse<Task>> => {
     try {
@@ -48,6 +50,14 @@ export const createTask = action({
         }
       }
 
+      // Handle deadline - simpler than due date
+      if (args.deadlineDate) {
+        taskArgs.deadlineDate = args.deadlineDate;
+        if (args.deadlineLang) {
+          taskArgs.deadlineLang = args.deadlineLang;
+        }
+      }
+
       // Create task using SDK
       const task = await client.addTask(taskArgs);
 
@@ -68,6 +78,10 @@ export const createTask = action({
             string: task.due.string,
             datetime: task.due.datetime || (task.due.date.includes('T') ? task.due.date : undefined),
             timezone: task.due.timezone,
+          } : null,
+          deadline: task.deadline ? {
+            date: task.deadline.date,
+            lang: task.deadline.lang,
           } : null,
           labels: task.labels,
           assigned_by_uid: task.assignedByUid || null,

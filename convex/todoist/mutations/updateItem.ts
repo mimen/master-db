@@ -19,6 +19,13 @@ const itemUpdateSchema = v.object({
       timezone: v.optional(v.union(v.string(), v.null())),
     })
   )),
+  deadline: v.optional(v.union(
+    v.null(),
+    v.object({
+      date: v.string(),
+      lang: v.string(),
+    })
+  )),
   labels: v.optional(v.array(v.string())),
   checked: v.optional(v.number()),
   is_deleted: v.optional(v.number()),
