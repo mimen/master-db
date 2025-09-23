@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react"
 import { useQuery, useMutation } from "convex/react"
 import { Flag, Calendar, Tag, User, Check, Edit2 } from "lucide-react"
+import { useState, useMemo } from "react"
 
-import { api } from "@/convex/_generated/api"
-import { Button } from "@/components/ui/button"
 import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
+import { Button } from "@/components/ui/button"
+import { api } from "@/convex/_generated/api"
 import { cn } from "@/lib/utils"
 
 interface Task {
@@ -40,37 +40,39 @@ interface TaskListViewProps {
 
 export function TaskListView({ currentView }: TaskListViewProps) {
   // Get projects for inbox and project views
-  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
-  
+  const projects = useQuery(api.todoist.publicQueries.getProjects)
+
+  // Get inbox project ID for filtering
+  const inboxProject = projects?.find((p: Project) =>
+    p.name === "Inbox" && !p.parent_id && !p.is_deleted && !p.is_archived
+  )
+
   // Use different queries based on the current view for better performance
   const inboxTasks = useQuery(
-    api.todoist.queries.getActiveItems.getActiveItems,
-    currentView === "inbox" ? {} : "skip"
+    api.todoist.publicQueries.getActiveItems,
+    currentView === "inbox" && inboxProject?.todoist_id ? { projectId: inboxProject.todoist_id } : "skip"
   )
   const todayTasks = useQuery(
-    api.todoist.queries.getDueTodayItems.getDueTodayItems,
+    api.todoist.publicQueries.getDueTodayItems,
     currentView === "today" ? {} : "skip"
   )
   const upcomingTasks = useQuery(
-    api.todoist.queries.getDueNext7DaysItems.getDueNext7DaysItems,
+    api.todoist.publicQueries.getDueNext7DaysItems,
     currentView === "upcoming" ? {} : "skip"
   )
   const projectTasks = useQuery(
-    api.todoist.queries.getActiveItems.getActiveItems,
-    currentView.startsWith("project:") ? {} : "skip"
+    api.todoist.publicQueries.getActiveItems,
+    currentView.startsWith("project:")
+      ? { projectId: currentView.replace("project:", "") }
+      : "skip"
   )
 
   // Get the appropriate tasks based on current view
   const filteredTasks = useMemo(() => {
     switch (currentView) {
       case "inbox": {
-        if (!inboxTasks || !projects) return []
-        const inboxProject = projects.find((p: Project) =>
-          p.name === "Inbox" && !p.parent_id && p.is_deleted === 0 && p.is_archived === 0
-        )
-        return inboxTasks.filter((task: Task) =>
-          task.project_id === inboxProject?.todoist_id
-        )
+        // inboxTasks is already filtered by project ID, no need to filter again
+        return inboxTasks || []
       }
       case "today": {
         return todayTasks || []
@@ -81,9 +83,8 @@ export function TaskListView({ currentView }: TaskListViewProps) {
       default: {
         // Handle project views (format: "project:PROJECT_ID")
         if (currentView.startsWith("project:")) {
-          if (!projectTasks) return []
-          const projectId = currentView.replace("project:", "")
-          return projectTasks.filter((task: Task) => task.project_id === projectId)
+          // projectTasks is already filtered for the specific project
+          return projectTasks || []
         }
         return []
       }
@@ -114,12 +115,12 @@ export function TaskListView({ currentView }: TaskListViewProps) {
   }
 
   const { title, description } = getViewInfo()
-  
+
   // Check if we're still loading based on current view
   const isLoading = useMemo(() => {
     switch (currentView) {
       case "inbox":
-        return inboxTasks === undefined || !projects
+        return inboxTasks === undefined
       case "today":
         return todayTasks === undefined
       case "upcoming":
@@ -238,7 +239,7 @@ function TaskRow({ task }: { task: Task }) {
 
     return { text, isOverdue }
   }
-  
+
   return (
     <div className="group flex items-center gap-3 p-3 hover:bg-muted/50 rounded-lg transition-colors">
       {/* Checkbox */}
@@ -253,14 +254,14 @@ function TaskRow({ task }: { task: Task }) {
           <Check className="w-3 h-3 text-green-600" />
         )}
       </button>
-      
+
       {/* Task content */}
       <div className="flex-1 min-w-0">
         <p className="text-sm leading-normal">{task.content}</p>
         {task.description && (
           <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
         )}
-        
+
         {/* Task metadata */}
         <div className="flex items-center gap-3 mt-2">
           {/* Priority - only show for P2, P3, P4 */}
@@ -316,7 +317,7 @@ function TaskRow({ task }: { task: Task }) {
           )}
         </div>
       </div>
-      
+
       {/* Actions (visible on hover) */}
       <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
         {isEditing ? (

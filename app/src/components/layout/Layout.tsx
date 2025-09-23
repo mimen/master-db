@@ -1,7 +1,8 @@
 import { useState } from "react"
 
-import { Sidebar } from "./Sidebar"
 import { TaskListView } from "../InboxView"
+
+import { Sidebar } from "./Sidebar"
 
 export function Layout() {
   const [currentView, setCurrentView] = useState("inbox")
