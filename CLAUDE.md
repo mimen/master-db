@@ -122,6 +122,36 @@ const data: any = response;
 - Todoist API v9 (deprecated)  
 - Any endpoint not starting with `/api/v1/`
 
+### Critical: Todoist Priority System
+
+⚠️ **IMPORTANT**: Todoist's API uses inverted priority numbers compared to their UI:
+
+- **API Priority 4** = **UI P1** (Highest Priority) - 🔴 Red flag
+- **API Priority 3** = **UI P2** (High Priority) - 🟠 Orange flag  
+- **API Priority 2** = **UI P3** (Medium Priority) - 🔵 Blue flag
+- **API Priority 1** = **UI P4** (Normal Priority) - No flag
+
+**Always use the priority utilities to prevent confusion:**
+
+```typescript
+// ✅ CORRECT - Use the abstraction
+import { usePriority } from "@/lib/priorities";
+const priority = usePriority(project.metadata?.priority);
+if (priority?.showFlag) {
+  // Show flag with priority.colorClass
+}
+
+// ❌ WRONG - Raw priority checks will be confusing
+if (project.metadata?.priority === 1) { // This is actually LOW priority!
+  // This logic is backwards
+}
+```
+
+**Files maintaining this abstraction:**
+- `convex/todoist/types/priorities.ts` - Canonical mapping 
+- `app/src/lib/priorities.ts` - React utilities
+- Always import from these files, never hardcode priority logic
+
 ```bash
 # Test task creation
 bunx convex run todoist:actions.createTask '{"content": "Test"}'
