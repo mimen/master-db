@@ -7,3 +7,5 @@ export { todoist_notes } from "./notes";
 export { todoist_reminders } from "./reminders";
 export { todoist_project_metadata } from "./projectMetadata";
 export { todoist_collaborators } from "./collaborators";
+export { todoist_queue_configs } from "./queueConfigs";
+export { todoist_queue_states } from "./queueStates";

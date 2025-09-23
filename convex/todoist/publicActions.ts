@@ -30,3 +30,6 @@ export {
   ensureAllProjectsHaveMetadata,
   ensureProjectHasMetadata
 } from "./actions/ensureProjectMetadata";
+
+// Queue actions
+export { startQueueSession } from "./actions/startQueueSession";

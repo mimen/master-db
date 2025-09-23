@@ -16,3 +16,7 @@ export { resetProjectMetadata } from "./mutations/resetProjectMetadata";
 // Computed mutations
 export { extractProjectMetadata } from "./computed/mutations/extractProjectMetadata";
 export { triggerMetadataExtraction } from "./computed/mutations/triggerMetadataExtraction";
+
+// Queue mutations
+export { createQueueState } from "./mutations/createQueueState";
+export { updateQueueProgress } from "./mutations/updateQueueProgress";

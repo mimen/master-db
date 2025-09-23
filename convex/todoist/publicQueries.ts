@@ -9,6 +9,7 @@ export { getProjectMetadata } from "./queries/getProjectMetadata";
 export { getProjectWithItemCount } from "./queries/getProjectWithItemCount";
 export { getSyncStatus } from "./queries/getSyncStatus";
 export { getProjectTaskCounts } from "./queries/getProjectTaskCounts";
+export { getLabels } from "./queries/getLabels";
 
 // Time-based queries
 export { getOverdueItems } from "./queries/getOverdueItems";
@@ -22,3 +23,9 @@ export { getNoDueDateItems } from "./queries/getNoDueDateItems";
 export { getProjectsWithMetadata } from "./computed/queries/getProjectsWithMetadata";
 export { getProjectsByPriority } from "./computed/queries/getProjectsByPriority";
 export { getScheduledProjects } from "./computed/queries/getScheduledProjects";
+
+// Prioritized Queue queries
+export { getPriorityQueue } from "./queries/getPriorityQueue";
+export { getFocusedTasks } from "./queries/getFocusedTasks"; 
+export { getContextBatch } from "./queries/getContextBatch";
+export { getQueueState } from "./queries/getQueueState";
