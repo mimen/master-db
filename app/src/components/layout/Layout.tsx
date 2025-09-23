@@ -1,10 +1,11 @@
-import { type ReactNode } from "react"
+import { useState } from "react"
 
-interface LayoutProps {
-  children: ReactNode
-}
+import { Sidebar } from "./Sidebar"
+import { TaskListView } from "../InboxView"
 
-export function Layout({ children }: LayoutProps) {
+export function Layout() {
+  const [currentView, setCurrentView] = useState("inbox")
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b">
@@ -12,9 +13,12 @@ export function Layout({ children }: LayoutProps) {
           <h1 className="text-xl font-semibold">Todoist Processor</h1>
         </div>
       </header>
-      <main className="flex-1">
-        {children}
-      </main>
+      <div className="flex h-[calc(100vh-73px)]">
+        <Sidebar currentView={currentView} onViewChange={setCurrentView} />
+        <main className="flex-1 overflow-auto">
+          <TaskListView currentView={currentView} />
+        </main>
+      </div>
     </div>
   )
 }
