@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { TodoistTask } from '@/types/convex/todoist'
 
-export type DialogType = 'priority' | 'project' | 'label'
+export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
@@ -11,6 +11,10 @@ interface DialogContextValue {
   openPriority: (task: TodoistTask) => void
   openProject: (task: TodoistTask) => void
   openLabel: (task: TodoistTask) => void
+  openDueDate: (task: TodoistTask) => void
+  openDeadline: (task: TodoistTask) => void
+  openComplete: (task: TodoistTask) => void
+  openDelete: (task: TodoistTask) => void
   closeDialog: () => void
 }
 
@@ -35,6 +39,26 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialogType('label')
   }, [])
 
+  const openDueDate = useCallback((task: TodoistTask) => {
+    setCurrentTask(task)
+    setDialogType('dueDate')
+  }, [])
+
+  const openDeadline = useCallback((task: TodoistTask) => {
+    setCurrentTask(task)
+    setDialogType('deadline')
+  }, [])
+
+  const openComplete = useCallback((task: TodoistTask) => {
+    setCurrentTask(task)
+    setDialogType('complete')
+  }, [])
+
+  const openDelete = useCallback((task: TodoistTask) => {
+    setCurrentTask(task)
+    setDialogType('delete')
+  }, [])
+
   const closeDialog = useCallback(() => {
     setCurrentTask(null)
     setDialogType(null)
@@ -46,6 +70,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     openPriority,
     openProject,
     openLabel,
+    openDueDate,
+    openDeadline,
+    openComplete,
+    openDelete,
     closeDialog
   }
 

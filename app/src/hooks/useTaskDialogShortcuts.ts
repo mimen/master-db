@@ -4,7 +4,7 @@ import { useDialogContext } from '@/contexts/OverlayContext'
 import type { TodoistTask } from '@/types/convex/todoist'
 
 export function useTaskDialogShortcuts(focusedTask: TodoistTask | null) {
-  const { openPriority, openProject, openLabel } = useDialogContext()
+  const { openPriority, openProject, openLabel, openDueDate, openDeadline, openComplete, openDelete } = useDialogContext()
 
   useEffect(() => {
     if (!focusedTask) return
@@ -34,10 +34,35 @@ export function useTaskDialogShortcuts(focusedTask: TodoistTask | null) {
             openLabel(focusedTask)
           }
           break
+        case 's':
+          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            openDueDate(focusedTask)
+          }
+          break
+        case 'D':
+          if (e.shiftKey) {
+            e.preventDefault()
+            openDeadline(focusedTask)
+          }
+          break
+        case 'c':
+          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            openComplete(focusedTask)
+          }
+          break
+        case 'Delete':
+        case 'Backspace':
+          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            openDelete(focusedTask)
+          }
+          break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [focusedTask, openPriority, openProject, openLabel])
+  }, [focusedTask, openPriority, openProject, openLabel, openDueDate, openDeadline, openComplete, openDelete])
 }

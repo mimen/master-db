@@ -1,5 +1,9 @@
 import { useAction } from 'convex/react'
 
+import { CompleteTaskDialog } from './CompleteTaskDialog'
+import { DeadlineDialog } from './DeadlineDialog'
+import { DeleteTaskDialog } from './DeleteTaskDialog'
+import { DueDateDialog } from './DueDateDialog'
 import { LabelDialog } from './LabelDialog'
 import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
@@ -10,6 +14,8 @@ export function DialogManager() {
   const { currentTask, dialogType, closeDialog } = useDialogContext()
   const updateTask = useAction(api.todoist.publicActions.updateTask)
   const moveTask = useAction(api.todoist.publicActions.moveTask)
+  const completeTask = useAction(api.todoist.publicActions.completeTask)
+  const deleteTask = useAction(api.todoist.publicActions.deleteTask)
 
   const handlePrioritySelect = async (priority: number) => {
     if (!currentTask) return
@@ -52,6 +58,61 @@ export function DialogManager() {
     }
   }
 
+  const handleDueDateSelect = async (dueString: string) => {
+    if (!currentTask) return
+
+    try {
+      await updateTask({
+        todoistId: currentTask.todoist_id,
+        dueString
+      })
+      closeDialog()
+    } catch (error) {
+      console.error('Failed to update due date:', error)
+    }
+  }
+
+  const handleDeadlineSelect = async (deadlineDate: string) => {
+    if (!currentTask) return
+
+    try {
+      await updateTask({
+        todoistId: currentTask.todoist_id,
+        deadlineDate,
+        deadlineLang: 'en'
+      })
+      closeDialog()
+    } catch (error) {
+      console.error('Failed to update deadline:', error)
+    }
+  }
+
+  const handleComplete = async () => {
+    if (!currentTask) return
+
+    try {
+      await completeTask({
+        todoistId: currentTask.todoist_id
+      })
+      closeDialog()
+    } catch (error) {
+      console.error('Failed to complete task:', error)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!currentTask) return
+
+    try {
+      await deleteTask({
+        taskId: currentTask.todoist_id
+      })
+      closeDialog()
+    } catch (error) {
+      console.error('Failed to delete task:', error)
+    }
+  }
+
   return (
     <>
       <PriorityDialog
@@ -67,6 +128,26 @@ export function DialogManager() {
       <LabelDialog
         task={dialogType === 'label' ? currentTask : null}
         onSelect={handleLabelSelect}
+        onClose={closeDialog}
+      />
+      <DueDateDialog
+        task={dialogType === 'dueDate' ? currentTask : null}
+        onSelect={handleDueDateSelect}
+        onClose={closeDialog}
+      />
+      <DeadlineDialog
+        task={dialogType === 'deadline' ? currentTask : null}
+        onSelect={handleDeadlineSelect}
+        onClose={closeDialog}
+      />
+      <CompleteTaskDialog
+        task={dialogType === 'complete' ? currentTask : null}
+        onConfirm={handleComplete}
+        onClose={closeDialog}
+      />
+      <DeleteTaskDialog
+        task={dialogType === 'delete' ? currentTask : null}
+        onConfirm={handleDelete}
         onClose={closeDialog}
       />
     </>

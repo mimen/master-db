@@ -11,12 +11,9 @@ export const updateTask = action({
     todoistId: v.string(),
     content: v.optional(v.string()),
     priority: v.optional(v.number()),
-    due: v.optional(v.object({
-      date: v.string(),
-      string: v.optional(v.string()),
-      datetime: v.optional(v.string()),
-      timezone: v.optional(v.string()),
-    })),
+    dueString: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
+    dueDatetime: v.optional(v.string()),
     labels: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
     deadlineDate: v.optional(v.string()),
@@ -34,17 +31,13 @@ export const updateTask = action({
       if (args.labels !== undefined) updateArgs.labels = args.labels;
       if (args.description !== undefined) updateArgs.description = args.description;
 
-      // Handle due date - must provide at most one of dueDate or dueDatetime
-      if (args.due) {
-        if (args.due.string) {
-          updateArgs.dueString = args.due.string;
-        } else if (args.due.datetime) {
-          // Use Object.assign to ensure type compatibility
-          Object.assign(updateArgs, { dueDatetime: args.due.datetime });
-        } else if (args.due.date) {
-          // Use Object.assign to ensure type compatibility
-          Object.assign(updateArgs, { dueDate: args.due.date });
-        }
+      // Handle due date - must provide at most one of dueDate, dueDatetime, or dueString
+      if (args.dueString !== undefined) {
+        updateArgs.dueString = args.dueString;
+      } else if (args.dueDatetime !== undefined) {
+        Object.assign(updateArgs, { dueDatetime: args.dueDatetime });
+      } else if (args.dueDate !== undefined) {
+        Object.assign(updateArgs, { dueDate: args.dueDate });
       }
 
       // Handle deadline updates
