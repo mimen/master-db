@@ -1,9 +1,13 @@
+import { v } from "convex/values";
 import { internalMutation } from "../../_generated/server";
 import { syncItemSchema } from "../types/syncApi";
 
 export const upsertItem = internalMutation({
-  args: { item: syncItemSchema },
-  handler: async (ctx, { item }) => {
+  args: {
+    item: syncItemSchema,
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { item, force }) => {
     const existing = await ctx.db
       .query("todoist_items")
       .withIndex("by_todoist_id", (q) => q.eq("todoist_id", item.id))
@@ -41,7 +45,8 @@ export const upsertItem = internalMutation({
     };
 
     if (existing) {
-      if (existing.sync_version < itemData.sync_version) {
+      // Update if: force flag is set, or version is newer
+      if (force || existing.sync_version < itemData.sync_version) {
         await ctx.db.patch(existing._id, itemData);
       }
     } else {

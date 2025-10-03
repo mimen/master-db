@@ -114,6 +114,7 @@ export const runInitialSync = action({
           } : null,
           labels: rawItem.labels,
           assigned_by_uid: rawItem.assigned_by_uid,
+          responsible_uid: rawItem.responsible_uid,
           added_by_uid: rawItem.added_by_uid || "",
           comment_count: rawItem.comment_count,
           checked: rawItem.checked,
@@ -126,6 +127,7 @@ export const runInitialSync = action({
 
         await ctx.runMutation(internal.todoist.mutations.upsertItem, {
           item,
+          force: true, // Force update during initial sync
         });
       }
     }
