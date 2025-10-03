@@ -15,10 +15,11 @@ const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
 interface TaskListViewProps {
   viewConfig: ViewConfig
   onTaskCountChange?: (viewId: string, count: number) => void
+  onTaskClick?: (viewId: string, taskIndex: number) => void
   focusedTaskIndex: number | null
 }
 
-export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }: TaskListViewProps) {
+export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focusedTaskIndex }: TaskListViewProps) {
   const [isExpanded, setIsExpanded] = useState(viewConfig.expanded ?? true)
   const currentView = viewConfig.value
   const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
@@ -301,6 +302,7 @@ export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }
                     key={task._id}
                     task={task}
                     onElementRef={refHandlers.current[index]!}
+                    onClick={() => onTaskClick?.(viewConfig.id, index)}
                   />
                 )
               })}
@@ -321,9 +323,10 @@ export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }
 interface TaskRowProps {
   task: TodoistTask
   onElementRef: (element: HTMLDivElement | null) => void
+  onClick?: () => void
 }
 
-const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowProps) {
   const completeTask = useAction(api.todoist.actions.completeTask.completeTask)
   const priority = usePriority(task.priority)
 
@@ -371,8 +374,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
       ref={onElementRef}
       tabIndex={-1}
       aria-selected={false}
+      onClick={onClick}
       className={cn(
-        "group flex items-center gap-3 p-3 rounded-lg transition-colors focus:outline-none",
+        "group flex items-center gap-3 p-3 rounded-lg transition-colors focus:outline-none cursor-pointer",
         "hover:bg-muted/50"
       )}
     >
@@ -484,4 +488,4 @@ const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
 
     </div>
   )
-}, (prev, next) => prev.task === next.task && prev.onElementRef === next.onElementRef)
+}, (prev, next) => prev.task === next.task && prev.onElementRef === next.onElementRef && prev.onClick === next.onClick)

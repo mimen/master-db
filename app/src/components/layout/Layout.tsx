@@ -60,6 +60,10 @@ export function Layout() {
     })
   }, [updateSelection, viewIds])
 
+  const handleTaskClick = useCallback((viewId: string, taskIndex: number) => {
+    updateSelection(() => ({ viewId, taskIndex }))
+  }, [updateSelection])
+
   const handleArrowNavigation = useCallback((direction: 1 | -1) => {
     updateSelection((prev) => {
       if (viewIds.length === 0) return prev
@@ -183,6 +187,7 @@ export function Layout() {
                 key={view.id}
                 viewConfig={view}
                 onTaskCountChange={handleTaskCountChange}
+                onTaskClick={handleTaskClick}
                 focusedTaskIndex={
                   selectionState.viewId === view.id ? selectionState.taskIndex : null
                 }
