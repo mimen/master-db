@@ -332,11 +332,17 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <div className="text-6xl mb-4">{emptyState.emoji}</div>
-              <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
-              <p className="text-muted-foreground">{emptyState.description}</p>
-            </div>
+            viewConfig.collapsible ? (
+              <div className="py-1 text-xs text-muted-foreground/50 text-center">
+                Empty
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <div className="text-6xl mb-4">{emptyState.emoji}</div>
+                <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
+                <p className="text-muted-foreground">{emptyState.description}</p>
+              </div>
+            )
           )}
         </>
       )}
