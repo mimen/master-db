@@ -27,8 +27,8 @@ const itemUpdateSchema = v.object({
     })
   )),
   labels: v.optional(v.array(v.string())),
-  checked: v.optional(v.number()),
-  is_deleted: v.optional(v.number()),
+  checked: v.optional(v.boolean()),
+  is_deleted: v.optional(v.boolean()),
   completed_at: v.optional(v.union(v.string(), v.null())),
   updated_at: v.optional(v.string()),
   sync_version: v.optional(v.number()),

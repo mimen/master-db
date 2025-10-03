@@ -21,7 +21,7 @@ export const completeTask = action({
         await ctx.runMutation(internal.todoist.mutations.updateItem, {
           todoistId: args.todoistId,
           updates: {
-            checked: 1,
+            checked: true,
             completed_at: new Date().toISOString(),
             sync_version: Date.now(),
           },
