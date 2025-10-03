@@ -359,7 +359,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
       </div>
 
       {/* Projects Section */}
-      <div className="flex-1 px-4 pb-4">
+      <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-muted-foreground">Projects</h3>
           <div className="flex items-center gap-1">
@@ -567,7 +567,10 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
                 )}
                 onClick={() => onViewChange(`label:${label.name}`)}
               >
-                <Tag className="h-4 w-4 mr-3 text-muted-foreground" />
+                <Tag
+                  className="h-4 w-4 mr-3"
+                  style={{ color: getProjectColor(label.color) }}
+                />
                 <span className="flex-1 text-left">@{label.name}</span>
                 {count > 0 && (
                   <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 min-w-6 text-center">
