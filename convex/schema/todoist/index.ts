@@ -9,3 +9,4 @@ export { todoist_project_metadata } from "./projectMetadata";
 export { todoist_collaborators } from "./collaborators";
 export { todoist_queue_configs } from "./queueConfigs";
 export { todoist_queue_states } from "./queueStates";
+export { todoist_multi_lists } from "./multiLists";

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { TaskListView } from "../TaskListView"
+
 import { Sidebar } from "./Sidebar"
+
+import { usePriorityProjectsExpansion } from "@/hooks/usePriorityProjectsExpansion"
+import { usePriorityQueueExpansion } from "@/hooks/usePriorityQueueExpansion"
+import { useProjectWithChildrenExpansion } from "@/hooks/useProjectWithChildrenExpansion"
 import type { ViewConfig } from "@/types/views"
 
 type Selection = {
@@ -13,8 +18,14 @@ export function Layout() {
   const [activeViews, setActiveViews] = useState<ViewConfig[]>([
     { id: "main", type: "inbox", value: "inbox", expanded: true, collapsible: false }
   ])
+  const [pendingView, setPendingView] = useState<string | null>(null)
   const [selectionState, setSelectionState] = useState<Selection>({ viewId: null, taskIndex: null })
   const viewTaskCountsRef = useRef(new Map<string, number>())
+
+  // Handle view expansions
+  const priorityProjectsViews = usePriorityProjectsExpansion(pendingView || "")
+  const priorityQueueViews = usePriorityQueueExpansion(pendingView === "multi:priority-queue")
+  const projectWithChildrenViews = useProjectWithChildrenExpansion(pendingView || "")
 
   const updateSelection = useCallback((updater: (prev: Selection) => Selection) => {
     setSelectionState((prev) => {
@@ -26,14 +37,93 @@ export function Layout() {
   const viewIds = useMemo(() => activeViews.map((view) => view.id), [activeViews])
 
   const handleViewChange = (view: string) => {
+    console.log('[Layout] handleViewChange:', view)
+
+    // Handle multi-list expansion
+    if (view.startsWith("multi:")) {
+      const multiListId = view.replace("multi:", "")
+
+      if (multiListId === "priority-queue") {
+        // Set pending view to trigger expansion
+        setPendingView("multi:priority-queue")
+        return
+      }
+    }
+
+    // Handle priority-projects and project-with-children expansion
+    if (view.startsWith("priority-projects:") || view.startsWith("project-with-children:")) {
+      console.log('[Layout] Setting pendingView:', view)
+      setPendingView(view)
+      return
+    }
+
+    // Single view
+    setPendingView(null)
     setActiveViews([
       { id: "main", type: getViewType(view), value: view, expanded: true, collapsible: false }
     ])
   }
 
   const handleMultiViewChange = (views: ViewConfig[]) => {
+    setPendingView(null)
     setActiveViews(views)
   }
+
+  // Effect to apply expanded views when hooks return data
+  useEffect(() => {
+    console.log('[Layout] priorityProjectsViews changed:', priorityProjectsViews, 'pendingView:', pendingView)
+    if (priorityProjectsViews !== null && pendingView?.startsWith('priority-projects:')) {
+      console.log('[Layout] Applying priority projects views:', priorityProjectsViews.length)
+
+      // If no projects found, fall back to regular priority view
+      if (priorityProjectsViews.length === 0) {
+        console.log('[Layout] No projects found, falling back to priority view')
+        const priorityId = pendingView.split(':')[1]
+        setActiveViews([{
+          id: "main",
+          type: "priority",
+          value: `priority:${priorityId}`,
+          expanded: true,
+          collapsible: false
+        }])
+      } else {
+        setActiveViews(priorityProjectsViews)
+      }
+      setPendingView(null)
+    }
+  }, [priorityProjectsViews, pendingView])
+
+  useEffect(() => {
+    console.log('[Layout] priorityQueueViews changed:', priorityQueueViews, 'pendingView:', pendingView)
+    if (priorityQueueViews !== null && pendingView === 'multi:priority-queue') {
+      console.log('[Layout] Applying priority queue views:', priorityQueueViews.length)
+      setActiveViews(priorityQueueViews)
+      setPendingView(null)
+    }
+  }, [priorityQueueViews, pendingView])
+
+  useEffect(() => {
+    console.log('[Layout] projectWithChildrenViews changed:', projectWithChildrenViews, 'pendingView:', pendingView)
+    if (projectWithChildrenViews !== null && pendingView?.startsWith('project-with-children:')) {
+      console.log('[Layout] Applying project with children views:', projectWithChildrenViews.length)
+
+      // If no views generated, fall back to single project view
+      if (projectWithChildrenViews.length === 0) {
+        console.log('[Layout] No children found, falling back to single project view')
+        const projectId = pendingView.split(':')[1]
+        setActiveViews([{
+          id: "main",
+          type: "project",
+          value: `project:${projectId}`,
+          expanded: true,
+          collapsible: false
+        }])
+      } else {
+        setActiveViews(projectWithChildrenViews)
+      }
+      setPendingView(null)
+    }
+  }, [projectWithChildrenViews, pendingView])
 
   const handleTaskCountChange = useCallback((viewId: string, count: number) => {
     viewTaskCountsRef.current.set(viewId, count)

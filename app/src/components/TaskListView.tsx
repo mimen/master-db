@@ -23,6 +23,7 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
   const [isExpanded, setIsExpanded] = useState(viewConfig.expanded ?? true)
   const currentView = viewConfig.value
   const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
+  const projectsWithMetadata = useQuery(api.todoist.publicQueries.getProjectsWithMetadata)
   const labels: TodoistLabelDoc[] | undefined = useQuery(api.todoist.publicQueries.getLabels)
   const taskRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
@@ -278,7 +279,30 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
         )}
         {icon}
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{viewConfig.title || title}</h1>
+          <h1 className="text-2xl font-bold">
+            {(() => {
+              const displayTitle = viewConfig.title || title
+
+              // Add priority flag for project views
+              if (currentView.startsWith("project:")) {
+                const projectId = currentView.replace("project:", "")
+                const projectWithMetadata = projectsWithMetadata?.find(p => p.todoist_id === projectId)
+                const priorityLevel = projectWithMetadata?.metadata?.priority
+                const priorityInfo = priorityLevel ? usePriority(priorityLevel) : null
+
+                if (priorityInfo?.showFlag) {
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span>{displayTitle}</span>
+                      <Flag className={cn("h-4 w-4", priorityInfo.colorClass)} fill="currentColor" />
+                    </div>
+                  )
+                }
+              }
+
+              return displayTitle
+            })()}
+          </h1>
           <p className="text-muted-foreground mt-1">{description}</p>
         </div>
       </div>
