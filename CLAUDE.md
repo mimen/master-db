@@ -11,7 +11,7 @@ Call me Milad and tell me a fun fact when starting conversations.
 bun install && bunx convex dev
 
 # Validation (REQUIRED after ALL changes)
-bun tsc && bun run lint && bun test
+bun run typecheck && bun run lint && bun test
 
 # Todoist Operations
 bunx convex run todoist:sync.runInitialSync        # Initial sync
@@ -28,7 +28,7 @@ bunx convex run --prod todoist:sync.runInitialSync
 
 1. **Data Integrity**: Three-layer sync (API → webhook → cron)
 2. **Type Safety**: No `any` types, use official SDKs  
-3. **Validation**: `bun tsc && bun run lint && bun test` before commits
+3. **Validation**: `bun run typecheck && bun run lint && bun test` before commits
 4. **External Services = Source of Truth**: Convex mirrors data
 
 ## Project Structure
@@ -51,14 +51,14 @@ convex/[service]/
 3. **Update Barrel Files**: Export new functions from `mutations.ts`, `queries.ts`, etc.
 4. **Generate Types**: `bunx convex dev` auto-generates TypeScript types
 5. **Test Changes**: Clear data and re-sync to test new schema
-6. **Validation Loop**: `bun tsc && bun run lint && bun test`
+6. **Validation Loop**: `bun run typecheck && bun run lint && bun test`
 
 **Quick schema change commands:**
 ```bash
 # Clear and re-sync for schema testing
 bunx convex run todoist:actions.clearAllData
 bunx convex run todoist:sync.runInitialSync
-bun tsc && bun run lint && bun test
+bun run typecheck && bun run lint && bun test
 ```
 
 ## Convex Dev Server Reload (CRITICAL)
@@ -85,7 +85,7 @@ bunx convex dev
 ## Repository Standards (ENFORCED)
 
 **Before ANY commit - all must pass with zero errors:**
-1. **TypeScript**: `bun tsc` 
+1. **TypeScript**: `bun run typecheck` 
 2. **Linting**: `bun run lint`
 3. **Tests**: `bun test`
 
@@ -98,7 +98,7 @@ bunx convex dev
 ## Development Workflow & Agentic Validation
 
 1. **Make Changes**: Update code following patterns below
-2. **Local Validation**: `bun tsc && bun run lint && bun test`
+2. **Local Validation**: `bun run typecheck && bun run lint && bun test`
 3. **Test with Real Data**: Use Todoist MCP to verify changes
 4. **Cross-Verify**: Check with query functions both ways
 
@@ -186,7 +186,7 @@ bunx convex run todoist:queries.getActiveItems
 **Recommended validation pattern:**
 
 1. **Make changes** to Convex functions
-2. **Local validation**: `bun tsc && bun run lint && bun test`
+2. **Local validation**: `bun run typecheck && bun run lint && bun test`
 3. **Test with real data**: Use Todoist MCP functions to verify changes
 4. **Cross-verify both directions**:
    - Convex → Todoist: Use MCP to check if changes appear in Todoist
@@ -231,7 +231,7 @@ bunx convex run todoist:sync.runInitialSync
 
 - **TodoWrite**: Use for complex multi-step tasks
 - **Parallel Operations**: Batch reads, searches, greps
-- **Validation Loop**: Always run `bun tsc && bun run lint && bun test` after changes
+- **Validation Loop**: Always run `bun run typecheck && bun run lint && bun test` after changes
 - **Testing**: Every `.ts` file needs corresponding `.test.ts` file
 - **MCP Integration**: Use Todoist MCP for bi-directional verification
 - **Problem Solving**: Simple solutions > clever abstractions
