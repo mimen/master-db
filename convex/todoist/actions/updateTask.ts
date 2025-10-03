@@ -16,8 +16,8 @@ export const updateTask = action({
     dueDatetime: v.optional(v.string()),
     labels: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
-    deadlineDate: v.optional(v.string()),
-    deadlineLang: v.optional(v.string()),
+    deadlineDate: v.optional(v.union(v.string(), v.null())),
+    deadlineLang: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args): Promise<ActionResponse<Task>> => {
     try {
@@ -41,9 +41,9 @@ export const updateTask = action({
       }
 
       // Handle deadline updates
-      if (args.deadlineDate) {
+      if (args.deadlineDate !== undefined) {
         updateArgs.deadlineDate = args.deadlineDate;
-        if (args.deadlineLang) {
+        if (args.deadlineLang !== undefined) {
           updateArgs.deadlineLang = args.deadlineLang;
         }
       }

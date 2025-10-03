@@ -78,8 +78,8 @@ export function DialogManager() {
     try {
       await updateTask({
         todoistId: currentTask.todoist_id,
-        deadlineDate,
-        deadlineLang: 'en'
+        deadlineDate: deadlineDate === 'no date' ? null : deadlineDate,
+        deadlineLang: deadlineDate === 'no date' ? null : 'en'
       })
       closeDialog()
     } catch (error) {
