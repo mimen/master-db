@@ -153,6 +153,7 @@ export const performIncrementalSync = action({
 
           await ctx.runMutation(internal.todoist.mutations.upsertItem, {
             item,
+            force: true, // Force update during incremental sync to catch assignment changes
           });
           changeCount++;
         }

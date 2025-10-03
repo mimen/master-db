@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react"
-import { Flag, Calendar, Tag, User, Check, Edit2 } from "lucide-react"
+import { Flag, Calendar, Tag, User, Check, Edit2, ChevronDown, ChevronRight } from "lucide-react"
 import { useState } from "react"
 
 import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
@@ -8,12 +8,15 @@ import { api } from "@/convex/_generated/api"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView } from "@/types/convex/todoist"
+import type { ViewConfig } from "@/types/views"
 
 interface TaskListViewProps {
-  currentView: string
+  viewConfig: ViewConfig
 }
 
-export function TaskListView({ currentView }: TaskListViewProps) {
+export function TaskListView({ viewConfig }: TaskListViewProps) {
+  const [isExpanded, setIsExpanded] = useState(viewConfig.expanded ?? true)
+  const currentView = viewConfig.value
   const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
 
   const inboxProject = projects?.find((project: TodoistProject) =>
@@ -80,6 +83,10 @@ export function TaskListView({ currentView }: TaskListViewProps) {
 
   const isLoading = tasks === undefined || (currentView === "inbox" && !inboxProject)
 
+  const toggleExpanded = () => {
+    setIsExpanded(!isExpanded)
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -121,23 +128,41 @@ export function TaskListView({ currentView }: TaskListViewProps) {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <p className="text-muted-foreground mt-1">{description}</p>
+      <div className="mb-6 flex items-center gap-2">
+        {viewConfig.collapsible && (
+          <button
+            onClick={toggleExpanded}
+            className="p-1 hover:bg-muted rounded transition-colors"
+          >
+            {isExpanded ? (
+              <ChevronDown className="h-5 w-5" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            )}
+          </button>
+        )}
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold">{viewConfig.title || title}</h1>
+          <p className="text-muted-foreground mt-1">{description}</p>
+        </div>
       </div>
 
-      {filteredTasks.length > 0 ? (
-        <div className="space-y-1">
-          {filteredTasks.map((task: TodoistTask) => (
-            <TaskRow key={task._id} task={task} />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center h-64 text-center">
-          <div className="text-6xl mb-4">{emptyState.emoji}</div>
-          <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
-          <p className="text-muted-foreground">{emptyState.description}</p>
-        </div>
+      {isExpanded && (
+        <>
+          {filteredTasks.length > 0 ? (
+            <div className="space-y-1">
+              {filteredTasks.map((task: TodoistTask) => (
+                <TaskRow key={task._id} task={task} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <div className="text-6xl mb-4">{emptyState.emoji}</div>
+              <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
+              <p className="text-muted-foreground">{emptyState.description}</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

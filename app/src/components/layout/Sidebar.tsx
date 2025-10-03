@@ -1,5 +1,6 @@
 import { useQuery } from "convex/react"
 import { Inbox, Calendar, Filter, Settings, Plus, Flag, Clock, Tag, AlertCircle } from "lucide-react"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
@@ -12,10 +13,12 @@ import type {
   TodoistProjectsWithMetadata,
   TodoistProjectWithMetadata,
 } from "@/types/convex/todoist"
+import type { ViewConfig } from "@/types/views"
 
 interface SidebarProps {
   currentView: string
   onViewChange: (view: string) => void
+  onMultiViewChange?: (views: ViewConfig[]) => void
 }
 
 type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
@@ -26,12 +29,12 @@ function buildProjectTree(projects: TodoistProjectsWithMetadata): ProjectTreeNod
   const rootProjects: ProjectTreeNode[] = []
 
   // First pass: create map and add children array
-  projects.forEach(project => {
+  projects.forEach((project: TodoistProjectWithMetadata) => {
     projectMap.set(project.todoist_id, { ...project, children: [] })
   })
 
   // Second pass: build hierarchy
-  projects.forEach(project => {
+  projects.forEach((project: TodoistProjectWithMetadata) => {
     const projectWithChildren = projectMap.get(project.todoist_id)!
     if (project.parent_id && projectMap.has(project.parent_id)) {
       // Add to parent's children
@@ -61,18 +64,49 @@ function ProjectItem({
   project,
   currentView,
   onViewChange,
+  onMultiViewChange,
+  expandNested,
   level = 0
 }: {
   project: ProjectTreeNode
   currentView: string
   onViewChange: (view: string) => void
+  onMultiViewChange?: (views: ViewConfig[]) => void
+  expandNested: boolean
   level?: number
 }) {
   const isActive = currentView === `project:${project.todoist_id}`
   const hasActiveItems = project.stats.activeCount > 0
+  const hasChildren = project.children.length > 0
 
   // Use the canonical priority utilities
   const priority = usePriority(project.metadata?.priority)
+
+  const handleProjectClick = () => {
+    if (expandNested && hasChildren && onMultiViewChange) {
+      const views: ViewConfig[] = [
+        {
+          id: `project-${project.todoist_id}`,
+          type: "project",
+          value: `project:${project.todoist_id}`,
+          title: project.name,
+          collapsible: true,
+          expanded: true
+        },
+        ...project.children.map((child: ProjectTreeNode) => ({
+          id: `project-${child.todoist_id}`,
+          type: "project" as const,
+          value: `project:${child.todoist_id}`,
+          title: child.name,
+          collapsible: true,
+          expanded: true
+        }))
+      ]
+      onMultiViewChange(views)
+    } else {
+      onViewChange(`project:${project.todoist_id}`)
+    }
+  }
 
   return (
     <>
@@ -80,11 +114,11 @@ function ProjectItem({
         key={project._id}
         variant="ghost"
         className={cn(
-          "w-full justify-start h-8 px-3 text-sm group", // Increased height and padding
+          "w-full justify-start h-8 px-3 text-sm", // Increased height and padding
           isActive && "bg-accent"
         )}
         style={{ paddingLeft: `${12 + level * 16}px` }} // Increased base padding
-        onClick={() => onViewChange(`project:${project.todoist_id}`)}
+        onClick={handleProjectClick}
       >
         {/* Color dot */}
         <div
@@ -109,12 +143,14 @@ function ProjectItem({
       </Button>
 
       {/* Render children */}
-      {project.children.map(child => (
+      {project.children.map((child: ProjectTreeNode) => (
         <ProjectItem
           key={child._id}
           project={child}
           currentView={currentView}
           onViewChange={onViewChange}
+          onMultiViewChange={onMultiViewChange}
+          expandNested={expandNested}
           level={level + 1}
         />
       ))}
@@ -122,7 +158,9 @@ function ProjectItem({
   )
 }
 
-export function Sidebar({ currentView, onViewChange }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, onMultiViewChange }: SidebarProps) {
+  const [expandNested, setExpandNested] = useState(false)
+
   const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
     | TodoistProjectsWithMetadata
     | undefined
@@ -137,7 +175,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
 
   const projectsData: TodoistProjectsWithMetadata | undefined = (enhancedProjects && enhancedProjects.length > 0)
     ? enhancedProjects
-    : basicProjects?.map((project) => ({
+    : basicProjects?.map((project: TodoistProjectWithMetadata) => ({
         ...project,
         metadata: {
           priority: 4,
@@ -163,7 +201,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
   const projectTree = projectsData ? buildProjectTree(projectsData) : []
 
   // Find inbox project
-  const inboxProject = projectsData?.find((project) =>
+  const inboxProject = projectsData?.find((project: TodoistProjectWithMetadata) =>
     project.name === "Inbox" && !project.parent_id
   )
 
@@ -227,20 +265,35 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
 
       {/* Projects Section */}
       <div className="flex-1 px-4 pb-4">
-        <div className="flex items-center justify-between mb-3"> {/* Increased margin */}
+        <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-muted-foreground">Projects</h3>
           <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
             <Plus className="h-3 w-3" />
           </Button>
         </div>
 
-        <div className="space-y-0.5 max-h-96 overflow-y-auto"> {/* Reduced spacing between items */}
+        <div className="mb-3 flex items-center gap-2 px-1">
+          <input
+            type="checkbox"
+            id="expand-nested"
+            checked={expandNested}
+            onChange={(e) => setExpandNested(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-gray-300"
+          />
+          <label htmlFor="expand-nested" className="text-xs text-muted-foreground cursor-pointer">
+            Load nested projects
+          </label>
+        </div>
+
+        <div className="space-y-0.5 max-h-96 overflow-y-auto">
           {otherProjects?.map((project: ProjectTreeNode) => (
             <ProjectItem
               key={project._id}
               project={project}
               currentView={currentView}
               onViewChange={onViewChange}
+              onMultiViewChange={onMultiViewChange}
+              expandNested={expandNested}
               level={0}
             />
           ))}
@@ -323,7 +376,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
           <h3 className="text-sm font-medium text-muted-foreground">Labels</h3>
         </div>
         <div className="space-y-0.5 max-h-48 overflow-y-auto">
-          {labels?.slice(0, 10).map((label: Label) => {
+          {labels?.slice(0, 10).map((label: TodoistLabelDoc) => {
             const isActive = currentView === `label:${label.name}`
             return (
               <Button
