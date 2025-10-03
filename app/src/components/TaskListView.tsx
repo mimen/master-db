@@ -235,25 +235,21 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
     switch (currentView) {
       case "inbox":
         return {
-          emoji: "🎉",
           title: "Inbox Zero!",
           description: "All tasks have been processed and moved to projects"
         }
       case "today":
         return {
-          emoji: "✅",
           title: "All caught up!",
           description: "No tasks due today"
         }
       case "upcoming":
         return {
-          emoji: "📅",
           title: "Nothing upcoming!",
           description: "No tasks due in the next 7 days"
         }
       default:
         return {
-          emoji: "📝",
           title: "No tasks here!",
           description: "This view is empty"
         }
@@ -338,7 +334,6 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-64 text-center">
-                <div className="text-6xl mb-4">{emptyState.emoji}</div>
                 <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
                 <p className="text-muted-foreground">{emptyState.description}</p>
               </div>
