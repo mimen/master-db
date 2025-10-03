@@ -1,5 +1,4 @@
 import { useMutation, useQuery } from "convex/react"
-import type { FunctionReturnType } from "convex/server"
 import { Flag, Calendar, Tag, User, Check, Edit2 } from "lucide-react"
 import { useState } from "react"
 
@@ -8,20 +7,16 @@ import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-
-type ProjectsResult = FunctionReturnType<typeof api.todoist.publicQueries.getProjects>
-type Project = ProjectsResult[number]
-type ItemsByView = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>
-type Task = ItemsByView[number]
+import type { TodoistProject, TodoistTask } from "@/types/convex/todoist"
 
 interface TaskListViewProps {
   currentView: string
 }
 
 export function TaskListView({ currentView }: TaskListViewProps) {
-  const projects: ProjectsResult | undefined = useQuery(api.todoist.publicQueries.getProjects)
+  const projects: TodoistProject[] | undefined = useQuery(api.todoist.publicQueries.getProjects)
 
-  const inboxProject = projects?.find((project: Project) =>
+  const inboxProject = projects?.find((project: TodoistProject) =>
     project.name === "Inbox" && !project.parent_id && !project.is_deleted && !project.is_archived
   )
 
@@ -29,7 +24,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
     ? { view: currentView, inboxProjectId: inboxProject?.todoist_id }
     : undefined
 
-  const tasks: ItemsByView | undefined = useQuery(
+  const tasks: TodoistTask[] | undefined = useQuery(
     api.todoist.publicQueries.getItemsByView,
     tasksArgs ?? "skip"
   )
@@ -56,7 +51,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
       default: {
         if (currentView.startsWith("project:")) {
           const projectId = currentView.replace("project:", "")
-          const project = projects?.find((p: Project) => p.todoist_id === projectId)
+          const project = projects?.find((p: TodoistProject) => p.todoist_id === projectId)
           return {
             title: project?.name || "Project",
             description: `${filteredTasks.length} tasks in this project`
@@ -133,7 +128,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
 
       {filteredTasks.length > 0 ? (
         <div className="space-y-1">
-          {filteredTasks.map((task: Task) => (
+          {filteredTasks.map((task: TodoistTask) => (
             <TaskRow key={task._id} task={task} />
           ))}
         </div>
@@ -148,7 +143,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
   )
 }
 
-function TaskRow({ task }: { task: Task }) {
+function TaskRow({ task }: { task: TodoistTask }) {
   const [isEditing, setIsEditing] = useState(false)
   const completeTask = useMutation(api.todoist.actions.completeTask.completeTask)
   const priority = usePriority(task.priority)
@@ -161,7 +156,7 @@ function TaskRow({ task }: { task: Task }) {
     }
   }
 
-  const formatDueDate = (due: Task["due"]) => {
+  const formatDueDate = (due: TodoistTask["due"]) => {
     if (!due) return { text: null, isOverdue: false }
 
     const date = new Date(due.date)
