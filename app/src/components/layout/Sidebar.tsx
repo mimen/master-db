@@ -174,6 +174,11 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
     | TodoistLabelDoc[]
     | undefined
 
+  // Fetch count data
+  const timeFilterCounts = useQuery(api.todoist.publicQueries.getTimeFilterCounts, {})
+  const priorityFilterCounts = useQuery(api.todoist.publicQueries.getPriorityFilterCounts, {})
+  const labelFilterCounts = useQuery(api.todoist.publicQueries.getLabelFilterCounts, {})
+
   const projectsData: TodoistProjectsWithMetadata | undefined = (enhancedProjects && enhancedProjects.length > 0)
     ? enhancedProjects
     : basicProjects?.map((project: TodoistProjectWithMetadata) => ({
@@ -286,7 +291,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
           </label>
         </div>
 
-        <div className="space-y-0.5 max-h-96 overflow-y-auto">
+        <div className="space-y-0.5 max-h-96 overflow-y-auto scrollbar-hide">
           {otherProjects?.map((project: ProjectTreeNode) => (
             <ProjectItem
               key={project._id}
@@ -314,13 +319,14 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
         </div>
         <div className="space-y-0.5">
           {[
-            { id: "overdue", label: "Overdue", icon: AlertCircle, color: "text-red-500" },
-            { id: "today", label: "Today", icon: Calendar, color: "text-blue-500" },
-            { id: "upcoming", label: "Upcoming", icon: Clock, color: "text-green-500" },
-            { id: "no-date", label: "No Date", icon: Calendar, color: "text-gray-500" },
+            { id: "overdue", label: "Overdue", icon: AlertCircle, color: "text-red-500", filterKey: "overdue" },
+            { id: "today", label: "Today", icon: Calendar, color: "text-blue-500", filterKey: "today" },
+            { id: "upcoming", label: "Upcoming", icon: Clock, color: "text-green-500", filterKey: "next7days" },
+            { id: "no-date", label: "No Date", icon: Calendar, color: "text-gray-500", filterKey: "nodate" },
           ].map((timeFilter) => {
             const Icon = timeFilter.icon
             const isActive = currentView === `time:${timeFilter.id}`
+            const count = timeFilterCounts?.timeCounts.find((c: { filter: string; filteredTaskCount: number }) => c.filter === timeFilter.filterKey)?.filteredTaskCount || 0
             return (
               <Button
                 key={timeFilter.id}
@@ -333,6 +339,11 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
               >
                 <Icon className={cn("h-4 w-4 mr-3", timeFilter.color)} />
                 <span className="flex-1 text-left">{timeFilter.label}</span>
+                {count > 0 && (
+                  <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 min-w-6 text-center">
+                    {count}
+                  </span>
+                )}
               </Button>
             )
           })}
@@ -367,13 +378,14 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
           ].map((priority) => {
             const Icon = priority.icon
             const isActive = currentView === `priority:${priority.id}`
-            
+            const count = priorityFilterCounts?.priorityCounts.find((c: { priority: number; filteredTaskCount: number }) => c.priority === priority.priorityLevel)?.filteredTaskCount || 0
+
             const handlePriorityClick = () => {
               if (priorityMode === "projects" && onMultiViewChange) {
                 const priorityProjects = projectsData?.filter(
                   (p: TodoistProjectWithMetadata) => p.metadata?.priority === priority.priorityLevel
                 ) || []
-                
+
                 if (priorityProjects.length > 0) {
                   const views: ViewConfig[] = priorityProjects.map((project: TodoistProjectWithMetadata) => ({
                     id: `project-${project.todoist_id}`,
@@ -404,6 +416,11 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
               >
                 <Icon className={cn("h-4 w-4 mr-3", priority.color)} fill="currentColor" />
                 <span className="flex-1 text-left">{priority.label}</span>
+                {count > 0 && (
+                  <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 min-w-6 text-center">
+                    {count}
+                  </span>
+                )}
               </Button>
             )
           })}
@@ -415,9 +432,10 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-muted-foreground">Labels</h3>
         </div>
-        <div className="space-y-0.5 max-h-48 overflow-y-auto">
+        <div className="space-y-0.5 max-h-48 overflow-y-auto scrollbar-hide">
           {labels?.slice(0, 10).map((label: TodoistLabelDoc) => {
             const isActive = currentView === `label:${label.name}`
+            const count = labelFilterCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === label.todoist_id)?.filteredTaskCount || 0
             return (
               <Button
                 key={label._id}
@@ -430,6 +448,11 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
               >
                 <Tag className="h-4 w-4 mr-3 text-muted-foreground" />
                 <span className="flex-1 text-left">@{label.name}</span>
+                {count > 0 && (
+                  <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 min-w-6 text-center">
+                    {count}
+                  </span>
+                )}
               </Button>
             )
           })}

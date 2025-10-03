@@ -37,10 +37,10 @@ export const getLabelFilterCounts = query({
     // Count tasks per label
     const labelCounts = labels.map(label => {
       const rawCount = rawActiveItems.filter(item =>
-        item.labels && item.labels.includes(label.todoist_id)
+        item.labels && item.labels.includes(label.name)
       ).length;
       const filteredCount = filteredItems.filter(item =>
-        item.labels && item.labels.includes(label.todoist_id)
+        item.labels && item.labels.includes(label.name)
       ).length;
 
       return {
