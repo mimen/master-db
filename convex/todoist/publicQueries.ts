@@ -9,6 +9,9 @@ export { getProjectMetadata } from "./queries/getProjectMetadata";
 export { getProjectWithItemCount } from "./queries/getProjectWithItemCount";
 export { getSyncStatus } from "./queries/getSyncStatus";
 export { getProjectTaskCounts } from "./queries/getProjectTaskCounts";
+export { getTimeFilterCounts } from "./queries/getTimeFilterCounts";
+export { getPriorityFilterCounts } from "./queries/getPriorityFilterCounts";
+export { getLabelFilterCounts } from "./queries/getLabelFilterCounts";
 export { getLabels } from "./queries/getLabels";
 
 // Time-based queries
