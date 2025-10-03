@@ -1,10 +1,9 @@
 import { useAction, useQuery } from "convex/react"
-import { Flag, Calendar, Tag, User, Check, Edit2, ChevronDown, ChevronRight, Inbox, Clock, AlertCircle } from "lucide-react"
+import { Flag, Calendar, Tag, User, Check, ChevronDown, ChevronRight, Inbox, Clock, AlertCircle } from "lucide-react"
 import { memo, useEffect, useRef, useState } from "react"
 
-import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
-import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
+import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
@@ -44,6 +43,12 @@ export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }
   const filteredTasks = tasks || []
   taskRefs.current.length = filteredTasks.length
   refHandlers.current.length = filteredTasks.length
+
+  const focusedTask = focusedTaskIndex !== null && focusedTaskIndex >= 0 && focusedTaskIndex < filteredTasks.length
+    ? filteredTasks[focusedTaskIndex]
+    : null
+
+  useTaskDialogShortcuts(focusedTask)
 
   useEffect(() => {
     onTaskCountChange?.(viewConfig.id, filteredTasks.length)
@@ -319,7 +324,6 @@ interface TaskRowProps {
 }
 
 const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
-  const [isEditing, setIsEditing] = useState(false)
   const completeTask = useAction(api.todoist.actions.completeTask.completeTask)
   const priority = usePriority(task.priority)
 
@@ -478,53 +482,6 @@ const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
         </div>
       </div>
 
-      {/* Actions (visible on hover) */}
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-        {isEditing ? (
-          <>
-            <ProjectSelector
-              value={task.project_id}
-              todoistId={task.todoist_id}
-              placeholder="Move to..."
-            />
-            <LabelSelector
-              value={task.labels}
-              todoistId={task.todoist_id}
-              placeholder="Labels"
-            />
-            <PrioritySelector
-              value={task.priority}
-              todoistId={task.todoist_id}
-              placeholder="Priority"
-              size="sm"
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setIsEditing(false)}
-            >
-              Done
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setIsEditing(true)}
-            >
-              <Edit2 className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-            <ProjectSelector
-              value={task.project_id}
-              todoistId={task.todoist_id}
-              placeholder="Move"
-              disabled={false}
-            />
-          </>
-        )}
-      </div>
     </div>
   )
 }, (prev, next) => prev.task === next.task && prev.onElementRef === next.onElementRef)
