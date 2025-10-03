@@ -41,11 +41,11 @@ export const getProjectsWithMetadata = query({
 
     // Get all active items and apply global filters once
     const allActiveItems = allItems.filter(item => item.checked === false);
-    
+
     // Get current user ID for assignee filtering (same as getActiveItems)
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
-    
+
     const filteredActiveItems = applyGlobalFilters(allActiveItems, {
       assigneeFilter: 'not-assigned-to-others', // Use same default as getActiveItems
       currentUserId: userId, // Pass the user ID context
@@ -63,7 +63,7 @@ export const getProjectsWithMetadata = query({
     for (const projectId of projectIds) {
       const projectItems = allItems.filter(item => item.project_id === projectId);
       const filteredProjectActiveItems = filteredActiveItems.filter(item => item.project_id === projectId);
-      
+
       statsByProjectId.set(projectId, {
         itemCount: projectItems.length,
         activeCount: filteredProjectActiveItems.length, // Use filtered count for active tasks
