@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:convex": "tsc --noEmit --project convex/tsconfig.json"
   },
   "dependencies": {
     "@doist/todoist-api-typescript": "^5.5.0",
