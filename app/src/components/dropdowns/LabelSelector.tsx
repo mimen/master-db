@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 import { Check, Tag, X } from "lucide-react"
 import { useState } from "react"
 
@@ -15,7 +15,7 @@ import type { TodoistLabelDoc } from "@/types/convex/todoist"
 
 interface LabelSelectorProps {
   value?: string[] // Array of label names (not IDs)
-  taskId?: string // If provided, will update the task when selection changes
+  todoistId?: string // Todoist ID of task to update
   onChange?: (labels: string[]) => void
   placeholder?: string
   disabled?: boolean
@@ -23,14 +23,14 @@ interface LabelSelectorProps {
 
 export function LabelSelector({
   value = [],
-  taskId,
+  todoistId,
   onChange,
   placeholder = "Add labels",
   disabled = false
 }: LabelSelectorProps) {
   const [open, setOpen] = useState(false)
   const labels: TodoistLabelDoc[] | undefined = useQuery(api.todoist.queries.getLabels.getLabels)
-  const updateTask = useMutation(api.todoist.actions.updateTask.updateTask)
+  const updateTask = useAction(api.todoist.publicActions.updateTask)
 
   // Filter to active labels and sort by order
   const activeLabels = labels
@@ -45,12 +45,12 @@ export function LabelSelector({
     // Call onChange callback if provided
     onChange?.(newLabels)
 
-    // Update task if taskId is provided
-    if (taskId) {
+    // Update task if todoistId is provided
+    if (todoistId) {
       try {
         await updateTask({
-          taskId,
-          updates: { labels: newLabels }
+          todoistId,
+          labels: newLabels
         })
       } catch (error) {
         console.error("Failed to update task labels:", error)
@@ -125,8 +125,8 @@ export function LabelSelector({
               className="w-full h-8 text-xs"
               onClick={async () => {
                 onChange?.([])
-                if (taskId) {
-                  await updateTask({ taskId, updates: { labels: [] } })
+                if (todoistId) {
+                  await updateTask({ todoistId, labels: [] })
                 }
                 setOpen(false)
               }}

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 
 import {
   Select,
@@ -13,7 +13,7 @@ import type { TodoistProject } from "@/types/convex/todoist"
 
 interface ProjectSelectorProps {
   value?: string // todoist_id of selected project
-  taskId?: string // If provided, will update the task when selection changes
+  todoistId?: string // Todoist ID of task to update
   onChange?: (projectId: string) => void
   placeholder?: string
   disabled?: boolean
@@ -21,13 +21,13 @@ interface ProjectSelectorProps {
 
 export function ProjectSelector({
   value,
-  taskId,
+  todoistId,
   onChange,
   placeholder = "Select project",
   disabled = false
 }: ProjectSelectorProps) {
   const projects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
-  const updateTask = useMutation(api.todoist.actions.updateTask.updateTask)
+  const moveTask = useAction(api.todoist.publicActions.moveTask)
 
   // Filter to active projects and sort by child_order
   const activeProjects = projects
@@ -38,12 +38,12 @@ export function ProjectSelector({
     // Call onChange callback if provided
     onChange?.(projectId)
 
-    // Update task if taskId is provided
-    if (taskId) {
+    // Update task if todoistId is provided
+    if (todoistId) {
       try {
-        await updateTask({
-          taskId,
-          updates: { project_id: projectId }
+        await moveTask({
+          todoistId,
+          projectId
         })
       } catch (error) {
         console.error("Failed to update task project:", error)
@@ -73,7 +73,7 @@ export function ProjectSelector({
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {activeProjects?.map((project: Project) => {
+        {activeProjects?.map((project) => {
           // Indent child projects
           const isChild = !!project.parent_id
           const indent = isChild ? "pl-6" : ""

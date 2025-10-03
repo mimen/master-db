@@ -1,4 +1,4 @@
-import { useMutation } from "convex/react"
+import { useAction } from "convex/react"
 import { Flag } from "lucide-react"
 
 import {
@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 
 interface PrioritySelectorProps {
   value?: number // 1-4, where 1 is default (no priority)
-  taskId?: string // If provided, will update the task when selection changes
+  todoistId?: string // Todoist ID of task to update
   onChange?: (priority: number) => void
   placeholder?: string
   disabled?: boolean
@@ -31,13 +31,13 @@ const PRIORITIES = Object.values(PRIORITY_MAP).map((p) => ({
 
 export function PrioritySelector({
   value = 1,
-  taskId,
+  todoistId,
   onChange,
   placeholder = "Set priority",
   disabled = false,
   size = "default"
 }: PrioritySelectorProps) {
-  const updateTask = useMutation(api.todoist.actions.updateTask.updateTask)
+  const updateTask = useAction(api.todoist.publicActions.updateTask)
 
   const handleChange = async (priorityStr: string) => {
     const priority = parseInt(priorityStr)
@@ -45,12 +45,12 @@ export function PrioritySelector({
     // Call onChange callback if provided
     onChange?.(priority)
 
-    // Update task if taskId is provided
-    if (taskId) {
+    // Update task if todoistId is provided
+    if (todoistId) {
       try {
         await updateTask({
-          taskId,
-          updates: { priority }
+          todoistId,
+          priority
         })
       } catch (error) {
         console.error("Failed to update task priority:", error)
