@@ -125,7 +125,7 @@ export const getActiveItems = query({
 
     const items: Doc<"todoist_items">[] = await ctx.runQuery(
       internal.todoist.internal.index.getFilteredActiveItems,
-      { 
+      {
         projectId: args.projectId,
         assigneeFilter: effectiveAssigneeFilter,
         currentUserId: userId,

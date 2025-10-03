@@ -24,7 +24,7 @@ export const getDueNext7DaysItems = query({
 
     const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
       internal.todoist.internal.index.getFilteredActiveItems,
-      { 
+      {
         projectId: args.projectId,
         assigneeFilter: args.assigneeFilter,
         currentUserId: userId,

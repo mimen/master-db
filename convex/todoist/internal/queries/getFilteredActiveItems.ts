@@ -29,31 +29,31 @@ export const getFilteredActiveItems = internalQuery({
     const includeStarPrefix = args.includeStarPrefix || false;
 
     let items: Doc<"todoist_items">[];
-    
+
     if (includeCompleted) {
       let q = ctx.db
         .query("todoist_items")
         .filter((q) => q.eq(q.field("is_deleted"), false));
-      
+
       if (args.projectId) {
         q = q.filter((q) => q.eq(q.field("project_id"), args.projectId));
       }
-      
+
       if (args.priority !== undefined) {
         q = q.filter((q) => q.eq(q.field("priority"), args.priority));
       }
-      
+
       if (assigneeFilter === 'unassigned') {
         q = q.filter((q) => q.eq(q.field("assignee_id"), undefined));
       } else if (assigneeFilter === 'assigned-to-me' && args.currentUserId) {
         q = q.filter((q) => q.eq(q.field("assignee_id"), args.currentUserId));
       }
-      
+
       items = await q.collect();
     } else {
       let q = ctx.db
         .query("todoist_items")
-        .withIndex("active_items", (q) => 
+        .withIndex("active_items", (q) =>
           q.eq("is_deleted", false).eq("checked", false)
         );
 

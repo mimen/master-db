@@ -26,7 +26,7 @@ type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[
 // Helper function to flatten project tree
 function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
   const result: ProjectTreeNode[] = []
-  
+
   function flatten(nodes: ProjectTreeNode[]) {
     for (const node of nodes) {
       result.push({ ...node, children: [] })
@@ -35,7 +35,7 @@ function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
       }
     }
   }
-  
+
   flatten(projects)
   return result
 }
@@ -46,11 +46,11 @@ function getSortedProjects(
   sortMode: ProjectSort
 ): ProjectTreeNode[] {
   if (!projects) return []
-  
+
   switch (sortMode) {
     case "hierarchy":
       return projects
-      
+
     case "priority": {
       const flat = flattenProjects(projects)
       return flat.sort((a, b) => {
@@ -59,21 +59,21 @@ function getSortedProjects(
         return priorityB - priorityA
       })
     }
-    
+
     case "taskCount": {
       const flat = flattenProjects(projects)
       return flat.sort((a, b) => {
         return b.stats.activeCount - a.stats.activeCount
       })
     }
-    
+
     case "alphabetical": {
       const flat = flattenProjects(projects)
       return flat.sort((a, b) => {
         return a.name.localeCompare(b.name)
       })
     }
-    
+
     default:
       return projects
   }
@@ -86,7 +86,7 @@ function getSortedLabels(
   labelCounts?: { labelCounts: { labelId: string; filteredTaskCount: number }[] }
 ): TodoistLabelDoc[] {
   if (!labels) return []
-  
+
   switch (sortMode) {
     case "taskCount": {
       return [...labels].sort((a, b) => {
@@ -95,13 +95,13 @@ function getSortedLabels(
         return countB - countA
       })
     }
-    
+
     case "alphabetical": {
       return [...labels].sort((a, b) => {
         return a.name.localeCompare(b.name)
       })
     }
-    
+
     default:
       return labels
   }
@@ -311,6 +311,12 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
       label: "Inbox",
       icon: Inbox,
       count: inboxProject?.stats.activeCount || null,
+    },
+    {
+      id: "multi:priority-queue",
+      label: "Priority Queue",
+      icon: Filter,
+      count: null,
     },
     {
       id: "today",
