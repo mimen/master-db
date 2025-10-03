@@ -25,7 +25,6 @@ export const getPriorityFilterCounts = query({
       .collect();
 
     const filteredItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
-      assigneeFilter: 'all',
       currentUserId: userId,
     });
 
