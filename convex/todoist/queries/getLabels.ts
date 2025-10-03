@@ -1,7 +1,8 @@
 import { query } from "../../_generated/server";
+import { SYSTEM_EXCLUDED_LABELS } from "../helpers/globalFilters";
 
 /**
- * Get all active labels
+ * Get all active labels, excluding system labels
  */
 export const getLabels = query({
   handler: async (ctx) => {
@@ -11,6 +12,7 @@ export const getLabels = query({
       .order("asc")
       .collect();
 
-    return labels;
+    // Filter out system excluded labels
+    return labels.filter(label => !SYSTEM_EXCLUDED_LABELS.includes(label.name as typeof SYSTEM_EXCLUDED_LABELS[number]));
   },
 });

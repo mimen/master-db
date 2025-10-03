@@ -433,7 +433,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
           <h3 className="text-sm font-medium text-muted-foreground">Labels</h3>
         </div>
         <div className="space-y-0.5 max-h-48 overflow-y-auto scrollbar-hide">
-          {labels?.slice(0, 10).map((label: TodoistLabelDoc) => {
+          {labels?.map((label: TodoistLabelDoc) => {
             const isActive = currentView === `label:${label.name}`
             const count = labelFilterCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === label.todoist_id)?.filteredTaskCount || 0
             return (
