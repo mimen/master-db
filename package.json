@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "typecheck": "bun run typecheck:app && bun run typecheck:convex",
     "typecheck:app": "bun --cwd app tsc --noEmit",
-    "typecheck:convex": "bunx convex typecheck"
+    "typecheck:convex": "cd convex && npx tsc --noEmit"
   },
   "dependencies": {
     "@doist/todoist-api-typescript": "^5.5.0",
