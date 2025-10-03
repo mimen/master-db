@@ -160,6 +160,7 @@ function ProjectItem({
 
 export function Sidebar({ currentView, onViewChange, onMultiViewChange }: SidebarProps) {
   const [expandNested, setExpandNested] = useState(false)
+  const [priorityMode, setPriorityMode] = useState<"tasks" | "projects">("tasks")
 
   const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
     | TodoistProjectsWithMetadata
@@ -340,18 +341,57 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
 
       {/* Priorities Section */}
       <div className="px-4 pb-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-muted-foreground">Priorities</h3>
         </div>
+
+        <div className="mb-3 flex items-center gap-2 px-1">
+          <input
+            type="checkbox"
+            id="priority-mode"
+            checked={priorityMode === "projects"}
+            onChange={(e) => setPriorityMode(e.target.checked ? "projects" : "tasks")}
+            className="h-3.5 w-3.5 rounded border-gray-300"
+          />
+          <label htmlFor="priority-mode" className="text-xs text-muted-foreground cursor-pointer">
+            Show as projects
+          </label>
+        </div>
+
         <div className="space-y-0.5">
           {[
-            { id: "p1", label: "Priority 1", icon: Flag, color: "text-red-500" },
-            { id: "p2", label: "Priority 2", icon: Flag, color: "text-orange-500" },
-            { id: "p3", label: "Priority 3", icon: Flag, color: "text-blue-500" },
-            { id: "p4", label: "Priority 4", icon: Flag, color: "text-gray-500" },
+            { id: "p1", label: "Priority 1", icon: Flag, color: "text-red-500", priorityLevel: 4 },
+            { id: "p2", label: "Priority 2", icon: Flag, color: "text-orange-500", priorityLevel: 3 },
+            { id: "p3", label: "Priority 3", icon: Flag, color: "text-blue-500", priorityLevel: 2 },
+            { id: "p4", label: "Priority 4", icon: Flag, color: "text-gray-500", priorityLevel: 1 },
           ].map((priority) => {
             const Icon = priority.icon
             const isActive = currentView === `priority:${priority.id}`
+            
+            const handlePriorityClick = () => {
+              if (priorityMode === "projects" && onMultiViewChange) {
+                const priorityProjects = projectsData?.filter(
+                  (p: TodoistProjectWithMetadata) => p.metadata?.priority === priority.priorityLevel
+                ) || []
+                
+                if (priorityProjects.length > 0) {
+                  const views: ViewConfig[] = priorityProjects.map((project: TodoistProjectWithMetadata) => ({
+                    id: `project-${project.todoist_id}`,
+                    type: "project" as const,
+                    value: `project:${project.todoist_id}`,
+                    title: project.name,
+                    collapsible: true,
+                    expanded: true
+                  }))
+                  onMultiViewChange(views)
+                } else {
+                  onViewChange(`priority:${priority.id}`)
+                }
+              } else {
+                onViewChange(`priority:${priority.id}`)
+              }
+            }
+
             return (
               <Button
                 key={priority.id}
@@ -360,7 +400,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
                   "w-full justify-start h-8 px-3 text-sm",
                   isActive && "bg-accent"
                 )}
-                onClick={() => onViewChange(`priority:${priority.id}`)}
+                onClick={handlePriorityClick}
               >
                 <Icon className={cn("h-4 w-4 mr-3", priority.color)} fill="currentColor" />
                 <span className="flex-1 text-left">{priority.label}</span>
