@@ -1,13 +1,14 @@
 import { useAction, useQuery } from "convex/react"
-import { Flag, Calendar, Tag, User, Check, Edit2, ChevronDown, ChevronRight } from "lucide-react"
+import { Flag, Calendar, Tag, User, Check, Edit2, ChevronDown, ChevronRight, Inbox, Clock, AlertCircle } from "lucide-react"
 import { memo, useEffect, useRef, useState } from "react"
 
 import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
+import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView } from "@/types/convex/todoist"
+import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView, TodoistLabelDoc } from "@/types/convex/todoist"
 import type { ViewConfig } from "@/types/views"
 
 const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
@@ -22,6 +23,7 @@ export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }
   const [isExpanded, setIsExpanded] = useState(viewConfig.expanded ?? true)
   const currentView = viewConfig.value
   const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
+  const labels: TodoistLabelDoc[] | undefined = useQuery(api.todoist.publicQueries.getLabels)
   const taskRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
   const lastFocusedIndex = useRef<number | null>(null)
@@ -108,52 +110,105 @@ export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }
     lastFocusedIndex.current = focusedTaskIndex
   }, [focusedTaskIndex, filteredTasks.length])
 
-  // Get view title and description
+  // Get view title, description and icon
   const getViewInfo = () => {
     switch (currentView) {
       case "inbox":
-        return { title: "Inbox", description: `${filteredTasks.length} tasks to process` }
+        return {
+          title: "Inbox",
+          description: `${filteredTasks.length} tasks to process`,
+          icon: <Inbox className="h-6 w-6 mr-3" />
+        }
       case "today":
-        return { title: "Today", description: `${filteredTasks.length} tasks due today` }
+        return {
+          title: "Today",
+          description: `${filteredTasks.length} tasks due today`,
+          icon: <Calendar className="h-6 w-6 mr-3 text-blue-500" />
+        }
       case "upcoming":
-        return { title: "Upcoming", description: `${filteredTasks.length} tasks due this week` }
+        return {
+          title: "Upcoming",
+          description: `${filteredTasks.length} tasks due this week`,
+          icon: <Calendar className="h-6 w-6 mr-3 text-green-500" />
+        }
       case "time:overdue":
-        return { title: "Overdue", description: `${filteredTasks.length} overdue tasks` }
+        return {
+          title: "Overdue",
+          description: `${filteredTasks.length} overdue tasks`,
+          icon: <AlertCircle className="h-6 w-6 mr-3 text-red-500" />
+        }
       case "time:today":
-        return { title: "Today", description: `${filteredTasks.length} tasks due today` }
+        return {
+          title: "Today",
+          description: `${filteredTasks.length} tasks due today`,
+          icon: <Calendar className="h-6 w-6 mr-3 text-blue-500" />
+        }
       case "time:upcoming":
-        return { title: "Upcoming", description: `${filteredTasks.length} upcoming tasks` }
+        return {
+          title: "Upcoming",
+          description: `${filteredTasks.length} upcoming tasks`,
+          icon: <Clock className="h-6 w-6 mr-3 text-green-500" />
+        }
       case "time:no-date":
-        return { title: "No Date", description: `${filteredTasks.length} tasks without due dates` }
+        return {
+          title: "No Date",
+          description: `${filteredTasks.length} tasks without due dates`,
+          icon: <Calendar className="h-6 w-6 mr-3 text-gray-500" />
+        }
       default: {
         if (currentView.startsWith("project:")) {
           const projectId = currentView.replace("project:", "")
           const project = projects?.find((p: TodoistProject) => p.todoist_id === projectId)
           return {
             title: project?.name || "Project",
-            description: `${filteredTasks.length} tasks in this project`
+            description: `${filteredTasks.length} tasks in this project`,
+            icon: project ? (
+              <div
+                className="w-3 h-3 rounded-full mr-3 flex-shrink-0"
+                style={{ backgroundColor: getProjectColor(project.color) }}
+              />
+            ) : null
           }
         }
         if (currentView.startsWith("priority:")) {
-          const priority = currentView.replace("priority:", "").toUpperCase()
+          const priorityId = currentView.replace("priority:", "")
+          const priorityMap: Record<string, { label: string; color: string; level: number }> = {
+            "p1": { label: "P1", color: "text-red-500", level: 4 },
+            "p2": { label: "P2", color: "text-orange-500", level: 3 },
+            "p3": { label: "P3", color: "text-blue-500", level: 2 },
+            "p4": { label: "P4", color: "text-gray-500", level: 1 },
+          }
+          const priorityInfo = priorityMap[priorityId]
           return {
-            title: `${priority}`,
-            description: `${filteredTasks.length} tasks with ${priority} priority`
+            title: priorityInfo?.label || priorityId.toUpperCase(),
+            description: `${filteredTasks.length} tasks with ${priorityInfo?.label || priorityId} priority`,
+            icon: priorityInfo ? (
+              <Flag className={cn("h-6 w-6 mr-3", priorityInfo.color)} fill="currentColor" />
+            ) : null
           }
         }
         if (currentView.startsWith("label:")) {
-          const label = currentView.replace("label:", "")
+          const labelName = currentView.replace("label:", "")
+          const label = labels?.find((l: TodoistLabelDoc) => l.name === labelName)
           return {
-            title: `@${label}`,
-            description: `${filteredTasks.length} tasks with @${label} label`
+            title: `@${labelName}`,
+            description: `${filteredTasks.length} tasks with @${labelName} label`,
+            icon: label ? (
+              <Tag
+                className="h-6 w-6 mr-3"
+                style={{ color: getProjectColor(label.color) }}
+              />
+            ) : (
+              <Tag className="h-6 w-6 mr-3 text-muted-foreground" />
+            )
           }
         }
-        return { title: "Tasks", description: `${filteredTasks.length} tasks` }
+        return { title: "Tasks", description: `${filteredTasks.length} tasks`, icon: null }
       }
     }
   }
 
-  const { title, description } = getViewInfo()
+  const { title, description, icon } = getViewInfo()
 
   const isLoading = tasks === undefined || (currentView === "inbox" && !inboxProject)
 
@@ -215,6 +270,7 @@ export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }
             )}
           </button>
         )}
+        {icon}
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{viewConfig.title || title}</h1>
           <p className="text-muted-foreground mt-1">{description}</p>
@@ -394,17 +450,17 @@ const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
           <>
             <ProjectSelector
               value={task.project_id}
-              taskId={task.todoist_id}
+              todoistId={task.todoist_id}
               placeholder="Move to..."
             />
             <LabelSelector
               value={task.labels}
-              taskId={task.todoist_id}
+              todoistId={task.todoist_id}
               placeholder="Labels"
             />
             <PrioritySelector
               value={task.priority}
-              taskId={task.todoist_id}
+              todoistId={task.todoist_id}
               placeholder="Priority"
               size="sm"
             />
@@ -428,7 +484,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
             </Button>
             <ProjectSelector
               value={task.project_id}
-              taskId={task.todoist_id}
+              todoistId={task.todoist_id}
               placeholder="Move"
               disabled={false}
             />
