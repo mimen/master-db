@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { Inbox, Calendar, Filter, Settings, Plus, Flag, Clock, Tag, AlertCircle } from "lucide-react"
+import { Inbox, Calendar, Filter, Settings, Plus, Flag, Clock, Tag, AlertCircle, Network, Hash, ArrowDownAZ } from "lucide-react"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,62 @@ interface SidebarProps {
 }
 
 type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
+
+// Helper function to flatten project tree
+function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
+  const result: ProjectTreeNode[] = []
+  
+  function flatten(nodes: ProjectTreeNode[]) {
+    for (const node of nodes) {
+      result.push({ ...node, children: [] })
+      if (node.children.length > 0) {
+        flatten(node.children)
+      }
+    }
+  }
+  
+  flatten(projects)
+  return result
+}
+
+// Helper function to sort projects based on sort mode
+function getSortedProjects(
+  projects: ProjectTreeNode[],
+  sortMode: ProjectSort
+): ProjectTreeNode[] {
+  if (!projects) return []
+  
+  switch (sortMode) {
+    case "hierarchy":
+      return projects
+      
+    case "priority": {
+      const flat = flattenProjects(projects)
+      return flat.sort((a, b) => {
+        const priorityA = a.metadata?.priority || 1
+        const priorityB = b.metadata?.priority || 1
+        return priorityB - priorityA
+      })
+    }
+    
+    case "taskCount": {
+      const flat = flattenProjects(projects)
+      return flat.sort((a, b) => {
+        return b.stats.activeCount - a.stats.activeCount
+      })
+    }
+    
+    case "alphabetical": {
+      const flat = flattenProjects(projects)
+      return flat.sort((a, b) => {
+        return a.name.localeCompare(b.name)
+      })
+    }
+    
+    default:
+      return projects
+  }
+}
 
 // Helper function to build hierarchical project tree
 function buildProjectTree(projects: TodoistProjectsWithMetadata): ProjectTreeNode[] {
@@ -158,9 +214,12 @@ function ProjectItem({
   )
 }
 
+type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
+
 export function Sidebar({ currentView, onViewChange, onMultiViewChange }: SidebarProps) {
   const [expandNested, setExpandNested] = useState(false)
   const [priorityMode, setPriorityMode] = useState<"tasks" | "projects">("tasks")
+  const [projectSort, setProjectSort] = useState<ProjectSort>("hierarchy")
 
   const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
     | TodoistProjectsWithMetadata
@@ -273,26 +332,45 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
       <div className="flex-1 px-4 pb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-muted-foreground">Projects</h3>
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
-            <Plus className="h-3 w-3" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                const sorts: ProjectSort[] = ["hierarchy", "priority", "taskCount", "alphabetical"]
+                const currentIndex = sorts.indexOf(projectSort)
+                const nextIndex = (currentIndex + 1) % sorts.length
+                setProjectSort(sorts[nextIndex])
+              }}
+              className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors"
+              title={`Sort: ${projectSort}`}
+            >
+              {projectSort === "hierarchy" && <Network className="h-3 w-3 text-muted-foreground" />}
+              {projectSort === "priority" && <Flag className="h-3 w-3 text-muted-foreground" />}
+              {projectSort === "taskCount" && <Hash className="h-3 w-3 text-muted-foreground" />}
+              {projectSort === "alphabetical" && <ArrowDownAZ className="h-3 w-3 text-muted-foreground" />}
+            </button>
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0">
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
 
-        <div className="mb-3 flex items-center gap-2 px-1">
-          <input
-            type="checkbox"
-            id="expand-nested"
-            checked={expandNested}
-            onChange={(e) => setExpandNested(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-gray-300"
-          />
-          <label htmlFor="expand-nested" className="text-xs text-muted-foreground cursor-pointer">
-            Load nested projects
-          </label>
-        </div>
+        {projectSort === "hierarchy" && (
+          <div className="mb-3 flex items-center gap-2 px-1">
+            <input
+              type="checkbox"
+              id="expand-nested"
+              checked={expandNested}
+              onChange={(e) => setExpandNested(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-gray-300"
+            />
+            <label htmlFor="expand-nested" className="text-xs text-muted-foreground cursor-pointer">
+              Load nested projects
+            </label>
+          </div>
+        )}
 
         <div className="space-y-0.5 max-h-96 overflow-y-auto scrollbar-hide">
-          {otherProjects?.map((project: ProjectTreeNode) => (
+          {getSortedProjects(otherProjects, projectSort).map((project: ProjectTreeNode) => (
             <ProjectItem
               key={project._id}
               project={project}
