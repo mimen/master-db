@@ -1,4 +1,5 @@
-import { useQuery, useMutation } from "convex/react"
+import { useMutation, useQuery } from "convex/react"
+import type { FunctionReturnType } from "convex/server"
 import { Flag, Calendar, Tag, User, Check, Edit2 } from "lucide-react"
 import { useState } from "react"
 
@@ -8,49 +9,29 @@ import { api } from "@/convex/_generated/api"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 
-interface Task {
-  _id: string
-  todoist_id: string
-  content: string
-  description?: string
-  project_id?: string
-  priority: number
-  labels: string[]
-  due?: {
-    date: string
-    datetime?: string
-    is_recurring?: boolean
-  }
-  checked: number
-  assignee_id?: string
-}
-
-interface Project {
-  _id: string
-  todoist_id: string
-  name: string
-  color: string
-  parent_id?: string
-  is_deleted: number
-  is_archived: number
-}
+type ProjectsResult = FunctionReturnType<typeof api.todoist.publicQueries.getProjects>
+type Project = ProjectsResult[number]
+type ItemsByView = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>
+type Task = ItemsByView[number]
 
 interface TaskListViewProps {
   currentView: string
 }
 
 export function TaskListView({ currentView }: TaskListViewProps) {
-  const projects = useQuery(api.todoist.publicQueries.getProjects)
+  const projects: ProjectsResult | undefined = useQuery(api.todoist.publicQueries.getProjects)
 
-  const inboxProject = projects?.find((p: Project) =>
-    p.name === "Inbox" && !p.parent_id && !p.is_deleted && !p.is_archived
+  const inboxProject = projects?.find((project: Project) =>
+    project.name === "Inbox" && !project.parent_id && !project.is_deleted && !project.is_archived
   )
 
-  const tasks = useQuery(
+  const tasksArgs = inboxProject || currentView !== "inbox"
+    ? { view: currentView, inboxProjectId: inboxProject?.todoist_id }
+    : undefined
+
+  const tasks: ItemsByView | undefined = useQuery(
     api.todoist.publicQueries.getItemsByView,
-    inboxProject || currentView !== "inbox"
-      ? { view: currentView, inboxProjectId: inboxProject?.todoist_id }
-      : "skip"
+    tasksArgs ?? "skip"
   )
 
   const filteredTasks = tasks || []
@@ -222,7 +203,7 @@ function TaskRow({ task }: { task: Task }) {
           "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
         )}
       >
-        {task.checked === 1 && (
+        {task.checked && (
           <Check className="w-3 h-3 text-green-600" />
         )}
       </button>
@@ -265,7 +246,7 @@ function TaskRow({ task }: { task: Task }) {
           {task.labels.length > 0 && (
             <div className="flex items-center gap-1">
               <Tag className="h-3 w-3 text-muted-foreground" />
-              {task.labels.map((label) => (
+              {task.labels.map((label: string) => (
                 <span
                   key={label}
                   className="text-xs px-1.5 py-0.5 bg-muted rounded-full"
