@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
-import { cn } from "@/lib/utils"
+import { cn, parseMarkdownLinks } from "@/lib/utils"
 import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView, TodoistLabelDoc } from "@/types/convex/todoist"
 import type { ViewConfig } from "@/types/views"
 
@@ -387,9 +387,43 @@ const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
 
       {/* Task content */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm leading-normal">{task.content}</p>
+        <p className="text-sm leading-normal">
+          {parseMarkdownLinks(task.content).map((part, index) => {
+            if (part.type === 'link') {
+              return (
+                <a
+                  key={index}
+                  href={part.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  {part.content}
+                </a>
+              )
+            }
+            return <span key={index}>{part.content}</span>
+          })}
+        </p>
         {task.description && (
-          <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {parseMarkdownLinks(task.description).map((part, index) => {
+              if (part.type === 'link') {
+                return (
+                  <a
+                    key={index}
+                    href={part.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline"
+                  >
+                    {part.content}
+                  </a>
+                )
+              }
+              return <span key={index}>{part.content}</span>
+            })}
+          </p>
         )}
 
         {/* Task metadata */}
