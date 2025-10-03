@@ -33,8 +33,8 @@ export const createSection = action({
           name: section.name,
           project_id: section.projectId,
           section_order: section.sectionOrder || 0,
-          is_deleted: 0,
-          is_archived: 0,
+          is_deleted: false,
+          is_archived: false,
         },
       });
 

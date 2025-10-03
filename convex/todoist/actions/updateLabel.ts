@@ -36,8 +36,8 @@ export const updateLabel = action({
           name: label.name,
           color: label.color,
           item_order: label.order || 0,
-          is_deleted: 0,
-          is_favorite: label.isFavorite ? 1 : 0,
+          is_deleted: false,
+          is_favorite: Boolean(label.isFavorite),
         },
       });
 

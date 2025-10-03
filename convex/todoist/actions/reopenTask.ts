@@ -21,7 +21,7 @@ export const reopenTask = action({
         await ctx.runMutation(internal.todoist.mutations.updateItem, {
           todoistId: args.todoistId,
           updates: {
-            checked: 0,
+            checked: false,
             completed_at: null,
             sync_version: Date.now(),
           },

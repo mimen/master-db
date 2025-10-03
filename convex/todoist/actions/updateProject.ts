@@ -37,9 +37,9 @@ export const updateProject = action({
           color: project.color,
           parent_id: 'parentId' in project ? project.parentId || null : null,
           child_order: project.childOrder || 0,
-          is_deleted: 0,
-          is_archived: project.isArchived ? 1 : 0,
-          is_favorite: project.isFavorite ? 1 : 0,
+          is_deleted: false,
+          is_archived: Boolean(project.isArchived),
+          is_favorite: Boolean(project.isFavorite),
           view_style: project.viewStyle || "list",
         },
       });

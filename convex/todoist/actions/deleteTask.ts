@@ -21,7 +21,7 @@ export const deleteTask = action({
         await ctx.runMutation(internal.todoist.mutations.updateItem, {
           todoistId: args.taskId,
           updates: {
-            is_deleted: 1,
+            is_deleted: true,
             sync_version: Date.now(),
           },
         });

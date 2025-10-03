@@ -24,9 +24,9 @@ export const deleteProject = action({
           color: "charcoal",
           parent_id: null,
           child_order: 0,
-          is_deleted: 1, // Mark as deleted
-          is_archived: 0,
-          is_favorite: 0,
+          is_deleted: true, // Mark as deleted
+          is_archived: false,
+          is_favorite: false,
           view_style: "list",
         },
       });

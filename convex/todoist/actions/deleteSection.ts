@@ -23,8 +23,8 @@ export const deleteSection = action({
           name: "", // Name is required by schema but section is deleted
           project_id: "", // Project ID is required by schema but section is deleted
           section_order: 0,
-          is_deleted: 1, // Mark as deleted
-          is_archived: 0,
+          is_deleted: true, // Mark as deleted
+          is_archived: false,
         },
       });
 

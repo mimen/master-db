@@ -23,8 +23,8 @@ export const deleteLabel = action({
           name: "", // Name will be preserved from existing record
           color: "charcoal", // Default color
           item_order: 0,
-          is_deleted: 1, // Mark as deleted
-          is_favorite: 0,
+          is_deleted: true, // Mark as deleted
+          is_favorite: false,
         },
       });
 
