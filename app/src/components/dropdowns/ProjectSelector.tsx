@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react"
+import { useMutation, useQuery } from "convex/react"
 
 import {
   Select,
@@ -9,17 +9,7 @@ import {
 } from "@/components/ui/select"
 import { api } from "@/convex/_generated/api"
 import { getProjectColor } from "@/lib/colors"
-
-interface Project {
-  _id: string
-  todoist_id: string
-  name: string
-  color: string
-  parent_id?: string
-  is_deleted: number
-  is_archived: number
-  child_order: number
-}
+import type { TodoistProject } from "@/types/convex/todoist"
 
 interface ProjectSelectorProps {
   value?: string // todoist_id of selected project
@@ -36,13 +26,13 @@ export function ProjectSelector({
   placeholder = "Select project",
   disabled = false
 }: ProjectSelectorProps) {
-  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
+  const projects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
   const updateTask = useMutation(api.todoist.actions.updateTask.updateTask)
 
   // Filter to active projects and sort by child_order
   const activeProjects = projects
-    ?.filter((p: Project) => p.is_deleted === 0 && p.is_archived === 0)
-    ?.sort((a: Project, b: Project) => a.child_order - b.child_order)
+    ?.filter((project) => !project.is_deleted && !project.is_archived)
+    ?.sort((a, b) => a.child_order - b.child_order)
 
   const handleChange = async (projectId: string) => {
     // Call onChange callback if provided
@@ -61,7 +51,7 @@ export function ProjectSelector({
     }
   }
 
-  const selectedProject = activeProjects?.find((p: Project) => p.todoist_id === value)
+  const selectedProject = activeProjects?.find((project) => project.todoist_id === value)
 
   return (
     <Select

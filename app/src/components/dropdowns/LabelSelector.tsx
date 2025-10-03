@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react"
+import { useMutation, useQuery } from "convex/react"
 import { Check, Tag, X } from "lucide-react"
 import { useState } from "react"
 
@@ -11,16 +11,7 @@ import {
 import { api } from "@/convex/_generated/api"
 import { getProjectColor } from "@/lib/colors"
 import { cn } from "@/lib/utils"
-
-interface Label {
-  _id: string
-  todoist_id: string
-  name: string
-  color: string
-  is_deleted: number
-  is_favorite: number
-  item_order: number
-}
+import type { TodoistLabelDoc } from "@/types/convex/todoist"
 
 interface LabelSelectorProps {
   value?: string[] // Array of label names (not IDs)
@@ -38,13 +29,13 @@ export function LabelSelector({
   disabled = false
 }: LabelSelectorProps) {
   const [open, setOpen] = useState(false)
-  const labels = useQuery(api.todoist.queries.getLabels.getLabels)
+  const labels: TodoistLabelDoc[] | undefined = useQuery(api.todoist.queries.getLabels.getLabels)
   const updateTask = useMutation(api.todoist.actions.updateTask.updateTask)
 
   // Filter to active labels and sort by order
   const activeLabels = labels
-    ?.filter((l: Label) => l.is_deleted === 0)
-    ?.sort((a: Label, b: Label) => a.item_order - b.item_order)
+    ?.filter((label) => !label.is_deleted)
+    ?.sort((a, b) => a.order - b.order)
 
   const handleToggleLabel = async (labelName: string) => {
     const newLabels = value.includes(labelName)
@@ -97,7 +88,7 @@ export function LabelSelector({
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
         <div className="max-h-64 overflow-auto">
-          {activeLabels?.map((label: Label) => {
+          {activeLabels?.map((label) => {
             const isSelected = value.includes(label.name)
 
             return (
@@ -132,10 +123,10 @@ export function LabelSelector({
               size="sm"
               variant="ghost"
               className="w-full h-8 text-xs"
-              onClick={() => {
+              onClick={async () => {
                 onChange?.([])
                 if (taskId) {
-                  updateTask({ taskId, updates: { labels: [] } })
+                  await updateTask({ taskId, updates: { labels: [] } })
                 }
                 setOpen(false)
               }}
