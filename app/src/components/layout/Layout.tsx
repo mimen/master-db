@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-import { TaskListView } from "../InboxView"
+import { TaskListView } from "../TaskListView"
 
 import { Sidebar } from "./Sidebar"
 

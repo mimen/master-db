@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 
+import { internal } from "../../../_generated/api";
+import { Doc } from "../../../_generated/dataModel";
 import { query } from "../../../_generated/server";
-import { applyGlobalFilters } from "../../helpers/globalFilters";
 
 export const getProjectsWithMetadata = query({
   args: {
@@ -9,10 +10,8 @@ export const getProjectsWithMetadata = query({
     includeDeleted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    // Get all projects
     let projectsQuery = ctx.db.query("todoist_projects");
 
-    // Apply filters
     if (!args.includeDeleted) {
       projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_deleted"), false));
     }
@@ -22,36 +21,30 @@ export const getProjectsWithMetadata = query({
 
     const projects = await projectsQuery.collect();
 
-    // Get all metadata
     const allMetadata = await ctx.db
       .query("todoist_project_metadata")
       .collect();
 
-    // Create metadata lookup map
     const metadataByProjectId = new Map(
       allMetadata.map(m => [m.project_id, m])
     );
 
-    // Get item counts for each project
     const projectIds = projects.map(p => p.todoist_id);
     const allItems = await ctx.db
       .query("todoist_items")
       .filter(q => q.eq(q.field("is_deleted"), false))
       .collect();
 
-    // Get all active items and apply global filters once
-    const allActiveItems = allItems.filter(item => item.checked === false);
-
-    // Get current user ID for assignee filtering (same as getActiveItems)
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
 
-    const filteredActiveItems = applyGlobalFilters(allActiveItems, {
-      assigneeFilter: 'not-assigned-to-others', // Use same default as getActiveItems
-      currentUserId: userId, // Pass the user ID context
-      includeCompleted: false, // We're already filtering to active items
-      includeStarPrefix: false // Exclude metadata tasks (those starting with *)
-    });
+    const filteredActiveItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      {
+        assigneeFilter: 'not-assigned-to-others',
+        currentUserId: userId,
+      }
+    );
 
     // Calculate stats for each project
     const statsByProjectId = new Map<string, {

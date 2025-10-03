@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 
 export const getDueNext7DaysItems = query({
   args: {
@@ -19,14 +18,18 @@ export const getDueNext7DaysItems = query({
       )
     ),
   },
-  handler: async (ctx, args) => {
-    const rawItems = await ctx.runQuery(
-      internal.todoist.internal.index.getRawActiveItems,
-      { projectId: args.projectId }
-    );
-
+  handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
+
+    const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      { 
+        projectId: args.projectId,
+        assigneeFilter: args.assigneeFilter,
+        currentUserId: userId,
+      }
+    );
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -38,7 +41,7 @@ export const getDueNext7DaysItems = query({
     const todayISODate = today.toISOString().split('T')[0];
     const next7DaysISODate = new Date(next7Days.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const dueNext7DaysItems = rawItems.filter((item: Doc<"todoist_items">) => {
+    const dueNext7DaysItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       if (!item.due) return false;
 
       const dueDate = item.due.date;
@@ -52,12 +55,7 @@ export const getDueNext7DaysItems = query({
       }
     });
 
-    const filteredItems = applyGlobalFilters(dueNext7DaysItems, {
-      assigneeFilter: args.assigneeFilter,
-      currentUserId: userId,
-    });
-
-    const sortedItems = filteredItems.sort((a, b) => {
+    const sortedItems: Doc<"todoist_items">[] = dueNext7DaysItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {
       const aDate = a.due?.date ? new Date(a.due.date) : new Date(0);
       const bDate = b.due?.date ? new Date(b.due.date) : new Date(0);
       const dateComparison = aDate.getTime() - bDate.getTime();

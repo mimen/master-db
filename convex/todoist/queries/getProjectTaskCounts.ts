@@ -1,28 +1,38 @@
+import { internal } from "../../_generated/api";
+import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 
-/**
- * Get task counts per project with both raw and filtered counts.
- */
 export const getProjectTaskCounts = query({
   args: {},
-  handler: async (ctx) => {
-    // Get all active items
-    const rawActiveItems = await ctx.db
+  handler: async (ctx): Promise<{
+    totalProjects: number;
+    totalRawTasks: number;
+    totalFilteredTasks: number;
+    totalTasksFilteredOut: number;
+    projectCounts: Array<{
+      projectId: string;
+      projectName: string;
+      rawTaskCount: number;
+      filteredTaskCount: number;
+      tasksFilteredOut: number;
+    }>;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject;
+
+    const rawActiveItems: Doc<"todoist_items">[] = await ctx.db
       .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), false))
-      .filter((q) => q.eq(q.field("is_deleted"), false))
+      .withIndex("active_items", (q) => q.eq("is_deleted", false).eq("checked", false))
       .collect();
 
-    // Get all projects
     const projects = await ctx.db
       .query("todoist_projects")
       .filter((q) => q.eq(q.field("is_deleted"), false))
       .collect();
 
-    // Apply global filters
-    const filteredItems = applyGlobalFilters(rawActiveItems, {
-      assigneeFilter: 'all'
+    const filteredItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+      assigneeFilter: 'all',
+      currentUserId: userId,
     });
 
     // Count tasks per project

@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 
 export const getOverdueItems = query({
   args: {
@@ -19,20 +18,24 @@ export const getOverdueItems = query({
       )
     ),
   },
-  handler: async (ctx, args) => {
-    const rawItems = await ctx.runQuery(
-      internal.todoist.internal.index.getRawActiveItems,
-      { projectId: args.projectId }
-    );
-
+  handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
+
+    const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      { 
+        projectId: args.projectId,
+        assigneeFilter: args.assigneeFilter,
+        currentUserId: userId,
+      }
+    );
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayISODate = today.toISOString().split('T')[0];
 
-    const overdueItems = rawItems.filter((item: Doc<"todoist_items">) => {
+    const overdueItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       if (!item.due) return false;
 
       const dueDate = item.due.date;
@@ -46,12 +49,7 @@ export const getOverdueItems = query({
       }
     });
 
-    const filteredItems = applyGlobalFilters(overdueItems, {
-      assigneeFilter: args.assigneeFilter,
-      currentUserId: userId,
-    });
-
-    const sortedItems = filteredItems.sort((a, b) => {
+    const sortedItems: Doc<"todoist_items">[] = overdueItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {
       const aDate = a.due?.date ? new Date(a.due.date) : new Date(0);
       const bDate = b.due?.date ? new Date(b.due.date) : new Date(0);
       return aDate.getTime() - bDate.getTime();

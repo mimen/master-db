@@ -1,13 +1,10 @@
 import { v } from "convex/values";
 
+import { internal } from "../../_generated/api";
+import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 import { processQueue } from "../helpers/queueEngine";
 
-/**
- * Get intelligently filtered and prioritized tasks based on context and timeframe
- * Replaces get-tasks with smart filtering for focused work sessions
- */
 export const getFocusedTasks = query({
   args: {
     context: v.optional(v.union(
@@ -31,16 +28,16 @@ export const getFocusedTasks = query({
     const limit = args.limit || 10;
     const includeAssignedToOthers = args.include_assigned_to_others || false;
 
-    // Get all active items
-    const allItems = await ctx.db
-      .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), false))
-      .filter((q) => q.eq(q.field("is_deleted"), false))
-      .collect();
-
-    // Get current user ID for assignee filtering
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
+
+    const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      {
+        assigneeFilter: includeAssignedToOthers ? 'all' : 'not-assigned-to-others',
+        currentUserId: userId,
+      }
+    );
 
     // Build filters based on context
     const filters = [];
@@ -166,11 +163,6 @@ export const getFocusedTasks = query({
     }
 
     // Apply global filters
-    const assigneeFilter = includeAssignedToOthers ? 'all' : 'not-assigned-to-others';
-
-    return applyGlobalFilters(processedItems, {
-      assigneeFilter,
-      currentUserId: userId,
-    });
+    return processedItems;
   },
 });

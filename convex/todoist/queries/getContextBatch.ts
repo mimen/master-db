@@ -1,13 +1,10 @@
 import { v } from "convex/values";
 
+import { internal } from "../../_generated/api";
+import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 import { processQueue } from "../helpers/queueEngine";
 
-/**
- * Group similar tasks by context to minimize context switching
- * Returns batches of tasks that can be done in the same mental/physical context
- */
 export const getContextBatch = query({
   args: {
     context_type: v.union(
@@ -27,16 +24,16 @@ export const getContextBatch = query({
     const includeLowPriority = args.include_low_priority || false;
     const maxTasks = args.max_tasks || 8;
 
-    // Get all active items
-    const allItems = await ctx.db
-      .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), false))
-      .filter((q) => q.eq(q.field("is_deleted"), false))
-      .collect();
-
-    // Get current user ID for assignee filtering
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
+
+    const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      {
+        assigneeFilter: 'not-assigned-to-others',
+        currentUserId: userId,
+      }
+    );
 
     // Define context-specific label mappings
     const contextLabels = {
@@ -113,10 +110,6 @@ export const getContextBatch = query({
     // Process the queue
     const processedItems = processQueue(allItems, queueConfig, userId);
 
-    // Apply global filters (excluding assignee filter to keep team tasks for context batching)
-    return applyGlobalFilters(processedItems, {
-      assigneeFilter: 'all', // Include all tasks for context batching
-      currentUserId: userId,
-    });
+    return processedItems;
   },
 });

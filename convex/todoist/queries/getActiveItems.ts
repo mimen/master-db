@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
+import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 
 // Date comparison helper functions
 const getDateComparisons = () => {
@@ -96,7 +96,6 @@ export const getActiveItems = query({
   args: {
     projectId: v.optional(v.string()),
     limit: v.optional(v.number()),
-    // UI can override assignee filter
     assigneeFilter: v.optional(
       v.union(
         v.literal('all'),
@@ -106,7 +105,6 @@ export const getActiveItems = query({
         v.literal('not-assigned-to-others')
       )
     ),
-    // Time filtering options
     timeFilter: v.optional(v.union(
       v.literal('overdue'),
       v.literal('today'),
@@ -116,24 +114,25 @@ export const getActiveItems = query({
       v.literal('none'),
       v.literal('all')
     )),
-    includeDeadlines: v.optional(v.boolean()), // Default false for backward compatibility
-    combineDueAndDeadline: v.optional(v.boolean()), // Default false
+    includeDeadlines: v.optional(v.boolean()),
+    combineDueAndDeadline: v.optional(v.boolean()),
   },
-  handler: async (ctx, args) => {
-    // Get raw data directly (internal query logic embedded for now)
-    let q = ctx.db
-      .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), false))
-      .filter((q) => q.eq(q.field("is_deleted"), false));
+  handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject;
 
-    if (args.projectId) {
-      q = q.filter((q) => q.eq(q.field("project_id"), args.projectId));
-    }
+    const effectiveAssigneeFilter = args.assigneeFilter || 'not-assigned-to-others';
 
-    const items = await q.collect();
+    const items: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      { 
+        projectId: args.projectId,
+        assigneeFilter: effectiveAssigneeFilter,
+        currentUserId: userId,
+      }
+    );
 
-    // Apply time filtering if specified
-    let filteredItems = items;
+    let filteredItems: Doc<"todoist_items">[] = items;
     if (args.timeFilter) {
       const dateComparisons = getDateComparisons();
       filteredItems = items.filter(item =>
@@ -147,14 +146,11 @@ export const getActiveItems = query({
       );
     }
 
-    // Sort by child_order, but prioritize by time if time filter is active
-    let sortedItems: typeof filteredItems;
+    let sortedItems: Doc<"todoist_items">[];
     if (args.timeFilter && args.timeFilter !== 'all' && args.timeFilter !== 'none') {
-      // Sort by due date/deadline first, then by child_order
       sortedItems = filteredItems.sort((a, b) => {
         const getRelevantDate = (item: Doc<"todoist_items">) => {
           if (args.combineDueAndDeadline) {
-            // Use earliest of due date or deadline
             const dueDate = item.due?.date;
             const deadlineDate = item.deadline?.date;
             if (dueDate && deadlineDate) {
@@ -182,26 +178,13 @@ export const getActiveItems = query({
         }
       });
     } else {
-      // Default sort by child_order
       sortedItems = filteredItems.sort((a, b) => a.child_order - b.child_order);
     }
 
-    // Apply limit if specified
-    const limitedItems = args.limit && args.limit > 0
-      ? sortedItems.slice(0, args.limit)
-      : sortedItems;
+    if (args.limit && args.limit > 0) {
+      return sortedItems.slice(0, args.limit);
+    }
 
-    // Get current user ID for assignee filtering
-    const identity = await ctx.auth.getUserIdentity();
-    const userId = identity?.subject;
-
-    // Use provided assignee filter or default to 'not-assigned-to-others'
-    const effectiveAssigneeFilter = args.assigneeFilter || 'not-assigned-to-others';
-
-    // Apply global filters
-    return applyGlobalFilters(limitedItems, {
-      assigneeFilter: effectiveAssigneeFilter,
-      currentUserId: userId,
-    });
+    return sortedItems;
   },
 });

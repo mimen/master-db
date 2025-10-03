@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import { api, internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 
 export const getItemsByView = query({
   args: {
@@ -15,10 +14,10 @@ export const getItemsByView = query({
     const userId = identity?.subject;
 
     if (args.view === "inbox" && args.inboxProjectId) {
-      const rawItems = await ctx.runQuery(internal.todoist.internal.index.getRawActiveItems, {
-        projectId: args.inboxProjectId
+      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+        projectId: args.inboxProjectId,
+        currentUserId: userId,
       });
-      return applyGlobalFilters(rawItems, { currentUserId: userId });
     }
 
     if (args.view === "today" || args.view === "time:today") {
@@ -39,27 +38,29 @@ export const getItemsByView = query({
 
     if (args.view.startsWith("project:")) {
       const projectId = args.view.replace("project:", "");
-      const rawItems = await ctx.runQuery(internal.todoist.internal.index.getRawActiveItems, {
-        projectId
+      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+        projectId,
+        currentUserId: userId,
       });
-      return applyGlobalFilters(rawItems, { currentUserId: userId });
     }
 
     if (args.view.startsWith("priority:")) {
-      const allItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getRawActiveItems, {});
-      const filteredItems = applyGlobalFilters(allItems, { currentUserId: userId });
       const priorityLevel =
         args.view === "priority:p1" ? 4 :
         args.view === "priority:p2" ? 3 :
         args.view === "priority:p3" ? 2 : 1;
-      return filteredItems.filter((task: Doc<"todoist_items">) => task.priority === priorityLevel);
+      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+        priority: priorityLevel,
+        currentUserId: userId,
+      });
     }
 
     if (args.view.startsWith("label:")) {
-      const allItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getRawActiveItems, {});
-      const filteredItems = applyGlobalFilters(allItems, { currentUserId: userId });
+      const allItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+        currentUserId: userId,
+      });
       const labelName = args.view.replace("label:", "");
-      return filteredItems.filter((task: Doc<"todoist_items">) => task.labels.includes(labelName));
+      return allItems.filter((task: Doc<"todoist_items">) => task.labels.includes(labelName));
     }
 
     return [];

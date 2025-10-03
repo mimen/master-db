@@ -1,13 +1,10 @@
 import { v } from "convex/values";
 
+import { internal } from "../../_generated/api";
+import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 import { processQueue } from "../helpers/queueEngine";
 
-/**
- * Get smart priority queue - top 5-7 tasks that need attention now
- * Based on overdue items, high priority, and upcoming deadlines
- */
 export const getPriorityQueue = query({
   args: {
     include_assigned_to_others: v.optional(v.boolean()),
@@ -18,27 +15,25 @@ export const getPriorityQueue = query({
     const maxTasks = args.max_tasks || 7;
     const includeAssignedToOthers = args.include_assigned_to_others || false;
 
-    // Get all active items
-    const allItems = await ctx.db
-      .query("todoist_items")
-      .filter((q) => q.eq(q.field("checked"), false))
-      .filter((q) => q.eq(q.field("is_deleted"), false))
-      .collect();
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject;
 
-    // Get project metadata for project priorities
+    const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      {
+        assigneeFilter: includeAssignedToOthers ? 'all' : 'not-assigned-to-others',
+        currentUserId: userId,
+      }
+    );
+
     const projectMetadata = await ctx.db
       .query("todoist_project_metadata")
       .collect();
 
-    // Create project metadata map for efficient lookup
     const projectMetadataMap = new Map();
     for (const metadata of projectMetadata) {
       projectMetadataMap.set(metadata.project_id, metadata);
     }
-
-    // Get current user ID for assignee filtering
-    const identity = await ctx.auth.getUserIdentity();
-    const userId = identity?.subject;
 
     // Priority queue configuration - focus on urgent and important
     const queueConfig = {
@@ -198,23 +193,11 @@ export const getPriorityQueue = query({
       }
     }
 
-    // Apply global filters to just the tasks
-    const assigneeFilter = includeAssignedToOthers ? 'all' : 'not-assigned-to-others';
-    const tasksOnly = priorityItems.map(item => item.task);
-    const filteredTasks = applyGlobalFilters(tasksOnly, {
-      assigneeFilter,
-      currentUserId: userId,
-    });
-
-    // Return tasks with grouping information preserved
-    const filteredTaskIds = new Set(filteredTasks.map(task => task.todoist_id));
-    const result = priorityItems
-      .filter(item => filteredTaskIds.has(item.task.todoist_id))
-      .map(item => ({
-        ...item.task,
-        _queueSegment: item.segment,
-        _projectName: item.projectName,
-      }));
+    const result = priorityItems.map(item => ({
+      ...item.task,
+      _queueSegment: item.segment,
+      _projectName: item.projectName,
+    }));
 
     return result;
   },

@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
 import { query } from "../../_generated/server";
-import { applyGlobalFilters } from "../helpers/globalFilters";
 
 export const getDueTomorrowItems = query({
   args: {
@@ -19,14 +18,18 @@ export const getDueTomorrowItems = query({
       )
     ),
   },
-  handler: async (ctx, args) => {
-    const rawItems = await ctx.runQuery(
-      internal.todoist.internal.index.getRawActiveItems,
-      { projectId: args.projectId }
-    );
-
+  handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
+
+    const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
+      internal.todoist.internal.index.getFilteredActiveItems,
+      { 
+        projectId: args.projectId,
+        assigneeFilter: args.assigneeFilter,
+        currentUserId: userId,
+      }
+    );
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -36,7 +39,7 @@ export const getDueTomorrowItems = query({
     const endOfTomorrow = new Date(tomorrow);
     endOfTomorrow.setHours(23, 59, 59, 999);
 
-    const dueTomorrowItems = rawItems.filter((item: Doc<"todoist_items">) => {
+    const dueTomorrowItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       if (!item.due) return false;
 
       const dueDate = item.due.date;
@@ -50,12 +53,7 @@ export const getDueTomorrowItems = query({
       }
     });
 
-    const filteredItems = applyGlobalFilters(dueTomorrowItems, {
-      assigneeFilter: args.assigneeFilter,
-      currentUserId: userId,
-    });
-
-    const sortedItems = filteredItems.sort((a, b) => {
+    const sortedItems: Doc<"todoist_items">[] = dueTomorrowItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {
       if (a.due?.datetime && b.due?.datetime) {
         return new Date(a.due.datetime).getTime() - new Date(b.due.datetime).getTime();
       }

@@ -5,4 +5,5 @@
 
 // Internal queries
 export { getRawActiveItems } from "./queries/getRawActiveItems";
+export { getFilteredActiveItems } from "./queries/getFilteredActiveItems";
 export { getSyncState } from "./queries/getSyncState";

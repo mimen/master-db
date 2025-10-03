@@ -52,4 +52,9 @@ export const todoist_items = defineTable({
 })
   .index("by_todoist_id", ["todoist_id"])
   .index("by_project", ["project_id"])
-  .index("by_section", ["section_id"]);
+  .index("by_section", ["section_id"])
+  .index("active_items", ["is_deleted", "checked"])
+  .index("by_assignee", ["assignee_id"])
+  .index("by_priority", ["priority", "is_deleted", "checked"])
+  .index("active_by_project", ["project_id", "is_deleted", "checked"])
+  .index("active_by_assignee", ["assignee_id", "is_deleted", "checked"]);
