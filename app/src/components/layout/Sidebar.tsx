@@ -79,6 +79,34 @@ function getSortedProjects(
   }
 }
 
+// Helper function to sort labels based on sort mode
+function getSortedLabels(
+  labels: TodoistLabelDoc[] | undefined,
+  sortMode: LabelSort,
+  labelCounts?: { labelCounts: { labelId: string; filteredTaskCount: number }[] }
+): TodoistLabelDoc[] {
+  if (!labels) return []
+  
+  switch (sortMode) {
+    case "taskCount": {
+      return [...labels].sort((a, b) => {
+        const countA = labelCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === a.todoist_id)?.filteredTaskCount || 0
+        const countB = labelCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === b.todoist_id)?.filteredTaskCount || 0
+        return countB - countA
+      })
+    }
+    
+    case "alphabetical": {
+      return [...labels].sort((a, b) => {
+        return a.name.localeCompare(b.name)
+      })
+    }
+    
+    default:
+      return labels
+  }
+}
+
 // Helper function to build hierarchical project tree
 function buildProjectTree(projects: TodoistProjectsWithMetadata): ProjectTreeNode[] {
   const projectMap = new Map<string, ProjectTreeNode>()
@@ -215,11 +243,13 @@ function ProjectItem({
 }
 
 type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
+type LabelSort = "taskCount" | "alphabetical"
 
 export function Sidebar({ currentView, onViewChange, onMultiViewChange }: SidebarProps) {
   const [expandNested, setExpandNested] = useState(false)
   const [priorityMode, setPriorityMode] = useState<"tasks" | "projects">("tasks")
   const [projectSort, setProjectSort] = useState<ProjectSort>("hierarchy")
+  const [labelSort, setLabelSort] = useState<LabelSort>("taskCount")
 
   const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
     | TodoistProjectsWithMetadata
@@ -509,9 +539,22 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-muted-foreground">Labels</h3>
+          <button
+            onClick={() => {
+              const sorts: LabelSort[] = ["taskCount", "alphabetical"]
+              const currentIndex = sorts.indexOf(labelSort)
+              const nextIndex = (currentIndex + 1) % sorts.length
+              setLabelSort(sorts[nextIndex])
+            }}
+            className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors"
+            title={`Sort: ${labelSort}`}
+          >
+            {labelSort === "taskCount" && <Hash className="h-3 w-3 text-muted-foreground" />}
+            {labelSort === "alphabetical" && <ArrowDownAZ className="h-3 w-3 text-muted-foreground" />}
+          </button>
         </div>
         <div className="space-y-0.5 max-h-48 overflow-y-auto scrollbar-hide">
-          {labels?.map((label: TodoistLabelDoc) => {
+          {getSortedLabels(labels, labelSort, labelFilterCounts).map((label: TodoistLabelDoc) => {
             const isActive = currentView === `label:${label.name}`
             const count = labelFilterCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === label.todoist_id)?.filteredTaskCount || 0
             return (
