@@ -1,6 +1,6 @@
-import { useMutation, useQuery } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 import { Flag, Calendar, Tag, User, Check, Edit2, ChevronDown, ChevronRight } from "lucide-react"
-import { useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 
 import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
 import { Button } from "@/components/ui/button"
@@ -10,14 +10,21 @@ import { cn } from "@/lib/utils"
 import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView } from "@/types/convex/todoist"
 import type { ViewConfig } from "@/types/views"
 
+const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
+
 interface TaskListViewProps {
   viewConfig: ViewConfig
+  onTaskCountChange?: (viewId: string, count: number) => void
+  focusedTaskIndex: number | null
 }
 
-export function TaskListView({ viewConfig }: TaskListViewProps) {
+export function TaskListView({ viewConfig, onTaskCountChange, focusedTaskIndex }: TaskListViewProps) {
   const [isExpanded, setIsExpanded] = useState(viewConfig.expanded ?? true)
   const currentView = viewConfig.value
   const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
+  const taskRefs = useRef<(HTMLDivElement | null)[]>([])
+  const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
+  const lastFocusedIndex = useRef<number | null>(null)
 
   const inboxProject = projects?.find((project: TodoistProject) =>
     project.name === "Inbox" && !project.parent_id && !project.is_deleted && !project.is_archived
@@ -33,6 +40,73 @@ export function TaskListView({ viewConfig }: TaskListViewProps) {
   )
 
   const filteredTasks = tasks || []
+  taskRefs.current.length = filteredTasks.length
+  refHandlers.current.length = filteredTasks.length
+
+  useEffect(() => {
+    onTaskCountChange?.(viewConfig.id, filteredTasks.length)
+  }, [filteredTasks.length, onTaskCountChange, viewConfig.id])
+
+  useEffect(() => {
+    const removeHighlight = (element: HTMLDivElement | null) => {
+      if (!element) return
+      TASK_ROW_FOCUSED_CLASSNAMES.forEach((className) => element.classList.remove(className))
+      element.setAttribute("aria-selected", "false")
+    }
+
+    const applyHighlight = (element: HTMLDivElement | null) => {
+      if (!element) return
+      TASK_ROW_FOCUSED_CLASSNAMES.forEach((className) => element.classList.add(className))
+      element.setAttribute("aria-selected", "true")
+    }
+
+    if (lastFocusedIndex.current !== null && lastFocusedIndex.current !== focusedTaskIndex) {
+      removeHighlight(taskRefs.current[lastFocusedIndex.current])
+    }
+
+    if (focusedTaskIndex === null) {
+      lastFocusedIndex.current = null
+      return
+    }
+
+    if (focusedTaskIndex < 0 || focusedTaskIndex >= filteredTasks.length) {
+      lastFocusedIndex.current = null
+      return
+    }
+
+    setIsExpanded(true)
+    const node = taskRefs.current[focusedTaskIndex]
+    if (!node) {
+      lastFocusedIndex.current = null
+      return
+    }
+
+    if (
+      lastFocusedIndex.current !== focusedTaskIndex ||
+      !node.classList.contains(TASK_ROW_FOCUSED_CLASSNAMES[0])
+    ) {
+      applyHighlight(node)
+    }
+
+    if (typeof document !== "undefined" && node !== document.activeElement) {
+      node.focus({ preventScroll: true })
+    }
+
+    const scrollContainer = node.closest("[data-task-scroll-container]") as HTMLElement | null
+    if (scrollContainer) {
+      const nodeRect = node.getBoundingClientRect()
+      const containerRect = scrollContainer.getBoundingClientRect()
+      const isAbove = nodeRect.top < containerRect.top
+      const isBelow = nodeRect.bottom > containerRect.bottom
+      if (isAbove || isBelow) {
+        node.scrollIntoView({ block: "nearest", inline: "nearest" })
+      }
+    } else if (typeof node.scrollIntoView === "function") {
+      node.scrollIntoView({ block: "nearest", inline: "nearest" })
+    }
+
+    lastFocusedIndex.current = focusedTaskIndex
+  }, [focusedTaskIndex, filteredTasks.length])
 
   // Get view title and description
   const getViewInfo = () => {
@@ -151,9 +225,24 @@ export function TaskListView({ viewConfig }: TaskListViewProps) {
         <>
           {filteredTasks.length > 0 ? (
             <div className="space-y-1">
-              {filteredTasks.map((task: TodoistTask) => (
-                <TaskRow key={task._id} task={task} />
-              ))}
+              {filteredTasks.map((task: TodoistTask, index: number) => {
+                if (!refHandlers.current[index]) {
+                  refHandlers.current[index] = (element) => {
+                    taskRefs.current[index] = element
+                    if (element === null && lastFocusedIndex.current === index) {
+                      lastFocusedIndex.current = null
+                    }
+                  }
+                }
+
+                return (
+                  <TaskRow
+                    key={task._id}
+                    task={task}
+                    onElementRef={refHandlers.current[index]!}
+                  />
+                )
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -168,9 +257,14 @@ export function TaskListView({ viewConfig }: TaskListViewProps) {
   )
 }
 
-function TaskRow({ task }: { task: TodoistTask }) {
+interface TaskRowProps {
+  task: TodoistTask
+  onElementRef: (element: HTMLDivElement | null) => void
+}
+
+const TaskRow = memo(function TaskRow({ task, onElementRef }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false)
-  const completeTask = useMutation(api.todoist.actions.completeTask.completeTask)
+  const completeTask = useAction(api.todoist.actions.completeTask.completeTask)
   const priority = usePriority(task.priority)
 
   const handleComplete = async () => {
@@ -212,9 +306,16 @@ function TaskRow({ task }: { task: TodoistTask }) {
 
     return { text, isOverdue }
   }
-
   return (
-    <div className="group flex items-center gap-3 p-3 hover:bg-muted/50 rounded-lg transition-colors">
+    <div
+      ref={onElementRef}
+      tabIndex={-1}
+      aria-selected={false}
+      className={cn(
+        "group flex items-center gap-3 p-3 rounded-lg transition-colors focus:outline-none",
+        "hover:bg-muted/50"
+      )}
+    >
       {/* Checkbox */}
       <button
         onClick={handleComplete}
@@ -336,4 +437,4 @@ function TaskRow({ task }: { task: TodoistTask }) {
       </div>
     </div>
   )
-}
+}, (prev, next) => prev.task === next.task && prev.onElementRef === next.onElementRef)
