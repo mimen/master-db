@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-import type { TodoistProject, TodoistTask } from "@/types/convex/todoist"
+import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView } from "@/types/convex/todoist"
 
 interface TaskListViewProps {
   currentView: string
 }
 
 export function TaskListView({ currentView }: TaskListViewProps) {
-  const projects: TodoistProject[] | undefined = useQuery(api.todoist.publicQueries.getProjects)
+  const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
 
   const inboxProject = projects?.find((project: TodoistProject) =>
     project.name === "Inbox" && !project.parent_id && !project.is_deleted && !project.is_archived
@@ -24,7 +24,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
     ? { view: currentView, inboxProjectId: inboxProject?.todoist_id }
     : undefined
 
-  const tasks: TodoistTask[] | undefined = useQuery(
+  const tasks: TodoistItemsByView | undefined = useQuery(
     api.todoist.publicQueries.getItemsByView,
     tasksArgs ?? "skip"
   )

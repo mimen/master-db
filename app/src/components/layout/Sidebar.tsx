@@ -6,55 +6,22 @@ import { api } from "@/convex/_generated/api"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-
-interface ProjectWithMetadata {
-  _id: string
-  todoist_id: string
-  name: string
-  color: string
-  parent_id?: string
-  is_deleted: number
-  is_archived: number
-  child_order: number
-  metadata: {
-    priority: number
-    scheduledDate?: string
-    description?: string
-    sourceTaskId?: string
-    lastUpdated?: string
-  } | null
-  stats: {
-    itemCount: number
-    activeCount: number
-    completedCount: number
-  }
-  computed: {
-    isScheduled: boolean
-    isHighPriority: boolean
-    completionRate: number | null
-    hasActiveItems: boolean
-  }
-}
+import type {
+  TodoistLabelDoc,
+  TodoistProjects,
+  TodoistProjectsWithMetadata,
+  TodoistProjectWithMetadata,
+} from "@/types/convex/todoist"
 
 interface SidebarProps {
   currentView: string
   onViewChange: (view: string) => void
 }
 
-interface Label {
-  _id: string
-  todoist_id: string
-  name: string
-  color: string
-  order: number
-  is_favorite: boolean
-  is_deleted: boolean
-}
-
-type ProjectTreeNode = ProjectWithMetadata & { children: ProjectTreeNode[] }
+type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
 
 // Helper function to build hierarchical project tree
-function buildProjectTree(projects: ProjectWithMetadata[]): ProjectTreeNode[] {
+function buildProjectTree(projects: TodoistProjectsWithMetadata): ProjectTreeNode[] {
   const projectMap = new Map<string, ProjectTreeNode>()
   const rootProjects: ProjectTreeNode[] = []
 
@@ -156,51 +123,53 @@ function ProjectItem({
 }
 
 export function Sidebar({ currentView, onViewChange }: SidebarProps) {
-  // Try to use the enhanced projects with metadata query
-  const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {})
+  const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
+    | TodoistProjectsWithMetadata
+    | undefined
 
-  // Fallback to basic projects if enhanced query fails
-  const basicProjects = useQuery(api.todoist.publicQueries.getProjects)
+  const basicProjects = useQuery(api.todoist.publicQueries.getProjects) as
+    | TodoistProjects
+    | undefined
 
-  // Get labels for the labels section
-  const labels = useQuery(api.todoist.publicQueries.getLabels)
+  const labels = useQuery(api.todoist.publicQueries.getLabels) as
+    | TodoistLabelDoc[]
+    | undefined
 
-  // Use enhanced projects if available and not empty, otherwise transform basic projects
-  const projectsData = (enhancedProjects && enhancedProjects.length > 0)
+  const projectsData: TodoistProjectsWithMetadata | undefined = (enhancedProjects && enhancedProjects.length > 0)
     ? enhancedProjects
-    : basicProjects?.map((p: { todoist_id: string; name: string; parent_id?: string }) => ({
-    ...p,
-    metadata: {
-      priority: 4, // Default priority when no metadata available
-      scheduledDate: null,
-      description: null,
-      sourceTaskId: null,
-      lastUpdated: null
-    },
-    stats: {
-      itemCount: 0,
-      activeCount: 0,
-      completedCount: 0
-    },
-    computed: {
-      isScheduled: false,
-      isHighPriority: false,
-      completionRate: null,
-      hasActiveItems: false
-    }
-  }))
+    : basicProjects?.map((project) => ({
+        ...project,
+        metadata: {
+          priority: 4,
+          scheduledDate: null,
+          description: null,
+          sourceTaskId: null,
+          lastUpdated: null,
+        },
+        stats: {
+          itemCount: 0,
+          activeCount: 0,
+          completedCount: 0,
+        },
+        computed: {
+          isScheduled: false,
+          isHighPriority: false,
+          completionRate: null,
+          hasActiveItems: false,
+        },
+      }))
 
   // Build hierarchical structure
   const projectTree = projectsData ? buildProjectTree(projectsData) : []
 
   // Find inbox project
-  const inboxProject = projectsData?.find((p: ProjectWithMetadata) =>
-    p.name === "Inbox" && !p.parent_id
+  const inboxProject = projectsData?.find((project) =>
+    project.name === "Inbox" && !project.parent_id
   )
 
   // Get non-inbox projects
-  const otherProjects = projectTree.filter((p: ProjectTreeNode) =>
-    p.todoist_id !== inboxProject?.todoist_id
+  const otherProjects = projectTree.filter(
+    (project) => project.todoist_id !== inboxProject?.todoist_id
   )
 
   const viewItems = [

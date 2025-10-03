@@ -1,15 +1,12 @@
 import { useQuery } from "convex/react"
-import type { FunctionReturnType } from "convex/server"
 
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { api } from "@/convex/_generated/api"
-
-type SyncStatus = FunctionReturnType<typeof api.todoist.queries.getSyncStatus>
-type ActiveItems = FunctionReturnType<typeof api.todoist.queries.getActiveItems>
+import type { TodoistActiveItems, TodoistActiveItem, TodoistSyncStatus } from "@/types/convex/todoist"
 
 export function TaskProcessor() {
-  const syncStatus: SyncStatus | undefined = useQuery(api.todoist.queries.getSyncStatus)
-  const tasks: ActiveItems | undefined = useQuery(api.todoist.queries.getActiveItems)
+  const syncStatus: TodoistSyncStatus | undefined = useQuery(api.todoist.queries.getSyncStatus)
+  const tasks: TodoistActiveItems | undefined = useQuery(api.todoist.queries.getActiveItems)
 
   if (!syncStatus) {
     return (
@@ -49,7 +46,7 @@ export function TaskProcessor() {
             {tasks ? (
               <div className="space-y-2">
                 <p><strong>Total Active Tasks:</strong> {tasks.length}</p>
-                {tasks.slice(0, 5).map((task: ActiveItems[number]) => (
+                {tasks.slice(0, 5).map((task: TodoistActiveItem) => (
                   <div key={task._id} className="p-2 border rounded">
                     <p className="font-medium">{task.content}</p>
                     <p className="text-sm text-muted-foreground">

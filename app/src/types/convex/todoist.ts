@@ -3,8 +3,19 @@ import type { FunctionReturnType } from "convex/server"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
 
-export type TodoistProject = FunctionReturnType<typeof api.todoist.publicQueries.getProjects>[number]
-export type TodoistTask = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>[number]
+export type TodoistProjects = FunctionReturnType<typeof api.todoist.publicQueries.getProjects>
+export type TodoistProject = TodoistProjects[number]
+
+export type TodoistItemsByView = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>
+export type TodoistTask = TodoistItemsByView[number]
+
+export type TodoistProjectsWithMetadata = FunctionReturnType<typeof api.todoist.publicQueries.getProjectsWithMetadata>
+export type TodoistProjectWithMetadata = TodoistProjectsWithMetadata[number]
+
+export type TodoistActiveItems = FunctionReturnType<typeof api.todoist.queries.getActiveItems>
+export type TodoistActiveItem = TodoistActiveItems[number]
+
+export type TodoistSyncStatus = FunctionReturnType<typeof api.todoist.queries.getSyncStatus>
 
 export type TodoistTaskDoc = Doc<"todoist_items">
 export type TodoistProjectDoc = Doc<"todoist_projects">
