@@ -61,6 +61,27 @@ bunx convex run todoist:sync.runInitialSync
 bun tsc && bun run lint && bun test
 ```
 
+## Convex Dev Server Reload (CRITICAL)
+
+**When to reload:** After creating, deleting, or renaming exported Convex functions
+
+**Symptoms of stale server:**
+- "Could not find public function" errors in frontend
+- Changes to function logic not taking effect
+- New functions not appearing in API
+
+**How to reload:**
+```bash
+# One-time reload (for batch changes)
+bunx convex dev --once
+
+# OR restart your continuous dev server
+# Kill existing: Ctrl+C
+bunx convex dev
+```
+
+**Note:** If running `bunx convex dev` in watch mode, it should auto-reload. If changes don't appear, manually reload with `--once`.
+
 ## Repository Standards (ENFORCED)
 
 **Before ANY commit - all must pass with zero errors:**

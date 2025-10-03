@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "convex/react"
 import { Flag, Calendar, Tag, User, Check, Edit2 } from "lucide-react"
-import { useState, useMemo } from "react"
+import { useState } from "react"
 
 import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
 import { Button } from "@/components/ui/button"
@@ -40,100 +40,20 @@ interface TaskListViewProps {
 }
 
 export function TaskListView({ currentView }: TaskListViewProps) {
-  // Get projects for inbox and project views
   const projects = useQuery(api.todoist.publicQueries.getProjects)
 
-  // Get inbox project ID for filtering
   const inboxProject = projects?.find((p: Project) =>
     p.name === "Inbox" && !p.parent_id && !p.is_deleted && !p.is_archived
   )
 
-  // Use different queries based on the current view for better performance
-  const inboxTasks = useQuery(
-    api.todoist.publicQueries.getActiveItems,
-    currentView === "inbox" && inboxProject?.todoist_id ? { projectId: inboxProject.todoist_id } : "skip"
-  )
-  const todayTasks = useQuery(
-    api.todoist.publicQueries.getDueTodayItems,
-    currentView === "today" ? {} : "skip"
-  )
-  const upcomingTasks = useQuery(
-    api.todoist.publicQueries.getDueNext7DaysItems,
-    currentView === "upcoming" ? {} : "skip"
-  )
-  const projectTasks = useQuery(
-    api.todoist.publicQueries.getActiveItems,
-    currentView.startsWith("project:")
-      ? { projectId: currentView.replace("project:", "") }
+  const tasks = useQuery(
+    api.todoist.publicQueries.getItemsByView,
+    inboxProject || currentView !== "inbox"
+      ? { view: currentView, inboxProjectId: inboxProject?.todoist_id }
       : "skip"
   )
 
-  // Time filter queries
-  const overdueTasks = useQuery(
-    api.todoist.publicQueries.getOverdueItems,
-    currentView === "time:overdue" ? {} : "skip"
-  )
-  const noDateTasks = useQuery(
-    api.todoist.publicQueries.getNoDueDateItems,
-    currentView === "time:no-date" ? {} : "skip"
-  )
-
-  // Priority and label filtered tasks - get all tasks and filter client-side
-  const allTasksForFiltering = useQuery(
-    api.todoist.publicQueries.getActiveItems,
-    currentView.startsWith("priority:") || currentView.startsWith("label:") ? {} : "skip"
-  )
-
-  // Get the appropriate tasks based on current view
-  const filteredTasks = useMemo(() => {
-    switch (currentView) {
-      case "inbox": {
-        // inboxTasks is already filtered by project ID, no need to filter again
-        return inboxTasks || []
-      }
-      case "today": {
-        return todayTasks || []
-      }
-      case "upcoming": {
-        return upcomingTasks || []
-      }
-      case "time:overdue": {
-        return overdueTasks || []
-      }
-      case "time:today": {
-        return todayTasks || []
-      }
-      case "time:upcoming": {
-        return upcomingTasks || []
-      }
-      case "time:no-date": {
-        return noDateTasks || []
-      }
-      default: {
-        // Handle project views (format: "project:PROJECT_ID")
-        if (currentView.startsWith("project:")) {
-          // projectTasks is already filtered for the specific project
-          return projectTasks || []
-        }
-        // Handle priority views (format: "priority:p1")
-        if (currentView.startsWith("priority:")) {
-          if (!allTasksForFiltering) return []
-          // Map UI priority (p1-p4) to API priority (4-1)
-          const priorityLevel = currentView === "priority:p1" ? 4 :
-                               currentView === "priority:p2" ? 3 :
-                               currentView === "priority:p3" ? 2 : 1
-          return allTasksForFiltering.filter((task: Task) => task.priority === priorityLevel)
-        }
-        // Handle label views (format: "label:LABEL_NAME")
-        if (currentView.startsWith("label:")) {
-          if (!allTasksForFiltering) return []
-          const labelName = currentView.replace("label:", "")
-          return allTasksForFiltering.filter((task: Task) => task.labels.includes(labelName))
-        }
-        return []
-      }
-    }
-  }, [currentView, inboxTasks, todayTasks, upcomingTasks, projectTasks, overdueTasks, noDateTasks, allTasksForFiltering])
+  const filteredTasks = tasks || []
 
   // Get view title and description
   const getViewInfo = () => {
@@ -182,36 +102,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
 
   const { title, description } = getViewInfo()
 
-  // Check if we're still loading based on current view
-  const isLoading = useMemo(() => {
-    switch (currentView) {
-      case "inbox":
-        return inboxTasks === undefined
-      case "today":
-        return todayTasks === undefined
-      case "upcoming":
-        return upcomingTasks === undefined
-      case "time:overdue":
-        return overdueTasks === undefined
-      case "time:today":
-        return todayTasks === undefined
-      case "time:upcoming":
-        return upcomingTasks === undefined
-      case "time:no-date":
-        return noDateTasks === undefined
-      default:
-        if (currentView.startsWith("project:")) {
-          return projectTasks === undefined || !projects
-        }
-        if (currentView.startsWith("priority:")) {
-          return allTasksForFiltering === undefined
-        }
-        if (currentView.startsWith("label:")) {
-          return allTasksForFiltering === undefined
-        }
-        return false
-    }
-  }, [currentView, inboxTasks, todayTasks, upcomingTasks, projectTasks, overdueTasks, noDateTasks, allTasksForFiltering, projects])
+  const isLoading = tasks === undefined || (currentView === "inbox" && !inboxProject)
 
   if (isLoading) {
     return (
