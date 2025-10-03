@@ -18,6 +18,7 @@ export const getFilteredActiveItems = internalQuery({
     ),
     currentUserId: v.optional(v.string()),
     priority: v.optional(v.number()),
+    label: v.optional(v.string()),
     limit: v.optional(v.number()),
     includeCompleted: v.optional(v.boolean()),
     includeStarPrefix: v.optional(v.boolean()),
@@ -79,6 +80,10 @@ export const getFilteredActiveItems = internalQuery({
       }
 
       if (item.labels.some(label => SYSTEM_EXCLUDED_LABELS.includes(label as typeof SYSTEM_EXCLUDED_LABELS[number]))) {
+        return false;
+      }
+
+      if (args.label && !item.labels.includes(args.label)) {
         return false;
       }
 

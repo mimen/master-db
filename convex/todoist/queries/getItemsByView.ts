@@ -56,11 +56,11 @@ export const getItemsByView = query({
     }
 
     if (args.view.startsWith("label:")) {
-      const allItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+      const labelName = args.view.replace("label:", "");
+      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+        label: labelName,
         currentUserId: userId,
       });
-      const labelName = args.view.replace("label:", "");
-      return allItems.filter((task: Doc<"todoist_items">) => task.labels.includes(labelName));
     }
 
     return [];
