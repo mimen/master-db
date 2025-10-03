@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
 import { useQuery } from 'convex/react'
+import { ChevronRight } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { api } from '@/convex/_generated/api'
 import { getProjectColor } from '@/lib/colors'

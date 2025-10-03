@@ -7,7 +7,7 @@ export type ViewConfig = {
   expanded?: boolean
 }
 
-export type ViewChangeAction = 
+export type ViewChangeAction =
   | { type: "set", views: ViewConfig[] }
   | { type: "add", view: ViewConfig }
   | { type: "remove", id: string }

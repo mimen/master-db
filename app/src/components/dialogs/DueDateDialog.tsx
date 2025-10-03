@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import { Calendar } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { cn, parseMarkdownLinks } from '@/lib/utils'
 import type { TodoistTask } from '@/types/convex/todoist'

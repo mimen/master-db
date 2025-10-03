@@ -7,8 +7,9 @@ import { DueDateDialog } from './DueDateDialog'
 import { LabelDialog } from './LabelDialog'
 import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
-import { api } from '@/convex/_generated/api'
+
 import { useDialogContext } from '@/contexts/OverlayContext'
+import { api } from '@/convex/_generated/api'
 
 export function DialogManager() {
   const { currentTask, dialogType, closeDialog } = useDialogContext()

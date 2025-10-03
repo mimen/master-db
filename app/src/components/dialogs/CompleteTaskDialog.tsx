@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
 import { CheckCircle } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 import { parseMarkdownLinks } from '@/lib/utils'
 import type { TodoistTask } from '@/types/convex/todoist'

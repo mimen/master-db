@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import { Flag } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { usePriority } from '@/lib/priorities'
 import { cn } from '@/lib/utils'
