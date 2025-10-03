@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { api } from "@/convex/_generated/api"
+import { PRIORITY_MAP } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 
 interface PrioritySelectorProps {
@@ -20,12 +21,13 @@ interface PrioritySelectorProps {
   size?: "default" | "sm"
 }
 
-const PRIORITIES = [
-  { value: 1, label: "Priority 4", color: "text-gray-500", display: "P4" },
-  { value: 2, label: "Priority 3", color: "text-blue-500", display: "P3" },
-  { value: 3, label: "Priority 2", color: "text-orange-500", display: "P2" },
-  { value: 4, label: "Priority 1", color: "text-red-500", display: "P1" },
-]
+// Use canonical priority mapping
+const PRIORITIES = Object.values(PRIORITY_MAP).map((p) => ({
+  value: p.apiPriority,
+  label: p.displayName,
+  color: p.color ? `text-${p.color}-500` : "text-gray-500",
+  display: p.uiPriority,
+}))
 
 export function PrioritySelector({
   value = 1,

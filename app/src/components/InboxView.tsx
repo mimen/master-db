@@ -5,6 +5,7 @@ import { useState, useMemo } from "react"
 import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
+import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 
 interface Task {
@@ -67,6 +68,22 @@ export function TaskListView({ currentView }: TaskListViewProps) {
       : "skip"
   )
 
+  // Time filter queries
+  const overdueTasks = useQuery(
+    api.todoist.publicQueries.getOverdueItems,
+    currentView === "time:overdue" ? {} : "skip"
+  )
+  const noDateTasks = useQuery(
+    api.todoist.publicQueries.getNoDueDateItems,
+    currentView === "time:no-date" ? {} : "skip"
+  )
+
+  // Priority and label filtered tasks - get all tasks and filter client-side
+  const allTasksForFiltering = useQuery(
+    api.todoist.publicQueries.getActiveItems,
+    currentView.startsWith("priority:") || currentView.startsWith("label:") ? {} : "skip"
+  )
+
   // Get the appropriate tasks based on current view
   const filteredTasks = useMemo(() => {
     switch (currentView) {
@@ -80,16 +97,43 @@ export function TaskListView({ currentView }: TaskListViewProps) {
       case "upcoming": {
         return upcomingTasks || []
       }
+      case "time:overdue": {
+        return overdueTasks || []
+      }
+      case "time:today": {
+        return todayTasks || []
+      }
+      case "time:upcoming": {
+        return upcomingTasks || []
+      }
+      case "time:no-date": {
+        return noDateTasks || []
+      }
       default: {
         // Handle project views (format: "project:PROJECT_ID")
         if (currentView.startsWith("project:")) {
           // projectTasks is already filtered for the specific project
           return projectTasks || []
         }
+        // Handle priority views (format: "priority:p1")
+        if (currentView.startsWith("priority:")) {
+          if (!allTasksForFiltering) return []
+          // Map UI priority (p1-p4) to API priority (4-1)
+          const priorityLevel = currentView === "priority:p1" ? 4 :
+                               currentView === "priority:p2" ? 3 :
+                               currentView === "priority:p3" ? 2 : 1
+          return allTasksForFiltering.filter((task: Task) => task.priority === priorityLevel)
+        }
+        // Handle label views (format: "label:LABEL_NAME")
+        if (currentView.startsWith("label:")) {
+          if (!allTasksForFiltering) return []
+          const labelName = currentView.replace("label:", "")
+          return allTasksForFiltering.filter((task: Task) => task.labels.includes(labelName))
+        }
         return []
       }
     }
-  }, [currentView, inboxTasks, todayTasks, upcomingTasks, projectTasks, projects])
+  }, [currentView, inboxTasks, todayTasks, upcomingTasks, projectTasks, overdueTasks, noDateTasks, allTasksForFiltering])
 
   // Get view title and description
   const getViewInfo = () => {
@@ -100,6 +144,14 @@ export function TaskListView({ currentView }: TaskListViewProps) {
         return { title: "Today", description: `${filteredTasks.length} tasks due today` }
       case "upcoming":
         return { title: "Upcoming", description: `${filteredTasks.length} tasks due this week` }
+      case "time:overdue":
+        return { title: "Overdue", description: `${filteredTasks.length} overdue tasks` }
+      case "time:today":
+        return { title: "Today", description: `${filteredTasks.length} tasks due today` }
+      case "time:upcoming":
+        return { title: "Upcoming", description: `${filteredTasks.length} upcoming tasks` }
+      case "time:no-date":
+        return { title: "No Date", description: `${filteredTasks.length} tasks without due dates` }
       default: {
         if (currentView.startsWith("project:")) {
           const projectId = currentView.replace("project:", "")
@@ -107,6 +159,20 @@ export function TaskListView({ currentView }: TaskListViewProps) {
           return {
             title: project?.name || "Project",
             description: `${filteredTasks.length} tasks in this project`
+          }
+        }
+        if (currentView.startsWith("priority:")) {
+          const priority = currentView.replace("priority:", "").toUpperCase()
+          return {
+            title: `${priority}`,
+            description: `${filteredTasks.length} tasks with ${priority} priority`
+          }
+        }
+        if (currentView.startsWith("label:")) {
+          const label = currentView.replace("label:", "")
+          return {
+            title: `@${label}`,
+            description: `${filteredTasks.length} tasks with @${label} label`
           }
         }
         return { title: "Tasks", description: `${filteredTasks.length} tasks` }
@@ -125,13 +191,27 @@ export function TaskListView({ currentView }: TaskListViewProps) {
         return todayTasks === undefined
       case "upcoming":
         return upcomingTasks === undefined
+      case "time:overdue":
+        return overdueTasks === undefined
+      case "time:today":
+        return todayTasks === undefined
+      case "time:upcoming":
+        return upcomingTasks === undefined
+      case "time:no-date":
+        return noDateTasks === undefined
       default:
         if (currentView.startsWith("project:")) {
           return projectTasks === undefined || !projects
         }
+        if (currentView.startsWith("priority:")) {
+          return allTasksForFiltering === undefined
+        }
+        if (currentView.startsWith("label:")) {
+          return allTasksForFiltering === undefined
+        }
         return false
     }
-  }, [currentView, inboxTasks, todayTasks, upcomingTasks, projectTasks, projects])
+  }, [currentView, inboxTasks, todayTasks, upcomingTasks, projectTasks, overdueTasks, noDateTasks, allTasksForFiltering, projects])
 
   if (isLoading) {
     return (
@@ -199,6 +279,7 @@ export function TaskListView({ currentView }: TaskListViewProps) {
 function TaskRow({ task }: { task: Task }) {
   const [isEditing, setIsEditing] = useState(false)
   const completeTask = useMutation(api.todoist.actions.completeTask.completeTask)
+  const priority = usePriority(task.priority)
 
   const handleComplete = async () => {
     try {
@@ -264,18 +345,14 @@ function TaskRow({ task }: { task: Task }) {
 
         {/* Task metadata */}
         <div className="flex items-center gap-3 mt-2">
-          {/* Priority - only show for P2, P3, P4 */}
-          {task.priority > 1 && task.priority <= 4 && (
+          {/* Priority - only show if has priority flag */}
+          {priority?.showFlag && (
             <div className="flex items-center gap-1">
               <Flag
-                className={cn("h-3.5 w-3.5", {
-                  "text-blue-500": task.priority === 2,
-                  "text-orange-500": task.priority === 3,
-                  "text-red-500": task.priority === 4,
-                })}
+                className={cn("h-3.5 w-3.5", priority.colorClass)}
                 fill="currentColor"
               />
-              <span className="text-xs text-muted-foreground">P{task.priority}</span>
+              <span className="text-xs text-muted-foreground">{priority.uiPriority}</span>
             </div>
           )}
 
