@@ -1,3 +1,6 @@
 build:
   docker:
-    web: Dockerfile
+    web:
+      dockerfile: Dockerfile
+      args:
+        VITE_CONVEX_URL: $VITE_CONVEX_URL

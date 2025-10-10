@@ -15,7 +15,11 @@ RUN bun install --frozen-lockfile
 # Copy app source files
 COPY app ./
 
-# Build the app
+# Accept build arg for Convex URL
+ARG VITE_CONVEX_URL
+ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
+
+# Build the app with environment variable
 RUN bun run build
 
 # Production stage
