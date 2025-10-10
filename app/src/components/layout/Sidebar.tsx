@@ -7,6 +7,12 @@ import { api } from "@/convex/_generated/api"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
+import {
+  createPriorityQueueViews,
+  createSingleView,
+  expandPriorityProjects,
+  expandProjectWithChildren,
+} from "@/lib/viewHelpers"
 import type {
   TodoistLabelDoc,
   TodoistProjects,
@@ -17,8 +23,7 @@ import type { ViewConfig } from "@/types/views"
 
 interface SidebarProps {
   currentView: string
-  onViewChange: (view: string) => void
-  onMultiViewChange?: (views: ViewConfig[]) => void
+  onViewChange: (views: ViewConfig[]) => void
 }
 
 type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
@@ -148,14 +153,14 @@ function ProjectItem({
   project,
   currentView,
   onViewChange,
-  onMultiViewChange,
+  allProjects,
   expandNested,
   level = 0
 }: {
   project: ProjectTreeNode
   currentView: string
-  onViewChange: (view: string) => void
-  onMultiViewChange?: (views: ViewConfig[]) => void
+  onViewChange: (views: ViewConfig[]) => void
+  allProjects: ProjectTreeNode[]
   expandNested: boolean
   level?: number
 }) {
@@ -167,29 +172,29 @@ function ProjectItem({
   const priority = usePriority(project.metadata?.priority)
 
   const handleProjectClick = () => {
-    if (expandNested && hasChildren && onMultiViewChange) {
-      const views: ViewConfig[] = [
-        {
-          id: `project-${project.todoist_id}`,
-          type: "project",
-          value: `project:${project.todoist_id}`,
-          title: project.name,
-          collapsible: true,
-          expanded: true
-        },
-        ...project.children.map((child: ProjectTreeNode) => ({
-          id: `project-${child.todoist_id}`,
-          type: "project" as const,
-          value: `project:${child.todoist_id}`,
-          title: child.name,
-          collapsible: true,
-          expanded: true
-        }))
-      ]
-      onMultiViewChange(views)
+    if (expandNested && hasChildren) {
+      // Flatten all projects (including nested children) for the helper
+      const flatProjects = flattenAllProjects(allProjects)
+      const views = expandProjectWithChildren(project.todoist_id, flatProjects)
+      onViewChange(views)
     } else {
-      onViewChange(`project:${project.todoist_id}`)
+      onViewChange([createSingleView(`project:${project.todoist_id}`)])
     }
+  }
+
+  // Helper to flatten project tree for viewHelpers
+  function flattenAllProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
+    const result: ProjectTreeNode[] = []
+    function flatten(nodes: ProjectTreeNode[]) {
+      for (const node of nodes) {
+        result.push(node)
+        if (node.children.length > 0) {
+          flatten(node.children)
+        }
+      }
+    }
+    flatten(projects)
+    return result
   }
 
   return (
@@ -233,7 +238,7 @@ function ProjectItem({
           project={child}
           currentView={currentView}
           onViewChange={onViewChange}
-          onMultiViewChange={onMultiViewChange}
+          allProjects={allProjects}
           expandNested={expandNested}
           level={level + 1}
         />
@@ -245,7 +250,7 @@ function ProjectItem({
 type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
 type LabelSort = "taskCount" | "alphabetical"
 
-export function Sidebar({ currentView, onViewChange, onMultiViewChange }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange }: SidebarProps) {
   const [expandNested, setExpandNested] = useState(false)
   const [priorityMode, setPriorityMode] = useState<"tasks" | "projects">("tasks")
   const [projectSort, setProjectSort] = useState<ProjectSort>("hierarchy")
@@ -341,6 +346,17 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
             const Icon = item.icon
             const isActive = currentView === item.id
 
+            const handleItemClick = () => {
+              // Handle priority queue multi-view expansion
+              if (item.id === "multi:priority-queue") {
+                const views = createPriorityQueueViews(projectsData || [])
+                onViewChange(views)
+              } else {
+                // Simple single view
+                onViewChange([createSingleView(item.id)])
+              }
+            }
+
             return (
               <Button
                 key={item.id}
@@ -349,7 +365,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
                   "w-full justify-start h-9 px-3 text-sm", // Increased height and padding
                   isActive && "bg-accent"
                 )}
-                onClick={() => onViewChange(item.id)}
+                onClick={handleItemClick}
               >
                 <Icon className="h-4 w-4 mr-3" />
                 <span className="flex-1 text-left">{item.label}</span>
@@ -412,7 +428,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
               project={project}
               currentView={currentView}
               onViewChange={onViewChange}
-              onMultiViewChange={onMultiViewChange}
+              allProjects={projectTree}
               expandNested={expandNested}
               level={0}
             />
@@ -449,7 +465,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
                   "w-full justify-start h-8 px-3 text-sm",
                   isActive && "bg-accent"
                 )}
-                onClick={() => onViewChange(`time:${timeFilter.id}`)}
+                onClick={() => onViewChange([createSingleView(`time:${timeFilter.id}`)])}
               >
                 <Icon className={cn("h-4 w-4 mr-3", timeFilter.color)} />
                 <span className="flex-1 text-left">{timeFilter.label}</span>
@@ -495,26 +511,16 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
             const count = priorityFilterCounts?.priorityCounts.find((c: { priority: number; filteredTaskCount: number }) => c.priority === priority.priorityLevel)?.filteredTaskCount || 0
 
             const handlePriorityClick = () => {
-              if (priorityMode === "projects" && onMultiViewChange) {
-                const priorityProjects = projectsData?.filter(
-                  (p: TodoistProjectWithMetadata) => p.metadata?.priority === priority.priorityLevel
-                ) || []
-
-                if (priorityProjects.length > 0) {
-                  const views: ViewConfig[] = priorityProjects.map((project: TodoistProjectWithMetadata) => ({
-                    id: `project-${project.todoist_id}`,
-                    type: "project" as const,
-                    value: `project:${project.todoist_id}`,
-                    title: project.name,
-                    collapsible: true,
-                    expanded: true
-                  }))
-                  onMultiViewChange(views)
+              if (priorityMode === "projects") {
+                const views = expandPriorityProjects(priority.id, projectsData || [])
+                // If no projects found, fall back to priority task view
+                if (views.length === 0) {
+                  onViewChange([createSingleView(`priority:${priority.id}`)])
                 } else {
-                  onViewChange(`priority:${priority.id}`)
+                  onViewChange(views)
                 }
               } else {
-                onViewChange(`priority:${priority.id}`)
+                onViewChange([createSingleView(`priority:${priority.id}`)])
               }
             }
 
@@ -571,7 +577,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
                   "w-full justify-start h-8 px-3 text-sm",
                   isActive && "bg-accent"
                 )}
-                onClick={() => onViewChange(`label:${label.name}`)}
+                onClick={() => onViewChange([createSingleView(`label:${label.name}`)])}
               >
                 <Tag
                   className="h-4 w-4 mr-3"
@@ -599,7 +605,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
         <Button
           variant="ghost"
           className="w-full justify-start h-9 px-3 text-sm" // Match main navigation style
-          onClick={() => onViewChange("filters")}
+          onClick={() => onViewChange([createSingleView("filters")])}
         >
           <Filter className="h-4 w-4 mr-3" />
           <span className="flex-1 text-left">Filters & Labels</span>
@@ -607,7 +613,7 @@ export function Sidebar({ currentView, onViewChange, onMultiViewChange }: Sideba
         <Button
           variant="ghost"
           className="w-full justify-start h-9 px-3 text-sm" // Match main navigation style
-          onClick={() => onViewChange("settings")}
+          onClick={() => onViewChange([createSingleView("settings")])}
         >
           <Settings className="h-4 w-4 mr-3" />
           <span className="flex-1 text-left">Settings</span>

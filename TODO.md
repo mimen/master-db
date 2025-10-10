@@ -49,5 +49,56 @@ Monitor label query performance. Implement only if:
 ---
 
 ## Future Enhancements
+
+### URL-Based View State Persistence
+**Status**: Planned
+**Priority**: Medium
+**Dependencies**: Phase 1 view refactor (✅ completed)
+
+**Goal**:
+Preserve view state in URL for shareable views and browser navigation support.
+
+**Implementation Approach**:
+- Add React Router or Tanstack Router (evaluate both)
+- URL structure: `/inbox`, `/project/123`, `/multi/priority/p1`
+- Serialize `ViewConfig[]` to URL params for multi-views
+- Support browser back/forward navigation
+- Enable deep linking and view sharing
+
+**Considerations**:
+- **Router choice**: Evaluate React Router vs Tanstack Router vs Wouter
+  - React Router: Industry standard, larger bundle (~10KB)
+  - Tanstack Router: Type-safe, modern, better DevEx
+  - Wouter: Minimal (~1.5KB), simple
+- **Serialization**: Complex multi-views need robust URL encoding/decoding
+- **Backward compatibility**: Handle direct URL access gracefully
+- **State sync**: Keep URL in sync with view state changes
+- **Migration**: No breaking changes for existing users
+
+**Technical Design**:
+```typescript
+// Example URL patterns
+/inbox                    → Single inbox view
+/project/123              → Single project view
+/multi/priority-queue     → Priority queue multi-view (serialized)
+/multi/priority/p1        → P1 projects multi-view
+/project/123/children     → Project with children expanded
+
+// ViewConfig[] serialization
+function serializeViews(views: ViewConfig[]): string
+function deserializeViews(url: string): ViewConfig[]
+```
+
+**Estimated Effort**: 6-8 hours
+
+**Benefits**:
+- ✅ Shareable task views via URL
+- ✅ Browser back/forward support
+- ✅ Bookmark specific views
+- ✅ Deep linking from external tools
+- ✅ Better UX for multi-tab workflows
+
+---
+
 - [ ] Add more items as needed
 
