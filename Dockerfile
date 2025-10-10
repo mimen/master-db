@@ -23,12 +23,11 @@ FROM oven/bun:1-slim
 
 WORKDIR /app
 
-# Copy built files and dependencies
+# Install serve for static file hosting
+RUN bun add -g serve
+
+# Copy built files
 COPY --from=builder /workspace/app/dist ./dist
-COPY --from=builder /workspace/app/package.json ./
-COPY --from=builder /workspace/app/node_modules ./node_modules
 
-# Expose port (Heroku will set this dynamically)
-EXPOSE $PORT
-
-CMD ["bunx", "--bun", "vite", "preview", "--port", "$PORT", "--host", "0.0.0.0"]
+# Use shell form to properly expand PORT environment variable
+CMD serve -s dist -l $PORT
