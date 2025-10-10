@@ -282,7 +282,7 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
               // Add priority flag for project views
               if (currentView.startsWith("project:")) {
                 const projectId = currentView.replace("project:", "")
-                const projectWithMetadata = projectsWithMetadata?.find(p => p.todoist_id === projectId)
+                const projectWithMetadata = projectsWithMetadata?.find((p: { todoist_id: string }) => p.todoist_id === projectId)
                 const priorityLevel = projectWithMetadata?.metadata?.priority
                 const priorityInfo = priorityLevel ? usePriority(priorityLevel) : null
 

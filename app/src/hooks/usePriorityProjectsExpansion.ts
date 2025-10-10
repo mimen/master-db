@@ -49,7 +49,7 @@ export function usePriorityProjectsExpansion(view: string): ViewConfig[] | null 
       return []
     }
 
-    const viewConfigs = projects.map((project) => ({
+    const viewConfigs = projects.map((project: { todoist_id: string; name: string }) => ({
       id: `project-${project.todoist_id}`,
       type: "project" as const,
       value: `project:${project.todoist_id}`,

@@ -247,8 +247,8 @@ export function Layout() {
     }
 
     const eventTarget =
-      typeof globalThis !== "undefined" && typeof (globalThis as Window).addEventListener === "function"
-        ? (globalThis as Window)
+      typeof window !== "undefined"
+        ? window
         : undefined
 
     eventTarget?.addEventListener("keydown", handleKeyDown)

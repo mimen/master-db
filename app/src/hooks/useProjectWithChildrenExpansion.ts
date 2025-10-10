@@ -24,12 +24,12 @@ export function useProjectWithChildrenExpansion(view: string): ViewConfig[] | nu
   return useMemo(() => {
     if (!allProjects || !projectId) return null
 
-    const parentProject = allProjects.find((p) => p.todoist_id === projectId)
+    const parentProject = allProjects.find((p: { todoist_id: string }) => p.todoist_id === projectId)
     if (!parentProject) return null
 
     const children = allProjects
-      .filter((p) => p.parent_id === projectId)
-      .sort((a, b) => a.child_order - b.child_order)
+      .filter((p: { parent_id?: string }) => p.parent_id === projectId)
+      .sort((a: { child_order: number }, b: { child_order: number }) => a.child_order - b.child_order)
 
     const views: ViewConfig[] = [
       {
@@ -40,7 +40,7 @@ export function useProjectWithChildrenExpansion(view: string): ViewConfig[] | nu
         collapsible: true,
         expanded: true,
       },
-      ...children.map((child) => ({
+      ...children.map((child: { todoist_id: string; name: string }) => ({
         id: `project-${child.todoist_id}`,
         type: "project" as const,
         value: `project:${child.todoist_id}`,
