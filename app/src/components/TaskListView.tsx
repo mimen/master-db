@@ -217,6 +217,17 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
 
   const { title, description, icon } = getViewInfo()
 
+  // Compute project priority for header
+  const currentProjectId = currentView.startsWith("project:") ? currentView.replace("project:", "") : null
+  const currentProjectMetadata = currentProjectId && projectsWithMetadata
+    ? projectsWithMetadata.find((p: { todoist_id: string }) => p.todoist_id === currentProjectId)
+    : null
+  const currentProjectPriorityLevel = currentProjectMetadata?.metadata?.priority || 1
+  // Always call Hook (React rules) - will return P4/Normal if no priority set
+  const projectPriorityInfoRaw = usePriority(currentProjectPriorityLevel)
+  // Only use if viewing a project view
+  const projectPriorityInfo = currentProjectId ? projectPriorityInfoRaw : null
+
   const isLoading = tasks === undefined || (currentView === "inbox" && !inboxProject)
 
   const toggleExpanded = () => {
@@ -276,28 +287,14 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
         {icon}
         <div className="flex-1">
           <h1 className="text-2xl font-bold">
-            {(() => {
-              const displayTitle = viewConfig.title || title
-
-              // Add priority flag for project views
-              if (currentView.startsWith("project:")) {
-                const projectId = currentView.replace("project:", "")
-                const projectWithMetadata = projectsWithMetadata?.find((p: { todoist_id: string }) => p.todoist_id === projectId)
-                const priorityLevel = projectWithMetadata?.metadata?.priority
-                const priorityInfo = priorityLevel ? usePriority(priorityLevel) : null
-
-                if (priorityInfo?.showFlag) {
-                  return (
-                    <div className="flex items-center gap-2">
-                      <span>{displayTitle}</span>
-                      <Flag className={cn("h-4 w-4", priorityInfo.colorClass)} fill="currentColor" />
-                    </div>
-                  )
-                }
-              }
-
-              return displayTitle
-            })()}
+            {projectPriorityInfo?.showFlag ? (
+              <div className="flex items-center gap-2">
+                <span>{viewConfig.title || title}</span>
+                <Flag className={cn("h-4 w-4", projectPriorityInfo.colorClass)} fill="currentColor" />
+              </div>
+            ) : (
+              viewConfig.title || title
+            )}
           </h1>
           <p className="text-muted-foreground mt-1">{description}</p>
         </div>
