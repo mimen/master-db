@@ -1,17 +1,17 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { fileURLToPath } from 'url'
-import { dirname, resolve } from 'path'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+const __dirname = path.dirname(__filename)
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@": resolve(__dirname, "./src"),
-      "@convex": resolve(__dirname, "../convex"),
+      "@": path.resolve(__dirname, "./src"),
+      "@convex": path.resolve(__dirname, "../convex"),
     },
   },
   server: {
