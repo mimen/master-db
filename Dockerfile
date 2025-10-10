@@ -15,9 +15,8 @@ RUN bun install --frozen-lockfile
 # Copy app source files
 COPY app ./
 
-# Accept build arg for Convex URL
-ARG VITE_CONVEX_URL
-ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
+# Set Convex URL for build (hardcoded for now)
+ENV VITE_CONVEX_URL=https://shiny-gerbil-853.convex.cloud
 
 # Build the app with environment variable
 RUN bun run build
