@@ -4,6 +4,7 @@ import { CompleteTaskDialog } from './CompleteTaskDialog'
 import { DeadlineDialog } from './DeadlineDialog'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
 import { DueDateDialog } from './DueDateDialog'
+import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { LabelDialog } from './LabelDialog'
 import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
@@ -12,7 +13,7 @@ import { useDialogContext } from '@/contexts/OverlayContext'
 import { api } from '@/convex/_generated/api'
 
 export function DialogManager() {
-  const { currentTask, dialogType, closeDialog } = useDialogContext()
+  const { currentTask, dialogType, isShortcutsOpen, closeDialog } = useDialogContext()
   const updateTask = useAction(api.todoist.publicActions.updateTask)
   const moveTask = useAction(api.todoist.publicActions.moveTask)
   const completeTask = useAction(api.todoist.publicActions.completeTask)
@@ -149,6 +150,10 @@ export function DialogManager() {
       <DeleteTaskDialog
         task={dialogType === 'delete' ? currentTask : null}
         onConfirm={handleDelete}
+        onClose={closeDialog}
+      />
+      <KeyboardShortcutsDialog
+        isOpen={isShortcutsOpen}
         onClose={closeDialog}
       />
     </>

@@ -3,11 +3,12 @@ import type { ReactNode } from 'react'
 
 import type { TodoistTask } from '@/types/convex/todoist'
 
-export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete'
+export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'shortcuts'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
   dialogType: DialogType | null
+  isShortcutsOpen: boolean
   openPriority: (task: TodoistTask) => void
   openProject: (task: TodoistTask) => void
   openLabel: (task: TodoistTask) => void
@@ -15,6 +16,7 @@ interface DialogContextValue {
   openDeadline: (task: TodoistTask) => void
   openComplete: (task: TodoistTask) => void
   openDelete: (task: TodoistTask) => void
+  openShortcuts: () => void
   closeDialog: () => void
 }
 
@@ -23,6 +25,7 @@ const DialogContext = createContext<DialogContextValue | null>(null)
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [currentTask, setCurrentTask] = useState<TodoistTask | null>(null)
   const [dialogType, setDialogType] = useState<DialogType | null>(null)
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
 
   const openPriority = useCallback((task: TodoistTask) => {
     setCurrentTask(task)
@@ -59,14 +62,21 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialogType('delete')
   }, [])
 
+  const openShortcuts = useCallback(() => {
+    setIsShortcutsOpen(true)
+    setDialogType('shortcuts')
+  }, [])
+
   const closeDialog = useCallback(() => {
     setCurrentTask(null)
     setDialogType(null)
+    setIsShortcutsOpen(false)
   }, [])
 
   const value: DialogContextValue = {
     currentTask,
     dialogType,
+    isShortcutsOpen,
     openPriority,
     openProject,
     openLabel,
@@ -74,6 +84,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     openDeadline,
     openComplete,
     openDelete,
+    openShortcuts,
     closeDialog
   }
 

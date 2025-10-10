@@ -4,6 +4,7 @@ import { TaskListView } from "../TaskListView"
 
 import { Sidebar } from "./Sidebar"
 
+import { useDialogContext } from "@/contexts/OverlayContext"
 import type { ViewConfig } from "@/types/views"
 
 type Selection = {
@@ -12,6 +13,7 @@ type Selection = {
 }
 
 export function Layout() {
+  const { openShortcuts } = useDialogContext()
   const [activeViews, setActiveViews] = useState<ViewConfig[]>([
     { id: "main", type: "inbox", value: "inbox", expanded: true, collapsible: false }
   ])
@@ -143,6 +145,13 @@ export function Layout() {
 
       if (isTextInput) return
 
+      // Global shortcuts
+      if (event.key === "?" && event.shiftKey) {
+        event.preventDefault()
+        openShortcuts()
+        return
+      }
+
       if (event.key === "ArrowDown" || event.key === "ArrowRight") {
         event.preventDefault()
         handleArrowNavigation(1)
@@ -161,7 +170,7 @@ export function Layout() {
     return () => {
       eventTarget?.removeEventListener("keydown", handleKeyDown)
     }
-  }, [handleArrowNavigation])
+  }, [handleArrowNavigation, openShortcuts])
 
   return (
     <div className="min-h-screen bg-background text-foreground">
