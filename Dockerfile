@@ -15,8 +15,9 @@ RUN bun install --frozen-lockfile
 # Copy app source files
 COPY app ./
 
-# Set Convex URL for build (hardcoded for now)
-ENV VITE_CONVEX_URL=https://shiny-gerbil-853.convex.cloud
+# Accept Convex URL as build arg from heroku.yml
+ARG VITE_CONVEX_URL
+ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
 
 # Build the app with environment variable
 RUN bun run build

@@ -1,3 +1,5 @@
 build:
+  config:
+    VITE_CONVEX_URL: https://shiny-gerbil-853.convex.cloud
   docker:
     web: Dockerfile
