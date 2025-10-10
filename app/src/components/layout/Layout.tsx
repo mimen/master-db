@@ -5,6 +5,7 @@ import { TaskListView } from "../TaskListView"
 import { Sidebar } from "./Sidebar"
 
 import { useDialogContext } from "@/contexts/DialogContext"
+import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts"
 import type { ViewConfig } from "@/types/views"
 
 type Selection = {
@@ -131,46 +132,11 @@ export function Layout() {
     })
   }, [updateSelection, viewIds])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Tab") {
-        event.preventDefault()
-        return
-      }
-
-      const target = event.target as HTMLElement | null
-      const isEditable = target?.isContentEditable
-      const tagName = target?.tagName
-      const isTextInput = tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" || isEditable
-
-      if (isTextInput) return
-
-      // Global shortcuts
-      if (event.key === "?" && event.shiftKey) {
-        event.preventDefault()
-        openShortcuts()
-        return
-      }
-
-      if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-        event.preventDefault()
-        handleArrowNavigation(1)
-      } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-        event.preventDefault()
-        handleArrowNavigation(-1)
-      }
-    }
-
-    const eventTarget =
-      typeof window !== "undefined"
-        ? window
-        : undefined
-
-    eventTarget?.addEventListener("keydown", handleKeyDown)
-    return () => {
-      eventTarget?.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [handleArrowNavigation, openShortcuts])
+  useGlobalShortcuts({
+    onNavigateNext: () => handleArrowNavigation(1),
+    onNavigatePrevious: () => handleArrowNavigation(-1),
+    onShowHelp: openShortcuts,
+  })
 
   return (
     <div className="min-h-screen bg-background text-foreground">
