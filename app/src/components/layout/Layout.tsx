@@ -4,7 +4,7 @@ import { TaskListView } from "../TaskListView"
 
 import { Sidebar } from "./Sidebar"
 
-import { useDialogContext } from "@/contexts/OverlayContext"
+import { useDialogContext } from "@/contexts/DialogContext"
 import type { ViewConfig } from "@/types/views"
 
 type Selection = {

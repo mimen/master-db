@@ -9,7 +9,7 @@ import { LabelDialog } from './LabelDialog'
 import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
 
-import { useDialogContext } from '@/contexts/OverlayContext'
+import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
 
 export function DialogManager() {

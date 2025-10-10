@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { useDialogContext } from '@/contexts/OverlayContext'
+import { useDialogContext } from '@/contexts/DialogContext'
 import type { TodoistTask } from '@/types/convex/todoist'
 
 export function useTaskDialogShortcuts(focusedTask: TodoistTask | null) {
