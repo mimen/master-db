@@ -7,7 +7,6 @@ import type {
   ListInstance,
   ListInstanceOptions,
   ListPresentationContext,
-  ListQueryDefinition,
   ListQueryInput,
   TimeRange,
 } from "./types"

@@ -1,8 +1,9 @@
-import { useAction, useQuery } from "convex/react"
+import { useQuery } from "convex/react"
 import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User } from "lucide-react"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
+import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
@@ -258,15 +259,18 @@ interface TaskRowProps {
 }
 
 const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowProps) {
-  const completeTask = useAction(api.todoist.actions.completeTask.completeTask)
+  const completeTask = useTodoistAction(
+    api.todoist.actions.completeTask.completeTask,
+    {
+      loadingMessage: "Completing task...",
+      successMessage: "Task completed!",
+      errorMessage: "Failed to complete task"
+    }
+  )
   const priority = usePriority(task.priority)
 
   const handleComplete = async () => {
-    try {
-      await completeTask({ todoistId: task.todoist_id })
-    } catch (error) {
-      console.error("Failed to complete task:", error)
-    }
+    await completeTask({ todoistId: task.todoist_id })
   }
 
   const formatDueDate = (due: TodoistTaskWithProject["due"]) => {
