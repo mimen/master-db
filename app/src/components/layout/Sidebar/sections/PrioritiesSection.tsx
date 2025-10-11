@@ -2,6 +2,7 @@ import { Flag } from "lucide-react"
 
 import { SidebarButton } from "../components/SidebarButton"
 
+import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
@@ -16,10 +17,10 @@ interface PrioritiesSectionProps {
 }
 
 const PRIORITY_FILTERS = [
-  { id: "p1", label: "Priority 1", icon: Flag, color: "text-red-500", priorityLevel: 4 },
-  { id: "p2", label: "Priority 2", icon: Flag, color: "text-orange-500", priorityLevel: 3 },
-  { id: "p3", label: "Priority 3", icon: Flag, color: "text-blue-500", priorityLevel: 2 },
-  { id: "p4", label: "Priority 4", icon: Flag, color: "text-gray-500", priorityLevel: 1 },
+  { id: "p1", label: "Priority 1", icon: Flag, priorityLevel: 4 },
+  { id: "p2", label: "Priority 2", icon: Flag, priorityLevel: 3 },
+  { id: "p3", label: "Priority 3", icon: Flag, priorityLevel: 2 },
+  { id: "p4", label: "Priority 4", icon: Flag, priorityLevel: 1 },
 ] as const
 
 export function PrioritiesSection({
@@ -60,11 +61,12 @@ export function PrioritiesSection({
           const isActive = currentViewKey === viewKey
           const count =
             counts?.priorityCounts.find((c) => c.priority === priority.priorityLevel)?.filteredTaskCount || 0
+          const colorClass = getPriorityColorClass(priority.priorityLevel)
 
           return (
             <SidebarButton
               key={priority.id}
-              icon={<Icon className={cn(priority.color, "h-4 w-4 mr-3")} fill="currentColor" />}
+              icon={<Icon className={cn(colorClass, "h-4 w-4 mr-3")} fill="currentColor" />}
               label={priority.label}
               count={count}
               isActive={isActive}

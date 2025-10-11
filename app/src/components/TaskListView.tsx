@@ -323,7 +323,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
           void handleComplete()
         }}
         className={cn(
-          "group mt-1 flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/40 bg-background transition-colors",
+          "group mt-1 flex h-5 w-5 items-center justify-center rounded-full border-[1.75px] border-muted-foreground/40 bg-background transition-colors",
           priority?.colorClass && "border-current",
           priority?.colorClass
         )}
@@ -333,27 +333,22 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       </button>
 
       <div className="flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <div className="font-medium">
-            {markdownSegments.map((segment, index) =>
-              segment.type === "text" ? (
-                <span key={index}>{segment.content}</span>
-              ) : (
-                <a
-                  key={index}
-                  href={segment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {segment.content}
-                </a>
-              )
-            )}
-          </div>
-          {priority?.showFlag && (
-            <Flag className={cn("h-3 w-3", priority.colorClass)} fill="currentColor" />
+        <div className="font-medium">
+          {markdownSegments.map((segment, index) =>
+            segment.type === "text" ? (
+              <span key={index}>{segment.content}</span>
+            ) : (
+              <a
+                key={index}
+                href={segment.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {segment.content}
+              </a>
+            )
           )}
         </div>
 
@@ -395,6 +390,13 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
             <span className="inline-flex items-center gap-1">
               <Tag className="h-3 w-3" />
               {task.labels.join(", ")}
+            </span>
+          )}
+
+          {priority?.showFlag && (
+            <span className={cn("inline-flex items-center gap-1", priority.colorClass)}>
+              <Flag className="h-3 w-3" fill="currentColor" />
+              {priority.label}
             </span>
           )}
         </div>

@@ -226,7 +226,7 @@ const priorityDefinition: ListDefinition<{ level: 1 | 2 | 3 | 4 }> = {
   getHeader: ({ taskCount, params }) => {
     const priorityInfo = getPriorityInfo(params.level)
     const colorClass = getPriorityColorClass(params.level)
-    const label = priorityInfo?.shortLabel ?? `P${params.level}`
+    const label = priorityInfo?.uiPriority ?? `P${params.level}`
 
     return {
       title: label,
@@ -237,7 +237,8 @@ const priorityDefinition: ListDefinition<{ level: 1 | 2 | 3 | 4 }> = {
     }
   },
   getEmptyState: ({ params }) => {
-    const label = `P${params.level}`
+    const priorityInfo = getPriorityInfo(params.level)
+    const label = priorityInfo?.uiPriority ?? `P${params.level}`
     return {
       title: "No tasks here!",
       description: `No ${label} tasks found`,

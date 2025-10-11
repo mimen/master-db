@@ -39,6 +39,7 @@ export function usePriority(apiPriority?: number) {
   return {
     ...info,
     colorClass: getPriorityColorClass(apiPriority),
+    label: info.uiPriority,
   };
 }
 

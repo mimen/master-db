@@ -102,12 +102,13 @@ export function shouldShowFlag(apiPriority?: number): boolean {
  */
 export function getPriorityColorClass(apiPriority?: number): string | null {
   const info = getPriorityInfo(apiPriority);
-  if (!info?.color) return null;
+  if (!info) return null;
 
   switch (info.color) {
     case "red": return "text-red-500";
     case "orange": return "text-orange-500";
     case "blue": return "text-blue-500";
+    case null: return "text-gray-500"; // P4 gets gray color
     default: return null;
   }
 }
