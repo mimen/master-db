@@ -352,30 +352,31 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
     // STEP 2: Exit edit mode - optimistic values will show immediately
     setIsEditing(false)
 
-    // STEP 3: Fire action in background (has its own DB-level optimistic update)
+    // STEP 3: Fire action in background (calls API + syncs to DB on success)
     const result = await updateTask({
       todoistId: task.todoist_id,
       ...updates
     })
 
-    // STEP 4: If action failed, revert optimistic values
+    // STEP 4: If action failed, clear optimistic values to show original data
     if (result === null) {
-      // Action failed - revert to original values
+      // Action failed - clear optimistic state so original DB value shows through
       setOptimisticContent(null)
       setOptimisticDescription(null)
     }
-    // If success, optimistic values will be cleared when Convex reactivity updates task prop
+    // If success, optimistic values will be cleared when DB updates via Convex reactivity
   }
 
-  // Clear optimistic values when real data arrives from Convex
+  // Clear optimistic values when DB value changes (API completed and synced)
+  // Since we no longer do DB-level optimistic updates, any DB change means the API call finished
   useEffect(() => {
-    if (optimisticContent !== null && task.content === optimisticContent) {
+    if (optimisticContent !== null) {
       setOptimisticContent(null)
     }
-    if (optimisticDescription !== null && task.description === optimisticDescription) {
+    if (optimisticDescription !== null) {
       setOptimisticDescription(null)
     }
-  }, [task.content, task.description, optimisticContent, optimisticDescription])
+  }, [task.content, task.description])
 
   // Focus content input when entering edit mode
   useEffect(() => {
