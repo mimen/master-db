@@ -285,7 +285,7 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
         count: inboxProject?.stats.activeCount || null,
       },
       {
-        key: "view:priority-queue",
+        key: "view:multi:priority-queue",
         label: "Priority Queue",
         icon: Filter,
         count: null,

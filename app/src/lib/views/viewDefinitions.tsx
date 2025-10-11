@@ -1,9 +1,9 @@
 import { Filter, Inbox } from "lucide-react"
 
 import { instantiateList, listDefinitions } from "./listDefinitions"
+import { BUILT_IN_MULTI_LISTS } from "../multi-list/defaults"
 import type {
   ListInstance,
-  ListInstanceOverrides,
   TimeRange,
   ViewBuildContext,
   ViewKey,
@@ -13,6 +13,16 @@ import type {
 
 function createListId(viewKey: ViewKey, suffix: string | number): string {
   return `${viewKey}:${suffix}`
+}
+
+function normalizeViewKey(view: string): ViewKey {
+  if (view.startsWith("view:")) {
+    return view as ViewKey
+  }
+  if (view.startsWith("multi:")) {
+    return `view:${view}` as ViewKey
+  }
+  return `view:${view}` as ViewKey
 }
 
 function buildTimeList(
@@ -165,6 +175,45 @@ export function resolveView(
       }
 
       push(buildTimeList(viewKey, "upcoming", lists.length))
+      break
+    }
+    case viewKey.startsWith("view:multi:"): {
+      const multiId = viewKey.replace("view:multi:", "")
+      const multi = BUILT_IN_MULTI_LISTS.find((list) => list.id === multiId)
+      if (!multi) {
+        break
+      }
+
+      metadata.title = multi.name
+      metadata.icon = multi.icon
+      metadata.description = multi.description
+
+      multi.sequence.forEach((item, sequenceIndex) => {
+        const targetKey = normalizeViewKey(item.view)
+        const nestedView = resolveView(targetKey, context)
+
+        nestedView.lists.forEach((nestedList) => {
+          const customHeader = (ctx: Parameters<typeof nestedList.getHeader>[0]) => {
+            const base = nestedList.getHeader(ctx)
+            return {
+              ...base,
+              title: item.name ?? base.title,
+              icon: item.icon ?? base.icon,
+            }
+          }
+
+          const nextList: ListInstance = {
+            ...nestedList,
+            id: createListId(viewKey, `${sequenceIndex}-${nestedList.id}`),
+            viewKey,
+            indexInView: lists.length,
+            maxTasks: item.maxTasks ?? nestedList.maxTasks,
+            getHeader: customHeader,
+          }
+
+          lists.push(nextList)
+        })
+      })
       break
     }
     case viewKey.startsWith("view:project:"): {
