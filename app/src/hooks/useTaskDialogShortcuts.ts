@@ -16,6 +16,24 @@ export function useTaskDialogShortcuts(focusedTask: TodoistTask | null) {
       }
 
       switch (e.key) {
+        case 'Enter':
+          if (!e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            // Find the task row element and call its startEditing function
+            const taskElement = document.querySelector(`[data-task-id="${focusedTask.todoist_id}"]`) as HTMLElement & { startEditing?: () => void; startEditingDescription?: () => void }
+            if (e.shiftKey) {
+              // Shift+Enter: Start editing description
+              if (taskElement?.startEditingDescription) {
+                taskElement.startEditingDescription()
+              }
+            } else {
+              // Enter: Start editing content
+              if (taskElement?.startEditing) {
+                taskElement.startEditing()
+              }
+            }
+          }
+          break
         case 'p':
           if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
             e.preventDefault()

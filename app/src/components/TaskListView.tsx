@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react"
 import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User } from "lucide-react"
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
@@ -259,6 +259,12 @@ interface TaskRowProps {
 }
 
 const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(task.content)
+  const [editDescription, setEditDescription] = useState(task.description || "")
+  const contentInputRef = useRef<HTMLInputElement>(null)
+  const descriptionInputRef = useRef<HTMLInputElement>(null)
+
   const completeTask = useTodoistAction(
     api.todoist.actions.completeTask.completeTask,
     {
@@ -267,11 +273,85 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       errorMessage: "Failed to complete task"
     }
   )
+
+  const updateTask = useTodoistAction(
+    api.todoist.publicActions.updateTask,
+    {
+      loadingMessage: "Updating task...",
+      successMessage: "Task updated!",
+      errorMessage: "Failed to update task"
+    }
+  )
+
   const priority = usePriority(task.priority)
 
   const handleComplete = async () => {
     await completeTask({ todoistId: task.todoist_id })
   }
+
+  const startEditing = useCallback(() => {
+    setIsEditing(true)
+    setEditContent(task.content)
+    setEditDescription(task.description || "")
+  }, [task.content, task.description])
+
+  const startEditingDescription = useCallback(() => {
+    setIsEditing(true)
+    setEditContent(task.content)
+    setEditDescription(task.description || "")
+    // Focus description input after state update
+    setTimeout(() => {
+      descriptionInputRef.current?.focus()
+    }, 0)
+  }, [task.content, task.description])
+
+  // Expose startEditing and startEditingDescription to parent
+  useEffect(() => {
+    // Store the functions on the task element for parent access
+    const element = document.querySelector(`[data-task-id="${task.todoist_id}"]`) as HTMLElement & {
+      startEditing?: () => void
+      startEditingDescription?: () => void
+    }
+    if (element) {
+      element.startEditing = startEditing
+      element.startEditingDescription = startEditingDescription
+    }
+  }, [task.todoist_id, startEditing, startEditingDescription])
+
+  const cancelEditing = () => {
+    setIsEditing(false)
+    setEditContent(task.content)
+    setEditDescription(task.description || "")
+  }
+
+  const saveEditing = async () => {
+    const hasContentChanged = editContent !== task.content
+    const hasDescriptionChanged = editDescription !== (task.description || "")
+
+    if (!hasContentChanged && !hasDescriptionChanged) {
+      setIsEditing(false)
+      return
+    }
+
+    setIsEditing(false)
+
+    const updates: Record<string, unknown> = {}
+    if (hasContentChanged) updates.content = editContent
+    if (hasDescriptionChanged) updates.description = editDescription
+
+    await updateTask({
+      todoistId: task.todoist_id,
+      ...updates
+    })
+  }
+
+  // Focus content input when entering edit mode
+  useEffect(() => {
+    if (isEditing && contentInputRef.current) {
+      contentInputRef.current.focus()
+      contentInputRef.current.select()
+    }
+  }, [isEditing])
 
   const formatDueDate = (due: TodoistTaskWithProject["due"]) => {
     if (!due) return { text: null, isOverdue: false }
@@ -316,8 +396,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       tabIndex={-1}
       aria-selected={false}
       onClick={onClick}
+      data-task-id={task.todoist_id}
       className={cn(
-        "flex items-start gap-3 rounded-md border border-transparent bg-background p-3 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
+        "flex items-start gap-3 rounded-md border border-transparent bg-background p-3 text-left text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring",
         "hover:border-border hover:bg-muted/50"
       )}
     >
@@ -337,27 +418,73 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       </button>
 
       <div className="flex-1 space-y-1">
-        <div className="font-medium">
-          {markdownSegments.map((segment, index) =>
-            segment.type === "text" ? (
-              <span key={index}>{segment.content}</span>
-            ) : (
-              <a
-                key={index}
-                href={segment.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {segment.content}
-              </a>
-            )
-          )}
-        </div>
+        {isEditing ? (
+          <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+            <input
+              ref={contentInputRef}
+              type="text"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void saveEditing()
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  cancelEditing()
+                } else if (e.key === "Tab") {
+                  e.preventDefault()
+                  descriptionInputRef.current?.focus()
+                }
+              }}
+              className="w-full -mx-0.5 px-0.5 text-sm font-medium bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded"
+            />
+            <input
+              ref={descriptionInputRef}
+              type="text"
+              value={editDescription}
+              placeholder="Description (optional)"
+              onChange={(e) => setEditDescription(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void saveEditing()
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  cancelEditing()
+                } else if (e.key === "Tab" && e.shiftKey) {
+                  e.preventDefault()
+                  contentInputRef.current?.focus()
+                }
+              }}
+              className="w-full -mx-0.5 px-0.5 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded placeholder:text-muted-foreground/50"
+            />
+          </div>
+        ) : (
+          <>
+            <div className="font-medium">
+              {markdownSegments.map((segment, index) =>
+                segment.type === "text" ? (
+                  <span key={index}>{segment.content}</span>
+                ) : (
+                  <a
+                    key={index}
+                    href={segment.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {segment.content}
+                  </a>
+                )
+              )}
+            </div>
 
-        {task.description && (
-          <p className="text-xs text-muted-foreground">{task.description}</p>
+            {task.description && (
+              <p className="text-xs text-muted-foreground">{task.description}</p>
+            )}
+          </>
         )}
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
