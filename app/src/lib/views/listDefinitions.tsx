@@ -180,7 +180,7 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
 
     const projectIcon = project ? (
       <div
-        className="w-3 h-3 rounded-full mr-3 flex-shrink-0"
+        className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
         style={{ backgroundColor: getProjectColor(project.color) }}
       />
     ) : null

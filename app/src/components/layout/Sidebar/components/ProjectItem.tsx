@@ -55,7 +55,7 @@ export function ProjectItem({
         onClick={handleProjectClick}
       >
         <div
-          className="w-2 h-2 rounded-full mr-3 flex-shrink-0"
+          className="w-2.5 h-2.5 rounded-full mr-3 flex-shrink-0"
           style={{ backgroundColor: getProjectColor(project.color) }}
         />
         <span className="flex-1 text-left truncate">{project.name}</span>
