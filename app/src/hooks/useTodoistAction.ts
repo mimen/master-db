@@ -1,6 +1,6 @@
 import { useAction } from "convex/react"
-import { toast } from "sonner"
 import type { FunctionReference } from "convex/server"
+import { toast } from "sonner"
 
 interface TodoistActionConfig {
   loadingMessage: string
@@ -30,13 +30,13 @@ interface TodoistActionConfig {
  *
  * await completeTask({ todoistId: "123" })
  */
-export function useTodoistAction<T = any>(
+export function useTodoistAction<T = unknown>(
   actionRef: FunctionReference<"action">,
   config: TodoistActionConfig
 ) {
   const baseAction = useAction(actionRef)
 
-  return async (args: any): Promise<T | null> => {
+  return async (args: Record<string, unknown>): Promise<T | null> => {
     const toastId = toast.loading(config.loadingMessage)
 
     try {

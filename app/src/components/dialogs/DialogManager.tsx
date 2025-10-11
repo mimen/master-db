@@ -1,5 +1,3 @@
-import { useAction } from 'convex/react'
-
 import { CompleteTaskDialog } from './CompleteTaskDialog'
 import { DeadlineDialog } from './DeadlineDialog'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
@@ -11,108 +9,120 @@ import { ProjectDialog } from './ProjectDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
+import { useTodoistAction } from '@/hooks/useTodoistAction'
 
 export function DialogManager() {
   const { currentTask, dialogType, isShortcutsOpen, closeDialog } = useDialogContext()
-  const updateTask = useAction(api.todoist.publicActions.updateTask)
-  const moveTask = useAction(api.todoist.publicActions.moveTask)
-  const completeTask = useAction(api.todoist.publicActions.completeTask)
-  const deleteTask = useAction(api.todoist.publicActions.deleteTask)
+
+  const updateTask = useTodoistAction(api.todoist.publicActions.updateTask, {
+    loadingMessage: "Updating task...",
+    successMessage: "Task updated!",
+    errorMessage: "Failed to update task"
+  })
+
+  const moveTask = useTodoistAction(api.todoist.publicActions.moveTask, {
+    loadingMessage: "Moving task...",
+    successMessage: "Task moved!",
+    errorMessage: "Failed to move task"
+  })
+
+  const completeTask = useTodoistAction(api.todoist.publicActions.completeTask, {
+    loadingMessage: "Completing task...",
+    successMessage: "Task completed!",
+    errorMessage: "Failed to complete task"
+  })
+
+  const deleteTask = useTodoistAction(api.todoist.publicActions.deleteTask, {
+    loadingMessage: "Deleting task...",
+    successMessage: "Task deleted!",
+    errorMessage: "Failed to delete task"
+  })
 
   const handlePrioritySelect = async (priority: number) => {
     if (!currentTask) return
 
-    try {
-      await updateTask({
-        todoistId: currentTask.todoist_id,
-        priority
-      })
-      closeDialog()
-    } catch (error) {
-      console.error('Failed to update priority:', error)
-    }
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    updateTask({
+      todoistId: currentTask.todoist_id,
+      priority
+    })
   }
 
   const handleProjectSelect = async (projectId: string) => {
     if (!currentTask) return
 
-    try {
-      await moveTask({
-        todoistId: currentTask.todoist_id,
-        projectId
-      })
-      closeDialog()
-    } catch (error) {
-      console.error('Failed to update project:', error)
-    }
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    moveTask({
+      todoistId: currentTask.todoist_id,
+      projectId
+    })
   }
 
   const handleLabelSelect = async (labels: string[]) => {
     if (!currentTask) return
 
-    try {
-      await updateTask({
-        todoistId: currentTask.todoist_id,
-        labels
-      })
-    } catch (error) {
-      console.error('Failed to update labels:', error)
-    }
+    // Labels dialog doesn't auto-close, but run action immediately
+    updateTask({
+      todoistId: currentTask.todoist_id,
+      labels
+    })
   }
 
   const handleDueDateSelect = async (dueString: string) => {
     if (!currentTask) return
 
-    try {
-      await updateTask({
-        todoistId: currentTask.todoist_id,
-        dueString
-      })
-      closeDialog()
-    } catch (error) {
-      console.error('Failed to update due date:', error)
-    }
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    updateTask({
+      todoistId: currentTask.todoist_id,
+      dueString
+    })
   }
 
   const handleDeadlineSelect = async (deadlineDate: string) => {
     if (!currentTask) return
 
-    try {
-      await updateTask({
-        todoistId: currentTask.todoist_id,
-        deadlineDate: deadlineDate === 'no date' ? null : deadlineDate,
-        deadlineLang: deadlineDate === 'no date' ? null : 'en'
-      })
-      closeDialog()
-    } catch (error) {
-      console.error('Failed to update deadline:', error)
-    }
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    updateTask({
+      todoistId: currentTask.todoist_id,
+      deadlineDate: deadlineDate === 'no date' ? null : deadlineDate,
+      deadlineLang: deadlineDate === 'no date' ? null : 'en'
+    })
   }
 
   const handleComplete = async () => {
     if (!currentTask) return
 
-    try {
-      await completeTask({
-        todoistId: currentTask.todoist_id
-      })
-      closeDialog()
-    } catch (error) {
-      console.error('Failed to complete task:', error)
-    }
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    completeTask({
+      todoistId: currentTask.todoist_id
+    })
   }
 
   const handleDelete = async () => {
     if (!currentTask) return
 
-    try {
-      await deleteTask({
-        taskId: currentTask.todoist_id
-      })
-      closeDialog()
-    } catch (error) {
-      console.error('Failed to delete task:', error)
-    }
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    deleteTask({
+      taskId: currentTask.todoist_id
+    })
   }
 
   return (
