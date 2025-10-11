@@ -20,6 +20,50 @@ export const updateTask = action({
     deadlineLang: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args): Promise<ActionResponse<Task>> => {
+    // Build optimistic update object
+    const optimisticUpdates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+      sync_version: Date.now(),
+    };
+
+    if (args.content !== undefined) optimisticUpdates.content = args.content;
+    if (args.priority !== undefined) optimisticUpdates.priority = args.priority;
+    if (args.labels !== undefined) optimisticUpdates.labels = args.labels;
+    if (args.description !== undefined) optimisticUpdates.description = args.description;
+
+    // Handle due date for optimistic update
+    if (args.dueString !== undefined || args.dueDate !== undefined || args.dueDatetime !== undefined) {
+      // For optimistic update, we'll set a placeholder - real sync will fix it
+      optimisticUpdates.due = args.dueString
+        ? { date: new Date().toISOString().split('T')[0], string: args.dueString }
+        : args.dueDate
+        ? { date: args.dueDate }
+        : args.dueDatetime
+        ? { date: args.dueDatetime.split('T')[0], datetime: args.dueDatetime }
+        : null;
+    }
+
+    // Handle deadline for optimistic update
+    if (args.deadlineDate !== undefined) {
+      optimisticUpdates.deadline = args.deadlineDate
+        ? { date: args.deadlineDate, lang: args.deadlineLang || 'en' }
+        : null;
+    }
+
+    // Store original values for rollback
+    const existing = await ctx.runQuery(
+      internal.todoist.queries.getItemByTodoistId,
+      {
+        todoistId: args.todoistId
+      }
+    );
+
+    // STEP 1: OPTIMISTIC UPDATE - Update Convex immediately
+    await ctx.runMutation(internal.todoist.mutations.updateItem, {
+      todoistId: args.todoistId,
+      updates: optimisticUpdates,
+    });
+
     try {
       const client = getTodoistClient();
 
@@ -48,10 +92,10 @@ export const updateTask = action({
         }
       }
 
-      // Update task using SDK
+      // STEP 2: REAL UPDATE - Send to Todoist API
       const task = await client.updateTask(args.todoistId, updateArgs);
 
-      // Update in Convex with the response
+      // STEP 3: SYNC - Update with real API response
       await ctx.runMutation(internal.todoist.mutations.updateItem, {
         todoistId: args.todoistId,
         updates: {
@@ -60,7 +104,7 @@ export const updateTask = action({
           priority: task.priority,
           labels: task.labels,
           due: task.due ? {
-            date: task.due.date.split('T')[0], // Extract just the date part
+            date: task.due.date.split('T')[0],
             is_recurring: task.due.isRecurring,
             string: task.due.string,
             datetime: task.due.datetime || (task.due.date.includes('T') ? task.due.date : undefined),
@@ -77,6 +121,23 @@ export const updateTask = action({
 
       return { success: true, data: task };
     } catch (error) {
+      // STEP 4: ROLLBACK - Restore original values on error
+      if (existing) {
+        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+          todoistId: args.todoistId,
+          updates: {
+            content: existing.content,
+            description: existing.description,
+            priority: existing.priority,
+            labels: existing.labels,
+            due: existing.due,
+            deadline: existing.deadline,
+            updated_at: existing.updated_at,
+            sync_version: Date.now(),
+          },
+        });
+      }
+
       console.error("Failed to update task:", error);
       return {
         success: false,
