@@ -21,7 +21,7 @@ export const updateTask = action({
   },
   handler: async (ctx, args): Promise<ActionResponse<Task>> => {
     // Build optimistic update object
-    const optimisticUpdates: Record<string, any> = {
+    const optimisticUpdates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
       sync_version: Date.now(),
     };

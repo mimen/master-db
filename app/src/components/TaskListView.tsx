@@ -3,8 +3,8 @@ import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
-import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
+import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
