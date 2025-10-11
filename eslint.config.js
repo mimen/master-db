@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import typescript from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
 import importPlugin from 'eslint-plugin-import';
+import globals from 'globals';
 
 export default [
   {
@@ -57,6 +58,23 @@ export default [
     settings: {
       'import/resolver': {
         typescript: {},
+      },
+    },
+  },
+  {
+    files: ['app/**/*.ts', 'app/**/*.tsx'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  {
+    files: ['**/*.config.js', '**/*.config.cjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        require: 'readonly',
       },
     },
   },
