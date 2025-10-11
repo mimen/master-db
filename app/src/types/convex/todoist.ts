@@ -9,6 +9,9 @@ export type TodoistProject = TodoistProjects[number]
 export type TodoistItemsByList = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>
 export type TodoistTask = TodoistItemsByList[number]
 
+export type TodoistItemsByListWithProjects = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByViewWithProjects>
+export type TodoistTaskWithProject = TodoistItemsByListWithProjects[number]
+
 export type TodoistProjectsWithMetadata = FunctionReturnType<typeof api.todoist.publicQueries.getProjectsWithMetadata>
 export type TodoistProjectWithMetadata = TodoistProjectsWithMetadata[number]
 

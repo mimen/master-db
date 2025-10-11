@@ -1,18 +1,19 @@
 import { useAction, useQuery } from "convex/react"
-import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User } from "lucide-react"
+import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User } from "lucide-react"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
+import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
 import type { ListInstance, ListQueryInput, ListSupportData } from "@/lib/views/types"
 import type {
-  TodoistItemsByList,
+  TodoistItemsByListWithProjects,
   TodoistLabelDoc,
   TodoistProjects,
   TodoistProjectsWithMetadata,
-  TodoistTask,
+  TodoistTaskWithProject,
 } from "@/types/convex/todoist"
 
 const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
@@ -75,8 +76,8 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
     return list.query
   }, [list.query, projects])
 
-  const tasks: TodoistItemsByList | undefined = useQuery(
-    api.todoist.publicQueries.getItemsByView,
+  const tasks: TodoistItemsByListWithProjects | undefined = useQuery(
+    api.todoist.publicQueries.getItemsByViewWithProjects,
     resolvedQuery ? { list: resolvedQuery } : "skip"
   )
 
@@ -251,7 +252,7 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
 }
 
 interface TaskRowProps {
-  task: TodoistTask
+  task: TodoistTaskWithProject
   onElementRef: (element: HTMLDivElement | null) => void
   onClick?: () => void
 }
@@ -268,7 +269,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
     }
   }
 
-  const formatDueDate = (due: TodoistTask["due"]) => {
+  const formatDueDate = (due: TodoistTaskWithProject["due"]) => {
     if (!due) return { text: null, isOverdue: false }
 
     const date = new Date(due.date)
@@ -361,6 +362,16 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
         )}
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {task.project && (
+            <span className="inline-flex items-center gap-1">
+              <FolderOpen
+                className="h-3 w-3"
+                style={{ color: getProjectColor(task.project.color) }}
+              />
+              {task.project.name}
+            </span>
+          )}
+
           {task.due?.date && (
             <span
               className={cn(

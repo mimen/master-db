@@ -22,6 +22,7 @@ export { getDueNext7DaysItems } from "./queries/getDueNext7DaysItems";
 export { getDueFutureItems } from "./queries/getDueFutureItems";
 export { getNoDueDateItems } from "./queries/getNoDueDateItems";
 export { getItemsByView } from "./queries/getItemsByView";
+export { getItemsByViewWithProjects } from "./queries/getItemsByViewWithProjects";
 
 // Computed queries
 export { getProjectsWithMetadata } from "./computed/queries/getProjectsWithMetadata";
