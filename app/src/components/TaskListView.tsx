@@ -262,6 +262,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState(task.content)
   const [editDescription, setEditDescription] = useState(task.description || "")
+  // UI-level optimistic values - shown while waiting for DB sync
+  const [optimisticContent, setOptimisticContent] = useState<string | null>(null)
+  const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
   const contentInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
 
@@ -291,12 +294,14 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
 
   const startEditing = useCallback(() => {
     setIsEditing(true)
+    // Use real DB values when entering edit mode, not optimistic ones
     setEditContent(task.content)
     setEditDescription(task.description || "")
   }, [task.content, task.description])
 
   const startEditingDescription = useCallback(() => {
     setIsEditing(true)
+    // Use real DB values when entering edit mode, not optimistic ones
     setEditContent(task.content)
     setEditDescription(task.description || "")
     // Focus description input after state update
@@ -322,6 +327,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
     setIsEditing(false)
     setEditContent(task.content)
     setEditDescription(task.description || "")
+    // Clear any optimistic values when canceling
+    setOptimisticContent(null)
+    setOptimisticDescription(null)
   }
 
   const saveEditing = async () => {
@@ -333,17 +341,41 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       return
     }
 
-    setIsEditing(false)
-
     const updates: Record<string, unknown> = {}
     if (hasContentChanged) updates.content = editContent
     if (hasDescriptionChanged) updates.description = editDescription
 
-    await updateTask({
+    // STEP 1: Set UI-level optimistic values immediately (0ms - instant!)
+    if (hasContentChanged) setOptimisticContent(editContent)
+    if (hasDescriptionChanged) setOptimisticDescription(editDescription)
+
+    // STEP 2: Exit edit mode - optimistic values will show immediately
+    setIsEditing(false)
+
+    // STEP 3: Fire action in background (has its own DB-level optimistic update)
+    const result = await updateTask({
       todoistId: task.todoist_id,
       ...updates
     })
+
+    // STEP 4: If action failed, revert optimistic values
+    if (result === null) {
+      // Action failed - revert to original values
+      setOptimisticContent(null)
+      setOptimisticDescription(null)
+    }
+    // If success, optimistic values will be cleared when Convex reactivity updates task prop
   }
+
+  // Clear optimistic values when real data arrives from Convex
+  useEffect(() => {
+    if (optimisticContent !== null && task.content === optimisticContent) {
+      setOptimisticContent(null)
+    }
+    if (optimisticDescription !== null && task.description === optimisticDescription) {
+      setOptimisticDescription(null)
+    }
+  }, [task.content, task.description, optimisticContent, optimisticDescription])
 
   // Focus content input when entering edit mode
   useEffect(() => {
@@ -386,7 +418,11 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   }
 
   const assignee = task.assigned_by_uid || task.responsible_uid
-  const markdownSegments = parseMarkdownLinks(task.content)
+
+  // Use optimistic values if available, otherwise use real DB values
+  const displayContent = optimisticContent ?? task.content
+  const displayDescription = optimisticDescription ?? task.description
+  const markdownSegments = parseMarkdownLinks(displayContent)
 
   const dueInfo = formatDueDate(task.due)
 
@@ -481,8 +517,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
               )}
             </div>
 
-            {task.description && (
-              <p className="text-xs text-muted-foreground">{task.description}</p>
+            {displayDescription && (
+              <p className="text-xs text-muted-foreground">{displayDescription}</p>
             )}
           </>
         )}
