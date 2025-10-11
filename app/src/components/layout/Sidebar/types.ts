@@ -1,0 +1,16 @@
+import type { ComponentType } from "react"
+
+import type { ViewKey } from "@/lib/views/types"
+import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
+
+export type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
+
+export type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
+export type LabelSort = "taskCount" | "alphabetical"
+
+export type ViewNavItem = {
+  key: ViewKey
+  label: string
+  icon: ComponentType<{ className?: string }>
+  count?: number | null
+}
