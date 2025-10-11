@@ -75,33 +75,9 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
     return list.query
   }, [list.query, projects])
 
-  const legacyArgs = useMemo(() => {
-    if (!resolvedQuery) return null
-
-    switch (resolvedQuery.type) {
-      case "inbox":
-        return { view: "inbox", inboxProjectId: resolvedQuery.inboxProjectId }
-      case "time": {
-        if (resolvedQuery.range === "today") return { view: "today" }
-        if (resolvedQuery.range === "upcoming") return { view: "upcoming" }
-        return { view: `time:${resolvedQuery.range}` }
-      }
-      case "project":
-        return { view: `project:${resolvedQuery.projectId}` }
-      case "priority": {
-        const legacyId = resolvedQuery.priority === 4 ? "p1" : resolvedQuery.priority === 3 ? "p2" : resolvedQuery.priority === 2 ? "p3" : "p4"
-        return { view: `priority:${legacyId}` }
-      }
-      case "label":
-        return { view: `label:${resolvedQuery.label}` }
-      default:
-        return null
-    }
-  }, [resolvedQuery])
-
   const tasks: TodoistItemsByList | undefined = useQuery(
     api.todoist.publicQueries.getItemsByView,
-    legacyArgs ?? "skip"
+    resolvedQuery ? { list: resolvedQuery } : "skip"
   )
 
   const resolvedTasks = tasks ?? []

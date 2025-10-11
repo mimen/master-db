@@ -46,22 +46,17 @@ const listQueryValidator = v.union(
   })
 );
 
-const legacyArgsValidator = v.object({
-  view: v.string(),
-  inboxProjectId: v.optional(v.string()),
-});
 export const getItemsByView = query({
-  args: v.union(
-    v.object({ list: listQueryValidator }),
-    legacyArgsValidator
-  ),
+  args: {
+    list: listQueryValidator,
+  },
   handler: async (
     ctx,
     args
   ): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
-    const list = normalizeArgs(args);
+    const list = args.list as ListQueryInput;
 
     if (list.type === "inbox") {
       if (!list.inboxProjectId) {
@@ -118,47 +113,3 @@ export const getItemsByView = query({
     return [];
   },
 });
-
-function normalizeArgs(args: { list: ListQueryInput } | { view: string; inboxProjectId?: string }): ListQueryInput {
-  if ("list" in args) {
-    return args.list;
-  }
-
-  const { view, inboxProjectId } = args;
-
-  if (view === "inbox") {
-    return { type: "inbox", inboxProjectId } satisfies InboxQuery;
-  }
-
-  if (view === "today" || view === "time:today") {
-    return { type: "time", range: "today" } satisfies TimeQuery;
-  }
-
-  if (view === "upcoming" || view === "time:upcoming") {
-    return { type: "time", range: "upcoming" } satisfies TimeQuery;
-  }
-
-  if (view === "time:overdue") {
-    return { type: "time", range: "overdue" } satisfies TimeQuery;
-  }
-
-  if (view === "time:no-date") {
-    return { type: "time", range: "no-date" } satisfies TimeQuery;
-  }
-
-  if (view.startsWith("project:")) {
-    return { type: "project", projectId: view.replace("project:", "") } satisfies ProjectQuery;
-  }
-
-  if (view.startsWith("priority:")) {
-    const priorityId = view.replace("priority:", "");
-    const priority = priorityId === "p1" ? 4 : priorityId === "p2" ? 3 : priorityId === "p3" ? 2 : 1;
-    return { type: "priority", priority } satisfies PriorityQuery;
-  }
-
-  if (view.startsWith("label:")) {
-    return { type: "label", label: view.replace("label:", "") } satisfies LabelQuery;
-  }
-
-  return { type: "time", range: "today" } satisfies TimeQuery;
-}
