@@ -260,6 +260,7 @@ interface TaskRowProps {
 
 const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [showDescriptionInput, setShowDescriptionInput] = useState(false)
   const [editContent, setEditContent] = useState(task.content)
   const [editDescription, setEditDescription] = useState(task.description || "")
   // UI-level optimistic values - shown while waiting for DB sync
@@ -294,6 +295,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
 
   const startEditing = useCallback(() => {
     setIsEditing(true)
+    // Only show description input if task already has a description
+    setShowDescriptionInput(!!task.description)
     // Use real DB values when entering edit mode, not optimistic ones
     setEditContent(task.content)
     setEditDescription(task.description || "")
@@ -301,6 +304,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
 
   const startEditingDescription = useCallback(() => {
     setIsEditing(true)
+    // Always show description input when explicitly editing description
+    setShowDescriptionInput(true)
     // Use real DB values when entering edit mode, not optimistic ones
     setEditContent(task.content)
     setEditDescription(task.description || "")
@@ -325,6 +330,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
 
   const cancelEditing = () => {
     setIsEditing(false)
+    setShowDescriptionInput(false)
     setEditContent(task.content)
     setEditDescription(task.description || "")
     // Clear any optimistic values when canceling
@@ -351,6 +357,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
 
     // STEP 2: Exit edit mode - optimistic values will show immediately
     setIsEditing(false)
+    setShowDescriptionInput(false)
 
     // STEP 3: Fire action in background (calls API + syncs to DB on success)
     const result = await updateTask({
@@ -376,7 +383,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
     if (optimisticDescription !== null) {
       setOptimisticDescription(null)
     }
-  }, [task.content, task.description])
+  }, [task.content, task.description, optimisticContent, optimisticDescription])
 
   // Focus content input when entering edit mode
   useEffect(() => {
@@ -471,31 +478,41 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
                   cancelEditing()
                 } else if (e.key === "Tab") {
                   e.preventDefault()
-                  descriptionInputRef.current?.focus()
+                  // Show description input when Tab is pressed
+                  if (!showDescriptionInput) {
+                    setShowDescriptionInput(true)
+                    setTimeout(() => {
+                      descriptionInputRef.current?.focus()
+                    }, 0)
+                  } else {
+                    descriptionInputRef.current?.focus()
+                  }
                 }
               }}
               className="w-full -mx-0.5 px-0.5 text-sm font-medium bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded"
             />
-            <input
-              ref={descriptionInputRef}
-              type="text"
-              value={editDescription}
-              placeholder="Description (optional)"
-              onChange={(e) => setEditDescription(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  void saveEditing()
-                } else if (e.key === "Escape") {
-                  e.preventDefault()
-                  cancelEditing()
-                } else if (e.key === "Tab" && e.shiftKey) {
-                  e.preventDefault()
-                  contentInputRef.current?.focus()
-                }
-              }}
-              className="w-full -mx-0.5 px-0.5 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded placeholder:text-muted-foreground/50"
-            />
+            {showDescriptionInput && (
+              <input
+                ref={descriptionInputRef}
+                type="text"
+                value={editDescription}
+                placeholder="Description (optional)"
+                onChange={(e) => setEditDescription(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    void saveEditing()
+                  } else if (e.key === "Escape") {
+                    e.preventDefault()
+                    cancelEditing()
+                  } else if (e.key === "Tab" && e.shiftKey) {
+                    e.preventDefault()
+                    contentInputRef.current?.focus()
+                  }
+                }}
+                className="w-full -mx-0.5 px-0.5 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded placeholder:text-muted-foreground/50"
+              />
+            )}
           </div>
         ) : (
           <>
