@@ -17,32 +17,25 @@ export const BUILT_IN_MULTI_LISTS: MultiListConfig[] = [
     sequence: [
       {
         view: "time:overdue",
-        name: "🔥 Overdue",
       },
       {
         view: "today",
-        name: "📅 Today",
       },
       {
         view: "inbox",
-        name: "📥 Inbox",
         maxTasks: 10,
       },
       {
         view: "priority:p1",
-        name: "🚨 P1 Tasks",
       },
       {
         view: "priority-projects:p1",
-        name: "🎯 P1 Projects",
       },
       {
         view: "priority-projects:p2",
-        name: "⭐ P2 Projects",
       },
       {
         view: "upcoming",
-        name: "🔜 Upcoming",
         maxTasks: 15,
       },
     ],
