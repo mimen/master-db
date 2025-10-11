@@ -1,4 +1,4 @@
-import { useAction, useQuery } from "convex/react"
+import { useQuery } from "convex/react"
 
 import {
   Select,
@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { api } from "@/convex/_generated/api"
+import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
 import type { TodoistProject } from "@/types/convex/todoist"
 
@@ -27,27 +28,27 @@ export function ProjectSelector({
   disabled = false
 }: ProjectSelectorProps) {
   const projects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
-  const moveTask = useAction(api.todoist.publicActions.moveTask)
+  const moveTask = useTodoistAction(api.todoist.publicActions.moveTask, {
+    loadingMessage: "Moving task...",
+    successMessage: "Task moved!",
+    errorMessage: "Failed to move task"
+  })
 
   // Filter to active projects and sort by child_order
   const activeProjects = projects
     ?.filter((project) => !project.is_deleted && !project.is_archived)
     ?.sort((a, b) => a.child_order - b.child_order)
 
-  const handleChange = async (projectId: string) => {
+  const handleChange = (projectId: string) => {
     // Call onChange callback if provided
     onChange?.(projectId)
 
-    // Update task if todoistId is provided
+    // Update task if todoistId is provided (fire and forget)
     if (todoistId) {
-      try {
-        await moveTask({
-          todoistId,
-          projectId
-        })
-      } catch (error) {
-        console.error("Failed to update task project:", error)
-      }
+      moveTask({
+        todoistId,
+        projectId
+      })
     }
   }
 

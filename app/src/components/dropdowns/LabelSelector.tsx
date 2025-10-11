@@ -1,4 +1,4 @@
-import { useAction, useQuery } from "convex/react"
+import { useQuery } from "convex/react"
 import { Check, Tag, X } from "lucide-react"
 import { useState } from "react"
 
@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { api } from "@/convex/_generated/api"
+import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
 import { cn } from "@/lib/utils"
 import type { TodoistLabelDoc } from "@/types/convex/todoist"
@@ -30,14 +31,18 @@ export function LabelSelector({
 }: LabelSelectorProps) {
   const [open, setOpen] = useState(false)
   const labels: TodoistLabelDoc[] | undefined = useQuery(api.todoist.queries.getLabels.getLabels)
-  const updateTask = useAction(api.todoist.publicActions.updateTask)
+  const updateTask = useTodoistAction(api.todoist.publicActions.updateTask, {
+    loadingMessage: "Updating labels...",
+    successMessage: "Labels updated!",
+    errorMessage: "Failed to update labels"
+  })
 
   // Filter to active labels and sort by order
   const activeLabels = labels
     ?.filter((label) => !label.is_deleted)
     ?.sort((a, b) => a.order - b.order)
 
-  const handleToggleLabel = async (labelName: string) => {
+  const handleToggleLabel = (labelName: string) => {
     const newLabels = value.includes(labelName)
       ? value.filter(l => l !== labelName)
       : [...value, labelName]
@@ -45,16 +50,12 @@ export function LabelSelector({
     // Call onChange callback if provided
     onChange?.(newLabels)
 
-    // Update task if todoistId is provided
+    // Update task if todoistId is provided (fire and forget)
     if (todoistId) {
-      try {
-        await updateTask({
-          todoistId,
-          labels: newLabels
-        })
-      } catch (error) {
-        console.error("Failed to update task labels:", error)
-      }
+      updateTask({
+        todoistId,
+        labels: newLabels
+      })
     }
   }
 
@@ -123,10 +124,10 @@ export function LabelSelector({
               size="sm"
               variant="ghost"
               className="w-full h-8 text-xs"
-              onClick={async () => {
+              onClick={() => {
                 onChange?.([])
                 if (todoistId) {
-                  await updateTask({ todoistId, labels: [] })
+                  updateTask({ todoistId, labels: [] })
                 }
                 setOpen(false)
               }}
