@@ -5,7 +5,7 @@ import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } fr
 export type TimeRange = "overdue" | "today" | "upcoming" | "no-date"
 
 export type ListQueryInput =
-  | { type: "inbox" }
+  | { type: "inbox"; inboxProjectId?: string }
   | { type: "time"; range: TimeRange }
   | { type: "project"; projectId: string }
   | { type: "priority"; priority: 1 | 2 | 3 | 4 }

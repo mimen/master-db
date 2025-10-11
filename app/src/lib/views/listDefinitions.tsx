@@ -2,8 +2,8 @@ import type { JSX } from "react"
 
 import { AlertCircle, Calendar, Flag, Inbox, Tag } from "lucide-react"
 
-import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
 import { getProjectColor } from "@/lib/colors"
+import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
@@ -12,10 +12,8 @@ import type {
   ListDependencies,
   ListInstance,
   ListInstanceOptions,
-  ListInstanceOverrides,
   ListPresentationContext,
   ListQueryInput,
-  ListSupportData,
   TimeRange,
 } from "./types"
 
@@ -290,17 +288,6 @@ export function instantiateList<P extends Record<string, unknown>>(
   options: ListInstanceOptions<P>
 ): ListInstance<P> {
   return createListInstance(definition, options)
-}
-
-export function instantiateListByKey(
-  key: ListDefinitionKey,
-  options: ListInstanceOptions<any>
-): ListInstance {
-  const definition = listDefinitions[key]
-  if (!definition) {
-    throw new Error(`Unknown list definition: ${key}`)
-  }
-  return createListInstance(definition as ListDefinition, options)
 }
 
 export function getProjectPriorityLevel(

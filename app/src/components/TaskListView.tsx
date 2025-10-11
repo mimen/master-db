@@ -17,49 +17,6 @@ import type {
 
 const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
 
-type LegacyViewArgs = {
-  view: string
-  inboxProjectId?: string
-}
-
-function mapListQueryToLegacyArgs(
-  query: ListQueryInput,
-  support: ListSupportData
-): LegacyViewArgs | null {
-  switch (query.type) {
-    case "inbox": {
-      const inboxProject = support.projects?.find(
-        (project) =>
-          project.name === "Inbox" &&
-          !project.parent_id &&
-          !project.is_deleted &&
-          !project.is_archived
-      )
-      if (!inboxProject) return null
-      return {
-        view: "inbox",
-        inboxProjectId: inboxProject.todoist_id,
-      }
-    }
-    case "time": {
-      if (query.range === "today") return { view: "today" }
-      if (query.range === "upcoming") return { view: "upcoming" }
-      if (query.range === "overdue") return { view: "time:overdue" }
-      return { view: "time:no-date" }
-    }
-    case "project":
-      return { view: `project:${query.projectId}` }
-    case "priority": {
-      const priorityId = query.priority === 4 ? "p1" : query.priority === 3 ? "p2" : query.priority === 2 ? "p3" : "p4"
-      return { view: `priority:${priorityId}` }
-    }
-    case "label":
-      return { view: `label:${query.label}` }
-    default:
-      return null
-  }
-}
-
 interface TaskListViewProps {
   list: ListInstance
   onTaskCountChange?: (listId: string, count: number) => void
@@ -95,10 +52,52 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
     labels: list.dependencies.labels ? labels : undefined,
   }
 
-  const legacyArgs = useMemo(
-    () => mapListQueryToLegacyArgs(list.query, supportData),
-    [list.query, supportData.projects, supportData.projectsWithMetadata, supportData.labels]
-  )
+  const resolvedQuery = useMemo<ListQueryInput | null>(() => {
+    if (list.query.type === "inbox") {
+      if (!projects) return null
+
+      const inboxProject = projects.find(
+        (project) =>
+          project.name === "Inbox" &&
+          !project.parent_id &&
+          !project.is_deleted &&
+          !project.is_archived
+      )
+
+      if (!inboxProject) return null
+
+      return {
+        ...list.query,
+        inboxProjectId: inboxProject.todoist_id,
+      }
+    }
+
+    return list.query
+  }, [list.query, projects])
+
+  const legacyArgs = useMemo(() => {
+    if (!resolvedQuery) return null
+
+    switch (resolvedQuery.type) {
+      case "inbox":
+        return { view: "inbox", inboxProjectId: resolvedQuery.inboxProjectId }
+      case "time": {
+        if (resolvedQuery.range === "today") return { view: "today" }
+        if (resolvedQuery.range === "upcoming") return { view: "upcoming" }
+        return { view: `time:${resolvedQuery.range}` }
+      }
+      case "project":
+        return { view: `project:${resolvedQuery.projectId}` }
+      case "priority": {
+        const legacyId = resolvedQuery.priority === 4 ? "p1" : resolvedQuery.priority === 3 ? "p2" : resolvedQuery.priority === 2 ? "p3" : "p4"
+        return { view: `priority:${legacyId}` }
+      }
+      case "label":
+        return { view: `label:${resolvedQuery.label}` }
+      default:
+        return null
+    }
+  }, [resolvedQuery])
 
   const tasks: TodoistItemsByList | undefined = useQuery(
     api.todoist.publicQueries.getItemsByView,
@@ -201,7 +200,7 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
     support: supportData,
   })
 
-  const isLoading = tasks === undefined
+  const isLoading = resolvedQuery === null || tasks === undefined
 
   const toggleExpanded = () => {
     setIsExpanded((prev) => !prev)
