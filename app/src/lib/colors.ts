@@ -21,6 +21,30 @@ export const TODOIST_COLORS = {
   "taupe": "#ccac93",
 } as const
 
+// Color options for project creation - ordered for visual appeal in grid
+export const TODOIST_COLOR_OPTIONS = [
+  { name: "berry_red", hex: "#b8255f", displayName: "Berry Red" },
+  { name: "red", hex: "#db4035", displayName: "Red" },
+  { name: "orange", hex: "#ff9933", displayName: "Orange" },
+  { name: "yellow", hex: "#fad000", displayName: "Yellow" },
+  { name: "olive_green", hex: "#afb83b", displayName: "Olive Green" },
+  { name: "lime_green", hex: "#7ecc49", displayName: "Lime Green" },
+  { name: "green", hex: "#299438", displayName: "Green" },
+  { name: "mint_green", hex: "#6accbc", displayName: "Mint Green" },
+  { name: "teal", hex: "#158fad", displayName: "Teal" },
+  { name: "sky_blue", hex: "#14aaf5", displayName: "Sky Blue" },
+  { name: "light_blue", hex: "#96c3eb", displayName: "Light Blue" },
+  { name: "blue", hex: "#4073ff", displayName: "Blue" },
+  { name: "grape", hex: "#884dff", displayName: "Grape" },
+  { name: "violet", hex: "#af38eb", displayName: "Violet" },
+  { name: "lavender", hex: "#eb96eb", displayName: "Lavender" },
+  { name: "magenta", hex: "#e05194", displayName: "Magenta" },
+  { name: "salmon", hex: "#ff8d85", displayName: "Salmon" },
+  { name: "charcoal", hex: "#808080", displayName: "Charcoal" },
+  { name: "grey", hex: "#b8b8b8", displayName: "Grey" },
+  { name: "taupe", hex: "#ccac93", displayName: "Taupe" },
+] as const
+
 export function getProjectColor(color: string): string {
   return TODOIST_COLORS[color as keyof typeof TODOIST_COLORS] || "#808080"
 }
