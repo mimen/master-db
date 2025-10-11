@@ -1,60 +1,132 @@
 import { useAction, useQuery } from "convex/react"
-import { Flag, Calendar, Tag, User, Check, ChevronDown, ChevronRight, Inbox, Clock, AlertCircle } from "lucide-react"
-import { memo, useEffect, useRef, useState } from "react"
+import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User } from "lucide-react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
-import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
-import type { TodoistProject, TodoistProjects, TodoistTask, TodoistItemsByView, TodoistLabelDoc } from "@/types/convex/todoist"
-import type { ViewConfig } from "@/types/views"
+import type { ListInstance, ListQueryInput, ListSupportData } from "@/lib/views/types"
+import type {
+  TodoistItemsByList,
+  TodoistLabelDoc,
+  TodoistProjects,
+  TodoistProjectsWithMetadata,
+  TodoistTask,
+} from "@/types/convex/todoist"
 
 const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
 
+type LegacyViewArgs = {
+  view: string
+  inboxProjectId?: string
+}
+
+function mapListQueryToLegacyArgs(
+  query: ListQueryInput,
+  support: ListSupportData
+): LegacyViewArgs | null {
+  switch (query.type) {
+    case "inbox": {
+      const inboxProject = support.projects?.find(
+        (project) =>
+          project.name === "Inbox" &&
+          !project.parent_id &&
+          !project.is_deleted &&
+          !project.is_archived
+      )
+      if (!inboxProject) return null
+      return {
+        view: "inbox",
+        inboxProjectId: inboxProject.todoist_id,
+      }
+    }
+    case "time": {
+      if (query.range === "today") return { view: "today" }
+      if (query.range === "upcoming") return { view: "upcoming" }
+      if (query.range === "overdue") return { view: "time:overdue" }
+      return { view: "time:no-date" }
+    }
+    case "project":
+      return { view: `project:${query.projectId}` }
+    case "priority": {
+      const priorityId = query.priority === 4 ? "p1" : query.priority === 3 ? "p2" : query.priority === 2 ? "p3" : "p4"
+      return { view: `priority:${priorityId}` }
+    }
+    case "label":
+      return { view: `label:${query.label}` }
+    default:
+      return null
+  }
+}
+
 interface TaskListViewProps {
-  viewConfig: ViewConfig
-  onTaskCountChange?: (viewId: string, count: number) => void
-  onTaskClick?: (viewId: string, taskIndex: number) => void
+  list: ListInstance
+  onTaskCountChange?: (listId: string, count: number) => void
+  onTaskClick?: (listId: string, taskIndex: number) => void
   focusedTaskIndex: number | null
 }
 
-export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focusedTaskIndex }: TaskListViewProps) {
-  const [isExpanded, setIsExpanded] = useState(viewConfig.expanded ?? true)
-  const currentView = viewConfig.value
-  const projects: TodoistProjects | undefined = useQuery(api.todoist.publicQueries.getProjects)
-  const projectsWithMetadata = useQuery(api.todoist.publicQueries.getProjectsWithMetadata)
-  const labels: TodoistLabelDoc[] | undefined = useQuery(api.todoist.publicQueries.getLabels)
+export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTaskIndex }: TaskListViewProps) {
+  const [isExpanded, setIsExpanded] = useState(list.startExpanded)
+
+  const projects: TodoistProjects | undefined = useQuery(
+    api.todoist.publicQueries.getProjects,
+    list.dependencies.projects ? {} : "skip"
+  )
+
+  const projectsWithMetadata: TodoistProjectsWithMetadata | undefined = useQuery(
+    api.todoist.publicQueries.getProjectsWithMetadata,
+    list.dependencies.projectMetadata ? {} : "skip"
+  )
+
+  const labels: TodoistLabelDoc[] | undefined = useQuery(
+    api.todoist.publicQueries.getLabels,
+    list.dependencies.labels ? {} : "skip"
+  )
+
   const taskRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
   const lastFocusedIndex = useRef<number | null>(null)
 
-  const inboxProject = projects?.find((project: TodoistProject) =>
-    project.name === "Inbox" && !project.parent_id && !project.is_deleted && !project.is_archived
+  const supportData: ListSupportData = {
+    projects: list.dependencies.projects ? projects : undefined,
+    projectsWithMetadata: list.dependencies.projectMetadata ? projectsWithMetadata : undefined,
+    labels: list.dependencies.labels ? labels : undefined,
+  }
+
+  const legacyArgs = useMemo(
+    () => mapListQueryToLegacyArgs(list.query, supportData),
+    [list.query, supportData.projects, supportData.projectsWithMetadata, supportData.labels]
   )
 
-  const tasksArgs = inboxProject || currentView !== "inbox"
-    ? { view: currentView, inboxProjectId: inboxProject?.todoist_id }
-    : undefined
-
-  const tasks: TodoistItemsByView | undefined = useQuery(
+  const tasks: TodoistItemsByList | undefined = useQuery(
     api.todoist.publicQueries.getItemsByView,
-    tasksArgs ?? "skip"
+    legacyArgs ?? "skip"
   )
 
-  const filteredTasks = tasks || []
-  taskRefs.current.length = filteredTasks.length
-  refHandlers.current.length = filteredTasks.length
+  const resolvedTasks = tasks ?? []
+  const visibleTasks = list.maxTasks ? resolvedTasks.slice(0, list.maxTasks) : resolvedTasks
 
-  const focusedTask = focusedTaskIndex !== null && focusedTaskIndex >= 0 && focusedTaskIndex < filteredTasks.length
-    ? filteredTasks[focusedTaskIndex]
-    : null
+  taskRefs.current.length = visibleTasks.length
+  refHandlers.current.length = visibleTasks.length
+
+  const focusedTask =
+    focusedTaskIndex !== null &&
+    focusedTaskIndex >= 0 &&
+    focusedTaskIndex < visibleTasks.length
+      ? visibleTasks[focusedTaskIndex]
+      : null
 
   useTaskDialogShortcuts(focusedTask)
 
   useEffect(() => {
-    onTaskCountChange?.(viewConfig.id, filteredTasks.length)
-  }, [filteredTasks.length, onTaskCountChange, viewConfig.id])
+    onTaskCountChange?.(list.id, visibleTasks.length)
+  }, [list.id, onTaskCountChange, visibleTasks.length])
+
+  useEffect(() => {
+    setIsExpanded(list.startExpanded)
+  }, [list.id, list.startExpanded])
 
   useEffect(() => {
     const removeHighlight = (element: HTMLDivElement | null) => {
@@ -78,7 +150,7 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
       return
     }
 
-    if (focusedTaskIndex < 0 || focusedTaskIndex >= filteredTasks.length) {
+    if (focusedTaskIndex < 0 || focusedTaskIndex >= visibleTasks.length) {
       lastFocusedIndex.current = null
       return
     }
@@ -115,123 +187,24 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
     }
 
     lastFocusedIndex.current = focusedTaskIndex
-  }, [focusedTaskIndex, filteredTasks.length])
+  }, [focusedTaskIndex, visibleTasks.length])
 
-  // Get view title, description and icon
-  const getViewInfo = () => {
-    switch (currentView) {
-      case "inbox":
-        return {
-          title: "Inbox",
-          description: `${filteredTasks.length} tasks to process`,
-          icon: <Inbox className="h-6 w-6 mr-3" />
-        }
-      case "today":
-        return {
-          title: "Today",
-          description: `${filteredTasks.length} tasks due today`,
-          icon: <Calendar className="h-6 w-6 mr-3 text-blue-500" />
-        }
-      case "upcoming":
-        return {
-          title: "Upcoming",
-          description: `${filteredTasks.length} tasks due this week`,
-          icon: <Calendar className="h-6 w-6 mr-3 text-green-500" />
-        }
-      case "time:overdue":
-        return {
-          title: "Overdue",
-          description: `${filteredTasks.length} overdue tasks`,
-          icon: <AlertCircle className="h-6 w-6 mr-3 text-red-500" />
-        }
-      case "time:today":
-        return {
-          title: "Today",
-          description: `${filteredTasks.length} tasks due today`,
-          icon: <Calendar className="h-6 w-6 mr-3 text-blue-500" />
-        }
-      case "time:upcoming":
-        return {
-          title: "Upcoming",
-          description: `${filteredTasks.length} upcoming tasks`,
-          icon: <Clock className="h-6 w-6 mr-3 text-green-500" />
-        }
-      case "time:no-date":
-        return {
-          title: "No Date",
-          description: `${filteredTasks.length} tasks without due dates`,
-          icon: <Calendar className="h-6 w-6 mr-3 text-gray-500" />
-        }
-      default: {
-        if (currentView.startsWith("project:")) {
-          const projectId = currentView.replace("project:", "")
-          const project = projects?.find((p: TodoistProject) => p.todoist_id === projectId)
-          return {
-            title: project?.name || "Project",
-            description: `${filteredTasks.length} tasks in this project`,
-            icon: project ? (
-              <div
-                className="w-3 h-3 rounded-full mr-3 flex-shrink-0"
-                style={{ backgroundColor: getProjectColor(project.color) }}
-              />
-            ) : null
-          }
-        }
-        if (currentView.startsWith("priority:")) {
-          const priorityId = currentView.replace("priority:", "")
-          const priorityMap: Record<string, { label: string; color: string; level: number }> = {
-            "p1": { label: "P1", color: "text-red-500", level: 4 },
-            "p2": { label: "P2", color: "text-orange-500", level: 3 },
-            "p3": { label: "P3", color: "text-blue-500", level: 2 },
-            "p4": { label: "P4", color: "text-gray-500", level: 1 },
-          }
-          const priorityInfo = priorityMap[priorityId]
-          return {
-            title: priorityInfo?.label || priorityId.toUpperCase(),
-            description: `${filteredTasks.length} tasks with ${priorityInfo?.label || priorityId} priority`,
-            icon: priorityInfo ? (
-              <Flag className={cn("h-6 w-6 mr-3", priorityInfo.color)} fill="currentColor" />
-            ) : null
-          }
-        }
-        if (currentView.startsWith("label:")) {
-          const labelName = currentView.replace("label:", "")
-          const label = labels?.find((l: TodoistLabelDoc) => l.name === labelName)
-          return {
-            title: `@${labelName}`,
-            description: `${filteredTasks.length} tasks with @${labelName} label`,
-            icon: label ? (
-              <Tag
-                className="h-6 w-6 mr-3"
-                style={{ color: getProjectColor(label.color) }}
-              />
-            ) : (
-              <Tag className="h-6 w-6 mr-3 text-muted-foreground" />
-            )
-          }
-        }
-        return { title: "Tasks", description: `${filteredTasks.length} tasks`, icon: null }
-      }
-    }
-  }
+  const header = list.getHeader({
+    params: list.params,
+    taskCount: visibleTasks.length,
+    support: supportData,
+  })
 
-  const { title, description, icon } = getViewInfo()
+  const emptyState = list.getEmptyState({
+    params: list.params,
+    taskCount: visibleTasks.length,
+    support: supportData,
+  })
 
-  // Compute project priority for header
-  const currentProjectId = currentView.startsWith("project:") ? currentView.replace("project:", "") : null
-  const currentProjectMetadata = currentProjectId && projectsWithMetadata
-    ? projectsWithMetadata.find((p: { todoist_id: string }) => p.todoist_id === currentProjectId)
-    : null
-  const currentProjectPriorityLevel = currentProjectMetadata?.metadata?.priority || 1
-  // Always call Hook (React rules) - will return P4/Normal if no priority set
-  const projectPriorityInfoRaw = usePriority(currentProjectPriorityLevel)
-  // Only use if viewing a project view
-  const projectPriorityInfo = currentProjectId ? projectPriorityInfoRaw : null
-
-  const isLoading = tasks === undefined || (currentView === "inbox" && !inboxProject)
+  const isLoading = tasks === undefined
 
   const toggleExpanded = () => {
-    setIsExpanded(!isExpanded)
+    setIsExpanded((prev) => !prev)
   }
 
   if (isLoading) {
@@ -242,69 +215,31 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
     )
   }
 
-  const getEmptyStateMessage = () => {
-    switch (currentView) {
-      case "inbox":
-        return {
-          title: "Inbox Zero!",
-          description: "All tasks have been processed and moved to projects"
-        }
-      case "today":
-        return {
-          title: "All caught up!",
-          description: "No tasks due today"
-        }
-      case "upcoming":
-        return {
-          title: "Nothing upcoming!",
-          description: "No tasks due in the next 7 days"
-        }
-      default:
-        return {
-          title: "No tasks here!",
-          description: "This view is empty"
-        }
-    }
-  }
-
-  const emptyState = getEmptyStateMessage()
-
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6 flex items-center gap-2">
-        {viewConfig.collapsible && (
+        {list.collapsible && (
           <button
             onClick={toggleExpanded}
             className="p-1 hover:bg-muted rounded transition-colors"
           >
-            {isExpanded ? (
-              <ChevronDown className="h-5 w-5" />
-            ) : (
-              <ChevronRight className="h-5 w-5" />
-            )}
+            {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
           </button>
         )}
-        {icon}
+        {header.icon}
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">
-            {projectPriorityInfo?.showFlag ? (
-              <div className="flex items-center gap-2">
-                <span>{viewConfig.title || title}</span>
-                <Flag className={cn("h-4 w-4", projectPriorityInfo.colorClass)} fill="currentColor" />
-              </div>
-            ) : (
-              viewConfig.title || title
-            )}
-          </h1>
-          <p className="text-muted-foreground mt-1">{description}</p>
+          <h1 className="text-2xl font-bold">{header.title}</h1>
+          {header.description && (
+            <p className="text-muted-foreground mt-1">{header.description}</p>
+          )}
         </div>
       </div>
 
       {isExpanded && (
         <>
-          {filteredTasks.length > 0 ? (
+          {visibleTasks.length > 0 ? (
             <div className="space-y-1">
-              {filteredTasks.map((task: TodoistTask, index: number) => {
+              {visibleTasks.map((task, index) => {
                 if (!refHandlers.current[index]) {
                   refHandlers.current[index] = (element) => {
                     taskRefs.current[index] = element
@@ -319,22 +254,20 @@ export function TaskListView({ viewConfig, onTaskCountChange, onTaskClick, focus
                     key={task._id}
                     task={task}
                     onElementRef={refHandlers.current[index]!}
-                    onClick={() => onTaskClick?.(viewConfig.id, index)}
+                    onClick={() => onTaskClick?.(list.id, index)}
                   />
                 )
               })}
             </div>
+          ) : list.collapsible ? (
+            <div className="py-1 text-xs text-muted-foreground/50 text-center">Empty</div>
           ) : (
-            viewConfig.collapsible ? (
-              <div className="py-1 text-xs text-muted-foreground/50 text-center">
-                Empty
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-64 text-center">
-                <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
+              {emptyState.description && (
                 <p className="text-muted-foreground">{emptyState.description}</p>
-              </div>
-            )
+              )}
+            </div>
           )}
         </>
       )}
@@ -385,12 +318,18 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       text = date.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-        year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined
+        year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
       })
     }
 
     return { text, isOverdue }
   }
+
+  const assignee = task.assigned_by_uid || task.responsible_uid
+  const markdownSegments = parseMarkdownLinks(task.content)
+
+  const dueInfo = formatDueDate(task.due)
+
   return (
     <div
       ref={onElementRef}
@@ -398,116 +337,82 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       aria-selected={false}
       onClick={onClick}
       className={cn(
-        "group flex items-center gap-3 p-3 rounded-lg transition-colors focus:outline-none cursor-pointer",
-        "hover:bg-muted/50"
+        "flex items-start gap-3 rounded-md border border-transparent bg-background p-3 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring",
+        "hover:border-border hover:bg-muted/50"
       )}
     >
-      {/* Checkbox */}
       <button
-        onClick={handleComplete}
+        onClick={(event) => {
+          event.stopPropagation()
+          void handleComplete()
+        }}
         className={cn(
-          "w-5 h-5 rounded-full border-2 transition-colors flex-shrink-0 flex items-center justify-center",
-          "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+          "group mt-1 flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/40 bg-background transition-colors",
+          priority?.colorClass && "border-current",
+          priority?.colorClass
         )}
+        aria-label="Complete task"
       >
-        {task.checked && (
-          <Check className="w-3 h-3 text-green-600" />
-        )}
+        <Check className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
       </button>
 
-      {/* Task content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm leading-normal">
-          {parseMarkdownLinks(task.content).map((part, index) => {
-            if (part.type === 'link') {
-              return (
+      <div className="flex-1 space-y-1">
+        <div className="flex items-center gap-2">
+          <div className="font-medium">
+            {markdownSegments.map((segment, index) =>
+              segment.type === "text" ? (
+                <span key={index}>{segment.content}</span>
+              ) : (
                 <a
                   key={index}
-                  href={part.url}
+                  href={segment.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
+                  className="underline"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  {part.content}
+                  {segment.content}
                 </a>
               )
-            }
-            return <span key={index}>{part.content}</span>
-          })}
-        </p>
+            )}
+          </div>
+          {priority?.showFlag && (
+            <Flag className={cn("h-3 w-3", priority.colorClass)} fill="currentColor" />
+          )}
+        </div>
+
         {task.description && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {parseMarkdownLinks(task.description).map((part, index) => {
-              if (part.type === 'link') {
-                return (
-                  <a
-                    key={index}
-                    href={part.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:underline"
-                  >
-                    {part.content}
-                  </a>
-                )
-              }
-              return <span key={index}>{part.content}</span>
-            })}
-          </p>
+          <p className="text-xs text-muted-foreground">{task.description}</p>
         )}
 
-        {/* Task metadata */}
-        <div className="flex items-center gap-3 mt-2">
-          {/* Priority - only show if has priority flag */}
-          {priority?.showFlag && (
-            <div className="flex items-center gap-1">
-              <Flag
-                className={cn("h-3.5 w-3.5", priority.colorClass)}
-                fill="currentColor"
-              />
-              <span className="text-xs text-muted-foreground">{priority.uiPriority}</span>
-            </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {task.due?.date && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                dueInfo.isOverdue && "text-destructive"
+              )}
+            >
+              <Calendar className="h-3 w-3" />
+              {dueInfo.text}
+            </span>
           )}
 
-          {/* Due date */}
-          {task.due && (() => {
-            const { text, isOverdue } = formatDueDate(task.due)
-            return text ? (
-              <div className={cn(
-                "flex items-center gap-1 text-xs",
-                isOverdue ? "text-red-500" : "text-muted-foreground"
-              )}>
-                <Calendar className="h-3 w-3" />
-                <span>{text}</span>
-              </div>
-            ) : null
-          })()}
-
-          {/* Labels */}
-          {task.labels.length > 0 && (
-            <div className="flex items-center gap-1">
-              <Tag className="h-3 w-3 text-muted-foreground" />
-              {task.labels.map((label: string) => (
-                <span
-                  key={label}
-                  className="text-xs px-1.5 py-0.5 bg-muted rounded-full"
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Assignee */}
-          {task.assignee_id && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          {task.assigned_by_uid && (
+            <span className="inline-flex items-center gap-1">
               <User className="h-3 w-3" />
-              <span>Assigned</span>
-            </div>
+              {assignee}
+            </span>
+          )}
+
+          {task.labels && task.labels.length > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Tag className="h-3 w-3" />
+              {task.labels.join(", ")}
+            </span>
           )}
         </div>
       </div>
-
     </div>
   )
-}, (prev, next) => prev.task === next.task && prev.onElementRef === next.onElementRef && prev.onClick === next.onClick)
+})

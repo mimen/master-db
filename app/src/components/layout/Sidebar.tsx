@@ -1,34 +1,50 @@
 import { useQuery } from "convex/react"
-import { Inbox, Calendar, Filter, Settings, Plus, Flag, Clock, Tag, AlertCircle, Network, Hash, ArrowDownAZ } from "lucide-react"
-import { useState } from "react"
+import {
+  AlertCircle,
+  ArrowDownAZ,
+  Calendar,
+  Filter,
+  Flag,
+  Hash,
+  Inbox,
+  Network,
+  Plus,
+  Tag,
+} from "lucide-react"
+import { useMemo, useState } from "react"
+import type { ComponentType } from "react"
 
 import { Button } from "@/components/ui/button"
 import { api } from "@/convex/_generated/api"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-import {
-  createPriorityQueueViews,
-  createSingleView,
-  expandPriorityProjects,
-  expandProjectWithChildren,
-} from "@/lib/viewHelpers"
+import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
+import { resolveView } from "@/lib/views/viewDefinitions"
 import type {
   TodoistLabelDoc,
   TodoistProjects,
   TodoistProjectsWithMetadata,
   TodoistProjectWithMetadata,
 } from "@/types/convex/todoist"
-import type { ViewConfig } from "@/types/views"
 
 interface SidebarProps {
-  currentView: string
-  onViewChange: (views: ViewConfig[]) => void
+  currentViewKey: ViewKey
+  onViewChange: (view: ViewSelection) => void
 }
 
 type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
 
-// Helper function to flatten project tree
+type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
+type LabelSort = "taskCount" | "alphabetical"
+
+type ViewNavItem = {
+  key: ViewKey
+  label: string
+  icon: ComponentType<{ className?: string }>
+  count?: number | null
+}
+
 function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
   const result: ProjectTreeNode[] = []
 
@@ -45,7 +61,6 @@ function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
   return result
 }
 
-// Helper function to sort projects based on sort mode
 function getSortedProjects(
   projects: ProjectTreeNode[],
   sortMode: ProjectSort
@@ -55,7 +70,6 @@ function getSortedProjects(
   switch (sortMode) {
     case "hierarchy":
       return projects
-
     case "priority": {
       const flat = flattenProjects(projects)
       return flat.sort((a, b) => {
@@ -64,27 +78,19 @@ function getSortedProjects(
         return priorityB - priorityA
       })
     }
-
     case "taskCount": {
       const flat = flattenProjects(projects)
-      return flat.sort((a, b) => {
-        return b.stats.activeCount - a.stats.activeCount
-      })
+      return flat.sort((a, b) => b.stats.activeCount - a.stats.activeCount)
     }
-
     case "alphabetical": {
       const flat = flattenProjects(projects)
-      return flat.sort((a, b) => {
-        return a.name.localeCompare(b.name)
-      })
+      return flat.sort((a, b) => a.name.localeCompare(b.name))
     }
-
     default:
       return projects
   }
 }
 
-// Helper function to sort labels based on sort mode
 function getSortedLabels(
   labels: TodoistLabelDoc[] | undefined,
   sortMode: LabelSort,
@@ -93,53 +99,43 @@ function getSortedLabels(
   if (!labels) return []
 
   switch (sortMode) {
-    case "taskCount": {
+    case "taskCount":
       return [...labels].sort((a, b) => {
-        const countA = labelCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === a.todoist_id)?.filteredTaskCount || 0
-        const countB = labelCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === b.todoist_id)?.filteredTaskCount || 0
+        const countA =
+          labelCounts?.labelCounts.find((c) => c.labelId === a.todoist_id)?.filteredTaskCount || 0
+        const countB =
+          labelCounts?.labelCounts.find((c) => c.labelId === b.todoist_id)?.filteredTaskCount || 0
         return countB - countA
       })
-    }
-
-    case "alphabetical": {
-      return [...labels].sort((a, b) => {
-        return a.name.localeCompare(b.name)
-      })
-    }
-
+    case "alphabetical":
+      return [...labels].sort((a, b) => a.name.localeCompare(b.name))
     default:
       return labels
   }
 }
 
-// Helper function to build hierarchical project tree
 function buildProjectTree(projects: TodoistProjectsWithMetadata): ProjectTreeNode[] {
   const projectMap = new Map<string, ProjectTreeNode>()
   const rootProjects: ProjectTreeNode[] = []
 
-  // First pass: create map and add children array
-  projects.forEach((project: TodoistProjectWithMetadata) => {
+  projects.forEach((project) => {
     projectMap.set(project.todoist_id, { ...project, children: [] })
   })
 
-  // Second pass: build hierarchy
-  projects.forEach((project: TodoistProjectWithMetadata) => {
+  projects.forEach((project) => {
     const projectWithChildren = projectMap.get(project.todoist_id)!
     if (project.parent_id && projectMap.has(project.parent_id)) {
-      // Add to parent's children
       projectMap.get(project.parent_id)!.children.push(projectWithChildren)
     } else {
-      // Root level project
       rootProjects.push(projectWithChildren)
     }
   })
 
-  // Sort at each level by child_order
-  const sortProjects = (projects: ProjectTreeNode[]) => {
-    projects.sort((a, b) => a.child_order - b.child_order)
-    projects.forEach(project => {
-      if (project.children.length > 0) {
-        sortProjects(project.children)
+  const sortProjects = (nodes: ProjectTreeNode[]) => {
+    nodes.sort((a, b) => a.child_order - b.child_order)
+    nodes.forEach((node) => {
+      if (node.children.length > 0) {
+        sortProjects(node.children)
       }
     })
   }
@@ -148,53 +144,36 @@ function buildProjectTree(projects: TodoistProjectsWithMetadata): ProjectTreeNod
   return rootProjects
 }
 
-// Component to render a project with its children
 function ProjectItem({
   project,
-  currentView,
+  currentViewKey,
   onViewChange,
-  allProjects,
   expandNested,
-  level = 0
+  level = 0,
+  viewContext,
 }: {
   project: ProjectTreeNode
-  currentView: string
-  onViewChange: (views: ViewConfig[]) => void
-  allProjects: ProjectTreeNode[]
+  currentViewKey: ViewKey
+  onViewChange: (view: ViewSelection) => void
   expandNested: boolean
   level?: number
+  viewContext: ViewBuildContext
 }) {
-  const isActive = currentView === `project:${project.todoist_id}`
+  const projectViewKey = `view:project:${project.todoist_id}` as ViewKey
+  const projectFamilyKey = `view:project-family:${project.todoist_id}` as ViewKey
+  const isActive = currentViewKey === projectViewKey || currentViewKey === projectFamilyKey
   const hasActiveItems = project.stats.activeCount > 0
   const hasChildren = project.children.length > 0
 
-  // Use the canonical priority utilities
   const priority = usePriority(project.metadata?.priority)
 
   const handleProjectClick = () => {
     if (expandNested && hasChildren) {
-      // Flatten all projects (including nested children) for the helper
-      const flatProjects = flattenAllProjects(allProjects)
-      const views = expandProjectWithChildren(project.todoist_id, flatProjects)
-      onViewChange(views)
+      const viewKey = `view:project-family:${project.todoist_id}` as ViewKey
+      onViewChange(resolveView(viewKey, viewContext))
     } else {
-      onViewChange([createSingleView(`project:${project.todoist_id}`)])
+      onViewChange(resolveView(`view:project:${project.todoist_id}` as ViewKey, viewContext))
     }
-  }
-
-  // Helper to flatten project tree for viewHelpers
-  function flattenAllProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
-    const result: ProjectTreeNode[] = []
-    function flatten(nodes: ProjectTreeNode[]) {
-      for (const node of nodes) {
-        result.push(node)
-        if (node.children.length > 0) {
-          flatten(node.children)
-        }
-      }
-    }
-    flatten(projects)
-    return result
   }
 
   return (
@@ -202,28 +181,18 @@ function ProjectItem({
       <Button
         key={project._id}
         variant="ghost"
-        className={cn(
-          "w-full justify-start h-8 px-3 text-sm", // Increased height and padding
-          isActive && "bg-accent"
-        )}
-        style={{ paddingLeft: `${12 + level * 16}px` }} // Increased base padding
+        className={cn("w-full justify-start h-8 px-3 text-sm", isActive && "bg-accent")}
+        style={{ paddingLeft: `${12 + level * 16}px` }}
         onClick={handleProjectClick}
       >
-        {/* Color dot */}
         <div
           className="w-2 h-2 rounded-full mr-3 flex-shrink-0"
           style={{ backgroundColor: getProjectColor(project.color) }}
         />
-
-        {/* Project name */}
         <span className="flex-1 text-left truncate">{project.name}</span>
-
-        {/* Priority indicator */}
         {priority?.showFlag && (
           <Flag className={cn("w-2.5 h-2.5 mr-2 flex-shrink-0", priority.colorClass)} fill="currentColor" />
         )}
-
-        {/* Task count */}
         {hasActiveItems && (
           <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 min-w-6 text-center">
             {project.stats.activeCount}
@@ -231,26 +200,22 @@ function ProjectItem({
         )}
       </Button>
 
-      {/* Render children */}
-      {project.children.map((child: ProjectTreeNode) => (
+      {project.children.map((child) => (
         <ProjectItem
           key={child._id}
           project={child}
-          currentView={currentView}
+          currentViewKey={currentViewKey}
           onViewChange={onViewChange}
-          allProjects={allProjects}
           expandNested={expandNested}
           level={level + 1}
+          viewContext={viewContext}
         />
       ))}
     </>
   )
 }
 
-type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
-type LabelSort = "taskCount" | "alphabetical"
-
-export function Sidebar({ currentView, onViewChange }: SidebarProps) {
+export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
   const [expandNested, setExpandNested] = useState(false)
   const [priorityMode, setPriorityMode] = useState<"tasks" | "projects">("tasks")
   const [projectSort, setProjectSort] = useState<ProjectSort>("hierarchy")
@@ -260,111 +225,104 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
     | TodoistProjectsWithMetadata
     | undefined
 
-  const basicProjects = useQuery(api.todoist.publicQueries.getProjects) as
-    | TodoistProjects
-    | undefined
+  const basicProjects = useQuery(api.todoist.publicQueries.getProjects) as TodoistProjects | undefined
 
-  const labels = useQuery(api.todoist.publicQueries.getLabels) as
-    | TodoistLabelDoc[]
-    | undefined
+  const labels = useQuery(api.todoist.publicQueries.getLabels) as TodoistLabelDoc[] | undefined
 
-  // Fetch count data
   const timeFilterCounts = useQuery(api.todoist.publicQueries.getTimeFilterCounts, {})
   const priorityFilterCounts = useQuery(api.todoist.publicQueries.getPriorityFilterCounts, {})
   const labelFilterCounts = useQuery(api.todoist.publicQueries.getLabelFilterCounts, {})
 
-  const projectsData: TodoistProjectsWithMetadata | undefined = (enhancedProjects && enhancedProjects.length > 0)
-    ? enhancedProjects
-    : basicProjects?.map((project: TodoistProjectWithMetadata) => ({
-        ...project,
-        metadata: {
-          priority: 4,
-          scheduledDate: null,
-          description: null,
-          sourceTaskId: null,
-          lastUpdated: null,
-        },
-        stats: {
-          itemCount: 0,
-          activeCount: 0,
-          completedCount: 0,
-        },
-        computed: {
-          isScheduled: false,
-          isHighPriority: false,
-          completionRate: null,
-          hasActiveItems: false,
-        },
-      }))
+  const projectsWithMetadata: TodoistProjectsWithMetadata | undefined =
+    enhancedProjects && enhancedProjects.length > 0
+      ? enhancedProjects
+      : basicProjects
+        ?.map((project) => ({
+          ...project,
+          metadata: {
+            priority: 4,
+            scheduledDate: null,
+            description: null,
+            sourceTaskId: null,
+            lastUpdated: null,
+          },
+          stats: {
+            itemCount: 0,
+            activeCount: 0,
+            completedCount: 0,
+          },
+          computed: {
+            isScheduled: false,
+            isHighPriority: false,
+            completionRate: null,
+            hasActiveItems: false,
+          },
+        }))
 
-  // Build hierarchical structure
-  const projectTree = projectsData ? buildProjectTree(projectsData) : []
+  const projectTree = projectsWithMetadata ? buildProjectTree(projectsWithMetadata) : []
 
-  // Find inbox project
-  const inboxProject = projectsData?.find((project: TodoistProjectWithMetadata) =>
-    project.name === "Inbox" && !project.parent_id
+  const inboxProject = projectsWithMetadata?.find(
+    (project) => project.name === "Inbox" && !project.parent_id
   )
 
-  // Get non-inbox projects
-  const otherProjects = projectTree.filter(
-    (project) => project.todoist_id !== inboxProject?.todoist_id
+  const otherProjects = projectTree.filter((project) => project.todoist_id !== inboxProject?.todoist_id)
+
+  const viewContext: ViewBuildContext = useMemo(
+    () => ({
+      projects: basicProjects,
+      projectsWithMetadata,
+      labels,
+    }),
+    [basicProjects, projectsWithMetadata, labels]
   )
 
-  const viewItems = [
-    {
-      id: "inbox",
-      label: "Inbox",
-      icon: Inbox,
-      count: inboxProject?.stats.activeCount || null,
-    },
-    {
-      id: "multi:priority-queue",
-      label: "Priority Queue",
-      icon: Filter,
-      count: null,
-    },
-    {
-      id: "today",
-      label: "Today",
-      icon: Calendar,
-      count: null,
-    },
-    {
-      id: "upcoming",
-      label: "Upcoming",
-      icon: Calendar,
-      count: null,
-    },
-  ]
+  const viewItems: ViewNavItem[] = useMemo(
+    () => [
+      {
+        key: "view:inbox",
+        label: "Inbox",
+        icon: Inbox,
+        count: inboxProject?.stats.activeCount || null,
+      },
+      {
+        key: "view:priority-queue",
+        label: "Priority Queue",
+        icon: Filter,
+        count: null,
+      },
+      {
+        key: "view:today",
+        label: "Today",
+        icon: Calendar,
+        count: null,
+      },
+      {
+        key: "view:upcoming",
+        label: "Upcoming",
+        icon: Calendar,
+        count: null,
+      },
+    ],
+    [inboxProject?.stats.activeCount]
+  )
 
   return (
-    <div className="w-72 bg-muted/30 border-r h-full flex flex-col"> {/* Increased width */}
-      {/* Views Section */}
+    <div className="w-72 bg-muted/30 border-r h-full flex flex-col">
       <div className="p-4">
         <div className="space-y-1">
           {viewItems.map((item) => {
             const Icon = item.icon
-            const isActive = currentView === item.id
+            const isActive = currentViewKey === item.key
 
             const handleItemClick = () => {
-              // Handle priority queue multi-view expansion
-              if (item.id === "multi:priority-queue") {
-                const views = createPriorityQueueViews(projectsData || [])
-                onViewChange(views)
-              } else {
-                // Simple single view
-                onViewChange([createSingleView(item.id)])
-              }
+              onViewChange(resolveView(item.key, viewContext))
             }
 
             return (
               <Button
-                key={item.id}
+                key={item.key}
                 variant="ghost"
-                className={cn(
-                  "w-full justify-start h-9 px-3 text-sm", // Increased height and padding
-                  isActive && "bg-accent"
-                )}
+                className={cn("w-full justify-start h-9 px-3 text-sm", isActive && "bg-accent")}
                 onClick={handleItemClick}
               >
                 <Icon className="h-4 w-4 mr-3" />
@@ -380,7 +338,6 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Projects Section */}
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-muted-foreground">Projects</h3>
@@ -422,27 +379,24 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
         )}
 
         <div className="space-y-0.5 max-h-96 overflow-y-auto scrollbar-hide">
-          {getSortedProjects(otherProjects, projectSort).map((project: ProjectTreeNode) => (
-            <ProjectItem
-              key={project._id}
-              project={project}
-              currentView={currentView}
-              onViewChange={onViewChange}
-              allProjects={projectTree}
-              expandNested={expandNested}
-              level={0}
-            />
+          {getSortedProjects(otherProjects, projectSort).map((project) => (
+          <ProjectItem
+            key={project._id}
+            project={project}
+            currentViewKey={currentViewKey}
+            onViewChange={onViewChange}
+            expandNested={expandNested}
+            level={0}
+            viewContext={viewContext}
+          />
           ))}
 
           {(!otherProjects || otherProjects.length === 0) && (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              No projects found
-            </p>
+            <p className="text-xs text-muted-foreground text-center py-4">No projects found</p>
           )}
         </div>
       </div>
 
-      {/* Time Filters Section */}
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-muted-foreground">Time</h3>
@@ -451,21 +405,20 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
           {[
             { id: "overdue", label: "Overdue", icon: AlertCircle, color: "text-red-500", filterKey: "overdue" },
             { id: "today", label: "Today", icon: Calendar, color: "text-blue-500", filterKey: "today" },
-            { id: "upcoming", label: "Upcoming", icon: Clock, color: "text-green-500", filterKey: "next7days" },
+            { id: "upcoming", label: "Upcoming", icon: Calendar, color: "text-green-500", filterKey: "next7days" },
             { id: "no-date", label: "No Date", icon: Calendar, color: "text-gray-500", filterKey: "nodate" },
           ].map((timeFilter) => {
             const Icon = timeFilter.icon
-            const isActive = currentView === `time:${timeFilter.id}`
-            const count = timeFilterCounts?.timeCounts.find((c: { filter: string; filteredTaskCount: number }) => c.filter === timeFilter.filterKey)?.filteredTaskCount || 0
+            const viewKey = `view:time:${timeFilter.id}` as ViewKey
+            const isActive = currentViewKey === viewKey
+            const count =
+              timeFilterCounts?.timeCounts.find((c) => c.filter === timeFilter.filterKey)?.filteredTaskCount || 0
             return (
               <Button
                 key={timeFilter.id}
                 variant="ghost"
-                className={cn(
-                  "w-full justify-start h-8 px-3 text-sm",
-                  isActive && "bg-accent"
-                )}
-                onClick={() => onViewChange([createSingleView(`time:${timeFilter.id}`)])}
+                className={cn("w-full justify-start h-8 px-3 text-sm", isActive && "bg-accent")}
+                onClick={() => onViewChange(resolveView(viewKey, viewContext))}
               >
                 <Icon className={cn("h-4 w-4 mr-3", timeFilter.color)} />
                 <span className="flex-1 text-left">{timeFilter.label}</span>
@@ -480,7 +433,6 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Priorities Section */}
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-muted-foreground">Priorities</h3>
@@ -507,31 +459,24 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
             { id: "p4", label: "Priority 4", icon: Flag, color: "text-gray-500", priorityLevel: 1 },
           ].map((priority) => {
             const Icon = priority.icon
-            const isActive = currentView === `priority:${priority.id}`
-            const count = priorityFilterCounts?.priorityCounts.find((c: { priority: number; filteredTaskCount: number }) => c.priority === priority.priorityLevel)?.filteredTaskCount || 0
+            const viewKey = (
+              priorityMode === "projects"
+                ? `view:priority-projects:${priority.id}`
+                : `view:priority:${priority.id}`
+            ) as ViewKey
+            const isActive = currentViewKey === viewKey
+            const count =
+              priorityFilterCounts?.priorityCounts.find((c) => c.priority === priority.priorityLevel)?.filteredTaskCount || 0
 
             const handlePriorityClick = () => {
-              if (priorityMode === "projects") {
-                const views = expandPriorityProjects(priority.id, projectsData || [])
-                // If no projects found, fall back to priority task view
-                if (views.length === 0) {
-                  onViewChange([createSingleView(`priority:${priority.id}`)])
-                } else {
-                  onViewChange(views)
-                }
-              } else {
-                onViewChange([createSingleView(`priority:${priority.id}`)])
-              }
+              onViewChange(resolveView(viewKey, viewContext))
             }
 
             return (
               <Button
                 key={priority.id}
                 variant="ghost"
-                className={cn(
-                  "w-full justify-start h-8 px-3 text-sm",
-                  isActive && "bg-accent"
-                )}
+                className={cn("w-full justify-start h-8 px-3 text-sm", isActive && "bg-accent")}
                 onClick={handlePriorityClick}
               >
                 <Icon className={cn("h-4 w-4 mr-3", priority.color)} fill="currentColor" />
@@ -547,7 +492,6 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
         </div>
       </div>
 
-      {/* Labels Section */}
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-muted-foreground">Labels</h3>
@@ -566,23 +510,19 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
           </button>
         </div>
         <div className="space-y-0.5 max-h-48 overflow-y-auto scrollbar-hide">
-          {getSortedLabels(labels, labelSort, labelFilterCounts).map((label: TodoistLabelDoc) => {
-            const isActive = currentView === `label:${label.name}`
-            const count = labelFilterCounts?.labelCounts.find((c: { labelId: string; filteredTaskCount: number }) => c.labelId === label.todoist_id)?.filteredTaskCount || 0
+          {getSortedLabels(labels, labelSort, labelFilterCounts).map((label) => {
+            const viewKey = `view:label:${label.name}` as ViewKey
+            const isActive = currentViewKey === viewKey
+            const count =
+              labelFilterCounts?.labelCounts.find((c) => c.labelId === label.todoist_id)?.filteredTaskCount || 0
             return (
               <Button
                 key={label._id}
                 variant="ghost"
-                className={cn(
-                  "w-full justify-start h-8 px-3 text-sm",
-                  isActive && "bg-accent"
-                )}
-                onClick={() => onViewChange([createSingleView(`label:${label.name}`)])}
+                className={cn("w-full justify-start h-8 px-3 text-sm", isActive && "bg-accent")}
+                onClick={() => onViewChange(resolveView(viewKey, viewContext))}
               >
-                <Tag
-                  className="h-4 w-4 mr-3"
-                  style={{ color: getProjectColor(label.color) }}
-                />
+                <Tag className="h-4 w-4 mr-3" style={{ color: getProjectColor(label.color) }} />
                 <span className="flex-1 text-left">@{label.name}</span>
                 {count > 0 && (
                   <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 min-w-6 text-center">
@@ -593,31 +533,9 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
             )
           })}
           {(!labels || labels.length === 0) && (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              No labels found
-            </p>
+            <p className="text-xs text-muted-foreground text-center py-4">No labels found</p>
           )}
         </div>
-      </div>
-
-      {/* Filters & Settings */}
-      <div className="border-t p-4 space-y-1">
-        <Button
-          variant="ghost"
-          className="w-full justify-start h-9 px-3 text-sm" // Match main navigation style
-          onClick={() => onViewChange([createSingleView("filters")])}
-        >
-          <Filter className="h-4 w-4 mr-3" />
-          <span className="flex-1 text-left">Filters & Labels</span>
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full justify-start h-9 px-3 text-sm" // Match main navigation style
-          onClick={() => onViewChange([createSingleView("settings")])}
-        >
-          <Settings className="h-4 w-4 mr-3" />
-          <span className="flex-1 text-left">Settings</span>
-        </Button>
       </div>
     </div>
   )

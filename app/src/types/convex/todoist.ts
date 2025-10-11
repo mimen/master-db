@@ -6,8 +6,8 @@ import type { Doc } from "@/convex/_generated/dataModel"
 export type TodoistProjects = FunctionReturnType<typeof api.todoist.publicQueries.getProjects>
 export type TodoistProject = TodoistProjects[number]
 
-export type TodoistItemsByView = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>
-export type TodoistTask = TodoistItemsByView[number]
+export type TodoistItemsByList = FunctionReturnType<typeof api.todoist.publicQueries.getItemsByView>
+export type TodoistTask = TodoistItemsByList[number]
 
 export type TodoistProjectsWithMetadata = FunctionReturnType<typeof api.todoist.publicQueries.getProjectsWithMetadata>
 export type TodoistProjectWithMetadata = TodoistProjectsWithMetadata[number]

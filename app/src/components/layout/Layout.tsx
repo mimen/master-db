@@ -6,137 +6,142 @@ import { Sidebar } from "./Sidebar"
 
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts"
-import type { ViewConfig } from "@/types/views"
+import type { ViewKey, ViewSelection } from "@/lib/views/types"
+import { resolveView } from "@/lib/views/viewDefinitions"
 
 type Selection = {
-  viewId: string | null
+  listId: string | null
   taskIndex: number | null
 }
 
 export function Layout() {
   const { openShortcuts } = useDialogContext()
-  const [activeViews, setActiveViews] = useState<ViewConfig[]>([
-    { id: "main", type: "inbox", value: "inbox", expanded: true, collapsible: false }
-  ])
-  const [selectionState, setSelectionState] = useState<Selection>({ viewId: null, taskIndex: null })
-  const viewTaskCountsRef = useRef(new Map<string, number>())
+  const [activeView, setActiveView] = useState<ViewSelection>(() => resolveView("view:inbox"))
+  const [selectionState, setSelectionState] = useState<Selection>({ listId: null, taskIndex: null })
+  const taskCountsRef = useRef(new Map<string, number>())
 
   const updateSelection = useCallback((updater: (prev: Selection) => Selection) => {
-    setSelectionState((prev) => {
-      const next = updater(prev)
-      return next
-    })
+    setSelectionState((prev) => updater(prev))
   }, [])
 
-  const viewIds = useMemo(() => activeViews.map((view) => view.id), [activeViews])
+  const listIds = useMemo(() => activeView.lists.map((list) => list.id), [activeView.lists])
 
-  const handleViewChange = useCallback((views: ViewConfig[]) => {
-    setActiveViews(views)
+  const handleViewChange = useCallback((view: ViewSelection) => {
+    setActiveView(view)
+    taskCountsRef.current = new Map<string, number>()
+    setSelectionState({ listId: null, taskIndex: null })
   }, [])
 
-  const handleTaskCountChange = useCallback((viewId: string, count: number) => {
-    viewTaskCountsRef.current.set(viewId, count)
+  const handleTaskCountChange = useCallback((listId: string, count: number) => {
+    taskCountsRef.current.set(listId, count)
 
     updateSelection((prev) => {
-      if (!prev.viewId || prev.taskIndex === null) {
-        const firstAvailable = findFirstAvailable(viewIds, viewTaskCountsRef.current)
+      if (!prev.listId || prev.taskIndex === null) {
+        const firstAvailable = findFirstAvailableList(listIds, taskCountsRef.current)
         return firstAvailable ?? prev
       }
 
-      if (prev.viewId === viewId) {
+      if (prev.listId === listId) {
         if (count === 0) {
-          const next = findNextView(viewIds, viewTaskCountsRef.current, viewId)
-            ?? findPreviousView(viewIds, viewTaskCountsRef.current, viewId)
-          return next ?? { viewId: null, taskIndex: null }
+          const next =
+            findNextList(listIds, taskCountsRef.current, listId) ??
+            findPreviousList(listIds, taskCountsRef.current, listId)
+          return next ?? { listId: null, taskIndex: null }
         }
 
         if (prev.taskIndex >= count) {
-          return { viewId, taskIndex: count - 1 }
+          return { listId, taskIndex: count - 1 }
         }
       }
 
       return prev
     })
-  }, [updateSelection, viewIds])
+  }, [listIds, updateSelection])
 
-  const handleTaskClick = useCallback((viewId: string, taskIndex: number) => {
-    updateSelection(() => ({ viewId, taskIndex }))
+  const handleTaskClick = useCallback((listId: string, taskIndex: number) => {
+    updateSelection(() => ({ listId, taskIndex }))
   }, [updateSelection])
 
-  const handleArrowNavigation = useCallback((direction: 1 | -1) => {
-    updateSelection((prev) => {
-      if (viewIds.length === 0) return prev
+  const handleArrowNavigation = useCallback(
+    (direction: 1 | -1) => {
+      updateSelection((prev) => {
+        if (listIds.length === 0) return prev
 
-      const counts = viewTaskCountsRef.current
-      const movingForward = direction === 1
+        const counts = taskCountsRef.current
+        const movingForward = direction === 1
 
-      if (!prev.viewId || prev.taskIndex === null) {
-        const fallback = movingForward
-          ? findFirstAvailable(viewIds, counts)
-          : findLastAvailable(viewIds, counts)
-        return fallback ?? prev
-      }
-
-      const currentIndex = viewIds.indexOf(prev.viewId)
-      if (currentIndex === -1) {
-        const fallback = movingForward
-          ? findFirstAvailable(viewIds, counts)
-          : findLastAvailable(viewIds, counts)
-        return fallback ?? { viewId: null, taskIndex: null }
-      }
-
-      const currentCount = counts.get(prev.viewId) ?? 0
-
-      if (currentCount === 0) {
-        const fallback = movingForward
-          ? findNextView(viewIds, counts, prev.viewId)
-          : findPreviousView(viewIds, counts, prev.viewId)
-        return fallback ?? { viewId: null, taskIndex: null }
-      }
-
-      if (movingForward) {
-        if ((prev.taskIndex ?? 0) + 1 < currentCount) {
-          return { viewId: prev.viewId, taskIndex: (prev.taskIndex ?? 0) + 1 }
+        if (!prev.listId || prev.taskIndex === null) {
+          const fallback = movingForward
+            ? findFirstAvailableList(listIds, counts)
+            : findLastAvailableList(listIds, counts)
+          return fallback ?? prev
         }
-        const next = findNextView(viewIds, counts, prev.viewId)
-        return next ?? prev
-      }
 
-      if ((prev.taskIndex ?? 0) > 0) {
-        return { viewId: prev.viewId, taskIndex: (prev.taskIndex ?? 0) - 1 }
-      }
-      const previous = findPreviousView(viewIds, counts, prev.viewId)
-      return previous ?? prev
-    })
-  }, [updateSelection, viewIds])
+        const currentIndex = listIds.indexOf(prev.listId)
+        if (currentIndex === -1) {
+          const fallback = movingForward
+            ? findFirstAvailableList(listIds, counts)
+            : findLastAvailableList(listIds, counts)
+          return fallback ?? { listId: null, taskIndex: null }
+        }
+
+        const currentCount = counts.get(prev.listId) ?? 0
+
+        if (currentCount === 0) {
+          const fallback = movingForward
+            ? findNextList(listIds, counts, prev.listId)
+            : findPreviousList(listIds, counts, prev.listId)
+          return fallback ?? { listId: null, taskIndex: null }
+        }
+
+        if (movingForward) {
+          if ((prev.taskIndex ?? 0) + 1 < currentCount) {
+            return { listId: prev.listId, taskIndex: (prev.taskIndex ?? 0) + 1 }
+          }
+          const next = findNextList(listIds, counts, prev.listId)
+          return next ?? prev
+        }
+
+        if ((prev.taskIndex ?? 0) > 0) {
+          return { listId: prev.listId, taskIndex: (prev.taskIndex ?? 0) - 1 }
+        }
+        const previous = findPreviousList(listIds, counts, prev.listId)
+        return previous ?? prev
+      })
+    },
+    [listIds, updateSelection]
+  )
 
   useEffect(() => {
     updateSelection((prev) => {
-      if (!prev.viewId || !viewIds.includes(prev.viewId)) {
-        const fallback = findFirstAvailable(viewIds, viewTaskCountsRef.current)
-        return fallback ?? { viewId: null, taskIndex: null }
+      if (!prev.listId || !listIds.includes(prev.listId)) {
+        const fallback = findFirstAvailableList(listIds, taskCountsRef.current)
+        return fallback ?? { listId: null, taskIndex: null }
       }
 
-      const currentCount = viewTaskCountsRef.current.get(prev.viewId) ?? 0
+      const currentCount = taskCountsRef.current.get(prev.listId) ?? 0
       if (currentCount === 0) {
-        const fallback = findNextView(viewIds, viewTaskCountsRef.current, prev.viewId)
-          ?? findPreviousView(viewIds, viewTaskCountsRef.current, prev.viewId)
-        return fallback ?? { viewId: null, taskIndex: null }
+        const fallback =
+          findNextList(listIds, taskCountsRef.current, prev.listId) ??
+          findPreviousList(listIds, taskCountsRef.current, prev.listId)
+        return fallback ?? { listId: null, taskIndex: null }
       }
 
       if ((prev.taskIndex ?? 0) >= currentCount) {
-        return { viewId: prev.viewId, taskIndex: currentCount - 1 }
+        return { listId: prev.listId, taskIndex: currentCount - 1 }
       }
 
       return prev
     })
-  }, [updateSelection, viewIds])
+  }, [listIds, updateSelection])
 
   useGlobalShortcuts({
     onNavigateNext: () => handleArrowNavigation(1),
     onNavigatePrevious: () => handleArrowNavigation(-1),
     onShowHelp: openShortcuts,
   })
+
+  const sidebarViewKey: ViewKey = activeView.key
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -146,20 +151,17 @@ export function Layout() {
         </div>
       </header>
       <div className="flex h-[calc(100vh-73px)]">
-        <Sidebar
-          currentView={activeViews[0]?.value || "inbox"}
-          onViewChange={handleViewChange}
-        />
+        <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
         <main className="flex-1 overflow-auto" data-task-scroll-container>
           <div className="space-y-6">
-            {activeViews.map((view) => (
+            {activeView.lists.map((list) => (
               <TaskListView
-                key={view.id}
-                viewConfig={view}
+                key={list.id}
+                list={list}
                 onTaskCountChange={handleTaskCountChange}
                 onTaskClick={handleTaskClick}
                 focusedTaskIndex={
-                  selectionState.viewId === view.id ? selectionState.taskIndex : null
+                  selectionState.listId === list.id ? selectionState.taskIndex : null
                 }
               />
             ))}
@@ -170,51 +172,59 @@ export function Layout() {
   )
 }
 
-function findFirstAvailable(viewIds: string[], counts: Map<string, number>): Selection | null {
-  for (const viewId of viewIds) {
-    const count = counts.get(viewId) ?? 0
+function findFirstAvailableList(listIds: string[], counts: Map<string, number>): Selection | null {
+  for (const listId of listIds) {
+    const count = counts.get(listId) ?? 0
     if (count > 0) {
-      return { viewId, taskIndex: 0 }
+      return { listId, taskIndex: 0 }
     }
   }
   return null
 }
 
-function findLastAvailable(viewIds: string[], counts: Map<string, number>): Selection | null {
-  for (let index = viewIds.length - 1; index >= 0; index -= 1) {
-    const viewId = viewIds[index]
-    const count = counts.get(viewId) ?? 0
+function findLastAvailableList(listIds: string[], counts: Map<string, number>): Selection | null {
+  for (let index = listIds.length - 1; index >= 0; index -= 1) {
+    const listId = listIds[index]
+    const count = counts.get(listId) ?? 0
     if (count > 0) {
-      return { viewId, taskIndex: count - 1 }
+      return { listId, taskIndex: count - 1 }
     }
   }
   return null
 }
 
-function findNextView(viewIds: string[], counts: Map<string, number>, currentViewId: string): Selection | null {
-  const startIndex = viewIds.indexOf(currentViewId)
+function findNextList(
+  listIds: string[],
+  counts: Map<string, number>,
+  currentListId: string
+): Selection | null {
+  const startIndex = listIds.indexOf(currentListId)
   if (startIndex === -1) return null
 
-  for (let index = startIndex + 1; index < viewIds.length; index += 1) {
-    const viewId = viewIds[index]
-    const count = counts.get(viewId) ?? 0
+  for (let index = startIndex + 1; index < listIds.length; index += 1) {
+    const listId = listIds[index]
+    const count = counts.get(listId) ?? 0
     if (count > 0) {
-      return { viewId, taskIndex: 0 }
+      return { listId, taskIndex: 0 }
     }
   }
 
   return null
 }
 
-function findPreviousView(viewIds: string[], counts: Map<string, number>, currentViewId: string): Selection | null {
-  const startIndex = viewIds.indexOf(currentViewId)
+function findPreviousList(
+  listIds: string[],
+  counts: Map<string, number>,
+  currentListId: string
+): Selection | null {
+  const startIndex = listIds.indexOf(currentListId)
   if (startIndex === -1) return null
 
   for (let index = startIndex - 1; index >= 0; index -= 1) {
-    const viewId = viewIds[index]
-    const count = counts.get(viewId) ?? 0
+    const listId = listIds[index]
+    const count = counts.get(listId) ?? 0
     if (count > 0) {
-      return { viewId, taskIndex: count - 1 }
+      return { listId, taskIndex: count - 1 }
     }
   }
 
