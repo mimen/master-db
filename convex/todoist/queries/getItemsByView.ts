@@ -6,11 +6,11 @@ import { query } from "../../_generated/server";
 
 type TimeRange = "overdue" | "today" | "upcoming" | "no-date";
 
-type InboxQuery = { type: "inbox"; inboxProjectId?: string }
-type TimeQuery = { type: "time"; range: TimeRange }
-type ProjectQuery = { type: "project"; projectId: string }
-type PriorityQuery = { type: "priority"; priority: 1 | 2 | 3 | 4 }
-type LabelQuery = { type: "label"; label: string }
+type InboxQuery = { type: "inbox"; view: string; inboxProjectId?: string }
+type TimeQuery = { type: "time"; view: string; range: TimeRange }
+type ProjectQuery = { type: "project"; view: string; projectId: string }
+type PriorityQuery = { type: "priority"; view: string; priority: 1 | 2 | 3 | 4 }
+type LabelQuery = { type: "label"; view: string; label: string }
 
 type ListQueryInput = InboxQuery | TimeQuery | ProjectQuery | PriorityQuery | LabelQuery;
 
@@ -21,27 +21,30 @@ const timeRangeValidator = v.union(
   v.literal("no-date")
 );
 
-const inboxValidator = v.object({
-  type: v.literal("inbox"),
-  inboxProjectId: v.optional(v.string()),
-});
-
 const listQueryValidator = v.union(
-  inboxValidator,
+  v.object({
+    type: v.literal("inbox"),
+    view: v.string(),
+    inboxProjectId: v.optional(v.string()),
+  }),
   v.object({
     type: v.literal("time"),
+    view: v.string(),
     range: timeRangeValidator,
   }),
   v.object({
     type: v.literal("project"),
+    view: v.string(),
     projectId: v.string(),
   }),
   v.object({
     type: v.literal("priority"),
+    view: v.string(),
     priority: v.union(v.literal(1), v.literal(2), v.literal(3), v.literal(4)),
   }),
   v.object({
     type: v.literal("label"),
+    view: v.string(),
     label: v.string(),
   })
 );

@@ -1,11 +1,5 @@
-import type { JSX } from "react"
-
 import { AlertCircle, Calendar, Flag, Inbox, Tag } from "lucide-react"
-
-import { getProjectColor } from "@/lib/colors"
-import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
-import { cn } from "@/lib/utils"
-import type { TodoistProjectsWithMetadata } from "@/types/convex/todoist"
+import type { JSX } from "react"
 
 import type {
   ListDefinition,
@@ -13,9 +7,15 @@ import type {
   ListInstance,
   ListInstanceOptions,
   ListPresentationContext,
+  ListQueryDefinition,
   ListQueryInput,
   TimeRange,
 } from "./types"
+
+import { getProjectColor } from "@/lib/colors"
+import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
+import { cn } from "@/lib/utils"
+import type { TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
 function mergeDependencies(...deps: Array<ListDependencies | undefined>): ListDependencies {
   return deps.reduce<ListDependencies>((acc, dep) => {
@@ -32,7 +32,11 @@ function createListInstance<P extends Record<string, unknown>>(
   options: ListInstanceOptions<P>
 ): ListInstance<P> {
   const { id, params, overrides, viewKey, indexInView } = options
-  const query = definition.buildQuery(params)
+  const baseQuery = definition.buildQuery(params)
+  const query: ListQueryInput = {
+    ...baseQuery,
+    view: viewKey,
+  }
   const dependencies = mergeDependencies(definition.dependencies)
 
   const getHeader = (context: ListPresentationContext<P>) => {

@@ -1,5 +1,8 @@
 import { Filter, Inbox } from "lucide-react"
 
+import { BUILT_IN_MULTI_LISTS } from "../multi-list/defaults"
+
+import { instantiateList, listDefinitions } from "./listDefinitions"
 import type {
   ListInstance,
   TimeRange,
@@ -9,8 +12,6 @@ import type {
   TodoistProjects,
   TodoistProjectsWithMetadata,
 } from "./types"
-import { instantiateList, listDefinitions } from "./listDefinitions"
-import { BUILT_IN_MULTI_LISTS } from "../multi-list/defaults"
 
 type ListBuilder = (
   viewKey: ViewKey,

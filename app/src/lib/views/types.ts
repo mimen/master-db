@@ -4,12 +4,14 @@ import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } fr
 
 export type TimeRange = "overdue" | "today" | "upcoming" | "no-date"
 
-export type ListQueryInput =
+export type ListQueryDefinition =
   | { type: "inbox"; inboxProjectId?: string }
   | { type: "time"; range: TimeRange }
   | { type: "project"; projectId: string }
   | { type: "priority"; priority: 1 | 2 | 3 | 4 }
   | { type: "label"; label: string }
+
+export type ListQueryInput = ListQueryDefinition & { view: ViewKey }
 
 export type ListDependencies = {
   projects?: boolean
@@ -48,7 +50,7 @@ export interface ListDefinition<P extends Record<string, unknown> = Record<strin
     maxTasks?: number
   }
   dependencies?: ListDependencies
-  buildQuery: (params: P) => ListQueryInput
+  buildQuery: (params: P) => ListQueryDefinition
   getHeader: (context: ListPresentationContext<P>) => ListHeaderInfo
   getEmptyState: (context: ListPresentationContext<P>) => ListEmptyStateInfo
 }
