@@ -14,6 +14,8 @@ import { resolveView } from "@/lib/views/viewDefinitions"
 export function Layout() {
   const { openShortcuts } = useDialogContext()
   const [activeView, setActiveView] = useState<ViewSelection>(() => resolveView("view:inbox"))
+  const [dismissedLists, setDismissedLists] = useState<Set<string>>(new Set())
+  const [taskCountsAtDismissal, setTaskCountsAtDismissal] = useState<Map<string, number>>(new Map())
 
   const { updateTaskCount, resetTaskCounts, getTaskCounts } = useTaskCounts()
 
@@ -36,9 +38,45 @@ export function Layout() {
     (listId: string, count: number) => {
       updateTaskCount(listId, count)
       handleTaskCountChange(listId, count)
+
+      // Auto-restore dismissed lists ONLY when task count increases
+      if (dismissedLists.has(listId)) {
+        const countAtDismissal = taskCountsAtDismissal.get(listId) ?? 0
+        if (count > countAtDismissal) {
+          setDismissedLists((prev) => {
+            const next = new Set(prev)
+            next.delete(listId)
+            return next
+          })
+          setTaskCountsAtDismissal((prev) => {
+            const next = new Map(prev)
+            next.delete(listId)
+            return next
+          })
+        }
+      }
     },
-    [updateTaskCount, handleTaskCountChange]
+    [updateTaskCount, handleTaskCountChange, dismissedLists, taskCountsAtDismissal]
   )
+
+  const handleDismissList = useCallback((listId: string) => {
+    const currentCount = getTaskCounts().get(listId) ?? 0
+    setDismissedLists((prev) => new Set(prev).add(listId))
+    setTaskCountsAtDismissal((prev) => new Map(prev).set(listId, currentCount))
+  }, [getTaskCounts])
+
+  const handleRestoreList = useCallback((listId: string) => {
+    setDismissedLists((prev) => {
+      const next = new Set(prev)
+      next.delete(listId)
+      return next
+    })
+    setTaskCountsAtDismissal((prev) => {
+      const next = new Map(prev)
+      next.delete(listId)
+      return next
+    })
+  }, [])
 
   useGlobalShortcuts({
     onNavigateNext: () => handleArrowNavigation(1),
@@ -47,6 +85,7 @@ export function Layout() {
   })
 
   const sidebarViewKey: ViewKey = activeView.key
+  const isMultiListView = activeView.lists.length > 1
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -58,7 +97,7 @@ export function Layout() {
       <div className="flex h-[calc(100vh-73px)]">
         <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
         <main className="flex-1 overflow-auto" data-task-scroll-container>
-          <div className="space-y-6">
+          <div className="space-y-6 pt-6">
             {activeView.lists.map((list) => (
               <TaskListView
                 key={list.id}
@@ -66,6 +105,10 @@ export function Layout() {
                 onTaskCountChange={handleTaskCountChangeWithUpdate}
                 onTaskClick={handleTaskClick}
                 focusedTaskIndex={selection.listId === list.id ? selection.taskIndex : null}
+                isDismissed={dismissedLists.has(list.id)}
+                onDismiss={handleDismissList}
+                onRestore={handleRestoreList}
+                isMultiListView={isMultiListView}
               />
             ))}
           </div>

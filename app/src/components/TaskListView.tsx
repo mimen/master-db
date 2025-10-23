@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User } from "lucide-react"
+import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User, X, RotateCcw } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
@@ -24,9 +24,22 @@ interface TaskListViewProps {
   onTaskCountChange?: (listId: string, count: number) => void
   onTaskClick?: (listId: string, taskIndex: number) => void
   focusedTaskIndex: number | null
+  isDismissed?: boolean
+  onDismiss?: (listId: string) => void
+  onRestore?: (listId: string) => void
+  isMultiListView?: boolean
 }
 
-export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTaskIndex }: TaskListViewProps) {
+export function TaskListView({
+  list,
+  onTaskCountChange,
+  onTaskClick,
+  focusedTaskIndex,
+  isDismissed = false,
+  onDismiss,
+  onRestore,
+  isMultiListView = false
+}: TaskListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
 
   const projects: TodoistProjects | undefined = useQuery(
@@ -192,6 +205,36 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
     )
   }
 
+  // Show compact view ONLY in multi-list views for:
+  // 1. Empty lists (always compact by default)
+  // 2. Dismissed lists (manually collapsed, shows task count)
+  const shouldShowCompact = isMultiListView && (visibleTasks.length === 0 || isDismissed)
+
+  if (shouldShowCompact) {
+    const taskCountText = visibleTasks.length === 0
+      ? "Empty"
+      : `${visibleTasks.length} task${visibleTasks.length === 1 ? '' : 's'}`
+
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-1">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground/60">
+          {header.icon}
+          <span className="flex-1">{header.title}</span>
+          <span className="text-xs">{taskCountText}</span>
+          {visibleTasks.length > 0 && (
+            <button
+              onClick={() => onRestore?.(list.id)}
+              className="p-1 hover:bg-muted rounded transition-colors"
+              title="Expand list"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6 flex items-center gap-2">
@@ -210,6 +253,15 @@ export function TaskListView({ list, onTaskCountChange, onTaskClick, focusedTask
             <p className="text-muted-foreground mt-1">{header.description}</p>
           )}
         </div>
+        {isMultiListView && visibleTasks.length > 0 && (
+          <button
+            onClick={() => onDismiss?.(list.id)}
+            className="p-1 hover:bg-muted rounded transition-colors text-muted-foreground"
+            title="Collapse list"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {isExpanded && (
