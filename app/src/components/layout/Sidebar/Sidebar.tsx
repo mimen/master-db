@@ -60,7 +60,7 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
       </SidebarHeader>
       <SidebarContent className="p-0 overflow-hidden">
         <ScrollArea className="h-full">
-          <div className="p-2 min-w-0 w-[250px]">
+          <div className="p-2 min-w-0 w-[265px]">
             <ViewsSection
               items={viewItems}
               currentViewKey={currentViewKey}

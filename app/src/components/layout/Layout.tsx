@@ -92,14 +92,14 @@ export function Layout() {
   return (
     <>
       <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
-      <SidebarInset>
+      <SidebarInset className="overflow-hidden">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <div className="h-6 w-px bg-border" />
           <h1 className="text-xl font-semibold">Todoist Processor</h1>
         </header>
-        <ScrollArea className="flex-1" data-task-scroll-container>
-          <main className="space-y-6 pt-6">
+        <ScrollArea className="h-[calc(100vh-4rem)]" data-task-scroll-container>
+          <main className="space-y-6 p-6">
             {activeView.lists.map((list) => (
               <TaskListView
                 key={list.id}
