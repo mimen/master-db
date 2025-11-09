@@ -58,9 +58,11 @@ export function SidebarButton({
       style={level > 0 ? { paddingLeft: `${8 + level * 16}px` } : undefined}
     >
       {renderIcon()}
-      <span className="flex-1 truncate">{label}</span>
-      {children}
-      {count !== null && count !== undefined && <CountBadge count={count} />}
+      <span className="flex-1 truncate min-w-0">{label}</span>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {children}
+        {count !== null && count !== undefined && <CountBadge count={count} />}
+      </div>
     </SidebarMenuButton>
   )
 }
