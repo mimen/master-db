@@ -1,25 +1,116 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import type { ProjectSort, LabelSort } from "../types"
 
+interface CollapsedSections {
+  projects: boolean
+  time: boolean
+  priorities: boolean
+  labels: boolean
+}
+
+const STORAGE_KEYS = {
+  COLLAPSED_SECTIONS: "sidebar:collapsedSections",
+  EXPAND_NESTED: "sidebar:expandNested",
+  PRIORITY_MODE: "sidebar:priorityMode",
+  PROJECT_SORT: "sidebar:projectSort",
+  LABEL_SORT: "sidebar:labelSort",
+} as const
+
+// Helper to safely read from localStorage
+function getStoredValue<T>(key: string, defaultValue: T): T {
+  try {
+    const item = window.localStorage.getItem(key)
+    return item ? JSON.parse(item) : defaultValue
+  } catch (error) {
+    console.warn(`Error reading localStorage key "${key}":`, error)
+    return defaultValue
+  }
+}
+
+// Helper to safely write to localStorage
+function setStoredValue<T>(key: string, value: T): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch (error) {
+    console.warn(`Error writing localStorage key "${key}":`, error)
+  }
+}
+
 export function useSidebarState() {
-  const [expandNested, setExpandNested] = useState(false)
-  const [priorityMode, setPriorityMode] = useState<"tasks" | "projects">("tasks")
-  const [projectSort, setProjectSort] = useState<ProjectSort>("hierarchy")
-  const [labelSort, setLabelSort] = useState<LabelSort>("taskCount")
+  // Initialize state from localStorage
+  const [expandNested, setExpandNestedState] = useState<boolean>(() =>
+    getStoredValue(STORAGE_KEYS.EXPAND_NESTED, false)
+  )
+  const [priorityMode, setPriorityModeState] = useState<"tasks" | "projects">(() =>
+    getStoredValue(STORAGE_KEYS.PRIORITY_MODE, "tasks")
+  )
+  const [projectSort, setProjectSortState] = useState<ProjectSort>(() =>
+    getStoredValue(STORAGE_KEYS.PROJECT_SORT, "hierarchy")
+  )
+  const [labelSort, setLabelSortState] = useState<LabelSort>(() =>
+    getStoredValue(STORAGE_KEYS.LABEL_SORT, "taskCount")
+  )
+
+  // Collapsible sections state - all open by default, persist in localStorage
+  const [collapsed, setCollapsed] = useState<CollapsedSections>(() =>
+    getStoredValue(STORAGE_KEYS.COLLAPSED_SECTIONS, {
+      projects: false,
+      time: false,
+      priorities: false,
+      labels: false,
+    })
+  )
+
+  // Persist collapsed sections to localStorage
+  useEffect(() => {
+    setStoredValue(STORAGE_KEYS.COLLAPSED_SECTIONS, collapsed)
+  }, [collapsed])
+
+  const toggleSection = useCallback((section: keyof CollapsedSections) => {
+    setCollapsed((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }))
+  }, [])
+
+  // Wrapped setters that persist to localStorage
+  const setExpandNested = useCallback((value: boolean) => {
+    setExpandNestedState(value)
+    setStoredValue(STORAGE_KEYS.EXPAND_NESTED, value)
+  }, [])
+
+  const setPriorityMode = useCallback((value: "tasks" | "projects") => {
+    setPriorityModeState(value)
+    setStoredValue(STORAGE_KEYS.PRIORITY_MODE, value)
+  }, [])
+
+  const setProjectSort = useCallback((value: ProjectSort) => {
+    setProjectSortState(value)
+    setStoredValue(STORAGE_KEYS.PROJECT_SORT, value)
+  }, [])
+
+  const setLabelSort = useCallback((value: LabelSort) => {
+    setLabelSortState(value)
+    setStoredValue(STORAGE_KEYS.LABEL_SORT, value)
+  }, [])
 
   const cycleProjectSort = useCallback(() => {
     const sorts: ProjectSort[] = ["hierarchy", "priority", "taskCount", "alphabetical"]
     const currentIndex = sorts.indexOf(projectSort)
     const nextIndex = (currentIndex + 1) % sorts.length
-    setProjectSort(sorts[nextIndex])
+    const nextSort = sorts[nextIndex]
+    setProjectSortState(nextSort)
+    setStoredValue(STORAGE_KEYS.PROJECT_SORT, nextSort)
   }, [projectSort])
 
   const cycleLabelSort = useCallback(() => {
     const sorts: LabelSort[] = ["taskCount", "alphabetical"]
     const currentIndex = sorts.indexOf(labelSort)
     const nextIndex = (currentIndex + 1) % sorts.length
-    setLabelSort(sorts[nextIndex])
+    const nextSort = sorts[nextIndex]
+    setLabelSortState(nextSort)
+    setStoredValue(STORAGE_KEYS.LABEL_SORT, nextSort)
   }, [labelSort])
 
   const togglePriorityMode = useCallback(() => {
@@ -38,5 +129,7 @@ export function useSidebarState() {
     labelSort,
     setLabelSort,
     cycleLabelSort,
+    collapsed,
+    toggleSection,
   }
 }

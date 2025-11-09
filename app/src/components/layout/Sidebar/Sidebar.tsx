@@ -1,3 +1,4 @@
+import { NavHeader } from "./components/NavHeader"
 import { useSidebarData } from "./hooks/useSidebarData"
 import { useSidebarState } from "./hooks/useSidebarState"
 import { LabelsSection } from "./sections/LabelsSection"
@@ -7,6 +8,11 @@ import { TimeSection } from "./sections/TimeSection"
 import { ViewsSection } from "./sections/ViewsSection"
 import { buildViewItems } from "./utils/viewItems"
 
+import {
+  Sidebar as SidebarPrimitive,
+  SidebarContent,
+  SidebarHeader,
+} from "@/components/ui/sidebar"
 import type { ViewKey, ViewSelection } from "@/lib/views/types"
 
 interface SidebarProps {
@@ -34,55 +40,76 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
     cycleProjectSort,
     labelSort,
     cycleLabelSort,
+    collapsed,
+    toggleSection,
   } = useSidebarState()
 
   const viewItems = buildViewItems(inboxProject?.stats.activeCount || null)
 
   return (
-    <div className="w-72 bg-muted/30 border-r h-full flex flex-col">
-      <ViewsSection
-        items={viewItems}
-        currentViewKey={currentViewKey}
-        onViewChange={onViewChange}
-        viewContext={viewContext}
-      />
+    <SidebarPrimitive>
+      <SidebarHeader>
+        <NavHeader
+          onViewChange={onViewChange}
+          projects={projectTree}
+          labels={labels}
+          viewContext={viewContext}
+          viewItems={viewItems}
+        />
+      </SidebarHeader>
+      <SidebarContent>
+        <ViewsSection
+          items={viewItems}
+          currentViewKey={currentViewKey}
+          onViewChange={onViewChange}
+          viewContext={viewContext}
+        />
 
-      <ProjectsSection
-        projects={projectTree}
-        currentViewKey={currentViewKey}
-        onViewChange={onViewChange}
-        viewContext={viewContext}
-        expandNested={expandNested}
-        onExpandNestedChange={setExpandNested}
-        sortMode={projectSort}
-        onSortChange={cycleProjectSort}
-      />
+        <ProjectsSection
+          projects={projectTree}
+          currentViewKey={currentViewKey}
+          onViewChange={onViewChange}
+          viewContext={viewContext}
+          expandNested={expandNested}
+          onExpandNestedChange={setExpandNested}
+          sortMode={projectSort}
+          onSortChange={cycleProjectSort}
+          isCollapsed={collapsed.projects}
+          onToggleCollapse={() => toggleSection("projects")}
+        />
 
-      <TimeSection
-        currentViewKey={currentViewKey}
-        onViewChange={onViewChange}
-        viewContext={viewContext}
-        counts={timeFilterCounts}
-      />
+        <TimeSection
+          currentViewKey={currentViewKey}
+          onViewChange={onViewChange}
+          viewContext={viewContext}
+          counts={timeFilterCounts}
+          isCollapsed={collapsed.time}
+          onToggleCollapse={() => toggleSection("time")}
+        />
 
-      <PrioritiesSection
-        currentViewKey={currentViewKey}
-        onViewChange={onViewChange}
-        viewContext={viewContext}
-        mode={priorityMode}
-        onModeChange={setPriorityMode}
-        counts={priorityFilterCounts}
-      />
+        <PrioritiesSection
+          currentViewKey={currentViewKey}
+          onViewChange={onViewChange}
+          viewContext={viewContext}
+          mode={priorityMode}
+          onModeChange={setPriorityMode}
+          counts={priorityFilterCounts}
+          isCollapsed={collapsed.priorities}
+          onToggleCollapse={() => toggleSection("priorities")}
+        />
 
-      <LabelsSection
-        labels={labels}
-        currentViewKey={currentViewKey}
-        onViewChange={onViewChange}
-        viewContext={viewContext}
-        sortMode={labelSort}
-        onSortChange={cycleLabelSort}
-        counts={labelFilterCounts}
-      />
-    </div>
+        <LabelsSection
+          labels={labels}
+          currentViewKey={currentViewKey}
+          onViewChange={onViewChange}
+          viewContext={viewContext}
+          sortMode={labelSort}
+          onSortChange={cycleLabelSort}
+          counts={labelFilterCounts}
+          isCollapsed={collapsed.labels}
+          onToggleCollapse={() => toggleSection("labels")}
+        />
+      </SidebarContent>
+    </SidebarPrimitive>
   )
 }

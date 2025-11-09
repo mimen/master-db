@@ -1,6 +1,7 @@
 import { SidebarButton } from "../components/SidebarButton"
 import type { ViewNavItem } from "../types"
 
+import { SidebarGroup, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 
@@ -13,8 +14,8 @@ interface ViewsSectionProps {
 
 export function ViewsSection({ items, currentViewKey, onViewChange, viewContext }: ViewsSectionProps) {
   return (
-    <div className="p-4">
-      <div className="space-y-1">
+    <SidebarGroup>
+      <SidebarMenu>
         {items.map((item) => {
           const isActive = currentViewKey === item.key
 
@@ -23,17 +24,18 @@ export function ViewsSection({ items, currentViewKey, onViewChange, viewContext 
           }
 
           return (
-            <SidebarButton
-              key={item.key}
-              icon={item.icon}
-              label={item.label}
-              count={item.count}
-              isActive={isActive}
-              onClick={handleItemClick}
-            />
+            <SidebarMenuItem key={item.key}>
+              <SidebarButton
+                icon={item.icon}
+                label={item.label}
+                count={item.count}
+                isActive={isActive}
+                onClick={handleItemClick}
+              />
+            </SidebarMenuItem>
           )
         })}
-      </div>
-    </div>
+      </SidebarMenu>
+    </SidebarGroup>
   )
 }

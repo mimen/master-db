@@ -4,6 +4,7 @@ import { TaskListView } from "../TaskListView"
 
 import { Sidebar } from "./Sidebar"
 
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts"
 import { useTaskCounts } from "@/hooks/useTaskCounts"
@@ -88,14 +89,14 @@ export function Layout() {
   const isMultiListView = activeView.lists.length > 1
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
+    <>
+      <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <div className="h-6 w-px bg-border" />
           <h1 className="text-xl font-semibold">Todoist Processor</h1>
-        </div>
-      </header>
-      <div className="flex h-[calc(100vh-73px)]">
-        <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
+        </header>
         <main className="flex-1 overflow-auto" data-task-scroll-container>
           <div className="space-y-6 pt-6">
             {activeView.lists.map((list) => (
@@ -113,7 +114,7 @@ export function Layout() {
             ))}
           </div>
         </main>
-      </div>
-    </div>
+      </SidebarInset>
+    </>
   )
 }
