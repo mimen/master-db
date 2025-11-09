@@ -8,6 +8,7 @@ import { getSortedProjects } from "../utils/sorting"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
+import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { cn } from "@/lib/utils"
 
@@ -17,7 +18,6 @@ interface ProjectsSectionProps {
   onViewChange: (view: ViewSelection) => void
   viewContext: ViewBuildContext
   expandNested: boolean
-  onExpandNestedChange: (value: boolean) => void
   sortMode: ProjectSort
   onSortChange: (mode: ProjectSort) => void
   isCollapsed: boolean
@@ -45,13 +45,86 @@ export function ProjectsSection({
   onViewChange,
   viewContext,
   expandNested,
-  onExpandNestedChange,
   sortMode,
   onSortChange,
   isCollapsed,
   onToggleCollapse,
 }: ProjectsSectionProps) {
   const sortedProjects = getSortedProjects(projects, sortMode)
+
+  // Group projects by priority when sorting by priority
+  const groupedByPriority = sortMode === "priority"
+    ? sortedProjects.reduce((acc: Record<number, ProjectTreeNode[]>, project: ProjectTreeNode) => {
+        const priority = project.metadata?.priority || 1
+        if (!acc[priority]) acc[priority] = []
+        acc[priority].push(project)
+        return acc
+      }, {} as Record<number, ProjectTreeNode[]>)
+    : null
+
+  const renderProjectList = () => {
+    if (sortMode === "priority" && groupedByPriority) {
+      // Render grouped by priority with headers
+      return (
+        <>
+          {[4, 3, 2].map((priorityLevel) => {
+            const projectsInGroup = groupedByPriority[priorityLevel]
+            if (!projectsInGroup || projectsInGroup.length === 0) return null
+
+            const priorityInfo = getPriorityInfo(priorityLevel)
+            if (!priorityInfo) return null
+
+            return (
+              <div key={priorityLevel} className="mb-3 first:mt-0">
+                <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
+                  <Flag className={cn("w-3 h-3", getPriorityColorClass(priorityLevel))} fill="currentColor" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {priorityInfo.uiPriority}
+                  </span>
+                </div>
+                <SidebarMenu className="space-y-0.5">
+                  {projectsInGroup.map((project) => (
+                    <ProjectItem
+                      key={project._id}
+                      project={project}
+                      currentViewKey={currentViewKey}
+                      onViewChange={onViewChange}
+                      expandNested={expandNested}
+                      level={0}
+                      viewContext={viewContext}
+                      showPriorityFlag={false}
+                    />
+                  ))}
+                </SidebarMenu>
+              </div>
+            )
+          })}
+        </>
+      )
+    }
+
+    // Default rendering for other sort modes
+    return (
+      <SidebarMenu className="space-y-0.5">
+        {sortedProjects.map((project) => (
+          <ProjectItem
+            key={project._id}
+            project={project}
+            currentViewKey={currentViewKey}
+            onViewChange={onViewChange}
+            expandNested={expandNested}
+            level={0}
+            viewContext={viewContext}
+            showPriorityFlag={false}
+          />
+        ))}
+
+        {(!sortedProjects || sortedProjects.length === 0) && (
+          <p className="text-xs text-muted-foreground text-center py-4">No projects found</p>
+        )}
+      </SidebarMenu>
+    )
+  }
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
@@ -77,38 +150,7 @@ export function ProjectsSection({
         </div>
 
         <CollapsibleContent>
-          {sortMode === "hierarchy" && (
-            <div className="mb-3 flex items-center gap-2 px-3">
-              <input
-                type="checkbox"
-                id="expand-nested"
-                checked={expandNested}
-                onChange={(e) => onExpandNestedChange(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-gray-300"
-              />
-              <label htmlFor="expand-nested" className="text-xs text-muted-foreground cursor-pointer">
-                Load nested projects
-              </label>
-            </div>
-          )}
-
-          <SidebarMenu className="space-y-0.5">
-            {sortedProjects.map((project) => (
-              <ProjectItem
-                key={project._id}
-                project={project}
-                currentViewKey={currentViewKey}
-                onViewChange={onViewChange}
-                expandNested={expandNested}
-                level={0}
-                viewContext={viewContext}
-              />
-            ))}
-
-            {(!sortedProjects || sortedProjects.length === 0) && (
-              <p className="text-xs text-muted-foreground text-center py-4">No projects found</p>
-            )}
-          </SidebarMenu>
+          {renderProjectList()}
         </CollapsibleContent>
       </SidebarGroup>
     </Collapsible>

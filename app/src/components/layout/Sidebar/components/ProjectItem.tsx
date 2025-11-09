@@ -18,6 +18,7 @@ interface ProjectItemProps {
   expandNested: boolean
   level?: number
   viewContext: ViewBuildContext
+  showPriorityFlag?: boolean
 }
 
 export function ProjectItem({
@@ -27,6 +28,7 @@ export function ProjectItem({
   expandNested,
   level = 0,
   viewContext,
+  showPriorityFlag = false,
 }: ProjectItemProps) {
   const projectViewKey = `view:project:${project.todoist_id}` as ViewKey
   const projectFamilyKey = `view:project-family:${project.todoist_id}` as ViewKey
@@ -63,8 +65,8 @@ export function ProjectItem({
         onClick={handleProjectClick}
         level={level}
       >
-        {priority?.showFlag && (
-          <Flag className={cn("w-2.5 h-2.5 mr-2 flex-shrink-0", priority.colorClass)} fill="currentColor" />
+        {showPriorityFlag && priority?.showFlag && (
+          <Flag className={cn("w-3 h-3 flex-shrink-0", priority.colorClass)} fill="currentColor" />
         )}
       </SidebarButton>
 
@@ -78,6 +80,7 @@ export function ProjectItem({
             expandNested={expandNested}
             level={level + 1}
             viewContext={viewContext}
+            showPriorityFlag={showPriorityFlag}
           />
         ))}
     </>
