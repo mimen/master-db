@@ -34,7 +34,6 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
 
   const {
     expandNested,
-    setExpandNested,
     priorityMode,
     setPriorityMode,
     projectSort,
@@ -74,7 +73,6 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
               onViewChange={onViewChange}
               viewContext={viewContext}
               expandNested={expandNested}
-              onExpandNestedChange={setExpandNested}
               sortMode={projectSort}
               onSortChange={cycleProjectSort}
               isCollapsed={collapsed.projects}

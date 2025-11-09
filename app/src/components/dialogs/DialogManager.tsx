@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { CompleteTaskDialog } from './CompleteTaskDialog'
 import { DeadlineDialog } from './DeadlineDialog'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
@@ -6,13 +8,38 @@ import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { LabelDialog } from './LabelDialog'
 import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
+import { SettingsDialog } from './SettingsDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 
+const EXPAND_NESTED_KEY = "sidebar:expandNested"
+
 export function DialogManager() {
-  const { currentTask, dialogType, isShortcutsOpen, closeDialog } = useDialogContext()
+  const { currentTask, dialogType, isShortcutsOpen, isSettingsOpen, closeDialog } = useDialogContext()
+
+  // Manage expandNested state for settings dialog
+  const [expandNested, setExpandNested] = useState<boolean>(() => {
+    try {
+      const item = window.localStorage.getItem(EXPAND_NESTED_KEY)
+      return item ? JSON.parse(item) : false
+    } catch {
+      return false
+    }
+  })
+
+  // Persist expandNested to localStorage
+  const handleExpandNestedChange = (value: boolean) => {
+    setExpandNested(value)
+    try {
+      window.localStorage.setItem(EXPAND_NESTED_KEY, JSON.stringify(value))
+      // Trigger a storage event for other components to react
+      window.dispatchEvent(new Event('storage'))
+    } catch (error) {
+      console.warn('Error saving expandNested setting:', error)
+    }
+  }
 
   const updateTask = useTodoistAction(api.todoist.publicActions.updateTask, {
     loadingMessage: "Updating task...",
@@ -165,6 +192,12 @@ export function DialogManager() {
       <KeyboardShortcutsDialog
         isOpen={isShortcutsOpen}
         onClose={closeDialog}
+      />
+      <SettingsDialog
+        open={isSettingsOpen}
+        onClose={closeDialog}
+        expandNested={expandNested}
+        onExpandNestedChange={handleExpandNestedChange}
       />
     </>
   )

@@ -91,6 +91,7 @@ export type ViewKey =
   | "view:today"
   | "view:upcoming"
   | "view:priority-queue"
+  | "view:settings"
   | `view:time:${TimeRange}`
   | `view:project:${string}`
   | `view:project-family:${string}`

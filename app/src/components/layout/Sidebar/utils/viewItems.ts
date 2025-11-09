@@ -1,4 +1,4 @@
-import { Calendar, Filter, Inbox } from "lucide-react"
+import { Filter, Inbox, Settings } from "lucide-react"
 
 import type { ViewNavItem } from "../types"
 
@@ -17,6 +17,12 @@ export function buildViewItems(inboxCount: number | null): ViewNavItem[] {
       key: "view:multi:priority-queue",
       label: "Priority Queue",
       icon: Filter,
+      count: null,
+    },
+    {
+      key: "view:settings",
+      label: "Settings",
+      icon: Settings,
       count: null,
     },
   ]

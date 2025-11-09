@@ -14,6 +14,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { SidebarGroupLabel } from "@/components/ui/sidebar"
+import { useDialogContext } from "@/contexts/DialogContext"
 import { getProjectColor } from "@/lib/colors"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
@@ -38,6 +39,7 @@ interface SearchableItem {
 }
 
 export function NavHeader({ onViewChange, projects, labels, viewContext, viewItems }: NavHeaderProps) {
+  const { openSettings } = useDialogContext()
   const [open, setOpen] = useState(false)
   const [searchItems, setSearchItems] = useState<SearchableItem[]>([])
 
@@ -137,9 +139,14 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
   const handleSelect = useCallback(
     (viewKey: ViewKey) => {
       setOpen(false)
-      onViewChange(resolveView(viewKey, viewContext))
+      // Settings is a special case - open dialog instead of changing view
+      if (viewKey === "view:settings") {
+        openSettings()
+      } else {
+        onViewChange(resolveView(viewKey, viewContext))
+      }
     },
-    [onViewChange, viewContext]
+    [onViewChange, viewContext, openSettings]
   )
 
   return (
