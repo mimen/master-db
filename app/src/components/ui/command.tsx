@@ -1,13 +1,10 @@
-"use client"
-
-// import { type DialogProps } from "@radix-ui/react-dialog"
+import * as React from "react"
+import { type DialogProps } from "@radix-ui/react-dialog"
 import { Command as CommandPrimitive } from "cmdk"
 import { Search } from "lucide-react"
-import * as React from "react"
 
-// TODO: Restore when implementing cmdk - will need Radix Dialog or native dialog wrapper
-// import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -24,9 +21,6 @@ const Command = React.forwardRef<
 ))
 Command.displayName = CommandPrimitive.displayName
 
-// TODO: Restore CommandDialog when implementing cmdk
-// Will use native <dialog> element instead of Radix
-/*
 const CommandDialog = ({ children, ...props }: DialogProps) => {
   return (
     <Dialog {...props}>
@@ -38,7 +32,6 @@ const CommandDialog = ({ children, ...props }: DialogProps) => {
     </Dialog>
   )
 }
-*/
 
 const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
@@ -147,7 +140,7 @@ CommandShortcut.displayName = "CommandShortcut"
 
 export {
   Command,
-  // CommandDialog, // TODO: Re-enable when implementing cmdk
+  CommandDialog,
   CommandInput,
   CommandList,
   CommandEmpty,
