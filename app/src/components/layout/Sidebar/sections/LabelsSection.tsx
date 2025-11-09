@@ -70,9 +70,8 @@ export function LabelsSection({
         </div>
 
         <CollapsibleContent>
-          <SidebarMenu>
-            <div className="space-y-0.5 max-h-48 overflow-y-auto scrollbar-hide">
-              {sortedLabels.map((label) => {
+          <SidebarMenu className="space-y-0.5">
+            {sortedLabels.map((label) => {
                 const viewKey = `view:label:${label.name}` as ViewKey
                 const isActive = currentViewKey === viewKey
                 const count =
@@ -89,11 +88,10 @@ export function LabelsSection({
                     />
                   </SidebarMenuItem>
                 )
-              })}
-              {(!sortedLabels || sortedLabels.length === 0) && (
-                <p className="text-xs text-muted-foreground text-center py-4">No labels found</p>
-              )}
-            </div>
+            })}
+            {(!sortedLabels || sortedLabels.length === 0) && (
+              <p className="text-xs text-muted-foreground text-center py-4">No labels found</p>
+            )}
           </SidebarMenu>
         </CollapsibleContent>
       </SidebarGroup>

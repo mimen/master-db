@@ -8,6 +8,7 @@ import { TimeSection } from "./sections/TimeSection"
 import { ViewsSection } from "./sections/ViewsSection"
 import { buildViewItems } from "./utils/viewItems"
 
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Sidebar as SidebarPrimitive,
   SidebarContent,
@@ -57,58 +58,62 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
           viewItems={viewItems}
         />
       </SidebarHeader>
-      <SidebarContent>
-        <ViewsSection
-          items={viewItems}
-          currentViewKey={currentViewKey}
-          onViewChange={onViewChange}
-          viewContext={viewContext}
-        />
+      <SidebarContent className="p-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-2 min-w-0 w-[250px]">
+            <ViewsSection
+              items={viewItems}
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+            />
 
-        <ProjectsSection
-          projects={projectTree}
-          currentViewKey={currentViewKey}
-          onViewChange={onViewChange}
-          viewContext={viewContext}
-          expandNested={expandNested}
-          onExpandNestedChange={setExpandNested}
-          sortMode={projectSort}
-          onSortChange={cycleProjectSort}
-          isCollapsed={collapsed.projects}
-          onToggleCollapse={() => toggleSection("projects")}
-        />
+            <ProjectsSection
+              projects={projectTree}
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              expandNested={expandNested}
+              onExpandNestedChange={setExpandNested}
+              sortMode={projectSort}
+              onSortChange={cycleProjectSort}
+              isCollapsed={collapsed.projects}
+              onToggleCollapse={() => toggleSection("projects")}
+            />
 
-        <TimeSection
-          currentViewKey={currentViewKey}
-          onViewChange={onViewChange}
-          viewContext={viewContext}
-          counts={timeFilterCounts}
-          isCollapsed={collapsed.time}
-          onToggleCollapse={() => toggleSection("time")}
-        />
+            <TimeSection
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              counts={timeFilterCounts}
+              isCollapsed={collapsed.time}
+              onToggleCollapse={() => toggleSection("time")}
+            />
 
-        <PrioritiesSection
-          currentViewKey={currentViewKey}
-          onViewChange={onViewChange}
-          viewContext={viewContext}
-          mode={priorityMode}
-          onModeChange={setPriorityMode}
-          counts={priorityFilterCounts}
-          isCollapsed={collapsed.priorities}
-          onToggleCollapse={() => toggleSection("priorities")}
-        />
+            <PrioritiesSection
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              mode={priorityMode}
+              onModeChange={setPriorityMode}
+              counts={priorityFilterCounts}
+              isCollapsed={collapsed.priorities}
+              onToggleCollapse={() => toggleSection("priorities")}
+            />
 
-        <LabelsSection
-          labels={labels}
-          currentViewKey={currentViewKey}
-          onViewChange={onViewChange}
-          viewContext={viewContext}
-          sortMode={labelSort}
-          onSortChange={cycleLabelSort}
-          counts={labelFilterCounts}
-          isCollapsed={collapsed.labels}
-          onToggleCollapse={() => toggleSection("labels")}
-        />
+            <LabelsSection
+              labels={labels}
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              sortMode={labelSort}
+              onSortChange={cycleLabelSort}
+              counts={labelFilterCounts}
+              isCollapsed={collapsed.labels}
+              onToggleCollapse={() => toggleSection("labels")}
+            />
+          </div>
+        </ScrollArea>
       </SidebarContent>
     </SidebarPrimitive>
   )

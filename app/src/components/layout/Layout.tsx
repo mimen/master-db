@@ -4,6 +4,7 @@ import { TaskListView } from "../TaskListView"
 
 import { Sidebar } from "./Sidebar"
 
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts"
@@ -97,8 +98,8 @@ export function Layout() {
           <div className="h-6 w-px bg-border" />
           <h1 className="text-xl font-semibold">Todoist Processor</h1>
         </header>
-        <main className="flex-1 overflow-auto" data-task-scroll-container>
-          <div className="space-y-6 pt-6">
+        <ScrollArea className="flex-1" data-task-scroll-container>
+          <main className="space-y-6 pt-6">
             {activeView.lists.map((list) => (
               <TaskListView
                 key={list.id}
@@ -112,8 +113,8 @@ export function Layout() {
                 isMultiListView={isMultiListView}
               />
             ))}
-          </div>
-        </main>
+          </main>
+        </ScrollArea>
       </SidebarInset>
     </>
   )

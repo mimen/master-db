@@ -19,17 +19,5 @@ export function buildViewItems(inboxCount: number | null): ViewNavItem[] {
       icon: Filter,
       count: null,
     },
-    {
-      key: "view:today",
-      label: "Today",
-      icon: Calendar,
-      count: null,
-    },
-    {
-      key: "view:upcoming",
-      label: "Upcoming",
-      icon: Calendar,
-      count: null,
-    },
   ]
 }

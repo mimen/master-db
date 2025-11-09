@@ -92,7 +92,7 @@ export function ProjectsSection({
             </div>
           )}
 
-          <SidebarMenu className="space-y-0.5 max-h-96 overflow-y-auto scrollbar-hide">
+          <SidebarMenu className="space-y-0.5">
             {sortedProjects.map((project) => (
               <ProjectItem
                 key={project._id}
