@@ -2,7 +2,7 @@ import { cloneElement, isValidElement, type ElementType, type ReactNode } from "
 
 import { CountBadge } from "./CountBadge"
 
-import { Button } from "@/components/ui/button"
+import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 
 interface SidebarButtonProps {
@@ -14,6 +14,7 @@ interface SidebarButtonProps {
   colorClass?: string
   level?: number
   children?: ReactNode
+  tooltip?: string
 }
 
 export function SidebarButton({
@@ -25,35 +26,41 @@ export function SidebarButton({
   colorClass,
   level = 0,
   children,
+  tooltip,
 }: SidebarButtonProps) {
   const renderIcon = () => {
     if (!icon) return null
 
-    const iconClassName = cn("h-4 w-4 mr-3", colorClass)
-
-    // Render JSX elements directly while merging class names for styling
+    // Render JSX elements directly - preserve their original classes
     if (isValidElement(icon)) {
-      return cloneElement(icon, {
-        className: cn(icon.props.className, iconClassName),
-      })
+      // If the element already has sizing classes, don't override them
+      // Just add the color class if provided
+      if (colorClass && icon.props.className) {
+        return cloneElement(icon, {
+          className: cn(icon.props.className, colorClass),
+        })
+      }
+      return icon
     }
 
-    // Otherwise treat the icon as a component type (including forwardRef wrappers)
+    // For component types, apply default sizing and color
+    const iconClassName = cn("h-4 w-4", colorClass)
     const IconComponent = icon as ElementType<{ className?: string }>
     return <IconComponent className={iconClassName} />
   }
 
   return (
-    <Button
-      variant="ghost"
-      className={cn("w-full justify-start h-8 px-3 text-sm", isActive && "bg-accent")}
-      style={level > 0 ? { paddingLeft: `${12 + level * 16}px` } : undefined}
+    <SidebarMenuButton
+      isActive={isActive}
       onClick={onClick}
+      tooltip={tooltip}
+      className={cn(level > 0 && "pl-2")}
+      style={level > 0 ? { paddingLeft: `${8 + level * 16}px` } : undefined}
     >
       {renderIcon()}
-      <span className="flex-1 text-left truncate">{label}</span>
+      <span className="flex-1 truncate">{label}</span>
       {children}
       {count !== null && count !== undefined && <CountBadge count={count} />}
-    </Button>
+    </SidebarMenuButton>
   )
 }

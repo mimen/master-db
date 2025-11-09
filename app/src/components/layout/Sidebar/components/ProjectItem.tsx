@@ -2,9 +2,9 @@ import { Flag } from "lucide-react"
 
 import type { ProjectTreeNode } from "../types"
 
-import { CountBadge } from "./CountBadge"
+import { SidebarButton } from "./SidebarButton"
 
-import { Button } from "@/components/ui/button"
+import { SidebarMenuItem } from "@/components/ui/sidebar"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
@@ -45,37 +45,48 @@ export function ProjectItem({
     }
   }
 
-  return (
+  const projectIcon = (
+    <div
+      className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
+      style={{ backgroundColor: getProjectColor(project.color) }}
+    />
+  )
+
+  // If this is a nested item (level > 0), don't use SidebarMenuItem wrapper
+  const content = (
     <>
-      <Button
-        key={project._id}
-        variant="ghost"
-        className={cn("w-full justify-start h-8 px-3 text-sm", isActive && "bg-accent")}
-        style={{ paddingLeft: `${12 + level * 16}px` }}
+      <SidebarButton
+        icon={projectIcon}
+        label={project.name}
+        count={hasActiveItems ? project.stats.activeCount : null}
+        isActive={isActive}
         onClick={handleProjectClick}
+        level={level}
       >
-        <div
-          className="w-2.5 h-2.5 rounded-full mr-3 flex-shrink-0"
-          style={{ backgroundColor: getProjectColor(project.color) }}
-        />
-        <span className="flex-1 text-left truncate">{project.name}</span>
         {priority?.showFlag && (
           <Flag className={cn("w-2.5 h-2.5 mr-2 flex-shrink-0", priority.colorClass)} fill="currentColor" />
         )}
-        {hasActiveItems && <CountBadge count={project.stats.activeCount} />}
-      </Button>
+      </SidebarButton>
 
-      {project.children.map((child) => (
-        <ProjectItem
-          key={child._id}
-          project={child}
-          currentViewKey={currentViewKey}
-          onViewChange={onViewChange}
-          expandNested={expandNested}
-          level={level + 1}
-          viewContext={viewContext}
-        />
-      ))}
+      {hasChildren &&
+        project.children.map((child: ProjectTreeNode) => (
+          <ProjectItem
+            key={child._id}
+            project={child}
+            currentViewKey={currentViewKey}
+            onViewChange={onViewChange}
+            expandNested={expandNested}
+            level={level + 1}
+            viewContext={viewContext}
+          />
+        ))}
     </>
   )
+
+  // Top-level items need SidebarMenuItem wrapper, nested ones don't
+  if (level === 0) {
+    return <SidebarMenuItem>{content}</SidebarMenuItem>
+  }
+
+  return content
 }
