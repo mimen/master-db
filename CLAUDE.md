@@ -227,6 +227,36 @@ bunx convex run todoist:sync.runInitialSync
 - `docs/architecture.md` - System design (if detailed context needed)
 - Convex dashboard: `http://localhost:3001`
 
+## Shadcn Component Installation (CRITICAL)
+
+⚠️ **IMPORTANT**: The `bunx shadcn@latest add` command sometimes reports success but fails to create files.
+
+**Always verify after adding shadcn components:**
+```bash
+# After running: bunx shadcn@latest add @shadcn/component-name
+ls -la src/components/ui/component-name.tsx
+
+# If file doesn't exist, manually create it using the standard shadcn pattern
+# or use the Write tool with proper shadcn component structure
+```
+
+**Common pattern for manual shadcn component creation:**
+1. Check if dependency is installed in package.json
+2. If missing, install: `bun add @radix-ui/react-component-name`
+3. Create component file manually following shadcn conventions
+4. Use "use client" directive for client components
+5. Follow standard shadcn export pattern
+
+**Why this happens:**
+- Race conditions with Bun's package manager
+- Vite dev server caching issues
+- File write permissions in some environments
+
+**Prevention:**
+- Always verify file creation after `shadcn add`
+- Use Glob tool to confirm file exists before importing
+- Keep a reference implementation of common components
+
 ## Agent Guidelines
 
 - **TodoWrite**: Use for complex multi-step tasks
@@ -235,5 +265,6 @@ bunx convex run todoist:sync.runInitialSync
 - **Testing**: Every `.ts` file needs corresponding `.test.ts` file
 - **MCP Integration**: Use Todoist MCP for bi-directional verification
 - **Problem Solving**: Simple solutions > clever abstractions
+- **Shadcn Components**: Verify file creation after running shadcn add commands
 
 Focus on maintainable code. Strong data layer enables rapid UI development.
