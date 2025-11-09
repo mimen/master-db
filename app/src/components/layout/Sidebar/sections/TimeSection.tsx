@@ -1,8 +1,12 @@
-import { AlertCircle, Calendar } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 
 import { SidebarButton } from "../components/SidebarButton"
+import { TIME_FILTER_ITEMS } from "../utils/filterItems"
 
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
+import { cn } from "@/lib/utils"
 import { resolveView } from "@/lib/views/viewDefinitions"
 
 interface TimeSectionProps {
@@ -10,41 +14,51 @@ interface TimeSectionProps {
   onViewChange: (view: ViewSelection) => void
   viewContext: ViewBuildContext
   counts?: { timeCounts: { filter: string; filteredTaskCount: number }[] }
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
-const TIME_FILTERS = [
-  { id: "overdue", label: "Overdue", icon: AlertCircle, color: "text-red-500", filterKey: "overdue" },
-  { id: "today", label: "Today", icon: Calendar, color: "text-blue-500", filterKey: "today" },
-  { id: "upcoming", label: "Upcoming", icon: Calendar, color: "text-green-500", filterKey: "next7days" },
-  { id: "no-date", label: "No Date", icon: Calendar, color: "text-gray-500", filterKey: "nodate" },
-] as const
-
-export function TimeSection({ currentViewKey, onViewChange, viewContext, counts }: TimeSectionProps) {
+export function TimeSection({
+  currentViewKey,
+  onViewChange,
+  viewContext,
+  counts,
+  isCollapsed,
+  onToggleCollapse,
+}: TimeSectionProps) {
   return (
-    <div className="px-4 pb-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-muted-foreground">Time</h3>
-      </div>
-      <div className="space-y-0.5">
-        {TIME_FILTERS.map((timeFilter) => {
-          const viewKey = `view:time:${timeFilter.id}` as ViewKey
-          const isActive = currentViewKey === viewKey
-          const count =
-            counts?.timeCounts.find((c) => c.filter === timeFilter.filterKey)?.filteredTaskCount || 0
+    <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
+      <SidebarGroup>
+        <CollapsibleTrigger asChild>
+          <SidebarGroupLabel className="cursor-pointer hover:bg-accent/50 flex items-center gap-1">
+            <ChevronRight className={cn("h-3 w-3 transition-transform", !isCollapsed && "rotate-90")} />
+            Time
+          </SidebarGroupLabel>
+        </CollapsibleTrigger>
 
-          return (
-            <SidebarButton
-              key={timeFilter.id}
-              icon={timeFilter.icon}
-              label={timeFilter.label}
-              count={count}
-              isActive={isActive}
-              onClick={() => onViewChange(resolveView(viewKey, viewContext))}
-              colorClass={timeFilter.color}
-            />
-          )
-        })}
-      </div>
-    </div>
+        <CollapsibleContent>
+          <SidebarMenu>
+            {TIME_FILTER_ITEMS.map((timeFilter) => {
+              const isActive = currentViewKey === timeFilter.viewKey
+              const count =
+                counts?.timeCounts.find((c) => c.filter === timeFilter.filterKey)?.filteredTaskCount || 0
+
+              return (
+                <SidebarMenuItem key={timeFilter.id}>
+                  <SidebarButton
+                    icon={timeFilter.icon}
+                    label={timeFilter.label}
+                    count={count}
+                    isActive={isActive}
+                    onClick={() => onViewChange(resolveView(timeFilter.viewKey, viewContext))}
+                    colorClass={timeFilter.color}
+                  />
+                </SidebarMenuItem>
+              )
+            })}
+          </SidebarMenu>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
   )
 }
