@@ -180,6 +180,17 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
               ))}
           </CommandGroup>
 
+          <CommandGroup heading="Time Filters">
+            {searchItems
+              .filter((item) => item.category === "time")
+              .map((item) => (
+                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
+                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
+                  {item.label}
+                </CommandItem>
+              ))}
+          </CommandGroup>
+
           <CommandGroup heading="Projects">
             {searchItems
               .filter((item) => item.category === "project")
@@ -199,17 +210,6 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
                   </CommandItem>
                 )
               })}
-          </CommandGroup>
-
-          <CommandGroup heading="Time Filters">
-            {searchItems
-              .filter((item) => item.category === "time")
-              .map((item) => (
-                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
-                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
-                  {item.label}
-                </CommandItem>
-              ))}
           </CommandGroup>
 
           <CommandGroup heading="Priorities">

@@ -77,6 +77,15 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               viewContext={viewContext}
             />
 
+            <TimeSection
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              counts={timeFilterCounts}
+              isCollapsed={collapsed.time}
+              onToggleCollapse={() => toggleSection("time")}
+            />
+
             <ProjectsSection
               projects={projectTree}
               currentViewKey={currentViewKey}
@@ -91,15 +100,6 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               isProjectCollapsed={isProjectCollapsed}
               togglePriorityGroupCollapse={togglePriorityGroupCollapse}
               isPriorityGroupCollapsed={isPriorityGroupCollapsed}
-            />
-
-            <TimeSection
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              counts={timeFilterCounts}
-              isCollapsed={collapsed.time}
-              onToggleCollapse={() => toggleSection("time")}
             />
 
             <PrioritiesSection
