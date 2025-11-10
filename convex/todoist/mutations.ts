@@ -20,3 +20,6 @@ export { triggerMetadataExtraction } from "./computed/mutations/triggerMetadataE
 // Queue mutations
 export { createQueueState } from "./mutations/createQueueState";
 export { updateQueueProgress } from "./mutations/updateQueueProgress";
+
+// Webhook mutations
+export { logWebhookEvent } from "./mutations/logWebhookEvent";

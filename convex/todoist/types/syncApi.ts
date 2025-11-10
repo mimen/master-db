@@ -35,6 +35,7 @@ export const syncItemSchema = v.object({
   section_id: v.optional(v.union(v.string(), v.null())),
   parent_id: v.optional(v.union(v.string(), v.null())),
   child_order: v.optional(v.number()),
+  day_order: v.optional(v.number()), // Order within the day (webhook only)
   priority: v.optional(v.number()),
   due: v.optional(v.union(syncDueSchema, v.null())),
   deadline: v.optional(v.union(syncDeadlineSchema, v.null())),
@@ -47,12 +48,14 @@ export const syncItemSchema = v.object({
   note_count: v.optional(v.number()), // Alternative field name sometimes used by API
   checked: v.optional(v.union(v.boolean(), v.number())),
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
+  is_collapsed: v.optional(v.boolean()), // Whether subtasks are collapsed (webhook only)
   added_at: v.optional(v.union(v.string(), v.null())),
   date_added: v.optional(v.union(v.string(), v.null())),
   completed_at: v.optional(v.union(v.string(), v.null())),
   date_completed: v.optional(v.union(v.string(), v.null())),
   updated_at: v.optional(v.union(v.string(), v.null())),
   user_id: v.optional(v.union(v.string(), v.null())),
+  url: v.optional(v.string()), // Direct URL to the task (webhook only)
 });
 
 // Project structure from Sync API

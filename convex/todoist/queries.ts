@@ -11,3 +11,6 @@ export { getQueueState } from "./queries/getQueueState";
 
 // Multi-list queries
 export { getProjectsByPriority } from "./queries/getProjectsByPriority";
+
+// Webhook queries
+export { getWebhookEventByDeliveryId } from "./queries/getWebhookEventByDeliveryId";

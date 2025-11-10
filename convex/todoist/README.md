@@ -58,6 +58,113 @@ todoist/
 - **Database Types** (snake_case): Generated from Convex schema
 - **Sync API Types** (snake_case): For bulk operations in `types/syncApi.ts`
 
+## Webhook Setup
+
+### Configuration
+
+**1. Set Environment Variables**
+```bash
+# Development (.env.local)
+TODOIST_WEBHOOK_SECRET=your_todoist_app_client_secret_here
+
+# Production (Convex Dashboard)
+# Add TODOIST_WEBHOOK_SECRET in Settings > Environment Variables
+```
+
+**2. Get Your Webhook Secret**
+- Visit the [Todoist App Management Console](https://developer.todoist.com/appconsole.html)
+- Copy your app's **client_secret** (this is your webhook secret)
+
+**3. Configure Webhook URL in Todoist**
+- In the App Management Console, set your webhook URL:
+  ```
+  https://your-convex-deployment.convex.cloud/todoist/webhook
+  ```
+- Get your Convex URL from the dashboard or `.env.local` (CONVEX_URL)
+
+**4. Complete OAuth Flow for Personal Use**
+Todoist webhooks don't fire by default for the app creator. To activate:
+
+1. Build authorization URL (replace YOUR_CLIENT_ID):
+   ```
+   https://todoist.com/oauth/authorize?client_id=YOUR_CLIENT_ID&scope=data:read_write&state=secretstring
+   ```
+2. Open in browser, authorize the app
+3. Capture the `code` from the redirect URL
+4. Exchange code for token using POST request (via Postman/curl):
+   ```bash
+   curl -X POST https://todoist.com/oauth/access_token \
+     -H "Content-Type: application/json" \
+     -d '{"client_id":"YOUR_CLIENT_ID","client_secret":"YOUR_CLIENT_SECRET","code":"CAPTURED_CODE"}'
+   ```
+
+### Supported Events
+
+The webhook handler processes these Todoist events:
+
+**Items (Tasks)**
+- `item:added` - Task created
+- `item:updated` - Task modified
+- `item:deleted` - Task deleted (soft delete)
+- `item:completed` - Task completed
+- `item:uncompleted` - Task uncompleted
+
+**Projects**
+- `project:added` - Project created
+- `project:updated` - Project modified
+- `project:deleted` - Project deleted (soft delete)
+- `project:archived` - Project archived (soft delete)
+- `project:unarchived` - Project unarchived
+
+**Labels**
+- `label:added` - Label created
+- `label:updated` - Label modified
+- `label:deleted` - Label deleted (soft delete)
+
+### How It Works
+
+1. **Todoist sends webhook** → POST to `/todoist/webhook`
+2. **Signature verification** → Validates HMAC-SHA256 signature
+3. **Idempotency check** → Skips duplicate deliveries using delivery_id
+4. **Route to mutations** → Calls existing upsert mutations
+5. **Metadata extraction** → Triggers for item events
+6. **Event logging** → Records in `todoist_webhook_events` table
+7. **Return 200 OK** → Prevents retry from Todoist
+
+### Monitoring Webhooks
+
+```bash
+# View recent webhook events
+bunx convex run todoist:queries.getRecentWebhookEvents
+
+# Check for failed webhooks
+bunx convex run todoist:queries.getFailedWebhookEvents
+
+# View events for specific entity
+bunx convex run todoist:queries.getWebhookEventsByEntity '{"entityId": "task_id"}'
+```
+
+### Webhook Reliability
+
+- **Retry Logic**: Todoist retries failed deliveries up to 3 times (15-minute intervals)
+- **Idempotency**: Safe to process same event multiple times
+- **Version Checking**: Existing mutations prevent data overwrites
+- **Fallback Sync**: Cron job catches any missed updates
+
+### Debugging
+
+**Check webhook delivery:**
+```bash
+# In Todoist App Management Console
+# View webhook delivery logs for your app
+```
+
+**Common issues:**
+- **401 Invalid signature**: Check TODOIST_WEBHOOK_SECRET matches client_secret
+- **500 Internal error**: Check Convex logs for errors
+- **No webhooks firing**: Complete OAuth flow for personal use
+- **Duplicate processing**: Idempotency check should prevent this
+
 ## Key Features
 
 ### Three-Layer Sync
