@@ -47,12 +47,11 @@ export const getDueNext7DaysItems = query({
       const dueDate = item.due.date;
       if (!dueDate) return false;
 
-      if (dueDate.includes('T')) {
-        const dueDateObj = new Date(dueDate);
-        return dueDateObj >= today && dueDateObj <= next7Days;
-      } else {
-        return dueDate >= todayISODate && dueDate <= next7DaysISODate;
-      }
+      // Extract date-only part for consistent comparison
+      const dateOnly = dueDate.includes('T') ? dueDate.split('T')[0] : dueDate;
+
+      // Upcoming means tomorrow through next 7 days (excluding today)
+      return dateOnly > todayISODate && dateOnly <= next7DaysISODate;
     });
 
     const sortedItems: Doc<"todoist_items">[] = dueNext7DaysItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {

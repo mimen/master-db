@@ -28,40 +28,50 @@ export const getTimeFilterCounts = query({
       currentUserId: userId,
     });
 
-    // Get current date/time for filtering
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Get current date strings for filtering (matching getActiveItems.ts logic)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = today.toISOString().split('T')[0];
+
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowISO = tomorrow.toISOString().split('T')[0];
+
     const next7Days = new Date(today);
     next7Days.setDate(next7Days.getDate() + 7);
+    const next7DaysISO = next7Days.toISOString().split('T')[0];
+
+    // Helper to extract date-only part from date or datetime string
+    const extractDateOnly = (dateStr: string): string => {
+      return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    };
 
     // Helper to check if item matches time filter
     const matchesTimeFilter = (item: Doc<"todoist_items">, filter: string): boolean => {
       if (filter === 'overdue') {
         if (!item.due?.date) return false;
-        const dueDate = new Date(item.due.date);
-        return dueDate < today;
+        const dateOnly = extractDateOnly(item.due.date);
+        return dateOnly < todayISO;
       }
       if (filter === 'today') {
         if (!item.due?.date) return false;
-        const dueDate = new Date(item.due.date);
-        return dueDate.getTime() === today.getTime();
+        const dateOnly = extractDateOnly(item.due.date);
+        return dateOnly === todayISO;
       }
       if (filter === 'tomorrow') {
         if (!item.due?.date) return false;
-        const dueDate = new Date(item.due.date);
-        return dueDate.getTime() === tomorrow.getTime();
+        const dateOnly = extractDateOnly(item.due.date);
+        return dateOnly === tomorrowISO;
       }
       if (filter === 'next7days') {
         if (!item.due?.date) return false;
-        const dueDate = new Date(item.due.date);
-        return dueDate >= tomorrow && dueDate < next7Days;
+        const dateOnly = extractDateOnly(item.due.date);
+        return dateOnly > tomorrowISO && dateOnly <= next7DaysISO;
       }
       if (filter === 'future') {
         if (!item.due?.date) return false;
-        const dueDate = new Date(item.due.date);
-        return dueDate >= next7Days;
+        const dateOnly = extractDateOnly(item.due.date);
+        return dateOnly > next7DaysISO;
       }
       if (filter === 'nodate') {
         return !item.due?.date;
