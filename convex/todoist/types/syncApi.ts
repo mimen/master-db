@@ -139,11 +139,12 @@ export const syncReminderSchema = v.object({
   id: v.string(),
   notify_uid: v.string(),
   item_id: v.string(),
-  service: v.string(),
+  service: v.optional(v.string()), // Optional - not always present
   type: v.string(),
   date: v.optional(v.string()),
   due: v.optional(v.union(syncDueSchema, v.null())),
-  mm_offset: v.optional(v.number()),
+  mm_offset: v.optional(v.number()), // Minutes offset
+  minute_offset: v.optional(v.number()), // Alternative field name
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
 });
 
