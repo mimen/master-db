@@ -488,6 +488,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   const formatDueDate = (due: TodoistTaskWithProject["due"]) => {
     if (!due) return { text: null, isOverdue: false }
 
+    // Use datetime if available, otherwise use date
+    const dateTime = due.datetime ? new Date(due.datetime) : new Date(due.date)
     const date = new Date(due.date)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -512,6 +514,16 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
         day: "numeric",
         year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
       })
+    }
+
+    // Append time if datetime is present
+    if (due.datetime) {
+      const timeString = dateTime.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+      text = `${text} at ${timeString}`
     }
 
     return { text, isOverdue }
