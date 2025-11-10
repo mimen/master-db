@@ -66,7 +66,7 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
         />
       </SidebarHeader>
       <SidebarContent className="p-0 overflow-hidden">
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full mr-0.5">
           <div className="p-2 min-w-0 w-[265px]">
             <ViewsSection
               items={viewItems}
