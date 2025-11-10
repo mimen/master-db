@@ -1,6 +1,5 @@
-import type { ComponentType } from "react"
-
 import { AlertCircle, Calendar, Flag } from "lucide-react"
+import type { ComponentType } from "react"
 
 import type { ViewKey } from "@/lib/views/types"
 

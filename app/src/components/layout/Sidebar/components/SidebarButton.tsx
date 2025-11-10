@@ -1,8 +1,9 @@
 import { cloneElement, isValidElement, type ElementType, type ReactNode } from "react"
 
+import { useSidebarHover } from "../contexts/SidebarHoverContext"
+
 import { CollapseCaret } from "./CollapseCaret"
 import { CountBadge } from "./CountBadge"
-import { useSidebarHover } from "../contexts/SidebarHoverContext"
 
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"

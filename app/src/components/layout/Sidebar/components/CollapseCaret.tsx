@@ -1,7 +1,8 @@
 import { ChevronRight } from "lucide-react"
 
-import { IconButton } from "./IconButton"
 import { useSidebarHover } from "../contexts/SidebarHoverContext"
+
+import { IconButton } from "./IconButton"
 
 import { cn } from "@/lib/utils"
 

@@ -2,6 +2,10 @@ import { useQuery } from "convex/react"
 import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateCcw } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
@@ -16,10 +20,6 @@ import type {
   TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "ring-1", "ring-primary/30", "shadow-sm"] as const
 
