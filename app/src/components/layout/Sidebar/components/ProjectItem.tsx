@@ -1,4 +1,5 @@
 import type { ProjectTreeNode } from "../types"
+import { getTotalActiveCount } from "../utils/projectTree"
 
 import { SidebarButton } from "./SidebarButton"
 
@@ -31,9 +32,14 @@ export function ProjectItem({
   const projectViewKey = `view:project:${project.todoist_id}` as ViewKey
   const projectFamilyKey = `view:project-family:${project.todoist_id}` as ViewKey
   const isActive = currentViewKey === projectViewKey || currentViewKey === projectFamilyKey
-  const hasActiveItems = project.stats.activeCount > 0
   const hasChildren = project.children.length > 0
   const isCollapsed = isProjectCollapsed(project.todoist_id)
+
+  // When collapsed with children, show total count including descendants
+  const displayCount = isCollapsed && hasChildren
+    ? getTotalActiveCount(project)
+    : project.stats.activeCount
+  const hasActiveItems = displayCount > 0
 
   const handleProjectClick = () => {
     if (expandNested && hasChildren) {
@@ -62,7 +68,7 @@ export function ProjectItem({
         <SidebarButton
           icon={projectIcon}
           label={project.name}
-          count={hasActiveItems ? project.stats.activeCount : null}
+          count={hasActiveItems ? displayCount : null}
           isActive={isActive}
           onClick={handleProjectClick}
           level={level}

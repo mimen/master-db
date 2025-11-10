@@ -53,3 +53,16 @@ export function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] 
   flatten(projects)
   return result
 }
+
+/**
+ * Calculates total active task count for a project and all its descendants
+ */
+export function getTotalActiveCount(project: ProjectTreeNode): number {
+  let total = project.stats.activeCount
+
+  for (const child of project.children) {
+    total += getTotalActiveCount(child)
+  }
+
+  return total
+}
