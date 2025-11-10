@@ -16,6 +16,9 @@ import type {
   TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
+import { Card, CardContent } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
 
@@ -222,13 +225,22 @@ export function TaskListView({
           <span className="flex-1">{header.title}</span>
           <span className="text-xs">{taskCountText}</span>
           {visibleTasks.length > 0 && (
-            <button
-              onClick={() => onRestore?.(list.id)}
-              className="p-1 hover:bg-muted rounded transition-colors"
-              title="Expand list"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => onRestore?.(list.id)}
+                    className="p-1 hover:bg-muted rounded transition-colors"
+                    aria-label="Expand list"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Expand list
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
@@ -237,38 +249,60 @@ export function TaskListView({
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-6 flex items-center gap-2">
-        {list.collapsible && (
-          <button
-            onClick={toggleExpanded}
-            className="p-1 hover:bg-muted rounded transition-colors"
-          >
-            {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-          </button>
-        )}
-        {header.icon}
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{header.title}</h1>
-          {header.description && (
-            <p className="text-muted-foreground mt-1">{header.description}</p>
+      <div className="mb-4">
+        <div className="flex items-center gap-2">
+          {list.collapsible && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={toggleExpanded}
+                    className="p-1 hover:bg-muted rounded transition-colors"
+                    aria-label={isExpanded ? "Collapse list" : "Expand list"}
+                  >
+                    {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {isExpanded ? "Collapse" : "Expand"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {header.icon}
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold">{header.title}</h1>
+            {header.description && (
+              <p className="text-muted-foreground mt-1">{header.description}</p>
+            )}
+          </div>
+          {isMultiListView && visibleTasks.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => onDismiss?.(list.id)}
+                    className="p-1 hover:bg-muted rounded transition-colors text-muted-foreground"
+                    aria-label="Collapse list"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Collapse list
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
-        {isMultiListView && visibleTasks.length > 0 && (
-          <button
-            onClick={() => onDismiss?.(list.id)}
-            className="p-1 hover:bg-muted rounded transition-colors text-muted-foreground"
-            title="Collapse list"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        )}
+        <Separator className="mt-3" />
       </div>
 
       {isExpanded && (
         <>
           {visibleTasks.length > 0 ? (
             <div className="space-y-1">
-              {visibleTasks.map((task, index) => {
+              {visibleTasks.map((task: TodoistTaskWithProject, index: number) => {
                 if (!refHandlers.current[index]) {
                   refHandlers.current[index] = (element) => {
                     taskRefs.current[index] = element
@@ -487,33 +521,45 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   const dueInfo = formatDueDate(task.due)
 
   return (
-    <div
+    <Card
       ref={onElementRef}
       tabIndex={-1}
       aria-selected={false}
       onClick={onClick}
       data-task-id={task.todoist_id}
       className={cn(
-        "flex items-start gap-3 rounded-md border border-transparent bg-background p-3 text-left text-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring",
-        "hover:border-border hover:bg-muted/50"
+        "group cursor-pointer transition-all duration-200 hover:shadow-sm",
+        "border-transparent hover:border-border",
+        "focus:outline-none focus:ring-2 focus:ring-ring"
       )}
     >
-      <button
-        onClick={(event) => {
-          event.stopPropagation()
-          void handleComplete()
-        }}
-        className={cn(
-          "group mt-1 flex h-5 w-5 items-center justify-center rounded-full border-[1.75px] border-muted-foreground/40 bg-background transition-colors",
-          priority?.colorClass && "border-current",
-          priority?.colorClass
-        )}
-        aria-label="Complete task"
-      >
-        <Check className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
-      </button>
+      <CardContent className="p-3">
+        <div className="flex items-start gap-3 text-sm">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void handleComplete()
+                  }}
+                  className={cn(
+                    "group/checkbox mt-1 flex h-5 w-5 items-center justify-center rounded-full border-[1.75px] border-muted-foreground/40 bg-background transition-colors hover:border-muted-foreground/60",
+                    priority?.colorClass && "border-current",
+                    priority?.colorClass
+                  )}
+                  aria-label="Complete task"
+                >
+                  <Check className="h-3 w-3 opacity-0 transition-opacity group-hover/checkbox:opacity-100" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Complete task
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
-      <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-1">
         {isEditing ? (
           <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
             <input
@@ -637,7 +683,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
             </span>
           )}
         </div>
-      </div>
-    </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 })
