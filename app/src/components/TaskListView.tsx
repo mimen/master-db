@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { Calendar, Check, ChevronDown, ChevronRight, Flag, FolderOpen, Tag, User, X, RotateCcw } from "lucide-react"
+import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateCcw } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "@/convex/_generated/api"
@@ -17,10 +17,11 @@ import type {
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-muted", "ring-2", "ring-ring"] as const
+const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "ring-1", "ring-primary/30", "shadow-sm"] as const
 
 interface TaskListViewProps {
   list: ListInstance
@@ -216,21 +217,23 @@ export function TaskListView({
   if (shouldShowCompact) {
     const taskCountText = visibleTasks.length === 0
       ? "Empty"
-      : `${visibleTasks.length} task${visibleTasks.length === 1 ? '' : 's'}`
+      : `${visibleTasks.length}`
 
     return (
-      <div className="max-w-4xl mx-auto px-6 py-1">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground/60">
-          {header.icon}
-          <span className="flex-1">{header.title}</span>
-          <span className="text-xs">{taskCountText}</span>
+      <div className="max-w-4xl mx-auto px-6 py-2">
+        <div className="flex items-center gap-3 text-sm">
+          <div className="text-muted-foreground">{header.icon}</div>
+          <span className="flex-1 font-medium text-foreground/70">{header.title}</span>
+          <Badge variant="secondary" className="text-xs font-normal">
+            {taskCountText}
+          </Badge>
           {visibleTasks.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => onRestore?.(list.id)}
-                    className="p-1 hover:bg-muted rounded transition-colors"
+                    className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
                     aria-label="Expand list"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -248,19 +251,19 @@ export function TaskListView({
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-4xl mx-auto px-6 py-4">
       <div className="mb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 mb-3">
           {list.collapsible && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     onClick={toggleExpanded}
-                    className="p-1 hover:bg-muted rounded transition-colors"
+                    className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
                     aria-label={isExpanded ? "Collapse list" : "Expand list"}
                   >
-                    {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -269,23 +272,26 @@ export function TaskListView({
               </Tooltip>
             </TooltipProvider>
           )}
-          {header.icon}
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold">{header.title}</h1>
+          <div className="text-muted-foreground">{header.icon}</div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight">{header.title}</h2>
             {header.description && (
-              <p className="text-muted-foreground mt-1">{header.description}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{header.description}</p>
             )}
           </div>
+          <Badge variant="secondary" className="text-xs font-normal shrink-0">
+            {visibleTasks.length}
+          </Badge>
           {isMultiListView && visibleTasks.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => onDismiss?.(list.id)}
-                    className="p-1 hover:bg-muted rounded transition-colors text-muted-foreground"
+                    className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
                     aria-label="Collapse list"
                   >
-                    <X className="h-5 w-5" />
+                    <X className="h-4 w-4" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -295,13 +301,13 @@ export function TaskListView({
             </TooltipProvider>
           )}
         </div>
-        <Separator className="mt-3" />
+        <Separator />
       </div>
 
       {isExpanded && (
         <>
           {visibleTasks.length > 0 ? (
-            <div className="space-y-1">
+            <div className="space-y-2">
               {visibleTasks.map((task: TodoistTaskWithProject, index: number) => {
                 if (!refHandlers.current[index]) {
                   refHandlers.current[index] = (element) => {
@@ -323,12 +329,12 @@ export function TaskListView({
               })}
             </div>
           ) : list.collapsible ? (
-            <div className="py-1 text-xs text-muted-foreground/50 text-center">Empty</div>
+            <div className="py-4 text-sm text-muted-foreground text-center">No tasks</div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <p className="text-xl font-semibold mb-2">{emptyState.title}</p>
+            <div className="flex flex-col items-center justify-center h-64 text-center px-4">
+              <p className="text-lg font-semibold mb-1">{emptyState.title}</p>
               {emptyState.description && (
-                <p className="text-muted-foreground">{emptyState.description}</p>
+                <p className="text-sm text-muted-foreground max-w-md">{emptyState.description}</p>
               )}
             </div>
           )}
@@ -528,13 +534,13 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       onClick={onClick}
       data-task-id={task.todoist_id}
       className={cn(
-        "group cursor-pointer transition-all duration-200 hover:shadow-sm",
-        "border-transparent hover:border-border",
-        "focus:outline-none focus:ring-2 focus:ring-ring"
+        "group cursor-pointer transition-all duration-150",
+        "hover:bg-accent/50 hover:shadow-sm",
+        "focus:outline-none focus:ring-1 focus:ring-primary/30 focus:shadow-sm"
       )}
     >
       <CardContent className="p-3">
-        <div className="flex items-start gap-3 text-sm">
+        <div className="flex items-start gap-3">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -544,13 +550,14 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
                     void handleComplete()
                   }}
                   className={cn(
-                    "group/checkbox mt-1 flex h-5 w-5 items-center justify-center rounded-full border-[1.75px] border-muted-foreground/40 bg-background transition-colors hover:border-muted-foreground/60",
-                    priority?.colorClass && "border-current",
+                    "group/checkbox mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all",
                     priority?.colorClass
+                      ? cn("border-current", priority.colorClass)
+                      : "border-muted-foreground/40 hover:border-muted-foreground/60 hover:bg-accent"
                   )}
                   aria-label="Complete task"
                 >
-                  <Check className="h-3 w-3 opacity-0 transition-opacity group-hover/checkbox:opacity-100" />
+                  <Check className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover/checkbox:opacity-100" />
                 </button>
               </TooltipTrigger>
               <TooltipContent>
@@ -559,9 +566,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
             </Tooltip>
           </TooltipProvider>
 
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 min-w-0 space-y-2">
         {isEditing ? (
-          <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <input
               ref={contentInputRef}
               type="text"
@@ -587,7 +594,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
                   }
                 }
               }}
-              className="w-full -mx-0.5 px-0.5 text-sm font-medium bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded"
+              className="w-full px-2 py-1 text-sm font-medium bg-accent/50 rounded-md border border-input outline-none focus:ring-2 focus:ring-primary"
             />
             {showDescriptionInput && (
               <input
@@ -608,81 +615,88 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
                     contentInputRef.current?.focus()
                   }
                 }}
-                className="w-full -mx-0.5 px-0.5 text-xs text-muted-foreground bg-transparent border-none outline-none focus:ring-1 focus:ring-ring focus:rounded placeholder:text-muted-foreground/50"
+                className="w-full px-2 py-1 text-xs text-muted-foreground bg-accent/50 rounded-md border border-input outline-none focus:ring-2 focus:ring-primary placeholder:text-muted-foreground/50"
               />
             )}
           </div>
         ) : (
           <>
-            <div className="font-medium">
-              {markdownSegments.map((segment, index) =>
-                segment.type === "text" ? (
-                  <span key={index}>{segment.content}</span>
-                ) : (
-                  <a
-                    key={index}
-                    href={segment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {segment.content}
-                  </a>
-                )
+            <div>
+              <div className="font-medium text-sm leading-relaxed">
+                {markdownSegments.map((segment, index) =>
+                  segment.type === "text" ? (
+                    <span key={index}>{segment.content}</span>
+                  ) : (
+                    <a
+                      key={index}
+                      href={segment.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-primary transition-colors"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {segment.content}
+                    </a>
+                  )
+                )}
+              </div>
+
+              {displayDescription && (
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{displayDescription}</p>
               )}
             </div>
 
-            {displayDescription && (
-              <p className="text-xs text-muted-foreground">{displayDescription}</p>
-            )}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {task.project && (
+                <Badge variant="outline" className="gap-1.5 font-normal">
+                  <div
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: getProjectColor(task.project.color) }}
+                  />
+                  <span>{task.project.name}</span>
+                </Badge>
+              )}
+
+              {task.due?.date && (
+                <Badge
+                  variant={dueInfo.isOverdue ? "destructive" : "outline"}
+                  className="gap-1.5 font-normal"
+                >
+                  <Calendar className="h-3 w-3" />
+                  <span>{dueInfo.text}</span>
+                </Badge>
+              )}
+
+              {task.labels && task.labels.length > 0 && (
+                <>
+                  {task.labels.map((label) => (
+                    <Badge key={label} variant="secondary" className="gap-1.5 font-normal">
+                      <Tag className="h-3 w-3" />
+                      <span>{label}</span>
+                    </Badge>
+                  ))}
+                </>
+              )}
+
+              {task.assigned_by_uid && (
+                <Badge variant="outline" className="gap-1.5 font-normal">
+                  <User className="h-3 w-3" />
+                  <span>{assignee}</span>
+                </Badge>
+              )}
+
+              {priority?.showFlag && (
+                <Badge
+                  variant="outline"
+                  className={cn("gap-1.5 font-normal", priority.colorClass)}
+                >
+                  <Flag className="h-3 w-3" fill="currentColor" />
+                  <span>{priority.label}</span>
+                </Badge>
+              )}
+            </div>
           </>
         )}
-
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          {task.project && (
-            <span className="inline-flex items-center gap-1">
-              <FolderOpen
-                className="h-3 w-3"
-                style={{ color: getProjectColor(task.project.color) }}
-              />
-              {task.project.name}
-            </span>
-          )}
-
-          {task.due?.date && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-1",
-                dueInfo.isOverdue && "text-destructive"
-              )}
-            >
-              <Calendar className="h-3 w-3" />
-              {dueInfo.text}
-            </span>
-          )}
-
-          {task.assigned_by_uid && (
-            <span className="inline-flex items-center gap-1">
-              <User className="h-3 w-3" />
-              {assignee}
-            </span>
-          )}
-
-          {task.labels && task.labels.length > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <Tag className="h-3 w-3" />
-              {task.labels.join(", ")}
-            </span>
-          )}
-
-          {priority?.showFlag && (
-            <span className={cn("inline-flex items-center gap-1", priority.colorClass)}>
-              <Flag className="h-3 w-3" fill="currentColor" />
-              {priority.label}
-            </span>
-          )}
-        </div>
           </div>
         </div>
       </CardContent>
