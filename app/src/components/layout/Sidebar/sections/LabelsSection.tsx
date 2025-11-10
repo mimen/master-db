@@ -1,14 +1,14 @@
-import { ArrowDownAZ, ChevronRight, Hash, Tag } from "lucide-react"
+import { ArrowDownAZ, Hash, Tag } from "lucide-react"
 
+import { CollapseCaret } from "../components/CollapseCaret"
 import { SidebarButton } from "../components/SidebarButton"
-import { SortToggle } from "../components/SortToggle"
+import { SortDropdown } from "../components/SortDropdown"
 import type { LabelSort } from "../types"
 import { getSortedLabels } from "../utils/sorting"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
 import { getProjectColor } from "@/lib/colors"
-import { cn } from "@/lib/utils"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc } from "@/types/convex/todoist"
@@ -53,19 +53,23 @@ export function LabelsSection({
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
         <div className="flex items-center justify-between">
-          <CollapsibleTrigger asChild>
-            <SidebarGroupLabel className="cursor-pointer hover:bg-accent/50 flex items-center gap-1">
-              <ChevronRight className={cn("h-3 w-3 transition-transform", !isCollapsed && "rotate-90")} />
-              Labels
-            </SidebarGroupLabel>
-          </CollapsibleTrigger>
-          <div className="pr-2">
-            <SortToggle
+          <SidebarGroupLabel className="flex-1">Labels</SidebarGroupLabel>
+          <div className="flex items-center pr-2">
+            <SortDropdown
               modes={LABEL_SORT_MODES}
               currentMode={sortMode}
-              onToggle={onSortChange}
+              onChange={onSortChange}
               getIcon={getLabelSortIcon}
             />
+            <CollapsibleTrigger asChild>
+              <CollapseCaret
+                isCollapsed={isCollapsed}
+                onToggle={(e) => {
+                  e.preventDefault()
+                  onToggleCollapse()
+                }}
+              />
+            </CollapsibleTrigger>
           </div>
         </div>
 

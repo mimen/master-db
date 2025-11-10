@@ -1,12 +1,10 @@
-import { ChevronRight } from "lucide-react"
-
+import { CollapseCaret } from "../components/CollapseCaret"
 import { SidebarButton } from "../components/SidebarButton"
 import { TIME_FILTER_ITEMS } from "../utils/filterItems"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
-import { cn } from "@/lib/utils"
 import { resolveView } from "@/lib/views/viewDefinitions"
 
 interface TimeSectionProps {
@@ -29,12 +27,20 @@ export function TimeSection({
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
-        <CollapsibleTrigger asChild>
-          <SidebarGroupLabel className="cursor-pointer hover:bg-accent/50 flex items-center gap-1">
-            <ChevronRight className={cn("h-3 w-3 transition-transform", !isCollapsed && "rotate-90")} />
-            Time
-          </SidebarGroupLabel>
-        </CollapsibleTrigger>
+        <div className="flex items-center justify-between">
+          <SidebarGroupLabel className="flex-1">Time</SidebarGroupLabel>
+          <CollapsibleTrigger asChild>
+            <div className="mr-2">
+              <CollapseCaret
+                isCollapsed={isCollapsed}
+                onToggle={(e) => {
+                  e.preventDefault()
+                  onToggleCollapse()
+                }}
+              />
+            </div>
+          </CollapsibleTrigger>
+        </div>
 
         <CollapsibleContent>
           <SidebarMenu>

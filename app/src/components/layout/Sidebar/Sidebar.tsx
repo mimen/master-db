@@ -1,4 +1,5 @@
 import { NavHeader } from "./components/NavHeader"
+import { SidebarHoverProvider, useSidebarHover } from "./contexts/SidebarHoverContext"
 import { useSidebarData } from "./hooks/useSidebarData"
 import { useSidebarState } from "./hooks/useSidebarState"
 import { LabelsSection } from "./sections/LabelsSection"
@@ -21,7 +22,7 @@ interface SidebarProps {
   onViewChange: (view: ViewSelection) => void
 }
 
-export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
+function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
   const {
     projectTree,
     labels,
@@ -42,12 +43,21 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
     cycleLabelSort,
     collapsed,
     toggleSection,
+    toggleProjectCollapse,
+    isProjectCollapsed,
+    togglePriorityGroupCollapse,
+    isPriorityGroupCollapsed,
   } = useSidebarState()
+
+  const { setIsHovered } = useSidebarHover()
 
   const viewItems = buildViewItems(inboxProject?.stats.activeCount || null)
 
   return (
-    <SidebarPrimitive>
+    <SidebarPrimitive
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <SidebarHeader>
         <NavHeader
           onViewChange={onViewChange}
@@ -77,6 +87,10 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
               onSortChange={cycleProjectSort}
               isCollapsed={collapsed.projects}
               onToggleCollapse={() => toggleSection("projects")}
+              toggleProjectCollapse={toggleProjectCollapse}
+              isProjectCollapsed={isProjectCollapsed}
+              togglePriorityGroupCollapse={togglePriorityGroupCollapse}
+              isPriorityGroupCollapsed={isPriorityGroupCollapsed}
             />
 
             <TimeSection
@@ -114,5 +128,13 @@ export function Sidebar({ currentViewKey, onViewChange }: SidebarProps) {
         </ScrollArea>
       </SidebarContent>
     </SidebarPrimitive>
+  )
+}
+
+export function Sidebar(props: SidebarProps) {
+  return (
+    <SidebarHoverProvider>
+      <SidebarContent_ {...props} />
+    </SidebarHoverProvider>
   )
 }

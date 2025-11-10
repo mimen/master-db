@@ -1,5 +1,4 @@
-import { ChevronRight } from "lucide-react"
-
+import { CollapseCaret } from "../components/CollapseCaret"
 import { SidebarButton } from "../components/SidebarButton"
 import { getPriorityProjectItems, PRIORITY_FILTER_ITEMS } from "../utils/filterItems"
 
@@ -34,12 +33,20 @@ export function PrioritiesSection({
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
-        <CollapsibleTrigger asChild>
-          <SidebarGroupLabel className="cursor-pointer hover:bg-accent/50 flex items-center gap-1">
-            <ChevronRight className={cn("h-3 w-3 transition-transform", !isCollapsed && "rotate-90")} />
-            Priorities
-          </SidebarGroupLabel>
-        </CollapsibleTrigger>
+        <div className="flex items-center justify-between">
+          <SidebarGroupLabel className="flex-1">Priorities</SidebarGroupLabel>
+          <CollapsibleTrigger asChild>
+            <div className="mr-2">
+              <CollapseCaret
+                isCollapsed={isCollapsed}
+                onToggle={(e) => {
+                  e.preventDefault()
+                  onToggleCollapse()
+                }}
+              />
+            </div>
+          </CollapsibleTrigger>
+        </div>
 
         <CollapsibleContent>
           <div className="mb-3 flex items-center gap-2 px-3">

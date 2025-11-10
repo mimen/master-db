@@ -11,6 +11,8 @@ interface CollapsedSections {
 
 const STORAGE_KEYS = {
   COLLAPSED_SECTIONS: "sidebar:collapsedSections",
+  COLLAPSED_PROJECTS: "sidebar:collapsedProjects",
+  COLLAPSED_PRIORITY_GROUPS: "sidebar:collapsedPriorityGroups",
   EXPAND_NESTED: "sidebar:expandNested",
   PRIORITY_MODE: "sidebar:priorityMode",
   PROJECT_SORT: "sidebar:projectSort",
@@ -62,10 +64,32 @@ export function useSidebarState() {
     })
   )
 
+  // Collapsed projects state - store project IDs that are collapsed
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => {
+    const stored = getStoredValue<string[]>(STORAGE_KEYS.COLLAPSED_PROJECTS, [])
+    return new Set(stored)
+  })
+
+  // Collapsed priority groups state - store priority levels that are collapsed
+  const [collapsedPriorityGroups, setCollapsedPriorityGroups] = useState<Set<number>>(() => {
+    const stored = getStoredValue<number[]>(STORAGE_KEYS.COLLAPSED_PRIORITY_GROUPS, [])
+    return new Set(stored)
+  })
+
   // Persist collapsed sections to localStorage
   useEffect(() => {
     setStoredValue(STORAGE_KEYS.COLLAPSED_SECTIONS, collapsed)
   }, [collapsed])
+
+  // Persist collapsed projects to localStorage
+  useEffect(() => {
+    setStoredValue(STORAGE_KEYS.COLLAPSED_PROJECTS, Array.from(collapsedProjects))
+  }, [collapsedProjects])
+
+  // Persist collapsed priority groups to localStorage
+  useEffect(() => {
+    setStoredValue(STORAGE_KEYS.COLLAPSED_PRIORITY_GROUPS, Array.from(collapsedPriorityGroups))
+  }, [collapsedPriorityGroups])
 
   const toggleSection = useCallback((section: keyof CollapsedSections) => {
     setCollapsed((prev) => ({
@@ -117,6 +141,40 @@ export function useSidebarState() {
     setPriorityMode((prev) => (prev === "tasks" ? "projects" : "tasks"))
   }, [])
 
+  const toggleProjectCollapse = useCallback((projectId: string) => {
+    setCollapsedProjects((prev) => {
+      const next = new Set(prev)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }, [])
+
+  const isProjectCollapsed = useCallback(
+    (projectId: string) => collapsedProjects.has(projectId),
+    [collapsedProjects]
+  )
+
+  const togglePriorityGroupCollapse = useCallback((priority: number) => {
+    setCollapsedPriorityGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(priority)) {
+        next.delete(priority)
+      } else {
+        next.add(priority)
+      }
+      return next
+    })
+  }, [])
+
+  const isPriorityGroupCollapsed = useCallback(
+    (priority: number) => collapsedPriorityGroups.has(priority),
+    [collapsedPriorityGroups]
+  )
+
   return {
     expandNested,
     setExpandNested,
@@ -131,5 +189,10 @@ export function useSidebarState() {
     cycleLabelSort,
     collapsed,
     toggleSection,
+    collapsedProjects,
+    toggleProjectCollapse,
+    isProjectCollapsed,
+    togglePriorityGroupCollapse,
+    isPriorityGroupCollapsed,
   }
 }
