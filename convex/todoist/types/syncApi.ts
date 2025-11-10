@@ -10,6 +10,7 @@ export const syncDueSchema = v.object({
   date: v.string(),
   is_recurring: v.optional(v.boolean()),
   string: v.optional(v.string()),
+  lang: v.optional(v.string()), // Language code for date string (webhook only)
   datetime: v.optional(v.string()),
   timezone: v.optional(v.union(v.string(), v.null())),
 });
