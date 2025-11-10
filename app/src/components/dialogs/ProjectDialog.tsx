@@ -1,12 +1,20 @@
 import { useQuery } from 'convex/react'
 import { ChevronRight, Plus } from 'lucide-react'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import type React from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { api } from '@/convex/_generated/api'
+import { useCreateProject } from '@/hooks/useCreateProject'
 import { getProjectColor, TODOIST_COLOR_OPTIONS } from '@/lib/colors'
 import { cn, parseMarkdownLinks } from '@/lib/utils'
-import { useCreateProject } from '@/hooks/useCreateProject'
-import type { TodoistTask, TodoistProject } from '@/types/convex/todoist'
+import type { TodoistProject, TodoistTask } from '@/types/convex/todoist'
 
 interface ProjectDialogProps {
   task: TodoistTask | null
@@ -15,7 +23,6 @@ interface ProjectDialogProps {
 }
 
 export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -153,30 +160,20 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   }, [searchTerm, selectedParentId, selectedColor, createProject, onSelect])
 
   useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog || !task) return
+    if (task) {
+      setSearchTerm('')
+      setSelectedIndex(0)
+      setIsSelectingParent(false)
+      setIsSelectingColor(false)
+      setSelectedParentId(undefined)
+      setSelectedColor('charcoal')
+      setIsCreatingProject(false)
+      setParentSelectorIndex(0)
+      setColorSelectorIndex(17) // charcoal
 
-    dialog.showModal()
-    setSearchTerm('')
-    setSelectedIndex(0)
-    setIsSelectingParent(false)
-    setIsSelectingColor(false)
-    setSelectedParentId(undefined)
-    setSelectedColor('charcoal')
-    setIsCreatingProject(false)
-    setParentSelectorIndex(0)
-    setColorSelectorIndex(17) // charcoal
-
-    setTimeout(() => searchInputRef.current?.focus(), 100)
-
-    const handleCancel = (e: Event) => {
-      e.preventDefault()
-      onClose()
+      setTimeout(() => searchInputRef.current?.focus(), 100)
     }
-
-    dialog.addEventListener('cancel', handleCancel)
-    return () => dialog.removeEventListener('cancel', handleCancel)
-  }, [task, onClose])
+  }, [task])
 
   useEffect(() => {
     if (selectedIndex >= filteredProjects.length) {
@@ -201,211 +198,177 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
     }
   }, [colorSelectorIndex, isSelectingColor])
 
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog || !task) return
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle parent selector navigation
+    if (isSelectingParent) {
+      const parentOptions = buildParentOptions()
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') {
-        e.stopPropagation()
-      }
-
-      // Handle parent selector navigation
-      if (isSelectingParent) {
-        const parentOptions = buildParentOptions()
-
-        switch (e.key) {
-          case 'ArrowDown':
-            e.preventDefault()
-            setParentSelectorIndex(prev => Math.min(prev + 1, parentOptions.length - 1))
-            break
-          case 'ArrowUp':
-            e.preventDefault()
-            setParentSelectorIndex(prev => Math.max(prev - 1, 0))
-            break
-          case 'Enter': {
-            e.preventDefault()
-            const selectedOption = parentOptions[parentSelectorIndex]
-            if (selectedOption.isNoParent) {
-              setSelectedParentId(undefined)
-              setSelectedColor('charcoal')
-            } else {
-              setSelectedParentId(selectedOption.id)
-              setSelectedColor(selectedOption.color || 'charcoal')
-            }
-            setIsSelectingParent(false)
-            setIsSelectingColor(true)
-            // Find the index of the current color in colorOptions
-            const colorIndex = TODOIST_COLOR_OPTIONS.findIndex(c => c.name === (selectedOption.color || 'charcoal'))
-            setColorSelectorIndex(colorIndex >= 0 ? colorIndex : 17)
-            break
-          }
-          case 'Escape':
-            e.preventDefault()
-            setIsSelectingParent(false)
-            setParentSelectorIndex(0)
-            break
-        }
-        return
-      }
-
-      // Handle color selector navigation
-      if (isSelectingColor) {
-        switch (e.key) {
-          case 'ArrowRight':
-            e.preventDefault()
-            setColorSelectorIndex(prev => (prev + 1) % TODOIST_COLOR_OPTIONS.length)
-            break
-          case 'ArrowLeft':
-            e.preventDefault()
-            setColorSelectorIndex(prev => (prev - 1 + TODOIST_COLOR_OPTIONS.length) % TODOIST_COLOR_OPTIONS.length)
-            break
-          case 'ArrowDown':
-            e.preventDefault()
-            // 5 columns per row
-            setColorSelectorIndex(prev => Math.min(prev + 5, TODOIST_COLOR_OPTIONS.length - 1))
-            break
-          case 'ArrowUp':
-            e.preventDefault()
-            // 5 columns per row
-            setColorSelectorIndex(prev => Math.max(prev - 5, 0))
-            break
-          case 'Enter':
-            e.preventDefault()
-            if (TODOIST_COLOR_OPTIONS[colorSelectorIndex]) {
-              setSelectedColor(TODOIST_COLOR_OPTIONS[colorSelectorIndex].name)
-              setIsSelectingColor(false)
-              handleCreateProject()
-            }
-            break
-          case 'Escape':
-            e.preventDefault()
-            setIsSelectingColor(false)
-            setIsSelectingParent(true)
-            break
-        }
-        return
-      }
-
-      // Handle regular project list navigation
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault()
-          setSelectedIndex(prev => {
-            let next = Math.min(prev + 1, filteredProjects.length - 1)
-            // Skip dividers
-            while (next < filteredProjects.length && 'divider' in filteredProjects[next]) {
-              next++
-            }
-            return Math.min(next, filteredProjects.length - 1)
-          })
+          setParentSelectorIndex(prev => Math.min(prev + 1, parentOptions.length - 1))
           break
         case 'ArrowUp':
           e.preventDefault()
-          setSelectedIndex(prev => {
-            let next = Math.max(prev - 1, 0)
-            // Skip dividers
-            while (next >= 0 && 'divider' in filteredProjects[next]) {
-              next--
-            }
-            return Math.max(next, 0)
-          })
+          setParentSelectorIndex(prev => Math.max(prev - 1, 0))
           break
         case 'Enter': {
           e.preventDefault()
-          const selected = filteredProjects[selectedIndex]
-          if (selected && !('divider' in selected)) {
-            if ('createNew' in selected) {
-              // Start project creation flow
-              if (!isSelectingParent && !isSelectingColor) {
-                setIsSelectingParent(true)
-                setParentSelectorIndex(0)
-              }
-            } else {
-              onSelect(selected.todoist_id)
-            }
+          const selectedOption = parentOptions[parentSelectorIndex]
+          if (selectedOption.isNoParent) {
+            setSelectedParentId(undefined)
+            setSelectedColor('charcoal')
+          } else {
+            setSelectedParentId(selectedOption.id)
+            setSelectedColor(selectedOption.color || 'charcoal')
           }
+          setIsSelectingParent(false)
+          setIsSelectingColor(true)
+          // Find the index of the current color in colorOptions
+          const colorIndex = TODOIST_COLOR_OPTIONS.findIndex(c => c.name === (selectedOption.color || 'charcoal'))
+          setColorSelectorIndex(colorIndex >= 0 ? colorIndex : 17)
           break
         }
         case 'Escape':
           e.preventDefault()
-          // If in color selection, go back to parent selection
-          if (isSelectingColor) {
-            setIsSelectingColor(false)
-            setIsSelectingParent(true)
-          }
-          // If in parent selection, go back to project list
-          else if (isSelectingParent) {
-            setIsSelectingParent(false)
-          }
-          // Otherwise close the overlay
-          else {
-            onClose()
-          }
+          setIsSelectingParent(false)
+          setParentSelectorIndex(0)
           break
       }
+      return
     }
 
-    dialog.addEventListener('keydown', handleKeyDown)
-    return () => dialog.removeEventListener('keydown', handleKeyDown)
-  }, [task, onSelect, filteredProjects, selectedIndex, isSelectingParent, isSelectingColor, parentSelectorIndex, colorSelectorIndex, handleCreateProject, onClose, buildParentOptions])
+    // Handle color selector navigation
+    if (isSelectingColor) {
+      switch (e.key) {
+        case 'ArrowRight':
+          e.preventDefault()
+          setColorSelectorIndex(prev => (prev + 1) % TODOIST_COLOR_OPTIONS.length)
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          setColorSelectorIndex(prev => (prev - 1 + TODOIST_COLOR_OPTIONS.length) % TODOIST_COLOR_OPTIONS.length)
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          // 5 columns per row
+          setColorSelectorIndex(prev => Math.min(prev + 5, TODOIST_COLOR_OPTIONS.length - 1))
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          // 5 columns per row
+          setColorSelectorIndex(prev => Math.max(prev - 5, 0))
+          break
+        case 'Enter':
+          e.preventDefault()
+          if (TODOIST_COLOR_OPTIONS[colorSelectorIndex]) {
+            setSelectedColor(TODOIST_COLOR_OPTIONS[colorSelectorIndex].name)
+            setIsSelectingColor(false)
+            handleCreateProject()
+          }
+          break
+        case 'Escape':
+          e.preventDefault()
+          setIsSelectingColor(false)
+          setIsSelectingParent(true)
+          break
+      }
+      return
+    }
+
+    // Handle regular project list navigation
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setSelectedIndex(prev => {
+          let next = Math.min(prev + 1, filteredProjects.length - 1)
+          // Skip dividers
+          while (next < filteredProjects.length && 'divider' in filteredProjects[next]) {
+            next++
+          }
+          return Math.min(next, filteredProjects.length - 1)
+        })
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setSelectedIndex(prev => {
+          let next = Math.max(prev - 1, 0)
+          // Skip dividers
+          while (next >= 0 && 'divider' in filteredProjects[next]) {
+            next--
+          }
+          return Math.max(next, 0)
+        })
+        break
+      case 'Enter': {
+        e.preventDefault()
+        const selected = filteredProjects[selectedIndex]
+        if (selected && !('divider' in selected)) {
+          if ('createNew' in selected) {
+            // Start project creation flow
+            if (!isSelectingParent && !isSelectingColor) {
+              setIsSelectingParent(true)
+              setParentSelectorIndex(0)
+            }
+          } else {
+            onSelect(selected.todoist_id)
+          }
+        }
+        break
+      }
+    }
+  }
 
   if (!task) return null
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="backdrop:bg-black/75 bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col p-0"
-      onClick={(e) => {
-        if (e.target === dialogRef.current) {
-          onClose()
-        }
-      }}
-    >
-      <div className="p-6 border-b border-gray-200 bg-blue-50 rounded-t-2xl">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-            <span className="text-white font-bold text-sm">#</span>
-          </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-bold text-blue-900">Select Project</h2>
-          </div>
-        </div>
-        <h3 className="text-sm font-medium text-blue-900 leading-tight">
-          {parseMarkdownLinks(task.content).map((segment, index) => {
-            if (segment.type === 'text') {
-              return <span key={index}>{segment.content}</span>
-            } else {
-              return (
-                <a
-                  key={index}
-                  href={segment.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-700 hover:text-blue-800 underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {segment.content}
-                </a>
-              )
-            }
-          })}
-        </h3>
-      </div>
+    <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-w-lg max-h-[80vh] flex flex-col p-0"
+        onKeyDown={handleKeyDown}
+      >
+        <DialogHeader className="p-6 pb-4 space-y-3">
+          <DialogTitle className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+              <span className="text-white font-bold text-sm">#</span>
+            </div>
+            Select Project
+          </DialogTitle>
+          <DialogDescription className="text-sm font-medium text-blue-900 leading-tight">
+            {parseMarkdownLinks(task.content).map((segment, index) => {
+              if (segment.type === 'text') {
+                return <span key={index}>{segment.content}</span>
+              } else {
+                return (
+                  <a
+                    key={index}
+                    href={segment.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-700 hover:text-blue-800 underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {segment.content}
+                  </a>
+                )
+              }
+            })}
+          </DialogDescription>
+        </DialogHeader>
 
-      <div className="p-6 border-b border-gray-200">
-        <input
-          ref={searchInputRef}
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-          placeholder="Search projects..."
-        />
-        <div className="mt-2 text-sm text-gray-500">
-          ↑↓ to navigate • Enter to select • ESC to cancel
+        <div className="px-6 pb-4 border-b border-gray-200">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+            placeholder="Search projects..."
+          />
+          <div className="mt-2 text-sm text-gray-500">
+            ↑↓ to navigate • Enter to select • ESC to cancel
+          </div>
         </div>
-      </div>
 
       <div className="flex-1 overflow-y-auto p-4">
         {filteredProjects.length === 0 ? (
@@ -651,6 +614,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
           </div>
         )}
       </div>
-    </dialog>
+      </DialogContent>
+    </Dialog>
   )
 }

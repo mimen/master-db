@@ -1,6 +1,13 @@
 import { Flag } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { usePriority } from '@/lib/priorities'
 import { cn } from '@/lib/utils'
 import type { TodoistTask } from '@/types/convex/todoist'
@@ -11,98 +18,71 @@ interface PriorityDialogProps {
   onClose: () => void
 }
 
+const priorities = [
+  { value: 4, label: 'P1', name: 'Urgent', color: 'text-red-500', bgColor: 'bg-red-500' },
+  { value: 3, label: 'P2', name: 'High', color: 'text-orange-500', bgColor: 'bg-orange-500' },
+  { value: 2, label: 'P3', name: 'Medium', color: 'text-blue-500', bgColor: 'bg-blue-500' },
+  { value: 1, label: 'P4', name: 'Normal', color: 'text-gray-500', bgColor: 'bg-gray-500' },
+]
+
 export function PriorityDialog({ task, onSelect, onClose }: PriorityDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
   const [focusedIndex, setFocusedIndex] = useState(0)
-
-  const priorities = [
-    { value: 4, label: 'P1', name: 'Urgent', color: 'text-red-500', bgColor: 'bg-red-500' },
-    { value: 3, label: 'P2', name: 'High', color: 'text-orange-500', bgColor: 'bg-orange-500' },
-    { value: 2, label: 'P3', name: 'Medium', color: 'text-blue-500', bgColor: 'bg-blue-500' },
-    { value: 1, label: 'P4', name: 'Normal', color: 'text-gray-500', bgColor: 'bg-gray-500' },
-  ]
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog || !task) return
-
-    dialog.showModal()
-    setFocusedIndex(priorities.findIndex(p => p.value === task.priority) || 0)
-
-    const handleCancel = (e: Event) => {
-      e.preventDefault()
-      onClose()
-    }
-
-    dialog.addEventListener('cancel', handleCancel)
-    return () => dialog.removeEventListener('cancel', handleCancel)
-  }, [task, onClose])
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog || !task) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') {
-        e.stopPropagation()
-      }
-
-      switch (e.key) {
-        case '1':
-          e.preventDefault()
-          onSelect(4)
-          break
-        case '2':
-          e.preventDefault()
-          onSelect(3)
-          break
-        case '3':
-          e.preventDefault()
-          onSelect(2)
-          break
-        case '4':
-          e.preventDefault()
-          onSelect(1)
-          break
-        case 'ArrowUp':
-        case 'ArrowLeft':
-          e.preventDefault()
-          setFocusedIndex(prev => Math.max(0, prev - 1))
-          break
-        case 'ArrowDown':
-        case 'ArrowRight':
-          e.preventDefault()
-          setFocusedIndex(prev => Math.min(priorities.length - 1, prev + 1))
-          break
-        case 'Enter':
-        case ' ':
-          e.preventDefault()
-          onSelect(priorities[focusedIndex].value)
-          break
-      }
-    }
-
-    dialog.addEventListener('keydown', handleKeyDown)
-    return () => dialog.removeEventListener('keydown', handleKeyDown)
-  }, [task, onSelect, focusedIndex])
-
   const currentPriority = usePriority(task?.priority || 1)
+
+  useEffect(() => {
+    if (task) {
+      setFocusedIndex(priorities.findIndex(p => p.value === task.priority) || 0)
+    }
+  }, [task])
 
   if (!task) return null
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="backdrop:bg-black/75 bg-white rounded-2xl p-8 shadow-2xl max-w-lg w-full"
-      onClick={(e) => {
-        if (e.target === dialogRef.current) {
-          onClose()
-        }
-      }}
-    >
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Set Priority</h2>
-        <p className="text-gray-600 mb-8">Use arrow keys and Enter, or press 1-4</p>
+    <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="max-w-lg"
+        onKeyDown={(e) => {
+          switch (e.key) {
+            case '1':
+              e.preventDefault()
+              onSelect(4)
+              break
+            case '2':
+              e.preventDefault()
+              onSelect(3)
+              break
+            case '3':
+              e.preventDefault()
+              onSelect(2)
+              break
+            case '4':
+              e.preventDefault()
+              onSelect(1)
+              break
+            case 'ArrowUp':
+            case 'ArrowLeft':
+              e.preventDefault()
+              setFocusedIndex(prev => Math.max(0, prev - 1))
+              break
+            case 'ArrowDown':
+            case 'ArrowRight':
+              e.preventDefault()
+              setFocusedIndex(prev => Math.min(priorities.length - 1, prev + 1))
+              break
+            case 'Enter':
+            case ' ':
+              e.preventDefault()
+              onSelect(priorities[focusedIndex].value)
+              break
+          }
+        }}
+      >
+        <DialogHeader className="text-center">
+          <DialogTitle className="text-2xl">Set Priority</DialogTitle>
+          <DialogDescription>
+            Use arrow keys and Enter, or press 1-4
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4">
           {priorities.map((priority, index) => {
@@ -137,10 +117,10 @@ export function PriorityDialog({ task, onSelect, onClose }: PriorityDialogProps)
           })}
         </div>
 
-        <div className="mt-8 text-sm text-gray-500">
+        <div className="mt-4 text-center text-sm text-gray-500">
           Current: <span className="font-semibold">{currentPriority?.displayName}</span> • ESC to cancel
         </div>
-      </div>
-    </dialog>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,5 +1,14 @@
 import { Keyboard } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface KeyboardShortcutsDialogProps {
   isOpen: boolean
@@ -52,66 +61,28 @@ const shortcuts: ShortcutSection[] = [
 ]
 
 export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-
-    if (isOpen) {
-      dialog.showModal()
-    } else {
-      dialog.close()
-    }
-
-    const handleCancel = (e: Event) => {
-      e.preventDefault()
-      onClose()
-    }
-
-    dialog.addEventListener('cancel', handleCancel)
-    return () => dialog.removeEventListener('cancel', handleCancel)
-  }, [isOpen, onClose])
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog || !isOpen) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') {
-        e.stopPropagation()
-      }
-
-      if (e.key === 'Enter' || e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
-      }
-    }
-
-    dialog.addEventListener('keydown', handleKeyDown)
-    return () => dialog.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onClose])
-
   return (
-    <dialog
-      ref={dialogRef}
-      className="backdrop:bg-black/75 bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-0"
-      onClick={(e) => {
-        if (e.target === dialogRef.current) {
-          onClose()
-        }
-      }}
-    >
-      <div className="p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-            <Keyboard className="h-6 w-6 text-blue-600" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Keyboard Shortcuts</h2>
-            <p className="text-sm text-gray-600">Master your workflow with these shortcuts</p>
-          </div>
-        </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent
+        className="max-w-2xl"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            onClose()
+          }
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <Keyboard className="h-6 w-6 text-blue-600" />
+            </div>
+            Keyboard Shortcuts
+          </DialogTitle>
+          <DialogDescription>
+            Master your workflow with these shortcuts
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {shortcuts.map((section) => (
@@ -142,15 +113,12 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
           ))}
         </div>
 
-        <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-          >
-            Close (ESC or Enter)
-          </button>
-        </div>
-      </div>
-    </dialog>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
