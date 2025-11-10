@@ -66,13 +66,27 @@ export const syncProjectSchema = v.object({
   parent_id: v.optional(v.union(v.string(), v.null())),
   child_order: v.optional(v.number()),
   collapsed: v.optional(v.boolean()),
+  is_collapsed: v.optional(v.boolean()), // Webhook version of collapsed
   shared: v.optional(v.boolean()),
+  is_shared: v.optional(v.boolean()), // Webhook version of shared
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
   is_archived: v.optional(v.union(v.boolean(), v.number())),
   is_favorite: v.optional(v.union(v.boolean(), v.number())),
+  is_frozen: v.optional(v.boolean()), // Whether project is frozen (webhook only)
   view_style: v.optional(v.string()),
   created_at: v.optional(v.string()),
   updated_at: v.optional(v.string()),
+  description: v.optional(v.string()), // Webhook includes description
+  can_assign_tasks: v.optional(v.boolean()), // Webhook only
+  creator_uid: v.optional(v.string()), // Webhook only
+  default_order: v.optional(v.number()), // Webhook only
+  public_access: v.optional(v.boolean()), // Webhook only
+  public_key: v.optional(v.string()), // Webhook only
+  role: v.optional(v.string()), // User's role in project (webhook only)
+  access: v.optional(v.object({ // Webhook only - access control settings
+    visibility: v.string(),
+    configuration: v.any(),
+  })),
 });
 
 // Section structure from Sync API
