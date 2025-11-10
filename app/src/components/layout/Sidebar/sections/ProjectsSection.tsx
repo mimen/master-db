@@ -113,7 +113,6 @@ export function ProjectsSection({
                         expandNested={expandNested}
                         level={0}
                         viewContext={viewContext}
-                        showPriorityFlag={false}
                         toggleProjectCollapse={toggleProjectCollapse}
                         isProjectCollapsed={isProjectCollapsed}
                       />
@@ -139,7 +138,6 @@ export function ProjectsSection({
             expandNested={expandNested}
             level={0}
             viewContext={viewContext}
-            showPriorityFlag={false}
             toggleProjectCollapse={toggleProjectCollapse}
             isProjectCollapsed={isProjectCollapsed}
           />

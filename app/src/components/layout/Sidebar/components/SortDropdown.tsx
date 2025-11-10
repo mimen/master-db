@@ -1,5 +1,5 @@
 import { Check } from "lucide-react"
-import { useState, type ElementType } from "react"
+import { type ElementType } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -24,7 +24,6 @@ export function SortDropdown<T extends string>({
   getIcon,
   getLabel,
 }: SortDropdownProps<T>) {
-  const [open, setOpen] = useState(false)
   const CurrentIcon = getIcon(currentMode)
 
   const formatLabel = (mode: T): string => {
@@ -37,18 +36,13 @@ export function SortDropdown<T extends string>({
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 w-6 p-0 flex-shrink-0"
-          onMouseEnter={() => setOpen(true)}
-        >
-          <CurrentIcon className="h-3 w-3" />
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 flex-shrink-0">
+          <CurrentIcon className="h-2.5 w-2.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onMouseLeave={() => setOpen(false)}>
+      <DropdownMenuContent align="end">
         {modes.map((mode) => {
           const Icon = getIcon(mode)
           const isActive = mode === currentMode
@@ -56,10 +50,7 @@ export function SortDropdown<T extends string>({
           return (
             <DropdownMenuItem
               key={mode}
-              onClick={() => {
-                onChange(mode)
-                setOpen(false)
-              }}
+              onClick={() => onChange(mode)}
               className="cursor-pointer text-xs py-1"
             >
               <Icon className="h-3 w-3 mr-2" />

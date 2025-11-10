@@ -1,13 +1,10 @@
 import { CollapseCaret } from "../components/CollapseCaret"
-import { SidebarButton } from "../components/SidebarButton"
+import { PriorityItem } from "../components/PriorityItem"
 import { getPriorityProjectItems, PRIORITY_FILTER_ITEMS } from "../utils/filterItems"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
-import { getPriorityColorClass } from "@/lib/priorities"
-import { cn } from "@/lib/utils"
+import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
-import { resolveView } from "@/lib/views/viewDefinitions"
 
 interface PrioritiesSectionProps {
   currentViewKey: ViewKey
@@ -64,23 +61,19 @@ export function PrioritiesSection({
 
           <SidebarMenu>
             {(mode === "projects" ? getPriorityProjectItems() : PRIORITY_FILTER_ITEMS).map((priority) => {
-              const Icon = priority.icon
-              const isActive = currentViewKey === priority.viewKey
               const count =
                 counts?.priorityCounts.find((c) => c.priority === priority.priorityLevel)?.filteredTaskCount ||
                 0
-              const colorClass = getPriorityColorClass(priority.priorityLevel)
 
               return (
-                <SidebarMenuItem key={priority.id}>
-                  <SidebarButton
-                    icon={<Icon className={cn(colorClass, "h-4 w-4 mr-3")} fill="currentColor" />}
-                    label={priority.label}
-                    count={count}
-                    isActive={isActive}
-                    onClick={() => onViewChange(resolveView(priority.viewKey, viewContext))}
-                  />
-                </SidebarMenuItem>
+                <PriorityItem
+                  key={priority.id}
+                  priority={priority}
+                  currentViewKey={currentViewKey}
+                  onViewChange={onViewChange}
+                  viewContext={viewContext}
+                  count={count}
+                />
               )
             })}
           </SidebarMenu>

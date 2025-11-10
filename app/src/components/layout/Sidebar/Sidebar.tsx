@@ -38,9 +38,9 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
     priorityMode,
     setPriorityMode,
     projectSort,
-    cycleProjectSort,
+    setProjectSort,
     labelSort,
-    cycleLabelSort,
+    setLabelSort,
     collapsed,
     toggleSection,
     toggleProjectCollapse,
@@ -84,7 +84,7 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               viewContext={viewContext}
               expandNested={expandNested}
               sortMode={projectSort}
-              onSortChange={cycleProjectSort}
+              onSortChange={setProjectSort}
               isCollapsed={collapsed.projects}
               onToggleCollapse={() => toggleSection("projects")}
               toggleProjectCollapse={toggleProjectCollapse}
@@ -119,7 +119,7 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               onViewChange={onViewChange}
               viewContext={viewContext}
               sortMode={labelSort}
-              onSortChange={cycleLabelSort}
+              onSortChange={setLabelSort}
               counts={labelFilterCounts}
               isCollapsed={collapsed.labels}
               onToggleCollapse={() => toggleSection("labels")}
