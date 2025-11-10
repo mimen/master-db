@@ -142,7 +142,7 @@ export const syncReminderSchema = v.object({
   service: v.string(),
   type: v.string(),
   date: v.optional(v.string()),
-  due: v.optional(syncDueSchema),
+  due: v.optional(v.union(syncDueSchema, v.null())),
   mm_offset: v.optional(v.number()),
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
 });
