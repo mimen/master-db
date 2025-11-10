@@ -488,9 +488,16 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   const formatDueDate = (due: TodoistTaskWithProject["due"]) => {
     if (!due) return { text: null, isOverdue: false }
 
-    // Use datetime if available, otherwise use date
-    const dateTime = due.datetime ? new Date(due.datetime) : new Date(due.date)
-    const date = new Date(due.date)
+    // Check if date string contains time (has 'T')
+    const hasTime = due.date.includes('T')
+
+    // Parse date in local timezone to avoid UTC midnight issue
+    // Date-only strings like "2025-11-10" are parsed as UTC by default,
+    // which shifts to previous day in timezones behind UTC (e.g., PST)
+    // Solution: Append 'T00:00:00' to force local timezone parsing (only if no time exists)
+    const dateString = hasTime ? due.date : due.date + 'T00:00:00'
+    const date = new Date(dateString)
+
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     date.setHours(0, 0, 0, 0)
@@ -516,8 +523,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
       })
     }
 
-    // Append time if datetime is present
-    if (due.datetime) {
+    // Append time if date string contains time information
+    if (hasTime) {
+      const dateTime = new Date(due.date)
       const timeString = dateTime.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
