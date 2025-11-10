@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { useCallback, useEffect, useState } from "react"
 
 import type { ProjectTreeNode, ViewNavItem } from "../types"
-import { PRIORITY_FILTER_ITEMS, TIME_FILTER_ITEMS } from "../utils/filterItems"
+import { PRIORITY_FILTER_ITEMS, PRIORITY_PROJECTS_ITEMS, TIME_FILTER_ITEMS } from "../utils/filterItems"
 
 import {
   CommandDialog,
@@ -33,7 +33,7 @@ interface NavHeaderProps {
 interface SearchableItem {
   id: string
   label: string
-  category: "view" | "project" | "time" | "priority" | "label"
+  category: "view" | "project" | "time" | "priority" | "priority-projects" | "label"
   viewKey: ViewKey
   icon?: ReactNode
 }
@@ -79,6 +79,19 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
         id: priority.id,
         label: priority.label,
         category: "priority",
+        viewKey: priority.viewKey,
+        icon: <PriorityIcon className={cn("h-4 w-4", colorClass)} fill="currentColor" />,
+      })
+    })
+
+    // Priority Projects - from centralized definitions
+    PRIORITY_PROJECTS_ITEMS.forEach((priority) => {
+      const PriorityIcon = priority.icon
+      const colorClass = getPriorityColorClass(priority.priorityLevel)
+      items.push({
+        id: priority.id,
+        label: priority.label,
+        category: "priority-projects",
         viewKey: priority.viewKey,
         icon: <PriorityIcon className={cn("h-4 w-4", colorClass)} fill="currentColor" />,
       })
@@ -215,6 +228,17 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
           <CommandGroup heading="Priorities">
             {searchItems
               .filter((item) => item.category === "priority")
+              .map((item) => (
+                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
+                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
+                  {item.label}
+                </CommandItem>
+              ))}
+          </CommandGroup>
+
+          <CommandGroup heading="Projects by Priority">
+            {searchItems
+              .filter((item) => item.category === "priority-projects")
               .map((item) => (
                 <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
                   {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}

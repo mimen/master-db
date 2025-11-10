@@ -336,7 +336,7 @@ const viewPatterns: ViewPattern[] = [
         priorityId === "p1" ? 4 : priorityId === "p2" ? 3 : priorityId === "p3" ? 2 : 1
 
       return {
-        metadata: { title: `Priority ${priorityId.toUpperCase()}` },
+        metadata: { title: `${priorityId.toUpperCase()} Projects` },
         buildLists: (viewKey, index, context) =>
           expandProjectsByPriority(viewKey, index, context, priorityLevel),
       }

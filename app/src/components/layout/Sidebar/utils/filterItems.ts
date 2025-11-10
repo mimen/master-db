@@ -100,11 +100,35 @@ export const PRIORITY_FILTER_ITEMS: PriorityFilterItem[] = [
 ]
 
 /**
- * Get priority filter items for project mode
+ * Static priority-projects filter items (project mode)
  */
-export function getPriorityProjectItems(): PriorityFilterItem[] {
-  return PRIORITY_FILTER_ITEMS.map((item) => ({
-    ...item,
-    viewKey: `view:priority-projects:${item.id}` as ViewKey,
-  }))
-}
+export const PRIORITY_PROJECTS_ITEMS: PriorityFilterItem[] = [
+  {
+    id: "p1-projects",
+    label: "P1 Projects",
+    icon: Flag,
+    priorityLevel: 4,
+    viewKey: "view:priority-projects:p1",
+  },
+  {
+    id: "p2-projects",
+    label: "P2 Projects",
+    icon: Flag,
+    priorityLevel: 3,
+    viewKey: "view:priority-projects:p2",
+  },
+  {
+    id: "p3-projects",
+    label: "P3 Projects",
+    icon: Flag,
+    priorityLevel: 2,
+    viewKey: "view:priority-projects:p3",
+  },
+  {
+    id: "p4-projects",
+    label: "P4 Projects",
+    icon: Flag,
+    priorityLevel: 1,
+    viewKey: "view:priority-projects:p4",
+  },
+]

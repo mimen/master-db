@@ -35,8 +35,6 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
 
   const {
     expandNested,
-    priorityMode,
-    setPriorityMode,
     projectSort,
     setProjectSort,
     labelSort,
@@ -106,8 +104,6 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               currentViewKey={currentViewKey}
               onViewChange={onViewChange}
               viewContext={viewContext}
-              mode={priorityMode}
-              onModeChange={setPriorityMode}
               counts={priorityFilterCounts}
               isCollapsed={collapsed.priorities}
               onToggleCollapse={() => toggleSection("priorities")}

@@ -14,7 +14,6 @@ const STORAGE_KEYS = {
   COLLAPSED_PROJECTS: "sidebar:collapsedProjects",
   COLLAPSED_PRIORITY_GROUPS: "sidebar:collapsedPriorityGroups",
   EXPAND_NESTED: "sidebar:expandNested",
-  PRIORITY_MODE: "sidebar:priorityMode",
   PROJECT_SORT: "sidebar:projectSort",
   LABEL_SORT: "sidebar:labelSort",
 } as const
@@ -43,9 +42,6 @@ export function useSidebarState() {
   // Initialize state from localStorage
   const [expandNested, setExpandNestedState] = useState<boolean>(() =>
     getStoredValue(STORAGE_KEYS.EXPAND_NESTED, false)
-  )
-  const [priorityMode, setPriorityModeState] = useState<"tasks" | "projects">(() =>
-    getStoredValue(STORAGE_KEYS.PRIORITY_MODE, "tasks")
   )
   const [projectSort, setProjectSortState] = useState<ProjectSort>(() =>
     getStoredValue(STORAGE_KEYS.PROJECT_SORT, "hierarchy")
@@ -104,11 +100,6 @@ export function useSidebarState() {
     setStoredValue(STORAGE_KEYS.EXPAND_NESTED, value)
   }, [])
 
-  const setPriorityMode = useCallback((value: "tasks" | "projects") => {
-    setPriorityModeState(value)
-    setStoredValue(STORAGE_KEYS.PRIORITY_MODE, value)
-  }, [])
-
   const setProjectSort = useCallback((value: ProjectSort) => {
     setProjectSortState(value)
     setStoredValue(STORAGE_KEYS.PROJECT_SORT, value)
@@ -136,10 +127,6 @@ export function useSidebarState() {
     setLabelSortState(nextSort)
     setStoredValue(STORAGE_KEYS.LABEL_SORT, nextSort)
   }, [labelSort])
-
-  const togglePriorityMode = useCallback(() => {
-    setPriorityMode((prev) => (prev === "tasks" ? "projects" : "tasks"))
-  }, [])
 
   const toggleProjectCollapse = useCallback((projectId: string) => {
     setCollapsedProjects((prev) => {
@@ -178,9 +165,6 @@ export function useSidebarState() {
   return {
     expandNested,
     setExpandNested,
-    priorityMode,
-    setPriorityMode,
-    togglePriorityMode,
     projectSort,
     setProjectSort,
     cycleProjectSort,

@@ -2,16 +2,16 @@ import { ArrowDownAZ, Flag, Hash, Network, Plus } from "lucide-react"
 
 import { CollapseCaret } from "../components/CollapseCaret"
 import { IconButton } from "../components/IconButton"
+import { PriorityItem } from "../components/PriorityItem"
 import { ProjectItem } from "../components/ProjectItem"
 import { SortDropdown } from "../components/SortDropdown"
 import type { ProjectSort, ProjectTreeNode } from "../types"
+import { PRIORITY_PROJECTS_ITEMS } from "../utils/filterItems"
 import { getSortedProjects } from "../utils/sorting"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
-import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
-import { cn } from "@/lib/utils"
 
 interface ProjectsSectionProps {
   projects: ProjectTreeNode[]
@@ -73,37 +73,39 @@ export function ProjectsSection({
 
   const renderProjectList = () => {
     if (sortMode === "priority" && groupedByPriority) {
-      // Render grouped by priority with headers
+      // Render grouped by priority with PriorityItem headers
       return (
         <>
           {[4, 3, 2, 1].map((priorityLevel) => {
             const projectsInGroup = groupedByPriority[priorityLevel]
             if (!projectsInGroup || projectsInGroup.length === 0) return null
 
-            const priorityInfo = getPriorityInfo(priorityLevel)
-            if (!priorityInfo) return null
+            // Find the corresponding priority-projects item
+            const priorityItem = PRIORITY_PROJECTS_ITEMS.find((p) => p.priorityLevel === priorityLevel)
+            if (!priorityItem) return null
+
+            // Calculate total task count across all projects in this priority group
+            const totalTaskCount = projectsInGroup.reduce((sum, project) => sum + (project.stats.activeCount || 0), 0)
 
             const isGroupCollapsed = isPriorityGroupCollapsed(priorityLevel)
 
             return (
               <div key={priorityLevel}>
-                <div className="flex items-center justify-between py-1.5 mb-1 pl-3 pr-2">
-                  <div className="flex items-center gap-2">
-                    <Flag className={cn("w-3 h-3", getPriorityColorClass(priorityLevel))} fill="currentColor" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {priorityInfo.uiPriority}
-                    </span>
-                  </div>
-                  <CollapseCaret
-                    isCollapsed={isGroupCollapsed}
-                    onToggle={(e) => {
-                      e.stopPropagation()
-                      togglePriorityGroupCollapse(priorityLevel)
-                    }}
-                  />
-                </div>
+                <PriorityItem
+                  priority={priorityItem}
+                  currentViewKey={currentViewKey}
+                  onViewChange={onViewChange}
+                  viewContext={viewContext}
+                  count={totalTaskCount}
+                  isCollapsible={true}
+                  isCollapsed={isGroupCollapsed}
+                  onToggle={(e) => {
+                    e.stopPropagation()
+                    togglePriorityGroupCollapse(priorityLevel)
+                  }}
+                />
                 {!isGroupCollapsed && (
-                  <SidebarMenu className="space-y-px pl-3">
+                  <SidebarMenu className="pl-4">
                     {projectsInGroup.map((project) => (
                       <ProjectItem
                         key={project._id}
