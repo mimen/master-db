@@ -12,6 +12,7 @@ import { SettingsDialog } from './SettingsDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
+import { useOptimisticProjectMove } from '@/hooks/useOptimisticProjectMove'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
@@ -47,11 +48,7 @@ export function DialogManager() {
     errorMessage: "Failed to update task"
   })
 
-  const moveTask = useTodoistAction(api.todoist.publicActions.moveTask, {
-    loadingMessage: "Moving task...",
-    successMessage: "Task moved!",
-    errorMessage: "Failed to move task"
-  })
+  const optimisticProjectMove = useOptimisticProjectMove()
 
   const completeTask = useTodoistAction(api.todoist.publicActions.completeTask, {
     loadingMessage: "Completing task...",
@@ -84,11 +81,8 @@ export function DialogManager() {
     // Close dialog immediately for instant feedback
     closeDialog()
 
-    // Run action in background
-    moveTask({
-      todoistId: currentTask.todoist_id,
-      projectId
-    })
+    // Use centralized optimistic project move
+    optimisticProjectMove(currentTask.todoist_id, projectId)
   }
 
   const handleLabelSelect = async (labels: string[]) => {

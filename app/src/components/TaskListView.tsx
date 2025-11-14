@@ -3,10 +3,14 @@ import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateC
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
+import { useOptimisticProjectMove } from "@/hooks/useOptimisticProjectMove"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
@@ -201,6 +205,8 @@ export function TaskListView({
   })
 
   const isLoading = resolvedQuery === null || tasks === undefined
+  // Detect if we're in a project-filtered view (project or inbox)
+  const isProjectView = list.query.type === "project" || list.query.type === "inbox"
 
   const toggleExpanded = () => {
     setIsExpanded((prev) => !prev)
@@ -336,6 +342,7 @@ export function TaskListView({
                     task={task}
                     onElementRef={refHandlers.current[index]!}
                     onClick={() => onTaskClick?.(list.id, index)}
+                    isProjectView={isProjectView}
                   />
                 )
               })}
@@ -360,9 +367,10 @@ interface TaskRowProps {
   task: TodoistTaskWithProject
   onElementRef: (element: HTMLDivElement | null) => void
   onClick?: () => void
+  isProjectView: boolean // Whether we're in a project-filtered view
 }
 
-const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectView }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [showDescriptionInput, setShowDescriptionInput] = useState(false)
   const [editContent, setEditContent] = useState(task.content)
@@ -370,10 +378,15 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   // UI-level optimistic values - shown while waiting for DB sync
   const [optimisticContent, setOptimisticContent] = useState<string | null>(null)
   const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
+  const [projectPopoverOpen, setProjectPopoverOpen] = useState(false)
   const lastSyncedContentRef = useRef(task.content)
   const lastSyncedDescriptionRef = useRef(task.description ?? "")
   const contentInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
+
+  // Centralized optimistic updates
+  const { getUpdate } = useOptimisticUpdates()
+  const optimisticProjectMove = useOptimisticProjectMove()
 
   const completeTask = useTodoistAction(
     api.todoist.actions.completeTask.completeTask,
@@ -394,6 +407,15 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   )
 
   const priority = usePriority(task.priority)
+  const allProjects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
+
+  // Filter to active projects and sort by child_order
+  const activeProjects = allProjects
+    ?.filter((project) => !project.is_deleted && !project.is_archived)
+    ?.sort((a, b) => a.child_order - b.child_order)
+
+  // Check optimistic update from context
+  const optimisticUpdate = getUpdate(task.todoist_id)
 
   const handleComplete = async () => {
     await completeTask({ todoistId: task.todoist_id })
@@ -480,6 +502,14 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
     // If success, optimistic values will be cleared when DB updates via Convex reactivity
   }
 
+  const handleProjectChange = async (newProjectId: string) => {
+    // Close popover immediately
+    setProjectPopoverOpen(false)
+
+    // Use centralized optimistic project move
+    await optimisticProjectMove(task.todoist_id, newProjectId)
+  }
+
   // Clear optimistic values when DB value changes (API completed and synced)
   useEffect(() => {
     if (task.content !== lastSyncedContentRef.current) {
@@ -561,9 +591,20 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   // Use optimistic values if available, otherwise use real DB values
   const displayContent = optimisticContent ?? task.content
   const displayDescription = optimisticDescription ?? task.description
-  const markdownSegments = parseMarkdownLinks(displayContent)
 
+  // Check for optimistic project move from context
+  const displayProjectId = optimisticUpdate?.newProjectId ?? task.project_id
+  const displayProject = optimisticUpdate?.newProjectId
+    ? allProjects?.find(p => p.todoist_id === optimisticUpdate.newProjectId)
+    : task.project
+
+  const markdownSegments = parseMarkdownLinks(displayContent)
   const dueInfo = formatDueDate(task.due)
+
+  // Hide task immediately if it's being moved AND we're in a project-filtered view
+  if (optimisticUpdate?.type === "project-move" && isProjectView) {
+    return null
+  }
 
   return (
     <div
@@ -686,14 +727,54 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
           </div>
 
           <div className="flex flex-wrap items-center gap-1">
-            {task.project && (
-              <Badge variant="outline" className="gap-1.5 font-normal">
-                <div
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: getProjectColor(task.project.color) }}
-                />
-                <span>{task.project.name}</span>
-              </Badge>
+            {displayProject && (
+              <Popover open={projectPopoverOpen} onOpenChange={setProjectPopoverOpen}>
+                <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <Badge
+                    variant="outline"
+                    className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors"
+                  >
+                    <div
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: getProjectColor(displayProject.color) }}
+                    />
+                    <span>{displayProject.name}</span>
+                  </Badge>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-64 p-0"
+                  align="start"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ScrollArea className="h-72">
+                    <div className="p-1">
+                      {activeProjects?.map((project) => {
+                        const isChild = !!project.parent_id
+                        const isSelected = project.todoist_id === displayProjectId
+
+                        return (
+                          <button
+                            key={project._id}
+                            onClick={() => handleProjectChange(project.todoist_id)}
+                            className={cn(
+                              "w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors",
+                              isSelected && "bg-accent",
+                              !isSelected && "hover:bg-accent/50",
+                              isChild && "pl-8"
+                            )}
+                          >
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: getProjectColor(project.color) }}
+                            />
+                            <span className="truncate">{project.name}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
             )}
 
             {task.due?.date && (

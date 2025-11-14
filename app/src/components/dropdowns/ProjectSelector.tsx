@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { api } from "@/convex/_generated/api"
-import { useTodoistAction } from "@/hooks/useTodoistAction"
+import { useOptimisticProjectMove } from "@/hooks/useOptimisticProjectMove"
 import { getProjectColor } from "@/lib/colors"
 import type { TodoistProject } from "@/types/convex/todoist"
 
@@ -28,11 +28,7 @@ export function ProjectSelector({
   disabled = false
 }: ProjectSelectorProps) {
   const projects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
-  const moveTask = useTodoistAction(api.todoist.publicActions.moveTask, {
-    loadingMessage: "Moving task...",
-    successMessage: "Task moved!",
-    errorMessage: "Failed to move task"
-  })
+  const optimisticProjectMove = useOptimisticProjectMove()
 
   // Filter to active projects and sort by child_order
   const activeProjects = projects
@@ -43,12 +39,9 @@ export function ProjectSelector({
     // Call onChange callback if provided
     onChange?.(projectId)
 
-    // Update task if todoistId is provided (fire and forget)
+    // Update task if todoistId is provided (use centralized optimistic move)
     if (todoistId) {
-      moveTask({
-        todoistId,
-        projectId
-      })
+      optimisticProjectMove(todoistId, projectId)
     }
   }
 
