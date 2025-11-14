@@ -22,6 +22,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
   const [showDescriptionInput, setShowDescriptionInput] = useState(false)
   const [editName, setEditName] = useState(project.name)
   const [editDescription, setEditDescription] = useState(project.metadata?.description || "")
+  const [isHovered, setIsHovered] = useState(false)
   // UI-level optimistic values - shown while waiting for DB sync
   const [optimisticName, setOptimisticName] = useState<string | null>(null)
   const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
@@ -171,6 +172,8 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       tabIndex={-1}
       aria-selected={false}
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       data-project-id={project.todoist_id}
       className={cn(
         "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
@@ -283,6 +286,21 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            )}
+
+            {/* P4 Ghost Badge (shown on hover when priority is P4) */}
+            {isHovered && !priority?.showFlag && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openPriority(project)
+                }}
+              >
+                <Flag className="h-3 w-3" />
+                <span>P4</span>
+              </Badge>
             )}
 
             {/* Active Tasks Count */}

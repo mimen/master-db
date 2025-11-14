@@ -1,16 +1,17 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
-import type { TodoistTask } from '@/types/convex/todoist'
+import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
 export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'shortcuts' | 'settings'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
+  currentProject: TodoistProjectWithMetadata | null
   dialogType: DialogType | null
   isShortcutsOpen: boolean
   isSettingsOpen: boolean
-  openPriority: (task: TodoistTask) => void
+  openPriority: (item: TodoistTask | TodoistProjectWithMetadata) => void
   openProject: (task: TodoistTask) => void
   openLabel: (task: TodoistTask) => void
   openDueDate: (task: TodoistTask) => void
@@ -26,12 +27,20 @@ const DialogContext = createContext<DialogContextValue | null>(null)
 
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [currentTask, setCurrentTask] = useState<TodoistTask | null>(null)
+  const [currentProject, setCurrentProject] = useState<TodoistProjectWithMetadata | null>(null)
   const [dialogType, setDialogType] = useState<DialogType | null>(null)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
-  const openPriority = useCallback((task: TodoistTask) => {
-    setCurrentTask(task)
+  const openPriority = useCallback((item: TodoistTask | TodoistProjectWithMetadata) => {
+    // Check if it's a task or project by checking for task-specific fields
+    if ('content' in item) {
+      setCurrentTask(item as TodoistTask)
+      setCurrentProject(null)
+    } else {
+      setCurrentProject(item as TodoistProjectWithMetadata)
+      setCurrentTask(null)
+    }
     setDialogType('priority')
   }, [])
 
@@ -77,6 +86,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const closeDialog = useCallback(() => {
     setCurrentTask(null)
+    setCurrentProject(null)
     setDialogType(null)
     setIsShortcutsOpen(false)
     setIsSettingsOpen(false)
@@ -84,6 +94,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const value: DialogContextValue = {
     currentTask,
+    currentProject,
     dialogType,
     isShortcutsOpen,
     isSettingsOpen,

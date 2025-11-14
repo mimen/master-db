@@ -24,7 +24,7 @@ import { parseNaturalLanguageDate } from '@/lib/dateFormatters'
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
 export function DialogManager() {
-  const { currentTask, dialogType, isShortcutsOpen, isSettingsOpen, closeDialog } = useDialogContext()
+  const { currentTask, currentProject, dialogType, isShortcutsOpen, isSettingsOpen, closeDialog } = useDialogContext()
 
   // Manage expandNested state for settings dialog
   const [expandNested, setExpandNested] = useState<boolean>(() => {
@@ -67,14 +67,29 @@ export function DialogManager() {
     errorMessage: "Failed to delete task"
   })
 
+  const updateProjectPriority = useTodoistAction(api.todoist.publicActions.updateProjectMetadataPriority, {
+    loadingMessage: "Updating project priority...",
+    successMessage: "Project priority updated!",
+    errorMessage: "Failed to update project priority"
+  })
+
   const handlePrioritySelect = async (priority: number) => {
-    if (!currentTask) return
+    if (currentTask) {
+      // Close dialog immediately for instant feedback
+      closeDialog()
 
-    // Close dialog immediately for instant feedback
-    closeDialog()
+      // Use centralized optimistic priority change for tasks
+      optimisticPriorityChange(currentTask.todoist_id, priority)
+    } else if (currentProject) {
+      // Close dialog immediately for instant feedback
+      closeDialog()
 
-    // Use centralized optimistic priority change
-    optimisticPriorityChange(currentTask.todoist_id, priority)
+      // Update project priority
+      await updateProjectPriority({
+        projectId: currentProject.todoist_id,
+        priority
+      })
+    }
   }
 
   const handleProjectSelect = async (projectId: string) => {
@@ -162,6 +177,7 @@ export function DialogManager() {
     <>
       <PriorityDialog
         task={dialogType === 'priority' ? currentTask : null}
+        project={dialogType === 'priority' ? currentProject : null}
         onSelect={handlePrioritySelect}
         onClose={closeDialog}
       />

@@ -10,10 +10,11 @@ import {
 } from '@/components/ui/dialog'
 import { usePriority } from '@/lib/priorities'
 import { cn } from '@/lib/utils'
-import type { TodoistTask } from '@/types/convex/todoist'
+import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
 interface PriorityDialogProps {
   task: TodoistTask | null
+  project: TodoistProjectWithMetadata | null
   onSelect: (priority: number) => void
   onClose: () => void
 }
@@ -25,20 +26,22 @@ const priorities = [
   { value: 1, label: 'P4', name: 'Normal', color: 'text-gray-500', bgColor: 'bg-gray-500' },
 ]
 
-export function PriorityDialog({ task, onSelect, onClose }: PriorityDialogProps) {
+export function PriorityDialog({ task, project, onSelect, onClose }: PriorityDialogProps) {
   const [focusedIndex, setFocusedIndex] = useState(0)
-  const currentPriority = usePriority(task?.priority || 1)
+  const item = task || project
+  const itemPriority = task?.priority || project?.metadata?.priority || 1
+  const currentPriority = usePriority(itemPriority)
 
   useEffect(() => {
-    if (task) {
-      setFocusedIndex(priorities.findIndex(p => p.value === task.priority) || 0)
+    if (item) {
+      setFocusedIndex(priorities.findIndex(p => p.value === itemPriority) || 0)
     }
-  }, [task])
+  }, [item, itemPriority])
 
-  if (!task) return null
+  if (!item) return null
 
   return (
-    <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-w-lg"
         onKeyDown={(e) => {
@@ -86,7 +89,7 @@ export function PriorityDialog({ task, onSelect, onClose }: PriorityDialogProps)
 
         <div className="grid grid-cols-2 gap-4">
           {priorities.map((priority, index) => {
-            const isSelected = task.priority === priority.value
+            const isSelected = itemPriority === priority.value
             const isFocused = focusedIndex === index
 
             return (
