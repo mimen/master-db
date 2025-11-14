@@ -84,7 +84,7 @@ Next steps:
 **Completion Notes**:
 ```
 Date: 2025-11-13
-Status: COMPLETED
+Status: COMPLETED & TESTED ✅
 Notes:
 - Created updateProjectName.ts - Updates Todoist project name via API and syncs to Convex
 - Created ensureProjectMetadataTask.ts - Creates metadata task with "project-metadata" label if missing
@@ -95,10 +95,30 @@ Notes:
 - Exported all four actions in publicActions.ts barrel file
 - Typecheck passes with zero errors
 
-Test approach:
-- Following existing codebase pattern: actions don't have unit tests
-- Manual testing will be done in Milestone 6 using Todoist MCP
-- Integration testing via actual Todoist API
+Integration Testing Results (2025-11-13):
+Test Project ID: 6cwJ4VPrwjJHcwGj
+
+✅ updateProjectName
+   - Updated: "Test Project" → "Test Project - Updated Name!"
+   - Verified: Change synced to Todoist via Todoist MCP
+   - Command: bunx convex run todoist/actions/updateProjectName:updateProjectName
+
+✅ ensureProjectMetadataTask
+   - Created: Metadata task ID 6fGrwmQP29XhqpgC
+   - Verified: Has "project-metadata" label, content "*", default priority P4
+   - Command: bunx convex run todoist/actions/ensureProjectMetadataTask:ensureProjectMetadataTask
+
+✅ updateProjectMetadataDescription
+   - Updated: "This is a test project for the Projects view feature!"
+   - Verified: Description synced to metadata task in Todoist
+   - Command: bunx convex run todoist/actions/updateProjectMetadataDescription:updateProjectMetadataDescription
+
+✅ updateProjectMetadataPriority
+   - Updated: Priority to P1 (API priority 4)
+   - Verified: Red flag shows in Todoist UI
+   - Command: bunx convex run todoist/actions/updateProjectMetadataPriority:updateProjectMetadataPriority
+
+Bidirectional Sync: ✅ All changes flow correctly: Convex Action → Todoist API → Todoist MCP verification
 
 Issues encountered:
 - Initial type errors with internal function references (resolved by using correct path: internal.todoist.computed.index.extractProjectMetadata)
@@ -443,4 +463,4 @@ Always use priority utilities from `@/lib/priorities.ts`!
 
 ---
 
-**Last Updated**: 2025-11-13 (Milestone 2 complete)
+**Last Updated**: 2025-11-13 (Milestone 2 complete & tested)
