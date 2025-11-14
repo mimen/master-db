@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
-export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'shortcuts' | 'settings'
+export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
@@ -18,6 +18,7 @@ interface DialogContextValue {
   openDeadline: (task: TodoistTask) => void
   openComplete: (task: TodoistTask) => void
   openDelete: (task: TodoistTask) => void
+  openArchive: (project: TodoistProjectWithMetadata) => void
   openShortcuts: () => void
   openSettings: () => void
   closeDialog: () => void
@@ -74,6 +75,12 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialogType('delete')
   }, [])
 
+  const openArchive = useCallback((project: TodoistProjectWithMetadata) => {
+    setCurrentProject(project)
+    setCurrentTask(null)
+    setDialogType('archive')
+  }, [])
+
   const openShortcuts = useCallback(() => {
     setIsShortcutsOpen(true)
     setDialogType('shortcuts')
@@ -105,6 +112,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     openDeadline,
     openComplete,
     openDelete,
+    openArchive,
     openShortcuts,
     openSettings,
     closeDialog

@@ -4,7 +4,7 @@ import { useDialogContext } from '@/contexts/DialogContext'
 import type { TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
 export function useProjectDialogShortcuts(focusedProject: TodoistProjectWithMetadata | null) {
-  const { openPriority } = useDialogContext()
+  const { openPriority, openArchive } = useDialogContext()
 
   useEffect(() => {
     if (!focusedProject) return
@@ -40,10 +40,16 @@ export function useProjectDialogShortcuts(focusedProject: TodoistProjectWithMeta
             openPriority(focusedProject)
           }
           break
+        case 'e':
+          if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            openArchive(focusedProject)
+          }
+          break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [focusedProject, openPriority])
+  }, [focusedProject, openPriority, openArchive])
 }

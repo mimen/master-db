@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { ArchiveProjectDialog } from './ArchiveProjectDialog'
 import { CompleteTaskDialog } from './CompleteTaskDialog'
 import { DeadlineDialog } from './DeadlineDialog'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
@@ -71,6 +72,12 @@ export function DialogManager() {
     loadingMessage: "Updating project priority...",
     successMessage: "Project priority updated!",
     errorMessage: "Failed to update project priority"
+  })
+
+  const archiveProject = useTodoistAction(api.todoist.publicActions.archiveProject, {
+    loadingMessage: "Archiving project...",
+    successMessage: "Project archived!",
+    errorMessage: "Failed to archive project"
   })
 
   const handlePrioritySelect = async (priority: number) => {
@@ -173,6 +180,18 @@ export function DialogManager() {
     })
   }
 
+  const handleArchive = async () => {
+    if (!currentProject) return
+
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
+    archiveProject({
+      projectId: currentProject.todoist_id
+    })
+  }
+
   return (
     <>
       <PriorityDialog
@@ -209,6 +228,11 @@ export function DialogManager() {
       <DeleteTaskDialog
         task={dialogType === 'delete' ? currentTask : null}
         onConfirm={handleDelete}
+        onClose={closeDialog}
+      />
+      <ArchiveProjectDialog
+        project={dialogType === 'archive' ? currentProject : null}
+        onConfirm={handleArchive}
         onClose={closeDialog}
       />
       <KeyboardShortcutsDialog

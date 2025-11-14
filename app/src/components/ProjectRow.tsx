@@ -1,4 +1,4 @@
-import { Flag } from "lucide-react"
+import { Archive, Flag } from "lucide-react"
 import { memo, useCallback, useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -31,7 +31,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
   const nameInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
 
-  const { openPriority } = useDialogContext()
+  const { openPriority, openArchive } = useDialogContext()
 
   const updateProjectName = useTodoistAction(
     api.todoist.publicActions.updateProjectName,
@@ -165,6 +165,10 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       nameInputRef.current.select()
     }
   }, [isEditing])
+
+  const handleArchive = () => {
+    openArchive(project)
+  }
 
   return (
     <div
@@ -307,6 +311,21 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
             {activeCount > 0 && (
               <Badge variant="secondary" className="gap-1.5 font-normal">
                 <span className="text-xs">{activeCount} task{activeCount !== 1 ? 's' : ''}</span>
+              </Badge>
+            )}
+
+            {/* Archive Button (shown on hover) */}
+            {isHovered && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleArchive()
+                }}
+              >
+                <Archive className="h-3 w-3" />
+                <span>Archive</span>
               </Badge>
             )}
           </div>
