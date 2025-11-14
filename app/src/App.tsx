@@ -1,4 +1,5 @@
 import { ConvexProvider, ConvexReactClient } from "convex/react"
+import { ThemeProvider } from "next-themes"
 
 import { DialogManager } from "@/components/dialogs/DialogManager"
 import { Layout } from "@/components/layout/Layout"
@@ -12,18 +13,20 @@ const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string)
 
 export function App() {
   return (
-    <ConvexProvider client={convex}>
-      <CountProvider>
-        <OptimisticUpdatesProvider>
-          <DialogProvider>
-            <SidebarProvider defaultOpen>
-              <Layout />
-              <DialogManager />
-              <Toaster />
-            </SidebarProvider>
-          </DialogProvider>
-        </OptimisticUpdatesProvider>
-      </CountProvider>
-    </ConvexProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <ConvexProvider client={convex}>
+        <CountProvider>
+          <OptimisticUpdatesProvider>
+            <DialogProvider>
+              <SidebarProvider defaultOpen>
+                <Layout />
+                <DialogManager />
+                <Toaster />
+              </SidebarProvider>
+            </DialogProvider>
+          </OptimisticUpdatesProvider>
+        </CountProvider>
+      </ConvexProvider>
+    </ThemeProvider>
   )
 }

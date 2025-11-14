@@ -843,9 +843,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 variant={dueInfo.isOverdue ? "destructive" : "outline"}
                 className={cn(
                   "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/due",
-                  dueInfo.isOverdue && "border-red-500 bg-red-50 text-red-700",
-                  dueInfo.isToday && !dueInfo.isOverdue && "border-green-500 bg-green-50 text-green-700",
-                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "border-purple-400 bg-purple-50 text-purple-700"
+                  dueInfo.isOverdue && "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 dark:border-red-500/50",
+                  dueInfo.isToday && !dueInfo.isOverdue && "border-green-500 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300 dark:border-green-500/50",
+                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "border-purple-400 bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-500/50"
                 )}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -854,9 +854,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
               >
                 <Calendar className={cn(
                   "h-3 w-3 group-hover/due:hidden",
-                  dueInfo.isOverdue && "text-red-600",
-                  dueInfo.isToday && !dueInfo.isOverdue && "text-green-600",
-                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "text-purple-600"
+                  dueInfo.isOverdue && "text-red-600 dark:text-red-400",
+                  dueInfo.isToday && !dueInfo.isOverdue && "text-green-600 dark:text-green-400",
+                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "text-purple-600 dark:text-purple-400"
                 )} />
                 <button
                   onClick={(e) => {
@@ -886,9 +886,9 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                   variant={deadlineInfo.isOverdue || deadlineInfo.isToday ? "destructive" : "outline"}
                   className={cn(
                     "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/deadline",
-                    (deadlineInfo.isOverdue || deadlineInfo.isToday) && "border-red-500 bg-red-50 text-red-700",
-                    isWithin3Days && "border-orange-500 bg-orange-50 text-orange-700",
-                    isFuture && "border-gray-300 bg-gray-50 text-gray-700"
+                    (deadlineInfo.isOverdue || deadlineInfo.isToday) && "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 dark:border-red-500/50",
+                    isWithin3Days && "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-500/50",
+                    isFuture && "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600/50"
                   )}
                   onClick={(e) => {
                     e.stopPropagation()
@@ -896,7 +896,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                   }}
                 >
                   <AlertCircle className={cn(
-                    "h-3 w-3 group-hover/deadline:hidden text-red-600"
+                    "h-3 w-3 group-hover/deadline:hidden text-red-600 dark:text-red-400"
                   )} />
                   <button
                     onClick={(e) => {
