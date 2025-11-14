@@ -1,5 +1,7 @@
-import { AlertCircle, Calendar, Flag, Inbox, Tag } from "lucide-react"
+import { Flag, Inbox, Tag } from "lucide-react"
 import type { JSX } from "react"
+
+import { getViewIcon } from "../icons/viewIcons"
 
 import type {
   ListDefinition,
@@ -90,26 +92,22 @@ const inboxDefinition: ListDefinition = {
   }),
 }
 
-const timeRangeLabels: Record<TimeRange, { title: string; description: string; icon: JSX.Element }> = {
+const timeRangeLabels: Record<TimeRange, { title: string; description: string }> = {
   overdue: {
     title: "Overdue",
     description: "overdue tasks",
-    icon: <AlertCircle className="h-6 w-6 mr-3 text-red-500" />,
   },
   today: {
     title: "Today",
     description: "tasks due today",
-    icon: <Calendar className="h-6 w-6 mr-3 text-green-500" />,
   },
   upcoming: {
     title: "Upcoming",
     description: "tasks due this week",
-    icon: <Calendar className="h-6 w-6 mr-3 text-purple-500" />,
   },
   "no-date": {
     title: "No Date",
     description: "tasks without due dates",
-    icon: <Calendar className="h-6 w-6 mr-3 text-gray-500" />,
   },
 }
 
@@ -128,10 +126,14 @@ const timeDefinition: ListDefinition<{ range: TimeRange }> = {
     timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1, // Convert to IANA format (PST is -480)
   }),
   getHeader: ({ taskCount, params }) => {
-    const { title, description, icon } = timeRangeLabels[params.range]
+    const { title, description } = timeRangeLabels[params.range]
     const descriptionText = params.range === "upcoming"
       ? `${taskCount} upcoming tasks`
       : `${taskCount} ${description}`
+
+    // Construct viewKey from params.range to get the correct icon
+    const viewKey = `view:time:${params.range}` as const
+    const icon = getViewIcon(viewKey, { size: "lg", className: "mr-3" })
 
     return {
       title,
