@@ -14,6 +14,7 @@ import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
 import { useOptimisticPriorityChange } from '@/hooks/useOptimisticPriorityChange'
 import { useOptimisticProjectMove } from '@/hooks/useOptimisticProjectMove'
+import { useOptimisticTaskComplete } from '@/hooks/useOptimisticTaskComplete'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
@@ -51,12 +52,7 @@ export function DialogManager() {
 
   const optimisticPriorityChange = useOptimisticPriorityChange()
   const optimisticProjectMove = useOptimisticProjectMove()
-
-  const completeTask = useTodoistAction(api.todoist.publicActions.completeTask, {
-    loadingMessage: "Completing task...",
-    successMessage: "Task completed!",
-    errorMessage: "Failed to complete task"
-  })
+  const optimisticTaskComplete = useOptimisticTaskComplete()
 
   const deleteTask = useTodoistAction(api.todoist.publicActions.deleteTask, {
     loadingMessage: "Deleting task...",
@@ -127,10 +123,8 @@ export function DialogManager() {
     // Close dialog immediately for instant feedback
     closeDialog()
 
-    // Run action in background
-    completeTask({
-      todoistId: currentTask.todoist_id
-    })
+    // Use centralized optimistic task complete
+    optimisticTaskComplete(currentTask.todoist_id)
   }
 
   const handleDelete = async () => {

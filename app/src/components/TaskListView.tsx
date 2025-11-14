@@ -9,6 +9,7 @@ import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
+import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
@@ -385,15 +386,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   // Centralized optimistic updates
   const { getUpdate, removeUpdate } = useOptimisticUpdates()
   const { openPriority, openProject } = useDialogContext()
-
-  const completeTask = useTodoistAction(
-    api.todoist.actions.completeTask.completeTask,
-    {
-      loadingMessage: "Completing task...",
-      successMessage: "Task completed!",
-      errorMessage: "Failed to complete task"
-    }
-  )
+  const optimisticTaskComplete = useOptimisticTaskComplete()
 
   const updateTask = useTodoistAction(
     api.todoist.publicActions.updateTask,
@@ -416,7 +409,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   const priority = usePriority(displayPriority)
 
   const handleComplete = async () => {
-    await completeTask({ todoistId: task.todoist_id })
+    await optimisticTaskComplete(task.todoist_id)
   }
 
   const startEditing = useCallback(() => {
@@ -523,6 +516,13 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     }
   }, [task.priority, optimisticUpdate, removeUpdate, task.todoist_id])
 
+  // Clear optimistic project move when DB value syncs
+  useEffect(() => {
+    if (optimisticUpdate?.type === "project-move" && task.project_id === optimisticUpdate.newProjectId) {
+      removeUpdate(task.todoist_id)
+    }
+  }, [task.project_id, optimisticUpdate, removeUpdate, task.todoist_id])
+
   // Focus content input when entering edit mode
   useEffect(() => {
     if (isEditing && contentInputRef.current) {
@@ -596,6 +596,11 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
   const markdownSegments = parseMarkdownLinks(displayContent)
   const dueInfo = formatDueDate(task.due)
+
+  // Hide task immediately if it's being completed
+  if (optimisticUpdate?.type === "task-complete") {
+    return null
+  }
 
   // Hide task immediately if it's being moved AND we're in a project-filtered view
   if (optimisticUpdate?.type === "project-move" && isProjectView) {
