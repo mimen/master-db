@@ -20,7 +20,7 @@ import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
 export function Layout() {
-  const { openShortcuts } = useDialogContext()
+  const { openShortcuts, openQuickAdd } = useDialogContext()
   const { getCountForView } = useCountRegistry()
   const [activeView, setActiveView] = useState<ViewSelection>(() => resolveView("view:inbox"))
   const [dismissedLists, setDismissedLists] = useState<Set<string>>(new Set())
@@ -110,13 +110,24 @@ export function Layout() {
   // Register keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Only handle when not editing text
+      // Only handle shortcuts when not editing text
       const target = document.activeElement
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) {
         return
       }
 
       switch (event.key) {
+        case 'n': {
+          event.preventDefault()
+          // Determine default project ID based on active view
+          let defaultProjectId: string | undefined = undefined
+          if (activeView.key.startsWith('project:')) {
+            // Extract project ID from view key (format: "project:{id}")
+            defaultProjectId = activeView.key.replace('project:', '')
+          }
+          openQuickAdd(defaultProjectId)
+          break
+        }
         case 'ArrowDown':
         case 'ArrowRight':
           event.preventDefault()
@@ -138,7 +149,7 @@ export function Layout() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleArrowNavigation, openShortcuts])
+  }, [handleArrowNavigation, openShortcuts, openQuickAdd, activeView.key])
 
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1

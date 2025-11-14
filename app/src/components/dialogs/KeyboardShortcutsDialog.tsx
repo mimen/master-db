@@ -55,6 +55,7 @@ const shortcuts: ShortcutSection[] = [
   {
     title: 'General',
     shortcuts: [
+      { keys: ['n'], description: 'Quick add task' },
       { keys: ['?'], description: 'Show this help' },
     ]
   }

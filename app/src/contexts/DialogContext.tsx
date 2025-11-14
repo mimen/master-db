@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
-export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings'
+export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings' | 'quickAdd'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
@@ -11,6 +11,8 @@ interface DialogContextValue {
   dialogType: DialogType | null
   isShortcutsOpen: boolean
   isSettingsOpen: boolean
+  isQuickAddOpen: boolean
+  quickAddDefaultProjectId?: string
   openPriority: (item: TodoistTask | TodoistProjectWithMetadata) => void
   openProject: (task: TodoistTask) => void
   openLabel: (task: TodoistTask) => void
@@ -21,6 +23,7 @@ interface DialogContextValue {
   openArchive: (project: TodoistProjectWithMetadata) => void
   openShortcuts: () => void
   openSettings: () => void
+  openQuickAdd: (defaultProjectId?: string) => void
   closeDialog: () => void
 }
 
@@ -32,6 +35,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [dialogType, setDialogType] = useState<DialogType | null>(null)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
+  const [quickAddDefaultProjectId, setQuickAddDefaultProjectId] = useState<string | undefined>(undefined)
 
   const openPriority = useCallback((item: TodoistTask | TodoistProjectWithMetadata) => {
     // Check if it's a task or project by checking for task-specific fields
@@ -91,12 +96,20 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialogType('settings')
   }, [])
 
+  const openQuickAdd = useCallback((defaultProjectId?: string) => {
+    setIsQuickAddOpen(true)
+    setQuickAddDefaultProjectId(defaultProjectId)
+    setDialogType('quickAdd')
+  }, [])
+
   const closeDialog = useCallback(() => {
     setCurrentTask(null)
     setCurrentProject(null)
     setDialogType(null)
     setIsShortcutsOpen(false)
     setIsSettingsOpen(false)
+    setIsQuickAddOpen(false)
+    setQuickAddDefaultProjectId(undefined)
   }, [])
 
   const value: DialogContextValue = {
@@ -105,6 +118,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     dialogType,
     isShortcutsOpen,
     isSettingsOpen,
+    isQuickAddOpen,
+    quickAddDefaultProjectId,
     openPriority,
     openProject,
     openLabel,
@@ -115,6 +130,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     openArchive,
     openShortcuts,
     openSettings,
+    openQuickAdd,
     closeDialog
   }
 

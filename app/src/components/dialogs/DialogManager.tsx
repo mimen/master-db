@@ -9,6 +9,7 @@ import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { LabelDialog } from './LabelDialog'
 import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
+import { QuickAddTaskDialog } from './QuickAddTaskDialog'
 import { SettingsDialog } from './SettingsDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
@@ -26,7 +27,7 @@ import { parseNaturalLanguageDate } from '@/lib/dateFormatters'
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
 export function DialogManager() {
-  const { currentTask, currentProject, dialogType, isShortcutsOpen, isSettingsOpen, closeDialog } = useDialogContext()
+  const { currentTask, currentProject, dialogType, isShortcutsOpen, isSettingsOpen, isQuickAddOpen, quickAddDefaultProjectId, closeDialog } = useDialogContext()
 
   // Manage expandNested state for settings dialog
   const [expandNested, setExpandNested] = useState<boolean>(() => {
@@ -237,6 +238,11 @@ export function DialogManager() {
         onClose={closeDialog}
         expandNested={expandNested}
         onExpandNestedChange={handleExpandNestedChange}
+      />
+      <QuickAddTaskDialog
+        isOpen={isQuickAddOpen}
+        onClose={closeDialog}
+        defaultProjectId={quickAddDefaultProjectId}
       />
     </>
   )
