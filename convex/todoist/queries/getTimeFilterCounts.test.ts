@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import { api } from "../../_generated/api";
 import schema from "../../schema";
+import { modules } from "../../testModules";
 
 describe("getTimeFilterCounts", () => {
   it("should return counts for all time filters", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts, {});
 
@@ -18,7 +19,7 @@ describe("getTimeFilterCounts", () => {
   });
 
   it("should include all time filter categories", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts, {});
 
@@ -32,7 +33,7 @@ describe("getTimeFilterCounts", () => {
   });
 
   it("should calculate filtered vs raw counts correctly", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts, {});
 

@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import { api } from "../../_generated/api";
 import schema from "../../schema";
+import { modules } from "../../testModules";
 
 describe("getLabelFilterCounts", () => {
   it("should return counts for all labels", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getLabelFilterCounts);
 
@@ -18,7 +19,7 @@ describe("getLabelFilterCounts", () => {
   });
 
   it("should limit to top 50 labels", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getLabelFilterCounts);
 
@@ -26,7 +27,7 @@ describe("getLabelFilterCounts", () => {
   });
 
   it("should sort by highest raw task count", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getLabelFilterCounts);
 
@@ -40,7 +41,7 @@ describe("getLabelFilterCounts", () => {
   });
 
   it("should calculate filtered vs raw counts correctly", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const result = await t.query(api.todoist.publicQueries.getLabelFilterCounts);
 

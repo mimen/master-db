@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import { api } from "../../../_generated/api";
 import schema from "../../../schema";
+import { modules } from "../../../testModules";
 
 describe("getAllListCounts", () => {
   it("should return a record of list counts", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const counts = await t.query(api.todoist.computed.index.getAllListCounts, {});
 
@@ -15,7 +16,7 @@ describe("getAllListCounts", () => {
   });
 
   it("should include time filter keys", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const counts = await t.query(api.todoist.computed.index.getAllListCounts, {});
 
@@ -29,7 +30,7 @@ describe("getAllListCounts", () => {
   });
 
   it("should include priority filter keys", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const counts = await t.query(api.todoist.computed.index.getAllListCounts, {});
 
@@ -41,7 +42,7 @@ describe("getAllListCounts", () => {
   });
 
   it("should return valid count numbers", async () => {
-    const t = convexTest(schema);
+    const t = convexTest(schema, modules);
 
     const counts = await t.query(api.todoist.computed.index.getAllListCounts, {});
 

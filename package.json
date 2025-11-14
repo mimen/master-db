@@ -30,11 +30,14 @@
     "@typescript-eslint/parser": "^8.44.0",
     "@vitest/ui": "^3.2.4",
     "convex-test": "^0.0.38",
+    "esbuild": "^0.27.0",
     "eslint": "^9.36.0",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
+    "glob": "^11.0.3",
     "globals": "^16.4.0",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vite": "^7.2.2",
+    "vitest": "^4.0.9"
   }
 }
