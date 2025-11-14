@@ -1,6 +1,7 @@
 import { createContext, ReactNode } from 'react'
 
-import { useGlobalHotkeys, GlobalHotkeysApi } from '@/hooks/useGlobalHotkeys'
+import { useGlobalHotkeys } from '@/hooks/useGlobalHotkeys'
+import type { GlobalHotkeysApi } from '@/hooks/useGlobalHotkeys'
 
 export const GlobalHotkeysContext = createContext<GlobalHotkeysApi | null>(null)
 

@@ -16,6 +16,7 @@ import type { ListInstance, ListQueryInput, ListSupportData } from "@/lib/views/
 import type {
   TodoistItemsByListWithProjects,
   TodoistLabelDoc,
+  TodoistProject,
   TodoistProjects,
   TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
@@ -77,7 +78,7 @@ export function TaskListView({
       if (!projects) return null
 
       const inboxProject = projects.find(
-        (project) =>
+        (project: TodoistProject) =>
           project.name === "Inbox" &&
           !project.parent_id &&
           !project.is_deleted &&
@@ -369,6 +370,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   // UI-level optimistic values - shown while waiting for DB sync
   const [optimisticContent, setOptimisticContent] = useState<string | null>(null)
   const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
+  const lastSyncedContentRef = useRef(task.content)
+  const lastSyncedDescriptionRef = useRef(task.description ?? "")
   const contentInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
 
@@ -478,15 +481,20 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
   }
 
   // Clear optimistic values when DB value changes (API completed and synced)
-  // Since we no longer do DB-level optimistic updates, any DB change means the API call finished
   useEffect(() => {
-    if (optimisticContent !== null) {
+    if (task.content !== lastSyncedContentRef.current) {
+      lastSyncedContentRef.current = task.content
       setOptimisticContent(null)
     }
-    if (optimisticDescription !== null) {
+  }, [task.content])
+
+  useEffect(() => {
+    const normalizedDescription = task.description ?? ""
+    if (normalizedDescription !== lastSyncedDescriptionRef.current) {
+      lastSyncedDescriptionRef.current = normalizedDescription
       setOptimisticDescription(null)
     }
-  }, [task.content, task.description, optimisticContent, optimisticDescription])
+  }, [task.description])
 
   // Focus content input when entering edit mode
   useEffect(() => {
@@ -596,138 +604,137 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick }: TaskRowPr
             </Tooltip>
           </TooltipProvider>
 
-          <div className="flex-1 min-w-0 space-y-1.5">
-        {isEditing ? (
-          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-            <input
-              ref={contentInputRef}
-              type="text"
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  void saveEditing()
-                } else if (e.key === "Escape") {
-                  e.preventDefault()
-                  cancelEditing()
-                } else if (e.key === "Tab") {
-                  e.preventDefault()
-                  // Show description input when Tab is pressed
-                  if (!showDescriptionInput) {
-                    setShowDescriptionInput(true)
-                    setTimeout(() => {
-                      descriptionInputRef.current?.focus()
-                    }, 0)
-                  } else {
-                    descriptionInputRef.current?.focus()
-                  }
-                }
-              }}
-              className="w-full px-2 py-1 text-sm font-medium bg-accent/50 rounded-md border border-input outline-none focus:ring-2 focus:ring-primary"
-            />
-            {showDescriptionInput && (
-              <input
-                ref={descriptionInputRef}
-                type="text"
-                value={editDescription}
-                placeholder="Description (optional)"
-                onChange={(e) => setEditDescription(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    void saveEditing()
-                  } else if (e.key === "Escape") {
-                    e.preventDefault()
-                    cancelEditing()
-                  } else if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault()
-                    contentInputRef.current?.focus()
-                  }
-                }}
-                className="w-full px-2 py-1 text-xs text-muted-foreground bg-accent/50 rounded-md border border-input outline-none focus:ring-2 focus:ring-primary placeholder:text-muted-foreground/50"
-              />
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div onClick={(e) => e.stopPropagation()}>
+            {isEditing ? (
+              <>
+                <input
+                  ref={contentInputRef}
+                  type="text"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      void saveEditing()
+                    } else if (e.key === "Escape") {
+                      e.preventDefault()
+                      cancelEditing()
+                    } else if (e.key === "Tab") {
+                      e.preventDefault()
+                      if (!showDescriptionInput) {
+                        setShowDescriptionInput(true)
+                        setTimeout(() => {
+                          descriptionInputRef.current?.focus()
+                        }, 0)
+                      } else {
+                        descriptionInputRef.current?.focus()
+                      }
+                    }
+                  }}
+                  className="block w-full bg-transparent px-0 py-0 m-0 text-sm font-medium leading-relaxed text-foreground outline-none border-none break-words"
+                  placeholder="Task content"
+                />
+                {showDescriptionInput && (
+                  <input
+                    ref={descriptionInputRef}
+                    type="text"
+                    value={editDescription}
+                    placeholder="Description (optional)"
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        void saveEditing()
+                      } else if (e.key === "Escape") {
+                        e.preventDefault()
+                        cancelEditing()
+                      } else if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault()
+                        contentInputRef.current?.focus()
+                      }
+                    }}
+                    className="block w-full bg-transparent px-0 py-0 m-0 mt-1 text-xs leading-relaxed text-muted-foreground outline-none border-none placeholder:text-muted-foreground/70 break-words"
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <div className="font-medium text-sm leading-relaxed break-words">
+                  {markdownSegments.map((segment, index) =>
+                    segment.type === "text" ? (
+                      <span key={index}>{segment.content}</span>
+                    ) : (
+                      <a
+                        key={index}
+                        href={segment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-primary transition-colors"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {segment.content}
+                      </a>
+                    )
+                  )}
+                </div>
+                {displayDescription && (
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words">{displayDescription}</p>
+                )}
+              </>
             )}
           </div>
-        ) : (
-          <>
-            <div>
-              <div className="font-medium text-sm leading-relaxed">
-                {markdownSegments.map((segment, index) =>
-                  segment.type === "text" ? (
-                    <span key={index}>{segment.content}</span>
-                  ) : (
-                    <a
-                      key={index}
-                      href={segment.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-primary transition-colors"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {segment.content}
-                    </a>
-                  )
-                )}
-              </div>
 
-              {displayDescription && (
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{displayDescription}</p>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {task.project && (
+              <Badge variant="outline" className="gap-1.5 font-normal">
+                <div
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: getProjectColor(task.project.color) }}
+                />
+                <span>{task.project.name}</span>
+              </Badge>
+            )}
 
-            <div className="flex flex-wrap items-center gap-1">
-              {task.project && (
-                <Badge variant="outline" className="gap-1.5 font-normal">
-                  <div
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: getProjectColor(task.project.color) }}
-                  />
-                  <span>{task.project.name}</span>
-                </Badge>
-              )}
+            {task.due?.date && (
+              <Badge
+                variant={dueInfo.isOverdue ? "destructive" : "outline"}
+                className="gap-1.5 font-normal"
+              >
+                <Calendar className="h-3 w-3" />
+                <span>{dueInfo.text}</span>
+              </Badge>
+            )}
 
-              {task.due?.date && (
-                <Badge
-                  variant={dueInfo.isOverdue ? "destructive" : "outline"}
-                  className="gap-1.5 font-normal"
-                >
-                  <Calendar className="h-3 w-3" />
-                  <span>{dueInfo.text}</span>
-                </Badge>
-              )}
+            {task.labels && task.labels.length > 0 && (
+              <>
+                {task.labels.map((label: string) => (
+                  <Badge key={label} variant="secondary" className="gap-1.5 font-normal">
+                    <Tag className="h-3 w-3" />
+                    <span>{label}</span>
+                  </Badge>
+                ))}
+              </>
+            )}
 
-              {task.labels && task.labels.length > 0 && (
-                <>
-                  {task.labels.map((label) => (
-                    <Badge key={label} variant="secondary" className="gap-1.5 font-normal">
-                      <Tag className="h-3 w-3" />
-                      <span>{label}</span>
-                    </Badge>
-                  ))}
-                </>
-              )}
+            {task.assigned_by_uid && (
+              <Badge variant="outline" className="gap-1.5 font-normal">
+                <User className="h-3 w-3" />
+                <span>{assignee}</span>
+              </Badge>
+            )}
 
-              {task.assigned_by_uid && (
-                <Badge variant="outline" className="gap-1.5 font-normal">
-                  <User className="h-3 w-3" />
-                  <span>{assignee}</span>
-                </Badge>
-              )}
-
-              {priority?.showFlag && (
-                <Badge
-                  variant="outline"
-                  className={cn("gap-1.5 font-normal", priority.colorClass)}
-                >
-                  <Flag className="h-3 w-3" fill="currentColor" />
-                  <span>{priority.label}</span>
-                </Badge>
-              )}
-            </div>
-          </>
-        )}
+            {priority?.showFlag && (
+              <Badge
+                variant="outline"
+                className={cn("gap-1.5 font-normal", priority.colorClass)}
+              >
+                <Flag className="h-3 w-3" fill="currentColor" />
+                <span>{priority.label}</span>
+              </Badge>
+            )}
           </div>
+        </div>
         </div>
     </div>
   )
