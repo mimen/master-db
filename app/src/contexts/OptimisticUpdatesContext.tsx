@@ -24,6 +24,18 @@ export type OptimisticTaskUpdate =
       newLabels: string[]
       timestamp: number
     }
+  | {
+      taskId: string
+      type: "due-change"
+      newDue: { date: string; datetime?: string } | null
+      timestamp: number
+    }
+  | {
+      taskId: string
+      type: "deadline-change"
+      newDeadline: { date: string } | null
+      timestamp: number
+    }
 
 interface OptimisticUpdatesContextValue {
   pendingUpdates: Map<string, OptimisticTaskUpdate>

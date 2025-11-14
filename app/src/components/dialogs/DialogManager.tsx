@@ -12,11 +12,14 @@ import { SettingsDialog } from './SettingsDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
+import { useOptimisticDeadlineChange } from '@/hooks/useOptimisticDeadlineChange'
+import { useOptimisticDueChange } from '@/hooks/useOptimisticDueChange'
 import { useOptimisticLabelChange } from '@/hooks/useOptimisticLabelChange'
 import { useOptimisticPriorityChange } from '@/hooks/useOptimisticPriorityChange'
 import { useOptimisticProjectMove } from '@/hooks/useOptimisticProjectMove'
 import { useOptimisticTaskComplete } from '@/hooks/useOptimisticTaskComplete'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
+import { parseNaturalLanguageDate } from '@/lib/dateFormatters'
 
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
@@ -55,6 +58,8 @@ export function DialogManager() {
   const optimisticPriorityChange = useOptimisticPriorityChange()
   const optimisticProjectMove = useOptimisticProjectMove()
   const optimisticTaskComplete = useOptimisticTaskComplete()
+  const optimisticDueChange = useOptimisticDueChange()
+  const optimisticDeadlineChange = useOptimisticDeadlineChange()
 
   const deleteTask = useTodoistAction(api.todoist.publicActions.deleteTask, {
     loadingMessage: "Deleting task...",
@@ -95,11 +100,29 @@ export function DialogManager() {
     // Close dialog immediately for instant feedback
     closeDialog()
 
-    // Run action in background
-    updateTask({
-      todoistId: currentTask.todoist_id,
-      dueString
-    })
+    // Parse dueString to get date for optimistic update
+    let optimisticDue: { date: string; datetime?: string } | null = null
+
+    if (dueString === 'no date') {
+      optimisticDue = null
+    } else {
+      // Try to parse natural language date
+      const parsedDate = parseNaturalLanguageDate(dueString)
+      if (parsedDate) {
+        optimisticDue = { date: parsedDate }
+      }
+    }
+
+    // Use optimistic update if we could parse the date
+    if (optimisticDue !== null || dueString === 'no date') {
+      optimisticDueChange(currentTask.todoist_id, optimisticDue)
+    } else {
+      // Fallback to direct API call if we couldn't parse
+      updateTask({
+        todoistId: currentTask.todoist_id,
+        dueString
+      })
+    }
   }
 
   const handleDeadlineSelect = async (deadlineDate: string) => {
@@ -108,12 +131,9 @@ export function DialogManager() {
     // Close dialog immediately for instant feedback
     closeDialog()
 
-    // Run action in background
-    updateTask({
-      todoistId: currentTask.todoist_id,
-      deadlineDate: deadlineDate === 'no date' ? null : deadlineDate,
-      deadlineLang: deadlineDate === 'no date' ? null : 'en'
-    })
+    // Use optimistic update
+    const optimisticDeadline = deadlineDate === 'no date' ? null : { date: deadlineDate }
+    optimisticDeadlineChange(currentTask.todoist_id, optimisticDeadline)
   }
 
   const handleComplete = async () => {

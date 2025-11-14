@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateCcw } from "lucide-react"
+import { AlertCircle, Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateCcw } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -9,11 +9,14 @@ import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
+import { useOptimisticDeadlineChange } from "@/hooks/useOptimisticDeadlineChange"
+import { useOptimisticDueChange } from "@/hooks/useOptimisticDueChange"
 import { useOptimisticLabelChange } from "@/hooks/useOptimisticLabelChange"
 import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
+import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
 import type { ListInstance, ListQueryInput, ListSupportData } from "@/lib/views/types"
@@ -388,9 +391,11 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
   // Centralized optimistic updates
   const { getUpdate, removeUpdate } = useOptimisticUpdates()
-  const { openPriority, openProject, openLabel } = useDialogContext()
+  const { openPriority, openProject, openLabel, openDueDate, openDeadline } = useDialogContext()
   const optimisticLabelChange = useOptimisticLabelChange()
   const optimisticTaskComplete = useOptimisticTaskComplete()
+  const optimisticDueChange = useOptimisticDueChange()
+  const optimisticDeadlineChange = useOptimisticDeadlineChange()
 
   const updateTask = useTodoistAction(
     api.todoist.publicActions.updateTask,
@@ -412,8 +417,36 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     : task.priority
   const priority = usePriority(displayPriority)
 
+  // Use optimistic schedule (due date) if available
+  const displayDue = optimisticUpdate?.type === "due-change"
+    ? optimisticUpdate.newDue
+    : task.due
+
+  // Use optimistic deadline if available
+  const displayDeadline = optimisticUpdate?.type === "deadline-change"
+    ? optimisticUpdate.newDeadline
+    : task.deadline
+
+  // Format schedule (due date) for display
+  const dueInfo = displayDue
+    ? formatSmartDate(displayDue.datetime || displayDue.date)
+    : { text: "", isOverdue: false, isToday: false, isTomorrow: false }
+
+  // Format deadline for display
+  const deadlineInfo = displayDeadline
+    ? formatSmartDate(displayDeadline.date)
+    : { text: "", isOverdue: false, isToday: false, isTomorrow: false }
+
   const handleComplete = async () => {
     await optimisticTaskComplete(task.todoist_id)
+  }
+
+  const handleRemoveDue = async () => {
+    await optimisticDueChange(task.todoist_id, null)
+  }
+
+  const handleRemoveDeadline = async () => {
+    await optimisticDeadlineChange(task.todoist_id, null)
   }
 
   const handleRemoveLabel = async (labelToRemove: string) => {
@@ -560,6 +593,49 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     }
   }, [task.labels, optimisticUpdate, removeUpdate, task.todoist_id])
 
+  // Clear optimistic schedule (due date) change when DB value syncs
+  useEffect(() => {
+    if (optimisticUpdate?.type === "due-change") {
+      const dbDue = task.due
+      const optimisticDue = optimisticUpdate.newDue
+
+      // Both null - cleared successfully
+      if (!dbDue && !optimisticDue) {
+        removeUpdate(task.todoist_id)
+        return
+      }
+
+      // Compare due dates - if they match, DB has synced
+      if (dbDue && optimisticDue && dbDue.date === optimisticDue.date) {
+        // Also check datetime if present
+        const dbDatetime = dbDue.datetime
+        const optimisticDatetime = optimisticDue.datetime
+        if (dbDatetime === optimisticDatetime) {
+          removeUpdate(task.todoist_id)
+        }
+      }
+    }
+  }, [task.due, optimisticUpdate, removeUpdate, task.todoist_id])
+
+  // Clear optimistic deadline change when DB value syncs
+  useEffect(() => {
+    if (optimisticUpdate?.type === "deadline-change") {
+      const dbDeadline = task.deadline
+      const optimisticDeadline = optimisticUpdate.newDeadline
+
+      // Both null - cleared successfully
+      if (!dbDeadline && !optimisticDeadline) {
+        removeUpdate(task.todoist_id)
+        return
+      }
+
+      // Compare deadlines - if they match, DB has synced
+      if (dbDeadline && optimisticDeadline && dbDeadline.date === optimisticDeadline.date) {
+        removeUpdate(task.todoist_id)
+      }
+    }
+  }, [task.deadline, optimisticUpdate, removeUpdate, task.todoist_id])
+
   // Focus content input when entering edit mode
   useEffect(() => {
     if (isEditing && contentInputRef.current) {
@@ -567,58 +643,6 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
       contentInputRef.current.select()
     }
   }, [isEditing])
-
-  const formatDueDate = (due: TodoistTaskWithProject["due"]) => {
-    if (!due) return { text: null, isOverdue: false }
-
-    // Check if date string contains time (has 'T')
-    const hasTime = due.date.includes('T')
-
-    // Parse date in local timezone to avoid UTC midnight issue
-    // Date-only strings like "2025-11-10" are parsed as UTC by default,
-    // which shifts to previous day in timezones behind UTC (e.g., PST)
-    // Solution: Append 'T00:00:00' to force local timezone parsing (only if no time exists)
-    const dateString = hasTime ? due.date : due.date + 'T00:00:00'
-    const date = new Date(dateString)
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    date.setHours(0, 0, 0, 0)
-
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-
-    const isOverdue = date < today
-    let text = ""
-
-    if (date.toDateString() === today.toDateString()) {
-      text = "Today"
-    } else if (date.toDateString() === tomorrow.toDateString()) {
-      text = "Tomorrow"
-    } else if (isOverdue) {
-      const daysOverdue = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-      text = daysOverdue === 1 ? "Yesterday" : `${daysOverdue} days overdue`
-    } else {
-      text = date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
-      })
-    }
-
-    // Append time if date string contains time information
-    if (hasTime) {
-      const dateTime = new Date(due.date)
-      const timeString = dateTime.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-      text = `${text} at ${timeString}`
-    }
-
-    return { text, isOverdue }
-  }
 
   const assignee = task.assigned_by_uid || task.responsible_uid
 
@@ -637,7 +661,6 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     : task.labels
 
   const markdownSegments = parseMarkdownLinks(displayContent)
-  const dueInfo = formatDueDate(task.due)
 
   // Hide task immediately if it's being completed
   if (optimisticUpdate?.type === "task-complete") {
@@ -798,15 +821,97 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
               </Badge>
             )}
 
-            {task.due?.date && (
+            {priority?.showFlag && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors",
+                  priority.colorClass
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openPriority(task)
+                }}
+              >
+                <Flag className="h-3 w-3" fill="currentColor" />
+                <span>{priority.label}</span>
+              </Badge>
+            )}
+
+            {displayDue && (
               <Badge
                 variant={dueInfo.isOverdue ? "destructive" : "outline"}
-                className="gap-1.5 font-normal"
+                className={cn(
+                  "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/due",
+                  dueInfo.isOverdue && "border-red-500 bg-red-50 text-red-700",
+                  dueInfo.isToday && !dueInfo.isOverdue && "border-green-500 bg-green-50 text-green-700",
+                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "border-purple-400 bg-purple-50 text-purple-700"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openDueDate(task)
+                }}
               >
-                <Calendar className="h-3 w-3" />
+                <Calendar className={cn(
+                  "h-3 w-3 group-hover/due:hidden",
+                  dueInfo.isOverdue && "text-red-600",
+                  dueInfo.isToday && !dueInfo.isOverdue && "text-green-600",
+                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "text-purple-600"
+                )} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleRemoveDue()
+                  }}
+                  className="hidden group-hover/due:block hover:text-destructive transition-colors"
+                  aria-label="Remove schedule"
+                >
+                  <X className="h-3 w-3" />
+                </button>
                 <span>{dueInfo.text}</span>
               </Badge>
             )}
+
+            {displayDeadline && (() => {
+              // Calculate if deadline is within 3 days
+              const deadlineDate = displayDeadline ? new Date(displayDeadline.date + 'T00:00:00') : null
+              const today = new Date()
+              today.setHours(0, 0, 0, 0)
+              const daysUntil = deadlineDate ? Math.floor((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 999
+              const isWithin3Days = daysUntil >= 0 && daysUntil <= 2 && !deadlineInfo.isToday
+              const isFuture = daysUntil > 2
+
+              return (
+                <Badge
+                  variant={deadlineInfo.isOverdue || deadlineInfo.isToday ? "destructive" : "outline"}
+                  className={cn(
+                    "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/deadline",
+                    (deadlineInfo.isOverdue || deadlineInfo.isToday) && "border-red-500 bg-red-50 text-red-700",
+                    isWithin3Days && "border-orange-500 bg-orange-50 text-orange-700",
+                    isFuture && "border-gray-300 bg-gray-50 text-gray-700"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openDeadline(task)
+                  }}
+                >
+                  <AlertCircle className={cn(
+                    "h-3 w-3 group-hover/deadline:hidden text-red-600"
+                  )} />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleRemoveDeadline()
+                    }}
+                    className="hidden group-hover/deadline:block hover:text-destructive transition-colors"
+                    aria-label="Remove deadline"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                  <span>{deadlineInfo.text}</span>
+                </Badge>
+              )
+            })()}
 
             {displayLabels && displayLabels.length > 0 && (
               <>
@@ -843,41 +948,10 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
               </>
             )}
 
-            {isHovered && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  openLabel(task)
-                }}
-              >
-                <Tag className="h-3 w-3" />
-                <span>add label</span>
-              </Badge>
-            )}
-
             {task.assigned_by_uid && (
               <Badge variant="outline" className="gap-1.5 font-normal">
                 <User className="h-3 w-3" />
                 <span>{assignee}</span>
-              </Badge>
-            )}
-
-            {priority?.showFlag && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors",
-                  priority.colorClass
-                )}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  openPriority(task)
-                }}
-              >
-                <Flag className="h-3 w-3" fill="currentColor" />
-                <span>{priority.label}</span>
               </Badge>
             )}
 
@@ -892,6 +966,48 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
               >
                 <Flag className="h-3 w-3" />
                 <span>P4</span>
+              </Badge>
+            )}
+
+            {isHovered && !displayDue && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openDueDate(task)
+                }}
+              >
+                <Calendar className="h-3 w-3" />
+                <span>add schedule</span>
+              </Badge>
+            )}
+
+            {isHovered && !displayDeadline && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openDeadline(task)
+                }}
+              >
+                <AlertCircle className="h-3 w-3" />
+                <span>add deadline</span>
+              </Badge>
+            )}
+
+            {isHovered && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openLabel(task)
+                }}
+              >
+                <Tag className="h-3 w-3" />
+                <span>add label</span>
               </Badge>
             )}
           </div>
