@@ -1,6 +1,5 @@
-import type { MouseEvent } from "react"
-
 import { ChevronRight } from "lucide-react"
+import type { MouseEvent } from "react"
 
 import { useSidebarHover } from "../contexts/SidebarHoverContext"
 

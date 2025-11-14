@@ -1,9 +1,9 @@
 import { flushSync } from "react-dom"
 
+import { useTodoistAction } from "./useTodoistAction"
+
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
-
-import { useTodoistAction } from "./useTodoistAction"
 
 /**
  * Centralized hook for task text (content and/or description) updates with optimistic updates

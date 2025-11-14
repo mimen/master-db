@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, type ElementType, type ReactNode } from "react"
+import type { MouseEvent } from "react"
 
 import { useSidebarHover } from "../contexts/SidebarHoverContext"
 
@@ -20,7 +21,7 @@ interface SidebarButtonProps {
   tooltip?: string
   hasChildren?: boolean
   isCollapsed?: boolean
-  onToggleCollapse?: (e: React.MouseEvent) => void
+  onToggleCollapse?: (e: MouseEvent) => void
 }
 
 export function SidebarButton({

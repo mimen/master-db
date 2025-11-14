@@ -1,13 +1,13 @@
-import { flushSync } from "react-dom"
 import type { FunctionReference } from "convex/server"
+import { flushSync } from "react-dom"
+
+import { useTodoistAction } from "./useTodoistAction"
 
 import {
   useOptimisticUpdates,
   type OptimisticTaskUpdate,
   type OptimisticProjectUpdate
 } from "@/contexts/OptimisticUpdatesContext"
-
-import { useTodoistAction } from "./useTodoistAction"
 
 /**
  * Factory for creating optimistic update hooks with consistent behavior

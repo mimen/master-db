@@ -1,5 +1,3 @@
-import { ArrowDownAZ, Flag, Hash, Network, Plus } from "lucide-react"
-import { type ReactNode, useState } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -12,6 +10,8 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core"
+import { ArrowDownAZ, Flag, Hash, Network, Plus } from "lucide-react"
+import { type ReactNode, useState } from "react"
 
 import { CollapseCaret } from "../components/CollapseCaret"
 import { IconButton } from "../components/IconButton"
@@ -25,8 +25,8 @@ import { getSortedProjects } from "../utils/sorting"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
-import { getProjectColor } from "@/lib/colors"
 import { useOptimisticProjectPriority } from "@/hooks/useOptimisticProjectPriority"
+import { getProjectColor } from "@/lib/colors"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 
 interface ProjectsSectionProps {

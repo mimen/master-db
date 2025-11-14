@@ -1,10 +1,11 @@
 import { AlertCircle, Calendar, CalendarRange, Filter, Flag, Folder, Inbox, Settings, Sunrise, Tag } from "lucide-react"
+import type { ReactNode } from "react"
 
 import { getProjectColor } from "../colors"
 import { getPriorityColorClass } from "../priorities"
 
-import type { ViewKey } from "@/lib/views/types"
 import { cn } from "@/lib/utils"
+import type { ViewKey } from "@/lib/views/types"
 
 export type IconSize = "sm" | "md" | "lg"
 
@@ -26,7 +27,7 @@ interface IconOptions {
  *
  * Icons automatically include semantic colors where appropriate (time filters, priorities, labels).
  */
-export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): React.ReactNode {
+export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactNode {
   const { size = "md", className = "", color } = options
   const sizeClass = ICON_SIZES[size]
   const finalClassName = cn(sizeClass, className)
@@ -134,7 +135,7 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): React.
 /**
  * Get a project icon (colored dot) for a given project
  */
-export function getProjectIcon(color: string, options: IconOptions = {}): React.ReactNode {
+export function getProjectIcon(color: string, options: IconOptions = {}): ReactNode {
   const { size = "md", className = "" } = options
 
   const dotSizes = {
@@ -156,7 +157,7 @@ export function getProjectIcon(color: string, options: IconOptions = {}): React.
 /**
  * Get a label icon (tag with color)
  */
-export function getLabelIcon(color: string, options: IconOptions = {}): React.ReactNode {
+export function getLabelIcon(color: string, options: IconOptions = {}): ReactNode {
   const { size = "md", className = "" } = options
   const sizeClass = ICON_SIZES[size]
 

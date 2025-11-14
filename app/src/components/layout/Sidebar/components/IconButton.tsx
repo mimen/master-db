@@ -1,11 +1,11 @@
-import { forwardRef, type ReactNode } from "react"
+import { forwardRef, type MouseEvent, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 interface IconButtonProps {
   children: ReactNode
-  onClick?: (e: React.MouseEvent) => void
+  onClick?: (e: MouseEvent) => void
   className?: string
   asChild?: boolean
 }

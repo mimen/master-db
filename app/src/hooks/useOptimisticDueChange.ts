@@ -1,6 +1,6 @@
-import { api } from "@/convex/_generated/api"
-
 import { createOptimisticHook } from "./createOptimisticHook"
+
+import { api } from "@/convex/_generated/api"
 
 /**
  * Centralized hook for schedule (due date) changes with optimistic updates

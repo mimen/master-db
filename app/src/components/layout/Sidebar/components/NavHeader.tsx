@@ -13,7 +13,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import { SidebarGroupLabel } from "@/components/ui/sidebar"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { getProjectColor } from "@/lib/colors"
 import { getViewIcon } from "@/lib/icons/viewIcons"
@@ -27,7 +26,7 @@ interface NavHeaderProps {
   onViewChange: (view: ViewSelection) => void
   projects: ProjectTreeNode[]
   labels: TodoistLabelDoc[] | undefined
-  viewContext: any
+  viewContext: Record<string, unknown>
   viewItems: ViewNavItem[]
 }
 

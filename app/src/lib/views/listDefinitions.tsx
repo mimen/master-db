@@ -1,5 +1,4 @@
 import { Flag, Inbox, Tag } from "lucide-react"
-import type { JSX } from "react"
 
 import { getViewIcon } from "../icons/viewIcons"
 

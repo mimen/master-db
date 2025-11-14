@@ -1,4 +1,5 @@
 import type { SVGProps } from "react"
+import type { MouseEvent } from "react"
 
 import type { PriorityFilterItem } from "../utils/filterItems"
 
@@ -19,7 +20,7 @@ interface PriorityItemProps {
   // Collapsible mode props
   isCollapsible?: boolean
   isCollapsed?: boolean
-  onToggle?: (e: React.MouseEvent) => void
+  onToggle?: (e: MouseEvent) => void
 }
 
 export function PriorityItem({

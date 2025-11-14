@@ -50,7 +50,7 @@ export function ProjectItem({
     }
   }
 
-  const handleToggleCollapse = (e: React.MouseEvent) => {
+  const handleToggleCollapse = (e: MouseEvent) => {
     e.stopPropagation()
     toggleProjectCollapse(project.todoist_id)
   }

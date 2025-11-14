@@ -2,6 +2,8 @@ import { useQuery } from "convex/react"
 import { ChevronDown, ChevronRight, RotateCcw, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { ProjectRow } from "./ProjectRow"
+
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -12,8 +14,6 @@ import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import { cn } from "@/lib/utils"
 import type { ListInstance } from "@/lib/views/types"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
-
-import { ProjectRow } from "./ProjectRow"
 
 const PROJECT_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "border-primary/30"] as const
 

@@ -1,6 +1,6 @@
-import { api } from "@/convex/_generated/api"
-
 import { createOptimisticProjectHook } from "./createOptimisticHook"
+
+import { api } from "@/convex/_generated/api"
 
 /**
  * Centralized hook for project description updates with optimistic updates
