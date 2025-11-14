@@ -28,6 +28,7 @@ export function DeleteTaskDialog({ task, onConfirm, onClose }: DeleteTaskDialogP
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault()
+            e.stopPropagation()
             onConfirm()
           }
         }}

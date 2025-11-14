@@ -94,7 +94,10 @@ export function DialogManager() {
   const handleLabelSelect = async (labels: string[]) => {
     if (!currentTask) return
 
-    // Labels dialog doesn't auto-close, but run action immediately
+    // Close dialog immediately for instant feedback
+    closeDialog()
+
+    // Run action in background
     updateTask({
       todoistId: currentTask.todoist_id,
       labels
@@ -131,8 +134,10 @@ export function DialogManager() {
   const handleComplete = async () => {
     if (!currentTask) return
 
-    // Close dialog immediately for instant feedback
-    closeDialog()
+    // Close dialog with a small delay to prevent Enter key leaking
+    setTimeout(() => {
+      closeDialog()
+    }, 50)
 
     // Run action in background
     completeTask({
@@ -143,8 +148,10 @@ export function DialogManager() {
   const handleDelete = async () => {
     if (!currentTask) return
 
-    // Close dialog immediately for instant feedback
-    closeDialog()
+    // Close dialog with a small delay to prevent Enter key leaking
+    setTimeout(() => {
+      closeDialog()
+    }, 50)
 
     // Run action in background
     deleteTask({
