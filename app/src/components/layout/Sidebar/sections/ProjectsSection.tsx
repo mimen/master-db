@@ -24,6 +24,7 @@ import { getSortedProjects } from "../utils/sorting"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
+import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { getProjectColor } from "@/lib/colors"
 import { useOptimisticProjectPriority } from "@/hooks/useOptimisticProjectPriority"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
@@ -140,6 +141,7 @@ export function ProjectsSection({
 }: ProjectsSectionProps) {
   const sortedProjects = getSortedProjects(projects, sortMode)
   const updateProjectPriority = useOptimisticProjectPriority()
+  const { getProjectUpdate } = useOptimisticUpdates()
 
   // DnD state
   const [activeProject, setActiveProject] = useState<ProjectTreeNode | null>(null)
@@ -184,9 +186,16 @@ export function ProjectsSection({
   }
 
   // Group projects by priority when sorting by priority
+  // IMPORTANT: Apply optimistic priority overrides BEFORE grouping
   const groupedByPriority = sortMode === "priority"
     ? sortedProjects.reduce((acc: Record<number, ProjectTreeNode[]>, project: ProjectTreeNode) => {
-        const priority = project.metadata?.priority || 1
+        // Check for optimistic priority update
+        const optimisticUpdate = getProjectUpdate(project.todoist_id)
+        const priority =
+          optimisticUpdate?.type === "priority-change"
+            ? optimisticUpdate.newPriority
+            : project.metadata?.priority || 1
+
         if (!acc[priority]) acc[priority] = []
         acc[priority].push(project)
         return acc

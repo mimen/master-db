@@ -19,6 +19,7 @@ export const useOptimisticProjectPriority = createOptimisticProjectHook<[number]
   },
   createUpdate: (projectId, newPriority) => ({
     projectId,
+    type: "priority-change",
     newPriority,
     timestamp: Date.now()
   }),

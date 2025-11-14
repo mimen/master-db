@@ -19,6 +19,7 @@ export const useOptimisticProjectName = createOptimisticProjectHook<[string]>({
   },
   createUpdate: (projectId, newName) => ({
     projectId,
+    type: "text-change",
     newName,
     timestamp: Date.now()
   }),

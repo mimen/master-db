@@ -37,9 +37,18 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
   const optimisticUpdate = getProjectUpdate(project.todoist_id)
 
   // Use optimistic values if available, otherwise use real DB values
-  const displayName = optimisticUpdate?.newName ?? project.name
-  const displayDescription = optimisticUpdate?.newDescription ?? project.metadata?.description
-  const displayPriority = optimisticUpdate?.newPriority ?? project.metadata?.priority
+  const displayName =
+    optimisticUpdate?.type === "text-change" && optimisticUpdate.newName !== undefined
+      ? optimisticUpdate.newName
+      : project.name
+  const displayDescription =
+    optimisticUpdate?.type === "text-change" && optimisticUpdate.newDescription !== undefined
+      ? optimisticUpdate.newDescription
+      : project.metadata?.description
+  const displayPriority =
+    optimisticUpdate?.type === "priority-change"
+      ? optimisticUpdate.newPriority
+      : project.metadata?.priority
 
   const priority = usePriority(displayPriority)
 
@@ -128,22 +137,24 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
 
     let shouldClear = false
 
-    // If optimistic name matches DB, name update completed
-    if (update.newName !== undefined && update.newName === project.name) {
-      shouldClear = true
-    }
+    if (update.type === "text-change") {
+      // If optimistic name matches DB, name update completed
+      if (update.newName !== undefined && update.newName === project.name) {
+        shouldClear = true
+      }
 
-    // If optimistic description matches DB, description update completed
-    if (
-      update.newDescription !== undefined &&
-      update.newDescription === (project.metadata?.description ?? "")
-    ) {
-      shouldClear = true
-    }
-
-    // If optimistic priority matches DB, priority update completed
-    if (update.newPriority !== undefined && update.newPriority === project.metadata?.priority) {
-      shouldClear = true
+      // If optimistic description matches DB, description update completed
+      if (
+        update.newDescription !== undefined &&
+        update.newDescription === (project.metadata?.description ?? "")
+      ) {
+        shouldClear = true
+      }
+    } else if (update.type === "priority-change") {
+      // If optimistic priority matches DB, priority update completed
+      if (update.newPriority === project.metadata?.priority) {
+        shouldClear = true
+      }
     }
 
     if (shouldClear) {

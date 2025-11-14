@@ -19,6 +19,7 @@ export const useOptimisticProjectDescription = createOptimisticProjectHook<[stri
   },
   createUpdate: (projectId, newDescription) => ({
     projectId,
+    type: "text-change",
     newDescription,
     timestamp: Date.now()
   }),

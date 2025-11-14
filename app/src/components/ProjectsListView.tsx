@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import { cn } from "@/lib/utils"
@@ -39,6 +40,7 @@ export function ProjectsListView({
 }: ProjectsListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
   const { registry } = useCountRegistry()
+  const { getProjectUpdate } = useOptimisticUpdates()
 
   const allProjects: TodoistProjectsWithMetadata | undefined = useQuery(
     api.todoist.publicQueries.getProjectsWithMetadata,
@@ -50,14 +52,25 @@ export function ProjectsListView({
   const lastFocusedIndex = useRef<number | null>(null)
 
   // Filter to active projects only and sort by priority (4→3→2→1), then alphabetically
+  // IMPORTANT: Apply optimistic priority overrides BEFORE sorting
   const projects = useMemo(() => {
     if (!allProjects) return []
 
     return allProjects
       .filter((p: TodoistProjectWithMetadata) => !p.is_deleted && !p.is_archived)
       .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => {
-        const aPriority = a.metadata?.priority ?? 1 // Default to P4 (API priority 1)
-        const bPriority = b.metadata?.priority ?? 1
+        // Check for optimistic priority updates
+        const aOptimistic = getProjectUpdate(a.todoist_id)
+        const bOptimistic = getProjectUpdate(b.todoist_id)
+
+        const aPriority =
+          aOptimistic?.type === "priority-change"
+            ? aOptimistic.newPriority
+            : a.metadata?.priority ?? 1
+        const bPriority =
+          bOptimistic?.type === "priority-change"
+            ? bOptimistic.newPriority
+            : b.metadata?.priority ?? 1
 
         // Sort by priority descending (4→3→2→1 means P1→P2→P3→P4)
         if (aPriority !== bPriority) {
@@ -67,7 +80,7 @@ export function ProjectsListView({
         // Then alphabetically by name
         return a.name.localeCompare(b.name)
       })
-  }, [allProjects])
+  }, [allProjects, getProjectUpdate])
 
   const visibleProjects = list.maxTasks ? projects.slice(0, list.maxTasks) : projects
 

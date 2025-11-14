@@ -52,13 +52,20 @@ export type OptimisticTaskUpdate =
 // PROJECT UPDATES
 // ============================================
 
-export type OptimisticProjectUpdate = {
-  projectId: string
-  newName?: string
-  newDescription?: string
-  newPriority?: number
-  timestamp: number
-}
+export type OptimisticProjectUpdate =
+  | {
+      projectId: string
+      type: "text-change"
+      newName?: string
+      newDescription?: string
+      timestamp: number
+    }
+  | {
+      projectId: string
+      type: "priority-change"
+      newPriority: number
+      timestamp: number
+    }
 
 // ============================================
 // COMBINED TYPE
@@ -140,11 +147,14 @@ export function OptimisticUpdatesProvider({ children }: { children: ReactNode })
       const next = new Map(prev)
       const existing = next.get(update.projectId)
 
-      // Merge with existing update to support simultaneous name + description changes
-      if (existing) {
+      // Merge text-change updates to support simultaneous name + description changes
+      if (existing?.type === "text-change" && update.type === "text-change") {
         next.set(update.projectId, {
           ...existing,
           ...update,
+          // Preserve existing fields not in new update
+          newName: update.newName ?? existing.newName,
+          newDescription: update.newDescription ?? existing.newDescription,
           timestamp: update.timestamp
         })
       } else {

@@ -18,6 +18,7 @@ import { useOptimisticDueChange } from '@/hooks/useOptimisticDueChange'
 import { useOptimisticLabelChange } from '@/hooks/useOptimisticLabelChange'
 import { useOptimisticPriorityChange } from '@/hooks/useOptimisticPriorityChange'
 import { useOptimisticProjectMove } from '@/hooks/useOptimisticProjectMove'
+import { useOptimisticProjectPriority } from '@/hooks/useOptimisticProjectPriority'
 import { useOptimisticTaskComplete } from '@/hooks/useOptimisticTaskComplete'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 import { parseNaturalLanguageDate } from '@/lib/dateFormatters'
@@ -58,6 +59,7 @@ export function DialogManager() {
   const optimisticLabelChange = useOptimisticLabelChange()
   const optimisticPriorityChange = useOptimisticPriorityChange()
   const optimisticProjectMove = useOptimisticProjectMove()
+  const optimisticProjectPriority = useOptimisticProjectPriority()
   const optimisticTaskComplete = useOptimisticTaskComplete()
   const optimisticDueChange = useOptimisticDueChange()
   const optimisticDeadlineChange = useOptimisticDeadlineChange()
@@ -66,12 +68,6 @@ export function DialogManager() {
     loadingMessage: "Deleting task...",
     successMessage: "Task deleted!",
     errorMessage: "Failed to delete task"
-  })
-
-  const updateProjectPriority = useTodoistAction(api.todoist.publicActions.updateProjectMetadataPriority, {
-    loadingMessage: "Updating project priority...",
-    successMessage: "Project priority updated!",
-    errorMessage: "Failed to update project priority"
   })
 
   const archiveProject = useTodoistAction(api.todoist.publicActions.archiveProject, {
@@ -91,11 +87,8 @@ export function DialogManager() {
       // Close dialog immediately for instant feedback
       closeDialog()
 
-      // Update project priority
-      await updateProjectPriority({
-        projectId: currentProject.todoist_id,
-        priority
-      })
+      // Use centralized optimistic priority change for projects
+      optimisticProjectPriority(currentProject.todoist_id, priority)
     }
   }
 
