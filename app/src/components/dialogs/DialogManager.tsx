@@ -12,6 +12,7 @@ import { SettingsDialog } from './SettingsDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
+import { useOptimisticPriorityChange } from '@/hooks/useOptimisticPriorityChange'
 import { useOptimisticProjectMove } from '@/hooks/useOptimisticProjectMove'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 
@@ -48,6 +49,7 @@ export function DialogManager() {
     errorMessage: "Failed to update task"
   })
 
+  const optimisticPriorityChange = useOptimisticPriorityChange()
   const optimisticProjectMove = useOptimisticProjectMove()
 
   const completeTask = useTodoistAction(api.todoist.publicActions.completeTask, {
@@ -68,11 +70,8 @@ export function DialogManager() {
     // Close dialog immediately for instant feedback
     closeDialog()
 
-    // Run action in background
-    updateTask({
-      todoistId: currentTask.todoist_id,
-      priority
-    })
+    // Use centralized optimistic priority change
+    optimisticPriorityChange(currentTask.todoist_id, priority)
   }
 
   const handleProjectSelect = async (projectId: string) => {

@@ -24,12 +24,12 @@ export const upsertProject = internalMutation({
       is_archived: Boolean(project.is_archived), // Convert to boolean
       is_favorite: Boolean(project.is_favorite), // Convert to boolean
       view_style: project.view_style || "list",
+      inbox_project: project.inbox_project, // Capture if provided by API
       // Note: Some fields like description, can_assign_tasks, etc. are only available in v1 API
       // They won't be in the sync API, so we'll leave them undefined for sync operations
       description: undefined, // Will be filled by v1 API calls if needed
       can_assign_tasks: undefined, // Will be filled by v1 API calls if needed
       is_shared: undefined, // Will be filled by v1 API calls if needed
-      inbox_project: undefined, // Will be filled by v1 API calls if needed
       created_at: project.created_at || new Date().toISOString(),
       updated_at: project.updated_at || new Date().toISOString(),
       sync_version: currentVersion,

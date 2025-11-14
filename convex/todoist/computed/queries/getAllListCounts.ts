@@ -119,8 +119,10 @@ export const getAllListCounts = query({
       const count = filteredItems.filter(item => item.project_id === project.todoist_id).length;
       counts[`list:project:${project.todoist_id}`] = count;
 
-      // Also set inbox specifically if this is the inbox project
-      if (project.inbox_project) {
+      // Identify inbox project - use inbox_project flag if available,
+      // otherwise fall back to name "Inbox" and no parent (same logic as frontend)
+      const isInbox = project.inbox_project || (project.name === "Inbox" && !project.parent_id);
+      if (isInbox) {
         counts['list:inbox'] = count;
       }
     }

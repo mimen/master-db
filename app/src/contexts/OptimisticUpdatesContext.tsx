@@ -1,11 +1,23 @@
 import { createContext, useContext, useState, type ReactNode } from "react"
 
-export interface OptimisticTaskUpdate {
-  taskId: string
-  type: "project-move"
-  newProjectId: string
-  timestamp: number
-}
+export type OptimisticTaskUpdate =
+  | {
+      taskId: string
+      type: "project-move"
+      newProjectId: string
+      timestamp: number
+    }
+  | {
+      taskId: string
+      type: "priority-change"
+      newPriority: number
+      timestamp: number
+    }
+  | {
+      taskId: string
+      type: "task-complete"
+      timestamp: number
+    }
 
 interface OptimisticUpdatesContextValue {
   pendingUpdates: Map<string, OptimisticTaskUpdate>

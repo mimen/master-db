@@ -75,6 +75,7 @@ export const syncProjectSchema = v.object({
   is_favorite: v.optional(v.union(v.boolean(), v.number())),
   is_frozen: v.optional(v.boolean()), // Whether project is frozen (webhook only)
   view_style: v.optional(v.string()),
+  inbox_project: v.optional(v.boolean()), // Whether this is the inbox project
   created_at: v.optional(v.string()),
   updated_at: v.optional(v.string()),
   description: v.optional(v.string()), // Webhook includes description

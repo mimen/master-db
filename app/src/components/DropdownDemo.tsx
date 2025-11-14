@@ -1,13 +1,12 @@
 import { useState } from "react"
 
-import { ProjectSelector, LabelSelector, PrioritySelector } from "@/components/dropdowns"
+import { ProjectSelector, LabelSelector } from "@/components/dropdowns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function DropdownDemo() {
   // Local state for demo purposes
   const [selectedProject, setSelectedProject] = useState<string>()
   const [selectedLabels, setSelectedLabels] = useState<string[]>([])
-  const [selectedPriority, setSelectedPriority] = useState<number>(1)
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -62,33 +61,6 @@ export function DropdownDemo() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Priority Selector</CardTitle>
-          <CardDescription>
-            Set task priority from P1 (highest) to P4 (lowest)
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <PrioritySelector
-              value={selectedPriority}
-              onChange={setSelectedPriority}
-              placeholder="Set priority"
-            />
-            <PrioritySelector
-              value={selectedPriority}
-              onChange={setSelectedPriority}
-              placeholder="Small size"
-              size="sm"
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Selected priority: P{5 - selectedPriority} (internal value: {selectedPriority})
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Integrated Example</CardTitle>
           <CardDescription>
             All dropdowns working together
@@ -103,11 +75,6 @@ export function DropdownDemo() {
             <LabelSelector
               value={selectedLabels}
               onChange={setSelectedLabels}
-            />
-            <PrioritySelector
-              value={selectedPriority}
-              onChange={setSelectedPriority}
-              size="sm"
             />
           </div>
         </CardContent>

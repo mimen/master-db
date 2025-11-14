@@ -3,14 +3,12 @@ import { Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateC
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
-import { useOptimisticProjectMove } from "@/hooks/useOptimisticProjectMove"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
@@ -378,15 +376,15 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   // UI-level optimistic values - shown while waiting for DB sync
   const [optimisticContent, setOptimisticContent] = useState<string | null>(null)
   const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
-  const [projectPopoverOpen, setProjectPopoverOpen] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
   const lastSyncedContentRef = useRef(task.content)
   const lastSyncedDescriptionRef = useRef(task.description ?? "")
   const contentInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
 
   // Centralized optimistic updates
-  const { getUpdate } = useOptimisticUpdates()
-  const optimisticProjectMove = useOptimisticProjectMove()
+  const { getUpdate, removeUpdate } = useOptimisticUpdates()
+  const { openPriority, openProject } = useDialogContext()
 
   const completeTask = useTodoistAction(
     api.todoist.actions.completeTask.completeTask,
@@ -406,16 +404,16 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     }
   )
 
-  const priority = usePriority(task.priority)
   const allProjects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
-
-  // Filter to active projects and sort by child_order
-  const activeProjects = allProjects
-    ?.filter((project) => !project.is_deleted && !project.is_archived)
-    ?.sort((a, b) => a.child_order - b.child_order)
 
   // Check optimistic update from context
   const optimisticUpdate = getUpdate(task.todoist_id)
+
+  // Use optimistic priority if available
+  const displayPriority = optimisticUpdate?.type === "priority-change"
+    ? optimisticUpdate.newPriority
+    : task.priority
+  const priority = usePriority(displayPriority)
 
   const handleComplete = async () => {
     await completeTask({ todoistId: task.todoist_id })
@@ -502,14 +500,6 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     // If success, optimistic values will be cleared when DB updates via Convex reactivity
   }
 
-  const handleProjectChange = async (newProjectId: string) => {
-    // Close popover immediately
-    setProjectPopoverOpen(false)
-
-    // Use centralized optimistic project move
-    await optimisticProjectMove(task.todoist_id, newProjectId)
-  }
-
   // Clear optimistic values when DB value changes (API completed and synced)
   useEffect(() => {
     if (task.content !== lastSyncedContentRef.current) {
@@ -525,6 +515,13 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
       setOptimisticDescription(null)
     }
   }, [task.description])
+
+  // Clear optimistic priority update when DB value syncs
+  useEffect(() => {
+    if (optimisticUpdate?.type === "priority-change" && task.priority === optimisticUpdate.newPriority) {
+      removeUpdate(task.todoist_id)
+    }
+  }, [task.priority, optimisticUpdate, removeUpdate, task.todoist_id])
 
   // Focus content input when entering edit mode
   useEffect(() => {
@@ -593,8 +590,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   const displayDescription = optimisticDescription ?? task.description
 
   // Check for optimistic project move from context
-  const displayProjectId = optimisticUpdate?.newProjectId ?? task.project_id
-  const displayProject = optimisticUpdate?.newProjectId
+  const displayProject = optimisticUpdate?.type === "project-move"
     ? allProjects?.find(p => p.todoist_id === optimisticUpdate.newProjectId)
     : task.project
 
@@ -612,6 +608,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
       tabIndex={-1}
       aria-selected={false}
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       data-task-id={task.todoist_id}
       className={cn(
         "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
@@ -728,53 +726,20 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
           <div className="flex flex-wrap items-center gap-1">
             {displayProject && (
-              <Popover open={projectPopoverOpen} onOpenChange={setProjectPopoverOpen}>
-                <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <Badge
-                    variant="outline"
-                    className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors"
-                  >
-                    <div
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: getProjectColor(displayProject.color) }}
-                    />
-                    <span>{displayProject.name}</span>
-                  </Badge>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-64 p-0"
-                  align="start"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ScrollArea className="h-72">
-                    <div className="p-1">
-                      {activeProjects?.map((project) => {
-                        const isChild = !!project.parent_id
-                        const isSelected = project.todoist_id === displayProjectId
-
-                        return (
-                          <button
-                            key={project._id}
-                            onClick={() => handleProjectChange(project.todoist_id)}
-                            className={cn(
-                              "w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors",
-                              isSelected && "bg-accent",
-                              !isSelected && "hover:bg-accent/50",
-                              isChild && "pl-8"
-                            )}
-                          >
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: getProjectColor(project.color) }}
-                            />
-                            <span className="truncate">{project.name}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </ScrollArea>
-                </PopoverContent>
-              </Popover>
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openProject(task)
+                }}
+              >
+                <div
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: getProjectColor(displayProject.color) }}
+                />
+                <span>{displayProject.name}</span>
+              </Badge>
             )}
 
             {task.due?.date && (
@@ -808,10 +773,31 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
             {priority?.showFlag && (
               <Badge
                 variant="outline"
-                className={cn("gap-1.5 font-normal", priority.colorClass)}
+                className={cn(
+                  "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors",
+                  priority.colorClass
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openPriority(task)
+                }}
               >
                 <Flag className="h-3 w-3" fill="currentColor" />
                 <span>{priority.label}</span>
+              </Badge>
+            )}
+
+            {isHovered && !priority?.showFlag && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openPriority(task)
+                }}
+              >
+                <Flag className="h-3 w-3" />
+                <span>P4</span>
               </Badge>
             )}
           </div>
