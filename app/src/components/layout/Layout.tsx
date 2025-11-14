@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { TaskListView } from "../TaskListView"
 
@@ -10,7 +10,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
-import { GlobalHotkeysContext } from "@/contexts/GlobalHotkeysContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskCounts } from "@/hooks/useTaskCounts"
 import { useTaskSelection } from "@/hooks/useTaskSelection"
@@ -106,54 +105,38 @@ export function Layout() {
     })
   }, [])
 
-  // Register global shortcuts with the hotkey system
-  const hotkeys = useContext(GlobalHotkeysContext)
+  // Register keyboard shortcuts
   useEffect(() => {
-    if (!hotkeys) return
-    const unregister = hotkeys.registerScope({
-      id: 'layout',
-      handlers: {
-        'Tab': () => {
-          // Prevent default Tab behavior for now
-          return true
-        },
-        'ArrowDown': () => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle when not editing text
+      const target = document.activeElement
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) {
+        return
+      }
+
+      switch (event.key) {
+        case 'ArrowDown':
+        case 'ArrowRight':
+          event.preventDefault()
           handleArrowNavigation(1)
-          return true
-        },
-        'ArrowUp': () => {
+          break
+        case 'ArrowUp':
+        case 'ArrowLeft':
+          event.preventDefault()
           handleArrowNavigation(-1)
-          return true
-        },
-        'ArrowRight': () => {
-          handleArrowNavigation(1)
-          return true
-        },
-        'ArrowLeft': () => {
-          handleArrowNavigation(-1)
-          return true
-        },
-        'shift+?': () => {
-          openShortcuts()
-          return true
-        },
-        '?': (event) => {
+          break
+        case '?':
           if (event.shiftKey) {
+            event.preventDefault()
             openShortcuts()
-            return true
           }
-          return false
-        },
-      },
-      priority: 10, // Lower priority than dialogs
-      isActive: () => {
-        // Only active when not editing text
-        const target = document.activeElement
-        return !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable)
-      },
-    })
-    return unregister
-  }, [hotkeys, handleArrowNavigation, openShortcuts])
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleArrowNavigation, openShortcuts])
 
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1
