@@ -17,6 +17,7 @@ export const getDueTodayItems = query({
         v.literal('not-assigned-to-others')
       )
     ),
+    timezoneOffsetMinutes: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -31,12 +32,25 @@ export const getDueTodayItems = query({
       }
     );
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayISODate = today.toISOString().split('T')[0];
+    // Get current time in user's timezone
+    // timezoneOffsetMinutes: minutes to ADD to UTC to get local time (e.g., PST is -480)
+    const offsetMs = (args.timezoneOffsetMinutes ?? 0) * 60 * 1000;
+    const nowUTC = Date.now();
+    const nowLocal = new Date(nowUTC + offsetMs);
 
-    const endOfToday = new Date(today);
-    endOfToday.setHours(23, 59, 59, 999);
+    // Get today's date string in user's local timezone (YYYY-MM-DD)
+    const year = nowLocal.getUTCFullYear();
+    const month = String(nowLocal.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(nowLocal.getUTCDate()).padStart(2, '0');
+    const todayLocalDate = `${year}-${month}-${day}`;
+
+    // Calculate today's boundaries in user's timezone
+    const todayLocal = new Date(Date.UTC(year, nowLocal.getUTCMonth(), nowLocal.getUTCDate(), 0, 0, 0, 0));
+    const endOfTodayLocal = new Date(Date.UTC(year, nowLocal.getUTCMonth(), nowLocal.getUTCDate(), 23, 59, 59, 999));
+
+    // Convert back to actual UTC for datetime comparisons
+    const todayUTC = new Date(todayLocal.getTime() - offsetMs);
+    const endOfTodayUTC = new Date(endOfTodayLocal.getTime() - offsetMs);
 
     const dueTodayItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       if (!item.due) return false;
@@ -45,10 +59,12 @@ export const getDueTodayItems = query({
       if (!dueDate) return false;
 
       if (dueDate.includes('T')) {
+        // For datetime strings, compare in UTC
         const dueDateObj = new Date(dueDate);
-        return dueDateObj >= today && dueDateObj <= endOfToday;
+        return dueDateObj >= todayUTC && dueDateObj <= endOfTodayUTC;
       } else {
-        return dueDate === todayISODate;
+        // For date-only strings, compare with local date
+        return dueDate === todayLocalDate;
       }
     });
 

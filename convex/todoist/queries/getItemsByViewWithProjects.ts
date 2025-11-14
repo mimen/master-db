@@ -6,11 +6,11 @@ import { query } from "../../_generated/server";
 
 type TimeRange = "overdue" | "today" | "upcoming" | "no-date";
 
-type InboxQuery = { type: "inbox"; view: string; inboxProjectId?: string }
-type TimeQuery = { type: "time"; view: string; range: TimeRange }
-type ProjectQuery = { type: "project"; view: string; projectId: string }
-type PriorityQuery = { type: "priority"; view: string; priority: 1 | 2 | 3 | 4 }
-type LabelQuery = { type: "label"; view: string; label: string }
+type InboxQuery = { type: "inbox"; view: string; inboxProjectId?: string; timezoneOffsetMinutes?: number }
+type TimeQuery = { type: "time"; view: string; range: TimeRange; timezoneOffsetMinutes?: number }
+type ProjectQuery = { type: "project"; view: string; projectId: string; timezoneOffsetMinutes?: number }
+type PriorityQuery = { type: "priority"; view: string; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
+type LabelQuery = { type: "label"; view: string; label: string; timezoneOffsetMinutes?: number }
 
 type ListQueryInput = InboxQuery | TimeQuery | ProjectQuery | PriorityQuery | LabelQuery;
 
@@ -26,26 +26,31 @@ const listQueryValidator = v.union(
     type: v.literal("inbox"),
     view: v.string(),
     inboxProjectId: v.optional(v.string()),
+    timezoneOffsetMinutes: v.optional(v.number()),
   }),
   v.object({
     type: v.literal("time"),
     view: v.string(),
     range: timeRangeValidator,
+    timezoneOffsetMinutes: v.optional(v.number()),
   }),
   v.object({
     type: v.literal("project"),
     view: v.string(),
     projectId: v.string(),
+    timezoneOffsetMinutes: v.optional(v.number()),
   }),
   v.object({
     type: v.literal("priority"),
     view: v.string(),
     priority: v.union(v.literal(1), v.literal(2), v.literal(3), v.literal(4)),
+    timezoneOffsetMinutes: v.optional(v.number()),
   }),
   v.object({
     type: v.literal("label"),
     view: v.string(),
     label: v.string(),
+    timezoneOffsetMinutes: v.optional(v.number()),
   })
 );
 
@@ -82,9 +87,13 @@ export const getItemsByViewWithProjects = query({
       });
     } else if (list.type === "time") {
       if (list.range === "today") {
-        items = await ctx.runQuery(api.todoist.publicQueries.getDueTodayItems, {});
+        items = await ctx.runQuery(api.todoist.publicQueries.getDueTodayItems, {
+          timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+        });
       } else if (list.range === "upcoming") {
-        items = await ctx.runQuery(api.todoist.publicQueries.getDueNext7DaysItems, {});
+        items = await ctx.runQuery(api.todoist.publicQueries.getDueNext7DaysItems, {
+          timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+        });
       } else if (list.range === "overdue") {
         items = await ctx.runQuery(api.todoist.publicQueries.getOverdueItems, {});
       } else if (list.range === "no-date") {

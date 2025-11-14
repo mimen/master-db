@@ -34,7 +34,9 @@ const CountContext = createContext<CountContextValue | null>(null)
  */
 export function CountProvider({ children }: { children: ReactNode }) {
   // Fetch all counts in a single query
-  const listCounts = useQuery(api.todoist.computed.index.getAllListCounts, {})
+  const listCounts = useQuery(api.todoist.computed.index.getAllListCounts, {
+    timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1,
+  })
 
   // Create registry instance (memoized to avoid recreation on every render)
   const registry = useMemo(() => {

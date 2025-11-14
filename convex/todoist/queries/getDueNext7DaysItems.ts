@@ -17,6 +17,7 @@ export const getDueNext7DaysItems = query({
         v.literal('not-assigned-to-others')
       )
     ),
+    timezoneOffsetMinutes: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -31,15 +32,24 @@ export const getDueNext7DaysItems = query({
       }
     );
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Get current time in user's timezone
+    const offsetMs = (args.timezoneOffsetMinutes ?? 0) * 60 * 1000;
+    const nowUTC = Date.now();
+    const nowLocal = new Date(nowUTC + offsetMs);
 
-    const next7Days = new Date(today);
-    next7Days.setDate(next7Days.getDate() + 7);
-    next7Days.setHours(23, 59, 59, 999);
+    // Get today's date string in user's local timezone (YYYY-MM-DD)
+    const year = nowLocal.getUTCFullYear();
+    const month = String(nowLocal.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(nowLocal.getUTCDate()).padStart(2, '0');
+    const todayLocalDate = `${year}-${month}-${day}`;
 
-    const todayISODate = today.toISOString().split('T')[0];
-    const next7DaysISODate = new Date(next7Days.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    // Calculate 7 days from today in user's timezone
+    const next7DaysLocal = new Date(nowLocal);
+    next7DaysLocal.setUTCDate(next7DaysLocal.getUTCDate() + 7);
+    const next7Year = next7DaysLocal.getUTCFullYear();
+    const next7Month = String(next7DaysLocal.getUTCMonth() + 1).padStart(2, '0');
+    const next7Day = String(next7DaysLocal.getUTCDate()).padStart(2, '0');
+    const next7DaysLocalDate = `${next7Year}-${next7Month}-${next7Day}`;
 
     const dueNext7DaysItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       if (!item.due) return false;
@@ -51,7 +61,7 @@ export const getDueNext7DaysItems = query({
       const dateOnly = dueDate.includes('T') ? dueDate.split('T')[0] : dueDate;
 
       // Upcoming means tomorrow through next 7 days (excluding today)
-      return dateOnly > todayISODate && dateOnly <= next7DaysISODate;
+      return dateOnly > todayLocalDate && dateOnly <= next7DaysLocalDate;
     });
 
     const sortedItems: Doc<"todoist_items">[] = dueNext7DaysItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {

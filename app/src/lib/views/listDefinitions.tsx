@@ -122,7 +122,11 @@ const timeDefinition: ListDefinition<{ range: TimeRange }> = {
   dependencies: {
     labels: true,
   },
-  buildQuery: ({ range }): ListQueryInput => ({ type: "time", range }),
+  buildQuery: ({ range }): ListQueryInput => ({
+    type: "time",
+    range,
+    timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1, // Convert to IANA format (PST is -480)
+  }),
   getHeader: ({ taskCount, params }) => {
     const { title, description, icon } = timeRangeLabels[params.range]
     const descriptionText = params.range === "upcoming"

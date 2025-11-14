@@ -8,7 +8,7 @@ describe("getTimeFilterCounts", () => {
   it("should return counts for all time filters", async () => {
     const t = convexTest(schema);
 
-    const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts);
+    const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts, {});
 
     expect(result).toHaveProperty("totalRawTasks");
     expect(result).toHaveProperty("totalFilteredTasks");
@@ -20,7 +20,7 @@ describe("getTimeFilterCounts", () => {
   it("should include all time filter categories", async () => {
     const t = convexTest(schema);
 
-    const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts);
+    const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts, {});
 
     const filters = result.timeCounts.map((c) => c.filter);
     expect(filters).toContain("overdue");
@@ -34,7 +34,7 @@ describe("getTimeFilterCounts", () => {
   it("should calculate filtered vs raw counts correctly", async () => {
     const t = convexTest(schema);
 
-    const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts);
+    const result = await t.query(api.todoist.publicQueries.getTimeFilterCounts, {});
 
     for (const count of result.timeCounts) {
       expect(count.tasksFilteredOut).toBe(count.rawTaskCount - count.filteredTaskCount);

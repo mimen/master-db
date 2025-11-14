@@ -1,3 +1,5 @@
+import { v } from "convex/values";
+
 import { internal } from "../../../_generated/api";
 import { Doc } from "../../../_generated/dataModel";
 import { query } from "../../../_generated/server";
@@ -23,8 +25,10 @@ import { query } from "../../../_generated/server";
  * - list:label:${labelName} -> label task count
  */
 export const getAllListCounts = query({
-  args: {},
-  handler: async (ctx): Promise<Record<string, number>> => {
+  args: {
+    timezoneOffsetMinutes: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Record<string, number>> => {
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject;
 
@@ -37,18 +41,32 @@ export const getAllListCounts = query({
       }
     );
 
-    // Get current date strings for time filtering
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayISO = today.toISOString().split('T')[0];
+    // Get current time in user's timezone
+    const offsetMs = (args.timezoneOffsetMinutes ?? 0) * 60 * 1000;
+    const nowUTC = Date.now();
+    const nowLocal = new Date(nowUTC + offsetMs);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowISO = tomorrow.toISOString().split('T')[0];
+    // Get today's date string in user's local timezone (YYYY-MM-DD)
+    const year = nowLocal.getUTCFullYear();
+    const month = String(nowLocal.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(nowLocal.getUTCDate()).padStart(2, '0');
+    const todayISO = `${year}-${month}-${day}`;
 
-    const next7Days = new Date(today);
-    next7Days.setDate(next7Days.getDate() + 7);
-    const next7DaysISO = next7Days.toISOString().split('T')[0];
+    // Calculate tomorrow in user's timezone
+    const tomorrowLocal = new Date(nowLocal);
+    tomorrowLocal.setUTCDate(tomorrowLocal.getUTCDate() + 1);
+    const tomorrowYear = tomorrowLocal.getUTCFullYear();
+    const tomorrowMonth = String(tomorrowLocal.getUTCMonth() + 1).padStart(2, '0');
+    const tomorrowDay = String(tomorrowLocal.getUTCDate()).padStart(2, '0');
+    const tomorrowISO = `${tomorrowYear}-${tomorrowMonth}-${tomorrowDay}`;
+
+    // Calculate 7 days from today in user's timezone
+    const next7DaysLocal = new Date(nowLocal);
+    next7DaysLocal.setUTCDate(next7DaysLocal.getUTCDate() + 7);
+    const next7Year = next7DaysLocal.getUTCFullYear();
+    const next7Month = String(next7DaysLocal.getUTCMonth() + 1).padStart(2, '0');
+    const next7Day = String(next7DaysLocal.getUTCDate()).padStart(2, '0');
+    const next7DaysISO = `${next7Year}-${next7Month}-${next7Day}`;
 
     // Helper to extract date-only part from date or datetime string
     const extractDateOnly = (dateStr: string): string => {

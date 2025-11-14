@@ -5,11 +5,11 @@ import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } fr
 export type TimeRange = "overdue" | "today" | "upcoming" | "no-date"
 
 export type ListQueryDefinition =
-  | { type: "inbox"; inboxProjectId?: string }
-  | { type: "time"; range: TimeRange }
-  | { type: "project"; projectId: string }
-  | { type: "priority"; priority: 1 | 2 | 3 | 4 }
-  | { type: "label"; label: string }
+  | { type: "inbox"; inboxProjectId?: string; timezoneOffsetMinutes?: number }
+  | { type: "time"; range: TimeRange; timezoneOffsetMinutes?: number }
+  | { type: "project"; projectId: string; timezoneOffsetMinutes?: number }
+  | { type: "priority"; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
+  | { type: "label"; label: string; timezoneOffsetMinutes?: number }
 
 export type ListQueryInput = ListQueryDefinition & { view: ViewKey }
 
