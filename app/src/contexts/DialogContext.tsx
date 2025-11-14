@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
+import { useDialogHotkeyScope } from '@/hooks/useDialogHotkeyScope'
 import type { TodoistTask } from '@/types/convex/todoist'
 
 export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'shortcuts' | 'settings'
@@ -29,6 +30,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [dialogType, setDialogType] = useState<DialogType | null>(null)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  // Block keyboard shortcuts when any dialog is open
+  const isAnyDialogOpen = dialogType !== null || isShortcutsOpen || isSettingsOpen
+  useDialogHotkeyScope(isAnyDialogOpen)
 
   const openPriority = useCallback((task: TodoistTask) => {
     setCurrentTask(task)
