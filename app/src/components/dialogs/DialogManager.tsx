@@ -12,6 +12,7 @@ import { SettingsDialog } from './SettingsDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
 import { api } from '@/convex/_generated/api'
+import { useOptimisticLabelChange } from '@/hooks/useOptimisticLabelChange'
 import { useOptimisticPriorityChange } from '@/hooks/useOptimisticPriorityChange'
 import { useOptimisticProjectMove } from '@/hooks/useOptimisticProjectMove'
 import { useOptimisticTaskComplete } from '@/hooks/useOptimisticTaskComplete'
@@ -50,6 +51,7 @@ export function DialogManager() {
     errorMessage: "Failed to update task"
   })
 
+  const optimisticLabelChange = useOptimisticLabelChange()
   const optimisticPriorityChange = useOptimisticPriorityChange()
   const optimisticProjectMove = useOptimisticProjectMove()
   const optimisticTaskComplete = useOptimisticTaskComplete()
@@ -83,11 +85,8 @@ export function DialogManager() {
   const handleLabelSelect = async (labels: string[]) => {
     if (!currentTask) return
 
-    // Labels dialog doesn't auto-close, but run action immediately
-    updateTask({
-      todoistId: currentTask.todoist_id,
-      labels
-    })
+    // Labels dialog doesn't auto-close, but run action with optimistic update
+    optimisticLabelChange(currentTask.todoist_id, labels)
   }
 
   const handleDueDateSelect = async (dueString: string) => {

@@ -18,6 +18,12 @@ export type OptimisticTaskUpdate =
       type: "task-complete"
       timestamp: number
     }
+  | {
+      taskId: string
+      type: "label-change"
+      newLabels: string[]
+      timestamp: number
+    }
 
 interface OptimisticUpdatesContextValue {
   pendingUpdates: Map<string, OptimisticTaskUpdate>

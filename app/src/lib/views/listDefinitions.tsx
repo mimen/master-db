@@ -76,6 +76,7 @@ const inboxDefinition: ListDefinition = {
   },
   dependencies: {
     projects: true,
+    labels: true,
   },
   buildQuery: (): ListQueryInput => ({ type: "inbox" }),
   getHeader: ({ taskCount }) => ({
@@ -117,6 +118,9 @@ const timeDefinition: ListDefinition<{ range: TimeRange }> = {
   defaults: {
     collapsible: true,
     startExpanded: true,
+  },
+  dependencies: {
+    labels: true,
   },
   buildQuery: ({ range }): ListQueryInput => ({ type: "time", range }),
   getHeader: ({ taskCount, params }) => {
@@ -167,6 +171,7 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
   dependencies: {
     projects: true,
     projectMetadata: true,
+    labels: true,
   },
   buildQuery: ({ projectId }): ListQueryInput => ({ type: "project", projectId }),
   getHeader: ({ taskCount, params, support }) => {
@@ -220,6 +225,9 @@ const priorityDefinition: ListDefinition<{ level: 1 | 2 | 3 | 4 }> = {
   defaults: {
     collapsible: true,
     startExpanded: true,
+  },
+  dependencies: {
+    labels: true,
   },
   buildQuery: ({ level }): ListQueryInput => ({ type: "priority", priority: level }),
   getHeader: ({ taskCount, params }) => {

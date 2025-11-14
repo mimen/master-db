@@ -9,6 +9,7 @@ import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
+import { useOptimisticLabelChange } from "@/hooks/useOptimisticLabelChange"
 import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
@@ -342,6 +343,7 @@ export function TaskListView({
                     onElementRef={refHandlers.current[index]!}
                     onClick={() => onTaskClick?.(list.id, index)}
                     isProjectView={isProjectView}
+                    allLabels={labels}
                   />
                 )
               })}
@@ -367,9 +369,10 @@ interface TaskRowProps {
   onElementRef: (element: HTMLDivElement | null) => void
   onClick?: () => void
   isProjectView: boolean // Whether we're in a project-filtered view
+  allLabels?: TodoistLabelDoc[] // All labels for color lookup
 }
 
-const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectView }: TaskRowProps) {
+const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectView, allLabels }: TaskRowProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [showDescriptionInput, setShowDescriptionInput] = useState(false)
   const [editContent, setEditContent] = useState(task.content)
@@ -385,7 +388,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
   // Centralized optimistic updates
   const { getUpdate, removeUpdate } = useOptimisticUpdates()
-  const { openPriority, openProject } = useDialogContext()
+  const { openPriority, openProject, openLabel } = useDialogContext()
+  const optimisticLabelChange = useOptimisticLabelChange()
   const optimisticTaskComplete = useOptimisticTaskComplete()
 
   const updateTask = useTodoistAction(
@@ -410,6 +414,24 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
   const handleComplete = async () => {
     await optimisticTaskComplete(task.todoist_id)
+  }
+
+  const handleRemoveLabel = async (labelToRemove: string) => {
+    const currentLabels = displayLabels || []
+    const newLabels = currentLabels.filter((label: string) => label !== labelToRemove)
+    await optimisticLabelChange(task.todoist_id, newLabels)
+  }
+
+  const getLabelColor = (labelName: string) => {
+    const labelObj = allLabels?.find(l => l.name === labelName)
+    if (!labelObj) return null
+    const color = getProjectColor(labelObj.color) // Reuse getProjectColor since labels use same color scheme
+    // Return color variations for different parts of the badge
+    return {
+      full: color,
+      border: `${color}40`, // 25% opacity for subtle border
+      background: `${color}15` // 8% opacity for very subtle background tint
+    }
   }
 
   const startEditing = useCallback(() => {
@@ -523,6 +545,21 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     }
   }, [task.project_id, optimisticUpdate, removeUpdate, task.todoist_id])
 
+  // Clear optimistic label change when DB value syncs
+  useEffect(() => {
+    if (optimisticUpdate?.type === "label-change") {
+      const dbLabels = task.labels || []
+      const optimisticLabels = optimisticUpdate.newLabels
+      // Compare arrays - if they match, DB has synced
+      if (
+        dbLabels.length === optimisticLabels.length &&
+        dbLabels.every((label: string, index: number) => label === optimisticLabels[index])
+      ) {
+        removeUpdate(task.todoist_id)
+      }
+    }
+  }, [task.labels, optimisticUpdate, removeUpdate, task.todoist_id])
+
   // Focus content input when entering edit mode
   useEffect(() => {
     if (isEditing && contentInputRef.current) {
@@ -593,6 +630,11 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   const displayProject = optimisticUpdate?.type === "project-move"
     ? allProjects?.find(p => p.todoist_id === optimisticUpdate.newProjectId)
     : task.project
+
+  // Use optimistic labels if available
+  const displayLabels = optimisticUpdate?.type === "label-change"
+    ? optimisticUpdate.newLabels
+    : task.labels
 
   const markdownSegments = parseMarkdownLinks(displayContent)
   const dueInfo = formatDueDate(task.due)
@@ -757,15 +799,53 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
               </Badge>
             )}
 
-            {task.labels && task.labels.length > 0 && (
+            {displayLabels && displayLabels.length > 0 && (
               <>
-                {task.labels.map((label: string) => (
-                  <Badge key={label} variant="secondary" className="gap-1.5 font-normal">
-                    <Tag className="h-3 w-3" />
-                    <span>{label}</span>
-                  </Badge>
-                ))}
+                {displayLabels.map((label: string) => {
+                  const labelColor = getLabelColor(label)
+                  return (
+                    <Badge
+                      key={label}
+                      variant="secondary"
+                      className="gap-1.5 font-normal group/label border"
+                      style={labelColor ? {
+                        borderColor: labelColor.border,
+                        backgroundColor: labelColor.background
+                      } : undefined}
+                    >
+                      <Tag
+                        className="h-3 w-3 group-hover/label:hidden"
+                        style={labelColor ? { color: labelColor.full } : undefined}
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleRemoveLabel(label)
+                        }}
+                        className="hidden group-hover/label:block hover:text-destructive transition-colors"
+                        aria-label={`Remove ${label} label`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <span>{label}</span>
+                    </Badge>
+                  )
+                })}
               </>
+            )}
+
+            {isHovered && (
+              <Badge
+                variant="outline"
+                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openLabel(task)
+                }}
+              >
+                <Tag className="h-3 w-3" />
+                <span>add label</span>
+              </Badge>
             )}
 
             {task.assigned_by_uid && (
