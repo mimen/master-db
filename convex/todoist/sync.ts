@@ -1,3 +1,3 @@
 // Barrel export for all sync actions
-export { performIncrementalSync } from "./sync/performIncrementalSync";
-export { runInitialSync } from "./sync/runInitialSync";
+export { performIncrementalSync } from "./_sync/performIncrementalSync";
+export { runInitialSync } from "./_sync/runInitialSync";

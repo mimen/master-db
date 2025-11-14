@@ -1,16 +1,17 @@
-// Barrel export for all internal queries
-export { getSyncState } from "./internal/queries/getSyncState";
+// Barrel export for INTERNAL-ONLY queries
+// Public queries are exported from publicQueries.ts instead
+
+// Internal queries
 export { getRawActiveItems } from "./internal/queries/getRawActiveItems";
-export { getItemByTodoistId } from "./queries/getItemByTodoistId";
 
-// Queue queries
-export { getPriorityQueue } from "./queries/getPriorityQueue";
-export { getFocusedTasks } from "./queries/getFocusedTasks";
-export { getContextBatch } from "./queries/getContextBatch";
-export { getQueueState } from "./queries/getQueueState";
+// Note: The following queries are PUBLIC and exported from publicQueries.ts, not here:
+// - getPriorityQueue, getFocusedTasks, getContextBatch, getQueueState
+// - getProjectsByPriority
+// - All time-based queries (getActiveItems, getDueTodayItems, etc.)
+// - All filter count queries (getTimeFilterCounts, getPriorityFilterCounts, etc.)
 
-// Multi-list queries
-export { getProjectsByPriority } from "./queries/getProjectsByPriority";
-
-// Webhook queries
-export { getWebhookEventByDeliveryId } from "./queries/getWebhookEventByDeliveryId";
+// Note: The following are internal-only and NOT exported from barrel files
+// to avoid type conflicts. Reference them directly from their modules:
+// - internal.todoist.internal.queries.getSyncState.getSyncState
+// - internal.todoist.queries.getItemByTodoistId.getItemByTodoistId
+// - internal.todoist.queries.getWebhookEventByDeliveryId.getWebhookEventByDeliveryId

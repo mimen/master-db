@@ -25,9 +25,9 @@ export { getItemsByView } from "./queries/getItemsByView";
 export { getItemsByViewWithProjects } from "./queries/getItemsByViewWithProjects";
 
 // Computed queries
-export { getProjectsWithMetadata } from "./computed/queries/getProjectsWithMetadata";
-export { getProjectsByPriority } from "./computed/queries/getProjectsByPriority";
-export { getScheduledProjects } from "./computed/queries/getScheduledProjects";
+export { getProjectsWithMetadata } from "./computed/_queries/getProjectsWithMetadata";
+export { getProjectsByPriority } from "./computed/_queries/getProjectsByPriority";
+export { getScheduledProjects } from "./computed/_queries/getScheduledProjects";
 
 // Prioritized Queue queries
 export { getPriorityQueue } from "./queries/getPriorityQueue";

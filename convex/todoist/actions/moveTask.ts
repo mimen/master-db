@@ -29,7 +29,7 @@ export const moveTask = action({
 
     // Store original values for rollback
     const existing = await ctx.runQuery(
-      internal.todoist.queries.getItemByTodoistId,
+      internal.todoist.queries.getItemByTodoistId.getItemByTodoistId,
       {
         todoistId: args.todoistId
       }

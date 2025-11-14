@@ -40,7 +40,7 @@ export const ensureAllProjectsHaveMetadata = action({
         } else {
           // Create default metadata
           await ctx.runMutation(
-            api.todoist.mutations.createProjectMetadata.createProjectMetadata,
+            api.todoist.publicMutations.createProjectMetadata,
             {
               project_id: project.todoist_id,
               last_updated: Date.now(),
@@ -89,7 +89,7 @@ export const ensureProjectHasMetadata = action({
 
     // Create default metadata
     const metadataId = await ctx.runMutation(
-      api.todoist.mutations.createProjectMetadata.createProjectMetadata,
+      api.todoist.publicMutations.createProjectMetadata,
       {
         project_id: args.projectId,
         last_updated: Date.now(),

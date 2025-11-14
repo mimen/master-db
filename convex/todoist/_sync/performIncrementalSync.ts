@@ -28,7 +28,7 @@ export const performIncrementalSync = action({
       }
 
       // Get current sync state
-      const syncState = await ctx.runQuery(internal.todoist.queries.getSyncState);
+      const syncState = await ctx.runQuery(internal.todoist.internal.queries.getSyncState.getSyncState);
       if (!syncState?.last_sync_token) {
         return ctx.runAction(api.todoist.sync.runInitialSync);
       }

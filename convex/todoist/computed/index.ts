@@ -4,11 +4,11 @@
  */
 
 // Computed mutations
-export { extractProjectMetadata } from "./mutations/extractProjectMetadata";
-export { triggerMetadataExtraction } from "./mutations/triggerMetadataExtraction";
+export { extractProjectMetadata } from "./_mutations/extractProjectMetadata";
+export { triggerMetadataExtraction } from "./_mutations/triggerMetadataExtraction";
 
 // Computed queries
-export { getAllListCounts } from "./queries/getAllListCounts";
-export { getProjectsWithMetadata } from "./queries/getProjectsWithMetadata";
-export { getProjectsByPriority } from "./queries/getProjectsByPriority";
-export { getScheduledProjects } from "./queries/getScheduledProjects";
+export { getAllListCounts } from "./_queries/getAllListCounts";
+export { getProjectsWithMetadata } from "./_queries/getProjectsWithMetadata";
+export { getProjectsByPriority } from "./_queries/getProjectsByPriority";
+export { getScheduledProjects } from "./_queries/getScheduledProjects";
