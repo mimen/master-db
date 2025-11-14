@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, Flag } from "lucide-react"
+import { Flag } from "lucide-react"
 import type { ComponentType } from "react"
 
 import type { ViewKey } from "@/lib/views/types"
@@ -9,8 +9,6 @@ import type { ViewKey } from "@/lib/views/types"
 export type TimeFilterItem = {
   id: string
   label: string
-  icon: ComponentType<{ className?: string }>
-  color: string
   filterKey: string
   viewKey: ViewKey
 }
@@ -33,32 +31,24 @@ export const TIME_FILTER_ITEMS: TimeFilterItem[] = [
   {
     id: "overdue",
     label: "Overdue",
-    icon: AlertCircle,
-    color: "text-red-500",
     filterKey: "overdue",
     viewKey: "view:time:overdue",
   },
   {
     id: "today",
     label: "Today",
-    icon: Calendar,
-    color: "text-green-500",
     filterKey: "today",
     viewKey: "view:time:today",
   },
   {
     id: "upcoming",
     label: "Upcoming",
-    icon: Calendar,
-    color: "text-purple-500",
     filterKey: "next7days",
     viewKey: "view:time:upcoming",
   },
   {
     id: "no-date",
     label: "No Date",
-    icon: Calendar,
-    color: "text-gray-500",
     filterKey: "nodate",
     viewKey: "view:time:no-date",
   },

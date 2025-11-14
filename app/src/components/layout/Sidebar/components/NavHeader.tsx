@@ -16,6 +16,7 @@ import {
 import { SidebarGroupLabel } from "@/components/ui/sidebar"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { getProjectColor } from "@/lib/colors"
+import { getViewIcon } from "@/lib/icons/viewIcons"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { ViewKey, ViewSelection } from "@/lib/views/types"
@@ -61,13 +62,12 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
 
     // Time filters - from centralized definitions
     TIME_FILTER_ITEMS.forEach((timeFilter) => {
-      const TimeIcon = timeFilter.icon
       items.push({
         id: timeFilter.id,
         label: timeFilter.label,
         category: "time",
         viewKey: timeFilter.viewKey,
-        icon: <TimeIcon className={cn("h-4 w-4", timeFilter.color)} />,
+        icon: getViewIcon(timeFilter.viewKey, { size: "sm" }),
       })
     })
 

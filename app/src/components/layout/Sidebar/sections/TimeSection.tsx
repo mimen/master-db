@@ -5,6 +5,7 @@ import { TIME_FILTER_ITEMS } from "../utils/filterItems"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { getViewIcon } from "@/lib/icons/viewIcons"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 
@@ -47,16 +48,16 @@ export function TimeSection({
             {TIME_FILTER_ITEMS.map((timeFilter) => {
               const isActive = currentViewKey === timeFilter.viewKey
               const count = getCountForView(timeFilter.viewKey, viewContext)
+              const icon = getViewIcon(timeFilter.viewKey, { size: "sm" })
 
               return (
                 <SidebarMenuItem key={timeFilter.id}>
                   <SidebarButton
-                    icon={timeFilter.icon}
+                    icon={icon}
                     label={timeFilter.label}
                     count={count}
                     isActive={isActive}
                     onClick={() => onViewChange(resolveView(timeFilter.viewKey, viewContext))}
-                    colorClass={timeFilter.color}
                   />
                 </SidebarMenuItem>
               )
