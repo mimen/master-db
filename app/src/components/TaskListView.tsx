@@ -13,8 +13,8 @@ import { useOptimisticDeadlineChange } from "@/hooks/useOptimisticDeadlineChange
 import { useOptimisticDueChange } from "@/hooks/useOptimisticDueChange"
 import { useOptimisticLabelChange } from "@/hooks/useOptimisticLabelChange"
 import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
+import { useOptimisticTaskText } from "@/hooks/useOptimisticTaskText"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
-import { useTodoistAction } from "@/hooks/useTodoistAction"
 import { getProjectColor } from "@/lib/colors"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
@@ -380,36 +380,23 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   const [showDescriptionInput, setShowDescriptionInput] = useState(false)
   const [editContent, setEditContent] = useState(task.content)
   const [editDescription, setEditDescription] = useState(task.description || "")
-  // UI-level optimistic values - shown while waiting for DB sync
-  const [optimisticContent, setOptimisticContent] = useState<string | null>(null)
-  const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
   const [isHovered, setIsHovered] = useState(false)
-  const lastSyncedContentRef = useRef(task.content)
-  const lastSyncedDescriptionRef = useRef(task.description ?? "")
   const contentInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
 
   // Centralized optimistic updates
-  const { getUpdate, removeUpdate } = useOptimisticUpdates()
+  const { getTaskUpdate, removeTaskUpdate } = useOptimisticUpdates()
   const { openPriority, openProject, openLabel, openDueDate, openDeadline } = useDialogContext()
   const optimisticLabelChange = useOptimisticLabelChange()
   const optimisticTaskComplete = useOptimisticTaskComplete()
   const optimisticDueChange = useOptimisticDueChange()
   const optimisticDeadlineChange = useOptimisticDeadlineChange()
-
-  const updateTask = useTodoistAction(
-    api.todoist.publicActions.updateTask,
-    {
-      loadingMessage: "Updating task...",
-      successMessage: "Task updated!",
-      errorMessage: "Failed to update task"
-    }
-  )
+  const optimisticTaskText = useOptimisticTaskText()
 
   const allProjects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
 
   // Check optimistic update from context
-  const optimisticUpdate = getUpdate(task.todoist_id)
+  const optimisticUpdate = getTaskUpdate(task.todoist_id)
 
   // Use optimistic priority if available
   const displayPriority = optimisticUpdate?.type === "priority-change"
@@ -507,9 +494,6 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     setShowDescriptionInput(false)
     setEditContent(task.content)
     setEditDescription(task.description || "")
-    // Clear any optimistic values when canceling
-    setOptimisticContent(null)
-    setOptimisticDescription(null)
   }
 
   const saveEditing = async () => {
@@ -521,62 +505,55 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
       return
     }
 
-    const updates: Record<string, unknown> = {}
-    if (hasContentChanged) updates.content = editContent
-    if (hasDescriptionChanged) updates.description = editDescription
-
-    // STEP 1: Set UI-level optimistic values immediately (0ms - instant!)
-    if (hasContentChanged) setOptimisticContent(editContent)
-    if (hasDescriptionChanged) setOptimisticDescription(editDescription)
-
-    // STEP 2: Exit edit mode - optimistic values will show immediately
+    // Exit edit mode - optimistic values will show immediately
     setIsEditing(false)
     setShowDescriptionInput(false)
 
-    // STEP 3: Fire action in background (calls API + syncs to DB on success)
-    const result = await updateTask({
-      todoistId: task.todoist_id,
-      ...updates
-    })
+    // Fire optimistic update (instant UI + background API call)
+    const changes: { content?: string; description?: string } = {}
+    if (hasContentChanged) changes.content = editContent
+    if (hasDescriptionChanged) changes.description = editDescription
 
-    // STEP 4: If action failed, clear optimistic values to show original data
-    if (result === null) {
-      // Action failed - clear optimistic state so original DB value shows through
-      setOptimisticContent(null)
-      setOptimisticDescription(null)
-    }
-    // If success, optimistic values will be cleared when DB updates via Convex reactivity
+    await optimisticTaskText(task.todoist_id, changes)
   }
 
-  // Clear optimistic values when DB value changes (API completed and synced)
+  // Clear optimistic text changes when DB value syncs
   useEffect(() => {
-    if (task.content !== lastSyncedContentRef.current) {
-      lastSyncedContentRef.current = task.content
-      setOptimisticContent(null)
-    }
-  }, [task.content])
+    if (optimisticUpdate?.type === "text-change") {
+      let shouldClear = false
 
-  useEffect(() => {
-    const normalizedDescription = task.description ?? ""
-    if (normalizedDescription !== lastSyncedDescriptionRef.current) {
-      lastSyncedDescriptionRef.current = normalizedDescription
-      setOptimisticDescription(null)
+      // If optimistic content matches DB, content update completed
+      if (optimisticUpdate.newContent !== undefined && optimisticUpdate.newContent === task.content) {
+        shouldClear = true
+      }
+
+      // If optimistic description matches DB, description update completed
+      if (
+        optimisticUpdate.newDescription !== undefined &&
+        optimisticUpdate.newDescription === (task.description ?? "")
+      ) {
+        shouldClear = true
+      }
+
+      if (shouldClear) {
+        removeTaskUpdate(task.todoist_id)
+      }
     }
-  }, [task.description])
+  }, [task.content, task.description, optimisticUpdate, removeTaskUpdate, task.todoist_id])
 
   // Clear optimistic priority update when DB value syncs
   useEffect(() => {
     if (optimisticUpdate?.type === "priority-change" && task.priority === optimisticUpdate.newPriority) {
-      removeUpdate(task.todoist_id)
+      removeTaskUpdate(task.todoist_id)
     }
-  }, [task.priority, optimisticUpdate, removeUpdate, task.todoist_id])
+  }, [task.priority, optimisticUpdate, removeTaskUpdate, task.todoist_id])
 
   // Clear optimistic project move when DB value syncs
   useEffect(() => {
     if (optimisticUpdate?.type === "project-move" && task.project_id === optimisticUpdate.newProjectId) {
-      removeUpdate(task.todoist_id)
+      removeTaskUpdate(task.todoist_id)
     }
-  }, [task.project_id, optimisticUpdate, removeUpdate, task.todoist_id])
+  }, [task.project_id, optimisticUpdate, removeTaskUpdate, task.todoist_id])
 
   // Clear optimistic label change when DB value syncs
   useEffect(() => {
@@ -588,10 +565,10 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
         dbLabels.length === optimisticLabels.length &&
         dbLabels.every((label: string, index: number) => label === optimisticLabels[index])
       ) {
-        removeUpdate(task.todoist_id)
+        removeTaskUpdate(task.todoist_id)
       }
     }
-  }, [task.labels, optimisticUpdate, removeUpdate, task.todoist_id])
+  }, [task.labels, optimisticUpdate, removeTaskUpdate, task.todoist_id])
 
   // Clear optimistic schedule (due date) change when DB value syncs
   useEffect(() => {
@@ -601,7 +578,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
       // Both null - cleared successfully
       if (!dbDue && !optimisticDue) {
-        removeUpdate(task.todoist_id)
+        removeTaskUpdate(task.todoist_id)
         return
       }
 
@@ -611,11 +588,11 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
         const dbDatetime = dbDue.datetime
         const optimisticDatetime = optimisticDue.datetime
         if (dbDatetime === optimisticDatetime) {
-          removeUpdate(task.todoist_id)
+          removeTaskUpdate(task.todoist_id)
         }
       }
     }
-  }, [task.due, optimisticUpdate, removeUpdate, task.todoist_id])
+  }, [task.due, optimisticUpdate, removeTaskUpdate, task.todoist_id])
 
   // Clear optimistic deadline change when DB value syncs
   useEffect(() => {
@@ -625,16 +602,16 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
       // Both null - cleared successfully
       if (!dbDeadline && !optimisticDeadline) {
-        removeUpdate(task.todoist_id)
+        removeTaskUpdate(task.todoist_id)
         return
       }
 
       // Compare deadlines - if they match, DB has synced
       if (dbDeadline && optimisticDeadline && dbDeadline.date === optimisticDeadline.date) {
-        removeUpdate(task.todoist_id)
+        removeTaskUpdate(task.todoist_id)
       }
     }
-  }, [task.deadline, optimisticUpdate, removeUpdate, task.todoist_id])
+  }, [task.deadline, optimisticUpdate, removeTaskUpdate, task.todoist_id])
 
   // Focus content input when entering edit mode
   useEffect(() => {
@@ -647,8 +624,14 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   const assignee = task.assigned_by_uid || task.responsible_uid
 
   // Use optimistic values if available, otherwise use real DB values
-  const displayContent = optimisticContent ?? task.content
-  const displayDescription = optimisticDescription ?? task.description
+  const displayContent =
+    optimisticUpdate?.type === "text-change" && optimisticUpdate.newContent !== undefined
+      ? optimisticUpdate.newContent
+      : task.content
+  const displayDescription =
+    optimisticUpdate?.type === "text-change" && optimisticUpdate.newDescription !== undefined
+      ? optimisticUpdate.newDescription
+      : task.description
 
   // Check for optimistic project move from context
   const displayProject = optimisticUpdate?.type === "project-move"

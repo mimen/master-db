@@ -1,4 +1,4 @@
-import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-react"
+import { Monitor, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 
@@ -16,7 +16,7 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <Button variant="ghost" size="icon" disabled>
-        <IconSun className="h-5 w-5" />
+        <Sun className="h-5 w-5" />
       </Button>
     )
   }
@@ -33,22 +33,22 @@ export function ThemeToggle() {
 
   const getIcon = () => {
     if (theme === "dark") {
-      return <IconMoon className="h-5 w-5" />
+      return <Moon className="h-5 w-5" />
     } else if (theme === "system") {
       return (
         <div className="relative h-5 w-5">
-          <IconDeviceDesktop className="h-5 w-5" />
+          <Monitor className="h-5 w-5" />
           <div className="absolute -bottom-0.5 -right-0.5 rounded-full bg-background border border-border" style={{ padding: '1px' }}>
             {resolvedTheme === "dark" ? (
-              <IconMoon style={{ width: '9.5px', height: '9.5px' }} strokeWidth={1.5} />
+              <Moon style={{ width: '9.5px', height: '9.5px' }} strokeWidth={1.5} />
             ) : (
-              <IconSun style={{ width: '9.5px', height: '9.5px' }} strokeWidth={1.5} />
+              <Sun style={{ width: '9.5px', height: '9.5px' }} strokeWidth={1.5} />
             )}
           </div>
         </div>
       )
     } else {
-      return <IconSun className="h-5 w-5" />
+      return <Sun className="h-5 w-5" />
     }
   }
 

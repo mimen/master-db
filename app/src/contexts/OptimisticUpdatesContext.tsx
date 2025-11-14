@@ -1,5 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from "react"
 
+// ============================================
+// TASK UPDATES
+// ============================================
+
 export type OptimisticTaskUpdate =
   | {
       taskId: string
@@ -36,44 +40,152 @@ export type OptimisticTaskUpdate =
       newDeadline: { date: string } | null
       timestamp: number
     }
+  | {
+      taskId: string
+      type: "text-change"
+      newContent?: string
+      newDescription?: string
+      timestamp: number
+    }
+
+// ============================================
+// PROJECT UPDATES
+// ============================================
+
+export type OptimisticProjectUpdate = {
+  projectId: string
+  newName?: string
+  newDescription?: string
+  newPriority?: number
+  timestamp: number
+}
+
+// ============================================
+// COMBINED TYPE
+// ============================================
+
+export type OptimisticUpdate = OptimisticTaskUpdate | OptimisticProjectUpdate
 
 interface OptimisticUpdatesContextValue {
+  // Task updates
+  taskUpdates: Map<string, OptimisticTaskUpdate>
+  addTaskUpdate: (update: OptimisticTaskUpdate) => void
+  removeTaskUpdate: (taskId: string) => void
+  getTaskUpdate: (taskId: string) => OptimisticTaskUpdate | undefined
+
+  // Project updates
+  projectUpdates: Map<string, OptimisticProjectUpdate>
+  addProjectUpdate: (update: OptimisticProjectUpdate) => void
+  removeProjectUpdate: (projectId: string) => void
+  getProjectUpdate: (projectId: string) => OptimisticProjectUpdate | undefined
+
+  // Legacy compatibility (deprecated - use task-specific methods)
+  /** @deprecated Use taskUpdates instead */
   pendingUpdates: Map<string, OptimisticTaskUpdate>
+  /** @deprecated Use addTaskUpdate instead */
   addUpdate: (update: OptimisticTaskUpdate) => void
+  /** @deprecated Use removeTaskUpdate instead */
   removeUpdate: (taskId: string) => void
+  /** @deprecated Use getTaskUpdate instead */
   getUpdate: (taskId: string) => OptimisticTaskUpdate | undefined
 }
 
 const OptimisticUpdatesContext = createContext<OptimisticUpdatesContextValue | null>(null)
 
 export function OptimisticUpdatesProvider({ children }: { children: ReactNode }) {
-  const [pendingUpdates, setPendingUpdates] = useState<Map<string, OptimisticTaskUpdate>>(
+  const [taskUpdates, setTaskUpdates] = useState<Map<string, OptimisticTaskUpdate>>(new Map())
+  const [projectUpdates, setProjectUpdates] = useState<Map<string, OptimisticProjectUpdate>>(
     new Map()
   )
 
-  const addUpdate = (update: OptimisticTaskUpdate) => {
-    setPendingUpdates((prev) => {
+  // Task update methods
+  const addTaskUpdate = (update: OptimisticTaskUpdate) => {
+    setTaskUpdates((prev) => {
       const next = new Map(prev)
-      next.set(update.taskId, update)
+      const existing = next.get(update.taskId)
+
+      // Merge text-change updates to support simultaneous content + description changes
+      if (existing?.type === "text-change" && update.type === "text-change") {
+        next.set(update.taskId, {
+          ...existing,
+          ...update,
+          // Preserve existing fields not in new update
+          newContent: update.newContent ?? existing.newContent,
+          newDescription: update.newDescription ?? existing.newDescription,
+          timestamp: update.timestamp
+        })
+      } else {
+        next.set(update.taskId, update)
+      }
+
       return next
     })
   }
 
-  const removeUpdate = (taskId: string) => {
-    setPendingUpdates((prev) => {
+  const removeTaskUpdate = (taskId: string) => {
+    setTaskUpdates((prev) => {
       const next = new Map(prev)
       next.delete(taskId)
       return next
     })
   }
 
-  const getUpdate = (taskId: string): OptimisticTaskUpdate | undefined => {
-    return pendingUpdates.get(taskId)
+  const getTaskUpdate = (taskId: string): OptimisticTaskUpdate | undefined => {
+    return taskUpdates.get(taskId)
+  }
+
+  // Project update methods
+  const addProjectUpdate = (update: OptimisticProjectUpdate) => {
+    setProjectUpdates((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(update.projectId)
+
+      // Merge with existing update to support simultaneous name + description changes
+      if (existing) {
+        next.set(update.projectId, {
+          ...existing,
+          ...update,
+          timestamp: update.timestamp
+        })
+      } else {
+        next.set(update.projectId, update)
+      }
+
+      return next
+    })
+  }
+
+  const removeProjectUpdate = (projectId: string) => {
+    setProjectUpdates((prev) => {
+      const next = new Map(prev)
+      next.delete(projectId)
+      return next
+    })
+  }
+
+  const getProjectUpdate = (projectId: string): OptimisticProjectUpdate | undefined => {
+    return projectUpdates.get(projectId)
   }
 
   return (
     <OptimisticUpdatesContext.Provider
-      value={{ pendingUpdates, addUpdate, removeUpdate, getUpdate }}
+      value={{
+        // Task updates
+        taskUpdates,
+        addTaskUpdate,
+        removeTaskUpdate,
+        getTaskUpdate,
+        // Project updates
+        projectUpdates,
+        addProjectUpdate,
+        removeProjectUpdate,
+        getProjectUpdate,
+        // Legacy compatibility (point to task methods)
+        pendingUpdates: taskUpdates,
+        addUpdate: addTaskUpdate,
+        removeUpdate: removeTaskUpdate,
+        getUpdate: getTaskUpdate
+      }}
     >
       {children}
     </OptimisticUpdatesContext.Provider>

@@ -4,8 +4,9 @@ import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useDialogContext } from "@/contexts/DialogContext"
-import { api } from "@/convex/_generated/api"
-import { useTodoistAction } from "@/hooks/useTodoistAction"
+import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
+import { useOptimisticProjectDescription } from "@/hooks/useOptimisticProjectDescription"
+import { useOptimisticProjectName } from "@/hooks/useOptimisticProjectName"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
@@ -23,39 +24,24 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
   const [editName, setEditName] = useState(project.name)
   const [editDescription, setEditDescription] = useState(project.metadata?.description || "")
   const [isHovered, setIsHovered] = useState(false)
-  // UI-level optimistic values - shown while waiting for DB sync
-  const [optimisticName, setOptimisticName] = useState<string | null>(null)
-  const [optimisticDescription, setOptimisticDescription] = useState<string | null>(null)
-  const lastSyncedNameRef = useRef(project.name)
-  const lastSyncedDescriptionRef = useRef(project.metadata?.description ?? "")
   const nameInputRef = useRef<HTMLInputElement>(null)
   const descriptionInputRef = useRef<HTMLInputElement>(null)
 
   const { openPriority, openArchive } = useDialogContext()
+  const { getProjectUpdate, removeProjectUpdate } = useOptimisticUpdates()
 
-  const updateProjectName = useTodoistAction(
-    api.todoist.publicActions.updateProjectName,
-    {
-      loadingMessage: "Updating project name...",
-      successMessage: "Project name updated!",
-      errorMessage: "Failed to update project name"
-    }
-  )
+  const updateProjectName = useOptimisticProjectName()
+  const updateProjectDescription = useOptimisticProjectDescription()
 
-  const updateProjectDescription = useTodoistAction(
-    api.todoist.publicActions.updateProjectMetadataDescription,
-    {
-      loadingMessage: "Updating description...",
-      successMessage: "Description updated!",
-      errorMessage: "Failed to update description"
-    }
-  )
-
-  const priority = usePriority(project.metadata?.priority)
+  // Get optimistic update from context
+  const optimisticUpdate = getProjectUpdate(project.todoist_id)
 
   // Use optimistic values if available, otherwise use real DB values
-  const displayName = optimisticName ?? project.name
-  const displayDescription = optimisticDescription ?? project.metadata?.description
+  const displayName = optimisticUpdate?.newName ?? project.name
+  const displayDescription = optimisticUpdate?.newDescription ?? project.metadata?.description
+  const displayPriority = optimisticUpdate?.newPriority ?? project.metadata?.priority
+
+  const priority = usePriority(displayPriority)
 
   const activeCount = project.stats.activeCount
 
@@ -98,9 +84,6 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
     setShowDescriptionInput(false)
     setEditName(project.name)
     setEditDescription(project.metadata?.description || "")
-    // Clear any optimistic values when canceling
-    setOptimisticName(null)
-    setOptimisticDescription(null)
   }
 
   const saveEditing = async () => {
@@ -112,51 +95,19 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       return
     }
 
-    // STEP 1: Set UI-level optimistic values immediately (0ms - instant!)
-    if (hasNameChanged) setOptimisticName(editName)
-    if (hasDescriptionChanged) setOptimisticDescription(editDescription)
-
-    // STEP 2: Exit edit mode - optimistic values will show immediately
+    // Exit edit mode - optimistic values will show immediately
     setIsEditing(false)
     setShowDescriptionInput(false)
 
-    // STEP 3: Fire actions in background (calls API + syncs to DB on success)
+    // Fire optimistic updates (instant UI + background API calls)
     if (hasNameChanged) {
-      const result = await updateProjectName({
-        projectId: project.todoist_id,
-        name: editName
-      })
-      if (result === null) {
-        setOptimisticName(null)
-      }
+      await updateProjectName(project.todoist_id, editName)
     }
 
     if (hasDescriptionChanged) {
-      const result = await updateProjectDescription({
-        projectId: project.todoist_id,
-        description: editDescription
-      })
-      if (result === null) {
-        setOptimisticDescription(null)
-      }
+      await updateProjectDescription(project.todoist_id, editDescription)
     }
   }
-
-  // Clear optimistic values when DB value changes (API completed and synced)
-  useEffect(() => {
-    if (project.name !== lastSyncedNameRef.current) {
-      lastSyncedNameRef.current = project.name
-      setOptimisticName(null)
-    }
-  }, [project.name])
-
-  useEffect(() => {
-    const normalizedDescription = project.metadata?.description ?? ""
-    if (normalizedDescription !== lastSyncedDescriptionRef.current) {
-      lastSyncedDescriptionRef.current = normalizedDescription
-      setOptimisticDescription(null)
-    }
-  }, [project.metadata?.description])
 
   // Focus name input when entering edit mode
   useEffect(() => {
@@ -169,6 +120,43 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
   const handleArchive = () => {
     openArchive(project)
   }
+
+  // Clear optimistic updates when DB syncs (success case)
+  useEffect(() => {
+    const update = getProjectUpdate(project.todoist_id)
+    if (!update) return
+
+    let shouldClear = false
+
+    // If optimistic name matches DB, name update completed
+    if (update.newName !== undefined && update.newName === project.name) {
+      shouldClear = true
+    }
+
+    // If optimistic description matches DB, description update completed
+    if (
+      update.newDescription !== undefined &&
+      update.newDescription === (project.metadata?.description ?? "")
+    ) {
+      shouldClear = true
+    }
+
+    // If optimistic priority matches DB, priority update completed
+    if (update.newPriority !== undefined && update.newPriority === project.metadata?.priority) {
+      shouldClear = true
+    }
+
+    if (shouldClear) {
+      removeProjectUpdate(project.todoist_id)
+    }
+  }, [
+    project.todoist_id,
+    project.name,
+    project.metadata?.description,
+    project.metadata?.priority,
+    getProjectUpdate,
+    removeProjectUpdate
+  ])
 
   return (
     <div

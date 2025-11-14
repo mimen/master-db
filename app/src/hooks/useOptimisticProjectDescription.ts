@@ -1,0 +1,29 @@
+import { api } from "@/convex/_generated/api"
+
+import { createOptimisticProjectHook } from "./createOptimisticHook"
+
+/**
+ * Centralized hook for project description updates with optimistic updates
+ *
+ * - Adds project to optimistic context immediately (description changes instantly)
+ * - Calls updateProjectMetadataDescription API
+ * - On failure: removes optimistic update to revert description
+ * - On success: description stays updated (Convex syncs naturally)
+ */
+export const useOptimisticProjectDescription = createOptimisticProjectHook<[string]>({
+  actionPath: api.todoist.publicActions.updateProjectMetadataDescription,
+  messages: {
+    loading: "Updating description...",
+    success: "Description updated!",
+    error: "Failed to update description"
+  },
+  createUpdate: (projectId, newDescription) => ({
+    projectId,
+    newDescription,
+    timestamp: Date.now()
+  }),
+  createActionArgs: (projectId, newDescription) => ({
+    projectId,
+    description: newDescription
+  })
+})

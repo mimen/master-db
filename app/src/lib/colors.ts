@@ -55,7 +55,3 @@ export const PRIORITY_COLORS = {
   3: "#f97316", // orange-500
   4: "#ef4444", // red-500
 } as const
-
-export function getPriorityColor(priority: number): string {
-  return PRIORITY_COLORS[priority as keyof typeof PRIORITY_COLORS] || "#d1d5db"
-}
