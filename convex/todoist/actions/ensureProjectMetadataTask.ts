@@ -28,22 +28,45 @@ export const ensureProjectMetadataTask = action({
       );
 
       if (metadata?.source_task_id) {
-        // Metadata task already exists
-        return {
-          success: true,
-          data: {
-            taskId: metadata.source_task_id,
-            created: false,
-          },
-        };
+        // Verify the task actually exists in Todoist
+        const client = getTodoistClient();
+        try {
+          await client.getTask(metadata.source_task_id);
+          // Task exists in Todoist - we're good!
+          return {
+            success: true,
+            data: {
+              taskId: metadata.source_task_id,
+              created: false,
+            },
+          };
+        } catch (error) {
+          // Task was deleted in Todoist - need to create a new one
+          console.warn("Metadata task was deleted, creating new one:", error);
+          // Fall through to create new task - extractProjectMetadata will update the record
+        }
       }
 
       // Need to create the metadata task
       const client = getTodoistClient();
 
-      // Create task with project-metadata label
+      // Get the project to use its name
+      const project = await ctx.runQuery(
+        api.todoist.queries.getProjects.getProjectByTodoistId,
+        { todoistId: projectId }
+      );
+
+      if (!project) {
+        return {
+          success: false,
+          error: "Project not found",
+          code: "PROJECT_NOT_FOUND",
+        };
+      }
+
+      // Create task with project name as content
       const task = await client.addTask({
-        content: "*",  // Convention: metadata tasks start with *
+        content: project.name,  // Use project name as task content
         projectId,
         labels: ["project-metadata"],
         priority: 1,  // Default to P4 (normal)

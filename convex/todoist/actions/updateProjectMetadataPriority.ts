@@ -45,7 +45,30 @@ export const updateProjectMetadataPriority = action({
 
       // Update the task's priority in Todoist
       const client = getTodoistClient();
-      const task = await client.updateTask(taskId, { priority });
+      let task: Task;
+
+      try {
+        task = await client.updateTask(taskId, { priority });
+      } catch (updateError) {
+        // Task might have been deleted - recreate it and try again
+        console.warn("Metadata task not found, recreating:", updateError);
+
+        const ensureResult = await ctx.runAction(
+          api.todoist.actions.ensureProjectMetadataTask.ensureProjectMetadataTask,
+          { projectId }
+        );
+
+        if (!ensureResult.success || !ensureResult.data) {
+          return {
+            success: false,
+            error: "Failed to recreate metadata task.",
+            code: "METADATA_TASK_RECREATION_FAILED",
+          };
+        }
+
+        taskId = ensureResult.data.taskId;
+        task = await client.updateTask(taskId, { priority });
+      }
 
       // Sync the task to Convex
       await ctx.runMutation(internal.todoist.mutations.updateItem, {

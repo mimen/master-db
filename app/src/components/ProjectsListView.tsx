@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { api } from "@/convex/_generated/api"
+import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import { cn } from "@/lib/utils"
 import type { ListInstance } from "@/lib/views/types"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
@@ -75,6 +76,15 @@ export function ProjectsListView({
 
   projectRefs.current.length = visibleProjects.length
   refHandlers.current.length = visibleProjects.length
+
+  const focusedProject =
+    focusedProjectIndex !== null &&
+    focusedProjectIndex >= 0 &&
+    focusedProjectIndex < visibleProjects.length
+      ? visibleProjects[focusedProjectIndex]
+      : null
+
+  useProjectDialogShortcuts(focusedProject)
 
   useEffect(() => {
     onProjectCountChange?.(list.id, visibleProjects.length)
