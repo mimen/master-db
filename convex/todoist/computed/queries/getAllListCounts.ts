@@ -22,6 +22,7 @@ import { query } from "../../../_generated/server";
  * - list:priority:p3 -> P3 task count (API priority 2)
  * - list:priority:p4 -> P4 task count (API priority 1)
  * - list:project:${projectId} -> project task count
+ * - list:projects -> active projects count
  * - list:label:${labelName} -> label task count
  */
 export const getAllListCounts = query({
@@ -164,6 +165,9 @@ export const getAllListCounts = query({
       ).length;
       counts[`list:label:${label.name}`] = count;
     }
+
+    // Projects count (total active projects)
+    counts['list:projects'] = projects.length;
 
     return counts;
   },

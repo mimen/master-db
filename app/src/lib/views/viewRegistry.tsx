@@ -56,6 +56,17 @@ function expandInbox(viewKey: ViewKey, startIndex: number): ListInstance[] {
   ]
 }
 
+function expandProjects(viewKey: ViewKey, startIndex: number): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.projects, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }),
+  ]
+}
+
 function expandTimeRange(
   viewKey: ViewKey,
   startIndex: number,
@@ -310,9 +321,8 @@ const viewPatterns: ViewPattern[] = [
         title: "Projects",
         icon: getViewIcon("view:projects", { size: "sm" }),
       },
-      buildLists: () => {
-        // Placeholder - will be implemented in Milestone 3
-        return []
+      buildLists: (viewKey, startIndex) => {
+        return expandProjects(viewKey, startIndex)
       },
     }),
   },

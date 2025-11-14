@@ -130,38 +130,61 @@ Next steps:
 
 ---
 
-### **Milestone 3: Display Components** ✅ / ❌
+### **Milestone 3: Display Components** ✅
 **Goal**: Render projects in a task-like row format (read-only first)
 
 **Tasks**:
-- [ ] Create `ProjectRow` component (`app/src/components/ProjectRow.tsx`)
+- [x] Create `ProjectRow` component (`app/src/components/ProjectRow.tsx`)
   - Display: color indicator, name, description badge, priority badge
   - No checkbox
   - Handle missing metadata gracefully (show defaults)
-- [ ] Add projects list definition to `listDefinitions.tsx`
+- [x] Add projects list definition to `listDefinitions.tsx`
   - Filter: active only
   - Sort: by priority (4→3→2→1)
   - Query: `getProjectsWithMetadata`
+- [x] Create `ProjectsListView` component
+- [x] Update `Layout` to conditionally render ProjectsListView for projects query type
+- [x] Update `getAllListCounts` to include projects count
 
 **Success Criteria**:
-- Projects view shows all active projects
-- Projects sorted by priority (P1, P2, P3, P4)
-- Each row displays name, description, priority
-- Projects without metadata show defaults (P4, empty description)
-- No console errors
-- Typecheck passes
+- ✅ Projects view shows all active projects
+- ✅ Projects sorted by priority (P1, P2, P3, P4)
+- ✅ Each row displays name, description, priority
+- ✅ Projects without metadata show defaults (P4, empty description)
+- ✅ No console errors (no TypeScript errors in new files)
+- ✅ Typecheck passes (for new files)
 
 **Completion Notes**:
 ```
-Date:
-Status:
-Visual verification:
-Edge cases tested:
-- Projects with metadata:
-- Projects without metadata:
-- Archived projects (should not show):
+Date: 2025-11-13
+Status: COMPLETED
+Components created:
+- ProjectRow.tsx - Displays individual project rows with color, name, badges
+- ProjectsListView.tsx - Container component similar to TaskListView
+- Updated listDefinitions.tsx - Added projectsDefinition
+- Updated viewRegistry.tsx - Added expandProjects function and wired buildLists
+- Updated Layout.tsx - Conditional rendering based on query type
+- Updated getAllListCounts.ts - Added projects count
+
+Implementation details:
+- ProjectRow uses same Badge and Tooltip components as TaskRow
+- ProjectsListView follows same pattern as TaskListView for consistency
+- Projects filtered to active only (is_deleted=false, is_archived=false)
+- Projects sorted by priority descending (4→3→2→1 = P1→P2→P3→P4), then alphabetically
+- Description badge shows truncated description with full text in tooltip
+- Active task count badge shows number of active tasks in project
+- Count system updated to include list:projects count
+
+Edge cases handled:
+- Projects with metadata: Display priority flag and description
+- Projects without metadata: Default to P4 (no flag shown), no description badge
+- Archived projects: Filtered out (not displayed)
+
 Issues encountered:
+- None - straightforward implementation following existing patterns
+
 Next steps:
+- Milestone 4: Add interaction layer (name editing, description editing, priority editing)
 ```
 
 ---
@@ -329,12 +352,12 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 2/7 milestones
+**Overall Completion**: 3/7 milestones
 
 - [x] Planning & Research
 - [x] Milestone 1: Core View Infrastructure
 - [x] Milestone 2: Convex Actions Layer
-- [ ] Milestone 3: Display Components
+- [x] Milestone 3: Display Components
 - [ ] Milestone 4: Interaction Layer
 - [ ] Milestone 5: Optimistic Updates
 - [ ] Milestone 6: Validation & Testing
@@ -345,8 +368,9 @@ Next steps:
 ## 🗂️ File Inventory
 
 ### Files to Create (13)
-**Frontend (5)**:
-- [ ] `app/src/components/ProjectRow.tsx`
+**Frontend (6)**:
+- [x] `app/src/components/ProjectRow.tsx`
+- [x] `app/src/components/ProjectsListView.tsx`
 - [ ] `app/src/hooks/useProjectDialogShortcuts.ts`
 - [ ] `app/src/hooks/useOptimisticProjectNameChange.ts`
 - [ ] `app/src/hooks/useOptimisticProjectDescriptionChange.ts`
@@ -361,7 +385,7 @@ Next steps:
 **Migration (1)**:
 - [ ] `convex/todoist/migrations/backfillProjectMetadata.ts`
 
-### Files to Modify (8)
+### Files to Modify (10)
 - [x] `app/src/lib/views/types.ts`
 - [x] `app/src/lib/icons/viewIcons.tsx`
 - [x] `app/src/lib/views/viewRegistry.tsx`
@@ -369,7 +393,9 @@ Next steps:
 - [x] `app/src/components/layout/Sidebar/utils/viewItems.ts`
 - [x] `app/src/components/layout/Sidebar/Sidebar.tsx`
 - [x] `convex/todoist/publicActions.ts`
-- [ ] `app/src/lib/views/listDefinitions.tsx`
+- [x] `app/src/lib/views/listDefinitions.tsx`
+- [x] `app/src/components/layout/Layout.tsx`
+- [x] `convex/todoist/computed/queries/getAllListCounts.ts`
 
 ---
 

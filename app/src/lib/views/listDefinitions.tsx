@@ -291,12 +291,38 @@ const labelDefinition: ListDefinition<{ label: string }> = {
   }),
 }
 
+const projectsDefinition: ListDefinition = {
+  key: "list:projects",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  dependencies: {
+    projectMetadata: true,
+  },
+  buildQuery: (): ListQueryInput => ({ type: "projects" }),
+  getHeader: ({ taskCount }) => {
+    const icon = getViewIcon("view:projects", { size: "lg", className: "mr-3" })
+
+    return {
+      title: "Projects",
+      description: `${taskCount} active projects`,
+      icon,
+    }
+  },
+  getEmptyState: () => ({
+    title: "No projects yet!",
+    description: "Create your first project in Todoist",
+  }),
+}
+
 export const listDefinitions = {
   inbox: inboxDefinition,
   time: timeDefinition,
   project: projectDefinition,
   priority: priorityDefinition,
   label: labelDefinition,
+  projects: projectsDefinition,
 } as const
 
 export type ListDefinitionKey = keyof typeof listDefinitions

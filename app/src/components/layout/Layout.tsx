@@ -1,7 +1,9 @@
 import { useQuery } from "convex/react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import { ProjectsListView } from "../ProjectsListView"
 import { TaskListView } from "../TaskListView"
+import { ThemeToggle } from "../ThemeToggle"
 
 import { Sidebar } from "./Sidebar"
 
@@ -159,22 +161,45 @@ export function Layout() {
               {totalTaskCount}
             </Badge>
           )}
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
         </header>
         <ScrollArea className="h-[calc(100vh-4rem)]" data-task-scroll-container>
           <main className="space-y-6 p-6">
-            {activeView.lists.map((list) => (
-              <TaskListView
-                key={list.id}
-                list={list}
-                onTaskCountChange={handleTaskCountChangeWithUpdate}
-                onTaskClick={handleTaskClick}
-                focusedTaskIndex={selection.listId === list.id ? selection.taskIndex : null}
-                isDismissed={dismissedLists.has(list.id)}
-                onDismiss={handleDismissList}
-                onRestore={handleRestoreList}
-                isMultiListView={isMultiListView}
-              />
-            ))}
+            {activeView.lists.map((list) => {
+              // Render ProjectsListView for projects-type queries
+              if (list.query.type === "projects") {
+                return (
+                  <ProjectsListView
+                    key={list.id}
+                    list={list}
+                    onProjectCountChange={handleTaskCountChangeWithUpdate}
+                    onProjectClick={handleTaskClick}
+                    focusedProjectIndex={selection.listId === list.id ? selection.taskIndex : null}
+                    isDismissed={dismissedLists.has(list.id)}
+                    onDismiss={handleDismissList}
+                    onRestore={handleRestoreList}
+                    isMultiListView={isMultiListView}
+                  />
+                )
+              }
+
+              // Render TaskListView for all other query types
+              return (
+                <TaskListView
+                  key={list.id}
+                  list={list}
+                  onTaskCountChange={handleTaskCountChangeWithUpdate}
+                  onTaskClick={handleTaskClick}
+                  focusedTaskIndex={selection.listId === list.id ? selection.taskIndex : null}
+                  isDismissed={dismissedLists.has(list.id)}
+                  onDismiss={handleDismissList}
+                  onRestore={handleRestoreList}
+                  isMultiListView={isMultiListView}
+                />
+              )
+            })}
           </main>
         </ScrollArea>
       </SidebarInset>
