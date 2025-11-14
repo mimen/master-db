@@ -674,14 +674,23 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                     void handleComplete()
                   }}
                   className={cn(
-                    "group/checkbox mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all",
-                    priority?.colorClass
-                      ? cn("border-current", priority.colorClass)
-                      : "border-muted-foreground/40 hover:border-muted-foreground/60 hover:bg-accent"
+                    "group/checkbox mt-0.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full border transition-all duration-150",
+                    "ring-1",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    priority?.colorClass === "text-red-500"
+                      ? "text-red-500 border-red-500/60 ring-red-500/100 hover:bg-red-500 hover:ring-red-500/10"
+                      : priority?.colorClass === "text-orange-500"
+                      ? "text-orange-500 border-orange-500/60 ring-orange-500/100 hover:bg-orange-500 hover:ring-orange-500/10"
+                      : priority?.colorClass === "text-blue-500"
+                      ? "text-blue-500 border-blue-500/60 ring-blue-500/100 hover:bg-blue-500 hover:ring-blue-500/10"
+                      : "border-foreground/20 ring-foreground/60 hover:border-foreground hover:bg-foreground/80 hover:ring-foreground/10"
                   )}
                   aria-label="Complete task"
                 >
-                  <Check className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover/checkbox:opacity-100" />
+                  <Check
+                    className="h-3 w-3 text-background opacity-0 transition-opacity duration-150 group-hover/checkbox:opacity-100"
+                    strokeWidth={3}
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent>
