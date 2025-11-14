@@ -1,10 +1,60 @@
 import { Doc } from "../../_generated/dataModel";
 
 // Type definitions for queue processing
-export interface QueueFilter {
-  type: "project" | "priority" | "label" | "date" | "custom" | "assignee" | "projectPriority";
+export type QueueFilter =
+  | ProjectFilter
+  | PriorityFilter
+  | LabelFilter
+  | DateFilter
+  | CustomFilter
+  | AssigneeFilter
+  | ProjectPriorityFilter;
+
+export interface ProjectFilter {
+  type: "project";
   mode?: "include" | "exclude";
-  [key: string]: any;
+  projectIds: string[];
+  includeSubprojects?: boolean;
+}
+
+export interface PriorityFilter {
+  type: "priority";
+  mode?: "include" | "exclude";
+  priorities?: number[];
+  minPriority?: number;
+}
+
+export interface LabelFilter {
+  type: "label";
+  mode?: "include" | "exclude";
+  labels: string[];
+}
+
+export interface DateFilter {
+  type: "date";
+  mode?: "include" | "exclude";
+  range: string;
+  includeDeadlines?: boolean;
+  combineDueAndDeadline?: boolean;
+}
+
+export interface CustomFilter {
+  type: "custom";
+  mode?: "include" | "exclude";
+  condition: string;
+}
+
+export interface AssigneeFilter {
+  type: "assignee";
+  mode?: "include" | "exclude";
+  filter: string;
+}
+
+export interface ProjectPriorityFilter {
+  type: "projectPriority";
+  mode?: "include" | "exclude";
+  priorities?: number[];
+  minPriority?: number;
 }
 
 export interface OrderingRule {
@@ -37,8 +87,8 @@ const getDateComparisons = () => {
 };
 
 // Filter implementation functions
-const applyProjectFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): Doc<"todoist_items">[] => {
-  const { projectIds, includeSubprojects = false, mode = "include" } = filter;
+const applyProjectFilter = (items: Doc<"todoist_items">[], filter: ProjectFilter): Doc<"todoist_items">[] => {
+  const { projectIds, includeSubprojects: _includeSubprojects = false, mode = "include" } = filter;
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
     if (!item.project_id) return false;
@@ -53,14 +103,14 @@ const applyProjectFilter = (items: Doc<"todoist_items">[], filter: QueueFilter):
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyPriorityFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): Doc<"todoist_items">[] => {
+const applyPriorityFilter = (items: Doc<"todoist_items">[], filter: PriorityFilter): Doc<"todoist_items">[] => {
   const { priorities, minPriority, mode = "include" } = filter;
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
     if (priorities && priorities.length > 0) {
       return priorities.includes(item.priority);
     }
-    if (minPriority !== undefined) {
+    if (minPriority !== undefined && minPriority !== null) {
       return item.priority >= minPriority;
     }
     return true;
@@ -71,7 +121,7 @@ const applyPriorityFilter = (items: Doc<"todoist_items">[], filter: QueueFilter)
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyLabelFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): Doc<"todoist_items">[] => {
+const applyLabelFilter = (items: Doc<"todoist_items">[], filter: LabelFilter): Doc<"todoist_items">[] => {
   const { labels, mode = "include" } = filter;
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
@@ -84,7 +134,7 @@ const applyLabelFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): D
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyDateFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): Doc<"todoist_items">[] => {
+const applyDateFilter = (items: Doc<"todoist_items">[], filter: DateFilter): Doc<"todoist_items">[] => {
   const { range, includeDeadlines = false, combineDueAndDeadline = false, mode = "include" } = filter;
   const { todayISO, tomorrowISO, next7DaysISO } = getDateComparisons();
 
@@ -132,15 +182,16 @@ const applyDateFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): Do
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyCustomFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): Doc<"todoist_items">[] => {
+const applyCustomFilter = (items: Doc<"todoist_items">[], filter: CustomFilter): Doc<"todoist_items">[] => {
   const { condition, mode = "include" } = filter;
   const { todayISO } = getDateComparisons();
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
     switch (condition) {
-      case "overdue":
+      case "overdue": {
         const dueDate = item.due?.date;
         return dueDate ? dueDate.split('T')[0] < todayISO : false;
+      }
       case "no-date":
         return !item.due?.date && !item.deadline?.date;
       case "has-subtasks":
@@ -162,7 +213,7 @@ const applyCustomFilter = (items: Doc<"todoist_items">[], filter: QueueFilter): 
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyAssigneeFilter = (items: Doc<"todoist_items">[], filter: QueueFilter, currentUserId?: string): Doc<"todoist_items">[] => {
+const applyAssigneeFilter = (items: Doc<"todoist_items">[], filter: AssigneeFilter, currentUserId?: string): Doc<"todoist_items">[] => {
   const { filter: assigneeFilter, mode = "include" } = filter;
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
@@ -187,7 +238,7 @@ const applyAssigneeFilter = (items: Doc<"todoist_items">[], filter: QueueFilter,
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyProjectPriorityFilter = (items: Doc<"todoist_items">[], filter: QueueFilter, projectMetadata?: Map<string, any>): Doc<"todoist_items">[] => {
+const applyProjectPriorityFilter = (items: Doc<"todoist_items">[], filter: ProjectPriorityFilter, projectMetadata?: Map<string, Doc<"todoist_project_metadata">>): Doc<"todoist_items">[] => {
   const { priorities, minPriority, mode = "include" } = filter;
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
@@ -197,7 +248,7 @@ const applyProjectPriorityFilter = (items: Doc<"todoist_items">[], filter: Queue
     if (priorities && priorities.length > 0) {
       return priorities.includes(projectPriority);
     }
-    if (minPriority !== undefined) {
+    if (minPriority !== undefined && minPriority !== null) {
       return projectPriority >= minPriority;
     }
     return true;
@@ -213,7 +264,7 @@ export const applyQueueFilters = (
   items: Doc<"todoist_items">[],
   filters: QueueFilter[],
   currentUserId?: string,
-  projectMetadata?: Map<string, any>
+  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>
 ): Doc<"todoist_items">[] => {
   let filteredItems = items;
 
@@ -247,7 +298,7 @@ export const applyQueueFilters = (
 };
 
 // Sort value extraction functions
-const getSortValue = (item: Doc<"todoist_items">, field: string, projectMetadata?: Map<string, any>): any => {
+const getSortValue = (item: Doc<"todoist_items">, field: string, projectMetadata?: Map<string, Doc<"todoist_project_metadata">>): string | number | boolean | null | undefined => {
   switch (field) {
     case "priority":
       return item.priority;
@@ -276,7 +327,7 @@ const getSortValue = (item: Doc<"todoist_items">, field: string, projectMetadata
 export const applyQueueOrdering = (
   items: Doc<"todoist_items">[],
   ordering: OrderingRule[],
-  projectMetadata?: Map<string, any>
+  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>
 ): Doc<"todoist_items">[] => {
   if (ordering.length === 0) {
     return items.sort((a, b) => a.child_order - b.child_order);
@@ -317,7 +368,7 @@ export const processQueue = (
   items: Doc<"todoist_items">[],
   config: QueueConfig,
   currentUserId?: string,
-  projectMetadata?: Map<string, any>
+  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>
 ): Doc<"todoist_items">[] => {
   // Apply filters
   let processedItems = applyQueueFilters(items, config.filters, currentUserId, projectMetadata);

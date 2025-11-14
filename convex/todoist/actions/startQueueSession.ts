@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 
-import { api } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { internal } from "../../_generated/api";
+import { ActionCtx, action } from "../../_generated/server";
 
 /**
  * Start a new queue session - creates queue state and returns initial task
  */
-export const startQueueSession: any = action({
+export const startQueueSession = action({
   args: {
     queueType: v.union(
       v.literal("priority"),
@@ -20,29 +20,32 @@ export const startQueueSession: any = action({
       max_tasks: v.optional(v.number()),
     })),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx: ActionCtx, args) => {
     // Get tasks based on queue type
     let tasks;
     const queueId = `${args.queueType}-${Date.now()}`;
 
     switch (args.queueType) {
       case "priority":
-        tasks = await ctx.runQuery(api.todoist.publicQueries.getPriorityQueue, {
+        // @ts-expect-error - Type resolution issue with generated API
+        tasks = await ctx.runQuery(internal.todoist.queries.getPriorityQueue, {
           max_tasks: args.queueOptions?.max_tasks || 7,
         });
         break;
 
       case "focused":
-        tasks = await ctx.runQuery(api.todoist.publicQueries.getFocusedTasks, {
-          context: args.queueOptions?.context as any,
-          timeframe: args.queueOptions?.timeframe as any,
+        // @ts-expect-error - Type resolution issue with generated API
+        tasks = await ctx.runQuery(internal.todoist.queries.getFocusedTasks, {
+          context: args.queueOptions?.context,
+          timeframe: args.queueOptions?.timeframe,
           limit: args.queueOptions?.max_tasks || 10,
         });
         break;
 
       case "context":
-        tasks = await ctx.runQuery(api.todoist.publicQueries.getContextBatch, {
-          context_type: args.queueOptions?.context_type as any,
+        // @ts-expect-error - Type resolution issue with generated API
+        tasks = await ctx.runQuery(internal.todoist.queries.getContextBatch, {
+          context_type: args.queueOptions?.context_type,
           max_tasks: args.queueOptions?.max_tasks || 8,
         });
         break;
@@ -60,17 +63,19 @@ export const startQueueSession: any = action({
     }
 
     // Create task snapshot (just the IDs in order)
-    const taskSnapshot = tasks.map((task: any) => task.todoist_id);
+    const taskSnapshot = tasks.map((task: { todoist_id: string }) => task.todoist_id);
 
     // Create queue state
-    const queueStateId = await ctx.runMutation(api.todoist.publicMutations.createQueueState, {
+    // @ts-expect-error - Type resolution issue with generated API
+    const queueStateId = await ctx.runMutation(internal.todoist.publicMutations.createQueueState, {
       queueId,
       taskSnapshot,
       currentIndex: 0,
     });
 
     // Get the queue state with current task
-    const queueState = await ctx.runQuery(api.todoist.publicQueries.getQueueState, {
+    // @ts-expect-error - Type resolution issue with generated API
+    const queueState = await ctx.runQuery(internal.todoist.queries.getQueueState, {
       queueId,
     });
 
