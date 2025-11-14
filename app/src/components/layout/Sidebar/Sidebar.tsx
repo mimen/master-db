@@ -15,6 +15,7 @@ import {
   SidebarContent,
   SidebarHeader,
 } from "@/components/ui/sidebar"
+import { useCountRegistry } from "@/contexts/CountContext"
 import type { ViewKey, ViewSelection } from "@/lib/views/types"
 
 interface SidebarProps {
@@ -26,12 +27,10 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
   const {
     projectTree,
     labels,
-    timeFilterCounts,
-    priorityFilterCounts,
-    labelFilterCounts,
-    inboxProject,
     viewContext,
   } = useSidebarData()
+
+  const { getCountForView } = useCountRegistry()
 
   const {
     expandNested,
@@ -49,7 +48,11 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
 
   const { setIsHovered } = useSidebarHover()
 
-  const viewItems = buildViewItems(inboxProject?.stats.activeCount || null)
+  // Use CountRegistry for all view counts
+  const inboxCount = getCountForView("view:inbox", viewContext)
+  const priorityQueueCount = getCountForView("view:multi:priority-queue", viewContext)
+
+  const viewItems = buildViewItems(inboxCount, priorityQueueCount)
 
   return (
     <SidebarPrimitive
@@ -79,7 +82,6 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               currentViewKey={currentViewKey}
               onViewChange={onViewChange}
               viewContext={viewContext}
-              counts={timeFilterCounts}
               isCollapsed={collapsed.time}
               onToggleCollapse={() => toggleSection("time")}
             />
@@ -104,7 +106,6 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               currentViewKey={currentViewKey}
               onViewChange={onViewChange}
               viewContext={viewContext}
-              counts={priorityFilterCounts}
               isCollapsed={collapsed.priorities}
               onToggleCollapse={() => toggleSection("priorities")}
             />
@@ -116,7 +117,6 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               viewContext={viewContext}
               sortMode={labelSort}
               onSortChange={setLabelSort}
-              counts={labelFilterCounts}
               isCollapsed={collapsed.labels}
               onToggleCollapse={() => toggleSection("labels")}
             />

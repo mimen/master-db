@@ -1,5 +1,4 @@
-import { Filter, Inbox } from "lucide-react"
-
+import { getProjectIcon, getViewIcon } from "../icons/viewIcons"
 import { BUILT_IN_MULTI_LISTS } from "../multi-list/defaults"
 
 import { instantiateList, listDefinitions } from "./listDefinitions"
@@ -28,7 +27,7 @@ interface ViewDefinition {
 interface ViewPattern {
   match: (viewKey: ViewKey) => boolean
   extract?: (viewKey: ViewKey) => Record<string, unknown>
-  getDefinition: (extracted: Record<string, unknown>) => ViewDefinition
+  getDefinition: (extracted: Record<string, unknown>, context?: ViewBuildContext) => ViewDefinition
 }
 
 function createListId(viewKey: ViewKey, suffix: string | number): string {
@@ -160,9 +159,12 @@ function expandPriority(
   level: 1 | 2 | 3 | 4,
   overrides?: { collapsible?: boolean }
 ): ListInstance[] {
+  // Extract priority ID from viewKey (e.g., "view:priority:p1" -> "p1")
+  const priorityId = viewKey.replace("view:priority:", "") as "p1" | "p2" | "p3" | "p4"
+
   return [
     instantiateList(listDefinitions.priority, {
-      id: createListId(viewKey, `p${level}`),
+      id: createListId(viewKey, priorityId),
       viewKey,
       indexInView: startIndex,
       params: { level },
@@ -195,7 +197,7 @@ const viewPatterns: ViewPattern[] = [
     getDefinition: () => ({
       metadata: {
         title: "Inbox",
-        icon: <Inbox className="h-4 w-4" />,
+        icon: getViewIcon("view:inbox", { size: "sm" }),
       },
       buildLists: (viewKey, index) => expandInbox(viewKey, index),
     }),
@@ -203,7 +205,10 @@ const viewPatterns: ViewPattern[] = [
   {
     match: (key) => key === "view:today",
     getDefinition: () => ({
-      metadata: { title: "Today" },
+      metadata: {
+        title: "Today",
+        icon: getViewIcon("view:today", { size: "sm" }),
+      },
       buildLists: (viewKey, index) =>
         expandTimeRange(viewKey, index, "today", { collapsible: false }),
     }),
@@ -211,7 +216,10 @@ const viewPatterns: ViewPattern[] = [
   {
     match: (key) => key === "view:upcoming",
     getDefinition: () => ({
-      metadata: { title: "Upcoming" },
+      metadata: {
+        title: "Upcoming",
+        icon: getViewIcon("view:upcoming", { size: "sm" }),
+      },
       buildLists: (viewKey, index) =>
         expandTimeRange(viewKey, index, "upcoming", { collapsible: false }),
     }),
@@ -227,9 +235,13 @@ const viewPatterns: ViewPattern[] = [
       const title = range === "no-date"
         ? "No Date"
         : range.charAt(0).toUpperCase() + range.slice(1)
+      const viewKey = `view:time:${range}` as ViewKey
 
       return {
-        metadata: { title },
+        metadata: {
+          title,
+          icon: getViewIcon(viewKey, { size: "sm" }),
+        },
         buildLists: (viewKey, index) =>
           expandTimeRange(viewKey, index, range, { collapsible: false }),
       }
@@ -240,7 +252,7 @@ const viewPatterns: ViewPattern[] = [
     getDefinition: () => ({
       metadata: {
         title: "Priority Queue",
-        icon: <Filter className="h-4 w-4" />,
+        icon: getViewIcon("view:priority-queue", { size: "sm" }),
       },
       buildLists: (viewKey, index, context) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -296,29 +308,47 @@ const viewPatterns: ViewPattern[] = [
     extract: (key) => ({
       projectId: key.replace("view:project:", ""),
     }),
-    getDefinition: (extracted) => ({
-      metadata: { title: "Project" },
-      buildLists: (viewKey, index) =>
-        expandProject(viewKey, index, extracted.projectId as string, {
-          collapsible: false,
-        }),
-    }),
+    getDefinition: (extracted, context) => {
+      const projectId = extracted.projectId as string
+      const projects = context?.projects ?? []
+      const project = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
+
+      return {
+        metadata: {
+          title: project?.name ?? "Project",
+          icon: project ? getProjectIcon(project.color, { size: "sm" }) : undefined
+        },
+        buildLists: (viewKey, index) =>
+          expandProject(viewKey, index, projectId, {
+            collapsible: false,
+          }),
+      }
+    },
   },
   {
     match: (key) => key.startsWith("view:project-family:"),
     extract: (key) => ({
       projectId: key.replace("view:project-family:", ""),
     }),
-    getDefinition: (extracted) => ({
-      metadata: { title: "Project" },
-      buildLists: (viewKey, index, context) =>
-        expandProjectWithChildren(
-          viewKey,
-          index,
-          context,
-          extracted.projectId as string
-        ),
-    }),
+    getDefinition: (extracted, context) => {
+      const projectId = extracted.projectId as string
+      const projects = context?.projects ?? []
+      const project = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
+
+      return {
+        metadata: {
+          title: project?.name ?? "Project",
+          icon: project ? getProjectIcon(project.color, { size: "sm" }) : undefined
+        },
+        buildLists: (viewKey, index, context) =>
+          expandProjectWithChildren(
+            viewKey,
+            index,
+            context,
+            projectId
+          ),
+      }
+    },
   },
   {
     match: (key) => key.startsWith("view:priority-projects:"),
@@ -334,9 +364,13 @@ const viewPatterns: ViewPattern[] = [
       const priorityId = extracted.priorityId as "p1" | "p2" | "p3" | "p4"
       const priorityLevel =
         priorityId === "p1" ? 4 : priorityId === "p2" ? 3 : priorityId === "p3" ? 2 : 1
+      const viewKey = `view:priority-projects:${priorityId}` as ViewKey
 
       return {
-        metadata: { title: `${priorityId.toUpperCase()} Projects` },
+        metadata: {
+          title: `${priorityId.toUpperCase()} Projects`,
+          icon: getViewIcon(viewKey, { size: "sm" }),
+        },
         buildLists: (viewKey, index, context) =>
           expandProjectsByPriority(viewKey, index, context, priorityLevel),
       }
@@ -351,9 +385,13 @@ const viewPatterns: ViewPattern[] = [
     getDefinition: (extracted) => {
       const priorityId = extracted.priorityId as "p1" | "p2" | "p3" | "p4"
       const level = priorityId === "p1" ? 4 : priorityId === "p2" ? 3 : priorityId === "p3" ? 2 : 1
+      const viewKey = `view:priority:${priorityId}` as ViewKey
 
       return {
-        metadata: { title: priorityId.toUpperCase() },
+        metadata: {
+          title: priorityId.toUpperCase(),
+          icon: getViewIcon(viewKey, { size: "sm" }),
+        },
         buildLists: (viewKey, index) =>
           expandPriority(viewKey, index, level, { collapsible: false }),
       }
@@ -364,13 +402,25 @@ const viewPatterns: ViewPattern[] = [
     extract: (key) => ({
       labelName: key.replace("view:label:", ""),
     }),
-    getDefinition: (extracted) => ({
-      metadata: { title: `@${extracted.labelName}` },
-      buildLists: (viewKey, index) =>
-        expandLabel(viewKey, index, extracted.labelName as string, {
-          collapsible: false,
-        }),
-    }),
+    getDefinition: (extracted, context) => {
+      const labelName = extracted.labelName as string
+      const viewKey = `view:label:${labelName}` as ViewKey
+
+      // Look up label color from context
+      const labels = context?.labels ?? []
+      const label = labels.find((l) => l.name === labelName)
+
+      return {
+        metadata: {
+          title: `@${labelName}`,
+          icon: getViewIcon(viewKey, { size: "sm", color: label?.color }),
+        },
+        buildLists: (viewKey, index) =>
+          expandLabel(viewKey, index, labelName, {
+            collapsible: false,
+          }),
+      }
+    },
   },
   {
     match: (key) => key.startsWith("view:multi:"),
@@ -400,7 +450,7 @@ const viewPatterns: ViewPattern[] = [
 
           multi.sequence.forEach((item, sequenceIndex) => {
             const targetKey = normalizeViewKey(item.view)
-            const nestedDefinition = getViewDefinition(targetKey)
+            const nestedDefinition = getViewDefinition(targetKey, context)
 
             if (!nestedDefinition) {
               return
@@ -439,12 +489,13 @@ const viewPatterns: ViewPattern[] = [
 ]
 
 export function getViewDefinition(
-  viewKey: ViewKey
+  viewKey: ViewKey,
+  context?: ViewBuildContext
 ): ViewDefinition | null {
   for (const pattern of viewPatterns) {
     if (pattern.match(viewKey)) {
       const extracted = pattern.extract ? pattern.extract(viewKey) : {}
-      return pattern.getDefinition(extracted)
+      return pattern.getDefinition(extracted, context)
     }
   }
 

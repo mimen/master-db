@@ -1,23 +1,49 @@
-import { useCallback, useMemo, useState } from "react"
+import { useQuery } from "convex/react"
+import { useCallback, useContext, useEffect, useMemo, useState } from "react"
 
 import { TaskListView } from "../TaskListView"
 
 import { Sidebar } from "./Sidebar"
 
+import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
-import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts"
+import { GlobalHotkeysContext } from "@/contexts/GlobalHotkeysContext"
+import { api } from "@/convex/_generated/api"
 import { useTaskCounts } from "@/hooks/useTaskCounts"
 import { useTaskSelection } from "@/hooks/useTaskSelection"
-import type { ViewKey, ViewSelection } from "@/lib/views/types"
+import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
+import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
 export function Layout() {
   const { openShortcuts } = useDialogContext()
+  const { getCountForView } = useCountRegistry()
   const [activeView, setActiveView] = useState<ViewSelection>(() => resolveView("view:inbox"))
   const [dismissedLists, setDismissedLists] = useState<Set<string>>(new Set())
   const [taskCountsAtDismissal, setTaskCountsAtDismissal] = useState<Map<string, number>>(new Map())
+
+  // Fetch data needed for viewContext
+  const projects = useQuery(api.todoist.publicQueries.getProjects) as TodoistProjects | undefined
+  const projectsWithMetadata = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
+    | TodoistProjectsWithMetadata
+    | undefined
+  const labels = useQuery(api.todoist.publicQueries.getLabels) as TodoistLabelDoc[] | undefined
+
+  // Build viewContext
+  const viewContext: ViewBuildContext = useMemo(
+    () => ({
+      projects,
+      projectsWithMetadata,
+      labels,
+    }),
+    [projects, projectsWithMetadata, labels]
+  )
+
+  // Use CountRegistry for instant total count WITH viewContext
+  const totalTaskCount = getCountForView(activeView.key, viewContext)
 
   const { updateTaskCount, resetTaskCounts, getTaskCounts } = useTaskCounts()
 
@@ -80,11 +106,54 @@ export function Layout() {
     })
   }, [])
 
-  useGlobalShortcuts({
-    onNavigateNext: () => handleArrowNavigation(1),
-    onNavigatePrevious: () => handleArrowNavigation(-1),
-    onShowHelp: openShortcuts,
-  })
+  // Register global shortcuts with the hotkey system
+  const hotkeys = useContext(GlobalHotkeysContext)
+  useEffect(() => {
+    if (!hotkeys) return
+    const unregister = hotkeys.registerScope({
+      id: 'layout',
+      handlers: {
+        'Tab': () => {
+          // Prevent default Tab behavior for now
+          return true
+        },
+        'ArrowDown': () => {
+          handleArrowNavigation(1)
+          return true
+        },
+        'ArrowUp': () => {
+          handleArrowNavigation(-1)
+          return true
+        },
+        'ArrowRight': () => {
+          handleArrowNavigation(1)
+          return true
+        },
+        'ArrowLeft': () => {
+          handleArrowNavigation(-1)
+          return true
+        },
+        'shift+?': () => {
+          openShortcuts()
+          return true
+        },
+        '?': (event) => {
+          if (event.shiftKey) {
+            openShortcuts()
+            return true
+          }
+          return false
+        },
+      },
+      priority: 10, // Lower priority than dialogs
+      isActive: () => {
+        // Only active when not editing text
+        const target = document.activeElement
+        return !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable)
+      },
+    })
+    return unregister
+  }, [hotkeys, handleArrowNavigation, openShortcuts])
 
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1
@@ -93,10 +162,20 @@ export function Layout() {
     <>
       <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
       <SidebarInset className="overflow-hidden">
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <div className="h-6 w-px bg-border" />
           <h1 className="text-xl font-semibold">Todoist Processor</h1>
+          <div className="h-6 w-px bg-border" />
+          {activeView.metadata.icon && (
+            <div className="text-muted-foreground">{activeView.metadata.icon}</div>
+          )}
+          <span className="text-lg font-medium">{activeView.metadata.title}</span>
+          {totalTaskCount > 0 && (
+            <Badge variant="secondary" className="text-xs font-normal">
+              {totalTaskCount}
+            </Badge>
+          )}
         </header>
         <ScrollArea className="h-[calc(100vh-4rem)]" data-task-scroll-container>
           <main className="space-y-6 p-6">

@@ -1,13 +1,14 @@
 import { ArrowDownAZ, Hash, Tag } from "lucide-react"
+import { useMemo } from "react"
 
 import { CollapseCaret } from "../components/CollapseCaret"
 import { SidebarButton } from "../components/SidebarButton"
 import { SortDropdown } from "../components/SortDropdown"
 import type { LabelSort } from "../types"
-import { getSortedLabels } from "../utils/sorting"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
+import { useCountRegistry } from "@/contexts/CountContext"
 import { getProjectColor } from "@/lib/colors"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
@@ -20,7 +21,6 @@ interface LabelsSectionProps {
   viewContext: ViewBuildContext
   sortMode: LabelSort
   onSortChange: (mode: LabelSort) => void
-  counts?: { labelCounts: { labelId: string; filteredTaskCount: number }[] }
   isCollapsed: boolean
   onToggleCollapse: () => void
 }
@@ -43,11 +43,31 @@ export function LabelsSection({
   viewContext,
   sortMode,
   onSortChange,
-  counts,
   isCollapsed,
   onToggleCollapse,
 }: LabelsSectionProps) {
-  const sortedLabels = getSortedLabels(labels, sortMode, counts)
+  const { getCountForView } = useCountRegistry()
+
+  // Sort labels using CountRegistry
+  const sortedLabels = useMemo(() => {
+    if (!labels) return []
+
+    const labelsWithCounts = labels.map((label) => ({
+      label,
+      count: getCountForView(`view:label:${label.name}` as ViewKey, viewContext),
+    }))
+
+    if (sortMode === "taskCount") {
+      return labelsWithCounts
+        .sort((a, b) => b.count - a.count)
+        .map((item) => item.label)
+    }
+
+    // Alphabetical
+    return labelsWithCounts
+      .sort((a, b) => a.label.name.localeCompare(b.label.name))
+      .map((item) => item.label)
+  }, [labels, sortMode, getCountForView, viewContext])
 
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
@@ -78,8 +98,7 @@ export function LabelsSection({
             {sortedLabels.map((label) => {
                 const viewKey = `view:label:${label.name}` as ViewKey
                 const isActive = currentViewKey === viewKey
-                const count =
-                  counts?.labelCounts.find((c) => c.labelId === label.todoist_id)?.filteredTaskCount || 0
+                const count = getCountForView(viewKey, viewContext)
 
                 return (
                   <SidebarMenuItem key={label._id}>

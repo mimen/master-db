@@ -4,6 +4,7 @@ import { TIME_FILTER_ITEMS } from "../utils/filterItems"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
+import { useCountRegistry } from "@/contexts/CountContext"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 
@@ -11,7 +12,6 @@ interface TimeSectionProps {
   currentViewKey: ViewKey
   onViewChange: (view: ViewSelection) => void
   viewContext: ViewBuildContext
-  counts?: { timeCounts: { filter: string; filteredTaskCount: number }[] }
   isCollapsed: boolean
   onToggleCollapse: () => void
 }
@@ -20,10 +20,10 @@ export function TimeSection({
   currentViewKey,
   onViewChange,
   viewContext,
-  counts,
   isCollapsed,
   onToggleCollapse,
 }: TimeSectionProps) {
+  const { getCountForView } = useCountRegistry()
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
@@ -46,8 +46,7 @@ export function TimeSection({
           <SidebarMenu>
             {TIME_FILTER_ITEMS.map((timeFilter) => {
               const isActive = currentViewKey === timeFilter.viewKey
-              const count =
-                counts?.timeCounts.find((c) => c.filter === timeFilter.filterKey)?.filteredTaskCount || 0
+              const count = getCountForView(timeFilter.viewKey, viewContext)
 
               return (
                 <SidebarMenuItem key={timeFilter.id}>

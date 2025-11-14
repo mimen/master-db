@@ -4,13 +4,13 @@ import { PRIORITY_FILTER_ITEMS } from "../utils/filterItems"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
+import { useCountRegistry } from "@/contexts/CountContext"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 
 interface PrioritiesSectionProps {
   currentViewKey: ViewKey
   onViewChange: (view: ViewSelection) => void
   viewContext: ViewBuildContext
-  counts?: { priorityCounts: { priority: number; filteredTaskCount: number }[] }
   isCollapsed: boolean
   onToggleCollapse: () => void
 }
@@ -19,10 +19,10 @@ export function PrioritiesSection({
   currentViewKey,
   onViewChange,
   viewContext,
-  counts,
   isCollapsed,
   onToggleCollapse,
 }: PrioritiesSectionProps) {
+  const { getCountForView } = useCountRegistry()
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
@@ -44,9 +44,7 @@ export function PrioritiesSection({
         <CollapsibleContent>
           <SidebarMenu>
             {PRIORITY_FILTER_ITEMS.map((priority) => {
-              const count =
-                counts?.priorityCounts.find((c) => c.priority === priority.priorityLevel)?.filteredTaskCount ||
-                0
+              const count = getCountForView(priority.viewKey, viewContext)
 
               return (
                 <PriorityItem

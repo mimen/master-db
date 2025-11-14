@@ -5,7 +5,7 @@ import type { ViewNavItem } from "../types"
 /**
  * Builds the static view navigation items with dynamic counts
  */
-export function buildViewItems(inboxCount: number | null): ViewNavItem[] {
+export function buildViewItems(inboxCount: number, priorityQueueCount: number): ViewNavItem[] {
   return [
     {
       key: "view:inbox",
@@ -17,7 +17,7 @@ export function buildViewItems(inboxCount: number | null): ViewNavItem[] {
       key: "view:multi:priority-queue",
       label: "Priority Queue",
       icon: Filter,
-      count: null,
+      count: priorityQueueCount,
     },
     {
       key: "view:settings",

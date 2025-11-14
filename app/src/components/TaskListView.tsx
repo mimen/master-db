@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useCountRegistry } from "@/contexts/CountContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
@@ -44,6 +45,7 @@ export function TaskListView({
   isMultiListView = false
 }: TaskListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
+  const { registry } = useCountRegistry()
 
   const projects: TodoistProjects | undefined = useQuery(
     api.todoist.publicQueries.getProjects,
@@ -100,6 +102,9 @@ export function TaskListView({
 
   const resolvedTasks = tasks ?? []
   const visibleTasks = list.maxTasks ? resolvedTasks.slice(0, list.maxTasks) : resolvedTasks
+
+  // Get total count from CountRegistry
+  const totalCount = registry.getCountForList(list.id, list.query)
 
   taskRefs.current.length = visibleTasks.length
   refHandlers.current.length = visibleTasks.length
@@ -214,9 +219,9 @@ export function TaskListView({
   const shouldShowCompact = isMultiListView && (visibleTasks.length === 0 || isDismissed)
 
   if (shouldShowCompact) {
-    const taskCountText = visibleTasks.length === 0
+    const taskCountText = totalCount === 0
       ? "Empty"
-      : `${visibleTasks.length}`
+      : `${totalCount}`
 
     return (
       <div className="max-w-4xl mx-auto px-6 py-2">
@@ -283,7 +288,9 @@ export function TaskListView({
               )}
             </div>
             <Badge variant="secondary" className="text-xs font-normal shrink-0">
-              {visibleTasks.length}
+              {list.maxTasks && visibleTasks.length < totalCount
+                ? `Showing ${visibleTasks.length} of ${totalCount}`
+                : totalCount}
             </Badge>
             {visibleTasks.length > 0 && (
               <TooltipProvider>
