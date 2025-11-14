@@ -99,12 +99,12 @@ const timeRangeLabels: Record<TimeRange, { title: string; description: string; i
   today: {
     title: "Today",
     description: "tasks due today",
-    icon: <Calendar className="h-6 w-6 mr-3 text-blue-500" />,
+    icon: <Calendar className="h-6 w-6 mr-3 text-green-500" />,
   },
   upcoming: {
     title: "Upcoming",
     description: "tasks due this week",
-    icon: <Calendar className="h-6 w-6 mr-3 text-green-500" />,
+    icon: <Calendar className="h-6 w-6 mr-3 text-purple-500" />,
   },
   "no-date": {
     title: "No Date",

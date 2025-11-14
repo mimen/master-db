@@ -34,7 +34,7 @@ const dateOptions: DateOption[] = [
   { id: 'in-1-week', label: 'In 1 week', sublabel: '7 days from now', dueString: 'in 7 days', icon: '📊' },
   { id: 'in-2-weeks', label: 'In 2 weeks', sublabel: '14 days from now', dueString: 'in 14 days', icon: '📈' },
   { id: 'in-1-month', label: 'In 1 month', sublabel: '30 days from now', dueString: 'in 30 days', icon: '🗓️' },
-  { id: 'no-date', label: 'No date', sublabel: 'Remove due date', dueString: 'no date', icon: '🚫' },
+  { id: 'no-date', label: 'No date', sublabel: 'Remove schedule', dueString: 'no date', icon: '🚫' },
 ]
 
 export function DueDateDialog({ task, onSelect, onClose }: DueDateDialogProps) {
@@ -98,7 +98,7 @@ export function DueDateDialog({ task, onSelect, onClose }: DueDateDialogProps) {
             <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
               <Calendar className="h-4 w-4 text-white" />
             </div>
-            Set Due Date
+            Set Schedule
           </DialogTitle>
           <DialogDescription className="text-sm font-medium text-purple-900 leading-tight">
             {parseMarkdownLinks(task.content).map((segment, index) => {
@@ -174,7 +174,7 @@ export function DueDateDialog({ task, onSelect, onClose }: DueDateDialogProps) {
         {task.due && (
           <div className="p-4 border-t border-gray-200 bg-gray-50">
             <div className="text-xs text-gray-600">
-              Current due date: <span className="font-semibold">{task.due.string || task.due.date}</span>
+              Current schedule: <span className="font-semibold">{task.due.string || task.due.date}</span>
             </div>
           </div>
         )}

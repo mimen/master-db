@@ -58,11 +58,11 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): React.
   }
 
   if (viewKey === "view:time:today") {
-    return <Calendar className={cn(finalClassName, "text-blue-500")} />
+    return <Calendar className={cn(finalClassName, "text-green-500")} />
   }
 
   if (viewKey === "view:time:upcoming") {
-    return <Calendar className={cn(finalClassName, "text-green-500")} />
+    return <Calendar className={cn(finalClassName, "text-purple-500")} />
   }
 
   if (viewKey === "view:time:no-date") {
