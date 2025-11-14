@@ -142,7 +142,7 @@ async function checkDuplicateDelivery(
   deliveryId: string
 ): Promise<boolean> {
   const existing = await ctx.runQuery(
-    internal.todoist.queries.getWebhookEventByDeliveryId,
+    internal.todoist.queries.getWebhookEventByDeliveryId.getWebhookEventByDeliveryId,
     { deliveryId }
   );
   return existing !== null;
