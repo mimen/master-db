@@ -76,6 +76,7 @@ export class CountRegistry {
    * - "view:project:123:project-123" -> "list:project:123"
    * - "view:priority:p1:p1" -> "list:priority:p1"
    * - "view:label:work:work" -> "list:label:work"
+   * - "view:projects:main" -> "list:projects"
    *
    * @private
    */
@@ -95,6 +96,8 @@ export class CountRegistry {
         }
         case "project":
           return `list:project:${query.projectId}`
+        case "projects":
+          return "list:projects"
         case "priority": {
           // Map API priority to UI level: API 4=P1, 3=P2, 2=P3, 1=P4
           const apiToUi = { 4: 'p1', 3: 'p2', 2: 'p3', 1: 'p4' }
@@ -112,6 +115,11 @@ export class CountRegistry {
     // Inbox special case
     if (listId.includes("inbox")) {
       return "list:inbox"
+    }
+
+    // Projects special case
+    if (listId.includes("view:projects")) {
+      return "list:projects"
     }
 
     // Time filters: "view:time:today:today" or "view:today:today"

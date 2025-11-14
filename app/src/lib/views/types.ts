@@ -8,6 +8,7 @@ export type ListQueryDefinition =
   | { type: "inbox"; inboxProjectId?: string; timezoneOffsetMinutes?: number }
   | { type: "time"; range: TimeRange; timezoneOffsetMinutes?: number }
   | { type: "project"; projectId: string; timezoneOffsetMinutes?: number }
+  | { type: "projects"; timezoneOffsetMinutes?: number }
   | { type: "priority"; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
   | { type: "label"; label: string; timezoneOffsetMinutes?: number }
 
@@ -91,6 +92,7 @@ export type ViewKey =
   | "view:today"
   | "view:upcoming"
   | "view:priority-queue"
+  | "view:projects"
   | "view:settings"
   | `view:time:${TimeRange}`
   | `view:project:${string}`

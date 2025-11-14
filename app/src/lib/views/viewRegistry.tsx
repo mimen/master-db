@@ -304,6 +304,19 @@ const viewPatterns: ViewPattern[] = [
     }),
   },
   {
+    match: (key) => key === "view:projects",
+    getDefinition: () => ({
+      metadata: {
+        title: "Projects",
+        icon: getViewIcon("view:projects", { size: "sm" }),
+      },
+      buildLists: () => {
+        // Placeholder - will be implemented in Milestone 3
+        return []
+      },
+    }),
+  },
+  {
     match: (key) => key.startsWith("view:project:") && !key.includes("-family"),
     extract: (key) => ({
       projectId: key.replace("view:project:", ""),

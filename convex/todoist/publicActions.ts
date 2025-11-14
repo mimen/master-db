@@ -9,6 +9,7 @@ export { duplicateTask } from "./actions/duplicateTask";
 export { completeMultipleTasks } from "./actions/completeMultipleTasks";
 export { createProject } from "./actions/createProject";
 export { updateProject } from "./actions/updateProject";
+export { updateProjectName } from "./actions/updateProjectName";
 export { deleteProject } from "./actions/deleteProject";
 export { createSection } from "./actions/createSection";
 export { updateSection } from "./actions/updateSection";
@@ -30,6 +31,9 @@ export {
   ensureAllProjectsHaveMetadata,
   ensureProjectHasMetadata
 } from "./actions/ensureProjectMetadata";
+export { ensureProjectMetadataTask } from "./actions/ensureProjectMetadataTask";
+export { updateProjectMetadataDescription } from "./actions/updateProjectMetadataDescription";
+export { updateProjectMetadataPriority } from "./actions/updateProjectMetadataPriority";
 
 // Queue actions
 export { startQueueSession } from "./actions/startQueueSession";

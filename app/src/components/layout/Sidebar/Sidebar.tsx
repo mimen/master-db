@@ -51,8 +51,9 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
   // Use CountRegistry for all view counts
   const inboxCount = getCountForView("view:inbox", viewContext)
   const priorityQueueCount = getCountForView("view:multi:priority-queue", viewContext)
+  const projectsCount = getCountForView("view:projects", viewContext)
 
-  const viewItems = buildViewItems(inboxCount, priorityQueueCount)
+  const viewItems = buildViewItems(inboxCount, priorityQueueCount, projectsCount)
 
   return (
     <SidebarPrimitive

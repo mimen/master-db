@@ -1,11 +1,15 @@
-import { Filter, Inbox, Settings } from "lucide-react"
+import { Filter, Folder, Inbox, Settings } from "lucide-react"
 
 import type { ViewNavItem } from "../types"
 
 /**
  * Builds the static view navigation items with dynamic counts
  */
-export function buildViewItems(inboxCount: number, priorityQueueCount: number): ViewNavItem[] {
+export function buildViewItems(
+  inboxCount: number,
+  priorityQueueCount: number,
+  projectsCount: number
+): ViewNavItem[] {
   return [
     {
       key: "view:inbox",
@@ -18,6 +22,12 @@ export function buildViewItems(inboxCount: number, priorityQueueCount: number): 
       label: "Priority Queue",
       icon: Filter,
       count: priorityQueueCount,
+    },
+    {
+      key: "view:projects",
+      label: "Projects",
+      icon: Folder,
+      count: projectsCount,
     },
     {
       key: "view:settings",

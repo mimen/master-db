@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, CalendarRange, Filter, Flag, Inbox, Settings, Sunrise, Tag } from "lucide-react"
+import { AlertCircle, Calendar, CalendarRange, Filter, Flag, Folder, Inbox, Settings, Sunrise, Tag } from "lucide-react"
 
 import { getProjectColor } from "../colors"
 import { getPriorityColorClass } from "../priorities"
@@ -37,15 +37,19 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): React.
   }
 
   if (viewKey === "view:today") {
-    return <Calendar className={cn(finalClassName, "text-blue-500")} />
+    return <Calendar className={cn(finalClassName, "text-blue-600 dark:text-blue-400")} />
   }
 
   if (viewKey === "view:upcoming") {
-    return <Calendar className={cn(finalClassName, "text-green-500")} />
+    return <Calendar className={cn(finalClassName, "text-green-600 dark:text-green-400")} />
   }
 
   if (viewKey === "view:priority-queue") {
     return <Filter className={finalClassName} />
+  }
+
+  if (viewKey === "view:projects") {
+    return <Folder className={finalClassName} />
   }
 
   if (viewKey === "view:settings") {
@@ -54,19 +58,19 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): React.
 
   // Time-based views (always colored)
   if (viewKey === "view:time:overdue") {
-    return <AlertCircle className={cn(finalClassName, "text-red-500")} />
+    return <AlertCircle className={cn(finalClassName, "text-red-600 dark:text-red-400")} />
   }
 
   if (viewKey === "view:time:today") {
-    return <Calendar className={cn(finalClassName, "text-green-500")} />
+    return <Calendar className={cn(finalClassName, "text-green-600 dark:text-green-400")} />
   }
 
   if (viewKey === "view:time:upcoming") {
-    return <Calendar className={cn(finalClassName, "text-purple-500")} />
+    return <Calendar className={cn(finalClassName, "text-purple-600 dark:text-purple-400")} />
   }
 
   if (viewKey === "view:time:no-date") {
-    return <Calendar className={cn(finalClassName, "text-gray-500")} />
+    return <Calendar className={cn(finalClassName, "text-gray-600 dark:text-gray-400")} />
   }
 
   // Priority views (P1-P4) - always colored
