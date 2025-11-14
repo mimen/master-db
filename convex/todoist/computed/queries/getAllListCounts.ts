@@ -10,8 +10,9 @@ import { query } from "../../../_generated/server";
  * - list:inbox -> inbox task count
  * - list:time:today -> today task count
  * - list:time:overdue -> overdue task count
+ * - list:time:upcoming -> upcoming task count (tomorrow through next 7 days)
  * - list:time:tomorrow -> tomorrow task count
- * - list:time:next7days -> next 7 days task count
+ * - list:time:next7days -> next 7 days task count (day after tomorrow through 7 days)
  * - list:time:future -> future task count
  * - list:time:nodate -> no date task count
  * - list:priority:p1 -> P1 task count (API priority 4)
@@ -66,6 +67,12 @@ export const getAllListCounts = query({
         const dateOnly = extractDateOnly(item.due.date);
         return dateOnly === todayISO;
       }
+      if (filter === 'upcoming') {
+        // Upcoming = tomorrow through next 7 days (matches getDueNext7DaysItems logic)
+        if (!item.due?.date) return false;
+        const dateOnly = extractDateOnly(item.due.date);
+        return dateOnly > todayISO && dateOnly <= next7DaysISO;
+      }
       if (filter === 'tomorrow') {
         if (!item.due?.date) return false;
         const dateOnly = extractDateOnly(item.due.date);
@@ -90,7 +97,7 @@ export const getAllListCounts = query({
     const counts: Record<string, number> = {};
 
     // Time filter counts
-    const timeFilters = ['overdue', 'today', 'tomorrow', 'next7days', 'future', 'nodate'];
+    const timeFilters = ['overdue', 'today', 'upcoming', 'tomorrow', 'next7days', 'future', 'nodate'];
     for (const filter of timeFilters) {
       const count = filteredItems.filter(item => matchesTimeFilter(item, filter)).length;
       counts[`list:time:${filter}`] = count;
