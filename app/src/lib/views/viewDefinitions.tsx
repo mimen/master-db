@@ -9,7 +9,7 @@ export function resolveView(
   viewKey: ViewKey,
   context: ViewBuildContext = {}
 ): ViewSelection {
-  const definition = getViewDefinition(viewKey)
+  const definition = getViewDefinition(viewKey, context)
 
   if (!definition) {
     throw new Error(`Unsupported view key: ${viewKey}`)

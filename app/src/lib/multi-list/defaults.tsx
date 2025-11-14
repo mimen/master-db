@@ -1,3 +1,5 @@
+import { getViewIcon } from "../icons/viewIcons"
+
 import type { MultiListConfig } from "@/types/multi-list"
 
 /**
@@ -10,7 +12,7 @@ export const BUILT_IN_MULTI_LISTS: MultiListConfig[] = [
   {
     id: "priority-queue",
     name: "Priority Queue",
-    icon: "🎯",
+    icon: getViewIcon("view:multi:priority-queue", { size: "sm" }),
     isBuiltIn: true,
     description: "Optimal task processing order: urgent → important → batched work",
     estimatedMinutes: 120,
@@ -43,22 +45,19 @@ export const BUILT_IN_MULTI_LISTS: MultiListConfig[] = [
   {
     id: "morning-review",
     name: "Morning Review",
-    icon: "☀️",
+    icon: getViewIcon("view:multi:morning-review", { size: "sm" }),
     isBuiltIn: true,
     description: "Quick morning review workflow",
     estimatedMinutes: 15,
     sequence: [
       {
         view: "time:overdue",
-        name: "⏰ Overdue",
       },
       {
         view: "today",
-        name: "📅 Today",
       },
       {
         view: "inbox",
-        name: "📥 Inbox",
         maxTasks: 5,
       },
     ],
@@ -66,30 +65,25 @@ export const BUILT_IN_MULTI_LISTS: MultiListConfig[] = [
   {
     id: "weekly-planning",
     name: "Weekly Planning",
-    icon: "📊",
+    icon: getViewIcon("view:multi:weekly-planning", { size: "sm" }),
     isBuiltIn: true,
     description: "Weekly planning and review session",
     estimatedMinutes: 30,
     sequence: [
       {
         view: "time:overdue",
-        name: "⏰ Overdue",
       },
       {
         view: "upcoming",
-        name: "📅 This Week",
       },
       {
         view: "priority-projects:p1",
-        name: "🎯 P1 Projects",
       },
       {
         view: "priority-projects:p2",
-        name: "⭐ P2 Projects",
       },
       {
         view: "time:no-date",
-        name: "📝 No Date",
         maxTasks: 10,
       },
     ],
