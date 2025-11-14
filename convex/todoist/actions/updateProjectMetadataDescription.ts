@@ -19,7 +19,7 @@ export const updateProjectMetadataDescription = action({
     try {
       // Get metadata to find source_task_id
       const metadata = await ctx.runQuery(
-        api.todoist.queries.getProjectMetadata.getProjectMetadata,
+        api.todoist.publicQueries.getProjectMetadata,
         { projectId }
       );
 
@@ -28,7 +28,7 @@ export const updateProjectMetadataDescription = action({
       // If no metadata task exists, create it first
       if (!taskId) {
         const ensureResult = await ctx.runAction(
-          api.todoist.actions.ensureProjectMetadataTask.ensureProjectMetadataTask,
+          api.todoist.publicActions.ensureProjectMetadataTask,
           { projectId }
         );
 
@@ -54,7 +54,7 @@ export const updateProjectMetadataDescription = action({
         console.warn("Metadata task not found, recreating:", updateError);
 
         const ensureResult = await ctx.runAction(
-          api.todoist.actions.ensureProjectMetadataTask.ensureProjectMetadataTask,
+          api.todoist.publicActions.ensureProjectMetadataTask,
           { projectId }
         );
 

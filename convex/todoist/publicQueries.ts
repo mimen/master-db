@@ -2,7 +2,7 @@
 
 // Basic queries
 export { getActiveItems } from "./queries/getActiveItems";
-export { getProjects } from "./queries/getProjects";
+export { getProjects, getProjectByTodoistId } from "./queries/getProjects";
 export { getProject } from "./queries/getProject";
 export { getAllProjects } from "./queries/getAllProjects";
 export { getProjectMetadata } from "./queries/getProjectMetadata";

@@ -28,7 +28,7 @@ export const updateProjectMetadata = action({
     metadataId?: string;
   }> => {
     // First, verify the project exists
-    const project = await ctx.runQuery(api.todoist.queries.getProject.getProject, {
+    const project = await ctx.runQuery(api.todoist.publicQueries.getProject, {
       projectId: args.projectId,
     });
 
@@ -38,7 +38,7 @@ export const updateProjectMetadata = action({
 
     // Check if metadata already exists
     const existingMetadata = await ctx.runQuery(
-      api.todoist.queries.getProjectMetadata.getProjectMetadata,
+      api.todoist.publicQueries.getProjectMetadata,
       { projectId: args.projectId }
     );
 
@@ -66,7 +66,7 @@ export const updateProjectMetadata = action({
 
       // Query the updated metadata
       const updatedMetadata = await ctx.runQuery(
-        api.todoist.queries.getProjectMetadata.getProjectMetadata,
+        api.todoist.publicQueries.getProjectMetadata,
         { projectId: args.projectId }
       );
 
@@ -85,7 +85,7 @@ export const updateProjectMetadata = action({
 
       // Query the created metadata
       const createdMetadata = await ctx.runQuery(
-        api.todoist.queries.getProjectMetadata.getProjectMetadata,
+        api.todoist.publicQueries.getProjectMetadata,
         { projectId: args.projectId }
       );
 
@@ -183,7 +183,7 @@ export const resetProjectMetadata = action({
   }> => {
     // Get existing metadata
     const existingMetadata = await ctx.runQuery(
-      api.todoist.queries.getProjectMetadata.getProjectMetadata,
+      api.todoist.publicQueries.getProjectMetadata,
       { projectId: args.projectId }
     );
 
@@ -219,7 +219,7 @@ export const resetProjectMetadata = action({
       projectId: args.projectId,
       message: "Metadata reset to defaults",
       metadata: (await ctx.runQuery(
-        api.todoist.queries.getProjectMetadata.getProjectMetadata,
+        api.todoist.publicQueries.getProjectMetadata,
         { projectId: args.projectId }
       )) || undefined,
     };

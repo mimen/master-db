@@ -23,7 +23,7 @@ export const ensureProjectMetadataTask = action({
     try {
       // Check if metadata already exists with source_task_id
       const metadata = await ctx.runQuery(
-        api.todoist.queries.getProjectMetadata.getProjectMetadata,
+        api.todoist.publicQueries.getProjectMetadata,
         { projectId }
       );
 
@@ -52,7 +52,7 @@ export const ensureProjectMetadataTask = action({
 
       // Get the project to use its name
       const project = await ctx.runQuery(
-        api.todoist.queries.getProjects.getProjectByTodoistId,
+        api.todoist.publicQueries.getProjectByTodoistId,
         { todoistId: projectId }
       );
 
