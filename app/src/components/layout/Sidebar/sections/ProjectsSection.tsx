@@ -3,7 +3,7 @@ import { type ReactNode, useState } from "react"
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
+  rectIntersection,
   PointerSensor,
   useSensor,
   useSensors,
@@ -55,9 +55,9 @@ function DroppableZone({ id, children, isActive }: { id: string; children: React
       ref={setNodeRef}
       className={`transition-all duration-200 ${
         isActive && isOver
-          ? "bg-accent/50 rounded-md ring-2 ring-primary/30 py-1"
+          ? "bg-accent/50 rounded-md ring-2 ring-primary/30"
           : isActive
-            ? "bg-accent/20 rounded-md py-1"
+            ? "bg-accent/20 rounded-md"
             : ""
       }`}
     >
@@ -212,22 +212,20 @@ export function ProjectsSection({
             const isGroupCollapsed = isPriorityGroupCollapsed(priorityLevel)
 
             return (
-              <div key={priorityLevel}>
-                <DroppableZone id={String(priorityLevel)} isActive={activeProject !== null}>
-                  <PriorityItem
-                    priority={priorityItem}
-                    currentViewKey={currentViewKey}
-                    onViewChange={onViewChange}
-                    viewContext={viewContext}
-                    count={totalTaskCount}
-                    isCollapsible={true}
-                    isCollapsed={isGroupCollapsed}
-                    onToggle={(e) => {
-                      e.stopPropagation()
-                      togglePriorityGroupCollapse(priorityLevel)
-                    }}
-                  />
-                </DroppableZone>
+              <DroppableZone key={priorityLevel} id={String(priorityLevel)} isActive={activeProject !== null}>
+                <PriorityItem
+                  priority={priorityItem}
+                  currentViewKey={currentViewKey}
+                  onViewChange={onViewChange}
+                  viewContext={viewContext}
+                  count={totalTaskCount}
+                  isCollapsible={true}
+                  isCollapsed={isGroupCollapsed}
+                  onToggle={(e) => {
+                    e.stopPropagation()
+                    togglePriorityGroupCollapse(priorityLevel)
+                  }}
+                />
                 {!isGroupCollapsed && (
                   <SidebarMenu className="pl-4">
                     {projectsInGroup.map((project) => (
@@ -244,7 +242,7 @@ export function ProjectsSection({
                     ))}
                   </SidebarMenu>
                 )}
-              </div>
+              </DroppableZone>
             )
           })}
         </>
@@ -253,7 +251,7 @@ export function ProjectsSection({
       return (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={rectIntersection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
