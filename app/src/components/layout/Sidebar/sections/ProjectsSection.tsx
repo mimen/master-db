@@ -29,7 +29,8 @@ import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/si
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectPriority } from "@/hooks/useOptimisticProjectPriority"
 import { getProjectColor } from "@/lib/colors"
-import { getDropZone, validateDrop } from "@/lib/dnd/validateDrop"
+import { getDropZone } from "@/lib/dnd/getDropZone"
+import { validateDrop } from "@/lib/dnd/validateDrop"
 import type { DropZone } from "@/lib/dnd/types"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 
