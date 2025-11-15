@@ -1,9 +1,9 @@
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 import { RoutineTaskStatus } from "../types/status";
 import { Frequency } from "../types/frequency";
 import { addDays } from "../utils/dateCalculation";
 
-export const getRoutinesNeedingGeneration = query({
+export const getRoutinesNeedingGeneration = internalQuery({
   handler: async (ctx) => {
     // Get all active (non-deferred) routines
     const routines = await ctx.db

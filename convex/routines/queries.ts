@@ -2,3 +2,4 @@
 // These are available via internal.routines.queries
 export { getRoutine } from "./queries/getRoutine";
 export { getRoutineTask } from "./queries/getRoutineTask";
+export { getRoutinesNeedingGeneration } from "./queries/getRoutinesNeedingGeneration";
