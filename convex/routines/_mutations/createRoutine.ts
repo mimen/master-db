@@ -1,9 +1,9 @@
 import { v } from "convex/values";
-import { internalMutation } from "../../_generated/server";
+import { mutation } from "../../_generated/server";
 import { Frequency } from "../types/frequency";
 import { Duration } from "../types/duration";
 
-export const createRoutine = internalMutation({
+export const createRoutine = mutation({
   args: {
     name: v.string(),
     description: v.optional(v.string()),

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 
-export const getRoutine = query({
+export const getRoutine = internalQuery({
   args: {
     routineId: v.id("routines"),
   },

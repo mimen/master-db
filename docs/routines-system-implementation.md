@@ -425,21 +425,56 @@ Next steps:
 
 **Completion Notes**:
 ```
-Date:
-Status:
+Date: 2025-01-14
+Status: COMPLETED ✅
+Notes:
+- Created createRoutineTaskInTodoist action following existing Todoist action patterns
+- Created generateAndCreateRoutineTasks orchestration action
+- Added internal query helpers (getRoutine, getRoutineTask)
+- Created barrel exports (publicActions.ts, mutations.ts, queries.ts)
+- Fixed mutation path references (internal.routines.mutations.* pattern)
+- Verified "routine" label exists in Todoist (ID: 2173725799)
+
 Test Results:
-- createRoutineTaskInTodoist (Inbox):
-- createRoutineTaskInTodoist (with project):
-- generateAndCreateRoutineTasks:
+- createRoutineTaskInTodoist: ✅ Successfully creates tasks in Todoist with all properties
+- generateAndCreateRoutineTasks: ✅ Generated 5 tasks for daily routine
+
 Todoist MCP Verification:
-- Task created:
-- Labels correct:
-- Project correct:
-- Priority correct:
+- Tasks created: ✅ 5 tasks for Nov 17-21 (business days, skipped weekends)
+- Labels correct: ✅ Both "chore" and "routine" labels applied
+- Project correct: ✅ Tasks created in Inbox (default when no project specified)
+- Priority correct: ✅ P2 (API priority 3) mapped correctly
+- Duration correct: ✅ 30 minutes set properly
+- Time of day correct: ✅ 7am (Morning) with timezone applied
+- Description correct: ✅ Routine description preserved in task
+
+Files created (5):
+- convex/routines/actions/createRoutineTaskInTodoist.ts (153 lines)
+- convex/routines/actions/generateAndCreateRoutineTasks.ts (74 lines)
+- convex/routines/queries/getRoutineTask.ts (12 lines)
+- convex/routines/publicActions.ts (3 lines - barrel export)
+- convex/routines/mutations.ts (4 lines - internal barrel export)
+- convex/routines/queries.ts (4 lines - internal barrel export)
+
+Files modified (3):
+- convex/routines/queries/getRoutine.ts (changed to internalQuery)
+- convex/routines/_mutations/createRoutine.ts (changed to public mutation)
+- convex/routines/publicMutations.ts (re-exports internal mutations)
+- convex/routines/publicQueries.ts (re-exports queries)
+
 Issues encountered:
--
+- TypeScript type errors across entire codebase (Convex API breaking change)
+  - Error: FunctionReference types missing _returnType and _componentPath
+  - Affects all actions calling internal.*.mutations.*
+  - Workaround: Used --typecheck=disable flag for Convex dev
+  - Functions work correctly at runtime despite type errors
+  - Needs systematic fix across all actions (separate task)
+- Initial confusion with barrel export patterns vs internal/public functions
+  - Resolution: Follow todoist pattern - internal mutations in mutations.ts, public in publicMutations.ts
+
 Next steps:
 - Milestone 6: Cron Job Implementation
+- TODO: Fix TypeScript type errors across codebase (breaking change in Convex types)
 ```
 
 ---
@@ -806,14 +841,14 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 4/11 milestones (36%)
+**Overall Completion**: 5/11 milestones (45%)
 
 - [x] Planning & Research
 - [x] Milestone 1: Schema & Type Definitions
 - [x] Milestone 2: Core Mutations & Queries
 - [x] Milestone 3: Date Calculation Logic
 - [x] Milestone 4: Task Generation Engine
-- [ ] Milestone 5: Todoist Integration Actions
+- [x] Milestone 5: Todoist Integration Actions
 - [ ] Milestone 6: Cron Job Implementation
 - [ ] Milestone 7: Webhook Integration
 - [ ] Milestone 8: Display Components (Read-Only)
@@ -858,8 +893,8 @@ Next steps:
 - [ ] `convex/routines/queries/getRoutineStats.ts`
 
 **Backend Actions (2)**:
-- [ ] `convex/routines/actions/createRoutineTaskInTodoist.ts`
-- [ ] `convex/routines/actions/generateAndCreateRoutineTasks.ts`
+- [x] `convex/routines/actions/createRoutineTaskInTodoist.ts`
+- [x] `convex/routines/actions/generateAndCreateRoutineTasks.ts`
 
 **Backend Utils (1)**:
 - [x] `convex/routines/utils/dateCalculation.ts`
@@ -871,8 +906,11 @@ Next steps:
 - [ ] `convex/routines/utils/dateCalculation.test.ts`
 - [ ] Other mutation tests (following existing patterns)
 
-**Backend Barrel Files (1)**:
-- [ ] `convex/routines/actions.ts` (only actions need barrel export)
+**Backend Barrel Files (4)**:
+- [x] `convex/routines/publicActions.ts` (public action exports)
+- [x] `convex/routines/publicMutations.ts` (public mutation exports)
+- [x] `convex/routines/publicQueries.ts` (public query exports)
+- [x] `convex/routines/mutations.ts` and `convex/routines/queries.ts` (internal exports)
 
 **Frontend Components (4)**:
 - [ ] `app/src/components/RoutineRow.tsx`

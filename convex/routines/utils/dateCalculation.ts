@@ -82,9 +82,9 @@ export function calculateDueDate(
   timeOfDay: TimeOfDayType | undefined,
   frequency: FrequencyType
 ): number {
-  // If time of day is set, due in 4 hours
+  // If time of day is set, due date is same as ready date (scheduled for that specific time)
   if (timeOfDay) {
-    return addHours(readyDate, 4);
+    return readyDate;
   }
 
   // Otherwise, due at end of frequency period (minus 1 day)
@@ -120,6 +120,10 @@ function adjustWeekendDueDate(date: number): number {
  * @param date - Base date timestamp
  * @param timeOfDay - Time preference (Morning/Day/Evening/Night)
  * @returns Timestamp with time applied
+ *
+ * Note: Convex servers run in UTC. We need to adjust for user's timezone.
+ * For PST (UTC-8), we add 8 hours to get the desired local time.
+ * TODO: Make timezone configurable per user/routine
  */
 export function applyTimeOfDay(
   date: number,
@@ -128,8 +132,12 @@ export function applyTimeOfDay(
   const d = new Date(date);
   const hour = getTimeOfDayHour(timeOfDay);
 
-  // Set to specific hour, clear minutes/seconds/ms
-  d.setHours(hour, 0, 0, 0);
+  // FIXME: Hardcoded for PST (UTC-8). Should be configurable per user.
+  const timezoneOffset = 8; // Hours to add for PST
+  const utcHour = hour + timezoneOffset;
+
+  // Set to specific hour in UTC to achieve desired local time
+  d.setUTCHours(utcHour, 0, 0, 0);
 
   return d.getTime();
 }
