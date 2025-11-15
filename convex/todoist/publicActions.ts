@@ -11,6 +11,7 @@ export { archiveProject } from "./actions/archiveProject";
 export { createProject } from "./actions/createProject";
 export { updateProject } from "./actions/updateProject";
 export { updateProjectName } from "./actions/updateProjectName";
+export { moveProject } from "./actions/moveProject";
 export { deleteProject } from "./actions/deleteProject";
 export { createSection } from "./actions/createSection";
 export { updateSection } from "./actions/updateSection";
