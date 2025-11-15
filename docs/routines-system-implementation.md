@@ -617,19 +617,52 @@ Next steps:
 
 **Completion Notes**:
 ```
-Date:
-Status:
-Webhook Test Results:
-- Task completed:
-- Task deleted:
-- Task uncompleted:
-Completion Rate Calculation:
-- Overall rate:
-- Monthly rate:
+Date: 2025-01-14
+Status: COMPLETED ✅
+Notes:
+- Created recalculateRoutineCompletionRate mutation with overall + monthly calculations
+- Extended webhook to detect routine tasks (checks for "routine" label)
+- Created 3 status update mutations:
+  - markRoutineTaskCompleted: Sets status=completed, stores completedDate
+  - markRoutineTaskSkipped: Sets status=skipped (task deleted in Todoist)
+  - markRoutineTaskPending: Sets status=pending, clears completedDate (task uncompleted)
+- Created getRoutineTaskByTodoistId internal query (links Todoist events to routine tasks)
+- Added handleRoutineTaskEvent function to webhook to coordinate status updates
+- All mutations properly exported in barrel files
+
+Files created (4):
+- convex/routines/_mutations/recalculateRoutineCompletionRate.ts (66 lines)
+- convex/routines/_mutations/markRoutineTaskCompleted.ts (19 lines)
+- convex/routines/_mutations/markRoutineTaskSkipped.ts (18 lines)
+- convex/routines/_mutations/markRoutineTaskPending.ts (19 lines)
+- convex/routines/queries/getRoutineTaskByTodoistId.ts (16 lines)
+
+Files modified (3):
+- convex/todoist/webhook.ts (added routine task detection and handlers)
+- convex/routines/mutations.ts (exported new mutations)
+- convex/routines/queries.ts (exported getRoutineTaskByTodoistId)
+- convex/routines/_mutations/updateOverdueRoutineTasks.ts (fixed type error: Frequency → FrequencyType)
+
+Typecheck Results: ✅ All routine-related code passes (pre-existing Convex type issues remain)
+
+Webhook Integration Flow:
+1. Todoist webhook → processItemEvent → isRoutineTask check
+2. If routine task → handleRoutineTaskEvent
+3. Find routineTask by todoistTaskId
+4. Update status based on event (completed/skipped/pending)
+5. Recalculate routine completion rates
+
+Completion Rate Calculation Logic:
+- Overall: count completed / (completed + missed + skipped) * 100
+- Monthly: same formula, filtered to last 30 days
+- Handles deleted tasks via routineTasks.status = "skipped"
+- Enables accurate rates even after task deletion in Todoist
+
 Issues encountered:
--
+- None - straightforward webhook integration
+
 Next steps:
-- Milestone 8: Display Components
+- Milestone 8: Display Components (Read-Only)
 ```
 
 ---
@@ -880,7 +913,7 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 6/11 milestones (55%)
+**Overall Completion**: 7/11 milestones (64%)
 
 - [x] Planning & Research
 - [x] Milestone 1: Schema & Type Definitions
@@ -889,7 +922,7 @@ Next steps:
 - [x] Milestone 4: Task Generation Engine
 - [x] Milestone 5: Todoist Integration Actions
 - [x] Milestone 6: Cron Job Implementation
-- [ ] Milestone 7: Webhook Integration
+- [x] Milestone 7: Webhook Integration
 - [ ] Milestone 8: Display Components (Read-Only)
 - [ ] Milestone 9: Interaction Layer
 - [ ] Milestone 10: Stats & Detail View
@@ -922,13 +955,17 @@ Next steps:
 - [x] `convex/routines/_mutations/linkRoutineTask.ts`
 - [x] `convex/routines/_mutations/updateOverdueRoutineTasks.ts`
 - [x] `convex/routines/_mutations/handleDeferredRoutines.ts`
-- [ ] `convex/routines/_mutations/recalculateRoutineCompletionRate.ts`
+- [x] `convex/routines/_mutations/recalculateRoutineCompletionRate.ts`
+- [x] `convex/routines/_mutations/markRoutineTaskCompleted.ts`
+- [x] `convex/routines/_mutations/markRoutineTaskSkipped.ts`
+- [x] `convex/routines/_mutations/markRoutineTaskPending.ts`
 
-**Backend Queries (5)**:
+**Backend Queries (6)**:
 - [x] `convex/routines/queries/getRoutines.ts`
 - [x] `convex/routines/queries/getRoutine.ts`
 - [x] `convex/routines/queries/getRoutineTasks.ts`
 - [x] `convex/routines/queries/getRoutinesNeedingGeneration.ts`
+- [x] `convex/routines/queries/getRoutineTaskByTodoistId.ts` (Milestone 7)
 - [ ] `convex/routines/queries/getRoutineStats.ts`
 
 **Backend Actions (2)**:
@@ -1152,4 +1189,4 @@ Night → 19 (7pm)
 
 ---
 
-**Last Updated**: 2025-01-14 (Milestone 4 Complete)
+**Last Updated**: 2025-01-14 (Milestone 7 Complete - Webhook Integration)

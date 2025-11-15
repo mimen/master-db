@@ -241,6 +241,11 @@ async function processItemEvent(
     item,
   });
 
+  // Check if this is a routine task and handle accordingly
+  if (isRoutineTask(item)) {
+    await handleRoutineTaskEvent(ctx, item, eventName);
+  }
+
   // Trigger metadata extraction for items
   await ctx.runMutation(internal.todoist.mutations.triggerMetadataExtraction);
 
@@ -248,6 +253,82 @@ async function processItemEvent(
     status: "success",
     eventDataSummary: { entity_id: item.id, entity_type: "item" },
   };
+}
+
+/**
+ * Check if a task is a routine task (has "routine" label)
+ */
+function isRoutineTask(item: {
+  labels?: string[];
+  [key: string]: unknown;
+}): boolean {
+  return item.labels ? item.labels.includes("routine") : false;
+}
+
+/**
+ * Handle routine-specific task events
+ */
+async function handleRoutineTaskEvent(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: any,
+  item: {
+    id: string;
+    [key: string]: unknown;
+  },
+  eventName: string
+): Promise<void> {
+  try {
+    const todoistTaskId = item.id as string;
+
+    // Find the routineTask by todoistTaskId
+    const routineTask = await ctx.runQuery(
+      internal.routines.queries.getRoutineTaskByTodoistId,
+      { todoistTaskId }
+    );
+
+    if (!routineTask) {
+      // Task not linked to a routine yet, skip routine handling
+      return;
+    }
+
+    // Handle different event types
+    if (eventName === "item:completed") {
+      await ctx.runMutation(
+        internal.routines.mutations.markRoutineTaskCompleted,
+        {
+          routineTaskId: routineTask._id,
+          completedDate: Date.now(),
+        }
+      );
+    } else if (eventName === "item:deleted") {
+      await ctx.runMutation(
+        internal.routines.mutations.markRoutineTaskSkipped,
+        {
+          routineTaskId: routineTask._id,
+        }
+      );
+    } else if (eventName === "item:uncompleted") {
+      await ctx.runMutation(
+        internal.routines.mutations.markRoutineTaskPending,
+        {
+          routineTaskId: routineTask._id,
+        }
+      );
+    }
+
+    // Recalculate completion rate for the routine
+    if (routineTask.routineId) {
+      await ctx.runMutation(
+        internal.routines.mutations.recalculateRoutineCompletionRate,
+        {
+          routineId: routineTask.routineId,
+        }
+      );
+    }
+  } catch (error) {
+    // Log error but don't fail the webhook
+    console.error("Error handling routine task event:", error);
+  }
 }
 
 /**

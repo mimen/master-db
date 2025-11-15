@@ -1,6 +1,6 @@
 import { internalMutation } from "../../_generated/server";
 import { RoutineTaskStatus } from "../types/status";
-import { Frequency, frequencyToDays, isHighFrequency } from "../types/frequency";
+import { FrequencyType, frequencyToDays, isHighFrequency } from "../types/frequency";
 
 /**
  * Mark overdue pending routine tasks as 'missed'
@@ -42,12 +42,12 @@ export const updateOverdueRoutineTasks = internalMutation({
       // Determine if task should be marked as missed
       let shouldMarkMissed = false;
 
-      if (isHighFrequency(routine.frequency as Frequency)) {
+      if (isHighFrequency(routine.frequency as FrequencyType)) {
         // High frequency (Daily, Twice a Week): mark missed after 1 day
         shouldMarkMissed = overdueMs > oneDayMs;
       } else {
         // Lower frequency: mark missed after the frequency interval
-        const frequencyMs = frequencyToDays(routine.frequency as Frequency) * oneDayMs;
+        const frequencyMs = frequencyToDays(routine.frequency as FrequencyType) * oneDayMs;
         shouldMarkMissed = overdueMs > frequencyMs;
       }
 
