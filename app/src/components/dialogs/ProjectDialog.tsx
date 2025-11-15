@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react'
-import { ChevronRight, Plus } from 'lucide-react'
+import { Folder, Plus } from 'lucide-react'
 import type React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -36,6 +36,8 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   const [selectedColor, setSelectedColor] = useState<string>('charcoal')
   const [parentSelectorIndex, setParentSelectorIndex] = useState(0)
   const [colorSelectorIndex, setColorSelectorIndex] = useState(17) // charcoal index
+  const [parentSearchTerm, setParentSearchTerm] = useState('')
+  const parentSearchInputRef = useRef<HTMLInputElement>(null)
   const parentProjectRef = useRef<HTMLButtonElement>(null)
   const colorButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -55,7 +57,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   }, [projects])
 
   // Build parent options with proper hierarchy and filtering
-  const buildParentOptions = useCallback(() => {
+  const buildParentOptions = useCallback((searchFilter: string = '') => {
     if (!projects) return []
 
     type ParentOption = {
@@ -68,14 +70,18 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
 
     const options: ParentOption[] = []
 
-    // Add "No parent" option
-    options.push({ name: 'No parent (top-level project)', level: 0, isNoParent: true })
+    // Add "No parent" option if it matches search or no search
+    if (!searchFilter || 'no parent'.includes(searchFilter.toLowerCase()) || 'top level'.includes(searchFilter.toLowerCase())) {
+      options.push({ name: 'No parent (top-level project)', level: 0, isNoParent: true })
+    }
 
     // Add all projects with proper hierarchy, filtering out those at max depth
     const addProjectAndChildren = (project: TodoistProject, level: number) => {
       const projectDepth = getProjectDepth(project.todoist_id)
+      const matchesSearch = !searchFilter || project.name.toLowerCase().includes(searchFilter.toLowerCase())
+
       // Todoist allows max 4 levels (0, 1, 2, 3), so projects at depth 3 can't be parents
-      if (projectDepth < 3) {
+      if (projectDepth < 3 && matchesSearch) {
         options.push({
           id: project.todoist_id,
           name: project.name,
@@ -84,13 +90,17 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
         })
       }
 
-      // Find and add children
-      const children = projects.filter((p: TodoistProject) => p.parent_id === project.todoist_id)
+      // Find and add children (sorted by child_order)
+      const children = projects
+        .filter((p: TodoistProject) => p.parent_id === project.todoist_id)
+        .sort((a, b) => a.child_order - b.child_order)
       children.forEach((child: TodoistProject) => addProjectAndChildren(child, level + 1))
     }
 
-    // Start with root projects
-    const rootProjects = projects.filter((p: TodoistProject) => !p.parent_id)
+    // Start with root projects (sorted by child_order)
+    const rootProjects = projects
+      .filter((p: TodoistProject) => !p.parent_id)
+      .sort((a, b) => a.child_order - b.child_order)
     rootProjects.forEach((project: TodoistProject) => addProjectAndChildren(project, 0))
 
     return options
@@ -99,7 +109,9 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   const buildProjectHierarchy = () => {
     if (!projects) return []
 
-    const rootProjects = projects.filter((p: TodoistProject) => !p.parent_id)
+    const rootProjects = projects
+      .filter((p: TodoistProject) => !p.parent_id)
+      .sort((a, b) => a.child_order - b.child_order)
 
     type ProjectWithLevel = TodoistProject & { level: number }
     type CreateNewOption = { createNew: true }
@@ -113,7 +125,9 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
         result.push({ ...project, level })
       }
 
-      const children = projects.filter((p: TodoistProject) => p.parent_id === project.todoist_id)
+      const children = projects
+        .filter((p: TodoistProject) => p.parent_id === project.todoist_id)
+        .sort((a, b) => a.child_order - b.child_order)
       children.forEach((child: TodoistProject) => addProjectWithChildren(child, level + 1))
     }
 
@@ -136,7 +150,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   const filteredProjects = buildProjectHierarchy()
 
   // Handler for creating a new project
-  const handleCreateProject = useCallback(async () => {
+  const handleCreateProject = useCallback(async (colorOverride?: string) => {
     if (!searchTerm.trim()) return
 
     try {
@@ -145,7 +159,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
       const newProject = await createProject({
         name: searchTerm.trim(),
         parentId: selectedParentId,
-        color: selectedColor,
+        color: colorOverride ?? selectedColor,
       })
 
       if (newProject) {
@@ -170,16 +184,30 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
       setIsCreatingProject(false)
       setParentSelectorIndex(0)
       setColorSelectorIndex(17) // charcoal
+      setParentSearchTerm('')
 
       setTimeout(() => searchInputRef.current?.focus(), 100)
     }
   }, [task])
+
+  // Focus parent search input when entering parent selection
+  useEffect(() => {
+    if (isSelectingParent) {
+      setParentSearchTerm('')
+      setTimeout(() => parentSearchInputRef.current?.focus(), 100)
+    }
+  }, [isSelectingParent])
 
   useEffect(() => {
     if (selectedIndex >= filteredProjects.length) {
       setSelectedIndex(Math.max(0, filteredProjects.length - 1))
     }
   }, [filteredProjects.length, selectedIndex])
+
+  // Reset parent selector index when search changes
+  useEffect(() => {
+    setParentSelectorIndex(0)
+  }, [parentSearchTerm])
 
   useEffect(() => {
     selectedProjectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -201,7 +229,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Handle parent selector navigation
     if (isSelectingParent) {
-      const parentOptions = buildParentOptions()
+      const parentOptions = buildParentOptions(parentSearchTerm)
 
       switch (e.key) {
         case 'ArrowDown':
@@ -251,20 +279,21 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
           break
         case 'ArrowDown':
           e.preventDefault()
-          // 5 columns per row
-          setColorSelectorIndex(prev => Math.min(prev + 5, TODOIST_COLOR_OPTIONS.length - 1))
+          // 9 columns per row
+          setColorSelectorIndex(prev => Math.min(prev + 9, TODOIST_COLOR_OPTIONS.length - 1))
           break
         case 'ArrowUp':
           e.preventDefault()
-          // 5 columns per row
-          setColorSelectorIndex(prev => Math.max(prev - 5, 0))
+          // 9 columns per row
+          setColorSelectorIndex(prev => Math.max(prev - 9, 0))
           break
         case 'Enter':
           e.preventDefault()
           if (TODOIST_COLOR_OPTIONS[colorSelectorIndex]) {
-            setSelectedColor(TODOIST_COLOR_OPTIONS[colorSelectorIndex].name)
+            const newColor = TODOIST_COLOR_OPTIONS[colorSelectorIndex].name
+            setSelectedColor(newColor)
             setIsSelectingColor(false)
-            handleCreateProject()
+            handleCreateProject(newColor)
           }
           break
         case 'Escape':
@@ -324,17 +353,15 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   return (
     <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="max-w-lg max-h-[80vh] flex flex-col p-0"
+        className="max-w-sm max-h-[80vh] flex flex-col p-0"
         onKeyDown={handleKeyDown}
       >
-        <DialogHeader className="p-6 pb-4 space-y-3">
-          <DialogTitle className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-              <span className="text-white font-bold text-sm">#</span>
-            </div>
+        <DialogHeader className="px-6 pt-6 pb-3">
+          <DialogTitle className="flex items-center gap-2.5 text-base">
+            <Folder className="h-4 w-4 text-muted-foreground shrink-0" />
             Select Project
           </DialogTitle>
-          <DialogDescription className="text-sm font-medium text-blue-900 leading-tight">
+          <DialogDescription className="text-sm font-medium leading-snug pt-1">
             {parseMarkdownLinks(task.content).map((segment, index) => {
               if (segment.type === 'text') {
                 return <span key={index}>{segment.content}</span>
@@ -345,7 +372,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
                     href={segment.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-700 hover:text-blue-800 underline"
+                    className="text-primary hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {segment.content}
@@ -356,32 +383,34 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 pb-4 border-b border-gray-200">
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-            placeholder="Search projects..."
-          />
-          <div className="mt-2 text-sm text-gray-500">
-            ↑↓ to navigate • Enter to select • ESC to cancel
+        {!isSelectingParent && !isSelectingColor && (
+          <div className="px-6 pb-3 border-b">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-8 px-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Search projects..."
+            />
+            <div className="mt-2 text-xs text-muted-foreground">
+              ↑↓ navigate • Enter select • ESC cancel
+            </div>
           </div>
-        </div>
+        )}
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto px-3 py-2">
         {filteredProjects.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-sm text-muted-foreground">
             {searchTerm ? `No projects found for "${searchTerm}"` : 'No projects available'}
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {filteredProjects.map((item, index) => {
               // Handle divider
               if ('divider' in item) {
                 return (
-                  <div key={`divider-${index}`} className="my-2 border-t border-gray-200" />
+                  <div key={`divider-${index}`} className="my-2 border-t" />
                 )
               }
 
@@ -391,14 +420,27 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
 
                 // Show parent selector
                 if (isSelectingParent) {
-                  const parentOptions = buildParentOptions()
+                  const parentOptions = buildParentOptions(parentSearchTerm)
 
                   return (
-                    <div key="parent-selector" className="p-4 space-y-4">
-                      <div className="text-sm font-medium text-gray-700">
-                        Select parent project for &quot;{searchTerm}&quot;
+                    <div key="parent-selector" className="space-y-3">
+                      <div className="px-2 text-sm font-medium">
+                        Select parent for &quot;{searchTerm}&quot;
                       </div>
-                      <div className="space-y-1 max-h-96 overflow-y-auto">
+                      <div className="px-2">
+                        <input
+                          ref={parentSearchInputRef}
+                          type="text"
+                          value={parentSearchTerm}
+                          onChange={(e) => {
+                            setParentSearchTerm(e.target.value)
+                            setParentSelectorIndex(0)
+                          }}
+                          className="w-full h-8 px-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          placeholder="Search parent projects..."
+                        />
+                      </div>
+                      <div className="space-y-0.5 max-h-96 overflow-y-auto">
                         {parentOptions.map((option, idx) => {
                           const isOptionSelected = idx === parentSelectorIndex
                           const isCurrentlySelected = option.isNoParent ? !selectedParentId : option.id === selectedParentId
@@ -419,39 +461,28 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
                                 setIsSelectingColor(true)
                               }}
                               className={cn(
-                                'w-full text-left p-2.5 rounded-md transition-all duration-150 flex items-center gap-2 border',
-                                isOptionSelected
-                                  ? 'bg-blue-50 border-blue-300'
-                                  : isCurrentlySelected
-                                  ? 'bg-green-50 border-green-200'
-                                  : 'hover:bg-gray-50 border-transparent'
+                                'flex w-full items-center gap-2 rounded-md p-2 text-left text-sm transition-colors h-8',
+                                'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                                isOptionSelected && 'bg-sidebar-accent font-medium text-sidebar-accent-foreground',
+                                isCurrentlySelected && !isOptionSelected && 'font-medium'
                               )}
-                              style={{ paddingLeft: `${0.75 + option.level * 1.5}rem` }}
+                              style={{ paddingLeft: `${8 + option.level * 16}px` }}
                             >
-                              {option.level > 0 && (
-                                <ChevronRight className="h-3 w-3 text-gray-400" />
-                              )}
                               {!option.isNoParent && (
                                 <div
-                                  className="w-3 h-3 rounded-full flex-shrink-0"
+                                  className="w-3 h-3 rounded-full shrink-0"
                                   style={{ backgroundColor: getProjectColor(option.color || 'charcoal') }}
                                 />
                               )}
-                              <span className={option.isNoParent ? 'text-gray-500' : 'text-gray-900'}>
+                              <span className={cn('flex-1 truncate min-w-0', option.isNoParent && 'text-muted-foreground')}>
                                 {option.name}
                               </span>
-                              {isCurrentlySelected && (
-                                <span className="ml-auto text-xs text-green-600">✓ Selected</span>
-                              )}
-                              {isOptionSelected && (
-                                <span className="ml-auto text-xs text-blue-500 font-bold">↵</span>
-                              )}
                             </button>
                           )
                         })}
                       </div>
-                      <div className="text-xs text-gray-500 pt-2 border-t">
-                        ↑↓ to navigate • Enter to select • ESC to go back
+                      <div className="px-2 text-xs text-muted-foreground pt-2 border-t">
+                        ↑↓ navigate • Enter select • ESC back
                       </div>
                     </div>
                   )
@@ -462,72 +493,79 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
                   const selectedParentProject = projects?.find((p: TodoistProject) => p.todoist_id === selectedParentId)
 
                   return (
-                    <div key="color-selector" className="p-4 space-y-4">
-                      <div className="text-sm font-medium text-gray-700">
-                        Select color for &quot;{searchTerm}&quot;
+                    <div key="color-selector" className="space-y-4">
+                      <div className="px-2 space-y-2">
+                        <div className="text-sm font-medium">Choose color</div>
                         {selectedParentProject && (
-                          <span className="text-gray-500 text-xs block mt-1">
-                            Parent: {selectedParentProject.name}
-                          </span>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: getProjectColor(selectedParentProject.color) }}
+                            />
+                            <span className="truncate">{selectedParentProject.name}</span>
+                          </div>
                         )}
                       </div>
-                      <div className="grid grid-cols-5 gap-3">
-                        {TODOIST_COLOR_OPTIONS.map((color, idx) => {
-                          const isColorSelected = idx === colorSelectorIndex
-                          const isCurrentColor = color.name === selectedColor
+                      <div className="px-2">
+                        <div className="grid grid-cols-9 gap-2">
+                          {TODOIST_COLOR_OPTIONS.map((color, idx) => {
+                            const isColorSelected = idx === colorSelectorIndex
+                            const isCurrentColor = color.name === selectedColor
 
-                          return (
-                            <button
-                              key={color.name}
-                              ref={isColorSelected ? colorButtonRef : null}
-                              onClick={() => {
-                                setSelectedColor(color.name)
-                                setColorSelectorIndex(idx)
-                              }}
-                              onMouseEnter={() => setColorSelectorIndex(idx)}
-                              className={cn(
-                                'relative w-full aspect-square rounded-full transition-all',
-                                isColorSelected
-                                  ? 'ring-2 ring-blue-500 ring-offset-2 scale-110'
-                                  : isCurrentColor
-                                  ? 'ring-2 ring-green-500 ring-offset-2'
-                                  : 'hover:scale-110 hover:ring-2 hover:ring-gray-300 hover:ring-offset-1'
-                              )}
-                              style={{ backgroundColor: color.hex }}
-                              title={color.displayName}
-                            >
-                              {(isCurrentColor || isColorSelected) && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <span className="text-white text-sm font-bold drop-shadow">
-                                    {isCurrentColor ? '✓' : ''}
-                                  </span>
-                                </div>
-                              )}
-                            </button>
-                          )
-                        })}
+                            return (
+                              <button
+                                key={color.name}
+                                ref={isColorSelected ? colorButtonRef : null}
+                                onClick={() => {
+                                  setSelectedColor(color.name)
+                                  setColorSelectorIndex(idx)
+                                }}
+                                onMouseEnter={() => setColorSelectorIndex(idx)}
+                                className={cn(
+                                  'relative w-7 h-7 rounded-full transition-all',
+                                  isColorSelected
+                                    ? 'ring-2 ring-foreground ring-offset-2 scale-125'
+                                    : 'hover:scale-110'
+                                )}
+                                style={{ backgroundColor: color.hex }}
+                                title={color.displayName}
+                              >
+                                {isCurrentColor && (
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-white text-[10px] font-bold drop-shadow-md">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {TODOIST_COLOR_OPTIONS[colorSelectorIndex] && (
+                          <div className="mt-2 text-xs text-center text-muted-foreground">
+                            {TODOIST_COLOR_OPTIONS[colorSelectorIndex].displayName}
+                          </div>
+                        )}
                       </div>
                       <div className="pt-2 border-t space-y-2">
-                        <div className="text-xs text-gray-500 text-center">
-                          ←→↑↓ to navigate • Enter to create • ESC to go back
+                        <div className="px-2 text-xs text-muted-foreground text-center">
+                          ←→↑↓ navigate • Enter create • ESC back
                         </div>
-                        <div className="flex items-center justify-between">
+                        <div className="px-2 flex items-center justify-between">
                           <button
                             onClick={() => {
                               setIsSelectingColor(false)
                               setIsSelectingParent(true)
                               setParentSelectorIndex(0)
                             }}
-                            className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
                           >
-                            <span className="text-lg">←</span> Back to parent
+                            <span className="text-lg">←</span> Back
                           </button>
                           <button
                             onClick={() => handleCreateProject()}
-                            className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
+                            className="px-3 py-1.5 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
                             disabled={isCreatingProject}
                           >
-                            {isCreatingProject ? 'Creating...' : 'Create Project'}
+                            {isCreatingProject ? 'Creating...' : 'Create'}
                           </button>
                         </div>
                       </div>
@@ -546,30 +584,19 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
                       }
                     }}
                     className={cn(
-                      'w-full text-left p-2.5 rounded-md transition-all duration-150 flex items-center space-x-2 border',
-                      isSelected
-                        ? 'bg-blue-50 border-blue-300'
-                        : 'hover:bg-gray-50 border-transparent',
+                      'flex w-full items-center gap-2 rounded-md p-2 text-left text-sm transition-colors',
+                      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                      isSelected && 'bg-sidebar-accent font-medium text-sidebar-accent-foreground',
                       isCreatingProject && 'opacity-50'
                     )}
                     disabled={isCreatingProject}
                   >
-                    <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex-shrink-0">
+                    <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-600 shrink-0">
                       <Plus className="w-3 h-3 text-white" />
                     </div>
-                    <div className="flex-1">
-                      <div className="font-medium text-sm text-gray-900">
-                        Create &quot;{searchTerm}&quot; as new project
-                      </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        Press Enter to select parent and color
-                      </div>
-                    </div>
-                    {isSelected && (
-                      <div className="text-xs font-bold text-blue-500">
-                        ↵
-                      </div>
-                    )}
+                    <span className="flex-1 truncate min-w-0">
+                      Create &quot;{searchTerm}&quot;
+                    </span>
                   </button>
                 )
               }
@@ -585,29 +612,18 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
                   ref={isSelected ? selectedProjectRef : null}
                   onClick={() => onSelect(project.todoist_id)}
                   className={cn(
-                    'w-full text-left p-2.5 rounded-md transition-all duration-150 flex items-center gap-2 border',
-                    isSelected
-                      ? 'bg-blue-50 border-blue-300'
-                      : isCurrent
-                      ? 'bg-green-50 border-green-200'
-                      : 'hover:bg-gray-50 border-transparent'
+                    'flex w-full items-center gap-2 rounded-md p-2 text-left text-sm transition-colors h-8',
+                    'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    isSelected && 'bg-sidebar-accent font-medium text-sidebar-accent-foreground',
+                    isCurrent && !isSelected && 'font-medium'
                   )}
-                  style={{ paddingLeft: `${0.75 + project.level * 1.5}rem` }}
+                  style={{ paddingLeft: `${8 + project.level * 16}px` }}
                 >
-                  {project.level > 0 && (
-                    <ChevronRight className="h-3 w-3 text-gray-400" />
-                  )}
                   <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: getProjectColor(project.color) }}
                   />
-                  <span className="text-gray-900 flex-1">{project.name}</span>
-                  {isCurrent && (
-                    <span className="text-xs text-green-600">✓ Current</span>
-                  )}
-                  {isSelected && (
-                    <span className="text-xs text-blue-500 font-bold">↵</span>
-                  )}
+                  <span className="flex-1 truncate min-w-0">{project.name}</span>
                 </button>
               )
             })}
