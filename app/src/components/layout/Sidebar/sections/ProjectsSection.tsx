@@ -23,7 +23,7 @@ import { SortDropdown } from "../components/SortDropdown"
 import type { ProjectSort, ProjectTreeNode } from "../types"
 import { PRIORITY_PROJECTS_ITEMS } from "../utils/filterItems"
 import { getSortedProjects } from "../utils/sorting"
-import { enrichTreeWithDnDMetadata } from "../utils/projectTree"
+import { enrichTreeWithDnDMetadata, flattenProjects } from "../utils/projectTree"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
@@ -152,6 +152,9 @@ export function ProjectsSection({
     sortedProjects = enrichTreeWithDnDMetadata(sortedProjects)
   }
 
+  // Flatten projects for DnD operations (find any project by ID, including children)
+  const flatProjects = sortMode === "hierarchy" ? flattenProjects(sortedProjects) : sortedProjects
+
   const updateProjectPriority = useOptimisticProjectPriority()
   const { getProjectUpdate } = useOptimisticUpdates()
 
@@ -171,7 +174,7 @@ export function ProjectsSection({
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
-    const project = sortedProjects.find((p) => p.todoist_id === active.id)
+    const project = flatProjects.find((p) => p.todoist_id === active.id)
     if (project) {
       setActiveProject(project)
     }
@@ -186,7 +189,7 @@ export function ProjectsSection({
       return
     }
 
-    const targetProject = sortedProjects.find((p) => p.todoist_id === over.id)
+    const targetProject = flatProjects.find((p) => p.todoist_id === over.id)
     if (!targetProject) {
       setDropZone(null)
       return
@@ -211,7 +214,7 @@ export function ProjectsSection({
       mouseY: rect.top + (verticalPercent > 0.5 ? rect.height : 0),
       projectRect: rect,
       targetProject,
-      allProjects: sortedProjects,
+      allProjects: flatProjects,
     })
 
     setDropZone(zone)
@@ -220,7 +223,7 @@ export function ProjectsSection({
     const validation = validateDrop({
       draggedProject: activeProject,
       dropZone: zone,
-      allProjects: sortedProjects,
+      allProjects: flatProjects,
     })
 
     setIsValidDrop(validation.valid)
@@ -358,20 +361,29 @@ export function ProjectsSection({
 
     // Hierarchy mode rendering with DnD
     if (sortMode === "hierarchy") {
+      const renderHierarchyItem = (project: ProjectTreeNode): ReactNode => (
+        <div key={project._id}>
+          <DraggableProjectItem
+            project={project}
+            currentViewKey={currentViewKey}
+            onViewChange={onViewChange}
+            expandNested={expandNested}
+            viewContext={viewContext}
+            toggleProjectCollapse={toggleProjectCollapse}
+            isProjectCollapsed={isProjectCollapsed}
+          />
+          {/* Recursively render children with indentation */}
+          {project.children.length > 0 && (
+            <div style={{ marginLeft: "16px" }}>
+              {project.children.map((child) => renderHierarchyItem(child))}
+            </div>
+          )}
+        </div>
+      )
+
       const content = (
         <SidebarMenu className="space-y-px">
-          {sortedProjects.map((project) => (
-            <DraggableProjectItem
-              key={project._id}
-              project={project}
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              expandNested={expandNested}
-              viewContext={viewContext}
-              toggleProjectCollapse={toggleProjectCollapse}
-              isProjectCollapsed={isProjectCollapsed}
-            />
-          ))}
+          {sortedProjects.map((project) => renderHierarchyItem(project))}
 
           {(!sortedProjects || sortedProjects.length === 0) && (
             <p className="text-xs text-muted-foreground text-center py-4">No projects found</p>
