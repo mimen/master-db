@@ -94,6 +94,20 @@ export const handleTodoistWebhook = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Convert ArrayBuffer to base64 string (Web-compatible)
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  // btoa is available in Convex runtime (Web API)
+  // eslint-disable-next-line no-undef
+  return btoa(binary);
+}
+
+/**
  * Verify the webhook signature using HMAC-SHA256
  * Uses Web Crypto API (compatible with Convex runtime)
  */
@@ -120,11 +134,8 @@ async function verifyWebhookSignature(
     // Sign the body
     const signatureBuffer = await crypto.subtle.sign("HMAC", key, bodyData);
 
-    // Convert signature to base64
-    const signatureArray = Array.from(new Uint8Array(signatureBuffer));
-    const expectedSignature = btoa(
-      String.fromCharCode(...signatureArray)
-    );
+    // Convert signature to base64 (using Web-compatible approach)
+    const expectedSignature = arrayBufferToBase64(signatureBuffer);
 
     return signature === expectedSignature;
   } catch (error) {
