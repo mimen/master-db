@@ -12,6 +12,7 @@ import type {
   TimeRange,
 } from "./types"
 
+import { Badge } from "@/components/ui/badge"
 import { getProjectColor } from "@/lib/colors"
 import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
@@ -211,7 +212,13 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
         <div className="flex items-center gap-2">
           <span>{title}</span>
           {priorityInfo?.showFlag && (
-            <Flag className={cn("h-4 w-4", colorClass)} fill="currentColor" />
+            <Badge
+              variant="outline"
+              className={cn("gap-1.5 font-normal", colorClass)}
+            >
+              <Flag className="h-3 w-3" fill="currentColor" />
+              <span>{priorityInfo.uiPriority}</span>
+            </Badge>
           )}
         </div>
       ),
