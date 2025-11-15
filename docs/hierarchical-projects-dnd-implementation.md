@@ -533,14 +533,17 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 4/5 milestones (80%)
+**Status**: ON HOLD - UI Layer Removed (Backend Preserved)
 
-- [x] Planning & Research
-- [x] Milestone 1: API Layer - Project Move Endpoint ✅
-- [x] Milestone 2: Drop Zone Detection System ✅
-- [x] Milestone 3: Enhanced DnD Components ✅
-- [x] Milestone 4: Integration & Optimistic Updates ✅
-- [ ] Milestone 5: Validation & Polish
+- [x] Milestone 1: API Layer - Project Move Endpoint ✅ (KEPT)
+- [x] Milestone 2: Drop Zone Detection System ✅ (REMOVED)
+- [x] Milestone 3: Enhanced DnD Components ✅ (REMOVED)
+- [x] Milestone 4: Integration & Optimistic Updates ✅ (REMOVED)
+- [ ] Milestone 5: Validation & Polish (NOT STARTED)
+
+**Note**: All UI-layer drag-and-drop code has been removed as of 2025-01-15.
+Backend infrastructure (moveProject action, reorderProjectSiblings mutation)
+remains in the codebase for future implementation.
 
 ---
 
