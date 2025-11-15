@@ -74,7 +74,7 @@ function DroppableZone({ id, children, isActive }: { id: string; children: React
   )
 }
 
-// DraggableProjectItem: Wraps ProjectItem to make it draggable
+// DraggableProjectItem: Wraps ProjectItem to make it draggable AND droppable
 function DraggableProjectItem({
   project,
   currentViewKey,
@@ -94,9 +94,19 @@ function DraggableProjectItem({
   isProjectCollapsed: (projectId: string) => boolean
   renderChildren?: boolean
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef: setDraggableRef, transform, isDragging } = useDraggable({
     id: project.todoist_id,
   })
+
+  const { setNodeRef: setDroppableRef } = useDroppable({
+    id: project.todoist_id,
+  })
+
+  // Combine both refs
+  const setRefs = (element: HTMLDivElement | null) => {
+    setDraggableRef(element)
+    setDroppableRef(element)
+  }
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -105,7 +115,7 @@ function DraggableProjectItem({
   }
 
   return (
-    <div id={`project-${project.todoist_id}`} ref={setNodeRef} style={style} {...listeners} {...attributes}>
+    <div id={`project-${project.todoist_id}`} ref={setRefs} style={style} {...listeners} {...attributes}>
       <ProjectItem
         project={project}
         currentViewKey={currentViewKey}
