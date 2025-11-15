@@ -29,9 +29,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectPriority } from "@/hooks/useOptimisticProjectPriority"
+import { useOptimisticProjectHierarchy } from "@/hooks/useOptimisticProjectHierarchy"
 import { getProjectColor } from "@/lib/colors"
 import { getDropZone } from "@/lib/dnd/getDropZone"
-import { validateDrop } from "@/lib/dnd/validateDrop"
+import { validateDrop, getNewParentAndOrder } from "@/lib/dnd/validateDrop"
 import type { DropZone } from "@/lib/dnd/types"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 
@@ -159,6 +160,7 @@ export function ProjectsSection({
   const flatProjects = sortMode === "hierarchy" ? flattenProjects(sortedProjects) : sortedProjects
 
   const updateProjectPriority = useOptimisticProjectPriority()
+  const updateProjectHierarchy = useOptimisticProjectHierarchy()
   const { getProjectUpdate } = useOptimisticUpdates()
 
   // DnD state
@@ -258,10 +260,13 @@ export function ProjectsSection({
 
       // Update priority optimistically
       updateProjectPriority(projectId, targetPriority)
-    } else if (sortMode === "hierarchy" && dropZone && isValidDrop) {
-      // Hierarchy drag-and-drop would go here (Milestone 4)
-      // For now, just log the intention
-      console.log("Moving project to hierarchy:", dropZone)
+    } else if (sortMode === "hierarchy" && dropZone && isValidDrop && active.id) {
+      // Hierarchy drag-and-drop: move project to new parent/position
+      const projectId = active.id as string
+      const { parentId, childOrder } = getNewParentAndOrder(dropZone)
+
+      // Update hierarchy optimistically
+      updateProjectHierarchy(projectId, parentId, childOrder)
     }
   }
 

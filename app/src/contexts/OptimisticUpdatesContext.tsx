@@ -66,6 +66,13 @@ export type OptimisticProjectUpdate =
       newPriority: number
       timestamp: number
     }
+  | {
+      projectId: string
+      type: "hierarchy-move"
+      newParentId: string | null
+      newChildOrder: number
+      timestamp: number
+    }
 
 // ============================================
 // COMBINED TYPE
