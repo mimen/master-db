@@ -73,15 +73,7 @@ export enum DropValidationCode {
 }
 
 /**
- * Project tree node with hierarchy metadata
- * Used for drag-drop calculations
+ * Import actual ProjectTreeNode from Sidebar types
+ * Contains todoist_id, parent_id, child_order (snake_case)
  */
-export interface ProjectTreeNode {
-  id: string;
-  name: string;
-  parentId: string | null;
-  childOrder: number;
-  level: number; // Calculated: 0 = root, 1 = child, 2 = grandchild
-  children: ProjectTreeNode[];
-  isLastInGroup: boolean; // Whether this is the last child of its parent
-}
+export type { ProjectTreeNode } from "@/components/layout/Sidebar/types";

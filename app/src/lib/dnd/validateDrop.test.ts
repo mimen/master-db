@@ -10,100 +10,115 @@ import type { DropZone, ProjectTreeNode } from "./types";
 //   │   └─ LastChild (level 2, last in group)
 //   └─ Parent2 (level 1)
 
+// Create minimal mock projects with required fields
+const createMockProject = (overrides: Partial<ProjectTreeNode> & { todoist_id: string }): ProjectTreeNode => ({
+  _id: "" as any,
+  _creationTime: 0,
+  todoist_id: overrides.todoist_id,
+  name: overrides.name || "Test",
+  color: "blue",
+  parent_id: overrides.parent_id || null,
+  child_order: overrides.child_order ?? 0,
+  is_deleted: false,
+  is_archived: false,
+  is_favorite: false,
+  view_style: "list",
+  children: overrides.children || [],
+  level: overrides.level,
+  isLastInGroup: overrides.isLastInGroup,
+  stats: { activeCount: 0, completedCount: 0 },
+  ...overrides,
+} as ProjectTreeNode);
+
 const mockProjects: ProjectTreeNode[] = [
-  {
-    id: "root",
+  createMockProject({
+    todoist_id: "root",
     name: "Root",
-    parentId: null,
-    childOrder: 0,
+    parent_id: null,
+    child_order: 0,
     level: 0,
-    children: [],
     isLastInGroup: false,
-  },
-  {
-    id: "parent",
+  }),
+  createMockProject({
+    todoist_id: "parent",
     name: "Parent",
-    parentId: null,
-    childOrder: 1,
+    parent_id: null,
+    child_order: 1,
     level: 0,
-    children: [],
     isLastInGroup: false,
-  },
-  {
-    id: "child",
+  }),
+  createMockProject({
+    todoist_id: "child",
     name: "Child",
-    parentId: "parent",
-    childOrder: 0,
+    parent_id: "parent",
+    child_order: 0,
     level: 1,
-    children: [],
     isLastInGroup: false,
-  },
-  {
-    id: "lastChild",
+  }),
+  createMockProject({
+    todoist_id: "lastChild",
     name: "Last Child",
-    parentId: "parent",
-    childOrder: 1,
+    parent_id: "parent",
+    child_order: 1,
     level: 1,
-    children: [],
     isLastInGroup: true,
-  },
-  {
-    id: "parent2",
+  }),
+  createMockProject({
+    todoist_id: "parent2",
     name: "Parent 2",
-    parentId: null,
-    childOrder: 2,
+    parent_id: null,
+    child_order: 2,
     level: 0,
-    children: [],
     isLastInGroup: false,
-  },
+  }),
 ];
 
 describe("getProjectDepth", () => {
   it("should return 0 for root level projects", () => {
-    const root = mockProjects.find((p) => p.id === "root")!;
+    const root = mockProjects.find((p) => p.todoist_id === "root")!;
     expect(getProjectDepth(root, mockProjects)).toBe(0);
   });
 
   it("should return 1 for child projects", () => {
-    const child = mockProjects.find((p) => p.id === "child")!;
+    const child = mockProjects.find((p) => p.todoist_id === "child")!;
     expect(getProjectDepth(child, mockProjects)).toBe(1);
   });
 });
 
 describe("getSubtreeDepth", () => {
   it("should return 0 for projects with no children", () => {
-    const child = mockProjects.find((p) => p.id === "child")!;
+    const child = mockProjects.find((p) => p.todoist_id === "child")!;
     expect(getSubtreeDepth(child, mockProjects)).toBe(0);
   });
 
   it("should return 1 for projects with children", () => {
-    const parent = mockProjects.find((p) => p.id === "parent")!;
+    const parent = mockProjects.find((p) => p.todoist_id === "parent")!;
     expect(getSubtreeDepth(parent, mockProjects)).toBe(1);
   });
 });
 
 describe("isDescendantOf", () => {
   it("should return true for direct child", () => {
-    const child = mockProjects.find((p) => p.id === "child")!;
-    const parent = mockProjects.find((p) => p.id === "parent")!;
+    const child = mockProjects.find((p) => p.todoist_id === "child")!;
+    const parent = mockProjects.find((p) => p.todoist_id === "parent")!;
     expect(isDescendantOf(child, parent, mockProjects)).toBe(true);
   });
 
   it("should return false for non-descendant", () => {
-    const parent = mockProjects.find((p) => p.id === "parent")!;
-    const parent2 = mockProjects.find((p) => p.id === "parent2")!;
+    const parent = mockProjects.find((p) => p.todoist_id === "parent")!;
+    const parent2 = mockProjects.find((p) => p.todoist_id === "parent2")!;
     expect(isDescendantOf(parent2, parent, mockProjects)).toBe(false);
   });
 
   it("should return false for self", () => {
-    const parent = mockProjects.find((p) => p.id === "parent")!;
+    const parent = mockProjects.find((p) => p.todoist_id === "parent")!;
     expect(isDescendantOf(parent, parent, mockProjects)).toBe(false);
   });
 });
 
 describe("validateDrop", () => {
   it("should reject same position drop", () => {
-    const draggedProject = mockProjects.find((p) => p.id === "child")!;
+    const draggedProject = mockProjects.find((p) => p.todoist_id === "child")!;
     const dropZone: DropZone = {
       position: "middle",
       vertical: "before",
@@ -119,7 +134,7 @@ describe("validateDrop", () => {
   });
 
   it("should reject circular reference (parent into child)", () => {
-    const draggedProject = mockProjects.find((p) => p.id === "parent")!;
+    const draggedProject = mockProjects.find((p) => p.todoist_id === "parent")!;
     const dropZone: DropZone = {
       position: "right",
       vertical: "inside",
@@ -138,18 +153,17 @@ describe("validateDrop", () => {
     // Create a deeper hierarchy for this test
     const deepProjects: ProjectTreeNode[] = [
       ...mockProjects,
-      {
-        id: "grandchild",
+      createMockProject({
+        todoist_id: "grandchild",
         name: "Grandchild",
-        parentId: "child",
-        childOrder: 0,
+        parent_id: "child",
+        child_order: 0,
         level: 2,
-        children: [],
         isLastInGroup: false,
-      },
+      }),
     ];
 
-    const draggedProject = deepProjects.find((p) => p.id === "child")!; // Has 1 level of children (grandchild)
+    const draggedProject = deepProjects.find((p) => p.todoist_id === "child")!; // Has 1 level of children (grandchild)
     const dropZone: DropZone = {
       position: "right",
       vertical: "inside",
@@ -167,7 +181,7 @@ describe("validateDrop", () => {
   });
 
   it("should allow valid drops", () => {
-    const draggedProject = mockProjects.find((p) => p.id === "child")!;
+    const draggedProject = mockProjects.find((p) => p.todoist_id === "child")!;
     const dropZone: DropZone = {
       position: "middle",
       vertical: "after",

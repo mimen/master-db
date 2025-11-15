@@ -23,9 +23,9 @@ export function validateDrop(params: {
 
   // Check 1: Same position (no-op)
   if (
-    draggedProject.id === dropZone.targetProjectId &&
-    draggedProject.parentId === dropZone.newParentId &&
-    draggedProject.childOrder === dropZone.newChildOrder
+    draggedProject.todoist_id === dropZone.targetProjectId &&
+    draggedProject.parent_id === dropZone.newParentId &&
+    draggedProject.child_order === dropZone.newChildOrder
   ) {
     return {
       valid: false,
@@ -35,7 +35,7 @@ export function validateDrop(params: {
   }
 
   // Check 2: Circular reference (parent into own descendant)
-  const targetProject = allProjects.find((p) => p.id === dropZone.targetProjectId);
+  const targetProject = allProjects.find((p) => p.todoist_id === dropZone.targetProjectId);
   if (!targetProject) {
     return {
       valid: false,
@@ -76,9 +76,9 @@ export function getProjectDepth(project: ProjectTreeNode, allProjects: ProjectTr
   let depth = 0;
   let current: ProjectTreeNode | undefined = project;
 
-  while (current?.parentId) {
+  while (current?.parent_id) {
     depth++;
-    current = allProjects.find((p) => p.id === current!.parentId);
+    current = allProjects.find((p) => p.todoist_id === current!.parent_id);
   }
 
   return depth;
@@ -89,7 +89,7 @@ export function getProjectDepth(project: ProjectTreeNode, allProjects: ProjectTr
  * @returns 0 if no children, 1 if has children, 2 if has grandchildren
  */
 export function getSubtreeDepth(project: ProjectTreeNode, allProjects: ProjectTreeNode[]): number {
-  const children = allProjects.filter((p) => p.parentId === project.id);
+  const children = allProjects.filter((p) => p.parent_id === project.todoist_id);
 
   if (children.length === 0) {
     return 0;
@@ -110,11 +110,11 @@ export function isDescendantOf(
 ): boolean {
   let current: ProjectTreeNode | undefined = project;
 
-  while (current?.parentId) {
-    if (current.parentId === potentialAncestor.id) {
+  while (current?.parent_id) {
+    if (current.parent_id === potentialAncestor.todoist_id) {
       return true;
     }
-    current = allProjects.find((p) => p.id === current!.parentId);
+    current = allProjects.find((p) => p.todoist_id === current!.parent_id);
   }
 
   return false;
