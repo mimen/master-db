@@ -3,7 +3,11 @@ import type { ComponentType } from "react"
 import type { ViewKey } from "@/lib/views/types"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
-export type ProjectTreeNode = TodoistProjectWithMetadata & { children: ProjectTreeNode[] }
+export type ProjectTreeNode = TodoistProjectWithMetadata & {
+  children: ProjectTreeNode[]
+  level?: number
+  isLastInGroup?: boolean
+}
 
 export type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
 export type LabelSort = "taskCount" | "alphabetical"

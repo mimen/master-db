@@ -36,14 +36,19 @@ export function buildProjectTree(projects: TodoistProjectsWithMetadata): Project
 }
 
 /**
- * Flattens a project tree into a single-level array
+ * Flattens a project tree into a single-level array, preserving DnD metadata
  */
 export function flattenProjects(projects: ProjectTreeNode[]): ProjectTreeNode[] {
   const result: ProjectTreeNode[] = []
 
   function flatten(nodes: ProjectTreeNode[]) {
     for (const node of nodes) {
-      result.push({ ...node, children: [] })
+      result.push({
+        ...node,
+        children: [],
+        level: node.level,
+        isLastInGroup: node.isLastInGroup,
+      })
       if (node.children.length > 0) {
         flatten(node.children)
       }
@@ -65,4 +70,19 @@ export function getTotalActiveCount(project: ProjectTreeNode): number {
   }
 
   return total
+}
+
+/**
+ * Enriches tree nodes with level and isLastInGroup properties for DnD
+ */
+export function enrichTreeWithDnDMetadata(nodes: ProjectTreeNode[], parentLevel = 0): ProjectTreeNode[] {
+  return nodes.map((node, index) => {
+    const enrichedNode: ProjectTreeNode = {
+      ...node,
+      level: parentLevel,
+      isLastInGroup: index === nodes.length - 1,
+      children: enrichTreeWithDnDMetadata(node.children, parentLevel + 1),
+    }
+    return enrichedNode
+  })
 }

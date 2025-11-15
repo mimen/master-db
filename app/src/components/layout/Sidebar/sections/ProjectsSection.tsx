@@ -23,6 +23,7 @@ import { SortDropdown } from "../components/SortDropdown"
 import type { ProjectSort, ProjectTreeNode } from "../types"
 import { PRIORITY_PROJECTS_ITEMS } from "../utils/filterItems"
 import { getSortedProjects } from "../utils/sorting"
+import { enrichTreeWithDnDMetadata } from "../utils/projectTree"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
@@ -144,7 +145,13 @@ export function ProjectsSection({
   togglePriorityGroupCollapse,
   isPriorityGroupCollapsed,
 }: ProjectsSectionProps) {
-  const sortedProjects = getSortedProjects(projects, sortMode)
+  let sortedProjects = getSortedProjects(projects, sortMode)
+
+  // Enrich with DnD metadata when in hierarchy mode
+  if (sortMode === "hierarchy") {
+    sortedProjects = enrichTreeWithDnDMetadata(sortedProjects)
+  }
+
   const updateProjectPriority = useOptimisticProjectPriority()
   const { getProjectUpdate } = useOptimisticUpdates()
 
