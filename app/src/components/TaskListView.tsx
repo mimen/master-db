@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { AlertCircle, Calendar, Check, ChevronDown, ChevronRight, Flag, Tag, User, X, RotateCcw } from "lucide-react"
+import { AlertCircle, Calendar, Check, Flag, Tag, User, X, RotateCcw } from "lucide-react"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
+import { useFocusContext } from "@/contexts/FocusContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
 import { useOptimisticDeadlineChange } from "@/hooks/useOptimisticDeadlineChange"
@@ -54,6 +55,7 @@ export function TaskListView({
 }: TaskListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
   const { registry } = useCountRegistry()
+  const { setFocusedTask } = useFocusContext()
 
   const projects: TodoistProjects | undefined = useQuery(
     api.todoist.publicQueries.getProjects,
@@ -123,6 +125,11 @@ export function TaskListView({
     focusedTaskIndex < visibleTasks.length
       ? visibleTasks[focusedTaskIndex]
       : null
+
+  // Update global focus context when focused task changes
+  useEffect(() => {
+    setFocusedTask(focusedTask)
+  }, [focusedTask, setFocusedTask])
 
   useTaskDialogShortcuts(focusedTask)
 
@@ -211,10 +218,6 @@ export function TaskListView({
   // Detect if we're in a project-filtered view (project or inbox)
   const isProjectView = list.query.type === "project" || list.query.type === "inbox"
 
-  const toggleExpanded = () => {
-    setIsExpanded((prev) => !prev)
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -272,24 +275,6 @@ export function TaskListView({
       {isMultiListView && (
         <div className="mb-4">
           <div className="flex items-center gap-3 mb-3">
-            {list.collapsible && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={toggleExpanded}
-                      className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
-                      aria-label={isExpanded ? "Collapse list" : "Expand list"}
-                    >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isExpanded ? "Collapse" : "Expand"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
             <div className="text-muted-foreground">{header.icon}</div>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold tracking-tight">{header.title}</h2>

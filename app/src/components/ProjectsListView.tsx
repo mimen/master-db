@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { ChevronDown, ChevronRight, RotateCcw, X } from "lucide-react"
+import { RotateCcw, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
 import { ProjectRow } from "./ProjectRow"
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { useFocusContext } from "@/contexts/FocusContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
@@ -40,6 +41,7 @@ export function ProjectsListView({
 }: ProjectsListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
   const { registry } = useCountRegistry()
+  const { setFocusedProject } = useFocusContext()
   const { getProjectUpdate } = useOptimisticUpdates()
 
   const allProjects: TodoistProjectsWithMetadata | undefined = useQuery(
@@ -96,6 +98,11 @@ export function ProjectsListView({
     focusedProjectIndex < visibleProjects.length
       ? visibleProjects[focusedProjectIndex]
       : null
+
+  // Update global focus context when focused project changes
+  useEffect(() => {
+    setFocusedProject(focusedProject)
+  }, [focusedProject, setFocusedProject])
 
   useProjectDialogShortcuts(focusedProject)
 
@@ -182,10 +189,6 @@ export function ProjectsListView({
 
   const isLoading = allProjects === undefined
 
-  const toggleExpanded = () => {
-    setIsExpanded((prev) => !prev)
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -243,24 +246,6 @@ export function ProjectsListView({
       {isMultiListView && (
         <div className="mb-4">
           <div className="flex items-center gap-3 mb-3">
-            {list.collapsible && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={toggleExpanded}
-                      className="p-1.5 hover:bg-accent rounded-md transition-colors text-muted-foreground hover:text-foreground"
-                      aria-label={isExpanded ? "Collapse list" : "Expand list"}
-                    >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isExpanded ? "Collapse" : "Expand"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
             <div className="text-muted-foreground">{header.icon}</div>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold tracking-tight">{header.title}</h2>

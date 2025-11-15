@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { CountProvider } from "@/contexts/CountContext"
 import { DialogProvider } from "@/contexts/DialogContext"
+import { FocusProvider } from "@/contexts/FocusContext"
 import { OptimisticUpdatesProvider } from "@/contexts/OptimisticUpdatesContext"
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string)
@@ -17,13 +18,15 @@ export function App() {
       <ConvexProvider client={convex}>
         <CountProvider>
           <OptimisticUpdatesProvider>
-            <DialogProvider>
-              <SidebarProvider defaultOpen>
-                <Layout />
-                <DialogManager />
-                <Toaster />
-              </SidebarProvider>
-            </DialogProvider>
+            <FocusProvider>
+              <DialogProvider>
+                <SidebarProvider defaultOpen>
+                  <Layout />
+                  <DialogManager />
+                  <Toaster />
+                </SidebarProvider>
+              </DialogProvider>
+            </FocusProvider>
           </OptimisticUpdatesProvider>
         </CountProvider>
       </ConvexProvider>
