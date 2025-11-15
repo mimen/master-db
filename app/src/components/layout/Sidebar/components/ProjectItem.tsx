@@ -17,6 +17,7 @@ interface ProjectItemProps {
   viewContext: ViewBuildContext
   toggleProjectCollapse: (projectId: string) => void
   isProjectCollapsed: (projectId: string) => boolean
+  renderChildren?: boolean // Whether to recursively render children (default: true)
 }
 
 export function ProjectItem({
@@ -28,6 +29,7 @@ export function ProjectItem({
   viewContext,
   toggleProjectCollapse,
   isProjectCollapsed,
+  renderChildren = true,
 }: ProjectItemProps) {
   const projectViewKey = `view:project:${project.todoist_id}` as ViewKey
   const projectFamilyKey = `view:project-family:${project.todoist_id}` as ViewKey
@@ -78,7 +80,8 @@ export function ProjectItem({
         />
       </SidebarMenuItem>
 
-      {hasChildren &&
+      {renderChildren &&
+        hasChildren &&
         !isCollapsed &&
         project.children.map((child: ProjectTreeNode) => (
           <ProjectItem
@@ -91,6 +94,7 @@ export function ProjectItem({
             viewContext={viewContext}
             toggleProjectCollapse={toggleProjectCollapse}
             isProjectCollapsed={isProjectCollapsed}
+            renderChildren={renderChildren}
           />
         ))}
     </>

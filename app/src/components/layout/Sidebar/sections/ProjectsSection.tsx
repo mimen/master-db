@@ -82,6 +82,7 @@ function DraggableProjectItem({
   viewContext,
   toggleProjectCollapse,
   isProjectCollapsed,
+  renderChildren = true,
 }: {
   project: ProjectTreeNode
   currentViewKey: ViewKey
@@ -90,6 +91,7 @@ function DraggableProjectItem({
   viewContext: ViewBuildContext
   toggleProjectCollapse: (projectId: string) => void
   isProjectCollapsed: (projectId: string) => boolean
+  renderChildren?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: project.todoist_id,
@@ -112,6 +114,7 @@ function DraggableProjectItem({
         viewContext={viewContext}
         toggleProjectCollapse={toggleProjectCollapse}
         isProjectCollapsed={isProjectCollapsed}
+        renderChildren={renderChildren}
       />
     </div>
   )
@@ -371,11 +374,12 @@ export function ProjectsSection({
             viewContext={viewContext}
             toggleProjectCollapse={toggleProjectCollapse}
             isProjectCollapsed={isProjectCollapsed}
+            renderChildren={false} // Disable ProjectItem's recursion - renderHierarchyItem handles it
           />
           {/* Recursively render children with indentation */}
           {project.children.length > 0 && (
             <div style={{ marginLeft: "16px" }}>
-              {project.children.map((child) => renderHierarchyItem(child))}
+              {project.children.map((child: ProjectTreeNode) => renderHierarchyItem(child))}
             </div>
           )}
         </div>
