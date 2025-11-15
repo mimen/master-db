@@ -1,7 +1,8 @@
 import { useQuery } from "convex/react"
-import { RotateCcw, X } from "lucide-react"
+import { Plus, RotateCcw, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { RoutineDialog } from "./dialogs/RoutineDialog"
 import { RoutineRow } from "./RoutineRow"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -21,7 +22,24 @@ export function RoutinesListView({
   isMultiListView = false,
 }: RoutinesListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [selectedRoutine, setSelectedRoutine] = useState<Doc<"routines"> | undefined>()
   const { registry } = useCountRegistry()
+
+  const handleOpenCreate = () => {
+    setSelectedRoutine(undefined)
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenEdit = (routine: Doc<"routines">) => {
+    setSelectedRoutine(routine)
+    setIsDialogOpen(true)
+  }
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false)
+    setSelectedRoutine(undefined)
+  }
 
   const allRoutines: Doc<"routines">[] | undefined = useQuery(
     api.routines.publicQueries.getRoutinesByView,
@@ -108,50 +126,66 @@ export function RoutinesListView({
   const hiddenCount = hasMaxRoutines && !isShowingAll ? allRoutines.length - list.maxTasks : 0
 
   return (
-    <div className="space-y-4">
-      {isMultiListView && (
-        <div className="mb-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="text-muted-foreground">{headerInfo.icon}</div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-semibold tracking-tight">{headerInfo.title}</h2>
-              {headerInfo.description && (
-                <p className="text-sm text-muted-foreground">{headerInfo.description}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {!isShowingAll && (
-                <span className="text-xs text-muted-foreground">
-                  +{hiddenCount} more
-                </span>
-              )}
-              <div className="text-sm text-muted-foreground">{count}</div>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setIsExpanded(!isExpanded)}
-                    >
-                      {isExpanded ? (
-                        <X className="h-4 w-4" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {isExpanded ? "Collapse" : "Expand"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+    <>
+      <RoutineDialog
+        isOpen={isDialogOpen}
+        onClose={handleCloseDialog}
+        routine={selectedRoutine}
+        mode={selectedRoutine ? "edit" : "create"}
+      />
+
+      <div className="space-y-4">
+        {/* Header with New button */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1">
+            {isMultiListView && (
+              <div className="flex items-center gap-3 mb-3">
+                <div className="text-muted-foreground">{headerInfo.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-semibold tracking-tight">{headerInfo.title}</h2>
+                  {headerInfo.description && (
+                    <p className="text-sm text-muted-foreground">{headerInfo.description}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isShowingAll && (
+                    <span className="text-xs text-muted-foreground">
+                      +{hiddenCount} more
+                    </span>
+                  )}
+                  <div className="text-sm text-muted-foreground">{count}</div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setIsExpanded(!isExpanded)}
+                        >
+                          {isExpanded ? (
+                            <X className="h-4 w-4" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isExpanded ? "Collapse" : "Expand"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+            )}
           </div>
-          <Separator />
+          <Button onClick={handleOpenCreate} size="sm" className="gap-2">
+            <Plus className="h-4 w-4" />
+            New Routine
+          </Button>
         </div>
-      )}
+
+        {isMultiListView && <Separator />}
 
       {visibleRoutines.length === 0 ? (
         <div className="flex items-center justify-center h-64">
@@ -169,6 +203,7 @@ export function RoutinesListView({
               key={routine._id}
               routine={routine}
               onElementRef={handleRef(routine._id)}
+              onClick={() => handleOpenEdit(routine)}
             />
           ))}
         </div>

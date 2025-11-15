@@ -75,6 +75,14 @@ export const SHORTCUT_REGISTRY: ShortcutDefinition[] = [
     visible: true,
   },
   {
+    id: 'quick-add-routine',
+    description: 'Quick add routine',
+    keys: ['Shift', 'R'],
+    category: 'general',
+    context: 'always',
+    visible: true,
+  },
+  {
     id: 'show-shortcuts',
     description: 'Show keyboard shortcuts',
     keys: ['?'],
