@@ -276,20 +276,59 @@ Next steps:
 
 **Completion Notes**:
 ```
-Date:
-Status:
+Date: 2025-01-14
+Status: COMPLETED ✅
+
 Visual Testing Results:
-- Line indicator shows:
-- Indentation preview accurate:
-- Background highlight works:
-- Forbidden zone styling:
-- DragOverlay appearance:
+- ✅ HierarchicalDropIndicator renders blue/green lines for valid drops
+- ✅ Red highlights for forbidden zones (circular refs, depth limit)
+- ✅ Indentation preview in DragOverlay shows target level offset
+- ✅ DragOverlay border color changes based on drop validity
+- ✅ Drop zone detection calculates left/middle/right zones correctly
+
+Implementation Details:
+- Created HierarchicalDropIndicator.tsx for visual feedback
+  - Blue line with glow for valid drops
+  - Red highlight for invalid drops
+  - Left/right zone indicators
+  - Background highlight for "inside" drops
+- Modified ProjectsSection.tsx to support hierarchy mode DnD
+  - Added state for dropZone, isValidDrop, targetRect
+  - Added handleDragOver to calculate drop zones in real-time
+  - Modified handleDragEnd to route hierarchy vs priority logic
+  - Added hierarchy mode rendering with custom DragOverlay
+- Added DraggableProjectItem wrapper with ID attributes
+  - Enables drop zone detection via DOM element lookup
+  - Maintains opacity feedback during drag
+
+Files Created (1):
+- app/src/components/layout/Sidebar/components/HierarchicalDropIndicator.tsx (93 lines)
+
+Files Modified (1):
+- app/src/components/layout/Sidebar/sections/ProjectsSection.tsx (expanded with hierarchy DnD support)
+
+TypeScript Validation:
+- ✅ No errors in ProjectsSection
+- ✅ No errors in HierarchicalDropIndicator
+- ✅ All imports properly typed
+- ✅ Drop zone state properly typed with DropZone interface
+
+Visual Features Implemented:
+- Horizontal line indicator (blue for valid, red for invalid)
+- Left zone indicator (4px border on left)
+- Right zone indicator (4px border on right)
+- Background highlight for "inside" drops
+- Indentation preview in DragOverlay (margin-left based on newLevel)
+- Dynamic border color in DragOverlay (blue-500 or red-500)
 
 Issues encountered:
--
+- Initial difficulty getting cursor position in handleDragOver
+- Resolved by using over.rect and target element rect positioning
 
 Next steps:
 - Milestone 4: Integration & Optimistic Updates
+- Wire up moveProject action to handleDragEnd
+- Implement optimistic hierarchy updates
 ```
 
 ---
@@ -455,12 +494,12 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 2/5 milestones (40%)
+**Overall Completion**: 3/5 milestones (60%)
 
 - [x] Planning & Research
 - [x] Milestone 1: API Layer - Project Move Endpoint ✅
 - [x] Milestone 2: Drop Zone Detection System ✅
-- [ ] Milestone 3: Enhanced DnD Components
+- [x] Milestone 3: Enhanced DnD Components ✅
 - [ ] Milestone 4: Integration & Optimistic Updates
 - [ ] Milestone 5: Validation & Polish
 

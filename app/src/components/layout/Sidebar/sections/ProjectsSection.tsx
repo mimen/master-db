@@ -9,10 +9,12 @@ import {
   useDraggable,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core"
 import { ArrowDownAZ, Flag, Hash, Network, Plus } from "lucide-react"
 import { type ReactNode, useState } from "react"
 
+import { HierarchicalDropIndicator } from "../components/HierarchicalDropIndicator"
 import { CollapseCaret } from "../components/CollapseCaret"
 import { IconButton } from "../components/IconButton"
 import { PriorityItem } from "../components/PriorityItem"
@@ -27,6 +29,8 @@ import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/si
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectPriority } from "@/hooks/useOptimisticProjectPriority"
 import { getProjectColor } from "@/lib/colors"
+import { getDropZone, validateDrop } from "@/lib/dnd/validateDrop"
+import type { DropZone } from "@/lib/dnd/types"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 
 interface ProjectsSectionProps {
@@ -96,7 +100,7 @@ function DraggableProjectItem({
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes}>
+    <div id={`project-${project.todoist_id}`} ref={setNodeRef} style={style} {...listeners} {...attributes}>
       <ProjectItem
         project={project}
         currentViewKey={currentViewKey}
@@ -145,6 +149,10 @@ export function ProjectsSection({
 
   // DnD state
   const [activeProject, setActiveProject] = useState<ProjectTreeNode | null>(null)
+  const [dropZone, setDropZone] = useState<DropZone | null>(null)
+  const [isValidDrop, setIsValidDrop] = useState(false)
+  const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -161,28 +169,86 @@ export function ProjectsSection({
     }
   }
 
+  const handleDragOver = (event: DragOverEvent) => {
+    if (sortMode !== "hierarchy" || !activeProject) return
+
+    const { over } = event
+    if (!over) {
+      setDropZone(null)
+      return
+    }
+
+    const targetProject = sortedProjects.find((p) => p.todoist_id === over.id)
+    if (!targetProject) {
+      setDropZone(null)
+      return
+    }
+
+    // Get target rect from DOM
+    const element = document.getElementById(`project-${over.id}`)
+    if (!element) return
+
+    const rect = element.getBoundingClientRect()
+    setTargetRect(rect)
+
+    // For drop zone calculation, we calculate zones based purely on rect position
+    // Left/middle/right zones are determined by horizontal position within the rect
+    const relativeX = (over.rect?.initial?.x ?? rect.x) % rect.width
+    const verticalPercent = (over.rect?.initial?.y ?? rect.y) % rect.height > rect.height / 2 ? 1 : 0
+
+    // Calculate drop zone using simplified approach
+    const horizontalPercent = relativeX / rect.width
+    const zone = getDropZone({
+      mouseX: rect.left + relativeX,
+      mouseY: rect.top + (verticalPercent > 0.5 ? rect.height : 0),
+      projectRect: rect,
+      targetProject,
+      allProjects: sortedProjects,
+    })
+
+    setDropZone(zone)
+
+    // Validate drop
+    const validation = validateDrop({
+      draggedProject: activeProject,
+      dropZone: zone,
+      allProjects: sortedProjects,
+    })
+
+    setIsValidDrop(validation.valid)
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     setActiveProject(null)
+    setDropZone(null)
+    setIsValidDrop(false)
+    setTargetRect(null)
 
-    if (!over || active.id === over.id) {
-      return // No-op if dropped outside or in same place
+    if (sortMode === "priority") {
+      if (!over || active.id === over.id) {
+        return // No-op if dropped outside or in same place
+      }
+
+      // Extract project ID and target priority
+      const projectId = active.id as string
+      const targetPriority = parseInt(over.id as string)
+
+      // Get current priority to check if it's actually changing
+      const project = sortedProjects.find((p) => p.todoist_id === projectId)
+      const currentPriority = project?.metadata?.priority || 1
+
+      if (currentPriority === targetPriority) {
+        return // No-op if dropping in same priority group
+      }
+
+      // Update priority optimistically
+      updateProjectPriority(projectId, targetPriority)
+    } else if (sortMode === "hierarchy" && dropZone && isValidDrop) {
+      // Hierarchy drag-and-drop would go here (Milestone 4)
+      // For now, just log the intention
+      console.log("Moving project to hierarchy:", dropZone)
     }
-
-    // Extract project ID and target priority
-    const projectId = active.id as string
-    const targetPriority = parseInt(over.id as string)
-
-    // Get current priority to check if it's actually changing
-    const project = sortedProjects.find((p) => p.todoist_id === projectId)
-    const currentPriority = project?.metadata?.priority || 1
-
-    if (currentPriority === targetPriority) {
-      return // No-op if dropping in same priority group
-    }
-
-    // Update priority optimistically
-    updateProjectPriority(projectId, targetPriority)
   }
 
   // Group projects by priority when sorting by priority
@@ -268,6 +334,69 @@ export function ProjectsSection({
           <DragOverlay>
             {activeProject ? (
               <div className="bg-sidebar rounded-md p-2 shadow-lg opacity-80 border border-border">
+                <div className="flex items-center text-sm">
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
+                    style={{ backgroundColor: getProjectColor(activeProject.color) }}
+                  />
+                  <span className="font-medium">{activeProject.name}</span>
+                </div>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )
+    }
+
+    // Hierarchy mode rendering with DnD
+    if (sortMode === "hierarchy") {
+      const content = (
+        <SidebarMenu className="space-y-px">
+          {sortedProjects.map((project) => (
+            <DraggableProjectItem
+              key={project._id}
+              project={project}
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              expandNested={expandNested}
+              viewContext={viewContext}
+              toggleProjectCollapse={toggleProjectCollapse}
+              isProjectCollapsed={isProjectCollapsed}
+            />
+          ))}
+
+          {(!sortedProjects || sortedProjects.length === 0) && (
+            <p className="text-xs text-muted-foreground text-center py-4">No projects found</p>
+          )}
+        </SidebarMenu>
+      )
+
+      return (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={rectIntersection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          {content}
+
+          {/* Drop zone indicator */}
+          {dropZone && targetRect && (
+            <HierarchicalDropIndicator dropZone={dropZone} isValid={isValidDrop} targetRect={targetRect} />
+          )}
+
+          {/* Drag overlay with indentation preview */}
+          <DragOverlay>
+            {activeProject ? (
+              <div
+                className={`bg-sidebar rounded-md p-2 shadow-lg border ${
+                  isValidDrop ? "border-blue-500 opacity-100" : "border-red-500 opacity-50"
+                }`}
+                style={{
+                  marginLeft: dropZone ? `${dropZone.newLevel * 16}px` : undefined,
+                }}
+              >
                 <div className="flex items-center text-sm">
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
