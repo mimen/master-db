@@ -67,6 +67,17 @@ function expandProjects(viewKey: ViewKey, startIndex: number): ListInstance[] {
   ]
 }
 
+function expandRoutines(viewKey: ViewKey, startIndex: number): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.routines, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }),
+  ]
+}
+
 function expandTimeRange(
   viewKey: ViewKey,
   startIndex: number,
@@ -323,6 +334,18 @@ const viewPatterns: ViewPattern[] = [
       },
       buildLists: (viewKey, startIndex) => {
         return expandProjects(viewKey, startIndex)
+      },
+    }),
+  },
+  {
+    match: (key) => key === "view:routines",
+    getDefinition: () => ({
+      metadata: {
+        title: "Routines",
+        icon: getViewIcon("view:routines", { size: "sm" }),
+      },
+      buildLists: (viewKey, startIndex) => {
+        return expandRoutines(viewKey, startIndex)
       },
     }),
   },

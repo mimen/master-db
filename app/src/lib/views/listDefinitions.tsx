@@ -322,6 +322,28 @@ const projectsDefinition: ListDefinition = {
   }),
 }
 
+const routinesDefinition: ListDefinition = {
+  key: "list:routines",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  buildQuery: (): ListQueryInput => ({ type: "routines" }),
+  getHeader: ({ taskCount }) => {
+    const icon = getViewIcon("view:routines", { size: "lg", className: "mr-3" })
+
+    return {
+      title: "Routines",
+      description: `${taskCount} active routines`,
+      icon,
+    }
+  },
+  getEmptyState: () => ({
+    title: "No routines yet!",
+    description: "Create your first routine to automate recurring tasks",
+  }),
+}
+
 export const listDefinitions = {
   inbox: inboxDefinition,
   time: timeDefinition,
@@ -329,6 +351,7 @@ export const listDefinitions = {
   priority: priorityDefinition,
   label: labelDefinition,
   projects: projectsDefinition,
+  routines: routinesDefinition,
 } as const
 
 export type ListDefinitionKey = keyof typeof listDefinitions

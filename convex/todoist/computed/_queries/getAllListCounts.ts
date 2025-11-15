@@ -169,6 +169,13 @@ export const getAllListCounts = query({
     // Projects count (total active projects)
     counts['list:projects'] = projects.length;
 
+    // Routines count (total active routines)
+    const routines = await ctx.db
+      .query("routines")
+      .withIndex("by_defer", (q) => q.eq("defer", false))
+      .collect();
+    counts['list:routines'] = routines.length;
+
     return counts;
   },
 });

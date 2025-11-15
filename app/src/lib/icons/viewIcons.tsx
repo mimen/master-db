@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, CalendarRange, Filter, Flag, Folder, Inbox, Settings, Sunrise, Tag } from "lucide-react"
+import { AlertCircle, Calendar, CalendarRange, Filter, Flag, Folder, Inbox, Repeat, Settings, Sunrise, Tag } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { getProjectColor } from "../colors"
@@ -51,6 +51,10 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
 
   if (viewKey === "view:projects") {
     return <Folder className={finalClassName} />
+  }
+
+  if (viewKey === "view:routines") {
+    return <Repeat className={cn(finalClassName, "text-purple-600 dark:text-purple-400")} />
   }
 
   if (viewKey === "view:settings") {

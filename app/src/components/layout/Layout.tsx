@@ -3,6 +3,7 @@ import { Keyboard, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { ProjectsListView } from "../ProjectsListView"
+import { RoutinesListView } from "../RoutinesListView"
 import { TaskListView } from "../TaskListView"
 import { ThemeToggle } from "../ThemeToggle"
 
@@ -220,6 +221,17 @@ export function Layout() {
                     isDismissed={dismissedLists.has(list.id)}
                     onDismiss={handleDismissList}
                     onRestore={handleRestoreList}
+                    isMultiListView={isMultiListView}
+                  />
+                )
+              }
+
+              // Render RoutinesListView for routines-type queries
+              if (list.query.type === "routines") {
+                return (
+                  <RoutinesListView
+                    key={list.id}
+                    list={list}
                     isMultiListView={isMultiListView}
                   />
                 )

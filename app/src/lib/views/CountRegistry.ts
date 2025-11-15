@@ -98,6 +98,8 @@ export class CountRegistry {
           return `list:project:${query.projectId}`
         case "projects":
           return "list:projects"
+        case "routines":
+          return "list:routines"
         case "priority": {
           // Map API priority to UI level: API 4=P1, 3=P2, 2=P3, 1=P4
           const apiToUi = { 4: 'p1', 3: 'p2', 2: 'p3', 1: 'p4' }
@@ -120,6 +122,11 @@ export class CountRegistry {
     // Projects special case
     if (listId.includes("view:projects")) {
       return "list:projects"
+    }
+
+    // Routines special case
+    if (listId.includes("view:routines")) {
+      return "list:routines"
     }
 
     // Time filters: "view:time:today:today" or "view:today:today"

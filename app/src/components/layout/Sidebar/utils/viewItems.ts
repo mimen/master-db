@@ -1,4 +1,4 @@
-import { Filter, Folder, Inbox, Settings } from "lucide-react"
+import { Filter, Folder, Inbox, Repeat, Settings } from "lucide-react"
 
 import type { ViewNavItem } from "../types"
 
@@ -8,7 +8,8 @@ import type { ViewNavItem } from "../types"
 export function buildViewItems(
   inboxCount: number,
   priorityQueueCount: number,
-  projectsCount: number
+  projectsCount: number,
+  routinesCount: number
 ): ViewNavItem[] {
   return [
     {
@@ -28,6 +29,12 @@ export function buildViewItems(
       label: "Projects",
       icon: Folder,
       count: projectsCount,
+    },
+    {
+      key: "view:routines",
+      label: "Routines",
+      icon: Repeat,
+      count: routinesCount,
     },
     {
       key: "view:settings",
