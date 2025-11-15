@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { ArchiveProjectDialog } from './ArchiveProjectDialog'
 import { CompleteTaskDialog } from './CompleteTaskDialog'
@@ -11,8 +11,10 @@ import { PriorityDialog } from './PriorityDialog'
 import { ProjectDialog } from './ProjectDialog'
 import { QuickAddTaskDialog } from './QuickAddTaskDialog'
 import { SettingsDialog } from './SettingsDialog'
+import { SyncDialog } from './SyncDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
+import { useFocusContext } from '@/contexts/FocusContext'
 import { api } from '@/convex/_generated/api'
 import { useOptimisticDeadlineChange } from '@/hooks/useOptimisticDeadlineChange'
 import { useOptimisticDueChange } from '@/hooks/useOptimisticDueChange'
@@ -23,11 +25,13 @@ import { useOptimisticProjectPriority } from '@/hooks/useOptimisticProjectPriori
 import { useOptimisticTaskComplete } from '@/hooks/useOptimisticTaskComplete'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 import { parseNaturalLanguageDate } from '@/lib/dateFormatters'
+import type { AppContextState } from '@/lib/shortcuts'
 
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
 export function DialogManager() {
-  const { currentTask, currentProject, dialogType, isShortcutsOpen, isSettingsOpen, isQuickAddOpen, quickAddDefaultProjectId, closeDialog } = useDialogContext()
+  const { currentTask, currentProject, dialogType, isShortcutsOpen, isSettingsOpen, isQuickAddOpen, isSyncOpen, quickAddDefaultProjectId, closeDialog } = useDialogContext()
+  const { focusedTask, focusedProject } = useFocusContext()
 
   // Manage expandNested state for settings dialog
   const [expandNested, setExpandNested] = useState<boolean>(() => {
@@ -76,6 +80,13 @@ export function DialogManager() {
     successMessage: "Project archived!",
     errorMessage: "Failed to archive project"
   })
+
+  // Build context state for keyboard shortcuts
+  const contextState: AppContextState = useMemo(() => ({
+    hasTaskFocused: focusedTask !== null,
+    hasProjectFocused: focusedProject !== null,
+    hasDialogOpen: dialogType !== null || isQuickAddOpen || isSettingsOpen || isSyncOpen,
+  }), [focusedTask, focusedProject, dialogType, isQuickAddOpen, isSettingsOpen, isSyncOpen])
 
   const handlePrioritySelect = async (priority: number) => {
     if (currentTask) {
@@ -232,6 +243,7 @@ export function DialogManager() {
       <KeyboardShortcutsDialog
         isOpen={isShortcutsOpen}
         onClose={closeDialog}
+        contextState={contextState}
       />
       <SettingsDialog
         open={isSettingsOpen}
@@ -243,6 +255,10 @@ export function DialogManager() {
         isOpen={isQuickAddOpen}
         onClose={closeDialog}
         defaultProjectId={quickAddDefaultProjectId}
+      />
+      <SyncDialog
+        isOpen={isSyncOpen}
+        onClose={closeDialog}
       />
     </>
   )

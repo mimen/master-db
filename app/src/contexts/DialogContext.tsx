@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
-export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings' | 'quickAdd'
+export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings' | 'quickAdd' | 'sync'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
@@ -12,6 +12,7 @@ interface DialogContextValue {
   isShortcutsOpen: boolean
   isSettingsOpen: boolean
   isQuickAddOpen: boolean
+  isSyncOpen: boolean
   quickAddDefaultProjectId?: string
   openPriority: (item: TodoistTask | TodoistProjectWithMetadata) => void
   openProject: (task: TodoistTask) => void
@@ -24,6 +25,7 @@ interface DialogContextValue {
   openShortcuts: () => void
   openSettings: () => void
   openQuickAdd: (defaultProjectId?: string) => void
+  openSync: () => void
   closeDialog: () => void
 }
 
@@ -36,6 +38,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
+  const [isSyncOpen, setIsSyncOpen] = useState(false)
   const [quickAddDefaultProjectId, setQuickAddDefaultProjectId] = useState<string | undefined>(undefined)
 
   const openPriority = useCallback((item: TodoistTask | TodoistProjectWithMetadata) => {
@@ -102,6 +105,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialogType('quickAdd')
   }, [])
 
+  const openSync = useCallback(() => {
+    setIsSyncOpen(true)
+    setDialogType('sync')
+  }, [])
+
   const closeDialog = useCallback(() => {
     setCurrentTask(null)
     setCurrentProject(null)
@@ -109,6 +117,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setIsShortcutsOpen(false)
     setIsSettingsOpen(false)
     setIsQuickAddOpen(false)
+    setIsSyncOpen(false)
     setQuickAddDefaultProjectId(undefined)
   }, [])
 
@@ -119,6 +128,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     isShortcutsOpen,
     isSettingsOpen,
     isQuickAddOpen,
+    isSyncOpen,
     quickAddDefaultProjectId,
     openPriority,
     openProject,
@@ -131,6 +141,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     openShortcuts,
     openSettings,
     openQuickAdd,
+    openSync,
     closeDialog
   }
 

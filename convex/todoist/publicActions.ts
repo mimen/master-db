@@ -38,3 +38,7 @@ export { updateProjectMetadataPriority } from "./actions/updateProjectMetadataPr
 
 // Queue actions
 export { startQueueSession } from "./actions/startQueueSession";
+
+// Sync actions
+export { performIncrementalSync } from "./_sync/performIncrementalSync";
+export { runInitialSync } from "./_sync/runInitialSync";

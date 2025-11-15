@@ -1,4 +1,5 @@
 import { useQuery } from "convex/react"
+import { Keyboard, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { ProjectsListView } from "../ProjectsListView"
@@ -8,6 +9,7 @@ import { ThemeToggle } from "../ThemeToggle"
 import { Sidebar } from "./Sidebar"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
@@ -20,7 +22,7 @@ import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
 export function Layout() {
-  const { openShortcuts, openQuickAdd } = useDialogContext()
+  const { openShortcuts, openQuickAdd, openSync } = useDialogContext()
   const { getCountForView } = useCountRegistry()
   const [activeView, setActiveView] = useState<ViewSelection>(() => resolveView("view:inbox"))
   const [dismissedLists, setDismissedLists] = useState<Set<string>>(new Set())
@@ -112,7 +114,11 @@ export function Layout() {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Only handle shortcuts when not editing text
       const target = document.activeElement
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable) {
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable === 'true')
+      ) {
         return
       }
 
@@ -144,12 +150,19 @@ export function Layout() {
             openShortcuts()
           }
           break
+        case 's':
+        case 'S':
+          if ((event.metaKey || event.ctrlKey) && event.shiftKey) {
+            event.preventDefault()
+            openSync()
+          }
+          break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleArrowNavigation, openShortcuts, openQuickAdd, activeView.key])
+  }, [handleArrowNavigation, openShortcuts, openQuickAdd, openSync, activeView.key])
 
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1
@@ -172,7 +185,23 @@ export function Layout() {
               {totalTaskCount}
             </Badge>
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={openSync}
+              title="Sync status"
+            >
+              <RefreshCw className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={openShortcuts}
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-5 w-5" />
+            </Button>
             <ThemeToggle />
           </div>
         </header>
