@@ -36,7 +36,7 @@ export const getPriorityQueue = query({
     }
 
     // Priority queue configuration - focus on urgent and important
-    const queueConfig = {
+    const _queueConfig = {
       filters: [
         {
           type: "custom" as const,

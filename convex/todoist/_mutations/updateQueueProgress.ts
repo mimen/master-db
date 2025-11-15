@@ -34,7 +34,13 @@ export const updateQueueProgress = mutation({
     }
 
     const now = new Date().toISOString();
-    let updates: any = {
+    let updates: {
+      lastAccessedAt: string;
+      updatedAt: string;
+      currentIndex?: number;
+      skippedTaskIds?: string[];
+      sessionTasksProcessed?: number;
+    } = {
       lastAccessedAt: now,
       updatedAt: now,
     };
