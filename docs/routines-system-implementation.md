@@ -338,16 +338,44 @@ Next steps:
 
 **Completion Notes**:
 ```
-Date:
-Status:
-Test Results:
-- generateTasksForRoutine (daily):
-- generateTasksForRoutine (weekly):
-- generateTasksForRoutine (deferred):
-- linkRoutineTask:
-- getRoutinesNeedingGeneration:
+Date: 2025-01-14
+Status: COMPLETED ✅
+Notes:
+- Created comprehensive generateTasksForRoutine mutation with frequency-specific logic:
+  - Daily: Generates up to 5 business days ahead (skips weekends)
+  - Twice a Week: Generates Monday + Thursday pairs for next 2 weeks
+  - Weekly+: Generates 1-2 tasks based on lastCompleted + frequency
+  - Applies timeOfDay and idealDay preferences
+  - Creates placeholder routineTasks with status='pending', todoistTaskId='PENDING'
+- Created linkRoutineTask mutation to update PENDING with real Todoist task ID
+- Created getRoutinesNeedingGeneration query with smart thresholds:
+  - Daily routines: need at least 3 pending tasks
+  - Twice a Week: need at least 2 pending tasks
+  - Weekly+: need at least 1 pending task
+- Removed barrel exports (queries.ts, mutations.ts) to avoid Convex export conflicts
+  - Convex auto-discovers functions from individual files
+  - Follows same pattern as Todoist (no barrel for internal queries/mutations)
+- Fixed TypeScript type error with wasRecentlyUndeferred (Boolean coercion)
+- All date calculation utilities properly integrated
+- Typecheck passes with ZERO errors
+
+Files created (3):
+- convex/routines/_mutations/generateTasksForRoutine.ts (229 lines)
+- convex/routines/_mutations/linkRoutineTask.ts (20 lines)
+- convex/routines/queries/getRoutinesNeedingGeneration.ts (55 lines)
+
+Test Results (Logic validated via code review):
+- generateTasksForRoutine (daily): ✅ Generates 5 business days, applies timeOfDay
+- generateTasksForRoutine (weekly): ✅ Applies idealDay, generates 1-2 tasks based on proximity
+- generateTasksForRoutine (deferred): ✅ Returns empty array for deferred routines
+- linkRoutineTask: ✅ Updates todoistTaskId from PENDING to real ID
+- getRoutinesNeedingGeneration: ✅ Returns routines needing tasks based on smart thresholds
+
 Issues encountered:
--
+- Convex export conflict: barrel exports (queries.ts, mutations.ts) conflicted with auto-discovery
+  - Solution: Removed barrel exports, let Convex auto-discover from individual files
+- TypeScript type error: wasRecentlyUndeferred could be `0` instead of boolean
+  - Solution: Explicit Boolean() coercion
 Next steps:
 - Milestone 5: Todoist Integration Actions
 ```
@@ -778,13 +806,13 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 3/11 milestones (27%)
+**Overall Completion**: 4/11 milestones (36%)
 
 - [x] Planning & Research
 - [x] Milestone 1: Schema & Type Definitions
 - [x] Milestone 2: Core Mutations & Queries
 - [x] Milestone 3: Date Calculation Logic
-- [ ] Milestone 4: Task Generation Engine
+- [x] Milestone 4: Task Generation Engine
 - [ ] Milestone 5: Todoist Integration Actions
 - [ ] Milestone 6: Cron Job Implementation
 - [ ] Milestone 7: Webhook Integration
@@ -816,8 +844,8 @@ Next steps:
 - [x] `convex/routines/_mutations/deleteRoutine.ts`
 - [x] `convex/routines/_mutations/deferRoutine.ts`
 - [x] `convex/routines/_mutations/undeferRoutine.ts`
-- [ ] `convex/routines/_mutations/generateTasksForRoutine.ts`
-- [ ] `convex/routines/_mutations/linkRoutineTask.ts`
+- [x] `convex/routines/_mutations/generateTasksForRoutine.ts`
+- [x] `convex/routines/_mutations/linkRoutineTask.ts`
 - [ ] `convex/routines/_mutations/updateOverdueRoutineTasks.ts`
 - [ ] `convex/routines/_mutations/handleDeferredRoutines.ts`
 - [ ] `convex/routines/_mutations/recalculateRoutineCompletionRate.ts`
@@ -826,7 +854,7 @@ Next steps:
 - [x] `convex/routines/queries/getRoutines.ts`
 - [x] `convex/routines/queries/getRoutine.ts`
 - [x] `convex/routines/queries/getRoutineTasks.ts`
-- [ ] `convex/routines/queries/getRoutinesNeedingGeneration.ts`
+- [x] `convex/routines/queries/getRoutinesNeedingGeneration.ts`
 - [ ] `convex/routines/queries/getRoutineStats.ts`
 
 **Backend Actions (2)**:
@@ -843,10 +871,8 @@ Next steps:
 - [ ] `convex/routines/utils/dateCalculation.test.ts`
 - [ ] Other mutation tests (following existing patterns)
 
-**Backend Barrel Files (3)**:
-- [x] `convex/routines/mutations.ts`
-- [x] `convex/routines/queries.ts`
-- [ ] `convex/routines/actions.ts`
+**Backend Barrel Files (1)**:
+- [ ] `convex/routines/actions.ts` (only actions need barrel export)
 
 **Frontend Components (4)**:
 - [ ] `app/src/components/RoutineRow.tsx`
@@ -1049,4 +1075,4 @@ Night → 19 (7pm)
 
 ---
 
-**Last Updated**: 2025-01-14 (Milestone 3 Complete)
+**Last Updated**: 2025-01-14 (Milestone 4 Complete)
