@@ -37,6 +37,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
   const completionRateColor = getCompletionRateColor(routine.completionRateOverall)
   const { deferRoutine, undeferRoutine } = useRoutineActions()
   const [isToggling, setIsToggling] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   const handleToggleDefer = async (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent opening dialog
@@ -57,42 +58,52 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
     <div
       ref={onElementRef}
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      tabIndex={-1}
+      aria-selected={false}
+      data-routine-id={routine._id}
       className={cn(
-        "group flex items-center gap-3 px-4 py-2.5 hover:bg-accent cursor-pointer transition-colors",
+        "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
+        "hover:bg-accent/50",
+        "focus:outline-none focus:bg-accent/50 focus:border-primary/30",
         routine.defer && "opacity-60"
       )}
     >
-      {/* Routine Icon */}
-      <Repeat className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+      <div className="flex items-start gap-2.5 w-full">
+        {/* Routine Icon */}
+        <Repeat className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
 
-      {/* Routine Name and Description */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium truncate">{routine.name}</span>
+        {/* Main Content Area */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          {/* Content/Editing Area */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <div className="font-medium truncate">{routine.name}</div>
+            {routine.description && (
+              <div className="text-sm text-muted-foreground truncate">
+                {routine.description}
+              </div>
+            )}
+          </div>
 
-          {/* Frequency Badge */}
-          <Badge variant="outline" className={cn("text-xs font-normal", frequencyColor)}>
-            {routine.frequency}
-          </Badge>
-
-          {/* Defer Badge */}
-          {routine.defer && (
-            <Badge variant="outline" className="text-xs font-normal text-gray-500">
-              Paused
+          {/* Badge Container */}
+          <div className="flex flex-wrap items-center gap-1">
+            {/* Frequency Badge */}
+            <Badge variant="outline" className={cn("text-xs font-normal", frequencyColor)}>
+              {routine.frequency}
             </Badge>
-          )}
+
+            {/* Defer Badge */}
+            {routine.defer && (
+              <Badge variant="outline" className="text-xs font-normal text-gray-500">
+                Paused
+              </Badge>
+            )}
+          </div>
         </div>
 
-        {/* Description */}
-        {routine.description && (
-          <div className="text-sm text-muted-foreground truncate mt-0.5">
-            {routine.description}
-          </div>
-        )}
-      </div>
-
-      {/* Completion Rate & Defer Toggle */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Completion Rate & Defer Toggle */}
+        <div className="flex items-center gap-2 flex-shrink-0">
         <div className="text-right">
           <div className={cn("text-sm font-medium", completionRateColor)}>
             {routine.completionRateOverall}%
@@ -125,6 +136,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        </div>
       </div>
     </div>
   )

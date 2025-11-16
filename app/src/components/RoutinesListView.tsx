@@ -8,6 +8,7 @@ import { RoutineRow } from "./RoutineRow"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useFocusContext } from "@/contexts/FocusContext"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
@@ -27,6 +28,7 @@ export function RoutinesListView({
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedRoutine, setSelectedRoutine] = useState<Doc<"routines"> | undefined>()
   const { registry } = useCountRegistry()
+  const { setFocusedRoutine } = useFocusContext()
 
   const handleOpenCreate = () => {
     setSelectedRoutine(undefined)
@@ -75,7 +77,9 @@ export function RoutinesListView({
   }, [allRoutines, isExpanded, isMultiListView, list.maxTasks])
 
   const [focusedRoutineIndex, setFocusedRoutineIndex] = useState(0)
-  const routineRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const routineRefs = useRef<(HTMLDivElement | null)[]>([])
+  const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
+  const lastFocusedIndex = useRef<number | null>(null)
 
   const focusedRoutine =
     focusedRoutineIndex >= 0 && focusedRoutineIndex < visibleRoutines.length
@@ -88,24 +92,49 @@ export function RoutinesListView({
     }
   }, [visibleRoutines.length, focusedRoutineIndex])
 
+  // Update FocusContext when focused routine changes
   useEffect(() => {
-    if (!focusedRoutine) return
+    setFocusedRoutine(focusedRoutine)
+    return () => setFocusedRoutine(null)
+  }, [focusedRoutine, setFocusedRoutine])
 
-    const element = routineRefs.current.get(focusedRoutine._id)
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-      })
-    }
-  }, [focusedRoutine])
+  // Focus styling and scroll management
+  useEffect(() => {
+    const ROUTINE_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "border-primary/30"]
 
-  const handleRef = (routineId: string) => (element: HTMLDivElement | null) => {
-    if (element) {
-      routineRefs.current.set(routineId, element)
-    } else {
-      routineRefs.current.delete(routineId)
+    // Remove highlight from old focused routine
+    if (lastFocusedIndex.current !== null && lastFocusedIndex.current < routineRefs.current.length) {
+      const oldElement = routineRefs.current[lastFocusedIndex.current]
+      if (oldElement) {
+        ROUTINE_ROW_FOCUSED_CLASSNAMES.forEach((cls) => oldElement.classList.remove(cls))
+      }
     }
+
+    // Apply highlight to new focused routine
+    if (focusedRoutineIndex >= 0 && focusedRoutineIndex < visibleRoutines.length) {
+      const newElement = routineRefs.current[focusedRoutineIndex]
+      if (newElement) {
+        ROUTINE_ROW_FOCUSED_CLASSNAMES.forEach((cls) => newElement.classList.add(cls))
+        newElement.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        })
+        lastFocusedIndex.current = focusedRoutineIndex
+      }
+    }
+  }, [focusedRoutineIndex, visibleRoutines.length])
+
+  // Create stable ref handlers for each routine
+  const getRefHandler = (index: number) => {
+    if (!refHandlers.current[index]) {
+      refHandlers.current[index] = (element) => {
+        routineRefs.current[index] = element
+        if (element === null && lastFocusedIndex.current === index) {
+          lastFocusedIndex.current = null
+        }
+      }
+    }
+    return refHandlers.current[index]!
   }
 
   const isLoading = allRoutines === undefined
@@ -216,11 +245,11 @@ export function RoutinesListView({
         </div>
       ) : (
         <div className="space-y-px">
-          {visibleRoutines.map((routine) => (
+          {visibleRoutines.map((routine, index) => (
             <RoutineRow
               key={routine._id}
               routine={routine}
-              onElementRef={handleRef(routine._id)}
+              onElementRef={getRefHandler(index)}
               onClick={() => handleOpenDetail(routine)}
             />
           ))}
