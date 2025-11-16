@@ -1,5 +1,6 @@
 import { useQuery } from "convex/react"
-import { CheckCircle2, Circle, Clock, Edit, Minus, X } from "lucide-react"
+import { CheckCircle2, Circle, Clock, Edit, Minus, Pause, Play, X } from "lucide-react"
+import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 import { cn } from "@/lib/utils"
@@ -75,6 +77,23 @@ export function RoutineDetailDialog({
     api.routines.queries.getRoutineStats.getRoutineStats,
     routineId ? { routineId } : "skip"
   )
+  const { deferRoutine, undeferRoutine } = useRoutineActions()
+  const [isToggling, setIsToggling] = useState(false)
+
+  const handleToggleDefer = async () => {
+    if (!routineId) return
+
+    setIsToggling(true)
+    try {
+      if (stats?.routine.defer) {
+        await undeferRoutine(routineId)
+      } else {
+        await deferRoutine(routineId)
+      }
+    } finally {
+      setIsToggling(false)
+    }
+  }
 
   if (!stats) {
     return (
@@ -111,12 +130,32 @@ export function RoutineDetailDialog({
                 <DialogDescription className="sr-only">View routine details and statistics</DialogDescription>
               )}
             </div>
-            {onEdit && (
-              <Button variant="outline" size="sm" onClick={onEdit} className="ml-4">
-                <Edit className="h-4 w-4 mr-2" />
-                Edit
+            <div className="flex items-center gap-2 ml-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleDefer}
+                disabled={isToggling}
+              >
+                {routine.defer ? (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-4 w-4 mr-2" />
+                    Pause
+                  </>
+                )}
               </Button>
-            )}
+              {onEdit && (
+                <Button variant="outline" size="sm" onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
