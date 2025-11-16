@@ -237,7 +237,7 @@ async function processItemEvent(
   }
 
   // Upsert the item
-  await ctx.runMutation(internal.todoist.mutations.upsertItem, {
+  await ctx.runMutation(internal.todoist.internalMutations.upsertItem.upsertItem, {
     item,
   });
 
@@ -247,7 +247,7 @@ async function processItemEvent(
   }
 
   // Trigger metadata extraction for items
-  await ctx.runMutation(internal.todoist.mutations.triggerMetadataExtraction);
+  await ctx.runMutation(internal.todoist.computed.mutations.triggerMetadataExtraction.triggerMetadataExtraction);
 
   return {
     status: "success",
@@ -282,7 +282,7 @@ async function handleRoutineTaskEvent(
 
     // Find the routineTask by todoistTaskId
     const routineTask = await ctx.runQuery(
-      internal.routines.queries.getRoutineTaskByTodoistId,
+      internal.routines.queries.getRoutineTaskByTodoistId.getRoutineTaskByTodoistId,
       { todoistTaskId }
     );
 
@@ -294,7 +294,7 @@ async function handleRoutineTaskEvent(
     // Handle different event types
     if (eventName === "item:completed") {
       await ctx.runMutation(
-        internal.routines.mutations.markRoutineTaskCompleted,
+        internal.routines.internalMutations.markRoutineTaskCompleted.markRoutineTaskCompleted,
         {
           routineTaskId: routineTask._id,
           completedDate: Date.now(),
@@ -302,14 +302,14 @@ async function handleRoutineTaskEvent(
       );
     } else if (eventName === "item:deleted") {
       await ctx.runMutation(
-        internal.routines.mutations.markRoutineTaskSkipped,
+        internal.routines.internalMutations.markRoutineTaskSkipped.markRoutineTaskSkipped,
         {
           routineTaskId: routineTask._id,
         }
       );
     } else if (eventName === "item:uncompleted") {
       await ctx.runMutation(
-        internal.routines.mutations.markRoutineTaskPending,
+        internal.routines.internalMutations.markRoutineTaskPending.markRoutineTaskPending,
         {
           routineTaskId: routineTask._id,
         }
@@ -319,7 +319,7 @@ async function handleRoutineTaskEvent(
     // Recalculate completion rate for the routine
     if (routineTask.routineId) {
       await ctx.runMutation(
-        internal.routines.mutations.recalculateRoutineCompletionRate,
+        internal.routines.internalMutations.recalculateRoutineCompletionRate.recalculateRoutineCompletionRate,
         {
           routineId: routineTask.routineId,
         }
@@ -361,7 +361,7 @@ async function processProjectEvent(
   }
 
   // Upsert the project
-  await ctx.runMutation(internal.todoist.mutations.upsertProject, {
+  await ctx.runMutation(internal.todoist.internalMutations.upsertProject.upsertProject, {
     project,
   });
 
@@ -392,7 +392,7 @@ async function processLabelEvent(
   }
 
   // Upsert the label
-  await ctx.runMutation(internal.todoist.mutations.upsertLabel, {
+  await ctx.runMutation(internal.todoist.internalMutations.upsertLabel.upsertLabel, {
     label,
   });
 
@@ -423,7 +423,7 @@ async function logWebhookEvent(
     initiatorEmail?: string;
   }
 ): Promise<void> {
-  await ctx.runMutation(internal.todoist.mutations.logWebhookEvent, {
+  await ctx.runMutation(internal.todoist.internalMutations.logWebhookEvent.logWebhookEvent, {
     delivery_id: data.deliveryId,
     event_name: data.eventName,
     user_id: data.userId,

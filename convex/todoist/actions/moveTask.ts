@@ -52,7 +52,7 @@ export const moveTask = action({
     }
 
     // STEP 1: OPTIMISTIC UPDATE - Update Convex immediately
-    await ctx.runMutation(internal.todoist.mutations.updateItem, {
+    await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
       todoistId: args.todoistId,
       updates: optimisticUpdates,
     });
@@ -81,7 +81,7 @@ export const moveTask = action({
           updates.parent_id = task.parentId;
         }
 
-        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+        await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
           todoistId: args.todoistId,
           updates,
         });
@@ -111,7 +111,7 @@ export const moveTask = action({
           rollbackUpdates.parent_id = existing.parent_id;
         }
 
-        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+        await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
           todoistId: args.todoistId,
           updates: rollbackUpdates,
         });

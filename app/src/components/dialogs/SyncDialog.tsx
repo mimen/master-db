@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react"
 import { format, formatDistanceToNow } from "date-fns"
-import { RefreshCw } from "lucide-react"
+import { CalendarClock, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
+import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
 
 interface SyncDialogProps {
@@ -23,14 +24,18 @@ interface SyncDialogProps {
 }
 
 export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
-  const syncStatus = useQuery(api.todoist.publicQueries.getSyncStatus)
+  const syncStatus = useQuery(api.todoist.queries.getSyncStatus.getSyncStatus)
+  const routineStatus = useQuery(api.routines.queries.getRoutineGenerationStatus.getRoutineGenerationStatus)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
 
-  const performSync = useTodoistAction(api.todoist.publicActions.performIncrementalSync, {
+  const performSync = useTodoistAction(api.todoist.actions.performIncrementalSync.performIncrementalSync, {
     loadingMessage: "Syncing with Todoist...",
     successMessage: "Sync completed successfully!",
     errorMessage: "Sync failed",
   })
+
+  const { generateRoutineTasks } = useRoutineActions()
 
   const handleSync = useCallback(async () => {
     setIsSyncing(true)
@@ -40,6 +45,15 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
       setIsSyncing(false)
     }
   }, [performSync])
+
+  const handleGenerateRoutines = useCallback(async () => {
+    setIsGenerating(true)
+    try {
+      await generateRoutineTasks()
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [generateRoutineTasks])
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -166,7 +180,7 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
           {/* Sync Actions */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Sync Actions</CardTitle>
+              <CardTitle className="text-base">Todoist Sync</CardTitle>
               <CardDescription>Manually trigger synchronization</CardDescription>
             </CardHeader>
             <CardContent>
@@ -174,6 +188,43 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
                 <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
                 {isSyncing ? "Syncing..." : "Sync Now"}
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Routine Task Generation */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Routine Task Generation</CardTitle>
+              <CardDescription>Generate upcoming routine tasks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {routineStatus ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-medium">Routines Needing Tasks</div>
+                      <div className="text-2xl font-bold">
+                        {routineStatus.routinesNeedingGeneration}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">Pending Tasks</div>
+                      <div className="text-2xl font-bold">
+                        {routineStatus.pendingTasksCount}
+                      </div>
+                    </div>
+                  </div>
+                  <Button onClick={handleGenerateRoutines} disabled={isGenerating} className="w-full">
+                    <CalendarClock className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
+                    {isGenerating ? "Generating..." : "Generate Routine Tasks"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

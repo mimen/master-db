@@ -41,7 +41,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
   const parentProjectRef = useRef<HTMLButtonElement>(null)
   const colorButtonRef = useRef<HTMLButtonElement>(null)
 
-  const projects = useQuery(api.todoist.publicQueries.getProjects)
+  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
   const { createProject } = useCreateProject()
 
   // Helper to calculate project depth for parent selection

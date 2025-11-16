@@ -19,7 +19,7 @@ export const getPriorityQueue = query({
     const userId = identity?.subject;
 
     const allItems: Doc<"todoist_items">[] = await ctx.runQuery(
-      internal.todoist.internal.index.getFilteredActiveItems,
+      internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems,
       {
         assigneeFilter: includeAssignedToOthers ? 'all' : 'not-assigned-to-others',
         currentUserId: userId,

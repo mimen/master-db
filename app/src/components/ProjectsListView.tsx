@@ -45,7 +45,7 @@ export function ProjectsListView({
   const { getProjectUpdate } = useOptimisticUpdates()
 
   const allProjects: TodoistProjectsWithMetadata | undefined = useQuery(
-    api.todoist.publicQueries.getProjectsWithMetadata,
+    api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata,
     {}
   )
 

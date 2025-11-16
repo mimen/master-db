@@ -5,7 +5,6 @@ export const routines = defineTable({
   // Core routine properties
   name: v.string(),
   description: v.optional(v.string()),
-  category: v.optional(v.string()),
 
   // Frequency and timing
   frequency: v.union(

@@ -22,7 +22,7 @@ export const completeMultipleTasks = action({
 
           if (success) {
             // Update in Convex
-            await ctx.runMutation(internal.todoist.mutations.updateItem, {
+            await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
               todoistId,
               updates: {
                 checked: true,

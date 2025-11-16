@@ -56,7 +56,7 @@ export const duplicateTask = action({
       const duplicatedTask = await client.addTask(newTaskArgs);
 
       // Store in Convex
-      await ctx.runMutation(internal.todoist.mutations.upsertItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertItem.upsertItem, {
         item: {
           id: duplicatedTask.id,
           content: duplicatedTask.content,

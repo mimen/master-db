@@ -35,7 +35,7 @@ const baseWebhookEventSchema = v.object({
   version: v.string(),
   triggered_at: v.string(),
   initiator: webhookInitiatorSchema,
-  event_data_extra: v.optional(v.any()), // Type varies by event
+  event_data_extra: v.optional(v.union(itemUpdatedExtraSchema, v.string(), v.null())), // Type varies by event
 });
 
 // Item webhook events

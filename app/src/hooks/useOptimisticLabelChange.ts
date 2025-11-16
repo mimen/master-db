@@ -12,7 +12,7 @@ import { api } from "@/convex/_generated/api"
  * - On success: TaskRow's useEffect clears it when DB syncs
  */
 export const useOptimisticLabelChange = createOptimisticHook<[string[]]>({
-  actionPath: api.todoist.publicActions.updateTask,
+  actionPath: api.todoist.actions.updateTask.updateTask,
   messages: {
     loading: "Updating labels...",
     success: "Labels updated!",

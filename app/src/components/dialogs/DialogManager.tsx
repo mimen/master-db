@@ -55,7 +55,7 @@ export function DialogManager() {
     }
   }
 
-  const updateTask = useTodoistAction(api.todoist.publicActions.updateTask, {
+  const updateTask = useTodoistAction(api.todoist.actions.updateTask.updateTask, {
     loadingMessage: "Updating task...",
     successMessage: "Task updated!",
     errorMessage: "Failed to update task"
@@ -69,13 +69,13 @@ export function DialogManager() {
   const optimisticDueChange = useOptimisticDueChange()
   const optimisticDeadlineChange = useOptimisticDeadlineChange()
 
-  const deleteTask = useTodoistAction(api.todoist.publicActions.deleteTask, {
+  const deleteTask = useTodoistAction(api.todoist.actions.deleteTask.deleteTask, {
     loadingMessage: "Deleting task...",
     successMessage: "Task deleted!",
     errorMessage: "Failed to delete task"
   })
 
-  const archiveProject = useTodoistAction(api.todoist.publicActions.archiveProject, {
+  const archiveProject = useTodoistAction(api.todoist.actions.archiveProject.archiveProject, {
     loadingMessage: "Archiving project...",
     successMessage: "Project archived!",
     errorMessage: "Failed to archive project"

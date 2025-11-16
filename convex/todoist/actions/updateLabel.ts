@@ -30,7 +30,7 @@ export const updateLabel = action({
       const label = await client.updateLabel(args.labelId, updateArgs);
 
       // Store in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertLabel, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertLabel.upsertLabel, {
         label: {
           id: label.id,
           name: label.name,

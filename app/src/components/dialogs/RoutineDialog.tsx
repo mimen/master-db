@@ -73,8 +73,8 @@ const PRIORITIES = [
 export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogProps) {
   const { createRoutine, updateRoutine, deleteRoutine } = useRoutineActions()
 
-  const projects = useQuery(api.todoist.publicQueries.getProjects)
-  const labels = useQuery(api.todoist.publicQueries.getLabels)
+  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
+  const labels = useQuery(api.todoist.queries.getLabels.getLabels)
 
   // Form state
   const [name, setName] = useState(routine?.name || "")

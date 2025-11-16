@@ -12,7 +12,7 @@ interface CreateProjectArgs {
 }
 
 export function useCreateProject() {
-  const createProjectAction = useAction(api.todoist.publicActions.createProject)
+  const createProjectAction = useAction(api.todoist.actions.createProject.createProject)
 
   const createProject = async (args: CreateProjectArgs) => {
     try {

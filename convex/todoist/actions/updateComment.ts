@@ -25,7 +25,7 @@ export const updateComment = action({
 
       // Store in Convex using existing mutation
       // Transform from Comment (camelCase) to syncNoteSchema (snake_case)
-      await ctx.runMutation(internal.todoist.mutations.upsertNote, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertNote.upsertNote, {
         note: {
           id: comment.id,
           item_id: comment.taskId || "", // Comments must have either taskId or projectId

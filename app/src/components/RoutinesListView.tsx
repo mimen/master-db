@@ -2,6 +2,7 @@ import { useQuery } from "convex/react"
 import { Plus, RotateCcw, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import { RoutineDetailDialog } from "./dialogs/RoutineDetailDialog"
 import { RoutineDialog } from "./dialogs/RoutineDialog"
 import { RoutineRow } from "./RoutineRow"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,7 @@ export function RoutinesListView({
 }: RoutinesListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedRoutine, setSelectedRoutine] = useState<Doc<"routines"> | undefined>()
   const { registry } = useCountRegistry()
 
@@ -31,8 +33,13 @@ export function RoutinesListView({
     setIsDialogOpen(true)
   }
 
-  const handleOpenEdit = (routine: Doc<"routines">) => {
+  const handleOpenDetail = (routine: Doc<"routines">) => {
     setSelectedRoutine(routine)
+    setIsDetailDialogOpen(true)
+  }
+
+  const handleOpenEditFromDetail = () => {
+    setIsDetailDialogOpen(false)
     setIsDialogOpen(true)
   }
 
@@ -41,8 +48,13 @@ export function RoutinesListView({
     setSelectedRoutine(undefined)
   }
 
+  const handleCloseDetailDialog = () => {
+    setIsDetailDialogOpen(false)
+    setSelectedRoutine(undefined)
+  }
+
   const allRoutines: Doc<"routines">[] | undefined = useQuery(
-    api.routines.publicQueries.getRoutinesByView,
+    api.routines.queries.getRoutinesByView.getRoutinesByView,
     {
       list: {
         type: "routines",
@@ -127,6 +139,12 @@ export function RoutinesListView({
 
   return (
     <>
+      <RoutineDetailDialog
+        isOpen={isDetailDialogOpen}
+        onClose={handleCloseDetailDialog}
+        routineId={selectedRoutine?._id || null}
+        onEdit={handleOpenEditFromDetail}
+      />
       <RoutineDialog
         isOpen={isDialogOpen}
         onClose={handleCloseDialog}
@@ -203,11 +221,12 @@ export function RoutinesListView({
               key={routine._id}
               routine={routine}
               onElementRef={handleRef(routine._id)}
-              onClick={() => handleOpenEdit(routine)}
+              onClick={() => handleOpenDetail(routine)}
             />
           ))}
         </div>
       )}
     </div>
+    </>
   )
 }

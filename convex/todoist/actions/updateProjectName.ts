@@ -23,7 +23,7 @@ export const updateProjectName = action({
       const project = await client.updateProject(projectId, { name });
 
       // Store in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertProject, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertProject.upsertProject, {
         project: {
           id: project.id,
           name: project.name,

@@ -13,17 +13,17 @@ import type {
 } from "@/types/convex/todoist"
 
 export function useSidebarData() {
-  const enhancedProjects = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
+  const enhancedProjects = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata, {}) as
     | TodoistProjectsWithMetadata
     | undefined
 
-  const basicProjects = useQuery(api.todoist.publicQueries.getProjects) as TodoistProjects | undefined
+  const basicProjects = useQuery(api.todoist.queries.getProjects.getProjects) as TodoistProjects | undefined
 
-  const labels = useQuery(api.todoist.publicQueries.getLabels) as TodoistLabelDoc[] | undefined
+  const labels = useQuery(api.todoist.queries.getLabels.getLabels) as TodoistLabelDoc[] | undefined
 
-  const timeFilterCounts = useQuery(api.todoist.publicQueries.getTimeFilterCounts, {})
-  const priorityFilterCounts = useQuery(api.todoist.publicQueries.getPriorityFilterCounts, {})
-  const labelFilterCounts = useQuery(api.todoist.publicQueries.getLabelFilterCounts, {})
+  const timeFilterCounts = useQuery(api.todoist.queries.getTimeFilterCounts.getTimeFilterCounts, {})
+  const priorityFilterCounts = useQuery(api.todoist.queries.getPriorityFilterCounts.getPriorityFilterCounts, {})
+  const labelFilterCounts = useQuery(api.todoist.queries.getLabelFilterCounts.getLabelFilterCounts, {})
 
   const projectsWithMetadata: TodoistProjectsWithMetadata | undefined =
     enhancedProjects && enhancedProjects.length > 0

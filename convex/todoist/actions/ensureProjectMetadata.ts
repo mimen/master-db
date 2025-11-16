@@ -18,7 +18,7 @@ export const ensureAllProjectsHaveMetadata = action({
     errors: { projectId: string; error: string }[];
   }> => {
     // Get all projects
-    const projects = await ctx.runQuery(api.todoist.publicQueries.getAllProjects, {});
+    const projects = await ctx.runQuery(api.todoist.queries.getAllProjects.getAllProjects, {});
 
     const results = {
       totalProjects: projects.length,
@@ -31,7 +31,7 @@ export const ensureAllProjectsHaveMetadata = action({
       try {
         // Check if metadata exists
         const metadata = await ctx.runQuery(
-          api.todoist.publicQueries.getProjectMetadata,
+          api.todoist.queries.getProjectMetadata.getProjectMetadata,
           { projectId: project.todoist_id }
         );
 
@@ -40,7 +40,7 @@ export const ensureAllProjectsHaveMetadata = action({
         } else {
           // Create default metadata
           await ctx.runMutation(
-            api.todoist.publicMutations.createProjectMetadata,
+            api.todoist.mutations.createProjectMetadata.createProjectMetadata,
             {
               project_id: project.todoist_id,
               last_updated: Date.now(),
@@ -76,7 +76,7 @@ export const ensureProjectHasMetadata = action({
   }> => {
     // Check if metadata exists
     const metadata = await ctx.runQuery(
-      api.todoist.publicQueries.getProjectMetadata,
+      api.todoist.queries.getProjectMetadata.getProjectMetadata,
       { projectId: args.projectId }
     );
 
@@ -89,7 +89,7 @@ export const ensureProjectHasMetadata = action({
 
     // Create default metadata
     const metadataId = await ctx.runMutation(
-      api.todoist.publicMutations.createProjectMetadata,
+      api.todoist.mutations.createProjectMetadata.createProjectMetadata,
       {
         project_id: args.projectId,
         last_updated: Date.now(),

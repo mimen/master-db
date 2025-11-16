@@ -7,7 +7,7 @@ export const clearAllData = action({
     console.warn("WARNING: Clearing all Todoist data from the database");
 
     // Clear all tables
-    await ctx.runMutation(internal.todoist.mutations.clearAllData);
+    await ctx.runMutation(internal.todoist.internalMutations.clearAllData.clearAllData);
 
     return { success: true, message: "All Todoist data cleared" };
   },

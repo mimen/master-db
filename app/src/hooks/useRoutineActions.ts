@@ -1,4 +1,4 @@
-import { useMutation } from "convex/react"
+import { useAction, useMutation } from "convex/react"
 import { toast } from "sonner"
 
 import { api } from "@/convex/_generated/api"
@@ -8,18 +8,18 @@ import type { Id } from "@/convex/_generated/dataModel"
  * Hook providing all routine CRUD operations with toast notifications
  */
 export function useRoutineActions() {
-  const createRoutineMutation = useMutation(api.routines.publicMutations.createRoutine)
-  const updateRoutineMutation = useMutation(api.routines.publicMutations.updateRoutine)
-  const deleteRoutineMutation = useMutation(api.routines.publicMutations.deleteRoutine)
-  const deferRoutineMutation = useMutation(api.routines.publicMutations.deferRoutine)
-  const undeferRoutineMutation = useMutation(api.routines.publicMutations.undeferRoutine)
+  const createRoutineMutation = useMutation(api.routines.internalMutations.createRoutine.createRoutine)
+  const updateRoutineMutation = useMutation(api.routines.internalMutations.updateRoutine.updateRoutine)
+  const deleteRoutineMutation = useMutation(api.routines.internalMutations.deleteRoutine.deleteRoutine)
+  const deferRoutineMutation = useMutation(api.routines.internalMutations.deferRoutine.deferRoutine)
+  const undeferRoutineMutation = useMutation(api.routines.internalMutations.undeferRoutine.undeferRoutine)
+  const generateTasksAction = useAction(api.routines.internalActions.manuallyGenerateRoutineTasks.manuallyGenerateRoutineTasks)
 
   const createRoutine = async (args: {
     name: string
     description?: string
     frequency: string
     duration?: string
-    category?: string
     timeOfDay?: string
     idealDay?: number
     todoistProjectId?: string
@@ -45,7 +45,6 @@ export function useRoutineActions() {
     description?: string
     frequency?: string
     duration?: string
-    category?: string
     timeOfDay?: string
     idealDay?: number
     todoistProjectId?: string
@@ -107,11 +106,29 @@ export function useRoutineActions() {
     }
   }
 
+  const generateRoutineTasks = async (): Promise<boolean> => {
+    const toastId = toast.loading("Generating routine tasks...")
+
+    try {
+      const result = await generateTasksAction({})
+      const message = result.totalTasksCreated > 0
+        ? `Generated ${result.totalTasksCreated} task${result.totalTasksCreated === 1 ? '' : 's'} for ${result.routinesSuccess} routine${result.routinesSuccess === 1 ? '' : 's'}!`
+        : "No new tasks needed"
+      toast.success(message, { id: toastId })
+      return true
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error"
+      toast.error(`Failed to generate tasks: ${msg}`, { id: toastId })
+      return false
+    }
+  }
+
   return {
     createRoutine,
     updateRoutine,
     deleteRoutine,
     deferRoutine,
     undeferRoutine,
+    generateRoutineTasks,
   }
 }

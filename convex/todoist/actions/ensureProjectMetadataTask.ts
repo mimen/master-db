@@ -23,7 +23,7 @@ export const ensureProjectMetadataTask = action({
     try {
       // Check if metadata already exists with source_task_id
       const metadata = await ctx.runQuery(
-        api.todoist.publicQueries.getProjectMetadata,
+        api.todoist.queries.getProjectMetadata.getProjectMetadata,
         { projectId }
       );
 
@@ -52,7 +52,7 @@ export const ensureProjectMetadataTask = action({
 
       // Get the project to use its name
       const project = await ctx.runQuery(
-        api.todoist.publicQueries.getProjectByTodoistId,
+        api.todoist.queries.getProjectByTodoistId.getProjectByTodoistId,
         { todoistId: projectId }
       );
 
@@ -73,7 +73,7 @@ export const ensureProjectMetadataTask = action({
       });
 
       // Sync the task to Convex
-      await ctx.runMutation(internal.todoist.mutations.upsertItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertItem.upsertItem, {
         item: {
           id: task.id,
           content: task.content,
@@ -108,7 +108,7 @@ export const ensureProjectMetadataTask = action({
       });
 
       // Extract metadata from this task
-      await ctx.runMutation(internal.todoist.computed.index.extractProjectMetadata, {
+      await ctx.runMutation(internal.todoist.computed.mutations.extractProjectMetadata.extractProjectMetadata, {
         projectId,
       });
 

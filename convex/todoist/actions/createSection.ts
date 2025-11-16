@@ -27,7 +27,7 @@ export const createSection = action({
       const section = await client.addSection(sectionArgs);
 
       // Store in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertSection, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertSection.upsertSection, {
         section: {
           id: section.id,
           name: section.name,

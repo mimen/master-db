@@ -20,7 +20,7 @@ interface TodoistActionConfig {
  *
  * @example
  * const completeTask = useTodoistAction(
- *   api.todoist.publicActions.completeTask,
+ *   api.todoist.actions.completeTask,
  *   {
  *     loadingMessage: "Completing task...",
  *     successMessage: "Task completed!",

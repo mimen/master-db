@@ -25,7 +25,7 @@ export const reopenTask = action({
       }
 
       // Update task state in Convex DB
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
         todoistId: args.todoistId,
         updates: {
           checked: false,

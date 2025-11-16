@@ -17,7 +17,7 @@ export const deleteProject = action({
       const deleted = await client.deleteProject(projectId);
 
       // Mark as deleted in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertProject, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertProject.upsertProject, {
         project: {
           id: projectId,
           name: "", // Name is required by schema but project is deleted

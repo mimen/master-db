@@ -30,7 +30,7 @@ export const getProjectTaskCounts = query({
       .filter((q) => q.eq(q.field("is_deleted"), false))
       .collect();
 
-    const filteredItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+    const filteredItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
       currentUserId: userId,
     });
 

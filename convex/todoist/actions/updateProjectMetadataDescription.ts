@@ -19,7 +19,7 @@ export const updateProjectMetadataDescription = action({
     try {
       // Get metadata to find source_task_id
       const metadata = await ctx.runQuery(
-        api.todoist.publicQueries.getProjectMetadata,
+        api.todoist.queries.getProjectMetadata.getProjectMetadata,
         { projectId }
       );
 
@@ -28,7 +28,7 @@ export const updateProjectMetadataDescription = action({
       // If no metadata task exists, create it first
       if (!taskId) {
         const ensureResult = await ctx.runAction(
-          api.todoist.publicActions.ensureProjectMetadataTask,
+          api.todoist.actions.ensureProjectMetadataTask.ensureProjectMetadataTask,
           { projectId }
         );
 
@@ -54,7 +54,7 @@ export const updateProjectMetadataDescription = action({
         console.warn("Metadata task not found, recreating:", updateError);
 
         const ensureResult = await ctx.runAction(
-          api.todoist.publicActions.ensureProjectMetadataTask,
+          api.todoist.actions.ensureProjectMetadataTask.ensureProjectMetadataTask,
           { projectId }
         );
 
@@ -71,7 +71,7 @@ export const updateProjectMetadataDescription = action({
       }
 
       // Sync the task to Convex
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
         todoistId: taskId,
         updates: {
           description: task.description,
@@ -81,7 +81,7 @@ export const updateProjectMetadataDescription = action({
       });
 
       // Extract metadata from this task to update project metadata
-      await ctx.runMutation(internal.todoist.computed.index.extractProjectMetadata, {
+      await ctx.runMutation(internal.todoist.computed.mutations.extractProjectMetadata.extractProjectMetadata, {
         projectId,
       });
 

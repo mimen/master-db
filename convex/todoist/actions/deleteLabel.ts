@@ -17,7 +17,7 @@ export const deleteLabel = action({
       await client.deleteLabel(args.labelId);
 
       // Mark as deleted in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertLabel, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertLabel.upsertLabel, {
         label: {
           id: args.labelId,
           name: "", // Name will be preserved from existing record

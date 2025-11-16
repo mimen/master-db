@@ -124,7 +124,7 @@ export const getActiveItems = query({
     const effectiveAssigneeFilter = args.assigneeFilter || 'not-assigned-to-others';
 
     const items: Doc<"todoist_items">[] = await ctx.runQuery(
-      internal.todoist.internal.index.getFilteredActiveItems,
+      internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems,
       {
         projectId: args.projectId,
         assigneeFilter: effectiveAssigneeFilter,

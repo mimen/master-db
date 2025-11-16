@@ -11,7 +11,7 @@ import { api } from "@/convex/_generated/api"
  * - On success: name stays updated (Convex syncs naturally)
  */
 export const useOptimisticProjectName = createOptimisticProjectHook<[string]>({
-  actionPath: api.todoist.publicActions.updateProjectName,
+  actionPath: api.todoist.actions.updateProjectName.updateProjectName,
   messages: {
     loading: "Updating project name...",
     success: "Project name updated!",

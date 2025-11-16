@@ -2,8 +2,8 @@ import { query } from "../../_generated/server";
 import { v } from "convex/values";
 
 /**
- * Get routines for a view (filtered by defer status)
- * Returns active routines sorted by name
+ * Get routines for a view (includes deferred/paused routines)
+ * Returns all routines sorted by defer status (active first) then by name
  */
 export const getRoutinesByView = query({
   args: {
@@ -13,13 +13,17 @@ export const getRoutinesByView = query({
     }),
   },
   handler: async (ctx) => {
-    // Get all active routines (defer=false)
-    const routines = await ctx.db
-      .query("routines")
-      .withIndex("by_defer", (q) => q.eq("defer", false))
-      .collect();
+    // Get all routines
+    const routines = await ctx.db.query("routines").collect();
 
-    // Sort by name
-    return routines.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort by defer status (active first), then by name
+    return routines.sort((a, b) => {
+      // Active routines come first
+      if (a.defer !== b.defer) {
+        return a.defer ? 1 : -1;
+      }
+      // Then sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
   },
 });

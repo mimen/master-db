@@ -25,7 +25,7 @@ export const deleteTask = action({
       }
 
       // Mark as deleted in Convex DB
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
         todoistId: args.taskId,
         updates: {
           is_deleted: true,

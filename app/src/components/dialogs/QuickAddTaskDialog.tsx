@@ -41,11 +41,11 @@ export function QuickAddTaskDialog({ isOpen, onClose, defaultProjectId }: QuickA
 
   const contentInputRef = useRef<HTMLInputElement>(null)
 
-  const projects = useQuery(api.todoist.publicQueries.getProjects)
-  const labels = useQuery(api.todoist.publicQueries.getLabels)
+  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
+  const labels = useQuery(api.todoist.queries.getLabels.getLabels)
 
   const createTask = useTodoistAction(
-    api.todoist.publicActions.createTask,
+    api.todoist.actions.createTask.createTask,
     {
       loadingMessage: "Creating task...",
       successMessage: "Task created!",

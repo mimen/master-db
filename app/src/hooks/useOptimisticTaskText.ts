@@ -22,7 +22,7 @@ import { api } from "@/convex/_generated/api"
 export function useOptimisticTaskText() {
   const { addTaskUpdate, removeTaskUpdate } = useOptimisticUpdates()
 
-  const action = useTodoistAction(api.todoist.publicActions.updateTask, {
+  const action = useTodoistAction(api.todoist.actions.updateTask.updateTask, {
     loadingMessage: "Updating task...",
     successMessage: "Task updated!",
     errorMessage: "Failed to update task"

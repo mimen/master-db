@@ -28,14 +28,14 @@ export const startQueueSession = action({
     switch (args.queueType) {
       case "priority":
         // @ts-expect-error - Type resolution issue with generated API
-        tasks = await ctx.runQuery(internal.todoist.queries.getPriorityQueue, {
+        tasks = await ctx.runQuery(internal.todoist.queries.getPriorityQueue.getPriorityQueue, {
           max_tasks: args.queueOptions?.max_tasks || 7,
         });
         break;
 
       case "focused":
         // @ts-expect-error - Type resolution issue with generated API
-        tasks = await ctx.runQuery(internal.todoist.queries.getFocusedTasks, {
+        tasks = await ctx.runQuery(internal.todoist.queries.getFocusedTasks.getFocusedTasks, {
           context: args.queueOptions?.context,
           timeframe: args.queueOptions?.timeframe,
           limit: args.queueOptions?.max_tasks || 10,
@@ -44,7 +44,7 @@ export const startQueueSession = action({
 
       case "context":
         // @ts-expect-error - Type resolution issue with generated API
-        tasks = await ctx.runQuery(internal.todoist.queries.getContextBatch, {
+        tasks = await ctx.runQuery(internal.todoist.queries.getContextBatch.getContextBatch, {
           context_type: args.queueOptions?.context_type,
           max_tasks: args.queueOptions?.max_tasks || 8,
         });
@@ -67,7 +67,7 @@ export const startQueueSession = action({
 
     // Create queue state
     // @ts-expect-error - Type resolution issue with generated API
-    const queueStateId = await ctx.runMutation(internal.todoist.publicMutations.createQueueState, {
+    const queueStateId = await ctx.runMutation(internal.todoist.internalMutations.createQueueState.createQueueState, {
       queueId,
       taskSnapshot,
       currentIndex: 0,
@@ -75,7 +75,7 @@ export const startQueueSession = action({
 
     // Get the queue state with current task
     // @ts-expect-error - Type resolution issue with generated API
-    const queueState = await ctx.runQuery(internal.todoist.queries.getQueueState, {
+    const queueState = await ctx.runQuery(internal.todoist.queries.getQueueState.getQueueState, {
       queueId,
     });
 

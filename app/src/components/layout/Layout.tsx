@@ -30,11 +30,11 @@ export function Layout() {
   const [taskCountsAtDismissal, setTaskCountsAtDismissal] = useState<Map<string, number>>(new Map())
 
   // Fetch data needed for viewContext
-  const projects = useQuery(api.todoist.publicQueries.getProjects) as TodoistProjects | undefined
-  const projectsWithMetadata = useQuery(api.todoist.publicQueries.getProjectsWithMetadata, {}) as
+  const projects = useQuery(api.todoist.queries.getProjects.getProjects) as TodoistProjects | undefined
+  const projectsWithMetadata = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata, {}) as
     | TodoistProjectsWithMetadata
     | undefined
-  const labels = useQuery(api.todoist.publicQueries.getLabels) as TodoistLabelDoc[] | undefined
+  const labels = useQuery(api.todoist.queries.getLabels.getLabels) as TodoistLabelDoc[] | undefined
 
   // Build viewContext
   const viewContext: ViewBuildContext = useMemo(

@@ -17,7 +17,7 @@ export const deleteComment = action({
       await client.deleteComment(args.commentId);
 
       // Mark as deleted in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertNote, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertNote.upsertNote, {
         note: {
           id: args.commentId,
           item_id: "", // Will be preserved from existing record

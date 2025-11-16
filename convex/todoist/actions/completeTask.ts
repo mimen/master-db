@@ -11,7 +11,7 @@ export const completeTask = action({
   },
   handler: async (ctx, args): Promise<ActionResponse<boolean>> => {
     // STEP 1: OPTIMISTIC UPDATE - Update Convex DB immediately for instant UI feedback
-    await ctx.runMutation(internal.todoist.mutations.updateItem, {
+    await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
       todoistId: args.todoistId,
       updates: {
         checked: true,
@@ -28,7 +28,7 @@ export const completeTask = action({
 
       if (!success) {
         // STEP 3a: ROLLBACK - API returned false, undo optimistic update
-        await ctx.runMutation(internal.todoist.mutations.updateItem, {
+        await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
           todoistId: args.todoistId,
           updates: {
             checked: false,
@@ -48,7 +48,7 @@ export const completeTask = action({
       return { success: true, data: success };
     } catch (error) {
       // STEP 3b: ROLLBACK - Exception occurred, undo optimistic update
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
         todoistId: args.todoistId,
         updates: {
           checked: false,

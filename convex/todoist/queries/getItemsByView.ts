@@ -71,7 +71,7 @@ export const getItemsByView = query({
         return [];
       }
 
-      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+      return ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
         projectId: list.inboxProjectId,
         currentUserId: userId,
       });
@@ -79,44 +79,44 @@ export const getItemsByView = query({
 
     if (list.type === "time") {
       if (list.range === "today") {
-        return ctx.runQuery(api.todoist.publicQueries.getDueTodayItems, {
+        return ctx.runQuery(api.todoist.queries.getDueTodayItems.getDueTodayItems, {
           timezoneOffsetMinutes: list.timezoneOffsetMinutes,
         });
       }
 
       if (list.range === "upcoming") {
-        return ctx.runQuery(api.todoist.publicQueries.getDueNext7DaysItems, {
+        return ctx.runQuery(api.todoist.queries.getDueNext7DaysItems.getDueNext7DaysItems, {
           timezoneOffsetMinutes: list.timezoneOffsetMinutes,
         });
       }
 
       if (list.range === "overdue") {
-        return ctx.runQuery(api.todoist.publicQueries.getOverdueItems, {});
+        return ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, {});
       }
 
       if (list.range === "no-date") {
-        return ctx.runQuery(api.todoist.publicQueries.getNoDueDateItems, {});
+        return ctx.runQuery(api.todoist.queries.getNoDueDateItems.getNoDueDateItems, {});
       }
 
       return [];
     }
 
     if (list.type === "project") {
-      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+      return ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
         projectId: list.projectId,
         currentUserId: userId,
       });
     }
 
     if (list.type === "priority") {
-      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+      return ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
         priority: list.priority,
         currentUserId: userId,
       });
     }
 
     if (list.type === "label") {
-      return ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+      return ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
         label: list.label,
         currentUserId: userId,
       });

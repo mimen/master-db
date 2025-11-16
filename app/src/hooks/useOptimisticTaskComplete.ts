@@ -12,7 +12,7 @@ import { api } from "@/convex/_generated/api"
  * - On success: task stays hidden (Convex removes it from queries naturally)
  */
 export const useOptimisticTaskComplete = createOptimisticHook<[]>({
-  actionPath: api.todoist.publicActions.completeTask,
+  actionPath: api.todoist.actions.completeTask.completeTask,
   messages: {
     loading: "Completing task...",
     success: "Task completed!",

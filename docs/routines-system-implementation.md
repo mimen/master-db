@@ -813,18 +813,55 @@ Next steps:
 
 **Completion Notes**:
 ```
-Date:
-Status:
-Stats Test Results:
-- Completion rate display:
-- Color coding:
-- Detail dialog:
-- Recent tasks:
-- Next task date:
+Date: 2025-01-15
+Status: COMPLETED ✅
+Notes:
+- Created getRoutineStats query with comprehensive statistics:
+  - Returns routine, completion rates (overall + monthly), recent tasks, next task date
+  - Includes task counts by status (pending, completed, missed, skipped)
+  - Filters recent tasks to last 30 days
+  - Finds next scheduled task date (earliest pending task)
+- Created RoutineDetailDialog component with full stats display:
+  - Shows routine properties (frequency, duration, category, time of day)
+  - Displays completion rates with color coding (green >80%, yellow 50-80%, red <50%)
+  - Shows recent tasks (last 30 days) with status icons (✓ completed, ✗ missed, - skipped, ⏰ pending)
+  - Displays next scheduled task date with relative formatting (Today, Tomorrow, in X days)
+  - Edit button opens RoutineDialog for editing
+  - Pause badge shows when routine is deferred
+- Updated RoutinesListView to open detail dialog instead of edit dialog:
+  - Click routine row → opens RoutineDetailDialog
+  - Edit button in detail dialog → opens RoutineDialog
+  - Maintains state between dialogs
+- RoutineRow already displays completion rate with color coding (from Milestone 9)
+- Exported getRoutineStats in publicQueries barrel file
+
+Stats Display Features:
+- Completion rate with color coding: ✅ Green >80%, Yellow 50-80%, Red <50%
+- Overall and monthly completion rates displayed prominently
+- Task counts by status (completed, pending, missed, skipped)
+- Recent tasks list with status icons and dates
+- Next scheduled task with relative date formatting
+- Edit button for quick access to editing
+
+Files created (1):
+- app/src/components/dialogs/RoutineDetailDialog.tsx (251 lines)
+
+Files modified (3):
+- convex/routines/queries/getRoutineStats.ts (created, 54 lines)
+- convex/routines/publicQueries.ts (added export)
+- app/src/components/RoutinesListView.tsx (updated dialog routing)
+
+Validation Results:
+- Typecheck: ✅ No new errors (pre-existing errors remain in other files)
+- Lint: ✅ No errors in new/modified files
+- Fixed TypeScript error: Added explicit type annotation for task parameter
+
 Issues encountered:
--
+- Initial TypeScript error for implicit 'any' type on task parameter
+- Fixed by adding explicit type: `Doc<"routineTasks">`
+
 Next steps:
-- Milestone 11: Validation & Testing
+- Milestone 11: Validation & End-to-End Testing
 ```
 
 ---
@@ -913,7 +950,7 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 9/11 milestones (82%)
+**Overall Completion**: 10/11 milestones (91%)
 
 - [x] Planning & Research
 - [x] Milestone 1: Schema & Type Definitions
@@ -925,7 +962,7 @@ Next steps:
 - [x] Milestone 7: Webhook Integration
 - [x] Milestone 8: Display Components (Read-Only)
 - [x] Milestone 9: Interaction Layer
-- [ ] Milestone 10: Stats & Detail View
+- [x] Milestone 10: Stats & Detail View
 - [ ] Milestone 11: Validation & End-to-End Testing
 
 ---
@@ -966,7 +1003,7 @@ Next steps:
 - [x] `convex/routines/queries/getRoutineTasks.ts`
 - [x] `convex/routines/queries/getRoutinesNeedingGeneration.ts`
 - [x] `convex/routines/queries/getRoutineTaskByTodoistId.ts` (Milestone 7)
-- [ ] `convex/routines/queries/getRoutineStats.ts`
+- [x] `convex/routines/queries/getRoutineStats.ts` (Milestone 10)
 
 **Backend Actions (2)**:
 - [x] `convex/routines/actions/createRoutineTaskInTodoist.ts`
@@ -989,13 +1026,13 @@ Next steps:
 - [x] `convex/routines/mutations.ts` and `convex/routines/queries.ts` (internal exports)
 
 **Frontend Components (4)**:
-- [ ] `app/src/components/RoutineRow.tsx`
-- [ ] `app/src/components/RoutinesListView.tsx`
-- [ ] `app/src/components/dialogs/RoutineDialog.tsx`
-- [ ] `app/src/components/dialogs/RoutineDetailDialog.tsx`
+- [x] `app/src/components/RoutineRow.tsx` (Milestone 8)
+- [x] `app/src/components/RoutinesListView.tsx` (Milestone 8)
+- [x] `app/src/components/dialogs/RoutineDialog.tsx` (Milestone 9)
+- [x] `app/src/components/dialogs/RoutineDetailDialog.tsx` (Milestone 10)
 
 **Frontend Hooks (1)**:
-- [ ] `app/src/hooks/useRoutineActions.ts`
+- [x] `app/src/hooks/useRoutineActions.ts` (Milestone 9)
 
 ### Files to Modify (12)
 
@@ -1189,4 +1226,4 @@ Night → 19 (7pm)
 
 ---
 
-**Last Updated**: 2025-01-14 (Milestone 7 Complete - Webhook Integration)
+**Last Updated**: 2025-01-15 (Milestone 10 Complete - Stats & Detail View)

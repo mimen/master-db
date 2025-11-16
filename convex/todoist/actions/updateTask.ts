@@ -58,7 +58,7 @@ export const updateTask = action({
       const task = await client.updateTask(args.todoistId, updateArgs);
 
       // Sync the result to Convex DB
-      await ctx.runMutation(internal.todoist.mutations.updateItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
         todoistId: args.todoistId,
         updates: {
           content: task.content,

@@ -62,7 +62,7 @@ export const createTask = action({
       const task = await client.addTask(taskArgs);
 
       // Store in Convex - filter to only expected fields
-      await ctx.runMutation(internal.todoist.mutations.upsertItem, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertItem.upsertItem, {
         item: {
           id: task.id,
           content: task.content,

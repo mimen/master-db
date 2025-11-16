@@ -24,7 +24,7 @@ import { api } from "@/convex/_generated/api"
 export const useOptimisticDueChange = createOptimisticHook<
   [{ date: string; datetime?: string } | null]
 >({
-  actionPath: api.todoist.publicActions.updateTask,
+  actionPath: api.todoist.actions.updateTask.updateTask,
   messages: {
     loading: "Updating schedule...",
     success: "Schedule updated!",

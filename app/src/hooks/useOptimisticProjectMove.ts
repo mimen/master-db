@@ -12,7 +12,7 @@ import { api } from "@/convex/_generated/api"
  * - On success: Convex reactivity updates the task in place (or hides in project views)
  */
 export const useOptimisticProjectMove = createOptimisticHook<[string]>({
-  actionPath: api.todoist.publicActions.moveTask,
+  actionPath: api.todoist.actions.moveTask.moveTask,
   messages: {
     loading: "Moving task...",
     success: "Task moved!",

@@ -11,7 +11,7 @@ import { api } from "@/convex/_generated/api"
  * - On success: priority stays updated (Convex syncs naturally)
  */
 export const useOptimisticProjectPriority = createOptimisticProjectHook<[number]>({
-  actionPath: api.todoist.publicActions.updateProjectMetadataPriority,
+  actionPath: api.todoist.actions.updateProjectMetadataPriority.updateProjectMetadataPriority,
   messages: {
     loading: "Updating project priority...",
     success: "Project priority updated!",

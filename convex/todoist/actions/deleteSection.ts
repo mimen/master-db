@@ -17,7 +17,7 @@ export const deleteSection = action({
       const deleted = await client.deleteSection(sectionId);
 
       // Mark as deleted in Convex using existing mutation
-      await ctx.runMutation(internal.todoist.mutations.upsertSection, {
+      await ctx.runMutation(internal.todoist.internalMutations.upsertSection.upsertSection, {
         section: {
           id: sectionId,
           name: "", // Name is required by schema but section is deleted

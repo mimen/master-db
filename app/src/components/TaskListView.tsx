@@ -58,17 +58,17 @@ export function TaskListView({
   const { setFocusedTask } = useFocusContext()
 
   const projects: TodoistProjects | undefined = useQuery(
-    api.todoist.publicQueries.getProjects,
+    api.todoist.queries.getProjects.getProjects,
     list.dependencies.projects ? {} : "skip"
   )
 
   const projectsWithMetadata: TodoistProjectsWithMetadata | undefined = useQuery(
-    api.todoist.publicQueries.getProjectsWithMetadata,
+    api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata,
     list.dependencies.projectMetadata ? {} : "skip"
   )
 
   const labels: TodoistLabelDoc[] | undefined = useQuery(
-    api.todoist.publicQueries.getLabels,
+    api.todoist.queries.getLabels.getLabels,
     list.dependencies.labels ? {} : "skip"
   )
 
@@ -106,7 +106,7 @@ export function TaskListView({
   }, [list.query, projects])
 
   const tasks: TodoistItemsByListWithProjects | undefined = useQuery(
-    api.todoist.publicQueries.getItemsByViewWithProjects,
+    api.todoist.queries.getItemsByViewWithProjects.getItemsByViewWithProjects,
     resolvedQuery ? { list: resolvedQuery } : "skip"
   )
 

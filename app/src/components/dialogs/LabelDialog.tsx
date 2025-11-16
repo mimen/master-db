@@ -27,7 +27,7 @@ export function LabelDialog({ task, onSelect, onClose }: LabelDialogProps) {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const selectedLabelRef = useRef<HTMLButtonElement>(null)
 
-  const labels = useQuery(api.todoist.publicQueries.getLabels)
+  const labels = useQuery(api.todoist.queries.getLabels.getLabels)
 
   const filteredLabels = (labels || []).filter((label: TodoistLabelDoc) =>
     label.name.toLowerCase().includes(searchTerm.toLowerCase())

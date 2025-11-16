@@ -24,7 +24,7 @@ export const getPriorityFilterCounts = query({
       .withIndex("active_items", (q) => q.eq("is_deleted", false).eq("checked", false))
       .collect();
 
-    const filteredItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internal.index.getFilteredActiveItems, {
+    const filteredItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
       currentUserId: userId,
     });
 

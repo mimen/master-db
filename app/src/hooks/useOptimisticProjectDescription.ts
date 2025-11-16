@@ -11,7 +11,7 @@ import { api } from "@/convex/_generated/api"
  * - On success: description stays updated (Convex syncs naturally)
  */
 export const useOptimisticProjectDescription = createOptimisticProjectHook<[string]>({
-  actionPath: api.todoist.publicActions.updateProjectMetadataDescription,
+  actionPath: api.todoist.actions.updateProjectMetadataDescription.updateProjectMetadataDescription,
   messages: {
     loading: "Updating description...",
     success: "Description updated!",
