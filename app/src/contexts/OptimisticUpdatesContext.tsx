@@ -68,10 +68,34 @@ export type OptimisticProjectUpdate =
     }
 
 // ============================================
+// ROUTINE UPDATES
+// ============================================
+
+export type OptimisticRoutineUpdate =
+  | {
+      routineId: string
+      type: "priority-change"
+      newPriority: number
+      timestamp: number
+    }
+  | {
+      routineId: string
+      type: "project-change"
+      newProjectId: string | undefined
+      timestamp: number
+    }
+  | {
+      routineId: string
+      type: "label-change"
+      newLabels: string[]
+      timestamp: number
+    }
+
+// ============================================
 // COMBINED TYPE
 // ============================================
 
-export type OptimisticUpdate = OptimisticTaskUpdate | OptimisticProjectUpdate
+export type OptimisticUpdate = OptimisticTaskUpdate | OptimisticProjectUpdate | OptimisticRoutineUpdate
 
 interface OptimisticUpdatesContextValue {
   // Task updates
@@ -85,6 +109,12 @@ interface OptimisticUpdatesContextValue {
   addProjectUpdate: (update: OptimisticProjectUpdate) => void
   removeProjectUpdate: (projectId: string) => void
   getProjectUpdate: (projectId: string) => OptimisticProjectUpdate | undefined
+
+  // Routine updates
+  routineUpdates: Map<string, OptimisticRoutineUpdate>
+  addRoutineUpdate: (update: OptimisticRoutineUpdate) => void
+  removeRoutineUpdate: (routineId: string) => void
+  getRoutineUpdate: (routineId: string) => OptimisticRoutineUpdate | undefined
 
   // Legacy compatibility (deprecated - use task-specific methods)
   /** @deprecated Use taskUpdates instead */
@@ -102,6 +132,9 @@ const OptimisticUpdatesContext = createContext<OptimisticUpdatesContextValue | n
 export function OptimisticUpdatesProvider({ children }: { children: ReactNode }) {
   const [taskUpdates, setTaskUpdates] = useState<Map<string, OptimisticTaskUpdate>>(new Map())
   const [projectUpdates, setProjectUpdates] = useState<Map<string, OptimisticProjectUpdate>>(
+    new Map()
+  )
+  const [routineUpdates, setRoutineUpdates] = useState<Map<string, OptimisticRoutineUpdate>>(
     new Map()
   )
 
@@ -177,6 +210,27 @@ export function OptimisticUpdatesProvider({ children }: { children: ReactNode })
     return projectUpdates.get(projectId)
   }
 
+  // Routine update methods
+  const addRoutineUpdate = (update: OptimisticRoutineUpdate) => {
+    setRoutineUpdates((prev) => {
+      const next = new Map(prev)
+      next.set(update.routineId, update)
+      return next
+    })
+  }
+
+  const removeRoutineUpdate = (routineId: string) => {
+    setRoutineUpdates((prev) => {
+      const next = new Map(prev)
+      next.delete(routineId)
+      return next
+    })
+  }
+
+  const getRoutineUpdate = (routineId: string): OptimisticRoutineUpdate | undefined => {
+    return routineUpdates.get(routineId)
+  }
+
   return (
     <OptimisticUpdatesContext.Provider
       value={{
@@ -190,6 +244,11 @@ export function OptimisticUpdatesProvider({ children }: { children: ReactNode })
         addProjectUpdate,
         removeProjectUpdate,
         getProjectUpdate,
+        // Routine updates
+        routineUpdates,
+        addRoutineUpdate,
+        removeRoutineUpdate,
+        getRoutineUpdate,
         // Legacy compatibility (point to task methods)
         pendingUpdates: taskUpdates,
         addUpdate: addTaskUpdate,
