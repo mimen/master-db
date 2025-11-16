@@ -250,10 +250,7 @@ export function RoutinesListView({
               key={routine._id}
               routine={routine}
               onElementRef={getRefHandler(index)}
-              onClick={() => {
-                setFocusedRoutineIndex(index)
-                handleOpenDetail(routine)
-              }}
+              onClick={() => setFocusedRoutineIndex(index)}
             />
           ))}
         </div>
