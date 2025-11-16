@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
+import type { Doc } from '@/convex/_generated/dataModel'
 import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
 export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings' | 'quickAdd' | 'sync'
@@ -8,15 +9,16 @@ export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadlin
 interface DialogContextValue {
   currentTask: TodoistTask | null
   currentProject: TodoistProjectWithMetadata | null
+  currentRoutine: Doc<"routines"> | null
   dialogType: DialogType | null
   isShortcutsOpen: boolean
   isSettingsOpen: boolean
   isQuickAddOpen: boolean
   isSyncOpen: boolean
   quickAddDefaultProjectId?: string
-  openPriority: (item: TodoistTask | TodoistProjectWithMetadata) => void
-  openProject: (task: TodoistTask) => void
-  openLabel: (task: TodoistTask) => void
+  openPriority: (item: TodoistTask | TodoistProjectWithMetadata | Doc<"routines">) => void
+  openProject: (item: TodoistTask | Doc<"routines">) => void
+  openLabel: (item: TodoistTask | Doc<"routines">) => void
   openDueDate: (task: TodoistTask) => void
   openDeadline: (task: TodoistTask) => void
   openComplete: (task: TodoistTask) => void
@@ -34,6 +36,7 @@ const DialogContext = createContext<DialogContextValue | null>(null)
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [currentTask, setCurrentTask] = useState<TodoistTask | null>(null)
   const [currentProject, setCurrentProject] = useState<TodoistProjectWithMetadata | null>(null)
+  const [currentRoutine, setCurrentRoutine] = useState<Doc<"routines"> | null>(null)
   const [dialogType, setDialogType] = useState<DialogType | null>(null)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -41,25 +44,52 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [isSyncOpen, setIsSyncOpen] = useState(false)
   const [quickAddDefaultProjectId, setQuickAddDefaultProjectId] = useState<string | undefined>(undefined)
 
-  const openPriority = useCallback((item: TodoistTask | TodoistProjectWithMetadata) => {
-    // Check if it's a task or project by checking for task-specific fields
+  const openPriority = useCallback((item: TodoistTask | TodoistProjectWithMetadata | Doc<"routines">) => {
+    // Check if it's a task, project, or routine by checking for specific fields
     if ('content' in item) {
+      // Task
       setCurrentTask(item as TodoistTask)
       setCurrentProject(null)
+      setCurrentRoutine(null)
+    } else if ('frequency' in item) {
+      // Routine
+      setCurrentRoutine(item as Doc<"routines">)
+      setCurrentTask(null)
+      setCurrentProject(null)
     } else {
+      // Project
       setCurrentProject(item as TodoistProjectWithMetadata)
       setCurrentTask(null)
+      setCurrentRoutine(null)
     }
     setDialogType('priority')
   }, [])
 
-  const openProject = useCallback((task: TodoistTask) => {
-    setCurrentTask(task)
+  const openProject = useCallback((item: TodoistTask | Doc<"routines">) => {
+    if ('content' in item) {
+      // Task
+      setCurrentTask(item as TodoistTask)
+      setCurrentRoutine(null)
+    } else {
+      // Routine
+      setCurrentRoutine(item as Doc<"routines">)
+      setCurrentTask(null)
+    }
+    setCurrentProject(null)
     setDialogType('project')
   }, [])
 
-  const openLabel = useCallback((task: TodoistTask) => {
-    setCurrentTask(task)
+  const openLabel = useCallback((item: TodoistTask | Doc<"routines">) => {
+    if ('content' in item) {
+      // Task
+      setCurrentTask(item as TodoistTask)
+      setCurrentRoutine(null)
+    } else {
+      // Routine
+      setCurrentRoutine(item as Doc<"routines">)
+      setCurrentTask(null)
+    }
+    setCurrentProject(null)
     setDialogType('label')
   }, [])
 
@@ -113,6 +143,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const closeDialog = useCallback(() => {
     setCurrentTask(null)
     setCurrentProject(null)
+    setCurrentRoutine(null)
     setDialogType(null)
     setIsShortcutsOpen(false)
     setIsSettingsOpen(false)
@@ -124,6 +155,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const value: DialogContextValue = {
     currentTask,
     currentProject,
+    currentRoutine,
     dialogType,
     isShortcutsOpen,
     isSettingsOpen,

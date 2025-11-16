@@ -11,18 +11,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '@/convex/_generated/api'
+import type { Doc } from '@/convex/_generated/dataModel'
 import { useCreateProject } from '@/hooks/useCreateProject'
 import { getProjectColor, TODOIST_COLOR_OPTIONS } from '@/lib/colors'
 import { cn, parseMarkdownLinks } from '@/lib/utils'
 import type { TodoistProject, TodoistTask } from '@/types/convex/todoist'
 
 interface ProjectDialogProps {
-  task: TodoistTask | null
+  task?: TodoistTask | null
+  routine?: Doc<"routines"> | null
   onSelect: (projectId: string) => void
   onClose: () => void
 }
 
-export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
+export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialogProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -362,7 +364,7 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
             Select Project
           </DialogTitle>
           <DialogDescription className="text-sm font-medium leading-snug pt-1">
-            {parseMarkdownLinks(task.content).map((segment, index) => {
+            {task && parseMarkdownLinks(task.content).map((segment, index) => {
               if (segment.type === 'text') {
                 return <span key={index}>{segment.content}</span>
               } else {
@@ -380,6 +382,11 @@ export function ProjectDialog({ task, onSelect, onClose }: ProjectDialogProps) {
                 )
               }
             })}
+            {routine && (
+              <span className="text-muted-foreground">
+                Set which project new tasks from <span className="font-semibold text-foreground">{routine.name}</span> will be created in
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 

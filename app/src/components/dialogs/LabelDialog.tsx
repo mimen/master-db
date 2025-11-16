@@ -10,17 +10,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '@/convex/_generated/api'
+import type { Doc } from '@/convex/_generated/dataModel'
 import { getProjectColor } from '@/lib/colors'
 import { cn, parseMarkdownLinks } from '@/lib/utils'
 import type { TodoistTask, TodoistLabelDoc } from '@/types/convex/todoist'
 
 interface LabelDialogProps {
-  task: TodoistTask | null
+  task?: TodoistTask | null
+  routine?: Doc<"routines"> | null
   onSelect: (labels: string[]) => void
   onClose: () => void
 }
 
-export function LabelDialog({ task, onSelect, onClose }: LabelDialogProps) {
+export function LabelDialog({ task, routine, onSelect, onClose }: LabelDialogProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedLabels, setSelectedLabels] = useState<string[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -39,8 +41,14 @@ export function LabelDialog({ task, onSelect, onClose }: LabelDialogProps) {
       setSelectedLabels(task.labels)
       setSelectedIndex(0)
       setTimeout(() => searchInputRef.current?.focus(), 100)
+    } else if (routine) {
+      setSearchTerm('')
+      // Filter out "routine" label since it's automatically added to generated tasks
+      setSelectedLabels(routine.todoistLabels.filter(l => l !== "routine"))
+      setSelectedIndex(0)
+      setTimeout(() => searchInputRef.current?.focus(), 100)
     }
-  }, [task])
+  }, [task, routine])
 
   useEffect(() => {
     if (selectedIndex >= filteredLabels.length) {
@@ -61,10 +69,11 @@ export function LabelDialog({ task, onSelect, onClose }: LabelDialogProps) {
     onSelect(newLabels)
   }
 
-  if (!task) return null
+  const item = task || routine
+  if (!item) return null
 
   return (
-    <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-w-lg max-h-[80vh] flex flex-col p-0"
         onKeyDown={(e) => {
@@ -100,7 +109,7 @@ export function LabelDialog({ task, onSelect, onClose }: LabelDialogProps) {
             </div>
           </DialogTitle>
           <DialogDescription className="text-sm font-medium text-green-900 leading-tight">
-            {parseMarkdownLinks(task.content).map((segment, index) => {
+            {task && parseMarkdownLinks(task.content).map((segment, index) => {
               if (segment.type === 'text') {
                 return <span key={index}>{segment.content}</span>
               } else {
@@ -118,6 +127,14 @@ export function LabelDialog({ task, onSelect, onClose }: LabelDialogProps) {
                 )
               }
             })}
+            {routine && (
+              <span className="text-green-800">
+                Labels for tasks created by <span className="font-semibold">{routine.name}</span>
+                <span className="block mt-1 text-xs text-green-700">
+                  (The "routine" label is automatically added to all generated tasks)
+                </span>
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
