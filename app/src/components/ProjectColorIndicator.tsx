@@ -30,7 +30,7 @@ export function ProjectColorIndicator({ project, size = "md", className }: Proje
       className={cn(
         sizeClass,
         "shrink-0",
-        isProject ? "" : "rounded-full",
+        isProject ? "rounded-sm" : "rounded-full",
         className
       )}
       style={{
