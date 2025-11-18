@@ -191,6 +191,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
                       )}
                       onClick={(e) => {
                         e.stopPropagation()
+                        onClick?.()
                         openPriority(project)
                       }}
                     >
@@ -212,6 +213,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
                 className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openPriority(project)
                 }}
               >
@@ -235,6 +237,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
                   className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                   onClick={(e) => {
                     e.stopPropagation()
+                    onClick?.()
                     onUnarchive?.(project.todoist_id)
                   }}
                 >
@@ -247,6 +250,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
                   className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                   onClick={(e) => {
                     e.stopPropagation()
+                    onClick?.()
                     handleArchive()
                   }}
                 >

@@ -10,17 +10,29 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useFocusContext } from "@/contexts/FocusContext"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { useRoutineActions } from "@/hooks/useRoutineActions"
+import { useRoutineDialogShortcuts } from "@/hooks/useRoutineDialogShortcuts"
+import { useListItemFocus } from "@/hooks/list-items"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
 import type { ListInstance } from "@/lib/views/types"
 
 interface RoutinesListViewProps {
   list: ListInstance
+  onRoutineCountChange?: (listId: string, count: number) => void
+  onRoutineClick?: (listId: string, routineIndex: number) => void
+  focusedRoutineIndex: number | null
+  isDismissed?: boolean // Not used yet but kept for interface consistency
+  onDismiss?: (listId: string) => void // Not used yet but kept for interface consistency
+  onRestore?: (listId: string) => void // Not used yet but kept for interface consistency
   isMultiListView?: boolean
 }
 
 export function RoutinesListView({
   list,
+  onRoutineCountChange,
+  onRoutineClick,
+  focusedRoutineIndex,
   isMultiListView = false,
 }: RoutinesListViewProps) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
@@ -40,9 +52,19 @@ export function RoutinesListView({
     setIsDetailDialogOpen(true)
   }
 
-  const handleOpenEditFromDetail = () => {
-    setIsDetailDialogOpen(false)
+  const handleOpenEdit = (routine: Doc<"routines">) => {
+    setSelectedRoutine(routine)
     setIsDialogOpen(true)
+  }
+
+  const { deferRoutine, undeferRoutine } = useRoutineActions()
+
+  const handleTogglePause = async (routine: Doc<"routines">) => {
+    if (routine.defer) {
+      await undeferRoutine(routine._id)
+    } else {
+      await deferRoutine(routine._id)
+    }
   }
 
   const handleCloseDialog = () => {
@@ -76,66 +98,37 @@ export function RoutinesListView({
     return allRoutines
   }, [allRoutines, isExpanded, isMultiListView, list.maxTasks])
 
-  const [focusedRoutineIndex, setFocusedRoutineIndex] = useState(0)
+  // Notify parent of routine count changes
+  useEffect(() => {
+    if (onRoutineCountChange && allRoutines) {
+      onRoutineCountChange(list.id, allRoutines.length)
+    }
+  }, [list.id, allRoutines, onRoutineCountChange])
+
   const routineRefs = useRef<(HTMLDivElement | null)[]>([])
-  const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
-  const lastFocusedIndex = useRef<number | null>(null)
+  routineRefs.current.length = visibleRoutines.length
 
   const focusedRoutine =
-    focusedRoutineIndex >= 0 && focusedRoutineIndex < visibleRoutines.length
+    focusedRoutineIndex !== null && focusedRoutineIndex >= 0 && focusedRoutineIndex < visibleRoutines.length
       ? visibleRoutines[focusedRoutineIndex]
       : null
-
-  useEffect(() => {
-    if (visibleRoutines.length > 0 && focusedRoutineIndex >= visibleRoutines.length) {
-      setFocusedRoutineIndex(Math.max(0, visibleRoutines.length - 1))
-    }
-  }, [visibleRoutines.length, focusedRoutineIndex])
 
   // Update FocusContext when focused routine changes
   useEffect(() => {
     setFocusedRoutine(focusedRoutine)
-    return () => setFocusedRoutine(null)
   }, [focusedRoutine, setFocusedRoutine])
 
-  // Focus styling and scroll management
-  useEffect(() => {
-    const ROUTINE_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "border-primary/30"]
+  // Enable keyboard shortcuts for property editing
+  useRoutineDialogShortcuts(focusedRoutine)
 
-    // Remove highlight from old focused routine
-    if (lastFocusedIndex.current !== null && lastFocusedIndex.current < routineRefs.current.length) {
-      const oldElement = routineRefs.current[lastFocusedIndex.current]
-      if (oldElement) {
-        ROUTINE_ROW_FOCUSED_CLASSNAMES.forEach((cls) => oldElement.classList.remove(cls))
-      }
-    }
-
-    // Apply highlight to new focused routine
-    if (focusedRoutineIndex >= 0 && focusedRoutineIndex < visibleRoutines.length) {
-      const newElement = routineRefs.current[focusedRoutineIndex]
-      if (newElement) {
-        ROUTINE_ROW_FOCUSED_CLASSNAMES.forEach((cls) => newElement.classList.add(cls))
-        newElement.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-        })
-        lastFocusedIndex.current = focusedRoutineIndex
-      }
-    }
-  }, [focusedRoutineIndex, visibleRoutines.length])
-
-  // Create stable ref handlers for each routine
-  const getRefHandler = (index: number) => {
-    if (!refHandlers.current[index]) {
-      refHandlers.current[index] = (element) => {
-        routineRefs.current[index] = element
-        if (element === null && lastFocusedIndex.current === index) {
-          lastFocusedIndex.current = null
-        }
-      }
-    }
-    return refHandlers.current[index]!
-  }
+  // Use shared focus management hook
+  useListItemFocus({
+    entityType: 'routine',
+    focusedIndex: focusedRoutineIndex,
+    entitiesLength: visibleRoutines.length,
+    elementRefs: routineRefs,
+    onExpand: () => setIsExpanded(true)
+  })
 
   const isLoading = allRoutines === undefined
 
@@ -163,8 +156,8 @@ export function RoutinesListView({
   })
 
   const hasMaxRoutines = list.maxTasks !== undefined
-  const isShowingAll = !hasMaxRoutines || allRoutines.length <= list.maxTasks
-  const hiddenCount = hasMaxRoutines && !isShowingAll ? allRoutines.length - list.maxTasks : 0
+  const isShowingAll = !hasMaxRoutines || allRoutines.length <= (list.maxTasks ?? 0)
+  const hiddenCount = hasMaxRoutines && !isShowingAll ? allRoutines.length - (list.maxTasks ?? 0) : 0
 
   return (
     <>
@@ -172,7 +165,6 @@ export function RoutinesListView({
         isOpen={isDetailDialogOpen}
         onClose={handleCloseDetailDialog}
         routineId={selectedRoutine?._id || null}
-        onEdit={handleOpenEditFromDetail}
       />
       <RoutineDialog
         isOpen={isDialogOpen}
@@ -249,8 +241,11 @@ export function RoutinesListView({
             <RoutineRow
               key={routine._id}
               routine={routine}
-              onElementRef={getRefHandler(index)}
-              onClick={() => setFocusedRoutineIndex(index)}
+              onElementRef={(el) => routineRefs.current[index] = el}
+              onClick={() => onRoutineClick?.(list.id, index)}
+              onOpenDetail={handleOpenDetail}
+              onOpenEdit={handleOpenEdit}
+              onTogglePause={handleTogglePause}
             />
           ))}
         </div>

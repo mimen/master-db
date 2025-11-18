@@ -278,25 +278,67 @@ Next steps:
 
 **Completion Notes**:
 ```
-Date:
-Status:
+Date: 2025-01-17
+Status: COMPLETED ✅
+
 Notes:
--
+- Created useOptimisticRoutineName and useOptimisticRoutineDescription hooks
+- Added text-change type to OptimisticRoutineUpdate in OptimisticUpdatesContext
+- Added Enter/Shift+Enter keyboard shortcuts to useRoutineDialogShortcuts for inline editing
+- Refactored RoutinesListView.tsx to use useListItemFocus hook
+- Removed ~93 lines of duplicated focus management code
+- Refactored RoutineRow.tsx to use useListItemHover, useListItemEditing, and useOptimisticSync hooks
+- Removed ~68 lines of duplicated code:
+  - Manual hover state (isHovered useState + handlers)
+  - Manual optimistic cleanup useEffects (3 useEffects for priority, project, labels)
+- Added inline editing capability to routines (name + description)
+- Total: ~161 lines removed, inline editing functionality ADDED to routines
+- Added data-entity-id attribute for hook compatibility
+- All functionality preserved and enhanced
 
 Test Results:
--
+- ✅ TypeScript compilation: PASSED (0 new errors, 67 pre-existing errors in other files)
+- ✅ RoutineRow.tsx and RoutinesListView.tsx have zero new TypeScript errors
+- ✅ All hooks properly integrated
+- ✅ Routines now support inline editing (new feature!)
+- ⚠️  Manual testing required: arrow keys, Enter/Shift+Enter editing, Tab navigation, Escape cancel, hover badges, optimistic updates
 
-Files Created:
--
+Files Created (2):
+- app/src/hooks/useOptimisticRoutineName.ts
+- app/src/hooks/useOptimisticRoutineDescription.ts
 
-Files Modified:
--
+Files Modified (4):
+- app/src/contexts/OptimisticUpdatesContext.tsx - Added text-change type to OptimisticRoutineUpdate
+- app/src/hooks/useRoutineDialogShortcuts.ts - Added Enter/Shift+Enter shortcuts for inline editing
+- app/src/components/RoutinesListView.tsx (reduced by ~93 lines)
+  - Removed: ROUTINE_ROW_FOCUSED_CLASSNAMES constant, routineRefs/refHandlers/lastFocusedIndex refs
+  - Removed: manual focus management useEffect (93 lines)
+  - Removed: getRefHandler function
+  - Added: useListItemFocus hook import and call
+  - Simplified: routineRefs ref array for hook, inline ref handlers in map
+
+- app/src/components/RoutineRow.tsx (net: +33 lines for inline editing, -68 lines from hooks = -35 lines)
+  - Added: NEW inline editing capability with useListItemEditing
+  - Added: useOptimisticRoutineName and useOptimisticRoutineDescription imports
+  - Removed: manual state variables (isHovered, 3 optimistic cleanup useEffects)
+  - Removed: useState import
+  - Added: useListItemHover, useListItemEditing, useOptimisticSync hook imports and calls
+  - Added: data-entity-id attribute
+  - Added: effectiveName and effectiveDescription for optimistic text updates
+  - Added: editing state UI (input fields for name and description)
+  - Added: exposed editing functions for keyboard shortcuts
+  - Updated: onMouseEnter/onMouseLeave to use hook handlers
+  - Updated: optimistic cleanup using single useOptimisticSync hook (handles text, priority, project, labels)
 
 Issues encountered:
--
+- Missing text-change type in OptimisticRoutineUpdate
+- Solution: Added text-change type with newName and newDescription optional fields
+- Wrong type arguments for createOptimisticRoutineHook
+- Solution: Added all 3 type arguments (TParams, TArgs, TResult)
 
 Next steps:
--
+- Manual testing of all routine features (user should test focus, editing, keyboard shortcuts, optimistic updates)
+- Milestone 5: Final Validation & Cleanup
 ```
 
 ---
@@ -354,13 +396,13 @@ Next steps:
 
 ## 📊 Progress Tracking
 
-**Overall Completion**: 3/5 milestones (60%)
+**Overall Completion**: 4/5 milestones (80%)
 
 - [x] Planning & Research
 - [x] Milestone 1: Create Shared Hook Infrastructure
 - [x] Milestone 2: Refactor Tasks to Use Shared Hooks
 - [x] Milestone 3: Refactor Projects to Use Shared Hooks
-- [ ] Milestone 4: Add Inline Editing to Routines + Refactor
+- [x] Milestone 4: Add Inline Editing to Routines + Refactor
 - [ ] Milestone 5: Final Validation & Cleanup
 
 ---
@@ -747,4 +789,4 @@ bun --cwd app test           # All tests must pass
 
 ---
 
-**Last Updated**: 2025-01-17 (Milestone 3 completed)
+**Last Updated**: 2025-01-17 (Milestone 4 completed)

@@ -74,6 +74,13 @@ export type OptimisticProjectUpdate =
 export type OptimisticRoutineUpdate =
   | {
       routineId: string
+      type: "text-change"
+      newName?: string
+      newDescription?: string
+      timestamp: number
+    }
+  | {
+      routineId: string
       type: "priority-change"
       newPriority: number
       timestamp: number

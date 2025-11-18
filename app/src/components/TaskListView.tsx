@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react"
 import { AlertCircle, Calendar, Check, Flag, Tag, User, X, RotateCcw } from "lucide-react"
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -16,6 +16,7 @@ import { useOptimisticLabelChange } from "@/hooks/useOptimisticLabelChange"
 import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useOptimisticTaskText } from "@/hooks/useOptimisticTaskText"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
+import { useListItemFocus, useListItemHover, useListItemEditing, useOptimisticSync } from "@/hooks/list-items"
 import { getProjectColor } from "@/lib/colors"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
@@ -29,8 +30,6 @@ import type {
   TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
-
-const TASK_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "border-primary/30"] as const
 
 interface TaskListViewProps {
   list: ListInstance
@@ -74,7 +73,6 @@ export function TaskListView({
 
   const taskRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
-  const lastFocusedIndex = useRef<number | null>(null)
 
   const supportData: ListSupportData = {
     projects: list.dependencies.projects ? projects : undefined,
@@ -141,66 +139,14 @@ export function TaskListView({
     setIsExpanded(list.startExpanded)
   }, [list.id, list.startExpanded])
 
-  useEffect(() => {
-    const removeHighlight = (element: HTMLDivElement | null) => {
-      if (!element) return
-      TASK_ROW_FOCUSED_CLASSNAMES.forEach((className) => element.classList.remove(className))
-      element.setAttribute("aria-selected", "false")
-    }
-
-    const applyHighlight = (element: HTMLDivElement | null) => {
-      if (!element) return
-      TASK_ROW_FOCUSED_CLASSNAMES.forEach((className) => element.classList.add(className))
-      element.setAttribute("aria-selected", "true")
-    }
-
-    if (lastFocusedIndex.current !== null && lastFocusedIndex.current !== focusedTaskIndex) {
-      removeHighlight(taskRefs.current[lastFocusedIndex.current])
-    }
-
-    if (focusedTaskIndex === null) {
-      lastFocusedIndex.current = null
-      return
-    }
-
-    if (focusedTaskIndex < 0 || focusedTaskIndex >= visibleTasks.length) {
-      lastFocusedIndex.current = null
-      return
-    }
-
-    setIsExpanded(true)
-    const node = taskRefs.current[focusedTaskIndex]
-    if (!node) {
-      lastFocusedIndex.current = null
-      return
-    }
-
-    if (
-      lastFocusedIndex.current !== focusedTaskIndex ||
-      !node.classList.contains(TASK_ROW_FOCUSED_CLASSNAMES[0])
-    ) {
-      applyHighlight(node)
-    }
-
-    if (typeof document !== "undefined" && node !== document.activeElement) {
-      node.focus({ preventScroll: true })
-    }
-
-    const scrollContainer = node.closest("[data-task-scroll-container]") as HTMLElement | null
-    if (scrollContainer) {
-      const nodeRect = node.getBoundingClientRect()
-      const containerRect = scrollContainer.getBoundingClientRect()
-      const isAbove = nodeRect.top < containerRect.top
-      const isBelow = nodeRect.bottom > containerRect.bottom
-      if (isAbove || isBelow) {
-        node.scrollIntoView({ block: "nearest", inline: "nearest" })
-      }
-    } else if (typeof node.scrollIntoView === "function") {
-      node.scrollIntoView({ block: "nearest", inline: "nearest" })
-    }
-
-    lastFocusedIndex.current = focusedTaskIndex
-  }, [focusedTaskIndex, visibleTasks.length])
+  // Focus management using shared hook
+  useListItemFocus({
+    entityType: 'task',
+    focusedIndex: focusedTaskIndex,
+    entitiesLength: visibleTasks.length,
+    elementRefs: taskRefs,
+    onExpand: () => setIsExpanded(true)
+  })
 
   const header = list.getHeader({
     params: list.params,
@@ -318,9 +264,6 @@ export function TaskListView({
                 if (!refHandlers.current[index]) {
                   refHandlers.current[index] = (element) => {
                     taskRefs.current[index] = element
-                    if (element === null && lastFocusedIndex.current === index) {
-                      lastFocusedIndex.current = null
-                    }
                   }
                 }
 
@@ -361,13 +304,8 @@ interface TaskRowProps {
 }
 
 const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectView, allLabels }: TaskRowProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [showDescriptionInput, setShowDescriptionInput] = useState(false)
-  const [editContent, setEditContent] = useState(task.content)
-  const [editDescription, setEditDescription] = useState(task.description || "")
-  const [isHovered, setIsHovered] = useState(false)
-  const contentInputRef = useRef<HTMLInputElement>(null)
-  const descriptionInputRef = useRef<HTMLInputElement>(null)
+  // Hover state using shared hook
+  const { isHovered, onMouseEnter, onMouseLeave } = useListItemHover()
 
   // Centralized optimistic updates
   const { getTaskUpdate, removeTaskUpdate } = useOptimisticUpdates()
@@ -377,6 +315,19 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
   const optimisticDueChange = useOptimisticDueChange()
   const optimisticDeadlineChange = useOptimisticDeadlineChange()
   const optimisticTaskText = useOptimisticTaskText()
+
+  // Editing state using shared hook
+  const editing = useListItemEditing({
+    entity: task,
+    entityId: task.todoist_id,
+    fields: {
+      primary: { value: task.content, key: 'content' },
+      secondary: { value: task.description, key: 'description' }
+    },
+    onSave: async (changes) => {
+      await optimisticTaskText(task.todoist_id, changes)
+    }
+  })
 
   const allProjects: TodoistProject[] | undefined = useQuery(api.todoist.queries.getProjects.getProjects)
 
@@ -439,172 +390,68 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
     }
   }
 
-  const startEditing = useCallback(() => {
-    setIsEditing(true)
-    // Only show description input if task already has a description
-    setShowDescriptionInput(!!task.description)
-    // Use real DB values when entering edit mode, not optimistic ones
-    setEditContent(task.content)
-    setEditDescription(task.description || "")
-  }, [task.content, task.description])
+  // Clear optimistic updates when DB syncs using shared hook
+  useOptimisticSync({
+    entity: task,
+    optimisticUpdate,
+    shouldClear: (task, update) =>
+      update.type === 'text-change' &&
+      ((update.newContent !== undefined && update.newContent === task.content) ||
+       (update.newDescription !== undefined && update.newDescription === (task.description ?? ''))),
+    onClear: () => removeTaskUpdate(task.todoist_id)
+  })
 
-  const startEditingDescription = useCallback(() => {
-    setIsEditing(true)
-    // Always show description input when explicitly editing description
-    setShowDescriptionInput(true)
-    // Use real DB values when entering edit mode, not optimistic ones
-    setEditContent(task.content)
-    setEditDescription(task.description || "")
-    // Focus description input after state update
-    setTimeout(() => {
-      descriptionInputRef.current?.focus()
-    }, 0)
-  }, [task.content, task.description])
+  useOptimisticSync({
+    entity: task,
+    optimisticUpdate,
+    shouldClear: (task, update) =>
+      update.type === 'priority-change' && task.priority === update.newPriority,
+    onClear: () => removeTaskUpdate(task.todoist_id)
+  })
 
-  // Expose startEditing and startEditingDescription to parent
-  useEffect(() => {
-    // Store the functions on the task element for parent access
-    const element = document.querySelector(`[data-task-id="${task.todoist_id}"]`) as HTMLElement & {
-      startEditing?: () => void
-      startEditingDescription?: () => void
-    }
-    if (element) {
-      element.startEditing = startEditing
-      element.startEditingDescription = startEditingDescription
-    }
-  }, [task.todoist_id, startEditing, startEditingDescription])
+  useOptimisticSync({
+    entity: task,
+    optimisticUpdate,
+    shouldClear: (task, update) =>
+      update.type === 'project-move' && task.project_id === update.newProjectId,
+    onClear: () => removeTaskUpdate(task.todoist_id)
+  })
 
-  const cancelEditing = () => {
-    setIsEditing(false)
-    setShowDescriptionInput(false)
-    setEditContent(task.content)
-    setEditDescription(task.description || "")
-  }
+  useOptimisticSync({
+    entity: task,
+    optimisticUpdate,
+    shouldClear: (task, update) =>
+      update.type === 'label-change' &&
+      task.labels?.length === update.newLabels.length &&
+      task.labels.every((label: string, index: number) => label === update.newLabels[index]),
+    onClear: () => removeTaskUpdate(task.todoist_id)
+  })
 
-  const saveEditing = async () => {
-    const hasContentChanged = editContent !== task.content
-    const hasDescriptionChanged = editDescription !== (task.description || "")
-
-    if (!hasContentChanged && !hasDescriptionChanged) {
-      setIsEditing(false)
-      return
-    }
-
-    // Exit edit mode - optimistic values will show immediately
-    setIsEditing(false)
-    setShowDescriptionInput(false)
-
-    // Fire optimistic update (instant UI + background API call)
-    const changes: { content?: string; description?: string } = {}
-    if (hasContentChanged) changes.content = editContent
-    if (hasDescriptionChanged) changes.description = editDescription
-
-    await optimisticTaskText(task.todoist_id, changes)
-  }
-
-  // Clear optimistic text changes when DB value syncs
-  useEffect(() => {
-    if (optimisticUpdate?.type === "text-change") {
-      let shouldClear = false
-
-      // If optimistic content matches DB, content update completed
-      if (optimisticUpdate.newContent !== undefined && optimisticUpdate.newContent === task.content) {
-        shouldClear = true
-      }
-
-      // If optimistic description matches DB, description update completed
-      if (
-        optimisticUpdate.newDescription !== undefined &&
-        optimisticUpdate.newDescription === (task.description ?? "")
-      ) {
-        shouldClear = true
-      }
-
-      if (shouldClear) {
-        removeTaskUpdate(task.todoist_id)
-      }
-    }
-  }, [task.content, task.description, optimisticUpdate, removeTaskUpdate, task.todoist_id])
-
-  // Clear optimistic priority update when DB value syncs
-  useEffect(() => {
-    if (optimisticUpdate?.type === "priority-change" && task.priority === optimisticUpdate.newPriority) {
-      removeTaskUpdate(task.todoist_id)
-    }
-  }, [task.priority, optimisticUpdate, removeTaskUpdate, task.todoist_id])
-
-  // Clear optimistic project move when DB value syncs
-  useEffect(() => {
-    if (optimisticUpdate?.type === "project-move" && task.project_id === optimisticUpdate.newProjectId) {
-      removeTaskUpdate(task.todoist_id)
-    }
-  }, [task.project_id, optimisticUpdate, removeTaskUpdate, task.todoist_id])
-
-  // Clear optimistic label change when DB value syncs
-  useEffect(() => {
-    if (optimisticUpdate?.type === "label-change") {
-      const dbLabels = task.labels || []
-      const optimisticLabels = optimisticUpdate.newLabels
-      // Compare arrays - if they match, DB has synced
-      if (
-        dbLabels.length === optimisticLabels.length &&
-        dbLabels.every((label: string, index: number) => label === optimisticLabels[index])
-      ) {
-        removeTaskUpdate(task.todoist_id)
-      }
-    }
-  }, [task.labels, optimisticUpdate, removeTaskUpdate, task.todoist_id])
-
-  // Clear optimistic schedule (due date) change when DB value syncs
-  useEffect(() => {
-    if (optimisticUpdate?.type === "due-change") {
+  useOptimisticSync({
+    entity: task,
+    optimisticUpdate,
+    shouldClear: (task, update) => {
+      if (update.type !== 'due-change') return false
       const dbDue = task.due
-      const optimisticDue = optimisticUpdate.newDue
+      const optimisticDue = update.newDue
+      if (!dbDue && !optimisticDue) return true
+      return dbDue && optimisticDue && dbDue.date === optimisticDue.date && dbDue.datetime === optimisticDue.datetime
+    },
+    onClear: () => removeTaskUpdate(task.todoist_id)
+  })
 
-      // Both null - cleared successfully
-      if (!dbDue && !optimisticDue) {
-        removeTaskUpdate(task.todoist_id)
-        return
-      }
-
-      // Compare due dates - if they match, DB has synced
-      if (dbDue && optimisticDue && dbDue.date === optimisticDue.date) {
-        // Also check datetime if present
-        const dbDatetime = dbDue.datetime
-        const optimisticDatetime = optimisticDue.datetime
-        if (dbDatetime === optimisticDatetime) {
-          removeTaskUpdate(task.todoist_id)
-        }
-      }
-    }
-  }, [task.due, optimisticUpdate, removeTaskUpdate, task.todoist_id])
-
-  // Clear optimistic deadline change when DB value syncs
-  useEffect(() => {
-    if (optimisticUpdate?.type === "deadline-change") {
+  useOptimisticSync({
+    entity: task,
+    optimisticUpdate,
+    shouldClear: (task, update) => {
+      if (update.type !== 'deadline-change') return false
       const dbDeadline = task.deadline
-      const optimisticDeadline = optimisticUpdate.newDeadline
-
-      // Both null - cleared successfully
-      if (!dbDeadline && !optimisticDeadline) {
-        removeTaskUpdate(task.todoist_id)
-        return
-      }
-
-      // Compare deadlines - if they match, DB has synced
-      if (dbDeadline && optimisticDeadline && dbDeadline.date === optimisticDeadline.date) {
-        removeTaskUpdate(task.todoist_id)
-      }
-    }
-  }, [task.deadline, optimisticUpdate, removeTaskUpdate, task.todoist_id])
-
-  // Focus content input when entering edit mode
-  useEffect(() => {
-    if (isEditing && contentInputRef.current) {
-      contentInputRef.current.focus()
-      contentInputRef.current.select()
-    }
-  }, [isEditing])
+      const optimisticDeadline = update.newDeadline
+      if (!dbDeadline && !optimisticDeadline) return true
+      return dbDeadline && optimisticDeadline && dbDeadline.date === optimisticDeadline.date
+    },
+    onClear: () => removeTaskUpdate(task.todoist_id)
+  })
 
   const assignee = task.assigned_by_uid || task.responsible_uid
 
@@ -646,9 +493,10 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
       tabIndex={-1}
       aria-selected={false}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       data-task-id={task.todoist_id}
+      data-entity-id={task.todoist_id}
       className={cn(
         "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
         "hover:bg-accent/50",
@@ -692,54 +540,25 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
         <div className="flex-1 min-w-0 space-y-1.5">
           <div onClick={(e) => e.stopPropagation()}>
-            {isEditing ? (
+            {editing.isEditing ? (
               <>
                 <input
-                  ref={contentInputRef}
+                  ref={editing.primaryInputRef}
                   type="text"
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      void saveEditing()
-                    } else if (e.key === "Escape") {
-                      e.preventDefault()
-                      cancelEditing()
-                    } else if (e.key === "Tab") {
-                      e.preventDefault()
-                      if (!showDescriptionInput) {
-                        setShowDescriptionInput(true)
-                        setTimeout(() => {
-                          descriptionInputRef.current?.focus()
-                        }, 0)
-                      } else {
-                        descriptionInputRef.current?.focus()
-                      }
-                    }
-                  }}
+                  value={editing.primaryValue}
+                  onChange={(e) => editing.setPrimaryValue(e.target.value)}
+                  onKeyDown={editing.handlePrimaryKeyDown}
                   className="block w-full bg-transparent px-0 py-0 m-0 text-sm font-medium leading-relaxed text-foreground outline-none border-none break-words"
                   placeholder="Task content"
                 />
-                {showDescriptionInput && (
+                {editing.showSecondaryInput && (
                   <input
-                    ref={descriptionInputRef}
+                    ref={editing.secondaryInputRef}
                     type="text"
-                    value={editDescription}
+                    value={editing.secondaryValue}
                     placeholder="Description (optional)"
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        void saveEditing()
-                      } else if (e.key === "Escape") {
-                        e.preventDefault()
-                        cancelEditing()
-                      } else if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault()
-                        contentInputRef.current?.focus()
-                      }
-                    }}
+                    onChange={(e) => editing.setSecondaryValue(e.target.value)}
+                    onKeyDown={editing.handleSecondaryKeyDown}
                     className="block w-full bg-transparent px-0 py-0 m-0 mt-1 text-xs leading-relaxed text-muted-foreground outline-none border-none placeholder:text-muted-foreground/70 break-words"
                   />
                 )}
@@ -778,6 +597,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openProject(task)
                 }}
               >
@@ -798,6 +618,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 )}
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openPriority(task)
                 }}
               >
@@ -817,6 +638,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 )}
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openDueDate(task)
                 }}
               >
@@ -860,6 +682,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                   )}
                   onClick={(e) => {
                     e.stopPropagation()
+                    onClick?.()
                     openDeadline(task)
                   }}
                 >
@@ -929,6 +752,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openPriority(task)
                 }}
               >
@@ -943,6 +767,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openDueDate(task)
                 }}
               >
@@ -957,6 +782,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openDeadline(task)
                 }}
               >
@@ -971,6 +797,7 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                 className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
                 onClick={(e) => {
                   e.stopPropagation()
+                  onClick?.()
                   openLabel(task)
                 }}
               >
