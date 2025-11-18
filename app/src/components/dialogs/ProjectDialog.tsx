@@ -3,6 +3,7 @@ import { Folder, Plus } from 'lucide-react'
 import type React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { ProjectColorIndicator } from '@/components/ProjectColorIndicator'
 import {
   Dialog,
   DialogContent,
@@ -14,7 +15,6 @@ import { api } from '@/convex/_generated/api'
 import type { Doc } from '@/convex/_generated/dataModel'
 import { useCreateProject } from '@/hooks/useCreateProject'
 import { getProjectColor, TODOIST_COLOR_OPTIONS } from '@/lib/colors'
-import { getProjectTypeIcon } from '@/lib/projectTypes'
 import { cn, parseMarkdownLinks } from '@/lib/utils'
 import type { TodoistProjectWithMetadata, TodoistTask } from '@/types/convex/todoist'
 
@@ -614,7 +614,6 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
               const project = item
               const isSelected = index === selectedIndex
               const isCurrent = task?.project_id === project.todoist_id || routine?.todoistProjectId === project.todoist_id
-              const ProjectTypeIcon = getProjectTypeIcon(project.metadata?.projectType)
 
               return (
                 <button
@@ -629,13 +628,7 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
                   )}
                   style={{ paddingLeft: `${8 + project.level * 16}px` }}
                 >
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: getProjectColor(project.color) }}
-                  />
-                  {ProjectTypeIcon && (
-                    <ProjectTypeIcon size="sm" className="text-muted-foreground shrink-0" />
-                  )}
+                  <ProjectColorIndicator project={project} size="md" />
                   <span className="flex-1 truncate min-w-0">{project.name}</span>
                 </button>
               )

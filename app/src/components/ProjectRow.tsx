@@ -1,6 +1,7 @@
 import { Archive, ArchiveRestore } from "lucide-react"
 import { memo, useEffect } from "react"
 
+import { ProjectColorIndicator } from "@/components/ProjectColorIndicator"
 import { Badge } from "@/components/ui/badge"
 import { PriorityBadge } from "@/components/badges/shared"
 import { useDialogContext } from "@/contexts/DialogContext"
@@ -8,9 +9,7 @@ import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectDescription } from "@/hooks/useOptimisticProjectDescription"
 import { useOptimisticProjectName } from "@/hooks/useOptimisticProjectName"
 import { useListItemHover, useListItemEditing, useOptimisticSync } from "@/hooks/list-items"
-import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
-import { getProjectTypeIcon } from "@/lib/projectTypes"
 import { cn } from "@/lib/utils"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
@@ -67,7 +66,6 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       : project.metadata?.priority
 
   const priority = usePriority(displayPriority)
-  const ProjectTypeIcon = getProjectTypeIcon(project.metadata?.projectType)
 
   const activeCount = project.stats.activeCount
 
@@ -130,19 +128,8 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       )}
     >
       <div className="flex items-start gap-2.5">
-        {/* Color Indicator */}
-        <div
-          className="w-4 h-4 rounded-full shrink-0 mt-0.5"
-          style={{ backgroundColor: getProjectColor(project.color) }}
-        />
-
-        {/* Project Type Icon */}
-        {ProjectTypeIcon && (
-          <ProjectTypeIcon
-            size="sm"
-            className="shrink-0 mt-0.5 text-muted-foreground"
-          />
-        )}
+        {/* Project Color Indicator (circle for Areas, square for Projects) */}
+        <ProjectColorIndicator project={project} size="lg" className="mt-0.5" />
 
         <div className="flex-1 min-w-0 space-y-1.5">
           <div onClick={(e) => e.stopPropagation()}>
