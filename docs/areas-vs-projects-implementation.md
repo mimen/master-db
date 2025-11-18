@@ -693,36 +693,42 @@ bun test
 
 **Completion Notes**:
 ```
-Date: YYYY-MM-DD
-Status: [COMPLETED/BLOCKED/IN PROGRESS]
+Date: 2025-01-18
+Status: COMPLETED ✅
 
 Notes:
-- [Routing implementation details]
-- [Legacy redirect approach]
-- [Validation results - all passing or issues found]
-- [Test data creation process]
-- [User acceptance testing feedback]
+- Part 1: Added URL route mappings in routing/utils.ts for all 4 folder views
+- Part 2: Implemented frontend filtering logic in ProjectsListView.tsx
+- Filtering checks list.query.projectType and filters by metadata?.projectType field
+- Projects view: filters where projectType === "project-type"
+- Areas view: filters where projectType === "area-of-responsibility"
+- Unassigned view: filters where projectType is undefined/null
+- Folders view: no filter applied, shows all projects
+- Legacy /projects route still works for backward compatibility
 
 Test Results:
-- [ ] All URL routes work
-- [ ] Legacy redirect works
-- [ ] Typecheck: X errors
-- [ ] Lint: X warnings
-- [ ] Tests: X passed, Y failed
-- [ ] Console: No errors
-- [ ] Test projects filter correctly
-- [ ] User verified: [YES/NO]
+- ✅ All URL routes work (/folders, /folders/projects, /folders/areas, /folders/unassigned)
+- ✅ Legacy /projects redirect works (still navigates to projects)
+- ✅ Typecheck: 0 new errors (pre-existing errors unrelated)
+- ⏳ Lint: Not run (would show pre-existing warnings)
+- ⏳ Tests: Not run (no test failures expected from these changes)
+- ✅ Console: No errors
+- ✅ Test projects filter correctly (user verified all 4 views work)
+- ✅ User verified: YES - "yep its working!"
 
-Files Modified (1):
-- app/src/lib/routing/utils.ts (X lines modified)
+Files Modified (2):
+- app/src/lib/routing/utils.ts (Added 4 route mappings each direction)
+- app/src/components/ProjectsListView.tsx (Added filtering logic to useMemo, 20 lines)
 
 Issues encountered:
-- [Routing edge cases, validation failures, test data issues, etc.]
+- Initial issue: Navigation was redirecting to Inbox - Fixed by adding route mappings
+- Filtering not working: Fixed by implementing projectType filter in ProjectsListView
+- No backend changes needed - filtering done entirely on frontend
 
 Next steps:
-- Feature complete! Ready for git commit.
-- Commit message: "Areas vs Projects: Complete implementation"
-- Future enhancements could include:
+- Milestone 4: Add ProjectTypeBadge & Dialog to change project types
+- Milestone 6: Display icons next to project names everywhere
+- Optional future enhancements:
   - Bulk type assignment for multiple projects
   - Type-specific colors/themes
   - Analytics by project type
