@@ -52,7 +52,25 @@ export function ProjectsListView({
     if (!allProjects) return []
 
     return allProjects
-      .filter((p: TodoistProjectWithMetadata) => !p.is_deleted)
+      .filter((p: TodoistProjectWithMetadata) => {
+        // Always exclude deleted projects
+        if (p.is_deleted) return false
+
+        // Apply projectType filter if specified
+        if (list.query.type === "projects" && list.query.projectType) {
+          const projectType = p.metadata?.projectType
+
+          if (list.query.projectType === "project-type") {
+            return projectType === "project-type"
+          } else if (list.query.projectType === "area-of-responsibility") {
+            return projectType === "area-of-responsibility"
+          } else if (list.query.projectType === "unassigned") {
+            return !projectType
+          }
+        }
+
+        return true
+      })
       .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => {
         // Keep archived projects at the bottom
         if (a.is_archived !== b.is_archived) {
@@ -80,7 +98,7 @@ export function ProjectsListView({
         // Then alphabetically by name
         return a.name.localeCompare(b.name)
       })
-  }, [allProjects, getProjectUpdate])
+  }, [allProjects, getProjectUpdate, list.query])
 
   const visibleProjects = list.maxTasks ? projects.slice(0, list.maxTasks) : projects
   const isLoading = allProjects === undefined
