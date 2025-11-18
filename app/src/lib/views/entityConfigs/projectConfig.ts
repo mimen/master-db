@@ -41,7 +41,8 @@ export const projectGroupOptions: GroupOption<TodoistProjectWithMetadata>[] = [
       }
       const projects = groupData.projects as any[]
       const project = projects?.find((p) => p.todoist_id === projectId || p.id === projectId)
-      return project?.name ?? "Unknown Parent"
+      // Note: If project not found, it's likely archived. Show a helpful message.
+      return project?.name ?? `${projectId} (archived or deleted)`
     },
   },
 ]
