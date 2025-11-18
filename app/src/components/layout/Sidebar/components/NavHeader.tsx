@@ -271,12 +271,21 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
           <CommandGroup heading="Routines">
             {searchItems
               .filter((item) => item.category === "routine")
-              .map((item) => (
-                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
-                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
-                  {item.label}
-                </CommandItem>
-              ))}
+              .map((item) => {
+                const separatorIndex = item.label.indexOf(" > ")
+                const prefix = separatorIndex >= 0 ? item.label.substring(0, separatorIndex + 3) : ""
+                const projectName = separatorIndex >= 0 ? item.label.substring(separatorIndex + 3) : item.label
+
+                return (
+                  <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
+                    {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
+                    <span>
+                      {prefix && <span className="text-xs text-muted-foreground">{prefix}</span>}
+                      <span>{projectName}</span>
+                    </span>
+                  </CommandItem>
+                )
+              })}
           </CommandGroup>
 
           <CommandGroup heading="Labels">
