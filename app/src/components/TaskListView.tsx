@@ -1,7 +1,6 @@
 import { useQuery } from "convex/react"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 
-import { useCountRegistry } from "@/contexts/CountContext"
 import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
@@ -21,7 +20,6 @@ interface TaskListViewProps {
   onTaskCountChange?: (listId: string, count: number) => void
   onTaskClick?: (listId: string, taskIndex: number) => void
   focusedTaskIndex: number | null
-  setFocusedTaskIndex?: (index: number | null) => void
   isDismissed?: boolean
   onDismiss?: (listId: string) => void
   onRestore?: (listId: string) => void
@@ -33,21 +31,12 @@ export function TaskListView({
   onTaskCountChange,
   onTaskClick,
   focusedTaskIndex,
-  setFocusedTaskIndex,
   isDismissed = false,
   onDismiss,
   onRestore,
   isMultiListView = false
 }: TaskListViewProps) {
-  const [localFocusedIndex, setLocalFocusedIndex] = useState<number | null>(focusedTaskIndex)
   const { setFocusedTask } = useFocusContext()
-
-  // Handle focus index updates - use provided setter if available, otherwise local state
-  const handleSetFocusedIndex = (index: number | null) => {
-    setFocusedTaskIndex?.(index) ?? setLocalFocusedIndex(index)
-  }
-
-  const effectiveFocusedIndex = setFocusedTaskIndex ? focusedTaskIndex : localFocusedIndex
 
   // Fetch support data
   const projects: TodoistProjects | undefined = useQuery(
@@ -119,8 +108,8 @@ export function TaskListView({
       onDismiss={onDismiss}
       onRestore={onRestore}
       isLoading={isLoading}
-      focusedIndex={effectiveFocusedIndex}
-      setFocusedEntity={handleSetFocusedIndex}
+      focusedIndex={focusedTaskIndex}
+      setFocusedEntity={() => {}}
       setFocusedEntityInContext={setFocusedTask}
       useEntityShortcuts={useTaskDialogShortcuts}
       onEntityCountChange={onTaskCountChange}
