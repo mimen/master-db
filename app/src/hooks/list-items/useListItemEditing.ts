@@ -72,12 +72,7 @@ interface Field {
   key: string
 }
 
-interface UseListItemEditingOptions<T> {
-  /**
-   * The entity being edited (used to reset state when entity changes)
-   */
-  entity: T
-
+interface UseListItemEditingOptions {
   /**
    * Unique identifier for the entity (used for DOM element lookup)
    */
@@ -148,13 +143,12 @@ interface UseListItemEditingReturn {
  * @param options Editing configuration
  * @returns Editing state and handlers
  */
-export function useListItemEditing<T>({
-  entity,
+export function useListItemEditing({
   entityId,
   fields,
   onSave,
   disabled = false
-}: UseListItemEditingOptions<T>): UseListItemEditingReturn {
+}: UseListItemEditingOptions): UseListItemEditingReturn {
   const [isEditing, setIsEditing] = useState(false)
   const [showSecondaryInput, setShowSecondaryInput] = useState(false)
   const [primaryValue, setPrimaryValue] = useState(fields.primary.value || '')

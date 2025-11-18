@@ -13,7 +13,6 @@ import { useEffect, useRef } from 'react'
  *   const [focusedIndex, setFocusedIndex] = useState(0)
  *
  *   useListItemFocus({
- *     entityType: 'task',
  *     focusedIndex,
  *     entitiesLength: tasks.length,
  *     elementRefs: taskRefs
@@ -31,12 +30,6 @@ import { useEffect, useRef } from 'react'
 const FOCUSED_CLASSNAMES = ['bg-accent/50', 'border-primary/30'] as const
 
 interface UseListItemFocusOptions {
-  /**
-   * Entity type for data attributes (e.g., 'task', 'project', 'routine')
-   * Used for data-{entityType}-id attribute
-   */
-  entityType: 'task' | 'project' | 'routine' | string
-
   /**
    * Current focused index (0-based)
    * null means no item is focused
@@ -74,7 +67,6 @@ interface UseListItemFocusOptions {
  * @param options Focus management options
  */
 export function useListItemFocus({
-  entityType,
   focusedIndex,
   entitiesLength,
   elementRefs,

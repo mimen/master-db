@@ -2,7 +2,7 @@ import { useQuery } from "convex/react"
 import { Repeat } from "lucide-react"
 import { memo, useEffect } from "react"
 
-import { DetailsBadge, DurationBadge, EditBadge, GhostLabelBadge, GhostProjectBadge, IdealDayBadge, LabelBadge, PauseBadge, PriorityBadge, ProjectBadge, TimeOfDayBadge } from "@/components/badges/RoutineBadges"
+import { DetailsBadge, DurationBadge, EditBadge, GhostLabelBadge, GhostProjectBadge, IdealDayBadge, LabelBadge, PriorityBadge, ProjectBadge, TimeOfDayBadge } from "@/components/badges/RoutineBadges"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
@@ -21,7 +21,6 @@ interface RoutineRowProps {
   onClick?: () => void
   onOpenDetail?: (routine: Doc<"routines">) => void
   onOpenEdit?: (routine: Doc<"routines">) => void
-  onTogglePause?: (routine: Doc<"routines">) => void
 }
 
 // Helper to get frequency display color
@@ -42,7 +41,7 @@ function getCompletionRateColor(rate: number): string {
   return "text-red-600 dark:text-red-400"
 }
 
-export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onClick, onOpenDetail, onOpenEdit, onTogglePause }: RoutineRowProps) {
+export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onClick, onOpenDetail, onOpenEdit }: RoutineRowProps) {
   const frequencyColor = getFrequencyColor(routine.frequency)
   const completionRateColor = getCompletionRateColor(routine.completionRateOverall)
 
