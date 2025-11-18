@@ -37,12 +37,13 @@ import { cn } from "@/lib/utils"
 
 export interface LabelBadgeProps {
   /**
-   * Label data: name and optional computed color
-   * Parent is responsible for computing the actual color value
+   * Label data: name and optional colors
+   * Parent is responsible for computing the actual color values
    */
   label: {
     name: string
-    color?: string  // Optional: CSS color, hex, rgb, etc. Computed by parent.
+    borderColor?: string  // Optional: CSS color for border, hex, rgb, etc. Computed by parent.
+    backgroundColor?: string  // Optional: CSS color for background (usually 8-10% opacity). Computed by parent.
   }
 
   /**
@@ -74,8 +75,11 @@ export function LabelBadge({
 }: LabelBadgeProps) {
   const [isHovering, setIsHovering] = useState(false)
 
-  // Apply color if provided, as a border color
-  const borderColor = label.color ? { borderColor: label.color } : undefined
+  // Apply colors if provided (border and background)
+  const colorStyle = label.borderColor || label.backgroundColor ? {
+    borderColor: label.borderColor,
+    backgroundColor: label.backgroundColor
+  } : undefined
 
   return (
     <Badge
@@ -85,7 +89,7 @@ export function LabelBadge({
         !isGhost && "border",
         isGhost && "text-muted-foreground border-dashed"
       )}
-      style={borderColor}
+      style={colorStyle}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}

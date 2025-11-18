@@ -669,7 +669,8 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
                       key={label}
                       label={{
                         name: label,
-                        color: labelColor?.border
+                        borderColor: labelColor?.border,
+                        backgroundColor: labelColor?.background
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
