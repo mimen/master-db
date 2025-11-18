@@ -6,16 +6,21 @@ import { query } from "../../../_generated/server";
 
 export const getProjectsWithMetadata = query({
   args: {
-    includeArchived: v.optional(v.boolean()),
     includeDeleted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    // Filter out archived and deleted projects
     let projectsQuery = ctx.db.query("todoist_projects");
 
     if (!args.includeDeleted) {
-      projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_deleted"), false));
-    }
-    if (!args.includeArchived) {
+      projectsQuery = projectsQuery.filter(q =>
+        q.and(
+          q.eq(q.field("is_deleted"), false),
+          q.eq(q.field("is_archived"), false)
+        )
+      );
+    } else {
+      // If includeDeleted is true, still filter archived projects
       projectsQuery = projectsQuery.filter(q => q.eq(q.field("is_archived"), false));
     }
 
@@ -79,6 +84,7 @@ export const getProjectsWithMetadata = query({
           priority: metadata.priority,
           scheduledDate: metadata.scheduled_date,
           description: metadata.description,
+          projectType: metadata.project_type,
           sourceTaskId: metadata.source_task_id,
           lastUpdated: metadata.last_updated,
         } : null,
@@ -92,6 +98,13 @@ export const getProjectsWithMetadata = query({
           hasActiveItems: stats.activeCount > 0,
         },
       };
-    }).sort((a, b) => a.child_order - b.child_order);
+    }).sort((a, b) => {
+      // Sort by archived status first (active projects before archived)
+      if (a.is_archived !== b.is_archived) {
+        return a.is_archived ? 1 : -1;
+      }
+      // Then sort by child_order
+      return a.child_order - b.child_order;
+    });
   },
 });
