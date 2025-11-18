@@ -1,4 +1,4 @@
-import { Search, Tag } from "lucide-react"
+import { Repeat, Search, Tag } from "lucide-react"
 import type { ReactNode } from "react"
 import { useCallback, useEffect, useState } from "react"
 
@@ -13,12 +13,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
+import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { getProjectColor } from "@/lib/colors"
 import { getViewIcon } from "@/lib/icons/viewIcons"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-import type { ViewKey, ViewSelection } from "@/lib/views/types"
+import type { ViewKey, ViewSelection, ViewBuildContext } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc } from "@/types/convex/todoist"
 
@@ -26,20 +27,21 @@ interface NavHeaderProps {
   onViewChange: (view: ViewSelection) => void
   projects: ProjectTreeNode[]
   labels: TodoistLabelDoc[] | undefined
-  viewContext: Record<string, unknown>
+  viewContext: ViewBuildContext
   viewItems: ViewNavItem[]
 }
 
 interface SearchableItem {
   id: string
   label: string
-  category: "view" | "project" | "time" | "priority" | "priority-projects" | "label"
+  category: "view" | "project" | "time" | "priority" | "priority-projects" | "label" | "routine"
   viewKey: ViewKey
   icon?: ReactNode
 }
 
 export function NavHeader({ onViewChange, projects, labels, viewContext, viewItems }: NavHeaderProps) {
   const { openSettings } = useDialogContext()
+  const { registry } = useCountRegistry()
   const [open, setOpen] = useState(false)
   const [searchItems, setSearchItems] = useState<SearchableItem[]>([])
 
@@ -119,6 +121,26 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
     }
     flattenProjects(projects)
 
+    // Routine Projects - projects that have routines
+    if (viewContext.projectsWithMetadata) {
+      const allCounts = registry.getAllCounts()
+      const projectsWithRoutines = viewContext.projectsWithMetadata.filter((project) => {
+        const countKey = `list:routines:${project.todoist_id}`
+        const count = allCounts[countKey] ?? 0
+        return count > 0
+      })
+
+      projectsWithRoutines.forEach((project) => {
+        items.push({
+          id: `routine-${project.todoist_id}`,
+          label: `Routines > ${project.name}`,
+          category: "routine",
+          viewKey: `view:routines:project:${project.todoist_id}` as ViewKey,
+          icon: <Repeat className="h-4 w-4" style={{ color: getProjectColor(project.color) }} />,
+        })
+      })
+    }
+
     // Labels
     if (labels) {
       labels.forEach((label) => {
@@ -133,7 +155,7 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
     }
 
     setSearchItems(items)
-  }, [projects, labels, viewItems])
+  }, [projects, labels, viewItems, viewContext, registry])
 
   // Register ⌘K shortcut
   useEffect(() => {
@@ -238,6 +260,17 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
           <CommandGroup heading="Projects by Priority">
             {searchItems
               .filter((item) => item.category === "priority-projects")
+              .map((item) => (
+                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
+                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
+                  {item.label}
+                </CommandItem>
+              ))}
+          </CommandGroup>
+
+          <CommandGroup heading="Routines">
+            {searchItems
+              .filter((item) => item.category === "routine")
               .map((item) => (
                 <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
                   {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
