@@ -4,12 +4,13 @@ import { useState } from "react"
 
 import { RoutineDetailDialog } from "./dialogs/RoutineDetailDialog"
 import { RoutineDialog } from "./dialogs/RoutineDialog"
+
 import { BaseListView, RoutineListItem } from "@/components/list-items"
 import { Button } from "@/components/ui/button"
 import { useFocusContext } from "@/contexts/FocusContext"
-import { useRoutineDialogShortcuts } from "@/hooks/useRoutineDialogShortcuts"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
+import { useRoutineDialogShortcuts } from "@/hooks/useRoutineDialogShortcuts"
 import type { ListInstance } from "@/lib/views/types"
 
 interface RoutinesListViewProps {

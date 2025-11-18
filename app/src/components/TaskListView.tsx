@@ -1,17 +1,16 @@
 import { useQuery } from "convex/react"
 import { useMemo } from "react"
 
+import { BaseListView, TaskListItem } from "@/components/list-items"
 import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
-import { BaseListView, TaskListItem } from "@/components/list-items"
-import type { ListInstance, ListQueryInput, ListSupportData } from "@/lib/views/types"
+import type { ListInstance, ListQueryInput } from "@/lib/views/types"
 import type {
   TodoistItemsByListWithProjects,
   TodoistLabelDoc,
   TodoistProject,
   TodoistProjects,
-  TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
 
@@ -44,21 +43,10 @@ export function TaskListView({
     list.dependencies.projects ? {} : "skip"
   )
 
-  const projectsWithMetadata: TodoistProjectsWithMetadata | undefined = useQuery(
-    api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata,
-    list.dependencies.projectMetadata ? {} : "skip"
-  )
-
   const labels: TodoistLabelDoc[] | undefined = useQuery(
     api.todoist.queries.getLabels.getLabels,
     list.dependencies.labels ? {} : "skip"
   )
-
-  const supportData: ListSupportData = {
-    projects: list.dependencies.projects ? projects : undefined,
-    projectsWithMetadata: list.dependencies.projectMetadata ? projectsWithMetadata : undefined,
-    labels: list.dependencies.labels ? labels : undefined,
-  }
 
   // Resolve inbox project if needed
   const resolvedQuery = useMemo<ListQueryInput | null>(() => {
