@@ -25,8 +25,8 @@ export function buildViewItems(
       count: priorityQueueCount,
     },
     {
-      key: "view:projects",
-      label: "Projects",
+      key: "view:folders",
+      label: "Folders",
       icon: Folder,
       count: projectsCount,
     },

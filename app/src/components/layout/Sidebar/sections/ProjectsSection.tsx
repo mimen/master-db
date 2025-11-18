@@ -14,16 +14,18 @@ import { ArrowDownAZ, Flag, Hash, Network, Plus } from "lucide-react"
 import { type ReactNode, useState } from "react"
 
 import { CollapseCaret } from "../components/CollapseCaret"
+import { FolderTypeItem } from "../components/FolderTypeItem"
 import { IconButton } from "../components/IconButton"
 import { PriorityItem } from "../components/PriorityItem"
 import { ProjectItem } from "../components/ProjectItem"
 import { SortDropdown } from "../components/SortDropdown"
 import type { ProjectSort, ProjectTreeNode } from "../types"
-import { PRIORITY_PROJECTS_ITEMS } from "../utils/filterItems"
+import { FOLDER_TYPE_ITEMS, PRIORITY_PROJECTS_ITEMS } from "../utils/filterItems"
 import { getSortedProjects } from "../utils/sorting"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
+import { useCountRegistry } from "@/contexts/CountContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectPriority } from "@/hooks/useOptimisticProjectPriority"
 import { getProjectColor } from "@/lib/colors"
@@ -142,6 +144,7 @@ export function ProjectsSection({
   const sortedProjects = getSortedProjects(projects, sortMode)
   const updateProjectPriority = useOptimisticProjectPriority()
   const { getProjectUpdate } = useOptimisticUpdates()
+  const { getCountForView } = useCountRegistry()
 
   // DnD state
   const [activeProject, setActiveProject] = useState<ProjectTreeNode | null>(null)
@@ -310,7 +313,7 @@ export function ProjectsSection({
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
         <div className="flex items-center justify-between">
-          <SidebarGroupLabel className="flex-1">Projects</SidebarGroupLabel>
+          <SidebarGroupLabel className="flex-1">Folders</SidebarGroupLabel>
           <div className="flex items-center pr-2">
             <SortDropdown
               modes={PROJECT_SORT_MODES}
@@ -334,6 +337,24 @@ export function ProjectsSection({
         </div>
 
         <CollapsibleContent>
+          {/* Folder type sub-items */}
+          <SidebarMenu className="mb-2">
+            {FOLDER_TYPE_ITEMS.map((folderType) => {
+              const count = getCountForView(folderType.viewKey, viewContext)
+              return (
+                <FolderTypeItem
+                  key={folderType.id}
+                  folderType={folderType}
+                  currentViewKey={currentViewKey}
+                  onViewChange={onViewChange}
+                  viewContext={viewContext}
+                  count={count}
+                />
+              )
+            })}
+          </SidebarMenu>
+
+          {/* Main project list */}
           {renderProjectList()}
         </CollapsibleContent>
       </SidebarGroup>

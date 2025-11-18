@@ -1,4 +1,4 @@
-import { Flag } from "lucide-react"
+import { Circle, Flag, Folder, Square } from "lucide-react"
 import type { ComponentType } from "react"
 
 import type { ViewKey } from "@/lib/views/types"
@@ -21,6 +21,16 @@ export type PriorityFilterItem = {
   label: string
   icon: ComponentType<{ className?: string }>
   priorityLevel: number
+  viewKey: ViewKey
+}
+
+/**
+ * Folder type filter item for sidebar
+ */
+export type FolderTypeFilterItem = {
+  id: string
+  label: string
+  icon: ComponentType<{ className?: string }>
   viewKey: ViewKey
 }
 
@@ -119,5 +129,29 @@ export const PRIORITY_PROJECTS_ITEMS: PriorityFilterItem[] = [
     icon: Flag,
     priorityLevel: 1,
     viewKey: "view:priority-projects:p4",
+  },
+]
+
+/**
+ * Static folder type filter items
+ */
+export const FOLDER_TYPE_ITEMS: FolderTypeFilterItem[] = [
+  {
+    id: "projects",
+    label: "Projects",
+    icon: Square,
+    viewKey: "view:folders:projects",
+  },
+  {
+    id: "areas",
+    label: "Areas",
+    icon: Circle,
+    viewKey: "view:folders:areas",
+  },
+  {
+    id: "unassigned",
+    label: "Unassigned",
+    icon: Folder,
+    viewKey: "view:folders:unassigned",
   },
 ]
