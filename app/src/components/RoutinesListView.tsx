@@ -12,6 +12,8 @@ import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
 import { useRoutineDialogShortcuts } from "@/hooks/useRoutineDialogShortcuts"
 import type { ListInstance } from "@/lib/views/types"
+import { routineSortOptions, routineGroupOptions } from "@/lib/views/entityConfigs/routineConfig"
+import type { TodoistProjects } from "@/types/convex/todoist"
 
 interface RoutinesListViewProps {
   list: ListInstance
@@ -81,6 +83,12 @@ export function RoutinesListView({
         }
   )
 
+  // Fetch projects for group data
+  const projects: TodoistProjects | undefined = useQuery(
+    api.todoist.queries.getProjects.getProjects,
+    {}
+  )
+
   const visibleRoutines = allRoutines ? (list.maxTasks ? allRoutines.slice(0, list.maxTasks) : allRoutines) : []
   const isLoading = allRoutines === undefined
 
@@ -125,6 +133,9 @@ export function RoutinesListView({
         useEntityShortcuts={useRoutineDialogShortcuts}
         onEntityCountChange={onRoutineCountChange}
         onEntityClick={onRoutineClick}
+        sortOptions={routineSortOptions}
+        groupOptions={routineGroupOptions}
+        groupData={{ projects }}
         renderRow={(routine, index, ref) => (
           <RoutineListItem
             key={routine._id}

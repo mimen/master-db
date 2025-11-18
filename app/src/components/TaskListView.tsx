@@ -6,6 +6,7 @@ import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import type { ListInstance, ListQueryInput } from "@/lib/views/types"
+import { taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
 import type {
   TodoistItemsByListWithProjects,
   TodoistLabelDoc,
@@ -102,6 +103,9 @@ export function TaskListView({
       useEntityShortcuts={useTaskDialogShortcuts}
       onEntityCountChange={onTaskCountChange}
       onEntityClick={onTaskClick}
+      sortOptions={taskSortOptions}
+      groupOptions={taskGroupOptions}
+      groupData={{ projects, labels }}
       renderRow={(task, index, ref) => (
         <TaskListItem
           key={task._id}

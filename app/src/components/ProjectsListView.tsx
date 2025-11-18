@@ -7,6 +7,7 @@ import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import type { ListInstance } from "@/lib/views/types"
+import { projectSortOptions, projectGroupOptions } from "@/lib/views/entityConfigs/projectConfig"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 interface ProjectsListViewProps {
@@ -102,6 +103,9 @@ export function ProjectsListView({
       useEntityShortcuts={useProjectDialogShortcuts}
       onEntityCountChange={onProjectCountChange}
       onEntityClick={onProjectClick}
+      sortOptions={projectSortOptions}
+      groupOptions={projectGroupOptions}
+      groupData={{ projects: visibleProjects }}
       renderRow={(project, index, ref) => (
         <ProjectListItem
           key={project._id}
