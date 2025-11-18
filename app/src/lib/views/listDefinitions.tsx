@@ -344,6 +344,35 @@ const routinesDefinition: ListDefinition = {
   }),
 }
 
+const projectRoutinesDefinition: ListDefinition<{ projectId: string }> = {
+  key: "list:project-routines",
+  defaults: {
+    collapsible: true,
+    startExpanded: true,
+  },
+  dependencies: {
+    projects: true,
+  },
+  buildQuery: ({ projectId }): ListQueryInput => ({ type: "routines", projectId }),
+  getHeader: ({ taskCount, params, support }) => {
+    const project = support.projects?.find((p) => p.todoist_id === params.projectId)
+    const title = project?.name ? `${project.name} Routines` : "Project Routines"
+    const description = `${taskCount} ${taskCount === 1 ? "routine" : "routines"}`
+
+    const icon = getViewIcon("view:routines", { size: "lg", className: "mr-3" })
+
+    return {
+      title,
+      description,
+      icon,
+    }
+  },
+  getEmptyState: () => ({
+    title: "No routines for this project",
+    description: "Create a routine to automate recurring tasks in this project",
+  }),
+}
+
 export const listDefinitions = {
   inbox: inboxDefinition,
   time: timeDefinition,
@@ -352,6 +381,7 @@ export const listDefinitions = {
   label: labelDefinition,
   projects: projectsDefinition,
   routines: routinesDefinition,
+  projectRoutines: projectRoutinesDefinition,
 } as const
 
 export type ListDefinitionKey = keyof typeof listDefinitions

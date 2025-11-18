@@ -112,6 +112,23 @@ function expandProject(
   ]
 }
 
+function expandRoutinesByProject(
+  viewKey: ViewKey,
+  startIndex: number,
+  projectId: string,
+  overrides?: { collapsible?: boolean; startExpanded?: boolean }
+): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.projectRoutines, {
+      id: createListId(viewKey, `routines-${projectId}`),
+      viewKey,
+      indexInView: startIndex,
+      params: { projectId },
+      overrides,
+    }),
+  ]
+}
+
 function expandProjectWithChildren(
   viewKey: ViewKey,
   startIndex: number,
@@ -364,10 +381,23 @@ const viewPatterns: ViewPattern[] = [
           title: project?.name ?? "Project",
           icon: project ? getProjectIcon(project.color, { size: "sm" }) : undefined
         },
-        buildLists: (viewKey, index) =>
-          expandProject(viewKey, index, projectId, {
+        buildLists: (viewKey) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lists: ListInstance<any>[] = []
+
+          // Tasks list (non-collapsible, primary content)
+          lists.push(...expandProject(viewKey, 0, projectId, {
             collapsible: false,
-          }),
+          }))
+
+          // Routines list (collapsible, secondary content)
+          lists.push(...expandRoutinesByProject(viewKey, 1, projectId, {
+            collapsible: true,
+            startExpanded: true,
+          }))
+
+          return lists
+        },
       }
     },
   },

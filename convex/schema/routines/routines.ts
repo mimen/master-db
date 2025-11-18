@@ -61,4 +61,5 @@ export const routines = defineTable({
 })
   .index("by_defer", ["defer"])
   .index("by_frequency", ["frequency"])
-  .index("active_routines", ["defer", "createdAt"]);
+  .index("active_routines", ["defer", "createdAt"])
+  .index("by_project", ["todoistProjectId", "defer"]); // For filtering routines by project

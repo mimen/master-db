@@ -99,7 +99,7 @@ export class CountRegistry {
         case "projects":
           return "list:projects"
         case "routines":
-          return "list:routines"
+          return query.projectId ? `list:routines:${query.projectId}` : "list:routines"
         case "priority": {
           // Map API priority to UI level: API 4=P1, 3=P2, 2=P3, 1=P4
           const apiToUi = { 4: 'p1', 3: 'p2', 2: 'p3', 1: 'p4' }
@@ -124,7 +124,13 @@ export class CountRegistry {
       return "list:projects"
     }
 
-    // Routines special case
+    // Routines: "view:project:123:routines-456" (project-specific)
+    const projectRoutineMatch = listId.match(/view:project:([^:]+):.*routines/)
+    if (projectRoutineMatch) {
+      return `list:routines:${projectRoutineMatch[1]}`
+    }
+
+    // Routines special case (global)
     if (listId.includes("view:routines")) {
       return "list:routines"
     }

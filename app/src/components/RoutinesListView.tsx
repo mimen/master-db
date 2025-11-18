@@ -66,15 +66,19 @@ export function RoutinesListView({
     setSelectedRoutine(undefined)
   }
 
-  // Fetch routines
+  // Fetch routines - use project-specific query if projectId present
   const allRoutines: Doc<"routines">[] | undefined = useQuery(
-    api.routines.queries.getRoutinesByView.getRoutinesByView,
-    {
-      list: {
-        type: "routines",
-        view: list.query.view,
-      },
-    }
+    list.query.projectId
+      ? api.routines.queries.getRoutinesByProject.getRoutinesByProject
+      : api.routines.queries.getRoutinesByView.getRoutinesByView,
+    list.query.projectId
+      ? { projectId: list.query.projectId }
+      : {
+          list: {
+            type: "routines",
+            view: list.query.view,
+          },
+        }
   )
 
   const visibleRoutines = allRoutines ? (list.maxTasks ? allRoutines.slice(0, list.maxTasks) : allRoutines) : []

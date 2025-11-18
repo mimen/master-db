@@ -24,6 +24,8 @@ import { query } from "../../../_generated/server";
  * - list:project:${projectId} -> project task count
  * - list:projects -> active projects count
  * - list:label:${labelName} -> label task count
+ * - list:routines -> active routines count (global)
+ * - list:routines:${projectId} -> active routines count for specific project
  */
 export const getAllListCounts = query({
   args: {
@@ -175,6 +177,14 @@ export const getAllListCounts = query({
       .withIndex("by_defer", (q) => q.eq("defer", false))
       .collect();
     counts['list:routines'] = routines.length;
+
+    // Per-project routine counts
+    for (const project of projects) {
+      const count = routines.filter(routine =>
+        routine.todoistProjectId === project.todoist_id
+      ).length;
+      counts[`list:routines:${project.todoist_id}`] = count;
+    }
 
     return counts;
   },
