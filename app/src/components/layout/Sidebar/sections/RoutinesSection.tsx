@@ -102,18 +102,30 @@ export function RoutinesSection({
     }
   }, [projectsWithRoutines, sortMode, registry])
 
+  const handleRoutinesClick = () => {
+    // Navigate to main routines view (all routines)
+    onViewChange({ type: "view", key: "view:routines" })
+  }
+
   return (
     <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
       <SidebarGroup>
         <div className="flex items-center justify-between">
-          <SidebarGroupLabel className="flex-1">Routines</SidebarGroupLabel>
+          <button
+            onClick={handleRoutinesClick}
+            className="flex-1 text-left transition-colors hover:text-foreground"
+          >
+            <SidebarGroupLabel className="cursor-pointer">Routines</SidebarGroupLabel>
+          </button>
           <div className="flex items-center pr-2">
-            <SortDropdown
-              modes={ROUTINE_SORT_MODES}
-              currentMode={sortMode}
-              onChange={onSortChange}
-              getIcon={getRoutineSortIcon}
-            />
+            {!isCollapsed && (
+              <SortDropdown
+                modes={ROUTINE_SORT_MODES}
+                currentMode={sortMode}
+                onChange={onSortChange}
+                getIcon={getRoutineSortIcon}
+              />
+            )}
             <CollapsibleTrigger asChild>
               <CollapseCaret
                 isCollapsed={isCollapsed}
