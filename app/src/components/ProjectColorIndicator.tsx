@@ -14,30 +14,49 @@ const SIZE_MAP = {
   lg: "w-4 h-4",
 } as const
 
+const BORDER_MAP = {
+  sm: "border",
+  md: "border-[1.5px]",
+  lg: "border-2",
+} as const
+
 /**
- * Centralized project color indicator that changes shape based on project type.
+ * Centralized project color indicator that changes style based on project type.
  *
- * - Areas (area-of-responsibility): Colored circle
- * - Projects (project-type): Colored flag/pennant (right-pointing triangle)
- * - Unassigned: Colored circle (default)
+ * - Areas (area-of-responsibility): Solid colored circle
+ * - Projects (project-type): Hollow/outline colored circle
+ * - Unassigned: Solid colored circle (default)
  */
 export function ProjectColorIndicator({ project, size = "md", className }: ProjectColorIndicatorProps) {
   const isProject = project.metadata?.projectType === "project-type"
   const sizeClass = SIZE_MAP[size]
+  const borderClass = BORDER_MAP[size]
+  const color = getProjectColor(project.color)
 
+  if (isProject) {
+    // Hollow circle for Projects
+    return (
+      <div
+        className={cn(
+          sizeClass,
+          borderClass,
+          "rounded-full shrink-0",
+          className
+        )}
+        style={{ borderColor: color }}
+      />
+    )
+  }
+
+  // Solid circle for Areas and Unassigned
   return (
     <div
       className={cn(
         sizeClass,
-        "shrink-0",
-        isProject ? "rounded-sm" : "rounded-full",
+        "rounded-full shrink-0",
         className
       )}
-      style={{
-        backgroundColor: getProjectColor(project.color),
-        // Right-pointing triangle/flag for Projects
-        clipPath: isProject ? "polygon(0% 0%, 100% 50%, 0% 100%)" : undefined,
-      }}
+      style={{ backgroundColor: color }}
     />
   )
 }
