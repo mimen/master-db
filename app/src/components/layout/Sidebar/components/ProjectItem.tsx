@@ -5,6 +5,7 @@ import { SidebarButton } from "./SidebarButton"
 
 import { SidebarMenuItem } from "@/components/ui/sidebar"
 import { getProjectColor } from "@/lib/colors"
+import { getProjectTypeIcon } from "@/lib/projectTypes"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 
@@ -55,11 +56,18 @@ export function ProjectItem({
     toggleProjectCollapse(project.todoist_id)
   }
 
+  const ProjectTypeIcon = getProjectTypeIcon(project.metadata?.projectType)
+
   const projectIcon = (
-    <div
-      className="w-3 h-3 rounded-full flex-shrink-0 mr-2"
-      style={{ backgroundColor: getProjectColor(project.color) }}
-    />
+    <div className="flex items-center gap-1.5">
+      <div
+        className="w-3 h-3 rounded-full flex-shrink-0"
+        style={{ backgroundColor: getProjectColor(project.color) }}
+      />
+      {ProjectTypeIcon && (
+        <ProjectTypeIcon size="sm" className="text-muted-foreground" />
+      )}
+    </div>
   )
 
   return (

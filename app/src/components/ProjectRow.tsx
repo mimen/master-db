@@ -1,8 +1,8 @@
-import { Archive, ArchiveRestore, Flag } from "lucide-react"
+import { Archive, ArchiveRestore } from "lucide-react"
 import { memo, useEffect } from "react"
 
 import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { PriorityBadge } from "@/components/badges/shared"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectDescription } from "@/hooks/useOptimisticProjectDescription"
@@ -10,6 +10,7 @@ import { useOptimisticProjectName } from "@/hooks/useOptimisticProjectName"
 import { useListItemHover, useListItemEditing, useOptimisticSync } from "@/hooks/list-items"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
+import { getProjectTypeIcon } from "@/lib/projectTypes"
 import { cn } from "@/lib/utils"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
@@ -66,6 +67,7 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       : project.metadata?.priority
 
   const priority = usePriority(displayPriority)
+  const ProjectTypeIcon = getProjectTypeIcon(project.metadata?.projectType)
 
   const activeCount = project.stats.activeCount
 
@@ -134,6 +136,14 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
           style={{ backgroundColor: getProjectColor(project.color) }}
         />
 
+        {/* Project Type Icon */}
+        {ProjectTypeIcon && (
+          <ProjectTypeIcon
+            size="sm"
+            className="shrink-0 mt-0.5 text-muted-foreground"
+          />
+        )}
+
         <div className="flex-1 min-w-0 space-y-1.5">
           <div onClick={(e) => e.stopPropagation()}>
             {editing.isEditing ? (
@@ -178,48 +188,17 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
 
           {/* Badges */}
           <div className="flex flex-wrap items-center gap-1">
-            {/* Priority Badge */}
-            {priority?.showFlag && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors",
-                        priority.colorClass
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onClick?.()
-                        openPriority(project)
-                      }}
-                    >
-                      <Flag className="h-3 w-3" fill="currentColor" />
-                      <span>{priority.label}</span>
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Priority: {priority.label}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            {/* P4 Ghost Badge (shown on hover when priority is P4) */}
-            {isHovered && !priority?.showFlag && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+            {/* Priority Badge - real or ghost */}
+            {(priority?.showFlag || isHovered) && (
+              <PriorityBadge
+                priority={priority || { label: "P4", colorClass: null }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openPriority(project)
                 }}
-              >
-                <Flag className="h-3 w-3" />
-                <span>P4</span>
-              </Badge>
+                isGhost={!priority?.showFlag}
+              />
             )}
 
             {/* Active Tasks Count */}

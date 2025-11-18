@@ -14,8 +14,9 @@ import { api } from '@/convex/_generated/api'
 import type { Doc } from '@/convex/_generated/dataModel'
 import { useCreateProject } from '@/hooks/useCreateProject'
 import { getProjectColor, TODOIST_COLOR_OPTIONS } from '@/lib/colors'
+import { getProjectTypeIcon } from '@/lib/projectTypes'
 import { cn, parseMarkdownLinks } from '@/lib/utils'
-import type { TodoistProject, TodoistTask } from '@/types/convex/todoist'
+import type { TodoistProjectWithMetadata, TodoistTask } from '@/types/convex/todoist'
 
 interface ProjectDialogProps {
   task?: TodoistTask | null
@@ -43,17 +44,17 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
   const parentProjectRef = useRef<HTMLButtonElement>(null)
   const colorButtonRef = useRef<HTMLButtonElement>(null)
 
-  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
+  const projects = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata)
   const { createProject } = useCreateProject()
 
   // Helper to calculate project depth for parent selection
   const getProjectDepth = useCallback((projectId: string): number => {
     if (!projects) return 0
     let depth = 0
-    let currentProject = projects.find((p: TodoistProject) => p.todoist_id === projectId)
+    let currentProject = projects.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
     while (currentProject?.parent_id) {
       depth++
-      currentProject = projects.find((p: TodoistProject) => p.todoist_id === currentProject!.parent_id)
+      currentProject = projects.find((p: TodoistProjectWithMetadata) => p.todoist_id === currentProject!.parent_id)
     }
     return depth
   }, [projects])
@@ -78,7 +79,7 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
     }
 
     // Add all projects with proper hierarchy, filtering out those at max depth
-    const addProjectAndChildren = (project: TodoistProject, level: number) => {
+    const addProjectAndChildren = (project: TodoistProjectWithMetadata, level: number) => {
       const projectDepth = getProjectDepth(project.todoist_id)
       const matchesSearch = !searchFilter || project.name.toLowerCase().includes(searchFilter.toLowerCase())
 
@@ -94,16 +95,16 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
 
       // Find and add children (sorted by child_order)
       const children = projects
-        .filter((p: TodoistProject) => p.parent_id === project.todoist_id)
+        .filter((p: TodoistProjectWithMetadata) => p.parent_id === project.todoist_id)
         .sort((a, b) => a.child_order - b.child_order)
-      children.forEach((child: TodoistProject) => addProjectAndChildren(child, level + 1))
+      children.forEach((child: TodoistProjectWithMetadata) => addProjectAndChildren(child, level + 1))
     }
 
     // Start with root projects (sorted by child_order)
     const rootProjects = projects
-      .filter((p: TodoistProject) => !p.parent_id)
+      .filter((p: TodoistProjectWithMetadata) => !p.parent_id)
       .sort((a, b) => a.child_order - b.child_order)
-    rootProjects.forEach((project: TodoistProject) => addProjectAndChildren(project, 0))
+    rootProjects.forEach((project: TodoistProjectWithMetadata) => addProjectAndChildren(project, 0))
 
     return options
   }, [projects, getProjectDepth])
@@ -112,15 +113,15 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
     if (!projects) return []
 
     const rootProjects = projects
-      .filter((p: TodoistProject) => !p.parent_id)
+      .filter((p: TodoistProjectWithMetadata) => !p.parent_id)
       .sort((a, b) => a.child_order - b.child_order)
 
-    type ProjectWithLevel = TodoistProject & { level: number }
+    type ProjectWithLevel = TodoistProjectWithMetadata & { level: number }
     type CreateNewOption = { createNew: true }
     type DividerOption = { divider: true }
     const result: (ProjectWithLevel | CreateNewOption | DividerOption)[] = []
 
-    const addProjectWithChildren = (project: TodoistProject, level: number) => {
+    const addProjectWithChildren = (project: TodoistProjectWithMetadata, level: number) => {
       const matchesSearch = !searchTerm || project.name.toLowerCase().includes(searchTerm.toLowerCase())
 
       if (matchesSearch || !searchTerm) {
@@ -128,15 +129,15 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
       }
 
       const children = projects
-        .filter((p: TodoistProject) => p.parent_id === project.todoist_id)
+        .filter((p: TodoistProjectWithMetadata) => p.parent_id === project.todoist_id)
         .sort((a, b) => a.child_order - b.child_order)
-      children.forEach((child: TodoistProject) => addProjectWithChildren(child, level + 1))
+      children.forEach((child: TodoistProjectWithMetadata) => addProjectWithChildren(child, level + 1))
     }
 
-    rootProjects.forEach((project: TodoistProject) => addProjectWithChildren(project, 0))
+    rootProjects.forEach((project: TodoistProjectWithMetadata) => addProjectWithChildren(project, 0))
 
     // Add "Create new project" option if search term exists and doesn't match any project exactly
-    if (searchTerm && !projects.some((p: TodoistProject) =>
+    if (searchTerm && !projects.some((p: TodoistProjectWithMetadata) =>
       p.name.toLowerCase() === searchTerm.toLowerCase()
     )) {
       // Add divider if there are existing results
@@ -176,7 +177,7 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
   }, [searchTerm, selectedParentId, selectedColor, createProject, onSelect])
 
   useEffect(() => {
-    if (task) {
+    if (task || routine) {
       setSearchTerm('')
       setSelectedIndex(0)
       setIsSelectingParent(false)
@@ -190,7 +191,7 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
 
       setTimeout(() => searchInputRef.current?.focus(), 100)
     }
-  }, [task])
+  }, [task, routine])
 
   // Focus parent search input when entering parent selection
   useEffect(() => {
@@ -350,10 +351,11 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
     }
   }
 
-  if (!task) return null
+  const item = task || routine
+  if (!item) return null
 
   return (
-    <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-w-sm max-h-[80vh] flex flex-col p-0"
         onKeyDown={handleKeyDown}
@@ -497,7 +499,7 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
 
                 // Show color selector
                 if (isSelectingColor) {
-                  const selectedParentProject = projects?.find((p: TodoistProject) => p.todoist_id === selectedParentId)
+                  const selectedParentProject = projects?.find((p: TodoistProjectWithMetadata) => p.todoist_id === selectedParentId)
 
                   return (
                     <div key="color-selector" className="space-y-4">
@@ -611,7 +613,8 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
               // Handle regular project item
               const project = item
               const isSelected = index === selectedIndex
-              const isCurrent = task.project_id === project.todoist_id
+              const isCurrent = task?.project_id === project.todoist_id || routine?.todoistProjectId === project.todoist_id
+              const ProjectTypeIcon = getProjectTypeIcon(project.metadata?.projectType)
 
               return (
                 <button
@@ -630,6 +633,9 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
                     className="w-3 h-3 rounded-full shrink-0"
                     style={{ backgroundColor: getProjectColor(project.color) }}
                   />
+                  {ProjectTypeIcon && (
+                    <ProjectTypeIcon size="sm" className="text-muted-foreground shrink-0" />
+                  )}
                   <span className="flex-1 truncate min-w-0">{project.name}</span>
                 </button>
               )
