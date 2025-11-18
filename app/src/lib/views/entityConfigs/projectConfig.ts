@@ -40,7 +40,7 @@ export const projectGroupOptions: GroupOption<TodoistProjectWithMetadata>[] = [
         return "Top Level"
       }
       const projects = groupData.projects as any[]
-      const project = projects?.find((p) => p.id === projectId)
+      const project = projects?.find((p) => p.todoist_id === projectId || p.id === projectId)
       return project?.name ?? "Unknown Parent"
     },
   },

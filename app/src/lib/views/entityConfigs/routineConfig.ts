@@ -98,7 +98,7 @@ export const routineGroupOptions: GroupOption<Routine>[] = [
         return "Unassigned"
       }
       const projects = groupData.projects as any[]
-      const project = projects?.find((p) => p.id === projectId)
+      const project = projects?.find((p) => p.todoist_id === projectId || p.id === projectId)
       return project?.name ?? "Unknown Project"
     },
   },

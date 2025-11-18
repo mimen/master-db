@@ -48,7 +48,7 @@ export const taskGroupOptions: GroupOption<TodoistTaskWithProject>[] = [
         return "Inbox"
       }
       const projects = groupData.projects as any[]
-      const project = projects?.find((p) => p.id === projectId)
+      const project = projects?.find((p) => p.todoist_id === projectId || p.id === projectId)
       return project?.name ?? "Unknown Project"
     },
   },
@@ -79,7 +79,7 @@ export const taskGroupOptions: GroupOption<TodoistTaskWithProject>[] = [
         return "No Label"
       }
       const labels = groupData.labels as any[]
-      const label = labels?.find((l) => l.id === labelId)
+      const label = labels?.find((l) => l.id === labelId || l.todoist_id === labelId)
       return label?.name ?? "Unknown Label"
     },
   },
