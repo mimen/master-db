@@ -38,6 +38,8 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
     setProjectSort,
     labelSort,
     setLabelSort,
+    routineSort,
+    setRoutineSort,
     collapsed,
     toggleSection,
     toggleProjectCollapse,
@@ -82,6 +84,8 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               onToggleFoldersCollapse={() => toggleSection("folders")}
               isRoutinesCollapsed={collapsed.routines}
               onToggleRoutinesCollapse={() => toggleSection("routines")}
+              routineSort={routineSort}
+              onRoutineSortChange={setRoutineSort}
             />
 
             <TimeSection

@@ -1,6 +1,10 @@
+import { ArrowDownAZ, Hash, Network } from "lucide-react"
+import { useMemo } from "react"
+
 import { FolderTypeItem } from "../components/FolderTypeItem"
 import { SidebarButton } from "../components/SidebarButton"
-import type { ViewNavItem } from "../types"
+import { SortDropdown } from "../components/SortDropdown"
+import type { RoutineSort, ViewNavItem } from "../types"
 import { FOLDER_TYPE_ITEMS } from "../utils/filterItems"
 
 import { RoutineProjectItem } from "./RoutineProjectItem"
@@ -11,7 +15,19 @@ import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
-import { useMemo } from "react"
+
+const ROUTINE_SORT_MODES: readonly RoutineSort[] = ["flat", "projectOrder", "routineCount"]
+
+function getRoutineSortIcon(mode: RoutineSort) {
+  switch (mode) {
+    case "flat":
+      return ArrowDownAZ
+    case "projectOrder":
+      return Network
+    case "routineCount":
+      return Hash
+  }
+}
 
 interface ViewsSectionProps {
   items: ViewNavItem[]
@@ -22,6 +38,8 @@ interface ViewsSectionProps {
   onToggleFoldersCollapse: () => void
   isRoutinesCollapsed: boolean
   onToggleRoutinesCollapse: () => void
+  routineSort: RoutineSort
+  onRoutineSortChange: (sort: RoutineSort) => void
 }
 
 export function ViewsSection({
@@ -33,24 +51,44 @@ export function ViewsSection({
   onToggleFoldersCollapse,
   isRoutinesCollapsed,
   onToggleRoutinesCollapse,
+  routineSort,
+  onRoutineSortChange,
 }: ViewsSectionProps) {
   const { openSettings } = useDialogContext()
   const { getCountForView, registry } = useCountRegistry()
 
-  // Filter projects that have routines (active routine count > 0)
+  // Filter and sort projects that have routines (active routine count > 0)
   const projectsWithRoutines = useMemo(() => {
     if (!viewContext.projectsWithMetadata) return []
 
     const allCounts = registry.getAllCounts()
+    const filtered = viewContext.projectsWithMetadata.filter((project) => {
+      const countKey = `list:routines:${project.todoist_id}`
+      const count = allCounts[countKey] ?? 0
+      return count > 0
+    })
 
-    return viewContext.projectsWithMetadata
-      .filter((project) => {
-        const countKey = `list:routines:${project.todoist_id}`
-        const count = allCounts[countKey] ?? 0
-        return count > 0
-      })
-      .sort((a, b) => a.name.localeCompare(b.name)) // Alphabetical sort
-  }, [viewContext.projectsWithMetadata, registry])
+    // Sort based on sortMode
+    switch (routineSort) {
+      case "flat":
+        return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+      case "routineCount": {
+        const projectsWithCounts = filtered.map((project) => {
+          const countKey = `list:routines:${project.todoist_id}`
+          const count = allCounts[countKey] ?? 0
+          return { project, count }
+        })
+        return projectsWithCounts
+          .sort((a, b) => b.count - a.count)
+          .map((item) => item.project)
+      }
+      case "projectOrder":
+        // For now, just alphabetical. Could implement hierarchy later
+        return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
+      default:
+        return filtered
+    }
+  }, [viewContext.projectsWithMetadata, registry, routineSort])
 
   return (
     <SidebarGroup>
@@ -109,25 +147,37 @@ export function ViewsSection({
 
             return (
               <Collapsible key={item.key} open={!isRoutinesCollapsed} onOpenChange={onToggleRoutinesCollapse}>
-                <SidebarMenuItem>
-                  <SidebarButton
-                    icon={item.icon}
-                    label={item.label}
-                    count={item.count}
-                    isActive={isActive}
-                    onClick={() => {
-                      // Clicking the button navigates to the routines view
-                      onViewChange(resolveView(item.key, viewContext))
-                    }}
-                    hasChildren={true}
-                    isCollapsed={isRoutinesCollapsed}
-                    onToggleCollapse={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      onToggleRoutinesCollapse()
-                    }}
-                  />
-                </SidebarMenuItem>
+                <div className="flex items-center gap-1">
+                  <SidebarMenuItem className="flex-1">
+                    <SidebarButton
+                      icon={item.icon}
+                      label={item.label}
+                      count={item.count}
+                      isActive={isActive}
+                      onClick={() => {
+                        // Clicking the button navigates to the routines view
+                        onViewChange(resolveView(item.key, viewContext))
+                      }}
+                      hasChildren={true}
+                      isCollapsed={isRoutinesCollapsed}
+                      onToggleCollapse={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onToggleRoutinesCollapse()
+                      }}
+                    />
+                  </SidebarMenuItem>
+                  {!isRoutinesCollapsed && (
+                    <div className="pr-2">
+                      <SortDropdown
+                        modes={ROUTINE_SORT_MODES}
+                        currentMode={routineSort}
+                        onChange={onRoutineSortChange}
+                        getIcon={getRoutineSortIcon}
+                      />
+                    </div>
+                  )}
+                </div>
 
                 <CollapsibleContent>
                   <SidebarMenu>
