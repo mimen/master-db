@@ -1,6 +1,6 @@
-import { useQuery } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 import { RotateCcw, X } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { ProjectRow } from "./ProjectRow"
 
@@ -12,11 +12,10 @@ import { useFocusContext } from "@/contexts/FocusContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
+import { useListItemFocus } from "@/hooks/list-items"
 import { cn } from "@/lib/utils"
 import type { ListInstance } from "@/lib/views/types"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
-
-const PROJECT_ROW_FOCUSED_CLASSNAMES = ["bg-accent/50", "border-primary/30"] as const
 
 interface ProjectsListViewProps {
   list: ListInstance
@@ -49,18 +48,27 @@ export function ProjectsListView({
     {}
   )
 
-  const projectRefs = useRef<(HTMLDivElement | null)[]>([])
-  const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
-  const lastFocusedIndex = useRef<number | null>(null)
+  const unarchiveProject = useAction(api.todoist.actions.unarchiveProject.unarchiveProject)
 
-  // Filter to active projects only and sort by priority (4→3→2→1), then alphabetically
+  const handleUnarchive = useCallback(async (projectId: string) => {
+    await unarchiveProject({ projectId })
+  }, [unarchiveProject])
+
+  const projectRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Filter out deleted projects and sort by priority (4→3→2→1), then alphabetically
+  // Note: Query already sorts archived projects to the bottom, we just maintain that here
   // IMPORTANT: Apply optimistic priority overrides BEFORE sorting
   const projects = useMemo(() => {
     if (!allProjects) return []
 
     return allProjects
-      .filter((p: TodoistProjectWithMetadata) => !p.is_deleted && !p.is_archived)
+      .filter((p: TodoistProjectWithMetadata) => !p.is_deleted)
       .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => {
+        // Keep archived projects at the bottom (query already sorts this way)
+        if (a.is_archived !== b.is_archived) {
+          return a.is_archived ? 1 : -1
+        }
         // Check for optimistic priority updates
         const aOptimistic = getProjectUpdate(a.todoist_id)
         const bOptimistic = getProjectUpdate(b.todoist_id)
@@ -90,7 +98,15 @@ export function ProjectsListView({
   const totalCount = registry.getCountForList(list.id, list.query)
 
   projectRefs.current.length = visibleProjects.length
-  refHandlers.current.length = visibleProjects.length
+
+  // Use shared focus management hook
+  useListItemFocus({
+    entityType: 'project',
+    focusedIndex: focusedProjectIndex,
+    entitiesLength: visibleProjects.length,
+    elementRefs: projectRefs,
+    onExpand: () => setIsExpanded(true)
+  })
 
   const focusedProject =
     focusedProjectIndex !== null &&
@@ -113,67 +129,6 @@ export function ProjectsListView({
   useEffect(() => {
     setIsExpanded(list.startExpanded)
   }, [list.id, list.startExpanded])
-
-  useEffect(() => {
-    const removeHighlight = (element: HTMLDivElement | null) => {
-      if (!element) return
-      PROJECT_ROW_FOCUSED_CLASSNAMES.forEach((className) => element.classList.remove(className))
-      element.setAttribute("aria-selected", "false")
-    }
-
-    const applyHighlight = (element: HTMLDivElement | null) => {
-      if (!element) return
-      PROJECT_ROW_FOCUSED_CLASSNAMES.forEach((className) => element.classList.add(className))
-      element.setAttribute("aria-selected", "true")
-    }
-
-    if (lastFocusedIndex.current !== null && lastFocusedIndex.current !== focusedProjectIndex) {
-      removeHighlight(projectRefs.current[lastFocusedIndex.current])
-    }
-
-    if (focusedProjectIndex === null) {
-      lastFocusedIndex.current = null
-      return
-    }
-
-    if (focusedProjectIndex < 0 || focusedProjectIndex >= visibleProjects.length) {
-      lastFocusedIndex.current = null
-      return
-    }
-
-    setIsExpanded(true)
-    const node = projectRefs.current[focusedProjectIndex]
-    if (!node) {
-      lastFocusedIndex.current = null
-      return
-    }
-
-    if (
-      lastFocusedIndex.current !== focusedProjectIndex ||
-      !node.classList.contains(PROJECT_ROW_FOCUSED_CLASSNAMES[0])
-    ) {
-      applyHighlight(node)
-    }
-
-    if (typeof document !== "undefined" && node !== document.activeElement) {
-      node.focus({ preventScroll: true })
-    }
-
-    const scrollContainer = node.closest("[data-task-scroll-container]") as HTMLElement | null
-    if (scrollContainer) {
-      const nodeRect = node.getBoundingClientRect()
-      const containerRect = scrollContainer.getBoundingClientRect()
-      const isAbove = nodeRect.top < containerRect.top
-      const isBelow = nodeRect.bottom > containerRect.bottom
-      if (isAbove || isBelow) {
-        node.scrollIntoView({ block: "nearest", inline: "nearest" })
-      }
-    } else if (typeof node.scrollIntoView === "function") {
-      node.scrollIntoView({ block: "nearest", inline: "nearest" })
-    }
-
-    lastFocusedIndex.current = focusedProjectIndex
-  }, [focusedProjectIndex, visibleProjects.length])
 
   const header = list.getHeader({
     params: list.params,
@@ -285,25 +240,15 @@ export function ProjectsListView({
         <>
           {visibleProjects.length > 0 ? (
             <div className="space-y-1">
-              {visibleProjects.map((project: TodoistProjectWithMetadata, index: number) => {
-                if (!refHandlers.current[index]) {
-                  refHandlers.current[index] = (element) => {
-                    projectRefs.current[index] = element
-                    if (element === null && lastFocusedIndex.current === index) {
-                      lastFocusedIndex.current = null
-                    }
-                  }
-                }
-
-                return (
-                  <ProjectRow
-                    key={project._id}
-                    project={project}
-                    onElementRef={refHandlers.current[index]!}
-                    onClick={() => onProjectClick?.(list.id, index)}
-                  />
-                )
-              })}
+              {visibleProjects.map((project: TodoistProjectWithMetadata, index: number) => (
+                <ProjectRow
+                  key={project._id}
+                  project={project}
+                  onElementRef={(el) => projectRefs.current[index] = el}
+                  onClick={() => onProjectClick?.(list.id, index)}
+                  onUnarchive={handleUnarchive}
+                />
+              ))}
             </div>
           ) : list.collapsible && isMultiListView ? (
             <div className="py-4 text-sm text-muted-foreground text-center">No projects</div>

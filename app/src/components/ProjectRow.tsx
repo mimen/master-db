@@ -1,5 +1,5 @@
-import { Archive, Flag } from "lucide-react"
-import { memo, useCallback, useEffect, useRef, useState } from "react"
+import { Archive, ArchiveRestore, Flag } from "lucide-react"
+import { memo, useEffect } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -7,6 +7,7 @@ import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectDescription } from "@/hooks/useOptimisticProjectDescription"
 import { useOptimisticProjectName } from "@/hooks/useOptimisticProjectName"
+import { useListItemHover, useListItemEditing, useOptimisticSync } from "@/hooks/list-items"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
@@ -16,22 +17,36 @@ interface ProjectRowProps {
   project: TodoistProjectWithMetadata
   onElementRef: (element: HTMLDivElement | null) => void
   onClick?: () => void
+  onUnarchive?: (projectId: string) => void
 }
 
-export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onClick }: ProjectRowProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [showDescriptionInput, setShowDescriptionInput] = useState(false)
-  const [editName, setEditName] = useState(project.name)
-  const [editDescription, setEditDescription] = useState(project.metadata?.description || "")
-  const [isHovered, setIsHovered] = useState(false)
-  const nameInputRef = useRef<HTMLInputElement>(null)
-  const descriptionInputRef = useRef<HTMLInputElement>(null)
-
+export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onClick, onUnarchive }: ProjectRowProps) {
   const { openPriority, openArchive } = useDialogContext()
   const { getProjectUpdate, removeProjectUpdate } = useOptimisticUpdates()
 
   const updateProjectName = useOptimisticProjectName()
   const updateProjectDescription = useOptimisticProjectDescription()
+
+  // Use shared hover state hook
+  const { isHovered, onMouseEnter, onMouseLeave } = useListItemHover()
+
+  // Use shared inline editing hook
+  const editing = useListItemEditing({
+    entity: project,
+    entityId: project.todoist_id,
+    fields: {
+      primary: { value: project.name, key: 'name' },
+      secondary: { value: project.metadata?.description, key: 'description' }
+    },
+    onSave: async (changes) => {
+      if (changes.name) {
+        await updateProjectName(project.todoist_id, changes.name)
+      }
+      if (changes.description !== undefined) {
+        await updateProjectDescription(project.todoist_id, changes.description)
+      }
+    }
+  })
 
   // Get optimistic update from context
   const optimisticUpdate = getProjectUpdate(project.todoist_id)
@@ -54,120 +69,46 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
 
   const activeCount = project.stats.activeCount
 
-  const startEditing = useCallback(() => {
-    setIsEditing(true)
-    // Only show description input if project already has a description
-    setShowDescriptionInput(!!project.metadata?.description)
-    // Use real DB values when entering edit mode, not optimistic ones
-    setEditName(project.name)
-    setEditDescription(project.metadata?.description || "")
-  }, [project.name, project.metadata?.description])
-
-  const startEditingDescription = useCallback(() => {
-    setIsEditing(true)
-    // Always show description input when explicitly editing description
-    setShowDescriptionInput(true)
-    // Use real DB values when entering edit mode, not optimistic ones
-    setEditName(project.name)
-    setEditDescription(project.metadata?.description || "")
-    // Focus description input after state update
-    setTimeout(() => {
-      descriptionInputRef.current?.focus()
-    }, 0)
-  }, [project.name, project.metadata?.description])
-
-  // Expose startEditing and startEditingDescription to parent
+  // Expose editing functions to parent (for keyboard shortcuts)
   useEffect(() => {
     const element = document.querySelector(`[data-project-id="${project.todoist_id}"]`) as HTMLElement & {
       startEditing?: () => void
       startEditingDescription?: () => void
     }
     if (element) {
-      element.startEditing = startEditing
-      element.startEditingDescription = startEditingDescription
+      element.startEditing = editing.startEditing
+      element.startEditingDescription = editing.startEditingSecondary
     }
-  }, [project.todoist_id, startEditing, startEditingDescription])
-
-  const cancelEditing = () => {
-    setIsEditing(false)
-    setShowDescriptionInput(false)
-    setEditName(project.name)
-    setEditDescription(project.metadata?.description || "")
-  }
-
-  const saveEditing = async () => {
-    const hasNameChanged = editName !== project.name
-    const hasDescriptionChanged = editDescription !== (project.metadata?.description || "")
-
-    if (!hasNameChanged && !hasDescriptionChanged) {
-      setIsEditing(false)
-      return
-    }
-
-    // Exit edit mode - optimistic values will show immediately
-    setIsEditing(false)
-    setShowDescriptionInput(false)
-
-    // Fire optimistic updates (instant UI + background API calls)
-    if (hasNameChanged) {
-      await updateProjectName(project.todoist_id, editName)
-    }
-
-    if (hasDescriptionChanged) {
-      await updateProjectDescription(project.todoist_id, editDescription)
-    }
-  }
-
-  // Focus name input when entering edit mode
-  useEffect(() => {
-    if (isEditing && nameInputRef.current) {
-      nameInputRef.current.focus()
-      nameInputRef.current.select()
-    }
-  }, [isEditing])
+  }, [project.todoist_id, editing.startEditing, editing.startEditingSecondary])
 
   const handleArchive = () => {
     openArchive(project)
   }
 
-  // Clear optimistic updates when DB syncs (success case)
-  useEffect(() => {
-    const update = getProjectUpdate(project.todoist_id)
-    if (!update) return
-
-    let shouldClear = false
-
-    if (update.type === "text-change") {
-      // If optimistic name matches DB, name update completed
-      if (update.newName !== undefined && update.newName === project.name) {
-        shouldClear = true
+  // Clear optimistic updates when DB syncs (using shared hook)
+  useOptimisticSync({
+    entity: project,
+    optimisticUpdate,
+    shouldClear: (proj, update) => {
+      if (update.type === "text-change") {
+        // Name update completed
+        if (update.newName !== undefined && update.newName === proj.name) {
+          return true
+        }
+        // Description update completed
+        if (update.newDescription !== undefined && update.newDescription === (proj.metadata?.description ?? "")) {
+          return true
+        }
+      } else if (update.type === "priority-change") {
+        // Priority update completed
+        if (update.newPriority === proj.metadata?.priority) {
+          return true
+        }
       }
-
-      // If optimistic description matches DB, description update completed
-      if (
-        update.newDescription !== undefined &&
-        update.newDescription === (project.metadata?.description ?? "")
-      ) {
-        shouldClear = true
-      }
-    } else if (update.type === "priority-change") {
-      // If optimistic priority matches DB, priority update completed
-      if (update.newPriority === project.metadata?.priority) {
-        shouldClear = true
-      }
-    }
-
-    if (shouldClear) {
-      removeProjectUpdate(project.todoist_id)
-    }
-  }, [
-    project.todoist_id,
-    project.name,
-    project.metadata?.description,
-    project.metadata?.priority,
-    getProjectUpdate,
-    removeProjectUpdate
-  ])
+      return false
+    },
+    onClear: () => removeProjectUpdate(project.todoist_id)
+  })
 
   return (
     <div
@@ -175,13 +116,15 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       tabIndex={-1}
       aria-selected={false}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       data-project-id={project.todoist_id}
+      data-entity-id={project.todoist_id}
       className={cn(
         "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
         "hover:bg-accent/50",
-        "focus:outline-none focus:bg-accent/50 focus:border-primary/30"
+        "focus:outline-none focus:bg-accent/50 focus:border-primary/30",
+        project.is_archived && "opacity-60"
       )}
     >
       <div className="flex items-start gap-2.5">
@@ -193,54 +136,25 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
 
         <div className="flex-1 min-w-0 space-y-1.5">
           <div onClick={(e) => e.stopPropagation()}>
-            {isEditing ? (
+            {editing.isEditing ? (
               <>
                 <input
-                  ref={nameInputRef}
+                  ref={editing.primaryInputRef}
                   type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      void saveEditing()
-                    } else if (e.key === "Escape") {
-                      e.preventDefault()
-                      cancelEditing()
-                    } else if (e.key === "Tab") {
-                      e.preventDefault()
-                      if (!showDescriptionInput) {
-                        setShowDescriptionInput(true)
-                        setTimeout(() => {
-                          descriptionInputRef.current?.focus()
-                        }, 0)
-                      } else {
-                        descriptionInputRef.current?.focus()
-                      }
-                    }
-                  }}
+                  value={editing.primaryValue}
+                  onChange={(e) => editing.setPrimaryValue(e.target.value)}
+                  onKeyDown={editing.handlePrimaryKeyDown}
                   className="block w-full bg-transparent px-0 py-0 m-0 text-sm font-medium leading-relaxed text-foreground outline-none border-none break-words"
                   placeholder="Project name"
                 />
-                {showDescriptionInput && (
+                {editing.showSecondaryInput && (
                   <input
-                    ref={descriptionInputRef}
+                    ref={editing.secondaryInputRef}
                     type="text"
-                    value={editDescription}
+                    value={editing.secondaryValue}
                     placeholder="Description (optional)"
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        void saveEditing()
-                      } else if (e.key === "Escape") {
-                        e.preventDefault()
-                        cancelEditing()
-                      } else if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault()
-                        nameInputRef.current?.focus()
-                      }
-                    }}
+                    onChange={(e) => editing.setSecondaryValue(e.target.value)}
+                    onKeyDown={editing.handleSecondaryKeyDown}
                     className="block w-full bg-transparent px-0 py-0 m-0 mt-1 text-xs leading-relaxed text-muted-foreground outline-none border-none placeholder:text-muted-foreground/70 break-words"
                   />
                 )}
@@ -313,19 +227,33 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
               </Badge>
             )}
 
-            {/* Archive Button (shown on hover) */}
+            {/* Archive/Unarchive Button (shown on hover) */}
             {isHovered && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleArchive()
-                }}
-              >
-                <Archive className="h-3 w-3" />
-                <span>Archive</span>
-              </Badge>
+              project.is_archived ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onUnarchive?.(project.todoist_id)
+                  }}
+                >
+                  <ArchiveRestore className="h-3 w-3" />
+                  <span>Unarchive</span>
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleArchive()
+                  }}
+                >
+                  <Archive className="h-3 w-3" />
+                  <span>Archive</span>
+                </Badge>
+              )
             )}
           </div>
         </div>
