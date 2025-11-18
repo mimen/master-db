@@ -85,7 +85,7 @@ export function LabelBadge({
     <Badge
       variant={isGhost ? "outline" : "secondary"}
       className={cn(
-        "gap-1 font-normal cursor-pointer hover:bg-accent/80 transition-colors",
+        "gap-1 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/label",
         !isGhost && "border",
         isGhost && "text-muted-foreground border-dashed"
       )}
@@ -94,11 +94,10 @@ export function LabelBadge({
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <Tag className="h-3 w-3" />
-      <span className="max-w-[150px] truncate">{label.name}</span>
-      {onRemove && isHovering && !isGhost && (
+      <Tag className={cn("h-3 w-3", onRemove && !isGhost && "group-hover/label:hidden")} />
+      {onRemove && !isGhost && (
         <button
-          className="ml-0.5 hover:text-destructive transition-colors"
+          className="hidden group-hover/label:block hover:text-destructive transition-colors"
           onClick={(e) => {
             e.stopPropagation()
             onRemove(e)
@@ -108,6 +107,7 @@ export function LabelBadge({
           <X className="h-3 w-3" />
         </button>
       )}
+      <span className="max-w-[150px] truncate">{label.name}</span>
     </Badge>
   )
 }
