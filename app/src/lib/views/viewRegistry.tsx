@@ -67,6 +67,39 @@ function expandProjects(viewKey: ViewKey, startIndex: number): ListInstance[] {
   ]
 }
 
+function expandProjectsOnly(viewKey: ViewKey, startIndex: number): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.projectsOnly, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }),
+  ]
+}
+
+function expandAreasOnly(viewKey: ViewKey, startIndex: number): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.areasOnly, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }),
+  ]
+}
+
+function expandUnassignedFolders(viewKey: ViewKey, startIndex: number): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.unassignedFolders, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }),
+  ]
+}
+
 function expandRoutines(viewKey: ViewKey, startIndex: number): ListInstance[] {
   return [
     instantiateList(listDefinitions.routines, {
@@ -351,6 +384,54 @@ const viewPatterns: ViewPattern[] = [
       },
       buildLists: (viewKey, startIndex) => {
         return expandProjects(viewKey, startIndex)
+      },
+    }),
+  },
+  {
+    match: (key) => key === "view:folders",
+    getDefinition: () => ({
+      metadata: {
+        title: "Folders",
+        icon: getViewIcon("view:folders", { size: "sm" }),
+      },
+      buildLists: (viewKey, startIndex) => {
+        return expandProjects(viewKey, startIndex)
+      },
+    }),
+  },
+  {
+    match: (key) => key === "view:folders:projects",
+    getDefinition: () => ({
+      metadata: {
+        title: "Projects",
+        icon: getViewIcon("view:folders:projects", { size: "sm" }),
+      },
+      buildLists: (viewKey, startIndex) => {
+        return expandProjectsOnly(viewKey, startIndex)
+      },
+    }),
+  },
+  {
+    match: (key) => key === "view:folders:areas",
+    getDefinition: () => ({
+      metadata: {
+        title: "Areas",
+        icon: getViewIcon("view:folders:areas", { size: "sm" }),
+      },
+      buildLists: (viewKey, startIndex) => {
+        return expandAreasOnly(viewKey, startIndex)
+      },
+    }),
+  },
+  {
+    match: (key) => key === "view:folders:unassigned",
+    getDefinition: () => ({
+      metadata: {
+        title: "Unassigned Folders",
+        icon: getViewIcon("view:folders:unassigned", { size: "sm" }),
+      },
+      buildLists: (viewKey, startIndex) => {
+        return expandUnassignedFolders(viewKey, startIndex)
       },
     }),
   },

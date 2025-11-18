@@ -53,6 +53,22 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
     return <Folder className={finalClassName} />
   }
 
+  if (viewKey === "view:folders") {
+    return <Folder className={finalClassName} />
+  }
+
+  if (viewKey === "view:folders:projects") {
+    return <Folder className={finalClassName} />
+  }
+
+  if (viewKey === "view:folders:areas") {
+    return <Folder className={finalClassName} />
+  }
+
+  if (viewKey === "view:folders:unassigned") {
+    return <Folder className={cn(finalClassName, "text-muted-foreground")} />
+  }
+
   if (viewKey === "view:routines") {
     return <Repeat className={cn(finalClassName, "text-purple-600 dark:text-purple-400")} />
   }

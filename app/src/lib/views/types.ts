@@ -47,7 +47,7 @@ export type ListQueryDefinition =
   | { type: "inbox"; inboxProjectId?: string; timezoneOffsetMinutes?: number }
   | { type: "time"; range: TimeRange; timezoneOffsetMinutes?: number }
   | { type: "project"; projectId: string; timezoneOffsetMinutes?: number }
-  | { type: "projects"; timezoneOffsetMinutes?: number }
+  | { type: "projects"; projectType?: "area-of-responsibility" | "project-type" | "unassigned"; timezoneOffsetMinutes?: number }
   | { type: "routines"; projectId?: string; timezoneOffsetMinutes?: number }
   | { type: "priority"; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
   | { type: "label"; label: string; timezoneOffsetMinutes?: number }
@@ -132,6 +132,10 @@ export type ViewKey =
   | "view:today"
   | "view:upcoming"
   | "view:priority-queue"
+  | "view:folders"
+  | "view:folders:projects"
+  | "view:folders:areas"
+  | "view:folders:unassigned"
   | "view:projects"
   | "view:routines"
   | "view:settings"

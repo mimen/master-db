@@ -373,6 +373,81 @@ const projectRoutinesDefinition: ListDefinition<{ projectId: string }> = {
   }),
 }
 
+const projectsOnlyDefinition: ListDefinition = {
+  key: "list:projects-only",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  dependencies: {
+    projectMetadata: true,
+  },
+  buildQuery: (): ListQueryInput => ({ type: "projects", projectType: "project-type" }),
+  getHeader: ({ taskCount }) => {
+    const icon = getViewIcon("view:folders:projects", { size: "lg", className: "mr-3" })
+
+    return {
+      title: "Projects",
+      description: `${taskCount} active projects`,
+      icon,
+    }
+  },
+  getEmptyState: () => ({
+    title: "No projects yet!",
+    description: "Projects have a finite end. Create one in Todoist with @project-type label.",
+  }),
+}
+
+const areasOnlyDefinition: ListDefinition = {
+  key: "list:areas-only",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  dependencies: {
+    projectMetadata: true,
+  },
+  buildQuery: (): ListQueryInput => ({ type: "projects", projectType: "area-of-responsibility" }),
+  getHeader: ({ taskCount }) => {
+    const icon = getViewIcon("view:folders:areas", { size: "lg", className: "mr-3" })
+
+    return {
+      title: "Areas",
+      description: `${taskCount} active areas of responsibility`,
+      icon,
+    }
+  },
+  getEmptyState: () => ({
+    title: "No areas yet!",
+    description: "Areas are ongoing responsibilities. Create one in Todoist with @area-of-responsibility label.",
+  }),
+}
+
+const unassignedFoldersDefinition: ListDefinition = {
+  key: "list:unassigned-folders",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  dependencies: {
+    projectMetadata: true,
+  },
+  buildQuery: (): ListQueryInput => ({ type: "projects", projectType: "unassigned" }),
+  getHeader: ({ taskCount }) => {
+    const icon = getViewIcon("view:folders:unassigned", { size: "lg", className: "mr-3" })
+
+    return {
+      title: "Unassigned Folders",
+      description: `${taskCount} folders without type`,
+      icon,
+    }
+  },
+  getEmptyState: () => ({
+    title: "All folders are typed!",
+    description: "All your folders have either Area or Project type assigned.",
+  }),
+}
+
 export const listDefinitions = {
   inbox: inboxDefinition,
   time: timeDefinition,
@@ -380,6 +455,9 @@ export const listDefinitions = {
   priority: priorityDefinition,
   label: labelDefinition,
   projects: projectsDefinition,
+  projectsOnly: projectsOnlyDefinition,
+  areasOnly: areasOnlyDefinition,
+  unassignedFolders: unassignedFoldersDefinition,
   routines: routinesDefinition,
   projectRoutines: projectRoutinesDefinition,
 } as const

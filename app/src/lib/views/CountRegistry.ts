@@ -97,6 +97,13 @@ export class CountRegistry {
         case "project":
           return `list:project:${query.projectId}`
         case "projects":
+          if (query.projectType === "project-type") {
+            return "list:projects-only"
+          } else if (query.projectType === "area-of-responsibility") {
+            return "list:areas-only"
+          } else if (query.projectType === "unassigned") {
+            return "list:unassigned-folders"
+          }
           return "list:projects"
         case "routines":
           return query.projectId ? `list:routines:${query.projectId}` : "list:routines"
@@ -119,8 +126,17 @@ export class CountRegistry {
       return "list:inbox"
     }
 
-    // Projects special case
-    if (listId.includes("view:projects")) {
+    // Projects special cases
+    if (listId.includes("view:folders:projects")) {
+      return "list:projects-only"
+    }
+    if (listId.includes("view:folders:areas")) {
+      return "list:areas-only"
+    }
+    if (listId.includes("view:folders:unassigned")) {
+      return "list:unassigned-folders"
+    }
+    if (listId.includes("view:projects") || listId.includes("view:folders")) {
       return "list:projects"
     }
 
