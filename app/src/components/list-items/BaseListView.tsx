@@ -1,12 +1,16 @@
 import { X, RotateCcw } from "lucide-react"
-import React, { useEffect, useRef, useState } from "react"
+import React, { useMemo, useEffect, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { CollapsibleGroupHeader } from "@/components/ui/CollapsibleGroupHeader"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ViewSettingsDropdown } from "@/components/ui/ViewSettingsDropdown"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useListItemFocus } from "@/hooks/list-items"
+import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
 import { cn } from "@/lib/utils"
+import { applyGroupingAndSorting } from "@/lib/views/sortAndGroup"
 import type { ListInstance, ListSupportData, SortOption, GroupOption, GroupData } from "@/lib/views/types"
 
 /**
@@ -216,20 +220,52 @@ export function BaseListView<T>({
   onDismiss,
   onRestore,
   isLoading = false,
+  sortOptions,
+  groupOptions,
+  groupData,
+  defaultSort,
+  defaultGroup,
   className,
 }: BaseListViewProps<T>) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
   const { registry } = useCountRegistry()
 
+  // Load sort/group settings from localStorage
+  const { currentSort, setCurrentSort, currentGroup, setCurrentGroup, collapsedGroups, toggleGroupCollapse } =
+    useListViewSettings(list.id, defaultSort, defaultGroup)
+
+  // Find active sort/group options
+  const activeSortOption = sortOptions?.find((opt) => opt.id === currentSort)
+  const activeGroupOption = groupOptions?.find((opt) => opt.id === currentGroup)
+
+  // Apply sorting and grouping to entities
+  const processedData = useMemo(() => {
+    return applyGroupingAndSorting(entities, activeSortOption, activeGroupOption, groupData)
+  }, [entities, activeSortOption, activeGroupOption, groupData])
+
+  // Determine if data is grouped (array of GroupedEntities) vs flat (array of entities)
+  const isGrouped = Array.isArray(processedData) && processedData.length > 0 && "groupKey" in processedData[0]
+  const groupedData = isGrouped ? (processedData as any[]) : null
+
+  // Build flat array of visible entities (excluding collapsed groups) for focus management
+  const visibleEntities: T[] = useMemo(() => {
+    if (groupedData) {
+      return groupedData.flatMap((group) =>
+        collapsedGroups.has(group.groupKey) ? [] : group.entities
+      )
+    }
+    return processedData as T[]
+  }, [groupedData, collapsedGroups, processedData])
+
   // Setup ref array for focus management
   const elementRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
 
-  // Initialize ref handlers for each entity
-  elementRefs.current.length = entities.length
-  refHandlers.current.length = entities.length
+  // Initialize ref handlers for visible entities
+  elementRefs.current.length = visibleEntities.length
+  refHandlers.current.length = visibleEntities.length
 
-  for (let i = 0; i < entities.length; i++) {
+  for (let i = 0; i < visibleEntities.length; i++) {
     if (!refHandlers.current[i]) {
       refHandlers.current[i] = (element) => {
         elementRefs.current[i] = element
@@ -237,12 +273,12 @@ export function BaseListView<T>({
     }
   }
 
-  // Get focused entity
+  // Get focused entity (from visible entities array)
   const focusedEntity =
     focusedIndex !== null &&
     focusedIndex >= 0 &&
-    focusedIndex < entities.length
-      ? entities[focusedIndex]
+    focusedIndex < visibleEntities.length
+      ? visibleEntities[focusedIndex]
       : null
 
   // Update global focus context when focused entity changes
@@ -253,11 +289,11 @@ export function BaseListView<T>({
   // Call entity-specific shortcuts hook with focused entity
   useEntityShortcuts(focusedEntity)
 
-  // Use shared focus management hook
+  // Use shared focus management hook with visible entities
   useListItemFocus({
     entityType,
     focusedIndex,
-    entitiesLength: entities.length,
+    entitiesLength: visibleEntities.length,
     elementRefs,
     onExpand: () => setIsExpanded(true)
   })
@@ -364,6 +400,16 @@ export function BaseListView<T>({
                 ? `Showing ${entities.length} of ${totalCount}`
                 : totalCount}
             </Badge>
+            {/* Sort/Group Settings Dropdown */}
+            <ViewSettingsDropdown<T>
+              sortOptions={sortOptions}
+              currentSort={currentSort}
+              onSortChange={setCurrentSort}
+              groupOptions={groupOptions}
+              currentGroup={currentGroup}
+              onGroupChange={setCurrentGroup}
+              triggerLabel="View"
+            />
             {entities.length > 0 && (
               <TooltipProvider>
                 <Tooltip>
@@ -391,19 +437,63 @@ export function BaseListView<T>({
       {(isExpanded || !isMultiListView) && (
         <>
           {entities.length > 0 ? (
-            <div className="space-y-1">
-              {entities.map((entity: T, index: number) => (
-                <div
-                  key={getEntityId(entity)}
-                  data-testid={`${entityType}-row-${index}`}
-                  data-entity-type={entityType}
-                  data-entity-id={getEntityId(entity)}
-                  onClick={() => onEntityClick?.(list.id, index)}
-                >
-                  {renderRow(entity, index, refHandlers.current[index]!)}
-                </div>
-              ))}
-            </div>
+            groupedData ? (
+              // GROUPED RENDERING
+              <div className="space-y-2">
+                {groupedData.map((group) => (
+                  <div key={group.groupKey}>
+                    {/* Group Header */}
+                    <CollapsibleGroupHeader
+                      groupKey={group.groupKey}
+                      label={group.groupLabel}
+                      count={group.entities.length}
+                      isCollapsed={collapsedGroups.has(group.groupKey)}
+                      onToggle={toggleGroupCollapse}
+                    />
+
+                    {/* Group Entities */}
+                    {!collapsedGroups.has(group.groupKey) && (
+                      <div className="space-y-1 pl-1">
+                        {group.entities.map((entity: T, groupEntityIndex: number) => {
+                          // Find index in visibleEntities array for focus management
+                          const visibleIndex = visibleEntities.indexOf(entity)
+                          return (
+                            <div
+                              key={getEntityId(entity)}
+                              data-testid={`${entityType}-row-${visibleIndex}`}
+                              data-entity-type={entityType}
+                              data-entity-id={getEntityId(entity)}
+                              onClick={() => onEntityClick?.(list.id, visibleIndex)}
+                            >
+                              {renderRow(
+                                entity,
+                                visibleIndex,
+                                visibleIndex >= 0 ? refHandlers.current[visibleIndex]! : () => {}
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // FLAT RENDERING
+              <div className="space-y-1">
+                {(processedData as T[]).map((entity: T, index: number) => (
+                  <div
+                    key={getEntityId(entity)}
+                    data-testid={`${entityType}-row-${index}`}
+                    data-entity-type={entityType}
+                    data-entity-id={getEntityId(entity)}
+                    onClick={() => onEntityClick?.(list.id, index)}
+                  >
+                    {renderRow(entity, index, refHandlers.current[index]!)}
+                  </div>
+                ))}
+              </div>
+            )
           ) : list.collapsible && isMultiListView ? (
             // Compact empty state for collapsible lists in multi-list view
             <div className="py-4 text-sm text-muted-foreground text-center">
