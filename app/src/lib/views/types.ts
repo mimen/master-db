@@ -138,6 +138,7 @@ export type ViewKey =
   | "view:folders:unassigned"
   | "view:projects"
   | "view:routines"
+  | `view:routines:project:${string}`
   | "view:settings"
   | `view:time:${TimeRange}`
   | `view:project:${string}`

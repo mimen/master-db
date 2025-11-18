@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 
-import type { ProjectSort, LabelSort } from "../types"
+import type { ProjectSort, LabelSort, RoutineSort } from "../types"
 
 interface CollapsedSections {
   projects: boolean
   time: boolean
   priorities: boolean
   labels: boolean
+  routines: boolean
 }
 
 const STORAGE_KEYS = {
@@ -16,6 +17,7 @@ const STORAGE_KEYS = {
   EXPAND_NESTED: "sidebar:expandNested",
   PROJECT_SORT: "sidebar:projectSort",
   LABEL_SORT: "sidebar:labelSort",
+  ROUTINE_SORT: "sidebar:routineSort",
 } as const
 
 // Helper to safely read from localStorage
@@ -49,6 +51,9 @@ export function useSidebarState() {
   const [labelSort, setLabelSortState] = useState<LabelSort>(() =>
     getStoredValue(STORAGE_KEYS.LABEL_SORT, "taskCount")
   )
+  const [routineSort, setRoutineSortState] = useState<RoutineSort>(() =>
+    getStoredValue(STORAGE_KEYS.ROUTINE_SORT, "flat")
+  )
 
   // Collapsible sections state - all open by default, persist in localStorage
   const [collapsed, setCollapsed] = useState<CollapsedSections>(() =>
@@ -57,6 +62,7 @@ export function useSidebarState() {
       time: false,
       priorities: false,
       labels: false,
+      routines: false,
     })
   )
 
@@ -110,6 +116,11 @@ export function useSidebarState() {
     setStoredValue(STORAGE_KEYS.LABEL_SORT, value)
   }, [])
 
+  const setRoutineSort = useCallback((value: RoutineSort) => {
+    setRoutineSortState(value)
+    setStoredValue(STORAGE_KEYS.ROUTINE_SORT, value)
+  }, [])
+
   const cycleProjectSort = useCallback(() => {
     const sorts: ProjectSort[] = ["hierarchy", "priority", "taskCount", "alphabetical"]
     const currentIndex = sorts.indexOf(projectSort)
@@ -127,6 +138,15 @@ export function useSidebarState() {
     setLabelSortState(nextSort)
     setStoredValue(STORAGE_KEYS.LABEL_SORT, nextSort)
   }, [labelSort])
+
+  const cycleRoutineSort = useCallback(() => {
+    const sorts: RoutineSort[] = ["flat", "projectOrder", "routineCount"]
+    const currentIndex = sorts.indexOf(routineSort)
+    const nextIndex = (currentIndex + 1) % sorts.length
+    const nextSort = sorts[nextIndex]
+    setRoutineSortState(nextSort)
+    setStoredValue(STORAGE_KEYS.ROUTINE_SORT, nextSort)
+  }, [routineSort])
 
   const toggleProjectCollapse = useCallback((projectId: string) => {
     setCollapsedProjects((prev) => {
@@ -171,6 +191,9 @@ export function useSidebarState() {
     labelSort,
     setLabelSort,
     cycleLabelSort,
+    routineSort,
+    setRoutineSort,
+    cycleRoutineSort,
     collapsed,
     toggleSection,
     collapsedProjects,

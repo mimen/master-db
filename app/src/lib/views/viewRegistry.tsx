@@ -448,6 +448,29 @@ const viewPatterns: ViewPattern[] = [
     }),
   },
   {
+    match: (key) => key.startsWith("view:routines:project:"),
+    extract: (key) => ({
+      projectId: key.replace("view:routines:project:", ""),
+    }),
+    getDefinition: (extracted, context) => {
+      const projectId = extracted.projectId as string
+      const projects = context?.projects ?? []
+      const project = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
+
+      return {
+        metadata: {
+          title: project?.name ? `${project.name} - Routines` : "Routines",
+          icon: project ? getProjectIcon(project.color, { size: "sm" }) : getViewIcon("view:routines", { size: "sm" }),
+        },
+        buildLists: (viewKey, startIndex) => {
+          return expandRoutinesByProject(viewKey, startIndex, projectId, {
+            collapsible: false,
+          })
+        },
+      }
+    },
+  },
+  {
     match: (key) => key.startsWith("view:project:") && !key.includes("-family"),
     extract: (key) => ({
       projectId: key.replace("view:project:", ""),

@@ -5,6 +5,7 @@ import { useSidebarState } from "./hooks/useSidebarState"
 import { LabelsSection } from "./sections/LabelsSection"
 import { PrioritiesSection } from "./sections/PrioritiesSection"
 import { ProjectsSection } from "./sections/ProjectsSection"
+import { RoutinesSection } from "./sections/RoutinesSection"
 import { TimeSection } from "./sections/TimeSection"
 import { ViewsSection } from "./sections/ViewsSection"
 import { buildViewItems } from "./utils/viewItems"
@@ -38,6 +39,8 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
     setProjectSort,
     labelSort,
     setLabelSort,
+    routineSort,
+    setRoutineSort,
     collapsed,
     toggleSection,
     toggleProjectCollapse,
@@ -102,6 +105,16 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               isProjectCollapsed={isProjectCollapsed}
               togglePriorityGroupCollapse={togglePriorityGroupCollapse}
               isPriorityGroupCollapsed={isPriorityGroupCollapsed}
+            />
+
+            <RoutinesSection
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              isCollapsed={collapsed.routines}
+              onToggleCollapse={() => toggleSection("routines")}
+              sortMode={routineSort}
+              onSortChange={setRoutineSort}
             />
 
             <PrioritiesSection
