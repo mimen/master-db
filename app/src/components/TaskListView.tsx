@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge } from "@/components/badges/shared"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useFocusContext } from "@/contexts/FocusContext"
@@ -592,148 +593,94 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
 
           <div className="flex flex-wrap items-center gap-1">
             {displayProject && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors"
+              <ProjectBadge
+                project={{
+                  name: displayProject.name,
+                  color: getProjectColor(displayProject.color)
+                }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openProject(task)
                 }}
-              >
-                <div
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: getProjectColor(displayProject.color) }}
-                />
-                <span>{displayProject.name}</span>
-              </Badge>
+              />
             )}
 
             {priority?.showFlag && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors",
-                  priority.colorClass
-                )}
+              <PriorityBadge
+                priority={priority}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openPriority(task)
                 }}
-              >
-                <Flag className="h-3 w-3" fill="currentColor" />
-                <span>{priority.label}</span>
-              </Badge>
+              />
             )}
 
             {displayDue && (
-              <Badge
-                variant={dueInfo.isOverdue ? "destructive" : "outline"}
-                className={cn(
-                  "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/due",
-                  dueInfo.isOverdue && "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 dark:border-red-500/50",
-                  dueInfo.isToday && !dueInfo.isOverdue && "border-green-500 bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300 dark:border-green-500/50",
-                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "border-purple-400 bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-500/50"
-                )}
+              <DateBadge
+                date={dueInfo.text}
+                status={
+                  dueInfo.isOverdue ? "overdue" :
+                  dueInfo.isToday ? "today" :
+                  dueInfo.isTomorrow ? "tomorrow" :
+                  "future"
+                }
+                icon={Calendar}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openDueDate(task)
                 }}
-              >
-                <Calendar className={cn(
-                  "h-3 w-3 group-hover/due:hidden",
-                  dueInfo.isOverdue && "text-red-600 dark:text-red-400",
-                  dueInfo.isToday && !dueInfo.isOverdue && "text-green-600 dark:text-green-400",
-                  (dueInfo.isTomorrow || (!dueInfo.isOverdue && !dueInfo.isToday)) && "text-purple-600 dark:text-purple-400"
-                )} />
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void handleRemoveDue()
-                  }}
-                  className="hidden group-hover/due:block hover:text-destructive transition-colors"
-                  aria-label="Remove schedule"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-                <span>{dueInfo.text}</span>
-              </Badge>
+                onRemove={(e) => {
+                  e.stopPropagation()
+                  void handleRemoveDue()
+                }}
+              />
             )}
 
-            {displayDeadline && (() => {
-              // Calculate if deadline is within 3 days
-              const deadlineDate = displayDeadline ? new Date(displayDeadline.date + 'T00:00:00') : null
-              const today = new Date()
-              today.setHours(0, 0, 0, 0)
-              const daysUntil = deadlineDate ? Math.floor((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 999
-              const isWithin3Days = daysUntil >= 0 && daysUntil <= 2 && !deadlineInfo.isToday
-              const isFuture = daysUntil > 2
-
-              return (
-                <Badge
-                  variant={deadlineInfo.isOverdue || deadlineInfo.isToday ? "destructive" : "outline"}
-                  className={cn(
-                    "gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/deadline",
-                    (deadlineInfo.isOverdue || deadlineInfo.isToday) && "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300 dark:border-red-500/50",
-                    isWithin3Days && "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-500/50",
-                    isFuture && "border-gray-300 bg-gray-50 text-gray-700 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600/50"
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onClick?.()
-                    openDeadline(task)
-                  }}
-                >
-                  <AlertCircle className={cn(
-                    "h-3 w-3 group-hover/deadline:hidden text-red-600 dark:text-red-400"
-                  )} />
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleRemoveDeadline()
-                    }}
-                    className="hidden group-hover/deadline:block hover:text-destructive transition-colors"
-                    aria-label="Remove deadline"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                  <span>{deadlineInfo.text}</span>
-                </Badge>
-              )
-            })()}
+            {displayDeadline && (
+              <DateBadge
+                date={deadlineInfo.text}
+                status={
+                  deadlineInfo.isOverdue ? "overdue" :
+                  deadlineInfo.isToday ? "today" :
+                  "future"
+                }
+                icon={AlertCircle}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onClick?.()
+                  openDeadline(task)
+                }}
+                onRemove={(e) => {
+                  e.stopPropagation()
+                  void handleRemoveDeadline()
+                }}
+              />
+            )}
 
             {displayLabels && displayLabels.length > 0 && (
               <>
                 {displayLabels.map((label: string) => {
                   const labelColor = getLabelColor(label)
                   return (
-                    <Badge
+                    <LabelBadge
                       key={label}
-                      variant="secondary"
-                      className="gap-1.5 font-normal group/label border"
-                      style={labelColor ? {
-                        borderColor: labelColor.border,
-                        backgroundColor: labelColor.background
-                      } : undefined}
-                    >
-                      <Tag
-                        className="h-3 w-3 group-hover/label:hidden"
-                        style={labelColor ? { color: labelColor.full } : undefined}
-                      />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void handleRemoveLabel(label)
-                        }}
-                        className="hidden group-hover/label:block hover:text-destructive transition-colors"
-                        aria-label={`Remove ${label} label`}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                      <span>{label}</span>
-                    </Badge>
+                      label={{
+                        name: label,
+                        color: labelColor?.border
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        // Labels are currently only removable, not editable
+                        // Future: could open labels dialog for editing
+                      }}
+                      onRemove={(e) => {
+                        e.stopPropagation()
+                        void handleRemoveLabel(label)
+                      }}
+                    />
                   )
                 })}
               </>
@@ -747,63 +694,51 @@ const TaskRow = memo(function TaskRow({ task, onElementRef, onClick, isProjectVi
             )}
 
             {isHovered && !priority?.showFlag && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+              <PriorityBadge
+                priority={{ label: "P4", colorClass: null }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openPriority(task)
                 }}
-              >
-                <Flag className="h-3 w-3" />
-                <span>P4</span>
-              </Badge>
+                isGhost={true}
+              />
             )}
 
             {isHovered && !displayDue && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+              <GhostBadge
+                icon={Calendar}
+                text="add schedule"
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openDueDate(task)
                 }}
-              >
-                <Calendar className="h-3 w-3" />
-                <span>add schedule</span>
-              </Badge>
+              />
             )}
 
             {isHovered && !displayDeadline && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+              <GhostBadge
+                icon={AlertCircle}
+                text="add deadline"
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openDeadline(task)
                 }}
-              >
-                <AlertCircle className="h-3 w-3" />
-                <span>add deadline</span>
-              </Badge>
+              />
             )}
 
             {isHovered && (
-              <Badge
-                variant="outline"
-                className="gap-1.5 font-normal cursor-pointer hover:bg-accent/80 transition-colors text-muted-foreground border-dashed"
+              <GhostBadge
+                icon={Tag}
+                text="add label"
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
                   openLabel(task)
                 }}
-              >
-                <Tag className="h-3 w-3" />
-                <span>add label</span>
-              </Badge>
+              />
             )}
           </div>
         </div>
