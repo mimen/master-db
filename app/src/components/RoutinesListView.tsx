@@ -83,7 +83,7 @@ export function RoutinesListView({
         }
   )
 
-  // Fetch projects for group data
+  // Fetch projects for group data (always fetch - needed for project grouping)
   const projects: TodoistProjects | undefined = useQuery(
     api.todoist.queries.getProjects.getProjects,
     {}

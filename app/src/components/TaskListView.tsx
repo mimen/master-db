@@ -38,15 +38,15 @@ export function TaskListView({
 }: TaskListViewProps) {
   const { setFocusedTask } = useFocusContext()
 
-  // Fetch support data
+  // Fetch support data (always fetch if we need them for grouping)
   const projects: TodoistProjects | undefined = useQuery(
     api.todoist.queries.getProjects.getProjects,
-    list.dependencies.projects ? {} : "skip"
+    {} // Always fetch - needed for project/label grouping
   )
 
   const labels: TodoistLabelDoc[] | undefined = useQuery(
     api.todoist.queries.getLabels.getLabels,
-    list.dependencies.labels ? {} : "skip"
+    {} // Always fetch - needed for label grouping
   )
 
   // Resolve inbox project if needed
