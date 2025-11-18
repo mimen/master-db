@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useListItemFocus } from "@/hooks/list-items"
 import { cn } from "@/lib/utils"
-import type { ListInstance, ListSupportData } from "@/lib/views/types"
+import type { ListInstance, ListSupportData, SortOption, GroupOption, GroupData } from "@/lib/views/types"
 
 /**
  * BaseListView - Generic, reusable list view component
@@ -158,6 +158,39 @@ export interface BaseListViewProps<T> {
    * Whether data is still loading
    */
   isLoading?: boolean
+
+  // ============= SORT & GROUP OPTIONS =============
+
+  /**
+   * Available sort options for this list
+   * If provided, sort controls appear in header
+   */
+  sortOptions?: SortOption<T>[]
+
+  /**
+   * Available group options for this list
+   * If provided, group controls appear in header
+   */
+  groupOptions?: GroupOption<T>[]
+
+  /**
+   * Lookup data for group labels
+   * Example: { projects: [...], labels: [...] }
+   * Required if groupOptions is provided
+   */
+  groupData?: GroupData
+
+  /**
+   * Default sort option ID
+   * @default null (no sort)
+   */
+  defaultSort?: string
+
+  /**
+   * Default group option ID
+   * @default null (no group)
+   */
+  defaultGroup?: string
 
   // ============= OPTIONAL STYLING =============
 

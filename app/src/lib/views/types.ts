@@ -2,6 +2,45 @@ import type { ReactNode } from "react"
 
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
+// ============= SORT & GROUP TYPES =============
+
+/**
+ * Configuration for a sort option
+ */
+export type SortOption<T> = {
+  id: string
+  label: string
+  icon?: ReactNode
+  compareFn: (a: T, b: T) => number
+}
+
+/**
+ * Configuration for a group option
+ */
+export type GroupOption<T> = {
+  id: string
+  label: string
+  icon?: ReactNode
+  groupFn: (entity: T) => string | null
+  getGroupLabel: (groupKey: string, groupData: GroupData) => string
+  groupSort?: (a: string, b: string) => number
+}
+
+/**
+ * Container for lookup data needed by group options
+ * Example: { projects: [...], labels: [...] }
+ */
+export type GroupData = Record<string, any>
+
+/**
+ * Persisted settings for a list view (sort, group, collapsed groups)
+ */
+export type ListViewSettings = {
+  sort: string | null
+  group: string | null
+  collapsedGroups: string[]
+}
+
 export type TimeRange = "overdue" | "today" | "upcoming" | "no-date"
 
 export type ListQueryDefinition =
