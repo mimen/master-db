@@ -335,9 +335,21 @@ Issues encountered:
 - Solution: Added text-change type with newName and newDescription optional fields
 - Wrong type arguments for createOptimisticRoutineHook
 - Solution: Added all 3 type arguments (TParams, TArgs, TResult)
+- Scroll-to-top bug when opening dialogs
+- Root cause: Cleanup function in ListView useEffects was clearing focus state when dialogs opened
+- Solution: Removed cleanup functions from all three ListView components
+- Badge click focus issue: Clicking badges scrolled to previously focused item instead of clicked item
+- Root cause: Badges called e.stopPropagation() preventing row onClick (which sets focus)
+- Solution: Added onClick?.() before opening dialogs in all badge handlers (26 total across all entity types)
+
+Bug Fixes Applied:
+- Removed focus cleanup in TaskListView, ProjectsListView, RoutinesListView (prevents scroll-to-top on dialog open)
+- Added onClick?.() to badge handlers in TaskListView (8 badges), ProjectRow (4 badges), RoutineRow (14 badges)
+- Ensures clicked item is focused before dialog opens, preventing unwanted scrolling
 
 Next steps:
 - Manual testing of all routine features (user should test focus, editing, keyboard shortcuts, optimistic updates)
+- Verify badge clicks no longer cause unwanted scrolling
 - Milestone 5: Final Validation & Cleanup
 ```
 
