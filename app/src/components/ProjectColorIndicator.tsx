@@ -18,7 +18,7 @@ const SIZE_MAP = {
  * Centralized project color indicator that changes shape based on project type.
  *
  * - Areas (area-of-responsibility): Colored circle
- * - Projects (project-type): Colored square with rounded corners
+ * - Projects (project-type): Colored square (sharp 90° corners)
  * - Unassigned: Colored circle (default)
  */
 export function ProjectColorIndicator({ project, size = "md", className }: ProjectColorIndicatorProps) {
@@ -30,7 +30,7 @@ export function ProjectColorIndicator({ project, size = "md", className }: Proje
       className={cn(
         sizeClass,
         "shrink-0",
-        isProject ? "rounded-sm" : "rounded-full",
+        isProject ? "" : "rounded-full",
         className
       )}
       style={{ backgroundColor: getProjectColor(project.color) }}
