@@ -18,7 +18,7 @@ const SIZE_MAP = {
  * Centralized project color indicator that changes shape based on project type.
  *
  * - Areas (area-of-responsibility): Colored circle
- * - Projects (project-type): Colored square (sharp 90° corners)
+ * - Projects (project-type): Colored flag/pennant (right-pointing triangle)
  * - Unassigned: Colored circle (default)
  */
 export function ProjectColorIndicator({ project, size = "md", className }: ProjectColorIndicatorProps) {
@@ -33,7 +33,11 @@ export function ProjectColorIndicator({ project, size = "md", className }: Proje
         isProject ? "" : "rounded-full",
         className
       )}
-      style={{ backgroundColor: getProjectColor(project.color) }}
+      style={{
+        backgroundColor: getProjectColor(project.color),
+        // Right-pointing triangle/flag for Projects
+        clipPath: isProject ? "polygon(0% 0%, 100% 50%, 0% 100%)" : undefined,
+      }}
     />
   )
 }
