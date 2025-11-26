@@ -225,7 +225,20 @@ bunx convex run todoist:sync.runInitialSync
 
 - `convex/todoist/README.md` - Todoist integration details
 - `docs/architecture.md` - System design (if detailed context needed)
+- `docs/adding-views-guide.md` - **Quick start guide for adding new views**
 - Convex dashboard: `http://localhost:3001`
+
+## Adding New Features
+
+### Adding New Views
+**Quick Start**: `docs/adding-views-guide.md` - Step-by-step checklist for adding views
+
+**Complete Examples**:
+- Projects View: `docs/projects-view-implementation.md`
+- Routines System: `docs/routines-system-implementation.md`
+- URL Routing: `docs/url-routing-implementation.md`
+
+**Pattern**: All views follow a consistent 10-step process covering types, definitions, registry, sidebar, routing, counts, and rendering.
 
 ## Shadcn Component Installation (CRITICAL)
 
