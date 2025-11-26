@@ -3,7 +3,7 @@ import { memo, useEffect } from "react"
 
 import { ProjectColorIndicator } from "@/components/ProjectColorIndicator"
 import { Badge } from "@/components/ui/badge"
-import { PriorityBadge } from "@/components/badges/shared"
+import { PriorityBadge, ProjectTypeBadge } from "@/components/badges/shared"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticProjectDescription } from "@/hooks/useOptimisticProjectDescription"
@@ -21,7 +21,7 @@ interface ProjectRowProps {
 }
 
 export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onClick, onUnarchive }: ProjectRowProps) {
-  const { openPriority, openArchive } = useDialogContext()
+  const { openPriority, openArchive, openProjectType } = useDialogContext()
   const { getProjectUpdate, removeProjectUpdate } = useOptimisticUpdates()
 
   const updateProjectName = useOptimisticProjectName()
@@ -64,6 +64,10 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
     optimisticUpdate?.type === "priority-change"
       ? optimisticUpdate.newPriority
       : project.metadata?.priority
+  const displayProjectType =
+    optimisticUpdate?.type === "project-type-change"
+      ? optimisticUpdate.newProjectType
+      : project.metadata?.projectType
 
   const priority = usePriority(displayPriority)
 
@@ -102,6 +106,11 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
       } else if (update.type === "priority-change") {
         // Priority update completed
         if (update.newPriority === proj.metadata?.priority) {
+          return true
+        }
+      } else if (update.type === "project-type-change") {
+        // Project type update completed
+        if (update.newProjectType === proj.metadata?.projectType) {
           return true
         }
       }
@@ -185,6 +194,19 @@ export const ProjectRow = memo(function ProjectRow({ project, onElementRef, onCl
                   openPriority(project)
                 }}
                 isGhost={!priority?.showFlag}
+              />
+            )}
+
+            {/* Project Type Badge - real or ghost */}
+            {(displayProjectType || isHovered) && (
+              <ProjectTypeBadge
+                projectType={displayProjectType}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onClick?.()
+                  openProjectType(project)
+                }}
+                isGhost={!displayProjectType}
               />
             )}
 

@@ -1,5 +1,4 @@
 import { X, Tag } from "lucide-react"
-import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -73,8 +72,6 @@ export function LabelBadge({
   onRemove,
   isGhost = false,
 }: LabelBadgeProps) {
-  const [isHovering, setIsHovering] = useState(false)
-
   // Apply colors if provided (border and background)
   const colorStyle = label.borderColor || label.backgroundColor ? {
     borderColor: label.borderColor,
@@ -91,8 +88,6 @@ export function LabelBadge({
       )}
       style={colorStyle}
       onClick={onClick}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
     >
       <Tag className={cn("h-3 w-3", onRemove && !isGhost && "group-hover/label:hidden")} />
       {onRemove && !isGhost && (

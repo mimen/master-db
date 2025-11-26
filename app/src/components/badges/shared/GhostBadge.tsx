@@ -1,7 +1,5 @@
 import type { LucideIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
-
 /**
  * Ghost Badge - Generic reusable ghost badge for "add X" actions
  *

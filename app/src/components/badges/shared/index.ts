@@ -26,6 +26,7 @@
 // Core badges
 export { PriorityBadge, type PriorityBadgeProps } from "./PriorityBadge"
 export { ProjectBadge, type ProjectBadgeProps } from "./ProjectBadge"
+export { ProjectTypeBadge, type ProjectTypeBadgeProps } from "./ProjectTypeBadge"
 export { LabelBadge, type LabelBadgeProps } from "./LabelBadge"
 export { GhostBadge, type GhostBadgeProps } from "./GhostBadge"
 

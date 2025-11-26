@@ -1,8 +1,9 @@
 import { useQuery } from "convex/react"
-import { Repeat } from "lucide-react"
+import { Folder, Repeat, Tag } from "lucide-react"
 import { memo, useEffect } from "react"
 
-import { DetailsBadge, DurationBadge, EditBadge, GhostLabelBadge, GhostProjectBadge, IdealDayBadge, LabelBadge, PriorityBadge, ProjectBadge, TimeOfDayBadge } from "@/components/badges/RoutineBadges"
+import { DetailsBadge, EditBadge } from "@/components/badges/routine-specific"
+import { PriorityBadge, ProjectBadge, LabelBadge, GhostBadge, TimeOfDayBadge, IdealDayBadge, DurationBadge } from "@/components/badges/shared"
 import { Badge } from "@/components/ui/badge"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
@@ -11,6 +12,7 @@ import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { useOptimisticRoutineName } from "@/hooks/useOptimisticRoutineName"
 import { useOptimisticRoutineDescription } from "@/hooks/useOptimisticRoutineDescription"
 import { useListItemHover, useListItemEditing, useOptimisticSync } from "@/hooks/list-items"
+import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
@@ -218,7 +220,10 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
             {/* Project Badge */}
             {displayProject && (
               <ProjectBadge
-                project={displayProject}
+                project={{
+                  name: displayProject.name,
+                  color: getProjectColor(displayProject.color)
+                }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
@@ -255,7 +260,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
             {/* Ideal Day Badge */}
             {routine.idealDay !== undefined && (
               <IdealDayBadge
-                idealDay={routine.idealDay}
+                day={routine.idealDay}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
@@ -292,7 +297,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
             {displayLabels.map((label: string) => (
               <LabelBadge
                 key={label}
-                label={label}
+                label={{ name: label }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
@@ -326,7 +331,9 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
             )}
 
             {isHovered && !displayProject && (
-              <GhostProjectBadge
+              <GhostBadge
+                icon={Folder}
+                text="Set project"
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
@@ -336,7 +343,9 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
             )}
 
             {isHovered && displayLabels.length === 0 && (
-              <GhostLabelBadge
+              <GhostBadge
+                icon={Tag}
+                text="Add label"
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
@@ -363,7 +372,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, onElementRef, onCl
              (routine.frequency === "Weekly" || routine.frequency === "Every Other Week") &&
              routine.idealDay === undefined && (
               <IdealDayBadge
-                idealDay={1} // Monday as default display
+                day={1} // Monday as default display
                 onClick={(e) => {
                   e.stopPropagation()
                   onClick?.()
