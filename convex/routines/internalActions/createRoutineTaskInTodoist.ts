@@ -1,4 +1,4 @@
-import type { Task } from "@doist/todoist-api-typescript";
+import type { Task, AddTaskArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
@@ -48,8 +48,7 @@ export const createRoutineTaskInTodoist = internalAction({
 
       const client = getTodoistClient();
 
-      // Format due date from readyDate timestamp
-      const readyDate = new Date(routineTask.readyDate);
+      // Format due date from dueDate timestamp
       const dueDate = new Date(routineTask.dueDate);
 
       // Prepare labels - add "routine" and time-of-day label
@@ -59,7 +58,7 @@ export const createRoutineTaskInTodoist = internalAction({
       }
 
       // Build task args - following the same pattern as createTask.ts
-      const taskArgs: any = {
+      const taskArgs: AddTaskArgs = {
         content: routine.name,
         labels,
       };

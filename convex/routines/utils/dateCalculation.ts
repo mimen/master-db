@@ -4,9 +4,8 @@
  */
 
 import type { Doc } from "../../_generated/dataModel";
-import { frequencyToDays, Frequency, isHighFrequency } from "../types/frequency";
+import { frequencyToDays, type FrequencyType } from "../types/frequency";
 import { getTimeOfDayHour, type TimeOfDayType } from "../types/timeOfDay";
-import type { FrequencyType } from "../types/frequency";
 
 /**
  * Calculate the next ready date for a routine

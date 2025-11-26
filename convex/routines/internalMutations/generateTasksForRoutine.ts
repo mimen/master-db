@@ -1,7 +1,8 @@
 import { v } from "convex/values";
-import { internalMutation } from "../../_generated/server";
-import { RoutineTaskStatus } from "../types/status";
+
+import { internalMutation, type MutationCtx } from "../../_generated/server";
 import { Frequency } from "../types/frequency";
+import { RoutineTaskStatus } from "../types/status";
 import {
   calculateNextReadyDate,
   calculateDueDate,
@@ -185,7 +186,7 @@ export const generateTasksForRoutine = internalMutation({
  * Helper to create a routineTask record
  */
 async function createRoutineTask(
-  ctx: any,
+  ctx: MutationCtx,
   routineId: string,
   readyDate: number,
   dueDate: number

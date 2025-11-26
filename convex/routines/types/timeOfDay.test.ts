@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { getTimeOfDayLabel, TimeOfDay } from "./timeOfDay";
 
 describe("getTimeOfDayLabel", () => {

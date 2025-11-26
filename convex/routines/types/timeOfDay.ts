@@ -26,9 +26,10 @@ export function getTimeOfDayHour(timeOfDay: TimeOfDayType): number {
       return 15; // 3pm
     case TimeOfDay.Night:
       return 19; // 7pm
-    default:
+    default: {
       const _exhaustive: never = timeOfDay;
       throw new Error(`Unknown time of day: ${_exhaustive}`);
+    }
   }
 }
 
@@ -46,9 +47,10 @@ export function getTimeOfDayLabel(timeOfDay: TimeOfDayType): string {
       return "evening";
     case TimeOfDay.Night:
       return "night";
-    default:
+    default: {
       const _exhaustive: never = timeOfDay;
       throw new Error(`Unknown time of day: ${_exhaustive}`);
+    }
   }
 }
 
