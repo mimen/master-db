@@ -1,5 +1,6 @@
-import { useQuery } from "convex/react"
-import { useState } from "react"
+
+import { Pause, Play } from "lucide-react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -20,8 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { api } from "@/convex/_generated/api"
-import type { Doc, Id } from "@/convex/_generated/dataModel"
+import type { Doc } from "@/convex/_generated/dataModel"
 import { useRoutineActions } from "@/hooks/useRoutineActions"
 
 interface RoutineDialogProps {
@@ -63,35 +63,22 @@ const DAYS_OF_WEEK = [
   { value: 6, label: "Saturday" },
 ]
 
-const PRIORITIES = [
-  { value: 4, label: "P1 (Highest)" },
-  { value: 3, label: "P2 (High)" },
-  { value: 2, label: "P3 (Medium)" },
-  { value: 1, label: "P4 (Normal)" },
-]
 
 export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogProps) {
-  const { createRoutine, updateRoutine, deleteRoutine } = useRoutineActions()
+  const { createRoutine, updateRoutine, deleteRoutine, deferRoutine, undeferRoutine } = useRoutineActions()
 
-  const projects = useQuery(api.todoist.queries.getProjects.getProjects)
-  const labels = useQuery(api.todoist.queries.getLabels.getLabels)
 
   // Form state
   const [name, setName] = useState(routine?.name || "")
   const [description, setDescription] = useState(routine?.description || "")
   const [frequency, setFrequency] = useState(routine?.frequency || "Daily")
   const [duration, setDuration] = useState(routine?.duration || "15min")
-  const [category, setCategory] = useState(routine?.category || "")
   const [timeOfDay, setTimeOfDay] = useState<string | undefined>(routine?.timeOfDay)
   const [idealDay, setIdealDay] = useState<number | undefined>(routine?.idealDay)
-  const [todoistProjectId, setTodoistProjectId] = useState<string | undefined>(
-    routine?.todoistProjectId || undefined
-  )
-  const [priority, setPriority] = useState(routine?.priority || 2)
-  const [selectedLabels, setSelectedLabels] = useState<string[]>(routine?.todoistLabels || [])
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isToggling, setIsToggling] = useState(false)
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -107,12 +94,12 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
           description: description.trim() || undefined,
           frequency,
           duration,
-          category: category.trim() || undefined,
+          
           timeOfDay,
           idealDay,
-          todoistProjectId,
-          todoistLabels: selectedLabels,
-          priority,
+          
+          
+          
         })
       } else if (routine) {
         await updateRoutine({
@@ -121,12 +108,12 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
           description: description.trim() || undefined,
           frequency,
           duration,
-          category: category.trim() || undefined,
+          
           timeOfDay,
           idealDay,
-          todoistProjectId,
-          todoistLabels: selectedLabels,
-          priority,
+          
+          
+          
         })
       }
 
@@ -149,11 +136,41 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
     }
   }
 
-  const toggleLabel = (labelName: string) => {
-    setSelectedLabels((prev) =>
-      prev.includes(labelName) ? prev.filter((l) => l !== labelName) : [...prev, labelName]
-    )
+  const handleToggleDefer = async () => {
+    if (!routine) return
+
+    setIsToggling(true)
+    try {
+      if (routine.defer) {
+        await undeferRoutine(routine._id)
+      } else {
+        await deferRoutine(routine._id)
+      }
+    } finally {
+      setIsToggling(false)
+    }
   }
+
+
+  // Reset form state when routine changes or dialog opens/closes
+  useEffect(() => {
+    if (routine) {
+      setName(routine.name)
+      setDescription(routine.description || "")
+      setFrequency(routine.frequency)
+      setDuration(routine.duration)
+      setTimeOfDay(routine.timeOfDay)
+      setIdealDay(routine.idealDay)
+    } else if (isOpen) {
+      // Reset to defaults when creating new routine
+      setName("")
+      setDescription("")
+      setFrequency("Daily")
+      setDuration("15min")
+      setTimeOfDay(undefined)
+      setIdealDay(undefined)
+    }
+  }, [routine, isOpen])
 
   // Helper to check if frequency supports ideal day
   const supportsIdealDay = ["Weekly", "Every Other Week", "Monthly", "Every Other Month", "Quarterly", "Twice a Year", "Yearly", "Every Other Year"].includes(frequency)
@@ -162,37 +179,72 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Create Routine" : "Edit Routine"}</DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Set up a new routine that will automatically generate tasks"
-              : "Update routine settings. Changes apply to newly generated tasks only."}
-          </DialogDescription>
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <DialogTitle>{mode === "create" ? "Create Routine" : "Edit Routine"}</DialogTitle>
+              <DialogDescription>
+                {mode === "create"
+                  ? "Set up a new routine that will automatically generate tasks"
+                  : "Update routine settings. Changes apply to newly generated tasks only."}
+              </DialogDescription>
+            </div>
+            {mode === "edit" && routine && (
+              <div className="flex items-center gap-2 ml-4 mr-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleDefer}
+                  disabled={isToggling}
+                >
+                  {routine.defer ? (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Resume
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="h-4 w-4 mr-2" />
+                      Pause
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Name */}
-          <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Morning Exercise"
-            />
-          </div>
+          {/* Name - editable in create mode, read-only in edit mode */}
+          {mode === "create" ? (
+            <div className="space-y-2">
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Morning Exercise"
+              />
+            </div>
+          ) : (
+            <div className="pb-2 border-b">
+              <p className="text-xs text-muted-foreground mb-1">Routine</p>
+              <p className="text-base font-medium">{name}</p>
+            </div>
+          )}
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="20 minutes of cardio or strength training"
-              rows={2}
-            />
-          </div>
+          {/* Description - only show in create mode */}
+          {mode === "create" && (
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="20 minutes of cardio or strength training"
+                rows={2}
+              />
+            </div>
+          )}
 
           {/* Frequency & Duration */}
           <div className="grid grid-cols-2 gap-4">
@@ -229,16 +281,6 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
             </div>
           </div>
 
-          {/* Category */}
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <Input
-              id="category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Health, Work, Personal, etc."
-            />
-          </div>
 
           {/* Time of Day */}
           <div className="space-y-2">
@@ -281,66 +323,6 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
             </div>
           )}
 
-          {/* Todoist Project */}
-          <div className="space-y-2">
-            <Label htmlFor="project">Todoist Project (optional)</Label>
-            <Select
-              value={todoistProjectId || "none"}
-              onValueChange={(v) => setTodoistProjectId(v === "none" ? undefined : v)}
-            >
-              <SelectTrigger id="project">
-                <SelectValue placeholder="Inbox (default)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Inbox (default)</SelectItem>
-                {projects?.map((project) => (
-                  <SelectItem key={project.todoist_id} value={project.todoist_id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Priority */}
-          <div className="space-y-2">
-            <Label htmlFor="priority">Priority</Label>
-            <Select value={priority.toString()} onValueChange={(v) => setPriority(parseInt(v))}>
-              <SelectTrigger id="priority">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRIORITIES.map((p) => (
-                  <SelectItem key={p.value} value={p.value.toString()}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Labels */}
-          {labels && labels.length > 0 && (
-            <div className="space-y-2">
-              <Label>Labels (optional)</Label>
-              <div className="flex flex-wrap gap-2">
-                {labels.map((label) => (
-                  <button
-                    key={label._id}
-                    type="button"
-                    onClick={() => toggleLabel(label.name)}
-                    className={`px-3 py-1 rounded-full text-sm border transition-colors ${
-                      selectedLabels.includes(label.name)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border hover:border-primary"
-                    }`}
-                  >
-                    @{label.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">

@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import type { Doc } from '@/convex/_generated/dataModel'
 import { usePriority } from '@/lib/priorities'
 import { cn } from '@/lib/utils'
 import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
@@ -15,6 +16,7 @@ import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/tod
 interface PriorityDialogProps {
   task: TodoistTask | null
   project: TodoistProjectWithMetadata | null
+  routine?: Doc<"routines"> | null
   onSelect: (priority: number) => void
   onClose: () => void
 }
@@ -26,10 +28,10 @@ const priorities = [
   { value: 1, label: 'P4', name: 'Normal', color: 'text-gray-500', bgColor: 'bg-gray-500' },
 ]
 
-export function PriorityDialog({ task, project, onSelect, onClose }: PriorityDialogProps) {
+export function PriorityDialog({ task, project, routine, onSelect, onClose }: PriorityDialogProps) {
   const [focusedIndex, setFocusedIndex] = useState(0)
-  const item = task || project
-  const itemPriority = task?.priority || project?.metadata?.priority || 1
+  const item = task || project || routine
+  const itemPriority = task?.priority || project?.metadata?.priority || routine?.priority || 1
   const currentPriority = usePriority(itemPriority)
 
   useEffect(() => {

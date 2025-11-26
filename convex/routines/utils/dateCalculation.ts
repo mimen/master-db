@@ -73,25 +73,25 @@ export function adjustToIdealDay(
 /**
  * Calculate due date based on ready date and routine settings
  * @param readyDate - When task becomes actionable
- * @param timeOfDay - Optional time preference
+ * @param _timeOfDay - Optional time preference (kept for API compatibility, no longer affects due date)
  * @param frequency - Routine frequency
  * @returns Due date timestamp
  */
 export function calculateDueDate(
   readyDate: number,
-  timeOfDay: TimeOfDayType | undefined,
+  _timeOfDay: TimeOfDayType | undefined,
   frequency: FrequencyType
 ): number {
-  // If time of day is set, due date is same as ready date (scheduled for that specific time)
-  if (timeOfDay) {
+  // Note: timeOfDay no longer affects due date - it's conveyed via labels
+  const frequencyDays = frequencyToDays(frequency);
+
+  // For daily frequency, due on same day
+  if (frequencyDays === 1) {
     return readyDate;
   }
 
-  // Otherwise, due at end of frequency period (minus 1 day)
-  const frequencyDays = frequencyToDays(frequency);
+  // For other frequencies, due at end of period
   const dueDate = addDays(readyDate, Math.max(0, frequencyDays - 1));
-
-  // Adjust weekend due dates
   return adjustWeekendDueDate(dueDate);
 }
 
@@ -116,6 +116,9 @@ function adjustWeekendDueDate(date: number): number {
 }
 
 /**
+ * @deprecated TimeOfDay is now conveyed via labels instead of datetime.
+ * This function is kept for reference but no longer used in task generation.
+ *
  * Apply time of day to a date
  * @param date - Base date timestamp
  * @param timeOfDay - Time preference (Morning/Day/Evening/Night)
@@ -123,7 +126,6 @@ function adjustWeekendDueDate(date: number): number {
  *
  * Note: Convex servers run in UTC. We need to adjust for user's timezone.
  * For PST (UTC-8), we add 8 hours to get the desired local time.
- * TODO: Make timezone configurable per user/routine
  */
 export function applyTimeOfDay(
   date: number,

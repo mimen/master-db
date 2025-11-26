@@ -66,6 +66,12 @@ export type OptimisticProjectUpdate =
       newPriority: number
       timestamp: number
     }
+  | {
+      projectId: string
+      type: "project-type-change"
+      newProjectType: "area-of-responsibility" | "project-type" | null
+      timestamp: number
+    }
 
 // ============================================
 // ROUTINE UPDATES

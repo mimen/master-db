@@ -1,9 +1,7 @@
 import { useQuery } from "convex/react"
-import { CheckCircle2, Circle, Clock, Edit, Minus, Pause, Play, X } from "lucide-react"
-import { useState } from "react"
+import { CheckCircle2, Circle, Clock, Minus, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -12,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 import { cn } from "@/lib/utils"
@@ -21,7 +18,6 @@ interface RoutineDetailDialogProps {
   isOpen: boolean
   onClose: () => void
   routineId: Id<"routines"> | null
-  onEdit?: () => void
 }
 
 // Helper to get status icon and color
@@ -71,29 +67,11 @@ export function RoutineDetailDialog({
   isOpen,
   onClose,
   routineId,
-  onEdit,
 }: RoutineDetailDialogProps) {
   const stats = useQuery(
     api.routines.queries.getRoutineStats.getRoutineStats,
     routineId ? { routineId } : "skip"
   )
-  const { deferRoutine, undeferRoutine } = useRoutineActions()
-  const [isToggling, setIsToggling] = useState(false)
-
-  const handleToggleDefer = async () => {
-    if (!routineId) return
-
-    setIsToggling(true)
-    try {
-      if (stats?.routine.defer) {
-        await undeferRoutine(routineId)
-      } else {
-        await deferRoutine(routineId)
-      }
-    } finally {
-      setIsToggling(false)
-    }
-  }
 
   if (!stats) {
     return (
@@ -121,42 +99,12 @@ export function RoutineDetailDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <DialogTitle>{routine.name}</DialogTitle>
-              {routine.description ? (
-                <DialogDescription className="mt-2">{routine.description}</DialogDescription>
-              ) : (
-                <DialogDescription className="sr-only">View routine details and statistics</DialogDescription>
-              )}
-            </div>
-            <div className="flex items-center gap-2 ml-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleToggleDefer}
-                disabled={isToggling}
-              >
-                {routine.defer ? (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Resume
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-4 w-4 mr-2" />
-                    Pause
-                  </>
-                )}
-              </Button>
-              {onEdit && (
-                <Button variant="outline" size="sm" onClick={onEdit}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-              )}
-            </div>
-          </div>
+          <DialogTitle>{routine.name}</DialogTitle>
+          {routine.description ? (
+            <DialogDescription className="mt-2">{routine.description}</DialogDescription>
+          ) : (
+            <DialogDescription className="sr-only">View routine details and statistics</DialogDescription>
+          )}
         </DialogHeader>
 
         <div className="space-y-6 py-4">

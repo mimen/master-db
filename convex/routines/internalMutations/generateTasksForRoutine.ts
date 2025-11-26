@@ -5,7 +5,6 @@ import { Frequency } from "../types/frequency";
 import {
   calculateNextReadyDate,
   calculateDueDate,
-  applyTimeOfDay,
   getBusinessDaysAhead,
   getTwiceAWeekDates,
   shouldGenerateTask,
@@ -53,12 +52,7 @@ export const generateTasksForRoutine = internalMutation({
       const businessDays = getBusinessDaysAhead(Date.now(), 5);
 
       for (const date of businessDays) {
-        let readyDate = date;
-
-        // Apply time of day if set
-        if (routine.timeOfDay) {
-          readyDate = applyTimeOfDay(date, routine.timeOfDay);
-        }
+        const readyDate = date;
 
         if (shouldGenerateTask(routine, existingDates, readyDate)) {
           const dueDate = calculateDueDate(
@@ -83,12 +77,7 @@ export const generateTasksForRoutine = internalMutation({
       const twiceAWeekDates = getTwiceAWeekDates(Date.now(), 2);
 
       for (const date of twiceAWeekDates) {
-        let readyDate = date;
-
-        // Apply time of day if set
-        if (routine.timeOfDay) {
-          readyDate = applyTimeOfDay(date, routine.timeOfDay);
-        }
+        const readyDate = date;
 
         if (shouldGenerateTask(routine, existingDates, readyDate)) {
           const dueDate = calculateDueDate(
@@ -130,11 +119,6 @@ export const generateTasksForRoutine = internalMutation({
         );
       }
 
-      // Apply time of day if set
-      if (routine.timeOfDay) {
-        readyDate = applyTimeOfDay(readyDate, routine.timeOfDay);
-      }
-
       // Generate first task
       if (shouldGenerateTask(routine, existingDates, readyDate)) {
         const dueDate = calculateDueDate(
@@ -167,14 +151,6 @@ export const generateTasksForRoutine = internalMutation({
             secondReadyDate,
             routine.idealDay,
             routine.frequency
-          );
-        }
-
-        // Apply time of day if set
-        if (routine.timeOfDay) {
-          adjustedSecondReady = applyTimeOfDay(
-            adjustedSecondReady,
-            routine.timeOfDay
           );
         }
 

@@ -5,6 +5,7 @@ import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
 import { ActionResponse, getTodoistClient } from "../../todoist/actions/utils/todoistClient";
 import { durationToMinutes } from "../types/duration";
+import { getTimeOfDayLabel } from "../types/timeOfDay";
 
 /**
  * Creates a Todoist task for a specific routineTask
@@ -51,8 +52,11 @@ export const createRoutineTaskInTodoist = internalAction({
       const readyDate = new Date(routineTask.readyDate);
       const dueDate = new Date(routineTask.dueDate);
 
-      // Prepare labels - add "routine" to existing labels
+      // Prepare labels - add "routine" and time-of-day label
       const labels = [...(routine.todoistLabels || []), "routine"];
+      if (routine.timeOfDay) {
+        labels.push(getTimeOfDayLabel(routine.timeOfDay));
+      }
 
       // Build task args - following the same pattern as createTask.ts
       const taskArgs: any = {
@@ -65,13 +69,8 @@ export const createRoutineTaskInTodoist = internalAction({
         taskArgs.description = routine.description;
       }
 
-      // Set due date - if timeOfDay is set, use datetime, otherwise just date
-      // Following the pattern from createTask.ts using Object.assign
-      if (routine.timeOfDay) {
-        Object.assign(taskArgs, { dueDatetime: dueDate.toISOString() });
-      } else {
-        Object.assign(taskArgs, { dueDate: dueDate.toISOString().split("T")[0] });
-      }
+      // Set due date - always use date-only format (timeOfDay is conveyed via labels)
+      Object.assign(taskArgs, { dueDate: dueDate.toISOString().split("T")[0] });
 
       // Set priority if specified
       if (routine.priority) {

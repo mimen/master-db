@@ -33,6 +33,26 @@ export function getTimeOfDayHour(timeOfDay: TimeOfDayType): number {
 }
 
 /**
+ * Convert time of day to corresponding Todoist label
+ * Labels are stored without @ prefix in Todoist API
+ */
+export function getTimeOfDayLabel(timeOfDay: TimeOfDayType): string {
+  switch (timeOfDay) {
+    case TimeOfDay.Morning:
+      return "morning";
+    case TimeOfDay.Day:
+      return "day";
+    case TimeOfDay.Evening:
+      return "evening";
+    case TimeOfDay.Night:
+      return "night";
+    default:
+      const _exhaustive: never = timeOfDay;
+      throw new Error(`Unknown time of day: ${_exhaustive}`);
+  }
+}
+
+/**
  * Get display name for time of day
  */
 export function getTimeOfDayDisplay(timeOfDay: TimeOfDayType): string {
