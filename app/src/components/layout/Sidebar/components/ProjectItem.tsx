@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react"
+
 import type { ProjectTreeNode } from "../types"
 import { getTotalActiveCount } from "../utils/projectTree"
 
@@ -17,6 +19,8 @@ interface ProjectItemProps {
   viewContext: ViewBuildContext
   toggleProjectCollapse: (projectId: string) => void
   isProjectCollapsed: (projectId: string) => boolean
+  sortMode?: "hierarchy" | "priority" | "taskCount" | "alphabetical"
+  onMoveProject?: (projectId: string, e: MouseEvent) => void
 }
 
 export function ProjectItem({
@@ -28,6 +32,8 @@ export function ProjectItem({
   viewContext,
   toggleProjectCollapse,
   isProjectCollapsed,
+  sortMode,
+  onMoveProject,
 }: ProjectItemProps) {
   const projectViewKey = `view:project:${project.todoist_id}` as ViewKey
   const projectFamilyKey = `view:project-family:${project.todoist_id}` as ViewKey
@@ -70,6 +76,8 @@ export function ProjectItem({
           hasChildren={hasChildren}
           isCollapsed={isCollapsed}
           onToggleCollapse={handleToggleCollapse}
+          sortMode={sortMode}
+          onMoveClick={onMoveProject ? (e) => onMoveProject(project.todoist_id, e) : undefined}
         />
       </SidebarMenuItem>
 
@@ -86,6 +94,8 @@ export function ProjectItem({
             viewContext={viewContext}
             toggleProjectCollapse={toggleProjectCollapse}
             isProjectCollapsed={isProjectCollapsed}
+            sortMode={sortMode}
+            onMoveProject={onMoveProject}
           />
         ))}
     </>

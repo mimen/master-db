@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import type { ProjectSort, LabelSort, RoutineSort } from "../types"
 
 interface CollapsedSections {
+  folders: boolean
   projects: boolean
   time: boolean
   priorities: boolean
@@ -58,6 +59,7 @@ export function useSidebarState() {
   // Collapsible sections state - all open by default, persist in localStorage
   const [collapsed, setCollapsed] = useState<CollapsedSections>(() =>
     getStoredValue(STORAGE_KEYS.COLLAPSED_SECTIONS, {
+      folders: false,
       projects: false,
       time: false,
       priorities: false,

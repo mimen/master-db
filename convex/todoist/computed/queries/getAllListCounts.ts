@@ -22,7 +22,10 @@ import { query } from "../../../_generated/server";
  * - list:priority:p3 -> P3 task count (API priority 2)
  * - list:priority:p4 -> P4 task count (API priority 1)
  * - list:project:${projectId} -> project task count
- * - list:projects -> active projects count
+ * - list:projects -> active projects count (all)
+ * - list:projects-only -> projects with @project-type label count
+ * - list:areas-only -> projects with @area-of-responsibility label count
+ * - list:unassigned-folders -> projects without type labels count
  * - list:label:${labelName} -> label task count
  * - list:routines -> active routines count (global)
  * - list:routines:${projectId} -> active routines count for specific project
@@ -170,6 +173,35 @@ export const getAllListCounts = query({
 
     // Projects count (total active projects)
     counts['list:projects'] = projects.length;
+
+    // Project type counts (for folder type filters)
+    const projectsWithMetadata = await ctx.db
+      .query("todoist_project_metadata")
+      .collect();
+
+    const projectTypeMap = new Map(projectsWithMetadata.map(pm => [pm.project_id, pm]));
+
+    // Count projects by type
+    let projectsOnlyCount = 0;
+    let areasOnlyCount = 0;
+    let unassignedCount = 0;
+
+    for (const project of projects) {
+      const metadata = projectTypeMap.get(project.todoist_id);
+      const projectType = metadata?.project_type;
+
+      if (projectType === "project-type") {
+        projectsOnlyCount++;
+      } else if (projectType === "area-of-responsibility") {
+        areasOnlyCount++;
+      } else {
+        unassignedCount++;
+      }
+    }
+
+    counts['list:projects-only'] = projectsOnlyCount;
+    counts['list:areas-only'] = areasOnlyCount;
+    counts['list:unassigned-folders'] = unassignedCount;
 
     // Routines count (total active routines)
     const routines = await ctx.db

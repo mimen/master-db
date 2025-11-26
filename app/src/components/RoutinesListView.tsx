@@ -74,7 +74,7 @@ export function RoutinesListView({
       ? api.routines.queries.getRoutinesByProject.getRoutinesByProject
       : api.routines.queries.getRoutinesByView.getRoutinesByView,
     list.query.projectId
-      ? { projectId: list.query.projectId }
+      ? { projectId: list.query.projectId, includeDeferred: true }
       : {
           list: {
             type: "routines",

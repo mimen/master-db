@@ -147,37 +147,34 @@ export function ViewsSection({
 
             return (
               <Collapsible key={item.key} open={!isRoutinesCollapsed} onOpenChange={onToggleRoutinesCollapse}>
-                <div className="flex items-center gap-1">
-                  <SidebarMenuItem className="flex-1">
-                    <SidebarButton
-                      icon={item.icon}
-                      label={item.label}
-                      count={item.count}
-                      isActive={isActive}
-                      onClick={() => {
-                        // Clicking the button navigates to the routines view
-                        onViewChange(resolveView(item.key, viewContext))
-                      }}
-                      hasChildren={true}
-                      isCollapsed={isRoutinesCollapsed}
-                      onToggleCollapse={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onToggleRoutinesCollapse()
-                      }}
-                    />
-                  </SidebarMenuItem>
-                  {!isRoutinesCollapsed && (
-                    <div className="pr-2">
+                <SidebarMenuItem>
+                  <SidebarButton
+                    icon={item.icon}
+                    label={item.label}
+                    count={item.count}
+                    isActive={isActive}
+                    onClick={() => {
+                      // Clicking the button navigates to the routines view
+                      onViewChange(resolveView(item.key, viewContext))
+                    }}
+                    hasChildren={true}
+                    isCollapsed={isRoutinesCollapsed}
+                    onToggleCollapse={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onToggleRoutinesCollapse()
+                    }}
+                  >
+                    {!isRoutinesCollapsed && (
                       <SortDropdown
                         modes={ROUTINE_SORT_MODES}
                         currentMode={routineSort}
                         onChange={onRoutineSortChange}
                         getIcon={getRoutineSortIcon}
                       />
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </SidebarButton>
+                </SidebarMenuItem>
 
                 <CollapsibleContent>
                   <SidebarMenu>

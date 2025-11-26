@@ -36,13 +36,14 @@ export function FolderTypeItem({
       <SidebarButton
         icon={
           <Icon
-            className={cn("h-4 w-4 mr-3", folderType.id === "unassigned" && "text-muted-foreground")}
+            className={cn("h-4 w-4", folderType.id === "unassigned" && "text-muted-foreground")}
           />
         }
         label={folderType.label}
         count={count}
         isActive={isActive || false}
         onClick={handleClick}
+        level={1}
       />
     </SidebarMenuItem>
   )

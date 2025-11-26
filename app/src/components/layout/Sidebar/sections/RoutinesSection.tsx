@@ -1,7 +1,8 @@
-import { ArrowDownAZ, Hash, Network } from "lucide-react"
+import { ArrowDownAZ, Hash, Network, Repeat } from "lucide-react"
 import { useMemo } from "react"
 
 import { CollapseCaret } from "../components/CollapseCaret"
+import { CountBadge } from "../components/CountBadge"
 import { SortDropdown } from "../components/SortDropdown"
 import type { RoutineSort } from "../types"
 import { buildProjectTree, flattenProjects } from "../utils/projectTree"
@@ -9,9 +10,11 @@ import { buildProjectTree, flattenProjects } from "../utils/projectTree"
 import { RoutineProjectItem } from "./RoutineProjectItem"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { SidebarGroup, SidebarGroupLabel, SidebarMenu } from "@/components/ui/sidebar"
+import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { cn } from "@/lib/utils"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
+import { resolveView } from "@/lib/views/viewDefinitions"
 
 interface RoutinesSectionProps {
   currentViewKey: ViewKey
@@ -102,41 +105,69 @@ export function RoutinesSection({
     }
   }, [projectsWithRoutines, sortMode, registry])
 
+  // Calculate total routine count across all projects
+  const totalRoutineCount = useMemo(() => {
+    const allCounts = registry.getAllCounts()
+    return projectsWithRoutines.reduce((sum, project) => {
+      const countKey = `list:routines:${project.todoist_id}`
+      const count = allCounts[countKey] ?? 0
+      return sum + count
+    }, 0)
+  }, [projectsWithRoutines, registry])
+
   const handleRoutinesClick = () => {
     // Navigate to main routines view (all routines)
-    onViewChange({ type: "view", key: "view:routines" })
+    onViewChange(resolveView("view:routines", viewContext))
   }
 
+  const isActive = currentViewKey === "view:routines"
+
   return (
-    <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
-      <SidebarGroup>
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleRoutinesClick}
-            className="flex-1 text-left transition-colors hover:text-foreground"
-          >
-            <SidebarGroupLabel className="cursor-pointer">Routines</SidebarGroupLabel>
-          </button>
-          <div className="flex items-center pr-2">
-            {!isCollapsed && (
-              <SortDropdown
-                modes={ROUTINE_SORT_MODES}
-                currentMode={sortMode}
-                onChange={onSortChange}
-                getIcon={getRoutineSortIcon}
-              />
-            )}
-            <CollapsibleTrigger asChild>
-              <CollapseCaret
-                isCollapsed={isCollapsed}
-                onToggle={(e) => {
-                  e.preventDefault()
-                  onToggleCollapse()
-                }}
-              />
-            </CollapsibleTrigger>
-          </div>
-        </div>
+    <SidebarGroup>
+      <Collapsible open={!isCollapsed} onOpenChange={onToggleCollapse}>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={isActive}
+              onClick={handleRoutinesClick}
+              className="group"
+            >
+              <Repeat className="h-4 w-4" />
+              <span className="flex-1 truncate min-w-0">Routines</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <SortDropdown
+                  modes={ROUTINE_SORT_MODES}
+                  currentMode={sortMode}
+                  onChange={onSortChange}
+                  getIcon={getRoutineSortIcon}
+                />
+                <div className="relative w-6 h-6 flex-shrink-0">
+                  {totalRoutineCount > 0 && (
+                    <div
+                      className={cn(
+                        "absolute inset-0 flex items-center justify-center transition-opacity",
+                        "group-hover:opacity-0"
+                      )}
+                    >
+                      <CountBadge count={totalRoutineCount} />
+                    </div>
+                  )}
+                  <CollapsibleTrigger asChild>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <CollapseCaret
+                        isCollapsed={isCollapsed}
+                        onToggle={(e) => {
+                          e.stopPropagation()
+                          onToggleCollapse()
+                        }}
+                      />
+                    </div>
+                  </CollapsibleTrigger>
+                </div>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
 
         <CollapsibleContent>
           <SidebarMenu className="space-y-0.5">
@@ -162,7 +193,7 @@ export function RoutinesSection({
             )}
           </SidebarMenu>
         </CollapsibleContent>
-      </SidebarGroup>
-    </Collapsible>
+      </Collapsible>
+    </SidebarGroup>
   )
 }

@@ -1,4 +1,5 @@
-import { cloneElement, isValidElement, type ElementType, type ReactNode } from "react"
+import { MoreVertical } from "lucide-react"
+import React, { cloneElement, isValidElement, type ElementType, type ReactNode } from "react"
 import type { MouseEvent } from "react"
 
 import { useSidebarHover } from "../contexts/SidebarHoverContext"
@@ -22,6 +23,8 @@ interface SidebarButtonProps {
   hasChildren?: boolean
   isCollapsed?: boolean
   onToggleCollapse?: (e: MouseEvent) => void
+  sortMode?: "hierarchy" | "priority" | "taskCount" | "alphabetical"
+  onMoveClick?: (e: MouseEvent) => void
 }
 
 export function SidebarButton({
@@ -37,6 +40,8 @@ export function SidebarButton({
   hasChildren = false,
   isCollapsed = false,
   onToggleCollapse,
+  sortMode,
+  onMoveClick,
 }: SidebarButtonProps) {
   const { isHovered } = useSidebarHover()
 
@@ -63,6 +68,7 @@ export function SidebarButton({
 
   const hasCaret = hasChildren && onToggleCollapse
   const hasCount = count !== null && count !== undefined
+  const showMoveButton = sortMode === "hierarchy" && onMoveClick && hasCount && isHovered
 
   return (
     <SidebarMenuButton
@@ -76,6 +82,23 @@ export function SidebarButton({
       <span className="flex-1 truncate min-w-0">{label}</span>
       <div className="flex items-center gap-1 flex-shrink-0">
         {children}
+        {showMoveButton && (
+          <div
+            onClick={onMoveClick}
+            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 cursor-pointer"
+            title="Move to different parent"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onMoveClick(e as MouseEvent)
+              }
+            }}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </div>
+        )}
         {(hasCount || hasCaret) && (
           <div className="relative w-6 h-6 flex-shrink-0">
             {hasCount && (
