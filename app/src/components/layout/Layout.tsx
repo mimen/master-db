@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react"
 import { Keyboard, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useLocation } from "wouter"
 
 import { ProjectsListView } from "../ProjectsListView"
 import { RoutinesListView } from "../RoutinesListView"
@@ -18,6 +19,7 @@ import { useDialogContext } from "@/contexts/DialogContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskCounts } from "@/hooks/useTaskCounts"
 import { useTaskSelection } from "@/hooks/useTaskSelection"
+import { pathToViewKey, viewKeyToPath } from "@/lib/routing/utils"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
@@ -25,6 +27,9 @@ import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } fr
 export function Layout() {
   const { openShortcuts, openQuickAdd, openSync } = useDialogContext()
   const { getCountForView } = useCountRegistry()
+  const [location, setLocation] = useLocation()
+
+  // Initialize active view from URL (we'll update this in useEffect once viewContext loads)
   const [activeView, setActiveView] = useState<ViewSelection>(() => resolveView("view:inbox"))
   const [dismissedLists, setDismissedLists] = useState<Set<string>>(new Set())
   const [taskCountsAtDismissal, setTaskCountsAtDismissal] = useState<Map<string, number>>(new Map())
@@ -62,9 +67,23 @@ export function Layout() {
     (view: ViewSelection) => {
       setActiveView(view)
       resetTaskCounts()
+      // Update URL when view changes (pass viewContext for project slugs)
+      const path = viewKeyToPath(view.key, viewContext)
+      setLocation(path)
     },
-    [resetTaskCounts]
+    [resetTaskCounts, setLocation, viewContext]
   )
+
+  // Sync view when URL changes (browser back/forward, direct navigation)
+  // Also handles initial load from URL
+  useEffect(() => {
+    const viewKey = pathToViewKey(location, viewContext)
+    if (viewKey && viewKey !== activeView.key) {
+      const newView = resolveView(viewKey, viewContext)
+      setActiveView(newView)
+      resetTaskCounts()
+    }
+  }, [location, activeView.key, viewContext, resetTaskCounts])
 
   const handleTaskCountChangeWithUpdate = useCallback(
     (listId: string, count: number) => {
@@ -232,6 +251,12 @@ export function Layout() {
                   <RoutinesListView
                     key={list.id}
                     list={list}
+                    onRoutineCountChange={handleTaskCountChangeWithUpdate}
+                    onRoutineClick={handleTaskClick}
+                    focusedRoutineIndex={selection.listId === list.id ? selection.taskIndex : null}
+                    isDismissed={dismissedLists.has(list.id)}
+                    onDismiss={handleDismissList}
+                    onRestore={handleRestoreList}
                     isMultiListView={isMultiListView}
                   />
                 )
