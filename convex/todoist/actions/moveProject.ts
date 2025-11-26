@@ -20,9 +20,14 @@ export const moveProject = action({
     try {
       const client = getTodoistClient();
 
+      // Fetch the project first to get its current name
+      // The Todoist API requires at least one of: name, description, color, is_favorite, or view_style
+      const existingProject = await client.getProject(projectId);
+
       // Update project using SDK - cast to include parent_id and child_order
       // The API supports these fields even though TypeScript types don't show them
       const project = await client.updateProject(projectId, {
+        name: existingProject.name,
         parentId: parentId === undefined ? null : parentId,
         childOrder: childOrder,
       } as any);

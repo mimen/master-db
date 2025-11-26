@@ -4,12 +4,14 @@ import type { ReactNode } from 'react'
 import type { Doc } from '@/convex/_generated/dataModel'
 import type { TodoistTask, TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
-export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings' | 'quickAdd' | 'sync'
+export type DialogType = 'priority' | 'project' | 'label' | 'dueDate' | 'deadline' | 'complete' | 'delete' | 'archive' | 'shortcuts' | 'settings' | 'quickAdd' | 'sync' | 'moveProject' | 'projectType'
 
 interface DialogContextValue {
   currentTask: TodoistTask | null
   currentProject: TodoistProjectWithMetadata | null
   currentRoutine: Doc<"routines"> | null
+  projectToMove: TodoistProjectWithMetadata | null
+  selectedParentProjectId: string | null
   dialogType: DialogType | null
   isShortcutsOpen: boolean
   isSettingsOpen: boolean
@@ -24,6 +26,9 @@ interface DialogContextValue {
   openComplete: (task: TodoistTask) => void
   openDelete: (task: TodoistTask) => void
   openArchive: (project: TodoistProjectWithMetadata) => void
+  openMoveProject: (project: TodoistProjectWithMetadata) => void
+  openProjectType: (project: TodoistProjectWithMetadata) => void
+  setSelectedParentProjectId: (parentId: string | null) => void
   openShortcuts: () => void
   openSettings: () => void
   openQuickAdd: (defaultProjectId?: string) => void
@@ -37,6 +42,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [currentTask, setCurrentTask] = useState<TodoistTask | null>(null)
   const [currentProject, setCurrentProject] = useState<TodoistProjectWithMetadata | null>(null)
   const [currentRoutine, setCurrentRoutine] = useState<Doc<"routines"> | null>(null)
+  const [projectToMove, setProjectToMove] = useState<TodoistProjectWithMetadata | null>(null)
+  const [selectedParentProjectId, setSelectedParentProjectId] = useState<string | null>(null)
   const [dialogType, setDialogType] = useState<DialogType | null>(null)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -119,6 +126,22 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialogType('archive')
   }, [])
 
+  const openMoveProject = useCallback((project: TodoistProjectWithMetadata) => {
+    setProjectToMove(project)
+    setSelectedParentProjectId(null)
+    setDialogType('moveProject')
+  }, [])
+
+  const openProjectType = useCallback((project: TodoistProjectWithMetadata) => {
+    setCurrentProject(project)
+    setCurrentTask(null)
+    setDialogType('projectType')
+  }, [])
+
+  const handleSetSelectedParentProjectId = useCallback((parentId: string | null) => {
+    setSelectedParentProjectId(parentId)
+  }, [])
+
   const openShortcuts = useCallback(() => {
     setIsShortcutsOpen(true)
     setDialogType('shortcuts')
@@ -144,6 +167,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setCurrentTask(null)
     setCurrentProject(null)
     setCurrentRoutine(null)
+    setProjectToMove(null)
+    setSelectedParentProjectId(null)
     setDialogType(null)
     setIsShortcutsOpen(false)
     setIsSettingsOpen(false)
@@ -156,6 +181,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     currentTask,
     currentProject,
     currentRoutine,
+    projectToMove,
+    selectedParentProjectId,
     dialogType,
     isShortcutsOpen,
     isSettingsOpen,
@@ -170,6 +197,9 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     openComplete,
     openDelete,
     openArchive,
+    openMoveProject,
+    openProjectType,
+    setSelectedParentProjectId: handleSetSelectedParentProjectId,
     openShortcuts,
     openSettings,
     openQuickAdd,

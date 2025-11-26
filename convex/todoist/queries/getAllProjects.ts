@@ -9,7 +9,12 @@ export const getAllProjects = query({
   handler: async (ctx, args) => {
     const projects = await ctx.db
       .query("todoist_projects")
-      .filter(q => q.eq(q.field("is_deleted"), false))
+      .filter(q =>
+        q.and(
+          q.eq(q.field("is_deleted"), false),
+          q.eq(q.field("is_archived"), false)
+        )
+      )
       .collect();
 
     // Apply limit if specified

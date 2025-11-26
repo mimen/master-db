@@ -87,7 +87,7 @@ export const syncProjectSchema = v.object({
   role: v.optional(v.string()), // User's role in project (webhook only)
   access: v.optional(v.object({ // Webhook only - access control settings
     visibility: v.string(),
-    configuration: v.optional(v.union(v.string(), v.null())), // API returns varied structures
+    configuration: v.optional(v.any()), // API returns varied structures (string, null, object, etc)
   })),
 });
 

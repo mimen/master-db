@@ -21,11 +21,12 @@ import type { TodoistProjectWithMetadata, TodoistTask } from '@/types/convex/tod
 interface ProjectDialogProps {
   task?: TodoistTask | null
   routine?: Doc<"routines"> | null
+  projectToMove?: TodoistProjectWithMetadata | null
   onSelect: (projectId: string) => void
   onClose: () => void
 }
 
-export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialogProps) {
+export function ProjectDialog({ task, routine, projectToMove, onSelect, onClose }: ProjectDialogProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -46,6 +47,10 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
 
   const projects = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata)
   const { createProject } = useCreateProject()
+
+  // Determine mode
+  const isSelectingParentMode = !!projectToMove
+  const item = task || routine || null
 
   // Helper to calculate project depth for parent selection
   const getProjectDepth = useCallback((projectId: string): number => {
@@ -193,6 +198,14 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
     }
   }, [task, routine])
 
+  useEffect(() => {
+    if (projectToMove) {
+      setParentSearchTerm('')
+      setParentSelectorIndex(0)
+      setTimeout(() => parentSearchInputRef.current?.focus(), 100)
+    }
+  }, [projectToMove])
+
   // Focus parent search input when entering parent selection
   useEffect(() => {
     if (isSelectingParent) {
@@ -230,7 +243,40 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
   }, [colorSelectorIndex, isSelectingColor])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Handle parent selector navigation
+    // Handle selectParent mode navigation
+    if (isSelectingParentMode) {
+      const parentOptions = buildParentOptions(parentSearchTerm)
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          setParentSelectorIndex(prev => Math.min(prev + 1, parentOptions.length - 1))
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          setParentSelectorIndex(prev => Math.max(prev - 1, 0))
+          break
+        case 'Enter': {
+          e.preventDefault()
+          const selectedOption = parentOptions[parentSelectorIndex]
+          if (selectedOption) {
+            if (selectedOption.isNoParent) {
+              onSelect('')
+            } else {
+              onSelect(selectedOption.id || '')
+            }
+          }
+          break
+        }
+        case 'Escape':
+          e.preventDefault()
+          onClose()
+          break
+      }
+      return
+    }
+
+    // Handle parent selector navigation (in create mode)
     if (isSelectingParent) {
       const parentOptions = buildParentOptions(parentSearchTerm)
 
@@ -351,11 +397,10 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
     }
   }
 
-  const item = task || routine
-  if (!item) return null
+  if (!item && !projectToMove) return null
 
   return (
-    <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!(item || projectToMove)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-w-sm max-h-[80vh] flex flex-col p-0"
         onKeyDown={handleKeyDown}
@@ -363,52 +408,115 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
         <DialogHeader className="px-6 pt-6 pb-3">
           <DialogTitle className="flex items-center gap-2.5 text-base">
             <Folder className="h-4 w-4 text-muted-foreground shrink-0" />
-            Select Project
+            {isSelectingParentMode ? `Move "${projectToMove!.name}"` : 'Select Project'}
           </DialogTitle>
           <DialogDescription className="text-sm font-medium leading-snug pt-1">
-            {task && parseMarkdownLinks(task.content).map((segment, index) => {
-              if (segment.type === 'text') {
-                return <span key={index}>{segment.content}</span>
-              } else {
-                return (
-                  <a
-                    key={index}
-                    href={segment.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {segment.content}
-                  </a>
-                )
-              }
-            })}
-            {routine && (
+            {isSelectingParentMode ? (
               <span className="text-muted-foreground">
-                Set which project new tasks from <span className="font-semibold text-foreground">{routine.name}</span> will be created in
+                Choose which folder to move this project into
               </span>
+            ) : (
+              <>
+                {task && parseMarkdownLinks(task.content).map((segment, index) => {
+                  if (segment.type === 'text') {
+                    return <span key={index}>{segment.content}</span>
+                  } else {
+                    return (
+                      <a
+                        key={index}
+                        href={segment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {segment.content}
+                      </a>
+                    )
+                  }
+                })}
+                {routine && (
+                  <span className="text-muted-foreground">
+                    Set which project new tasks from <span className="font-semibold text-foreground">{routine.name}</span> will be created in
+                  </span>
+                )}
+              </>
             )}
           </DialogDescription>
         </DialogHeader>
 
-        {!isSelectingParent && !isSelectingColor && (
-          <div className="px-6 pb-3 border-b">
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-8 px-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Search projects..."
-            />
-            <div className="mt-2 text-xs text-muted-foreground">
+        {isSelectingParentMode ? (
+          // Parent selector mode - show immediately
+          <div className="space-y-3 px-6 py-4 flex-1 overflow-y-auto">
+            <div className="px-2">
+              <input
+                ref={parentSearchInputRef}
+                type="text"
+                value={parentSearchTerm}
+                onChange={(e) => setParentSearchTerm(e.target.value)}
+                className="w-full h-8 px-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Search parent projects..."
+                autoFocus
+              />
+            </div>
+            <div className="space-y-0.5 max-h-96 overflow-y-auto">
+              {buildParentOptions(parentSearchTerm).map((option, idx) => {
+                const isOptionSelected = idx === parentSelectorIndex
+
+                return (
+                  <button
+                    key={option.id || 'no-parent'}
+                    ref={isOptionSelected ? parentProjectRef : null}
+                    onClick={() => {
+                      if (option.isNoParent) {
+                        onSelect('')
+                      } else {
+                        onSelect(option.id || '')
+                      }
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md p-2 text-left text-sm transition-colors h-8',
+                      'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                      isOptionSelected && 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+                    )}
+                    style={{ paddingLeft: `${8 + option.level * 16}px` }}
+                  >
+                    {!option.isNoParent && (
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: getProjectColor(option.color || 'charcoal') }}
+                      />
+                    )}
+                    <span className={cn('flex-1 truncate min-w-0', option.isNoParent && 'text-muted-foreground')}>
+                      {option.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="px-2 text-xs text-muted-foreground pt-2 border-t">
               ↑↓ navigate • Enter select • ESC cancel
             </div>
           </div>
-        )}
+        ) : (
+          <>
+            {!isSelectingParent && !isSelectingColor && (
+              <div className="px-6 pb-3 border-b">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full h-8 px-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Search projects..."
+                />
+                <div className="mt-2 text-xs text-muted-foreground">
+                  ↑↓ navigate • Enter select • ESC cancel
+                </div>
+              </div>
+            )}
 
-      <div className="flex-1 overflow-y-auto px-3 py-2">
+            <div className="flex-1 overflow-y-auto px-3 py-2">
         {filteredProjects.length === 0 ? (
           <div className="text-center py-8 text-sm text-muted-foreground">
             {searchTerm ? `No projects found for "${searchTerm}"` : 'No projects available'}
@@ -633,9 +741,11 @@ export function ProjectDialog({ task, routine, onSelect, onClose }: ProjectDialo
                 </button>
               )
             })}
-          </div>
+            </div>
+          )}
+            </div>
+          </>
         )}
-      </div>
       </DialogContent>
     </Dialog>
   )
