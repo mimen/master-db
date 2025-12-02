@@ -1,7 +1,8 @@
-import { useQuery } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 import { format, formatDistanceToNow } from "date-fns"
-import { CalendarClock, RefreshCw } from "lucide-react"
+import { AlertTriangle, CalendarClock, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
 import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
+import { ClearRoutineTasksDialog } from "./ClearRoutineTasksDialog"
 
 interface SyncDialogProps {
   isOpen: boolean
@@ -26,8 +28,11 @@ interface SyncDialogProps {
 export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
   const syncStatus = useQuery(api.todoist.queries.getSyncStatus.getSyncStatus)
   const routineStatus = useQuery(api.routines.queries.getRoutineGenerationStatus.getRoutineGenerationStatus)
+  const pendingRoutineTasks = useQuery(api.routines.queries.getPendingRoutineTasks.getPendingRoutineTasks)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isClearingRoutines, setIsClearingRoutines] = useState(false)
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false)
 
   const performSync = useTodoistAction(api.todoist.actions.performIncrementalSync.performIncrementalSync, {
     loadingMessage: "Syncing with Todoist...",
@@ -36,6 +41,10 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
   })
 
   const { generateRoutineTasks } = useRoutineActions()
+
+  const clearRoutineTasksAction = useAction(
+    api.routines.actions.clearAllPendingRoutineTasks.clearAllPendingRoutineTasks
+  )
 
   const handleSync = useCallback(async () => {
     setIsSyncing(true)
@@ -54,6 +63,31 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
       setIsGenerating(false)
     }
   }, [generateRoutineTasks])
+
+  const handleClearRoutineTasks = useCallback(async () => {
+    setShowClearConfirmation(false)
+    setIsClearingRoutines(true)
+
+    const toastId = toast.loading("Clearing routine tasks...")
+
+    try {
+      const result = await clearRoutineTasksAction({})
+
+      if (result?.success && result.data) {
+        const { deleted, failed, skipped } = result.data
+        toast.success(
+          `Cleared ${deleted} task${deleted !== 1 ? 's' : ''} (${failed} failed, ${skipped} skipped)`,
+          { id: toastId }
+        )
+      } else {
+        toast.error(result?.error || "Failed to clear routine tasks", { id: toastId })
+      }
+    } catch (error) {
+      toast.error("Failed to clear routine tasks", { id: toastId })
+    } finally {
+      setIsClearingRoutines(false)
+    }
+  }, [clearRoutineTasksAction])
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -227,6 +261,45 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
               )}
             </CardContent>
           </Card>
+
+          {/* Clear Routine Tasks */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Clear Routine Tasks</CardTitle>
+              <CardDescription>Delete all pending routine tasks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pendingRoutineTasks ? (
+                <>
+                  <div className="p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="text-sm font-medium text-orange-900">
+                      Pending Routine Tasks
+                    </div>
+                    <div className="text-2xl font-bold text-orange-700 mt-1">
+                      {pendingRoutineTasks.count}
+                    </div>
+                    <div className="text-xs text-orange-700 mt-1">
+                      Completed and historical tasks will be preserved
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => setShowClearConfirmation(true)}
+                    disabled={isClearingRoutines || pendingRoutineTasks.count === 0}
+                    variant="outline"
+                    className="w-full border-orange-300 hover:bg-orange-50"
+                  >
+                    <AlertTriangle className="mr-2 h-4 w-4 text-orange-600" />
+                    Clear All Pending Tasks
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <DialogFooter>
@@ -235,6 +308,13 @@ export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
           </Button>
         </DialogFooter>
       </DialogContent>
+      <ClearRoutineTasksDialog
+        isOpen={showClearConfirmation}
+        pendingTaskCount={pendingRoutineTasks?.count || 0}
+        onConfirm={handleClearRoutineTasks}
+        onClose={() => setShowClearConfirmation(false)}
+        isClearing={isClearingRoutines}
+      />
     </Dialog>
   )
 }
