@@ -110,6 +110,11 @@ export function useListItemFocus({
     // Set aria-selected to trigger CSS styling
     node.setAttribute('aria-selected', 'true')
 
+    // Focus the DOM element (needed for keyboard events and proper click handling)
+    if (typeof document !== 'undefined' && node !== document.activeElement) {
+      node.focus({ preventScroll: true })
+    }
+
     // Scroll into view if needed (only on focus change)
     if (lastFocusedIndex.current !== focusedIndex) {
       const scrollContainer = node.closest('[data-task-scroll-container]') as HTMLElement | null
