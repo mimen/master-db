@@ -53,6 +53,7 @@ export const syncItemSchema = v.object({
   added_at: v.optional(v.union(v.string(), v.null())),
   date_added: v.optional(v.union(v.string(), v.null())),
   completed_at: v.optional(v.union(v.string(), v.null())),
+  completed_by_uid: v.optional(v.union(v.string(), v.null())),
   date_completed: v.optional(v.union(v.string(), v.null())),
   updated_at: v.optional(v.union(v.string(), v.null())),
   user_id: v.optional(v.union(v.string(), v.null())),
