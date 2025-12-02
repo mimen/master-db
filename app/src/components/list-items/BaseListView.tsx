@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ViewSettingsDropdown } from "@/components/ui/ViewSettingsDropdown"
 import { useCountRegistry } from "@/contexts/CountContext"
+import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
 import { useListItemFocus } from "@/hooks/list-items"
 import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
 import { cn } from "@/lib/utils"
@@ -234,6 +235,26 @@ export function BaseListView<T>({
   const { currentSort, setCurrentSort, currentGroup, setCurrentGroup, collapsedGroups, toggleGroupCollapse } =
     useListViewSettings(list.id, defaultSort, defaultGroup)
 
+  // Build the view settings dropdown (used in both single-list and multi-list views)
+  const viewSettingsDropdown = (sortOptions || groupOptions) ? (
+    <ViewSettingsDropdown<T>
+      sortOptions={sortOptions}
+      currentSort={currentSort}
+      onSortChange={setCurrentSort}
+      groupOptions={groupOptions}
+      currentGroup={currentGroup}
+      onGroupChange={setCurrentGroup}
+      triggerLabel="View"
+    />
+  ) : null
+
+  // Register dropdown to header slot for single-list views
+  // For multi-list views, dropdown renders inline in each list's header
+  useHeaderSlotContent(
+    "view-settings",
+    !isMultiListView ? viewSettingsDropdown : null
+  )
+
   // Find active sort/group options
   const activeSortOption = sortOptions?.find((opt) => opt.id === currentSort)
   const activeGroupOption = groupOptions?.find((opt) => opt.id === currentGroup)
@@ -400,16 +421,8 @@ export function BaseListView<T>({
                 ? `Showing ${entities.length} of ${totalCount}`
                 : totalCount}
             </Badge>
-            {/* Sort/Group Settings Dropdown */}
-            <ViewSettingsDropdown<T>
-              sortOptions={sortOptions}
-              currentSort={currentSort}
-              onSortChange={setCurrentSort}
-              groupOptions={groupOptions}
-              currentGroup={currentGroup}
-              onGroupChange={setCurrentGroup}
-              triggerLabel="View"
-            />
+            {/* Sort/Group Settings Dropdown (only inline for multi-list views) */}
+            {viewSettingsDropdown}
             {entities.length > 0 && (
               <TooltipProvider>
                 <Tooltip>

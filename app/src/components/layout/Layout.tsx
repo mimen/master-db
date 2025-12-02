@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
+import { useHeaderSlot } from "@/contexts/HeaderSlotContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskCounts } from "@/hooks/useTaskCounts"
 import { useTaskSelection } from "@/hooks/useTaskSelection"
@@ -187,6 +188,9 @@ export function Layout() {
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1
 
+  // Get header slot content (registered by BaseListView for single-list views)
+  const { slots } = useHeaderSlot()
+
   return (
     <>
       <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
@@ -205,6 +209,8 @@ export function Layout() {
               {totalTaskCount}
             </Badge>
           )}
+          {/* Header slot for view settings (registered by BaseListView for single-list views) */}
+          {slots.get("view-settings")}
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant="ghost"

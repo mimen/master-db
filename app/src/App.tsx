@@ -9,6 +9,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { CountProvider } from "@/contexts/CountContext"
 import { DialogProvider } from "@/contexts/DialogContext"
 import { FocusProvider } from "@/contexts/FocusContext"
+import { HeaderSlotProvider } from "@/contexts/HeaderSlotContext"
 import { OptimisticUpdatesProvider } from "@/contexts/OptimisticUpdatesContext"
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string)
@@ -23,7 +24,9 @@ export function App() {
               <FocusProvider>
                 <DialogProvider>
                   <SidebarProvider defaultOpen>
-                    <Layout />
+                    <HeaderSlotProvider>
+                      <Layout />
+                    </HeaderSlotProvider>
                     <DialogManager />
                     <Toaster />
                   </SidebarProvider>
