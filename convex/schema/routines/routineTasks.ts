@@ -9,8 +9,8 @@ export const routineTasks = defineTable({
   todoistTaskId: v.string(), // ID of the task in Todoist (or "PENDING" during creation)
 
   // Scheduling
-  readyDate: v.number(), // Timestamp when task becomes actionable
-  dueDate: v.number(), // Timestamp when task is due
+  readyDate: v.number(), // Timestamp when task is scheduled (Todoist dueDate)
+  dueDate: v.number(), // Timestamp deadline (Todoist deadlineDate)
 
   // Status tracking
   status: v.union(

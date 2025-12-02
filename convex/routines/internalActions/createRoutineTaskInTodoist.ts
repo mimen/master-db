@@ -48,8 +48,9 @@ export const createRoutineTaskInTodoist = internalAction({
 
       const client = getTodoistClient();
 
-      // Format due date from dueDate timestamp
-      const dueDate = new Date(routineTask.dueDate);
+      // Format dates - readyDate becomes scheduled date, dueDate becomes deadline
+      const scheduledDate = new Date(routineTask.readyDate);
+      const deadlineDate = new Date(routineTask.dueDate);
 
       // Prepare labels - add "routine" and time-of-day label
       const labels = [...(routine.todoistLabels || []), "routine"];
@@ -68,8 +69,15 @@ export const createRoutineTaskInTodoist = internalAction({
         taskArgs.description = routine.description;
       }
 
-      // Set due date - always use date-only format (timeOfDay is conveyed via labels)
-      Object.assign(taskArgs, { dueDate: dueDate.toISOString().split("T")[0] });
+      // Set scheduled date (shows in Today/Upcoming)
+      const scheduledDateStr = scheduledDate.toISOString().split("T")[0];
+      Object.assign(taskArgs, { dueDate: scheduledDateStr });
+
+      // Set deadline only if different from scheduled (skip for daily routines)
+      const deadlineDateStr = deadlineDate.toISOString().split("T")[0];
+      if (deadlineDateStr !== scheduledDateStr) {
+        taskArgs.deadlineDate = deadlineDateStr;
+      }
 
       // Set priority if specified
       if (routine.priority) {

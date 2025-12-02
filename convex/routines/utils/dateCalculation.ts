@@ -70,11 +70,14 @@ export function adjustToIdealDay(
 }
 
 /**
- * Calculate due date based on ready date and routine settings
- * @param readyDate - When task becomes actionable
- * @param _timeOfDay - Optional time preference (kept for API compatibility, no longer affects due date)
+ * Calculate deadline date based on ready date and routine frequency.
+ * This is the latest date by which the task should be completed.
+ * For Todoist, this becomes the deadlineDate field.
+ *
+ * @param readyDate - When task becomes actionable (scheduled date / Todoist dueDate)
+ * @param _timeOfDay - Unused, kept for API compatibility
  * @param frequency - Routine frequency
- * @returns Due date timestamp
+ * @returns Deadline timestamp (Todoist deadlineDate)
  */
 export function calculateDueDate(
   readyDate: number,
