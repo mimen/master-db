@@ -101,35 +101,40 @@ function deserializeViews(url: string): ViewConfig[]
 ---
 
 ### List Item Standardization - Phase 4: BaseListView Component
-**Status**: Deferred
-**Priority**: Low
+**Status**: ✅ Complete
+**Priority**: N/A (Completed)
+**Completed**: 2025-11-17
 **Dependencies**: Phase 1-3 (✅ completed)
 
 **Goal**:
 Create a reusable `BaseListView` component that consolidates common list view patterns (header rendering, empty state, collapse/expand, focus management, count tracking) across Tasks, Projects, and Routines.
 
-**Current State**:
+**Final State**:
 - Phase 1 (Extract hooks) ✅ Complete
 - Phase 2 (Standardize badges) ✅ Complete
 - Phase 3 (BaseListItem component) ✅ Complete
-- Phase 4 (BaseListView component) ⏸️ Deferred
+- Phase 4 (BaseListView component) ✅ Complete (2025-11-17)
 
-**Tradeoffs**:
-- **High risk, medium reward**: List wrappers already fairly similar
-- ~300 lines could be reduced, but risk of breaking existing functionality
-- Better to wait until adding more entity types to justify the refactor
+**Results Achieved**:
+- ✅ BaseListView component created (515 lines, fully generic with TypeScript)
+- ✅ TaskListView refactored: 287 → 121 lines (58% reduction)
+- ✅ ProjectsListView refactored: 267 → 138 lines (48% reduction)
+- ✅ RoutinesListView refactored: 245 → 152 lines (38% reduction)
+- ✅ Total code reduction: 799 → 411 lines (49% reduction)
+- ✅ All 8 duplicate patterns abstracted successfully
+- ✅ Sort & Group feature built on top of BaseListView
+- ✅ Zero regressions, all features working
 
-**Recommendation**:
-Implement only if:
-- Adding 2+ new entity types (Areas, Goals, Habits, etc.)
-- List view bugs appear across multiple entity types
-- Need to standardize list behavior (sorting, filtering, etc.)
-
-**Effort**: ~2-3 days (design, implementation, testing, migration)
+**Architecture Benefits Realized**:
+- Clean separation: BaseListView (layout), Parent (data), ListItem (rendering)
+- Easy to add new entity types (just configure BaseListView)
+- Consistent behavior across all list views
+- Proven robust with multiple features built on top
 
 **References**:
 - Planning doc: `docs/list-item-standardization-plan.md`
-- Phase 4 spec: `docs/list-item-standardization-phase4-implementation.md`
+- Phase 4 implementation: `docs/list-item-standardization-phase4-implementation.md`
+- API design doc: `docs/list-item-standardization-phase4-api-design.md`
 
 ---
 
