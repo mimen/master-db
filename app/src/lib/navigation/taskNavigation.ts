@@ -1,28 +1,57 @@
 /**
  * Task Navigation Utilities
  *
- * Pure functions for navigating between tasks across multiple lists.
- * These handle finding available lists and tasks based on task counts.
+ * Pure functions for navigating between entities across multiple lists.
+ * These handle finding next/previous entities and navigating between lists.
  */
 
 export type TaskSelection = {
   listId: string | null
-  taskIndex: number | null
+  entityId: string | null
 }
 
+// Legacy type for backwards compatibility
 export type TaskCounts = Map<string, number>
 
 /**
- * Find the first list that has tasks available
+ * Find the next entity in a list after the current entity
  */
-export function findFirstAvailableList(
+export function findNextEntity<T>(
+  entities: T[],
+  getEntityId: (entity: T) => string,
+  currentEntityId: string
+): string | null {
+  const currentIndex = entities.findIndex(e => getEntityId(e) === currentEntityId)
+  if (currentIndex === -1 || currentIndex === entities.length - 1) return null
+  return getEntityId(entities[currentIndex + 1])
+}
+
+/**
+ * Find the previous entity in a list before the current entity
+ */
+export function findPreviousEntity<T>(
+  entities: T[],
+  getEntityId: (entity: T) => string,
+  currentEntityId: string
+): string | null {
+  const currentIndex = entities.findIndex(e => getEntityId(e) === currentEntityId)
+  if (currentIndex <= 0) return null
+  return getEntityId(entities[currentIndex - 1])
+}
+
+/**
+ * Find the first list that has tasks available
+ * Returns the first entity ID in that list
+ */
+export function findFirstAvailableList<T>(
   listIds: string[],
-  counts: TaskCounts
+  getEntitiesForList: (listId: string) => T[],
+  getEntityId: (entity: T) => string
 ): TaskSelection | null {
   for (const listId of listIds) {
-    const count = counts.get(listId) ?? 0
-    if (count > 0) {
-      return { listId, taskIndex: 0 }
+    const entities = getEntitiesForList(listId)
+    if (entities.length > 0) {
+      return { listId, entityId: getEntityId(entities[0]) }
     }
   }
   return null
@@ -30,16 +59,18 @@ export function findFirstAvailableList(
 
 /**
  * Find the last list that has tasks available (starts at end of list)
+ * Returns the last entity ID in that list
  */
-export function findLastAvailableList(
+export function findLastAvailableList<T>(
   listIds: string[],
-  counts: TaskCounts
+  getEntitiesForList: (listId: string) => T[],
+  getEntityId: (entity: T) => string
 ): TaskSelection | null {
   for (let index = listIds.length - 1; index >= 0; index -= 1) {
     const listId = listIds[index]
-    const count = counts.get(listId) ?? 0
-    if (count > 0) {
-      return { listId, taskIndex: count - 1 }
+    const entities = getEntitiesForList(listId)
+    if (entities.length > 0) {
+      return { listId, entityId: getEntityId(entities[entities.length - 1]) }
     }
   }
   return null
@@ -47,10 +78,12 @@ export function findLastAvailableList(
 
 /**
  * Find the next list with tasks after the current list
+ * Returns the first entity ID in that list
  */
-export function findNextList(
+export function findNextList<T>(
   listIds: string[],
-  counts: TaskCounts,
+  getEntitiesForList: (listId: string) => T[],
+  getEntityId: (entity: T) => string,
   currentListId: string
 ): TaskSelection | null {
   const startIndex = listIds.indexOf(currentListId)
@@ -58,9 +91,9 @@ export function findNextList(
 
   for (let index = startIndex + 1; index < listIds.length; index += 1) {
     const listId = listIds[index]
-    const count = counts.get(listId) ?? 0
-    if (count > 0) {
-      return { listId, taskIndex: 0 }
+    const entities = getEntitiesForList(listId)
+    if (entities.length > 0) {
+      return { listId, entityId: getEntityId(entities[0]) }
     }
   }
 
@@ -69,10 +102,12 @@ export function findNextList(
 
 /**
  * Find the previous list with tasks before the current list
+ * Returns the last entity ID in that list
  */
-export function findPreviousList(
+export function findPreviousList<T>(
   listIds: string[],
-  counts: TaskCounts,
+  getEntitiesForList: (listId: string) => T[],
+  getEntityId: (entity: T) => string,
   currentListId: string
 ): TaskSelection | null {
   const startIndex = listIds.indexOf(currentListId)
@@ -80,9 +115,9 @@ export function findPreviousList(
 
   for (let index = startIndex - 1; index >= 0; index -= 1) {
     const listId = listIds[index]
-    const count = counts.get(listId) ?? 0
-    if (count > 0) {
-      return { listId, taskIndex: count - 1 }
+    const entities = getEntitiesForList(listId)
+    if (entities.length > 0) {
+      return { listId, entityId: getEntityId(entities[entities.length - 1]) }
     }
   }
 

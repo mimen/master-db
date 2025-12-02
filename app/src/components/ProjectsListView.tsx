@@ -3,7 +3,6 @@ import { useCallback, useMemo } from "react"
 
 import { BaseListView, ProjectListItem } from "@/components/list-items"
 import { useFocusContext } from "@/contexts/FocusContext"
-import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import type { ListInstance } from "@/lib/views/types"
@@ -13,8 +12,10 @@ import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/
 interface ProjectsListViewProps {
   list: ListInstance
   onProjectCountChange?: (listId: string, count: number) => void
-  onProjectClick?: (listId: string, projectIndex: number) => void
-  focusedProjectIndex: number | null
+  onProjectClick?: (listId: string, entityId: string) => void
+  focusedEntityId: string | null
+  onEntityRemoved?: (listId: string, entityId: string) => void
+  onEntitiesChange?: (listId: string, entities: unknown[]) => void
   isDismissed?: boolean
   onDismiss?: (listId: string) => void
   onRestore?: (listId: string) => void
@@ -25,14 +26,15 @@ export function ProjectsListView({
   list,
   onProjectCountChange,
   onProjectClick,
-  focusedProjectIndex,
+  focusedEntityId,
+  onEntityRemoved,
+  onEntitiesChange,
   isDismissed = false,
   onDismiss,
   onRestore,
   isMultiListView = false
 }: ProjectsListViewProps) {
   const { setFocusedProject } = useFocusContext()
-  const { getProjectUpdate } = useOptimisticUpdates()
 
   // Fetch all projects
   const allProjects: TodoistProjectsWithMetadata | undefined = useQuery(
@@ -46,59 +48,30 @@ export function ProjectsListView({
     await unarchiveProject({ projectId })
   }, [unarchiveProject])
 
-  // Filter and sort projects (entity-specific logic stays in parent)
-  // Sort by: archived status (active first), then priority, then alphabetically
+  // Filter projects (sorting is handled by BaseListView via sortOptions)
   const projects = useMemo(() => {
     if (!allProjects) return []
 
-    return allProjects
-      .filter((p: TodoistProjectWithMetadata) => {
-        // Always exclude deleted projects
-        if (p.is_deleted) return false
+    return allProjects.filter((p: TodoistProjectWithMetadata) => {
+      // Always exclude deleted projects
+      if (p.is_deleted) return false
 
-        // Apply projectType filter if specified
-        if (list.query.type === "projects" && list.query.projectType) {
-          const projectType = p.metadata?.projectType
+      // Apply projectType filter if specified
+      if (list.query.type === "projects" && list.query.projectType) {
+        const projectType = p.metadata?.projectType
 
-          if (list.query.projectType === "project-type") {
-            return projectType === "project-type"
-          } else if (list.query.projectType === "area-of-responsibility") {
-            return projectType === "area-of-responsibility"
-          } else if (list.query.projectType === "unassigned") {
-            return !projectType
-          }
+        if (list.query.projectType === "project-type") {
+          return projectType === "project-type"
+        } else if (list.query.projectType === "area-of-responsibility") {
+          return projectType === "area-of-responsibility"
+        } else if (list.query.projectType === "unassigned") {
+          return !projectType
         }
+      }
 
-        return true
-      })
-      .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => {
-        // Keep archived projects at the bottom
-        if (a.is_archived !== b.is_archived) {
-          return a.is_archived ? 1 : -1
-        }
-
-        // Check for optimistic priority updates
-        const aOptimistic = getProjectUpdate(a.todoist_id)
-        const bOptimistic = getProjectUpdate(b.todoist_id)
-
-        const aPriority =
-          aOptimistic?.type === "priority-change"
-            ? aOptimistic.newPriority
-            : a.metadata?.priority ?? 1
-        const bPriority =
-          bOptimistic?.type === "priority-change"
-            ? bOptimistic.newPriority
-            : b.metadata?.priority ?? 1
-
-        // Sort by priority descending (4→3→2→1 means P1→P2→P3→P4)
-        if (aPriority !== bPriority) {
-          return bPriority - aPriority
-        }
-
-        // Then alphabetically by name
-        return a.name.localeCompare(b.name)
-      })
-  }, [allProjects, getProjectUpdate, list.query])
+      return true
+    })
+  }, [allProjects, list.query])
 
   const visibleProjects = list.maxTasks ? projects.slice(0, list.maxTasks) : projects
   const isLoading = allProjects === undefined
@@ -115,11 +88,13 @@ export function ProjectsListView({
       onDismiss={onDismiss}
       onRestore={onRestore}
       isLoading={isLoading}
-      focusedIndex={focusedProjectIndex}
+      focusedEntityId={focusedEntityId}
+      onEntityRemoved={onEntityRemoved}
       setFocusedEntity={() => {}}
       setFocusedEntityInContext={setFocusedProject}
       useEntityShortcuts={useProjectDialogShortcuts}
       onEntityCountChange={onProjectCountChange}
+      onEntitiesChange={onEntitiesChange}
       onEntityClick={onProjectClick}
       sortOptions={projectSortOptions}
       groupOptions={projectGroupOptions}
@@ -129,7 +104,7 @@ export function ProjectsListView({
           key={project._id}
           project={project}
           onElementRef={ref}
-          onClick={() => onProjectClick?.(list.id, index)}
+          onClick={() => onProjectClick?.(list.id, project.todoist_id)}
           onUnarchive={handleUnarchive}
         />
       )}

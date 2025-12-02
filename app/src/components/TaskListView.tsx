@@ -18,8 +18,10 @@ import type {
 interface TaskListViewProps {
   list: ListInstance
   onTaskCountChange?: (listId: string, count: number) => void
-  onTaskClick?: (listId: string, taskIndex: number) => void
-  focusedTaskIndex: number | null
+  onTaskClick?: (listId: string, entityId: string) => void
+  focusedEntityId: string | null
+  onEntityRemoved?: (listId: string, entityId: string) => void
+  onEntitiesChange?: (listId: string, entities: unknown[]) => void
   isDismissed?: boolean
   onDismiss?: (listId: string) => void
   onRestore?: (listId: string) => void
@@ -30,7 +32,9 @@ export function TaskListView({
   list,
   onTaskCountChange,
   onTaskClick,
-  focusedTaskIndex,
+  focusedEntityId,
+  onEntityRemoved,
+  onEntitiesChange,
   isDismissed = false,
   onDismiss,
   onRestore,
@@ -97,11 +101,13 @@ export function TaskListView({
       onDismiss={onDismiss}
       onRestore={onRestore}
       isLoading={isLoading}
-      focusedIndex={focusedTaskIndex}
+      focusedEntityId={focusedEntityId}
+      onEntityRemoved={onEntityRemoved}
       setFocusedEntity={() => {}}
       setFocusedEntityInContext={setFocusedTask}
       useEntityShortcuts={useTaskDialogShortcuts}
       onEntityCountChange={onTaskCountChange}
+      onEntitiesChange={onEntitiesChange}
       onEntityClick={onTaskClick}
       sortOptions={taskSortOptions}
       groupOptions={taskGroupOptions}
@@ -111,9 +117,11 @@ export function TaskListView({
           key={task._id}
           task={task}
           onElementRef={ref}
-          onClick={() => onTaskClick?.(list.id, index)}
+          onClick={() => onTaskClick?.(list.id, task.todoist_id)}
           isProjectView={isProjectView}
           allLabels={labels}
+          onEntityRemoved={onEntityRemoved}
+          listId={list.id}
         />
       )}
     />

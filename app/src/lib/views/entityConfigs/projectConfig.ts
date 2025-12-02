@@ -2,28 +2,45 @@ import type { SortOption, GroupOption } from "@/lib/views/types"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 /**
+ * Helper to wrap sort functions with archived-at-bottom behavior
+ */
+function withArchivedAtBottom(
+  compareFn: (a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => number
+) {
+  return (a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => {
+    // Always keep archived projects at the bottom
+    if (a.is_archived !== b.is_archived) {
+      return a.is_archived ? 1 : -1
+    }
+    return compareFn(a, b)
+  }
+}
+
+/**
  * Sort options for projects
  */
 export const projectSortOptions: SortOption<TodoistProjectWithMetadata>[] = [
   {
     id: "az",
     label: "A-Z",
-    compareFn: (a, b) => a.name.localeCompare(b.name),
+    compareFn: withArchivedAtBottom((a, b) => a.name.localeCompare(b.name)),
   },
   {
     id: "priority",
     label: "Priority",
-    compareFn: (a, b) => {
+    compareFn: withArchivedAtBottom((a, b) => {
       // Invert: higher API number = higher UI priority
       const aPriority = a.metadata?.priority ?? 1
       const bPriority = b.metadata?.priority ?? 1
       return bPriority - aPriority
-    },
+    }),
   },
   {
     id: "task-count",
     label: "Task Count",
-    compareFn: (a, b) => (b.metadata?.taskCount ?? 0) - (a.metadata?.taskCount ?? 0),
+    compareFn: withArchivedAtBottom(
+      (a, b) => (b.stats?.activeCount ?? 0) - (a.stats?.activeCount ?? 0)
+    ),
   },
 ]
 

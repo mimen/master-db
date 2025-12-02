@@ -18,8 +18,10 @@ import type { TodoistProjects } from "@/types/convex/todoist"
 interface RoutinesListViewProps {
   list: ListInstance
   onRoutineCountChange?: (listId: string, count: number) => void
-  onRoutineClick?: (listId: string, routineIndex: number) => void
-  focusedRoutineIndex: number | null
+  onRoutineClick?: (listId: string, entityId: string) => void
+  focusedEntityId: string | null
+  onEntityRemoved?: (listId: string, entityId: string) => void
+  onEntitiesChange?: (listId: string, entities: unknown[]) => void
   isDismissed?: boolean
   onDismiss?: (listId: string) => void
   onRestore?: (listId: string) => void
@@ -30,7 +32,9 @@ export function RoutinesListView({
   list,
   onRoutineCountChange,
   onRoutineClick,
-  focusedRoutineIndex,
+  focusedEntityId,
+  onEntityRemoved,
+  onEntitiesChange,
   isDismissed = false,
   onDismiss,
   onRestore,
@@ -127,11 +131,13 @@ export function RoutinesListView({
         onDismiss={onDismiss}
         onRestore={onRestore}
         isLoading={isLoading}
-        focusedIndex={focusedRoutineIndex}
+        focusedEntityId={focusedEntityId}
+        onEntityRemoved={onEntityRemoved}
         setFocusedEntity={() => {}}
         setFocusedEntityInContext={setFocusedRoutine}
         useEntityShortcuts={useRoutineDialogShortcuts}
         onEntityCountChange={onRoutineCountChange}
+        onEntitiesChange={onEntitiesChange}
         onEntityClick={onRoutineClick}
         sortOptions={routineSortOptions}
         groupOptions={routineGroupOptions}
@@ -141,7 +147,7 @@ export function RoutinesListView({
             key={routine._id}
             routine={routine}
             onElementRef={ref}
-            onClick={() => onRoutineClick?.(list.id, index)}
+            onClick={() => onRoutineClick?.(list.id, routine._id)}
             onOpenDetail={handleOpenDetail}
             onOpenEdit={handleOpenEdit}
           />

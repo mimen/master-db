@@ -27,6 +27,8 @@ interface TaskListItemProps {
   onClick?: () => void
   isProjectView: boolean
   allLabels?: TodoistLabelDoc[]
+  onEntityRemoved?: (listId: string, entityId: string) => void
+  listId?: string
 }
 
 export const TaskListItem = memo(function TaskListItem({
@@ -34,7 +36,9 @@ export const TaskListItem = memo(function TaskListItem({
   onElementRef,
   onClick,
   isProjectView,
-  allLabels
+  allLabels,
+  onEntityRemoved,
+  listId
 }: TaskListItemProps) {
   // IMPORTANT: Check for early returns BEFORE calling any hooks
   // Get optimistic update first (this is safe - just a context read, not a hook)
@@ -43,11 +47,19 @@ export const TaskListItem = memo(function TaskListItem({
 
   // Hide task immediately if completing
   if (optimisticUpdate?.type === "task-complete") {
+    // Notify cursor system before removing from DOM
+    if (onEntityRemoved && listId) {
+      onEntityRemoved(listId, task.todoist_id)
+    }
     return null
   }
 
   // Hide task immediately if moving in project-filtered view
   if (optimisticUpdate?.type === "project-move" && isProjectView) {
+    // Notify cursor system before removing from DOM
+    if (onEntityRemoved && listId) {
+      onEntityRemoved(listId, task.todoist_id)
+    }
     return null
   }
 

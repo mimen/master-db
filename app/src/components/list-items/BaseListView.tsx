@@ -97,27 +97,35 @@ export interface BaseListViewProps<T> {
   onEntityCountChange?: (listId: string, count: number) => void
 
   /**
+   * Parent callback: called when entities change (for cursor navigation)
+   *
+   * @param listId Unique identifier of this list
+   * @param entities Array of entities currently displayed
+   */
+  onEntitiesChange?: (listId: string, entities: T[]) => void
+
+  /**
    * Parent callback: called when entity is clicked
    *
    * @param listId Unique identifier of this list
-   * @param index Index of clicked entity in visible array
+   * @param entityId ID of clicked entity
    */
-  onEntityClick?: (listId: string, entityIndex: number) => void
+  onEntityClick?: (listId: string, entityId: string) => void
 
   // ============= FOCUS MANAGEMENT =============
 
   /**
-   * Current focused entity index (from parent state)
+   * Current focused entity ID (from parent state)
    * Parent manages this via useState + FocusContext
-   * Null or -1 means no entity is focused
+   * Null means no entity is focused
    */
-  focusedIndex: number | null
+  focusedEntityId: string | null
 
   /**
-   * Callback to update focused entity index in parent
-   * Called when user navigates with arrow keys
+   * Callback when entity is removed (for cursor management)
+   * Called immediately when entity is optimistically removed
    */
-  setFocusedEntity: (index: number | null) => void
+  onEntityRemoved?: (listId: string, entityId: string) => void
 
   /**
    * Hook that provides entity-specific keyboard shortcuts
@@ -212,8 +220,10 @@ export function BaseListView<T>({
   renderRow,
   list,
   onEntityCountChange,
+  onEntitiesChange,
   onEntityClick,
-  focusedIndex,
+  focusedEntityId,
+  onEntityRemoved,
   useEntityShortcuts,
   setFocusedEntityInContext,
   isMultiListView = false,
@@ -236,17 +246,21 @@ export function BaseListView<T>({
     useListViewSettings(list.id, defaultSort, defaultGroup)
 
   // Build the view settings dropdown (used in both single-list and multi-list views)
-  const viewSettingsDropdown = (sortOptions || groupOptions) ? (
-    <ViewSettingsDropdown<T>
-      sortOptions={sortOptions}
-      currentSort={currentSort}
-      onSortChange={setCurrentSort}
-      groupOptions={groupOptions}
-      currentGroup={currentGroup}
-      onGroupChange={setCurrentGroup}
-      triggerLabel="View"
-    />
-  ) : null
+  // IMPORTANT: Memoize to prevent infinite re-render loop in HeaderSlotContext
+  const viewSettingsDropdown = useMemo(() => {
+    if (!sortOptions && !groupOptions) return null
+    return (
+      <ViewSettingsDropdown<T>
+        sortOptions={sortOptions}
+        currentSort={currentSort}
+        onSortChange={setCurrentSort}
+        groupOptions={groupOptions}
+        currentGroup={currentGroup}
+        onGroupChange={setCurrentGroup}
+        triggerLabel="View"
+      />
+    )
+  }, [sortOptions, currentSort, setCurrentSort, groupOptions, currentGroup, setCurrentGroup])
 
   // Register dropdown to header slot for single-list views
   // For multi-list views, dropdown renders inline in each list's header
@@ -277,6 +291,13 @@ export function BaseListView<T>({
     }
     return processedData as T[]
   }, [groupedData, collapsedGroups, processedData])
+
+  // Convert entity ID to index for rendering and focus management
+  const focusedIndex = useMemo(() => {
+    if (!focusedEntityId) return null
+    const index = visibleEntities.findIndex(e => getEntityId(e) === focusedEntityId)
+    return index === -1 ? null : index
+  }, [visibleEntities, focusedEntityId, getEntityId])
 
   // Setup ref array for focus management
   const elementRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -323,6 +344,17 @@ export function BaseListView<T>({
   useEffect(() => {
     onEntityCountChange?.(list.id, entities.length)
   }, [list.id, onEntityCountChange, entities.length])
+
+  // Report visible entities to parent (for cursor navigation)
+  // Only update when entity IDs actually change (not just array reference)
+  const visibleEntityIds = useMemo(
+    () => visibleEntities.map(e => getEntityId(e)).join(','),
+    [visibleEntities, getEntityId]
+  )
+
+  useEffect(() => {
+    onEntitiesChange?.(list.id, visibleEntities)
+  }, [list.id, onEntitiesChange, visibleEntityIds]) // Use visibleEntityIds instead of visibleEntities
 
   // Sync isExpanded state with isDismissed prop
   useEffect(() => {
@@ -470,13 +502,14 @@ export function BaseListView<T>({
                         {group.entities.map((entity: T, groupEntityIndex: number) => {
                           // Find index in visibleEntities array for focus management
                           const visibleIndex = visibleEntities.indexOf(entity)
+                          const entityId = getEntityId(entity)
                           return (
                             <div
-                              key={getEntityId(entity)}
+                              key={entityId}
                               data-testid={`${entityType}-row-${visibleIndex}`}
                               data-entity-type={entityType}
-                              data-entity-id={getEntityId(entity)}
-                              onClick={() => onEntityClick?.(list.id, visibleIndex)}
+                              data-entity-id={entityId}
+                              onClick={() => onEntityClick?.(list.id, entityId)}
                             >
                               {renderRow(
                                 entity,
@@ -494,17 +527,20 @@ export function BaseListView<T>({
             ) : (
               // FLAT RENDERING
               <div className="space-y-1">
-                {(processedData as T[]).map((entity: T, index: number) => (
-                  <div
-                    key={getEntityId(entity)}
-                    data-testid={`${entityType}-row-${index}`}
-                    data-entity-type={entityType}
-                    data-entity-id={getEntityId(entity)}
-                    onClick={() => onEntityClick?.(list.id, index)}
-                  >
-                    {renderRow(entity, index, refHandlers.current[index]!)}
-                  </div>
-                ))}
+                {(processedData as T[]).map((entity: T, index: number) => {
+                  const entityId = getEntityId(entity)
+                  return (
+                    <div
+                      key={entityId}
+                      data-testid={`${entityType}-row-${index}`}
+                      data-entity-type={entityType}
+                      data-entity-id={entityId}
+                      onClick={() => onEntityClick?.(list.id, entityId)}
+                    >
+                      {renderRow(entity, index, refHandlers.current[index]!)}
+                    </div>
+                  )
+                })}
               </div>
             )
           ) : list.collapsible && isMultiListView ? (

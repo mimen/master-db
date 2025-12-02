@@ -1,6 +1,6 @@
 import { useQuery } from "convex/react"
 import { Keyboard, RefreshCw } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "wouter"
 
 import { ProjectsListView } from "../ProjectsListView"
@@ -35,6 +35,9 @@ export function Layout() {
   const [dismissedLists, setDismissedLists] = useState<Set<string>>(new Set())
   const [taskCountsAtDismissal, setTaskCountsAtDismissal] = useState<Map<string, number>>(new Map())
 
+  // Track entities for each list (for cursor navigation)
+  const entitiesRef = useRef<Map<string, unknown[]>>(new Map())
+
   // Fetch data needed for viewContext
   const projects = useQuery(api.todoist.queries.getProjects.getProjects) as TodoistProjects | undefined
   const projectsWithMetadata = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata, {}) as
@@ -59,9 +62,32 @@ export function Layout() {
 
   const listIds = useMemo(() => activeView.lists.map((list) => list.id), [activeView.lists])
 
-  const { selection, handleTaskCountChange, handleArrowNavigation, handleTaskClick } = useTaskSelection({
+  // Callback for list views to report their entities
+  const handleEntitiesChange = useCallback((listId: string, entities: unknown[]) => {
+    entitiesRef.current.set(listId, entities)
+  }, [])
+
+  // Entity getter functions for cursor navigation
+  const getEntitiesForList = useCallback((listId: string): Record<string, unknown>[] => {
+    const entities = entitiesRef.current.get(listId) ?? []
+    return entities as Record<string, unknown>[]
+  }, [])
+
+  const getEntityId = useCallback((entity: Record<string, unknown>) => {
+    // Handle different entity types
+    // Tasks and Projects both use todoist_id
+    if ('todoist_id' in entity && typeof entity.todoist_id === 'string') return entity.todoist_id
+    // Routines use _id
+    if ('_id' in entity && typeof entity._id === 'string') return entity._id
+    // Fallback
+    const id = 'id' in entity ? entity.id : entity._id
+    return String(id)
+  }, [])
+
+  const { selection, handleEntityRemoved, handleArrowNavigation, handleEntityClick } = useTaskSelection({
     listIds,
-    getTaskCounts,
+    getEntitiesForList,
+    getEntityId,
   })
 
   const handleViewChange = useCallback(
@@ -89,7 +115,7 @@ export function Layout() {
   const handleTaskCountChangeWithUpdate = useCallback(
     (listId: string, count: number) => {
       updateTaskCount(listId, count)
-      handleTaskCountChange(listId, count)
+      // Note: Cursor updates now happen via handleEntityRemoved, not count changes
 
       // Auto-restore dismissed lists ONLY when task count increases
       if (dismissedLists.has(listId)) {
@@ -108,7 +134,7 @@ export function Layout() {
         }
       }
     },
-    [updateTaskCount, handleTaskCountChange, dismissedLists, taskCountsAtDismissal]
+    [updateTaskCount, dismissedLists, taskCountsAtDismissal]
   )
 
   const handleDismissList = useCallback((listId: string) => {
@@ -138,7 +164,7 @@ export function Layout() {
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable === 'true')
+        (target instanceof HTMLElement && target.isContentEditable)
       ) {
         return
       }
@@ -241,8 +267,10 @@ export function Layout() {
                     key={list.id}
                     list={list}
                     onProjectCountChange={handleTaskCountChangeWithUpdate}
-                    onProjectClick={handleTaskClick}
-                    focusedProjectIndex={selection.listId === list.id ? selection.taskIndex : null}
+                    onProjectClick={handleEntityClick}
+                    focusedEntityId={selection.listId === list.id ? selection.entityId : null}
+                    onEntityRemoved={handleEntityRemoved}
+                    onEntitiesChange={handleEntitiesChange}
                     isDismissed={dismissedLists.has(list.id)}
                     onDismiss={handleDismissList}
                     onRestore={handleRestoreList}
@@ -258,8 +286,10 @@ export function Layout() {
                     key={list.id}
                     list={list}
                     onRoutineCountChange={handleTaskCountChangeWithUpdate}
-                    onRoutineClick={handleTaskClick}
-                    focusedRoutineIndex={selection.listId === list.id ? selection.taskIndex : null}
+                    onRoutineClick={handleEntityClick}
+                    focusedEntityId={selection.listId === list.id ? selection.entityId : null}
+                    onEntityRemoved={handleEntityRemoved}
+                    onEntitiesChange={handleEntitiesChange}
                     isDismissed={dismissedLists.has(list.id)}
                     onDismiss={handleDismissList}
                     onRestore={handleRestoreList}
@@ -274,8 +304,10 @@ export function Layout() {
                   key={list.id}
                   list={list}
                   onTaskCountChange={handleTaskCountChangeWithUpdate}
-                  onTaskClick={handleTaskClick}
-                  focusedTaskIndex={selection.listId === list.id ? selection.taskIndex : null}
+                  onTaskClick={handleEntityClick}
+                  focusedEntityId={selection.listId === list.id ? selection.entityId : null}
+                  onEntityRemoved={handleEntityRemoved}
+                  onEntitiesChange={handleEntitiesChange}
                   isDismissed={dismissedLists.has(list.id)}
                   onDismiss={handleDismissList}
                   onRestore={handleRestoreList}
