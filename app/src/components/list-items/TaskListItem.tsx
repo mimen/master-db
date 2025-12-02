@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { AlertCircle, Calendar, Check, Flag, Tag, User, X } from "lucide-react"
+import { AlertCircle, Calendar, Check, Tag, User } from "lucide-react"
 import { memo, useEffect } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -40,28 +40,11 @@ export const TaskListItem = memo(function TaskListItem({
   onEntityRemoved,
   listId
 }: TaskListItemProps) {
-  // IMPORTANT: Check for early returns BEFORE calling any hooks
-  // Get optimistic update first (this is safe - just a context read, not a hook)
+  // ============= ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS =============
+
+  // Get optimistic update
   const { getTaskUpdate } = useOptimisticUpdates()
   const optimisticUpdate = getTaskUpdate(task.todoist_id)
-
-  // Hide task immediately if completing
-  if (optimisticUpdate?.type === "task-complete") {
-    // Notify cursor system before removing from DOM
-    if (onEntityRemoved && listId) {
-      onEntityRemoved(listId, task.todoist_id)
-    }
-    return null
-  }
-
-  // Hide task immediately if moving in project-filtered view
-  if (optimisticUpdate?.type === "project-move" && isProjectView) {
-    // Notify cursor system before removing from DOM
-    if (onEntityRemoved && listId) {
-      onEntityRemoved(listId, task.todoist_id)
-    }
-    return null
-  }
 
   // Dialog context
   const { openPriority, openProject, openLabel, openDueDate, openDeadline } = useDialogContext()
@@ -116,6 +99,30 @@ export const TaskListItem = memo(function TaskListItem({
 
   const assignee = task.assigned_by_uid || task.responsible_uid
   const markdownSegments = parseMarkdownLinks(displayContent)
+
+  // Notify cursor system when task is being removed (use effect to avoid setState during render)
+  useEffect(() => {
+    const shouldRemove =
+      optimisticUpdate?.type === "task-complete" ||
+      (optimisticUpdate?.type === "project-move" && isProjectView)
+
+    if (shouldRemove && onEntityRemoved && listId) {
+      onEntityRemoved(listId, task.todoist_id)
+    }
+  }, [optimisticUpdate, isProjectView, onEntityRemoved, listId, task.todoist_id])
+
+  // Expose editing functions to parent (for keyboard shortcuts)
+  useEffect(() => {
+    const element = document.querySelector(`[data-entity-id="${task.todoist_id}"]`) as HTMLElement & {
+      startEditing?: () => void
+      startEditingDescription?: () => void
+    }
+    if (element) {
+      // These are exposed by BaseListItem
+      // Just verify they exist
+      void (element.startEditing || element.startEditingDescription)
+    }
+  }, [task.todoist_id])
 
   // Clear optimistic updates when DB syncs
   useOptimisticSync({
@@ -180,6 +187,20 @@ export const TaskListItem = memo(function TaskListItem({
     onClear: () => removeTaskUpdate(task.todoist_id)
   })
 
+  // ============= EARLY RETURNS (after all hooks) =============
+
+  // Hide task immediately if completing
+  if (optimisticUpdate?.type === "task-complete") {
+    return null
+  }
+
+  // Hide task immediately if moving in project-filtered view
+  if (optimisticUpdate?.type === "project-move" && isProjectView) {
+    return null
+  }
+
+  // ============= COMPONENT LOGIC =============
+
   const handleComplete = async () => {
     await optimisticTaskComplete(task.todoist_id)
   }
@@ -208,19 +229,6 @@ export const TaskListItem = memo(function TaskListItem({
       background: `${color}15`
     }
   }
-
-  // Expose editing functions to parent (for keyboard shortcuts)
-  useEffect(() => {
-    const element = document.querySelector(`[data-entity-id="${task.todoist_id}"]`) as HTMLElement & {
-      startEditing?: () => void
-      startEditingDescription?: () => void
-    }
-    if (element) {
-      // These are exposed by BaseListItem
-      // Just verify they exist
-      void (element.startEditing || element.startEditingDescription)
-    }
-  }, [task.todoist_id])
 
   return (
     <BaseListItem
@@ -297,6 +305,7 @@ export const TaskListItem = memo(function TaskListItem({
         </>
       )}
       renderSecondaryDisplay={() => displayDescription}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       renderFixedBadges={(task, isHovered) => (
         <>
           {displayProject && (

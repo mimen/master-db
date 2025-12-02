@@ -1,10 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 
 /**
  * Focus Management Hook for List Items
  *
  * Manages focus highlighting, scrolling, and aria attributes for list items.
  * Extracts the common focus management pattern used across Tasks, Projects, and Routines.
+ *
+ * Focus is indicated via aria-selected attribute, which is styled in BaseListItem via
+ * aria-selected:bg-accent/50 and aria-selected:border-primary/30 classes.
  *
  * @example
  * ```tsx
@@ -26,8 +29,6 @@ import { useEffect, useRef } from 'react'
  * }
  * ```
  */
-
-const FOCUSED_CLASSNAMES = ['bg-accent/50', 'border-primary/30'] as const
 
 interface UseListItemFocusOptions {
   /**
@@ -74,22 +75,13 @@ export function useListItemFocus({
 }: UseListItemFocusOptions) {
   const lastFocusedIndex = useRef<number | null>(null)
 
-  useEffect(() => {
-    const removeHighlight = (element: HTMLDivElement | null) => {
-      if (!element) return
-      FOCUSED_CLASSNAMES.forEach((className) => element.classList.remove(className))
-      element.setAttribute('aria-selected', 'false')
-    }
-
-    const applyHighlight = (element: HTMLDivElement | null) => {
-      if (!element) return
-      FOCUSED_CLASSNAMES.forEach((className) => element.classList.add(className))
-      element.setAttribute('aria-selected', 'true')
-    }
-
-    // Remove highlight from previously focused item
+  useLayoutEffect(() => {
+    // Remove aria-selected from previously focused item
     if (lastFocusedIndex.current !== null && lastFocusedIndex.current !== focusedIndex) {
-      removeHighlight(elementRefs.current[lastFocusedIndex.current])
+      const previousNode = elementRefs.current[lastFocusedIndex.current]
+      if (previousNode) {
+        previousNode.setAttribute('aria-selected', 'false')
+      }
     }
 
     // No item focused
@@ -115,31 +107,23 @@ export function useListItemFocus({
       return
     }
 
-    // Apply highlight if not already applied or index changed
-    if (
-      lastFocusedIndex.current !== focusedIndex ||
-      !node.classList.contains(FOCUSED_CLASSNAMES[0])
-    ) {
-      applyHighlight(node)
-    }
+    // Set aria-selected to trigger CSS styling
+    node.setAttribute('aria-selected', 'true')
 
-    // Focus the DOM element
-    if (typeof document !== 'undefined' && node !== document.activeElement) {
-      node.focus({ preventScroll: true })
-    }
-
-    // Scroll into view if needed
-    const scrollContainer = node.closest('[data-task-scroll-container]') as HTMLElement | null
-    if (scrollContainer) {
-      const nodeRect = node.getBoundingClientRect()
-      const containerRect = scrollContainer.getBoundingClientRect()
-      const isAbove = nodeRect.top < containerRect.top
-      const isBelow = nodeRect.bottom > containerRect.bottom
-      if (isAbove || isBelow) {
+    // Scroll into view if needed (only on focus change)
+    if (lastFocusedIndex.current !== focusedIndex) {
+      const scrollContainer = node.closest('[data-task-scroll-container]') as HTMLElement | null
+      if (scrollContainer) {
+        const nodeRect = node.getBoundingClientRect()
+        const containerRect = scrollContainer.getBoundingClientRect()
+        const isAbove = nodeRect.top < containerRect.top
+        const isBelow = nodeRect.bottom > containerRect.bottom
+        if (isAbove || isBelow) {
+          node.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        }
+      } else if (typeof node.scrollIntoView === 'function') {
         node.scrollIntoView({ block: 'nearest', inline: 'nearest' })
       }
-    } else if (typeof node.scrollIntoView === 'function') {
-      node.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     }
 
     lastFocusedIndex.current = focusedIndex

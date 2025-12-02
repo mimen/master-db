@@ -333,7 +333,6 @@ export function BaseListView<T>({
 
   // Use shared focus management hook with visible entities
   useListItemFocus({
-    entityType,
     focusedIndex,
     entitiesLength: visibleEntities.length,
     elementRefs,
