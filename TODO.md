@@ -100,5 +100,38 @@ function deserializeViews(url: string): ViewConfig[]
 
 ---
 
+### List Item Standardization - Phase 4: BaseListView Component
+**Status**: Deferred
+**Priority**: Low
+**Dependencies**: Phase 1-3 (✅ completed)
+
+**Goal**:
+Create a reusable `BaseListView` component that consolidates common list view patterns (header rendering, empty state, collapse/expand, focus management, count tracking) across Tasks, Projects, and Routines.
+
+**Current State**:
+- Phase 1 (Extract hooks) ✅ Complete
+- Phase 2 (Standardize badges) ✅ Complete
+- Phase 3 (BaseListItem component) ✅ Complete
+- Phase 4 (BaseListView component) ⏸️ Deferred
+
+**Tradeoffs**:
+- **High risk, medium reward**: List wrappers already fairly similar
+- ~300 lines could be reduced, but risk of breaking existing functionality
+- Better to wait until adding more entity types to justify the refactor
+
+**Recommendation**:
+Implement only if:
+- Adding 2+ new entity types (Areas, Goals, Habits, etc.)
+- List view bugs appear across multiple entity types
+- Need to standardize list behavior (sorting, filtering, etc.)
+
+**Effort**: ~2-3 days (design, implementation, testing, migration)
+
+**References**:
+- Planning doc: `docs/list-item-standardization-plan.md`
+- Phase 4 spec: `docs/list-item-standardization-phase4-implementation.md`
+
+---
+
 - [ ] Add more items as needed
 
