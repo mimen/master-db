@@ -160,6 +160,22 @@ export function useTaskSelection<T>({ listIds, getEntitiesForList, getEntityId }
     })
   }, [listIds, updateSelection, getEntitiesForList, getEntityId])
 
+  /**
+   * Effect to focus the selected element using native browser focus
+   * This provides visual feedback and keyboard event handling
+   */
+  useEffect(() => {
+    if (!selection.entityId) return
+
+    const element = document.querySelector(
+      `[data-entity-id="${selection.entityId}"]`
+    ) as HTMLElement | null
+
+    if (element) {
+      element.focus()
+    }
+  }, [selection.entityId])
+
   return {
     selection,
     handleEntityRemoved,

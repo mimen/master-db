@@ -8,7 +8,6 @@ import { SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { CountProvider } from "@/contexts/CountContext"
 import { DialogProvider } from "@/contexts/DialogContext"
-import { FocusProvider } from "@/contexts/FocusContext"
 import { HeaderSlotProvider } from "@/contexts/HeaderSlotContext"
 import { OptimisticUpdatesProvider } from "@/contexts/OptimisticUpdatesContext"
 
@@ -21,17 +20,15 @@ export function App() {
         <Router>
           <CountProvider>
             <OptimisticUpdatesProvider>
-              <FocusProvider>
-                <DialogProvider>
-                  <SidebarProvider defaultOpen>
-                    <HeaderSlotProvider>
-                      <Layout />
-                    </HeaderSlotProvider>
-                    <DialogManager />
-                    <Toaster />
-                  </SidebarProvider>
-                </DialogProvider>
-              </FocusProvider>
+              <DialogProvider>
+                <SidebarProvider defaultOpen>
+                  <HeaderSlotProvider>
+                    <Layout />
+                  </HeaderSlotProvider>
+                  <DialogManager />
+                  <Toaster />
+                </SidebarProvider>
+              </DialogProvider>
             </OptimisticUpdatesProvider>
           </CountProvider>
         </Router>

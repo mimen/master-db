@@ -2,11 +2,10 @@ import { useQuery } from "convex/react"
 import { useMemo } from "react"
 
 import { BaseListView, TaskListItem } from "@/components/list-items"
-import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
-import type { ListInstance, ListQueryInput } from "@/lib/views/types"
 import { taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
+import type { ListInstance, ListQueryInput } from "@/lib/views/types"
 import type {
   TodoistItemsByListWithProjects,
   TodoistLabelDoc,
@@ -40,8 +39,6 @@ export function TaskListView({
   onRestore,
   isMultiListView = false
 }: TaskListViewProps) {
-  const { setFocusedEntity } = useFocusContext()
-
   // Fetch support data (always fetch if we need them for grouping)
   const projects: TodoistProjects | undefined = useQuery(
     api.todoist.queries.getProjects.getProjects,
@@ -103,8 +100,6 @@ export function TaskListView({
       isLoading={isLoading}
       focusedEntityId={focusedEntityId}
       onEntityRemoved={onEntityRemoved}
-      setFocusedEntity={() => {}}
-      setFocusedEntityInContext={(task) => setFocusedEntity(task?.todoist_id ?? null, task ? 'task' : undefined)}
       useEntityShortcuts={useTaskDialogShortcuts}
       onEntityCountChange={onTaskCountChange}
       onEntitiesChange={onEntitiesChange}

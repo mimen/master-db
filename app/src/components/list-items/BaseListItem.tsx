@@ -1,6 +1,6 @@
 import { forwardRef, useEffect } from "react"
 
-import { useListItemHover, useListItemEditing, useOptimisticSync } from "@/hooks/list-items"
+import { useListItemHover, useListItemEditing } from "@/hooks/list-items"
 import { cn } from "@/lib/utils"
 
 /**
@@ -236,14 +236,12 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
       <div
         ref={handleRef}
         tabIndex={-1}
-        aria-selected={false}
         data-entity-type={entityType}
         data-entity-id={getEntityId(entity)}
         className={cn(
           "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
           "hover:bg-accent/50",
-          "focus:outline-none",
-          "aria-selected:bg-accent/50 aria-selected:border-primary/30",
+          "focus:outline-none focus:bg-accent/50 focus:border-primary/30",
           archivedClass,
           className
         )}
@@ -263,7 +261,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
           {/* Content Area */}
           <div className="flex-1 min-w-0 space-y-1.5">
             {/* Primary Field (Editable or Display) */}
-            <div onClick={(e) => e.stopPropagation()}>
+            <div onClick={editing.isEditing ? (e) => e.stopPropagation() : undefined}>
               {editing.isEditing ? (
                 <input
                   ref={editing.primaryInputRef}
@@ -284,7 +282,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
 
             {/* Secondary Field (Editable or Display) */}
             {secondaryField && (
-              <div onClick={(e) => e.stopPropagation()}>
+              <div onClick={editing.isEditing ? (e) => e.stopPropagation() : undefined}>
                 {editing.isEditing ? (
                   editing.showSecondaryInput && (
                     <input

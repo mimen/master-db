@@ -17,7 +17,6 @@ import { SettingsDialog } from './SettingsDialog'
 import { SyncDialog } from './SyncDialog'
 
 import { useDialogContext } from '@/contexts/DialogContext'
-import { useFocusContext } from '@/contexts/FocusContext'
 import { api } from '@/convex/_generated/api'
 import { useOptimisticDeadlineChange } from '@/hooks/useOptimisticDeadlineChange'
 import { useOptimisticDueChange } from '@/hooks/useOptimisticDueChange'
@@ -39,9 +38,14 @@ const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
 export function DialogManager() {
   const { currentTask, currentProject, currentRoutine, projectToMove, selectedParentProjectId, setSelectedParentProjectId, dialogType, isShortcutsOpen, isSettingsOpen, isQuickAddOpen, isSyncOpen, quickAddDefaultProjectId, closeDialog } = useDialogContext()
-  const { focusedEntityType } = useFocusContext()
   const [isMovingProject, setIsMovingProject] = useState(false)
   const allProjects = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata)
+
+  // Derive focused entity type from current dialog state
+  const focusedEntityType = currentTask ? 'task'
+    : currentProject ? 'project'
+    : currentRoutine ? 'routine'
+    : null
 
   // Manage expandNested state for settings dialog
   const [expandNested, setExpandNested] = useState<boolean>(() => {

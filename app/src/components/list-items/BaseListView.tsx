@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ViewSettingsDropdown } from "@/components/ui/ViewSettingsDropdown"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
-import { useListItemFocus } from "@/hooks/list-items"
 import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
 import { cn } from "@/lib/utils"
 import { applyGroupingAndSorting } from "@/lib/views/sortAndGroup"
@@ -135,12 +134,6 @@ export interface BaseListViewProps<T> {
    */
   useEntityShortcuts: (entity: T | null) => void
 
-  /**
-   * Callback for focus context update
-   * Called when focused entity changes to update global FocusContext
-   */
-  setFocusedEntityInContext?: (entity: T | null) => void
-
   // ============= MULTI-LIST VIEW OPTIONS =============
 
   /**
@@ -225,7 +218,6 @@ export function BaseListView<T>({
   focusedEntityId,
   onEntityRemoved,
   useEntityShortcuts,
-  setFocusedEntityInContext,
   isMultiListView = false,
   isDismissed = false,
   onDismiss,
@@ -304,7 +296,7 @@ export function BaseListView<T>({
   const elementRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
 
-  // Build index-based refs array from Map for useListItemFocus compatibility
+  // Build index-based refs array from Map for keyboard shortcut access
   elementRefs.current = visibleEntities.map((entity) => {
     const entityId = getEntityId(entity)
     return elementRefsMap.current.get(entityId) ?? null
@@ -327,21 +319,8 @@ export function BaseListView<T>({
       ? visibleEntities[focusedIndex]
       : null
 
-  // Update global focus context when focused entity changes
-  useEffect(() => {
-    setFocusedEntityInContext?.(focusedEntity)
-  }, [focusedEntity, setFocusedEntityInContext])
-
   // Call entity-specific shortcuts hook with focused entity
   useEntityShortcuts(focusedEntity)
-
-  // Use shared focus management hook with visible entities
-  useListItemFocus({
-    focusedIndex,
-    entitiesLength: visibleEntities.length,
-    elementRefs,
-    onExpand: () => setIsExpanded(true)
-  })
 
   // Report visible count to parent
   useEffect(() => {
@@ -510,9 +489,6 @@ export function BaseListView<T>({
                             <div
                               key={entityId}
                               data-testid={`${entityType}-row-${visibleIndex}`}
-                              data-entity-type={entityType}
-                              data-entity-id={entityId}
-                              onClick={() => onEntityClick?.(list.id, entityId)}
                             >
                               {renderRow(
                                 entity,
@@ -536,9 +512,6 @@ export function BaseListView<T>({
                     <div
                       key={entityId}
                       data-testid={`${entityType}-row-${index}`}
-                      data-entity-type={entityType}
-                      data-entity-id={entityId}
-                      onClick={() => onEntityClick?.(list.id, entityId)}
                     >
                       {renderRow(entity, index, refHandlers.current[index]!)}
                     </div>

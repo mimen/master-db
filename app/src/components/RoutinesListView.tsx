@@ -7,12 +7,11 @@ import { RoutineDialog } from "./dialogs/RoutineDialog"
 
 import { BaseListView, RoutineListItem } from "@/components/list-items"
 import { Button } from "@/components/ui/button"
-import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
 import { useRoutineDialogShortcuts } from "@/hooks/useRoutineDialogShortcuts"
-import type { ListInstance } from "@/lib/views/types"
 import { routineSortOptions, routineGroupOptions } from "@/lib/views/entityConfigs/routineConfig"
+import type { ListInstance } from "@/lib/views/types"
 import type { TodoistProjects } from "@/types/convex/todoist"
 
 interface RoutinesListViewProps {
@@ -44,8 +43,6 @@ export function RoutinesListView({
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedRoutine, setSelectedRoutine] = useState<Doc<"routines"> | undefined>()
-
-  const { setFocusedEntity } = useFocusContext()
 
   const handleOpenCreate = () => {
     setSelectedRoutine(undefined)
@@ -133,8 +130,6 @@ export function RoutinesListView({
         isLoading={isLoading}
         focusedEntityId={focusedEntityId}
         onEntityRemoved={onEntityRemoved}
-        setFocusedEntity={() => {}}
-        setFocusedEntityInContext={(routine) => setFocusedEntity(routine?._id ?? null, routine ? 'routine' : undefined)}
         useEntityShortcuts={useRoutineDialogShortcuts}
         onEntityCountChange={onRoutineCountChange}
         onEntitiesChange={onEntitiesChange}

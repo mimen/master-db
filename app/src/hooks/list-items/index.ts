@@ -7,7 +7,6 @@
  * @example
  * ```tsx
  * import {
- *   useListItemFocus,
  *   useListItemHover,
  *   useListItemEditing,
  *   useOptimisticSync
@@ -15,7 +14,6 @@
  * ```
  */
 
-export { useListItemFocus } from './useListItemFocus'
 export { useListItemHover } from './useListItemHover'
 export { useListItemEditing } from './useListItemEditing'
 export { useOptimisticSync } from './useOptimisticSync'

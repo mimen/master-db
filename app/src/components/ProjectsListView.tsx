@@ -2,11 +2,10 @@ import { useAction, useQuery } from "convex/react"
 import { useCallback, useMemo } from "react"
 
 import { BaseListView, ProjectListItem } from "@/components/list-items"
-import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
-import type { ListInstance } from "@/lib/views/types"
 import { projectSortOptions, projectGroupOptions } from "@/lib/views/entityConfigs/projectConfig"
+import type { ListInstance } from "@/lib/views/types"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 interface ProjectsListViewProps {
@@ -34,8 +33,6 @@ export function ProjectsListView({
   onRestore,
   isMultiListView = false
 }: ProjectsListViewProps) {
-  const { setFocusedEntity } = useFocusContext()
-
   // Fetch all projects
   const allProjects: TodoistProjectsWithMetadata | undefined = useQuery(
     api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata,
@@ -90,8 +87,6 @@ export function ProjectsListView({
       isLoading={isLoading}
       focusedEntityId={focusedEntityId}
       onEntityRemoved={onEntityRemoved}
-      setFocusedEntity={() => {}}
-      setFocusedEntityInContext={(project) => setFocusedEntity(project?.todoist_id ?? null, project ? 'project' : undefined)}
       useEntityShortcuts={useProjectDialogShortcuts}
       onEntityCountChange={onProjectCountChange}
       onEntitiesChange={onEntitiesChange}
