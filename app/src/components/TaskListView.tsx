@@ -112,6 +112,7 @@ export function TaskListView({
       sortOptions={taskSortOptions}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
+      defaultSort="default"
       renderRow={(task, index, ref) => (
         <TaskListItem
           key={task._id}
