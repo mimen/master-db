@@ -34,7 +34,7 @@ export function ProjectsListView({
   onRestore,
   isMultiListView = false
 }: ProjectsListViewProps) {
-  const { setFocusedProject } = useFocusContext()
+  const { setFocusedEntity } = useFocusContext()
 
   // Fetch all projects
   const allProjects: TodoistProjectsWithMetadata | undefined = useQuery(
@@ -91,7 +91,7 @@ export function ProjectsListView({
       focusedEntityId={focusedEntityId}
       onEntityRemoved={onEntityRemoved}
       setFocusedEntity={() => {}}
-      setFocusedEntityInContext={setFocusedProject}
+      setFocusedEntityInContext={(project) => setFocusedEntity(project?.todoist_id ?? null, project ? 'project' : undefined)}
       useEntityShortcuts={useProjectDialogShortcuts}
       onEntityCountChange={onProjectCountChange}
       onEntitiesChange={onEntitiesChange}

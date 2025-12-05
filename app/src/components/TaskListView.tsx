@@ -40,7 +40,7 @@ export function TaskListView({
   onRestore,
   isMultiListView = false
 }: TaskListViewProps) {
-  const { setFocusedTask } = useFocusContext()
+  const { setFocusedEntity } = useFocusContext()
 
   // Fetch support data (always fetch if we need them for grouping)
   const projects: TodoistProjects | undefined = useQuery(
@@ -104,7 +104,7 @@ export function TaskListView({
       focusedEntityId={focusedEntityId}
       onEntityRemoved={onEntityRemoved}
       setFocusedEntity={() => {}}
-      setFocusedEntityInContext={setFocusedTask}
+      setFocusedEntityInContext={(task) => setFocusedEntity(task?.todoist_id ?? null, task ? 'task' : undefined)}
       useEntityShortcuts={useTaskDialogShortcuts}
       onEntityCountChange={onTaskCountChange}
       onEntitiesChange={onEntitiesChange}

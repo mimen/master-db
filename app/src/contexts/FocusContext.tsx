@@ -1,41 +1,59 @@
 /**
  * Focus Context
  *
- * Tracks which task, project, or routine is currently focused/selected in the UI.
+ * Tracks which entity (task, project, or routine) is currently focused/selected in the UI.
  * This is used to enable context-aware keyboard shortcuts.
+ *
+ * Simplified single-focus design - only ONE entity can be focused at a time.
  */
 
 import type { ReactNode } from 'react'
-import { createContext, useContext, useState } from 'react'
-
-import type { Doc } from '@/convex/_generated/dataModel'
-import type { TodoistProjectWithMetadata, TodoistTask } from '@/types/convex/todoist'
+import { createContext, useContext, useState, useCallback } from 'react'
 
 interface FocusContextValue {
-  focusedTask: TodoistTask | null
-  focusedProject: TodoistProjectWithMetadata | null
-  focusedRoutine: Doc<"routines"> | null
-  setFocusedTask: (task: TodoistTask | null) => void
-  setFocusedProject: (project: TodoistProjectWithMetadata | null) => void
-  setFocusedRoutine: (routine: Doc<"routines"> | null) => void
+  /**
+   * ID of currently focused entity (null if nothing focused)
+   */
+  focusedEntityId: string | null
+
+  /**
+   * Type of currently focused entity (null if nothing focused)
+   */
+  focusedEntityType: 'task' | 'project' | 'routine' | null
+
+  /**
+   * Update focused entity
+   * @param id Entity ID (null to clear focus)
+   * @param type Entity type (required when id is non-null)
+   */
+  setFocusedEntity: (id: string | null, type?: 'task' | 'project' | 'routine') => void
 }
 
 const FocusContext = createContext<FocusContextValue | undefined>(undefined)
 
 export function FocusProvider({ children }: { children: ReactNode }) {
-  const [focusedTask, setFocusedTask] = useState<TodoistTask | null>(null)
-  const [focusedProject, setFocusedProject] = useState<TodoistProjectWithMetadata | null>(null)
-  const [focusedRoutine, setFocusedRoutine] = useState<Doc<"routines"> | null>(null)
+  const [focusedEntityId, setFocusedEntityId] = useState<string | null>(null)
+  const [focusedEntityType, setFocusedEntityType] = useState<'task' | 'project' | 'routine' | null>(null)
+
+  const setFocusedEntity = useCallback((id: string | null, type?: 'task' | 'project' | 'routine') => {
+    if (id === null) {
+      setFocusedEntityId(null)
+      setFocusedEntityType(null)
+    } else {
+      if (!type) {
+        throw new Error('setFocusedEntity: type is required when id is non-null')
+      }
+      setFocusedEntityId(id)
+      setFocusedEntityType(type)
+    }
+  }, [])
 
   return (
     <FocusContext.Provider
       value={{
-        focusedTask,
-        focusedProject,
-        focusedRoutine,
-        setFocusedTask,
-        setFocusedProject,
-        setFocusedRoutine,
+        focusedEntityId,
+        focusedEntityType,
+        setFocusedEntity,
       }}
     >
       {children}

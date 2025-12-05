@@ -39,7 +39,7 @@ const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
 export function DialogManager() {
   const { currentTask, currentProject, currentRoutine, projectToMove, selectedParentProjectId, setSelectedParentProjectId, dialogType, isShortcutsOpen, isSettingsOpen, isQuickAddOpen, isSyncOpen, quickAddDefaultProjectId, closeDialog } = useDialogContext()
-  const { focusedTask, focusedProject } = useFocusContext()
+  const { focusedEntityType } = useFocusContext()
   const [isMovingProject, setIsMovingProject] = useState(false)
   const allProjects = useQuery(api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata)
 
@@ -103,10 +103,10 @@ export function DialogManager() {
 
   // Build context state for keyboard shortcuts
   const contextState: AppContextState = useMemo(() => ({
-    hasTaskFocused: focusedTask !== null,
-    hasProjectFocused: focusedProject !== null,
+    hasTaskFocused: focusedEntityType === 'task',
+    hasProjectFocused: focusedEntityType === 'project',
     hasDialogOpen: dialogType !== null || isQuickAddOpen || isSettingsOpen || isSyncOpen,
-  }), [focusedTask, focusedProject, dialogType, isQuickAddOpen, isSettingsOpen, isSyncOpen])
+  }), [focusedEntityType, dialogType, isQuickAddOpen, isSettingsOpen, isSyncOpen])
 
   const handlePrioritySelect = async (priority: number) => {
     if (currentTask) {

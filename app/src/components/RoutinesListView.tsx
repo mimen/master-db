@@ -45,7 +45,7 @@ export function RoutinesListView({
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [selectedRoutine, setSelectedRoutine] = useState<Doc<"routines"> | undefined>()
 
-  const { setFocusedRoutine } = useFocusContext()
+  const { setFocusedEntity } = useFocusContext()
 
   const handleOpenCreate = () => {
     setSelectedRoutine(undefined)
@@ -134,7 +134,7 @@ export function RoutinesListView({
         focusedEntityId={focusedEntityId}
         onEntityRemoved={onEntityRemoved}
         setFocusedEntity={() => {}}
-        setFocusedEntityInContext={setFocusedRoutine}
+        setFocusedEntityInContext={(routine) => setFocusedEntity(routine?._id ?? null, routine ? 'routine' : undefined)}
         useEntityShortcuts={useRoutineDialogShortcuts}
         onEntityCountChange={onRoutineCountChange}
         onEntitiesChange={onEntitiesChange}
