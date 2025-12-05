@@ -17,9 +17,87 @@ function withArchivedAtBottom(
 }
 
 /**
+ * Build hierarchy path for a project (for sorting in flattened hierarchy order)
+ * Returns array of child_orders from root to this project
+ */
+function getHierarchyPath(
+  project: TodoistProjectWithMetadata,
+  projectMap: Map<string, TodoistProjectWithMetadata>
+): number[] {
+  const path: number[] = []
+  let current: TodoistProjectWithMetadata | undefined = project
+
+  while (current) {
+    path.unshift(current.child_order)
+    current = current.parent_id ? projectMap.get(current.parent_id) : undefined
+  }
+
+  return path
+}
+
+/**
+ * Compare two hierarchy paths lexicographically
+ */
+function compareHierarchyPaths(pathA: number[], pathB: number[]): number {
+  const minLen = Math.min(pathA.length, pathB.length)
+
+  for (let i = 0; i < minLen; i++) {
+    if (pathA[i] !== pathB[i]) {
+      return pathA[i] - pathB[i]
+    }
+  }
+
+  // Shorter path (parent) comes before longer path (child)
+  return pathA.length - pathB.length
+}
+
+/**
+ * Creates a hierarchy sort function that captures the project list
+ * This enables proper flattened hierarchy ordering
+ */
+function createHierarchySortFn(
+  projects: TodoistProjectWithMetadata[]
+): (a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => number {
+  // Build lookup map once
+  const projectMap = new Map<string, TodoistProjectWithMetadata>()
+  projects.forEach((p) => projectMap.set(p.todoist_id, p))
+
+  // Cache paths for efficiency
+  const pathCache = new Map<string, number[]>()
+  const getPath = (p: TodoistProjectWithMetadata): number[] => {
+    if (!pathCache.has(p.todoist_id)) {
+      pathCache.set(p.todoist_id, getHierarchyPath(p, projectMap))
+    }
+    return pathCache.get(p.todoist_id)!
+  }
+
+  return withArchivedAtBottom((a, b) => {
+    return compareHierarchyPaths(getPath(a), getPath(b))
+  })
+}
+
+/**
+ * Sort projects in flattened hierarchy order
+ * Parents come before their children, siblings sorted by child_order
+ */
+export function sortProjectsByHierarchy(
+  projects: TodoistProjectWithMetadata[]
+): TodoistProjectWithMetadata[] {
+  const sortFn = createHierarchySortFn(projects)
+  return [...projects].sort(sortFn)
+}
+
+/**
  * Sort options for projects
  */
 export const projectSortOptions: SortOption<TodoistProjectWithMetadata>[] = [
+  {
+    id: "default",
+    label: "Default",
+    // No-op: ProjectsListView pre-sorts using sortProjectsByHierarchy
+    // This preserves the flattened hierarchy order
+    compareFn: () => 0,
+  },
   {
     id: "az",
     label: "A-Z",

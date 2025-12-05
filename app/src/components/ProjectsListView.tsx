@@ -6,7 +6,7 @@ import { useFocusContext } from "@/contexts/FocusContext"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import type { ListInstance } from "@/lib/views/types"
-import { projectSortOptions, projectGroupOptions } from "@/lib/views/entityConfigs/projectConfig"
+import { projectSortOptions, projectGroupOptions, sortProjectsByHierarchy } from "@/lib/views/entityConfigs/projectConfig"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 interface ProjectsListViewProps {
@@ -48,11 +48,12 @@ export function ProjectsListView({
     await unarchiveProject({ projectId })
   }, [unarchiveProject])
 
-  // Filter projects (sorting is handled by BaseListView via sortOptions)
+  // Filter and pre-sort projects in hierarchy order
+  // Pre-sorting ensures "default" sort preserves flattened hierarchy
   const projects = useMemo(() => {
     if (!allProjects) return []
 
-    return allProjects.filter((p: TodoistProjectWithMetadata) => {
+    const filtered = allProjects.filter((p: TodoistProjectWithMetadata) => {
       // Always exclude deleted projects
       if (p.is_deleted) return false
 
@@ -71,6 +72,9 @@ export function ProjectsListView({
 
       return true
     })
+
+    // Pre-sort in hierarchy order (parents before children, siblings by child_order)
+    return sortProjectsByHierarchy(filtered)
   }, [allProjects, list.query])
 
   const visibleProjects = list.maxTasks ? projects.slice(0, list.maxTasks) : projects
@@ -99,6 +103,7 @@ export function ProjectsListView({
       sortOptions={projectSortOptions}
       groupOptions={projectGroupOptions}
       groupData={{ projects: visibleProjects }}
+      defaultSort="default"
       renderRow={(project, index, ref) => (
         <ProjectListItem
           key={project._id}
