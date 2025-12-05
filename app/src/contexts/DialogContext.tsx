@@ -51,7 +51,21 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [isSyncOpen, setIsSyncOpen] = useState(false)
   const [quickAddDefaultProjectId, setQuickAddDefaultProjectId] = useState<string | undefined>(undefined)
 
+  // Store the focused entity before opening a dialog for restoration after closing
+  const [focusRestoreTarget, setFocusRestoreTarget] = useState<string | null>(null)
+
+  // Helper to capture currently focused element before opening dialog
+  const captureFocusedElement = useCallback(() => {
+    const activeElement = document.activeElement as HTMLElement | null
+    const entityId = activeElement?.getAttribute('data-entity-id')
+    if (entityId) {
+      setFocusRestoreTarget(entityId)
+    }
+  }, [])
+
   const openPriority = useCallback((item: TodoistTask | TodoistProjectWithMetadata | Doc<"routines">) => {
+    captureFocusedElement()
+
     // Check if it's a task, project, or routine by checking for specific fields
     if ('content' in item) {
       // Task
@@ -70,9 +84,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       setCurrentRoutine(null)
     }
     setDialogType('priority')
-  }, [])
+  }, [captureFocusedElement])
 
   const openProject = useCallback((item: TodoistTask | Doc<"routines">) => {
+    captureFocusedElement()
+
     if ('content' in item) {
       // Task
       setCurrentTask(item as TodoistTask)
@@ -84,9 +100,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     }
     setCurrentProject(null)
     setDialogType('project')
-  }, [])
+  }, [captureFocusedElement])
 
   const openLabel = useCallback((item: TodoistTask | Doc<"routines">) => {
+    captureFocusedElement()
+
     if ('content' in item) {
       // Task
       setCurrentTask(item as TodoistTask)
@@ -98,45 +116,52 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     }
     setCurrentProject(null)
     setDialogType('label')
-  }, [])
+  }, [captureFocusedElement])
 
   const openDueDate = useCallback((task: TodoistTask) => {
+    captureFocusedElement()
     setCurrentTask(task)
     setDialogType('dueDate')
-  }, [])
+  }, [captureFocusedElement])
 
   const openDeadline = useCallback((task: TodoistTask) => {
+    captureFocusedElement()
     setCurrentTask(task)
     setDialogType('deadline')
-  }, [])
+  }, [captureFocusedElement])
 
   const openComplete = useCallback((task: TodoistTask) => {
+    captureFocusedElement()
     setCurrentTask(task)
     setDialogType('complete')
-  }, [])
+  }, [captureFocusedElement])
 
   const openDelete = useCallback((task: TodoistTask) => {
+    captureFocusedElement()
     setCurrentTask(task)
     setDialogType('delete')
-  }, [])
+  }, [captureFocusedElement])
 
   const openArchive = useCallback((project: TodoistProjectWithMetadata) => {
+    captureFocusedElement()
     setCurrentProject(project)
     setCurrentTask(null)
     setDialogType('archive')
-  }, [])
+  }, [captureFocusedElement])
 
   const openMoveProject = useCallback((project: TodoistProjectWithMetadata) => {
+    captureFocusedElement()
     setProjectToMove(project)
     setSelectedParentProjectId(null)
     setDialogType('moveProject')
-  }, [])
+  }, [captureFocusedElement])
 
   const openProjectType = useCallback((project: TodoistProjectWithMetadata) => {
+    captureFocusedElement()
     setCurrentProject(project)
     setCurrentTask(null)
     setDialogType('projectType')
-  }, [])
+  }, [captureFocusedElement])
 
   const handleSetSelectedParentProjectId = useCallback((parentId: string | null) => {
     setSelectedParentProjectId(parentId)
@@ -175,7 +200,22 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setIsQuickAddOpen(false)
     setIsSyncOpen(false)
     setQuickAddDefaultProjectId(undefined)
-  }, [])
+
+    // Restore focus to the previously focused element
+    if (focusRestoreTarget) {
+      // Use setTimeout to ensure dialog is fully closed before restoring focus
+      setTimeout(() => {
+        const element = document.querySelector(
+          `[data-entity-id="${focusRestoreTarget}"]`
+        ) as HTMLElement | null
+
+        if (element) {
+          element.focus()
+        }
+      }, 0)
+      setFocusRestoreTarget(null)
+    }
+  }, [focusRestoreTarget])
 
   const value: DialogContextValue = {
     currentTask,
