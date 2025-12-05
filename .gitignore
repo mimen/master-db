@@ -54,3 +54,6 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+# Git worktrees
+.worktrees/
