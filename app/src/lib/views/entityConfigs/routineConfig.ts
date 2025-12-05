@@ -1,22 +1,34 @@
-import type { SortOption, GroupOption, GroupData } from "@/lib/views/types"
+import type { Doc } from "@/convex/_generated/dataModel"
+import type { SortOption, GroupOption } from "@/lib/views/types"
 
-// Routine type - will use doc structure from Convex
-export type Routine = {
-  _id: string
-  _creationTime: number
-  name: string
-  description?: string
-  frequency?: "daily" | "weekly" | "biweekly" | "monthly"
-  estimatedDuration?: number
-  todoistProjectId?: string
-  defer?: boolean
-  createdAt: number
+// Use Convex Doc type for routines
+type Routine = Doc<"routines">
+
+/**
+ * Helper to wrap sort functions with deferred-at-bottom behavior
+ */
+function withDeferredAtBottom(
+  compareFn: (a: Routine, b: Routine) => number
+) {
+  return (a: Routine, b: Routine) => {
+    // Always keep deferred (paused) routines at the bottom
+    if (a.defer !== b.defer) {
+      return a.defer ? 1 : -1
+    }
+    return compareFn(a, b)
+  }
 }
 
 /**
  * Sort options for routines
  */
 export const routineSortOptions: SortOption<Routine>[] = [
+  {
+    id: "default",
+    label: "Default",
+    // A-Z with deferred routines at the bottom
+    compareFn: withDeferredAtBottom((a, b) => a.name.localeCompare(b.name)),
+  },
   {
     id: "az",
     label: "A-Z",
@@ -26,16 +38,21 @@ export const routineSortOptions: SortOption<Routine>[] = [
     id: "frequency",
     label: "Frequency",
     compareFn: (a, b) => {
-      const frequencyOrder = ["daily", "weekly", "biweekly", "monthly"]
-      const aFreq = a.frequency ?? ""
-      const bFreq = b.frequency ?? ""
-      return frequencyOrder.indexOf(aFreq) - frequencyOrder.indexOf(bFreq)
+      const frequencyOrder = [
+        "Daily", "Twice a Week", "Weekly", "Every Other Week",
+        "Monthly", "Every Other Month", "Quarterly",
+        "Twice a Year", "Yearly", "Every Other Year"
+      ]
+      return frequencyOrder.indexOf(a.frequency) - frequencyOrder.indexOf(b.frequency)
     },
   },
   {
     id: "duration",
     label: "Duration",
-    compareFn: (a, b) => (b.estimatedDuration ?? 0) - (a.estimatedDuration ?? 0),
+    compareFn: (a, b) => {
+      const durationOrder = ["5min", "15min", "30min", "45min", "1hr", "2hr", "3hr", "4hr"]
+      return durationOrder.indexOf(a.duration) - durationOrder.indexOf(b.duration)
+    },
   },
   {
     id: "created",
@@ -51,41 +68,36 @@ export const routineGroupOptions: GroupOption<Routine>[] = [
   {
     id: "duration",
     label: "Duration",
-    groupFn: (routine) => {
-      const mins = routine.estimatedDuration ?? 0
-      if (mins < 30) return "short"
-      if (mins < 60) return "medium"
-      return "long"
-    },
+    groupFn: (routine) => routine.duration,
     getGroupLabel: (key) => {
       const labels: Record<string, string> = {
-        short: "< 30 minutes",
-        medium: "30-60 minutes",
-        long: "60+ minutes",
+        "5min": "5 minutes",
+        "15min": "15 minutes",
+        "30min": "30 minutes",
+        "45min": "45 minutes",
+        "1hr": "1 hour",
+        "2hr": "2 hours",
+        "3hr": "3 hours",
+        "4hr": "4 hours",
       }
-      return labels[key] ?? "Unknown"
+      return labels[key] ?? key
     },
     groupSort: (a, b) => {
-      const order = ["short", "medium", "long"]
+      const order = ["5min", "15min", "30min", "45min", "1hr", "2hr", "3hr", "4hr"]
       return order.indexOf(a) - order.indexOf(b)
     },
   },
   {
     id: "frequency",
     label: "Frequency",
-    groupFn: (routine) => routine.frequency ?? "custom",
-    getGroupLabel: (key) => {
-      const labels: Record<string, string> = {
-        daily: "Daily",
-        weekly: "Weekly",
-        biweekly: "Bi-weekly",
-        monthly: "Monthly",
-        custom: "Custom",
-      }
-      return labels[key] ?? "Unknown"
-    },
+    groupFn: (routine) => routine.frequency,
+    getGroupLabel: (key) => key, // Frequency values are already human-readable
     groupSort: (a, b) => {
-      const order = ["daily", "weekly", "biweekly", "monthly", "custom"]
+      const order = [
+        "Daily", "Twice a Week", "Weekly", "Every Other Week",
+        "Monthly", "Every Other Month", "Quarterly",
+        "Twice a Year", "Yearly", "Every Other Year"
+      ]
       return order.indexOf(a) - order.indexOf(b)
     },
   },
