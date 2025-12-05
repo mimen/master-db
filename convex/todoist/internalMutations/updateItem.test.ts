@@ -200,31 +200,46 @@ describe('updateItem', () => {
     expect(Object.keys(patchUpdates)).toHaveLength(0);
   });
 
-  test('handles mixed null and valid values', () => {
+  test('handles mixed null and valid values with clearable fields', () => {
     const updates = {
       content: "New content",
       description: null,
       priority: 3,
       due: null,
+      deadline: null,
       labels: ["work"],
       checked: null,
       is_deleted: 0,
     };
 
     const patchUpdates: Record<string, unknown> = {};
+    const clearableFields = new Set(['due', 'deadline', 'completed_at']);
 
     for (const [key, value] of Object.entries(updates)) {
-      if (value !== null) {
+      if (value === null) {
+        // For clearable fields, convert null to undefined to remove the field
+        if (clearableFields.has(key)) {
+          patchUpdates[key] = undefined;
+        }
+        // For other fields, skip null (preserve existing value)
+      } else {
+        // Non-null values are set directly
         patchUpdates[key] = value;
       }
     }
 
-    const expectedKeys = ["content", "priority", "labels", "is_deleted"];
+    const expectedKeys = ["content", "priority", "labels", "is_deleted", "due", "deadline"];
     expect(Object.keys(patchUpdates).sort()).toEqual(expectedKeys.sort());
     expect(patchUpdates.content).toBe("New content");
     expect(patchUpdates.priority).toBe(3);
     expect(patchUpdates.labels).toEqual(["work"]);
     expect(patchUpdates.is_deleted).toBe(0);
+    // Clearable fields should be set to undefined (to clear them)
+    expect(patchUpdates.due).toBeUndefined();
+    expect(patchUpdates.deadline).toBeUndefined();
+    // Non-clearable null fields should not be in the patch
+    expect(patchUpdates.description).toBeUndefined();
+    expect(patchUpdates.checked).toBeUndefined();
   });
 
   test('sync_version handling', () => {

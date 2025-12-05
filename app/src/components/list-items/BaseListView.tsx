@@ -299,19 +299,23 @@ export function BaseListView<T>({
     return index === -1 ? null : index
   }, [visibleEntities, focusedEntityId, getEntityId])
 
-  // Setup ref array for focus management
+  // Setup ref map for focus management (using Map to avoid index shifting issues)
+  const elementRefsMap = useRef<Map<string, HTMLDivElement | null>>(new Map())
   const elementRefs = useRef<(HTMLDivElement | null)[]>([])
   const refHandlers = useRef<((element: HTMLDivElement | null) => void)[]>([])
 
-  // Initialize ref handlers for visible entities
-  elementRefs.current.length = visibleEntities.length
-  refHandlers.current.length = visibleEntities.length
+  // Build index-based refs array from Map for useListItemFocus compatibility
+  elementRefs.current = visibleEntities.map((entity) => {
+    const entityId = getEntityId(entity)
+    return elementRefsMap.current.get(entityId) ?? null
+  })
 
+  // Initialize ref handlers for visible entities
+  refHandlers.current.length = visibleEntities.length
   for (let i = 0; i < visibleEntities.length; i++) {
-    if (!refHandlers.current[i]) {
-      refHandlers.current[i] = (element) => {
-        elementRefs.current[i] = element
-      }
+    const entityId = getEntityId(visibleEntities[i])
+    refHandlers.current[i] = (element) => {
+      elementRefsMap.current.set(entityId, element)
     }
   }
 

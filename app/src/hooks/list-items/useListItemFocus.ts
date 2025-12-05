@@ -102,8 +102,10 @@ export function useListItemFocus({
     }
 
     const node = elementRefs.current[focusedIndex]
+
     if (!node) {
-      lastFocusedIndex.current = null
+      // Ref not ready - this can happen during rapid clicks
+      // Don't update lastFocusedIndex so we'll retry on next render
       return
     }
 

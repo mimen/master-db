@@ -50,15 +50,25 @@ export const updateItem = internalMutation({
       return;
     }
 
-    // Filter out null values and convert them to undefined for patch
-    // Build a clean update object without null values
+    // Build patch updates, handling null values appropriately
+    // For clearable fields (due, deadline, completed_at), convert null to undefined to clear them
+    // For other fields, skip null values (keep existing value)
     // Note: We use 'any' here because we're dynamically filtering properties
     // and TypeScript can't track the resulting type through Object.entries
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patchUpdates: any = {};
 
+    const clearableFields = new Set(['due', 'deadline', 'completed_at']);
+
     for (const [key, value] of Object.entries(updates)) {
-      if (value !== null) {
+      if (value === null) {
+        // For clearable fields, convert null to undefined to remove the field
+        if (clearableFields.has(key)) {
+          patchUpdates[key] = undefined;
+        }
+        // For other fields, skip null (preserve existing value)
+      } else {
+        // Non-null values are set directly
         patchUpdates[key] = value;
       }
     }
