@@ -6,6 +6,11 @@ import type { TodoistTaskWithProject } from "@/types/convex/todoist"
  */
 export const taskSortOptions: SortOption<TodoistTaskWithProject>[] = [
   {
+    id: "default",
+    label: "Default",
+    compareFn: (a, b) => a.child_order - b.child_order,
+  },
+  {
     id: "az",
     label: "A-Z",
     compareFn: (a, b) => a.content.localeCompare(b.content),
