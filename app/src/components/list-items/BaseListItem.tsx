@@ -242,7 +242,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
         className={cn(
           "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
           "hover:bg-accent/50",
-          "focus:outline-none focus:bg-accent/50 focus:border-primary/30",
+          "focus:outline-none",
           "aria-selected:bg-accent/50 aria-selected:border-primary/30",
           archivedClass,
           className
