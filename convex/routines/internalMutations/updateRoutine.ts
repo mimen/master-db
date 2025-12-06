@@ -37,13 +37,14 @@ export const updateRoutine = mutation({
     ),
     timeOfDay: v.optional(
       v.union(
+        v.null(),
         v.literal("Morning"),
         v.literal("Day"),
         v.literal("Evening"),
         v.literal("Night")
       )
     ),
-    idealDay: v.optional(v.number()), // 0-6 for Sunday-Saturday
+    idealDay: v.optional(v.union(v.null(), v.number())), // 0-6 for Sunday-Saturday, null to clear
     todoistProjectId: v.optional(v.string()),
     todoistLabels: v.optional(v.array(v.string())),
     priority: v.optional(v.number()), // 1-4
@@ -67,8 +68,9 @@ export const updateRoutine = mutation({
       updateData.frequency = updates.frequency;
     if (updates.duration !== undefined) updateData.duration = updates.duration;
     if (updates.timeOfDay !== undefined)
-      updateData.timeOfDay = updates.timeOfDay;
-    if (updates.idealDay !== undefined) updateData.idealDay = updates.idealDay;
+      updateData.timeOfDay = updates.timeOfDay === null ? undefined : updates.timeOfDay;
+    if (updates.idealDay !== undefined)
+      updateData.idealDay = updates.idealDay === null ? undefined : updates.idealDay;
     if (updates.todoistProjectId !== undefined)
       updateData.todoistProjectId = updates.todoistProjectId;
     if (updates.todoistLabels !== undefined)

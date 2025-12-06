@@ -73,8 +73,8 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
   const [description, setDescription] = useState(routine?.description || "")
   const [frequency, setFrequency] = useState(routine?.frequency || "Daily")
   const [duration, setDuration] = useState(routine?.duration || "15min")
-  const [timeOfDay, setTimeOfDay] = useState<string | undefined>(routine?.timeOfDay)
-  const [idealDay, setIdealDay] = useState<number | undefined>(routine?.idealDay)
+  const [timeOfDay, setTimeOfDay] = useState<string | null | undefined>(routine?.timeOfDay)
+  const [idealDay, setIdealDay] = useState<number | null | undefined>(routine?.idealDay)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -167,8 +167,8 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
       setDescription("")
       setFrequency("Daily")
       setDuration("15min")
-      setTimeOfDay(undefined)
-      setIdealDay(undefined)
+      setTimeOfDay(null)
+      setIdealDay(null)
     }
   }, [routine, isOpen])
 
@@ -285,7 +285,7 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
           {/* Time of Day */}
           <div className="space-y-2">
             <Label htmlFor="timeOfDay">Time of Day (optional)</Label>
-            <Select value={timeOfDay || "none"} onValueChange={(v) => setTimeOfDay(v === "none" ? undefined : v)}>
+            <Select value={timeOfDay ?? "none"} onValueChange={(v) => setTimeOfDay(v === "none" ? null : v)}>
               <SelectTrigger id="timeOfDay">
                 <SelectValue placeholder="No specific time" />
               </SelectTrigger>
@@ -305,8 +305,8 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
             <div className="space-y-2">
               <Label htmlFor="idealDay">Preferred Day (optional)</Label>
               <Select
-                value={idealDay !== undefined ? idealDay.toString() : "none"}
-                onValueChange={(v) => setIdealDay(v === "none" ? undefined : parseInt(v))}
+                value={idealDay != null ? idealDay.toString() : "none"}
+                onValueChange={(v) => setIdealDay(v === "none" ? null : parseInt(v))}
               >
                 <SelectTrigger id="idealDay">
                   <SelectValue placeholder="Any day" />

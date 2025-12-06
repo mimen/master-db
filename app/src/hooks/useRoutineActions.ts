@@ -45,8 +45,8 @@ export function useRoutineActions() {
     description?: string
     frequency?: string
     duration?: string
-    timeOfDay?: string
-    idealDay?: number
+    timeOfDay?: string | null
+    idealDay?: number | null
     todoistProjectId?: string
     todoistLabels?: string[]
     priority?: number

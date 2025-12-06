@@ -5,6 +5,7 @@ import { internal } from "../../_generated/api";
 import { internalAction } from "../../_generated/server";
 import { ActionResponse, getTodoistClient } from "../../todoist/actions/utils/todoistClient";
 import { durationToMinutes } from "../types/duration";
+import { Frequency } from "../types/frequency";
 import { getTimeOfDayLabel } from "../types/timeOfDay";
 
 /**
@@ -48,9 +49,15 @@ export const createRoutineTaskInTodoist = internalAction({
 
       const client = getTodoistClient();
 
-      // Format dates - readyDate becomes scheduled date, dueDate becomes deadline
-      const scheduledDate = new Date(routineTask.readyDate);
-      const deadlineDate = new Date(routineTask.dueDate);
+      // Format date from routineTask.dueDate
+      const taskDate = new Date(routineTask.dueDate);
+      const taskDateStr = taskDate.toISOString().split("T")[0];
+
+      // Determine if this routine should use dueDate vs deadlineDate:
+      // - Daily routines: use dueDate (appear in Today view)
+      // - Routines with idealDay: use dueDate (appear on specific day)
+      // - All other routines: use deadlineDate only (flexible scheduling)
+      const shouldUseDueDate = routine.frequency === Frequency.Daily || routine.idealDay !== undefined;
 
       // Prepare labels - add "routine" and time-of-day label
       const labels = [...(routine.todoistLabels || []), "routine"];
@@ -64,19 +71,16 @@ export const createRoutineTaskInTodoist = internalAction({
         labels,
       };
 
+      // Set due date or deadline based on routine type
+      if (shouldUseDueDate) {
+        taskArgs.dueDate = taskDateStr;
+      } else {
+        taskArgs.deadlineDate = taskDateStr;
+      }
+
       // Add description if present
       if (routine.description) {
         taskArgs.description = routine.description;
-      }
-
-      // Set scheduled date (shows in Today/Upcoming)
-      const scheduledDateStr = scheduledDate.toISOString().split("T")[0];
-      Object.assign(taskArgs, { dueDate: scheduledDateStr });
-
-      // Set deadline only if different from scheduled (skip for daily routines)
-      const deadlineDateStr = deadlineDate.toISOString().split("T")[0];
-      if (deadlineDateStr !== scheduledDateStr) {
-        taskArgs.deadlineDate = deadlineDateStr;
       }
 
       // Set priority if specified
