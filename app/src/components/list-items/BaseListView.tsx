@@ -76,8 +76,9 @@ export interface BaseListViewProps<T> {
    * @param entity Current entity to render
    * @param index Position in entities array (used for focus management)
    * @param onElementRef Callback to register element ref for focus management
+   * @param query Query definition for this list (for filter matching)
    */
-  renderRow: (entity: T, index: number, onElementRef: (el: HTMLDivElement | null) => void) => React.ReactNode
+  renderRow: (entity: T, index: number, onElementRef: (el: HTMLDivElement | null) => void, query: import("@/lib/views/types").ListQueryInput) => React.ReactNode
 
   // ============= LIST CONFIGURATION =============
 
@@ -493,7 +494,8 @@ export function BaseListView<T>({
                               {renderRow(
                                 entity,
                                 visibleIndex,
-                                visibleIndex >= 0 ? refHandlers.current[visibleIndex]! : () => {}
+                                visibleIndex >= 0 ? refHandlers.current[visibleIndex]! : () => {},
+                                list.query
                               )}
                             </div>
                           )
@@ -513,7 +515,7 @@ export function BaseListView<T>({
                       key={entityId}
                       data-testid={`${entityType}-row-${index}`}
                     >
-                      {renderRow(entity, index, refHandlers.current[index]!)}
+                      {renderRow(entity, index, refHandlers.current[index]!, list.query)}
                     </div>
                   )
                 })}

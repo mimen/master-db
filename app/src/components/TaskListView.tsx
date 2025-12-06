@@ -84,7 +84,15 @@ export function TaskListView({
   const visibleTasks = list.maxTasks ? resolvedTasks.slice(0, list.maxTasks) : resolvedTasks
 
   const isLoading = resolvedQuery === null || tasks === undefined
-  const isProjectView = list.query.type === "project" || list.query.type === "inbox"
+
+  // Create list with resolved query (important for inbox views which need inboxProjectId)
+  const listWithResolvedQuery = useMemo(() => {
+    if (!resolvedQuery) return list
+    return {
+      ...list,
+      query: resolvedQuery
+    }
+  }, [list, resolvedQuery])
 
   // BaseListView handles all list-level rendering (header, empty state, collapse, focus, count)
   return (
@@ -92,7 +100,7 @@ export function TaskListView({
       entities={visibleTasks}
       entityType="task"
       getEntityId={(task) => task.todoist_id}
-      list={list}
+      list={listWithResolvedQuery}
       isMultiListView={isMultiListView}
       isDismissed={isDismissed}
       onDismiss={onDismiss}
@@ -107,16 +115,16 @@ export function TaskListView({
       sortOptions={taskSortOptions}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
-      renderRow={(task, index, ref) => (
+      renderRow={(task, index, ref, query) => (
         <TaskListItem
           key={task._id}
           task={task}
           onElementRef={ref}
           onClick={() => onTaskClick?.(list.id, task.todoist_id)}
-          isProjectView={isProjectView}
           allLabels={labels}
           onEntityRemoved={onEntityRemoved}
           listId={list.id}
+          query={query}
         />
       )}
     />

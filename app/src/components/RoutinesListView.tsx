@@ -137,7 +137,7 @@ export function RoutinesListView({
         sortOptions={routineSortOptions}
         groupOptions={routineGroupOptions}
         groupData={{ projects }}
-        renderRow={(routine, index, ref) => (
+        renderRow={(routine, index, ref, query) => (
           <RoutineListItem
             key={routine._id}
             routine={routine}

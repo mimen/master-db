@@ -94,7 +94,7 @@ export function ProjectsListView({
       sortOptions={projectSortOptions}
       groupOptions={projectGroupOptions}
       groupData={{ projects: visibleProjects }}
-      renderRow={(project, index, ref) => (
+      renderRow={(project, index, ref, query) => (
         <ProjectListItem
           key={project._id}
           project={project}

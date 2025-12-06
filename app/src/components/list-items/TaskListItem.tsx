@@ -15,30 +15,33 @@ import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useOptimisticTaskText } from "@/hooks/useOptimisticTaskText"
 import { useOptimisticSync } from "@/hooks/list-items"
 import { getProjectColor } from "@/lib/colors"
+import { applyOptimisticTaskUpdate } from "@/lib/cursor/applyOptimisticUpdate"
+import { matchesViewFilter } from "@/lib/cursor/filters"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
 import { BaseListItem } from "./BaseListItem"
 import type { TodoistTaskWithProject, TodoistLabelDoc } from "@/types/convex/todoist"
+import type { ListQueryInput } from "@/lib/views/types"
 
 interface TaskListItemProps {
   task: TodoistTaskWithProject
   onElementRef: (element: HTMLDivElement | null) => void
   onClick?: () => void
-  isProjectView: boolean
   allLabels?: TodoistLabelDoc[]
   onEntityRemoved?: (listId: string, entityId: string) => void
   listId?: string
+  query: ListQueryInput
 }
 
 export const TaskListItem = memo(function TaskListItem({
   task,
   onElementRef,
   onClick,
-  isProjectView,
   allLabels,
   onEntityRemoved,
-  listId
+  listId,
+  query
 }: TaskListItemProps) {
   // ============= ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS =============
 
@@ -100,16 +103,17 @@ export const TaskListItem = memo(function TaskListItem({
   const assignee = task.assigned_by_uid || task.responsible_uid
   const markdownSegments = parseMarkdownLinks(displayContent)
 
-  // Notify cursor system when task is being removed (use effect to avoid setState during render)
+  // Notify cursor system when task no longer matches filter (use effect to avoid setState during render)
   useEffect(() => {
-    const shouldRemove =
-      optimisticUpdate?.type === "task-complete" ||
-      (optimisticUpdate?.type === "project-move" && isProjectView)
+    if (!optimisticUpdate || !onEntityRemoved || !listId) return
 
-    if (shouldRemove && onEntityRemoved && listId) {
+    const updatedTask = applyOptimisticTaskUpdate(task, optimisticUpdate)
+    const stillMatchesFilter = matchesViewFilter(query, updatedTask)
+
+    if (!stillMatchesFilter) {
       onEntityRemoved(listId, task.todoist_id)
     }
-  }, [optimisticUpdate, isProjectView, onEntityRemoved, listId, task.todoist_id])
+  }, [optimisticUpdate, query, task, listId, onEntityRemoved])
 
   // Expose editing functions to parent (for keyboard shortcuts)
   useEffect(() => {
@@ -189,14 +193,12 @@ export const TaskListItem = memo(function TaskListItem({
 
   // ============= EARLY RETURNS (after all hooks) =============
 
-  // Hide task immediately if completing
-  if (optimisticUpdate?.type === "task-complete") {
-    return null
-  }
-
-  // Hide task immediately if moving in project-filtered view
-  if (optimisticUpdate?.type === "project-move" && isProjectView) {
-    return null
+  // Hide task immediately if it no longer matches the view's filter
+  if (optimisticUpdate) {
+    const updatedTask = applyOptimisticTaskUpdate(task, optimisticUpdate)
+    if (!matchesViewFilter(query, updatedTask)) {
+      return null
+    }
   }
 
   // ============= COMPONENT LOGIC =============
