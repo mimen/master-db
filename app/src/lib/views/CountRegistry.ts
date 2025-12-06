@@ -32,14 +32,15 @@ export class CountRegistry {
    * - Multi-list views (Priority Queue, etc.)
    * - Project family views (parent + children)
    *
-   * For project views in hierarchy mode (when projectTree is in context),
-   * automatically includes counts from all descendant projects.
+   * For project views in hierarchy mode with includeDescendants=true,
+   * recursively includes counts from all descendant projects.
    *
    * @param viewKey - The view to get count for
    * @param context - Optional context with projects/labels data for view resolution
+   * @param includeDescendants - If true, include counts from all descendant projects (for collapsed parent projects)
    * @returns Total count of tasks in the view
    */
-  getCountForView(viewKey: ViewKey, context?: ViewBuildContext): number {
+  getCountForView(viewKey: ViewKey, context?: ViewBuildContext, includeDescendants?: boolean): number {
     try {
       // Resolve view to get its lists
       const view = resolveView(viewKey, context)
@@ -52,8 +53,8 @@ export class CountRegistry {
         return sum + listCount
       }, 0)
 
-      // For project views with hierarchy context, recursively add children counts
-      if (viewKey.startsWith("view:project:") && context?.projectTree) {
+      // For collapsed parent projects, recursively add children counts
+      if (includeDescendants && viewKey.startsWith("view:project:") && context?.projectTree) {
         const projectId = viewKey.replace("view:project:", "")
         const childrenCount = this.getProjectChildrenCount(projectId, context)
         count += childrenCount

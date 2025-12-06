@@ -9,7 +9,7 @@ import type { ViewBuildContext, ViewKey } from "@/lib/views/types"
 interface CountContextValue {
   registry: CountRegistry
   isLoaded: boolean
-  getCountForView: (viewKey: ViewKey, context?: ViewBuildContext) => number
+  getCountForView: (viewKey: ViewKey, context?: ViewBuildContext, includeDescendants?: boolean) => number
 }
 
 const CountContext = createContext<CountContextValue | null>(null)
@@ -47,8 +47,8 @@ export function CountProvider({ children }: { children: ReactNode }) {
   }, [listCounts])
 
   // Helper method for convenience
-  const getCountForView = (viewKey: ViewKey, context?: ViewBuildContext): number => {
-    return registry.getCountForView(viewKey, context)
+  const getCountForView = (viewKey: ViewKey, context?: ViewBuildContext, includeDescendants?: boolean): number => {
+    return registry.getCountForView(viewKey, context, includeDescendants)
   }
 
   const value: CountContextValue = {

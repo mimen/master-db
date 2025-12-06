@@ -62,8 +62,10 @@ export function ViewItem({
   }
 
   // 3. Get count from CountRegistry
+  // For collapsed parent projects, include descendant counts
   const { getCountForView } = useCountRegistry()
-  const count = viewContext ? getCountForView(viewKey, viewContext) : null
+  const includeDescendants = hasChildren && isCollapsed
+  const count = viewContext ? getCountForView(viewKey, viewContext, includeDescendants) : null
 
   // 4. Determine active state
   const isActive = currentViewKey === viewKey
