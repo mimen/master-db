@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 
-import type { ProjectSort, LabelSort, RoutineSort } from "../types"
+import type { ProjectSort, LabelSort, RoutineSort, CollapsedViewKey } from "../types"
+
+import type { ViewKey } from "@/lib/views/types"
 
 interface CollapsedSections {
   folders: boolean
@@ -17,6 +19,7 @@ const STORAGE_KEYS = {
   COLLAPSED_SECTIONS: "sidebar:collapsedSections",
   COLLAPSED_PROJECTS: "sidebar:collapsedProjects",
   COLLAPSED_PRIORITY_GROUPS: "sidebar:collapsedPriorityGroups",
+  COLLAPSED_VIEWS: "sidebar:collapsedViews", // NEW: Unified section-scoped collapse system
   EXPAND_NESTED: "sidebar:expandNested",
   PROJECT_SORT: "sidebar:projectSort",
   LABEL_SORT: "sidebar:labelSort",
@@ -84,6 +87,12 @@ export function useSidebarState() {
     return new Set(stored)
   })
 
+  // NEW: Unified section-scoped view collapse state
+  const [collapsedViews, setCollapsedViews] = useState<Set<CollapsedViewKey>>(() => {
+    const stored = getStoredValue<string[]>(STORAGE_KEYS.COLLAPSED_VIEWS, [])
+    return new Set(stored as CollapsedViewKey[])
+  })
+
   // Persist collapsed sections to localStorage
   useEffect(() => {
     setStoredValue(STORAGE_KEYS.COLLAPSED_SECTIONS, collapsed)
@@ -98,6 +107,11 @@ export function useSidebarState() {
   useEffect(() => {
     setStoredValue(STORAGE_KEYS.COLLAPSED_PRIORITY_GROUPS, Array.from(collapsedPriorityGroups))
   }, [collapsedPriorityGroups])
+
+  // Persist collapsed views to localStorage
+  useEffect(() => {
+    setStoredValue(STORAGE_KEYS.COLLAPSED_VIEWS, Array.from(collapsedViews))
+  }, [collapsedViews])
 
   const toggleSection = useCallback((section: keyof CollapsedSections) => {
     setCollapsed((prev) => ({
@@ -188,6 +202,28 @@ export function useSidebarState() {
     [collapsedPriorityGroups]
   )
 
+  // NEW: Unified section-scoped view collapse functions
+  const toggleViewCollapse = useCallback((viewKey: ViewKey, section: string) => {
+    const key = `${section}:${viewKey}` as CollapsedViewKey
+    setCollapsedViews((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }, [])
+
+  const isViewCollapsed = useCallback(
+    (viewKey: ViewKey, section: string) => {
+      const key = `${section}:${viewKey}` as CollapsedViewKey
+      return collapsedViews.has(key)
+    },
+    [collapsedViews]
+  )
+
   return {
     expandNested,
     setExpandNested,
@@ -207,5 +243,8 @@ export function useSidebarState() {
     isProjectCollapsed,
     togglePriorityGroupCollapse,
     isPriorityGroupCollapsed,
+    // NEW: Unified section-scoped collapse
+    toggleViewCollapse,
+    isViewCollapsed,
   }
 }

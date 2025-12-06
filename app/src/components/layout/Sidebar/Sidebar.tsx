@@ -1,10 +1,10 @@
-import { SIDEBAR_CONFIG } from "./config/sidebarConfig"
 import { NavHeader } from "./components/NavHeader"
+import { SIDEBAR_CONFIG } from "./config/sidebarConfig"
 import { SidebarHoverProvider, useSidebarHover } from "./contexts/SidebarHoverContext"
 import { useSidebarData } from "./hooks/useSidebarData"
 import { useSidebarState } from "./hooks/useSidebarState"
-import { buildViewItems } from "./utils/viewItems"
 import { renderSection } from "./utils/renderSection"
+import { buildViewItems } from "./utils/viewItems"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -34,12 +34,17 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
     setProjectSort,
     labelSort,
     setLabelSort,
+    routineSort,
+    setRoutineSort,
     collapsed,
     toggleSection,
     toggleProjectCollapse,
     isProjectCollapsed,
     togglePriorityGroupCollapse,
     isPriorityGroupCollapsed,
+    // NEW: Unified section-scoped collapse
+    toggleViewCollapse,
+    isViewCollapsed,
   } = useSidebarState()
 
   const { setIsHovered } = useSidebarHover()
@@ -56,6 +61,7 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
   const sortMode = {
     folders: projectSort,
     labels: labelSort,
+    routines: routineSort,
   }
 
   // Create unified setSortMode function
@@ -64,6 +70,8 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
       setProjectSort(mode as typeof projectSort)
     } else if (section === "labels") {
       setLabelSort(mode as typeof labelSort)
+    } else if (section === "routines") {
+      setRoutineSort(mode as typeof routineSort)
     }
   }
 
@@ -81,6 +89,9 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
     togglePriorityGroupCollapse,
     isProjectCollapsed,
     toggleProjectCollapse,
+    // NEW: Unified section-scoped collapse
+    toggleViewCollapse,
+    isViewCollapsed,
   }
 
   return (

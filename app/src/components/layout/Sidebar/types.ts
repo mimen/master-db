@@ -6,6 +6,21 @@ export type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical
 export type LabelSort = "taskCount" | "alphabetical"
 export type RoutineSort = "flat" | "projectOrder" | "routineCount"
 
+/**
+ * Composite key format for tracking collapsed views by section.
+ *
+ * Format: "{section}:{viewKey}"
+ *
+ * Examples:
+ * - "folders:view:priority-projects:p1"
+ * - "priorityQueue:view:priority-projects:p1"
+ * - "folders:view:project:abc123"
+ *
+ * This allows the same view to have independent collapse states
+ * when it appears in different sections.
+ */
+export type CollapsedViewKey = `${string}:${string}`
+
 export type ViewNavItem = {
   key: ViewKey
   label: string

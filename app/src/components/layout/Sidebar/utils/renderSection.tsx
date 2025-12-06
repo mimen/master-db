@@ -1,13 +1,13 @@
-import type { ReactNode } from "react"
-import { Fragment } from "react"
 import { ArrowDownAZ, Flag, Hash, Network } from "lucide-react"
+import { Fragment } from "react"
+import type { ReactNode } from "react"
 import type { ElementType } from "react"
 
-import type { SidebarSection, SortOption, SubviewDefinition } from "../config/types"
-import { SIDEBAR_CONFIG } from "../config/sidebarConfig"
 import { CollapseCaret } from "../components/CollapseCaret"
 import { SortDropdown } from "../components/SortDropdown"
 import { ViewItem } from "../components/ViewItem"
+import { SIDEBAR_CONFIG } from "../config/sidebarConfig"
+import type { SidebarSection, SortOption, SubviewDefinition } from "../config/types"
 
 import { resolveGenerator } from "./generators"
 
@@ -27,10 +27,14 @@ interface CommonSectionProps {
   sortMode: Record<string, string>
   setSortMode: (section: string, mode: string) => void
   getCountForView: (viewKey: ViewKey, ctx: ViewBuildContext) => number
+  // Old collapse functions (kept for backward compatibility during transition)
   isPriorityGroupCollapsed: (priority: number) => boolean
   togglePriorityGroupCollapse: (priority: number) => void
   isProjectCollapsed: (projectId: string) => boolean
   toggleProjectCollapse: (projectId: string) => void
+  // NEW: Unified section-scoped collapse
+  isViewCollapsed: (viewKey: ViewKey, section: string) => boolean
+  toggleViewCollapse: (viewKey: ViewKey, section: string) => void
 }
 
 /**
@@ -66,7 +70,8 @@ export function renderSection(
   const toggleCollapse = () => props.toggleSection(sectionKey)
 
   // Determine what to render
-  let sectionItems: ViewKey[] = []
+  let staticItems: ViewKey[] = []
+  let dynamicItems: ViewKey[] = []
   let sortConfig: {
     modes: readonly string[]
     currentMode: string
@@ -74,19 +79,22 @@ export function renderSection(
     onChange: (mode: string) => void
   } | null = null
 
+  // Handle static items (always shown, e.g., folder type views)
   if (items) {
-    // Simple static list
-    sectionItems = items
-  } else if (sortOptions) {
+    staticItems = items
+  }
+
+  // Handle dynamic items (with sorting, e.g., projects list)
+  if (sortOptions) {
     // Section with sorting - get current sort mode
     const currentSort = props.sortMode[sectionKey] || sortOptions[0].key
     const currentSortOption = sortOptions.find((opt) => opt.key === currentSort)!
 
     // Resolve items based on current sort
     if ("items" in currentSortOption) {
-      sectionItems = currentSortOption.items
+      dynamicItems = currentSortOption.items
     } else {
-      sectionItems = resolveGenerator(
+      dynamicItems = resolveGenerator(
         currentSortOption.source,
         {},
         props.viewContext,
@@ -102,6 +110,9 @@ export function renderSection(
       getIcon: getSortIcon,
     }
   }
+
+  // Combine static and dynamic items (static items appear first)
+  const sectionItems = [...staticItems, ...dynamicItems]
 
   // Render section
   return (
@@ -127,7 +138,7 @@ export function renderSection(
 
         <CollapsibleContent>
           <SidebarMenu className="space-y-0.5">
-            {sectionItems.map((viewKey) => renderViewItem(viewKey, props, 0))}
+            {sectionItems.map((viewKey) => renderViewItem(viewKey, props, 0, sectionKey))}
             {sectionItems.length === 0 && label && (
               <p className="text-xs text-muted-foreground text-center py-4">
                 No {label.toLowerCase()} found
@@ -174,7 +185,8 @@ function getProjectChildren(projectId: string, viewContext: ViewBuildContext): V
 export function renderViewItem(
   viewKey: ViewKey,
   props: CommonSectionProps,
-  level: number = 0
+  level: number = 0,
+  section: string = "default"
 ): ReactNode {
   // Check if this view has subviews (either static or dynamic)
   const subviewDef = SIDEBAR_CONFIG.subviews[viewKey]
@@ -212,24 +224,14 @@ export function renderViewItem(
   let isCollapsed = false
   let onToggleCollapse = () => {}
 
-  if (viewKey.startsWith("view:priority-projects:")) {
-    // Priority-projects use priority group collapse
-    const priorityStr = viewKey.replace("view:priority-projects:", "")
-    const priorityMap: Record<string, number> = { p1: 4, p2: 3, p3: 2, p4: 1 }
-    const priority = priorityMap[priorityStr]
-    if (priority) {
-      isCollapsed = props.isPriorityGroupCollapsed(priority)
-      onToggleCollapse = () => props.togglePriorityGroupCollapse(priority)
-    }
-  } else if (viewKey === "view:multi:priority-queue") {
-    // Priority queue uses its own collapse state
+  if (viewKey === "view:multi:priority-queue") {
+    // Priority queue uses section collapse (special case)
     isCollapsed = props.collapsed.priorityQueue ?? false
     onToggleCollapse = () => props.toggleSection("priorityQueue")
-  } else if (viewKey.startsWith("view:project:")) {
-    // Projects use project collapse state
-    const projectId = viewKey.replace("view:project:", "")
-    isCollapsed = props.isProjectCollapsed(projectId)
-    onToggleCollapse = () => props.toggleProjectCollapse(projectId)
+  } else {
+    // NEW: All other expandable views use unified section-scoped collapse
+    isCollapsed = props.isViewCollapsed(viewKey, section)
+    onToggleCollapse = () => props.toggleViewCollapse(viewKey, section)
   }
 
   return (
@@ -244,7 +246,12 @@ export function renderViewItem(
         onViewChange={props.onViewChange}
         viewContext={props.viewContext}
       />
-      {!isCollapsed && children.map((child) => renderViewItem(child, props, level + 1))}
+      {!isCollapsed &&
+        children.map((child) => {
+          // Special case: Priority Queue creates its own section context
+          const childSection = viewKey === "view:multi:priority-queue" ? "priorityQueue" : section
+          return renderViewItem(child, props, level + 1, childSection)
+        })}
     </Fragment>
   )
 }
