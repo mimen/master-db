@@ -52,8 +52,8 @@ export const routines = defineTable({
   lastCompletedDate: v.optional(v.number()), // Most recent completion timestamp
 
   // Completion statistics
-  completionRateOverall: v.number(), // 0-100, lifetime completion rate
-  completionRateMonth: v.number(), // 0-100, last 30 days completion rate
+  completionRateOverall: v.union(v.number(), v.null()), // 0-100 or null (not enough data)
+  completionRateMonth: v.union(v.number(), v.null()), // 0-100 or null (not enough data)
 
   // Metadata
   createdAt: v.number(), // Timestamp when routine created

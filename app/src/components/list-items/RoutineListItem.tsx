@@ -36,7 +36,8 @@ function getFrequencyColor(frequency: string): string {
   return "text-purple-600 dark:text-purple-400"
 }
 
-function getCompletionRateColor(rate: number): string {
+function getCompletionRateColor(rate: number | null): string {
+  if (rate === null) return "text-gray-600 dark:text-gray-400"
   if (rate >= 80) return "text-green-600 dark:text-green-400"
   if (rate >= 50) return "text-yellow-600 dark:text-yellow-400"
   return "text-red-600 dark:text-red-400"

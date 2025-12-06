@@ -39,7 +39,8 @@ function getStatusIcon(status: string) {
 }
 
 // Helper to get completion rate color
-function getCompletionRateColor(rate: number): string {
+function getCompletionRateColor(rate: number | null): string {
+  if (rate === null) return "text-gray-600 dark:text-gray-400"
   if (rate >= 80) return "text-green-600 dark:text-green-400"
   if (rate >= 50) return "text-yellow-600 dark:text-yellow-400"
   return "text-red-600 dark:text-red-400"
@@ -151,13 +152,13 @@ export function RoutineDetailDialog({
               <div>
                 <div className="text-xs text-muted-foreground">Overall Completion Rate</div>
                 <div className={cn("text-2xl font-bold", overallRateColor)}>
-                  {stats.completionRateOverall}%
+                  {stats.completionRateOverall === null ? "N/A" : `${stats.completionRateOverall}%`}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">This Month</div>
                 <div className={cn("text-2xl font-bold", monthlyRateColor)}>
-                  {stats.completionRateMonth}%
+                  {stats.completionRateMonth === null ? "N/A" : `${stats.completionRateMonth}%`}
                 </div>
               </div>
             </div>

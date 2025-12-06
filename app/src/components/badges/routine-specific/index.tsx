@@ -9,7 +9,7 @@ interface BaseBadgeProps {
 }
 
 interface DetailsBadgeProps extends BaseBadgeProps {
-  completionRate: number
+  completionRate: number | null
   colorClass?: string
 }
 
@@ -24,7 +24,7 @@ export function DetailsBadge({ completionRate, onClick, colorClass }: DetailsBad
       onClick={onClick}
     >
       <Info className="h-3 w-3" />
-      <span>{completionRate}%</span>
+      <span>{completionRate === null ? "N/A" : `${completionRate}%`}</span>
     </Badge>
   )
 }

@@ -31,7 +31,7 @@ export const recalculateRoutineCompletionRate = mutation({
     const completionRateOverall =
       totalForOverall > 0
         ? Math.round((completedCount / totalForOverall) * 100)
-        : 100;
+        : null; // Not enough data yet
 
     // Calculate monthly rate (last 30 days)
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -52,7 +52,7 @@ export const recalculateRoutineCompletionRate = mutation({
     const completionRateMonth =
       totalForMonthly > 0
         ? Math.round((monthlyCompletedCount / totalForMonthly) * 100)
-        : 100;
+        : null; // Not enough data yet
 
     // Update the routine with new rates
     await ctx.db.patch(routineId, {

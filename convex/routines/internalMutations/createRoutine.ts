@@ -60,8 +60,8 @@ export const createRoutine = mutation({
       defer: false, // New routines start active
       deferralDate: undefined,
       lastCompletedDate: undefined,
-      completionRateOverall: 100, // Start optimistic
-      completionRateMonth: 100,
+      completionRateOverall: null, // No data yet
+      completionRateMonth: null,
       createdAt: now,
       updatedAt: now,
     };
