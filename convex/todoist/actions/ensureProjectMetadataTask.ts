@@ -52,7 +52,7 @@ export const ensureProjectMetadataTask = action({
 
       // Get the project to use its name
       const project = await ctx.runQuery(
-        api.todoist.queries.getProjectByTodoistId.getProjectByTodoistId,
+        api.todoist.queries.getProjects.getProjectByTodoistId,
         { todoistId: projectId }
       );
 

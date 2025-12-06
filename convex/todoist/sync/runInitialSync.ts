@@ -112,6 +112,10 @@ export const runInitialSync = internalAction({
             datetime: rawItem.due.datetime,
             timezone: rawItem.due.timezone,
           } : null,
+          deadline: rawItem.deadline ? {
+            date: rawItem.deadline.date,
+            lang: rawItem.deadline.lang,
+          } : null,
           labels: rawItem.labels,
           assigned_by_uid: rawItem.assigned_by_uid,
           responsible_uid: rawItem.responsible_uid,
