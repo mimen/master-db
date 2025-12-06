@@ -6,14 +6,15 @@ import { FrequencyType, frequencyToDays, isHighFrequency } from "../types/freque
  * Mark overdue pending routine tasks as 'missed'
  *
  * Logic:
- * - Daily/Twice a Week: Mark missed if overdue by >1 day
- * - Others: Mark missed if overdue by > frequency interval
+ * - Tasks overdue by >2 days → mark as missed
+ * - Returns list of missed tasks (with todoistTaskIds) for completion in Todoist
  */
 export const updateOverdueRoutineTasks = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
     const oneDayMs = 86400000; // 24 hours in milliseconds
+    const twoDaysMs = 2 * oneDayMs;
 
     // Get all pending routine tasks
     const pendingTasks = await ctx.db
@@ -22,6 +23,8 @@ export const updateOverdueRoutineTasks = internalMutation({
       .collect();
 
     let missedCount = 0;
+    const missedTaskIds: string[] = []; // Todoist task IDs to complete
+    const affectedRoutineIds = new Set<string>(); // Routines that need recalculation
 
     for (const task of pendingTasks) {
       // Skip if not overdue yet
@@ -29,37 +32,29 @@ export const updateOverdueRoutineTasks = internalMutation({
         continue;
       }
 
-      // Get the routine to determine frequency
-      const routine = await ctx.db.get(task.routineId);
-      if (!routine) {
-        console.warn(`Routine ${task.routineId} not found for task ${task._id}`);
-        continue;
-      }
-
       // Calculate how overdue the task is
       const overdueMs = now - task.dueDate;
 
-      // Determine if task should be marked as missed
-      let shouldMarkMissed = false;
-
-      if (isHighFrequency(routine.frequency as FrequencyType)) {
-        // High frequency (Daily, Twice a Week): mark missed after 1 day
-        shouldMarkMissed = overdueMs > oneDayMs;
-      } else {
-        // Lower frequency: mark missed after the frequency interval
-        const frequencyMs = frequencyToDays(routine.frequency as FrequencyType) * oneDayMs;
-        shouldMarkMissed = overdueMs > frequencyMs;
-      }
-
-      if (shouldMarkMissed) {
+      // Auto-miss tasks that are overdue by more than 2 days
+      if (overdueMs > twoDaysMs) {
         await ctx.db.patch(task._id, {
           status: RoutineTaskStatus.Missed,
           updatedAt: now,
         });
         missedCount++;
+        affectedRoutineIds.add(task.routineId);
+
+        // Collect Todoist task IDs for completion (skip PENDING placeholders)
+        if (task.todoistTaskId && task.todoistTaskId !== "PENDING") {
+          missedTaskIds.push(task.todoistTaskId);
+        }
       }
     }
 
-    return { missedCount };
+    return {
+      missedCount,
+      missedTaskIds,
+      affectedRoutineIds: Array.from(affectedRoutineIds),
+    };
   },
 });

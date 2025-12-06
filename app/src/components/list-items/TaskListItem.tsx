@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { AlertCircle, Calendar, Check, Tag, User } from "lucide-react"
+import { AlertCircle, Calendar, Check, SkipForward, Tag, User } from "lucide-react"
 import { memo, useEffect } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,7 @@ import { useOptimisticLabelChange } from "@/hooks/useOptimisticLabelChange"
 import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useOptimisticTaskText } from "@/hooks/useOptimisticTaskText"
 import { useOptimisticSync } from "@/hooks/list-items"
+import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { getProjectColor } from "@/lib/colors"
 import { applyOptimisticTaskUpdate } from "@/lib/cursor/applyOptimisticUpdate"
 import { matchesViewFilter } from "@/lib/cursor/filters"
@@ -99,6 +100,16 @@ export const TaskListItem = memo(function TaskListItem({
   const displayLabels = optimisticUpdate?.type === "label-change"
     ? optimisticUpdate.newLabels
     : task.labels
+
+  // Check if this is a routine task
+  const isRoutineTask = displayLabels?.includes("routine")
+  const routineTask = useQuery(
+    api.routines.queries.getRoutineTaskByTodoistId.getRoutineTaskByTodoistIdPublic,
+    isRoutineTask ? { todoistTaskId: task.todoist_id } : "skip"
+  )
+
+  // Routine actions
+  const { skipRoutineTask } = useRoutineActions()
 
   const assignee = task.assigned_by_uid || task.responsible_uid
   const markdownSegments = parseMarkdownLinks(displayContent)
@@ -219,6 +230,11 @@ export const TaskListItem = memo(function TaskListItem({
     const currentLabels = displayLabels || []
     const newLabels = currentLabels.filter((label: string) => label !== labelToRemove)
     await optimisticLabelChange(task.todoist_id, newLabels)
+  }
+
+  const handleSkipRoutineTask = async () => {
+    if (!routineTask?._id) return
+    await skipRoutineTask(routineTask._id)
   }
 
   const getLabelColor = (labelName: string) => {
@@ -458,6 +474,17 @@ export const TaskListItem = memo(function TaskListItem({
               openLabel(task)
             }}
           />
+
+          {routineTask && routineTask.status === "pending" && (
+            <GhostBadge
+              icon={SkipForward}
+              text="skip routine"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleSkipRoutineTask()
+              }}
+            />
+          )}
         </>
       )}
     />

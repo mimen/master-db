@@ -293,13 +293,17 @@ async function handleRoutineTaskEvent(
 
     // Handle different event types
     if (eventName === "item:completed") {
-      await ctx.runMutation(
-        internal.routines.internalMutations.markRoutineTaskCompleted.markRoutineTaskCompleted,
-        {
-          routineTaskId: routineTask._id,
-          completedDate: Date.now(),
-        }
-      );
+      // Don't overwrite "missed" status with "completed"
+      // (tasks marked as missed and then completed in Todoist should stay missed)
+      if (routineTask.status !== "missed") {
+        await ctx.runMutation(
+          internal.routines.internalMutations.markRoutineTaskCompleted.markRoutineTaskCompleted,
+          {
+            routineTaskId: routineTask._id,
+            completedDate: Date.now(),
+          }
+        );
+      }
     } else if (eventName === "item:deleted") {
       await ctx.runMutation(
         internal.routines.internalMutations.markRoutineTaskSkipped.markRoutineTaskSkipped,

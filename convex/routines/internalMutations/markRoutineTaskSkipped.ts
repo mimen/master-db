@@ -2,7 +2,7 @@ import { mutation } from "../../_generated/server";
 import { v } from "convex/values";
 
 /**
- * Mark a routine task as skipped (task was deleted in Todoist)
+ * Mark a routine task as missed (task was manually skipped or deleted in Todoist)
  */
 export const markRoutineTaskSkipped = mutation({
   args: {
@@ -15,7 +15,8 @@ export const markRoutineTaskSkipped = mutation({
     }
 
     await ctx.db.patch(routineTaskId, {
-      status: "skipped",
+      status: "missed",
+      updatedAt: Date.now(),
     });
 
     return routineTask;

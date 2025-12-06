@@ -6,8 +6,8 @@
 export const RoutineTaskStatus = {
   Pending: "pending",       // Task created, awaiting completion
   Completed: "completed",   // Task completed on time
-  Missed: "missed",         // Task overdue and marked as missed
-  Skipped: "skipped",       // Task manually deleted in Todoist
+  Missed: "missed",         // Task not completed (manually skipped, deleted, or overdue)
+  Skipped: "skipped",       // DEPRECATED: Treated same as "missed" (kept for backwards compatibility)
   Deferred: "deferred",     // Routine was deferred, task cancelled
 } as const;
 

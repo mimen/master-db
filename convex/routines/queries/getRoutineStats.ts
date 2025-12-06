@@ -45,7 +45,6 @@ export const getRoutineStats = query({
       pendingCount: allTasks.filter((t) => t.status === RoutineTaskStatus.Pending).length,
       completedCount: allTasks.filter((t) => t.status === RoutineTaskStatus.Completed).length,
       missedCount: allTasks.filter((t) => t.status === RoutineTaskStatus.Missed).length,
-      skippedCount: allTasks.filter((t) => t.status === RoutineTaskStatus.Skipped).length,
     };
   },
 });

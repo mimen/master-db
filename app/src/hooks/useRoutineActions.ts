@@ -14,6 +14,7 @@ export function useRoutineActions() {
   const deferRoutineMutation = useMutation(api.routines.internalMutations.deferRoutine.deferRoutine)
   const undeferRoutineMutation = useMutation(api.routines.internalMutations.undeferRoutine.undeferRoutine)
   const generateTasksAction = useAction(api.routines.internalActions.manuallyGenerateRoutineTasks.manuallyGenerateRoutineTasks)
+  const skipRoutineTaskAction = useAction(api.routines.actions.skipRoutineTask.skipRoutineTask)
 
   const createRoutine = async (args: {
     name: string
@@ -123,6 +124,25 @@ export function useRoutineActions() {
     }
   }
 
+  const skipRoutineTask = async (routineTaskId: Id<"routineTasks">): Promise<boolean> => {
+    const toastId = toast.loading("Skipping routine task...")
+
+    try {
+      const result = await skipRoutineTaskAction({ routineTaskId })
+      if (result.success) {
+        toast.success("Routine task skipped!", { id: toastId })
+        return true
+      } else {
+        toast.error(result.error || "Failed to skip routine task", { id: toastId })
+        return false
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error"
+      toast.error(`Failed to skip routine task: ${msg}`, { id: toastId })
+      return false
+    }
+  }
+
   return {
     createRoutine,
     updateRoutine,
@@ -130,5 +150,6 @@ export function useRoutineActions() {
     deferRoutine,
     undeferRoutine,
     generateRoutineTasks,
+    skipRoutineTask,
   }
 }

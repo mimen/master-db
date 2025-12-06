@@ -6,7 +6,7 @@ import { internal } from "../_generated/api";
  * Runs at midnight (00:00) every day
  *
  * Tasks:
- * 1. Mark overdue tasks as 'missed'
+ * 1. Mark overdue tasks as 'missed' (>2 days) and complete them in Todoist
  * 2. Mark tasks of deferred routines as 'deferred'
  * 3. Generate new tasks for all routines needing generation
  */

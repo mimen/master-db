@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 /**
  * Recalculate completion rates for a routine
- * Overall: completed / (completed + missed + skipped) * 100
+ * Overall: completed / (completed + missed) * 100
  * Monthly: same formula, but only tasks in last 30 days
  */
 export const recalculateRoutineCompletionRate = mutation({
@@ -26,11 +26,8 @@ export const recalculateRoutineCompletionRate = mutation({
       (t) => t.status === "completed"
     ).length;
     const missedCount = allTasks.filter((t) => t.status === "missed").length;
-    const skippedCount = allTasks.filter(
-      (t) => t.status === "skipped"
-    ).length;
 
-    const totalForOverall = completedCount + missedCount + skippedCount;
+    const totalForOverall = completedCount + missedCount;
     const completionRateOverall =
       totalForOverall > 0
         ? Math.round((completedCount / totalForOverall) * 100)
@@ -50,12 +47,8 @@ export const recalculateRoutineCompletionRate = mutation({
     const monthlyMissedCount = monthlyTasks.filter(
       (t) => t.status === "missed"
     ).length;
-    const monthlySkippedCount = monthlyTasks.filter(
-      (t) => t.status === "skipped"
-    ).length;
 
-    const totalForMonthly =
-      monthlyCompletedCount + monthlyMissedCount + monthlySkippedCount;
+    const totalForMonthly = monthlyCompletedCount + monthlyMissedCount;
     const completionRateMonth =
       totalForMonthly > 0
         ? Math.round((monthlyCompletedCount / totalForMonthly) * 100)
@@ -73,7 +66,6 @@ export const recalculateRoutineCompletionRate = mutation({
       totalTasks: allTasks.length,
       completedCount,
       missedCount,
-      skippedCount,
     };
   },
 });
