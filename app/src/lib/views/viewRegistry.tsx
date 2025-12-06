@@ -4,6 +4,7 @@ import { BUILT_IN_MULTI_LISTS } from "../multi-list/defaults"
 import { instantiateList, listDefinitions } from "./listDefinitions"
 import type {
   ListInstance,
+  RoutineTaskFilter,
   TimeRange,
   ViewBuildContext,
   ViewKey,
@@ -257,6 +258,23 @@ function expandLabel(
       viewKey,
       indexInView: startIndex,
       params: { label },
+      overrides,
+    }),
+  ]
+}
+
+function expandRoutineTask(
+  viewKey: ViewKey,
+  startIndex: number,
+  filter: RoutineTaskFilter,
+  overrides?: { collapsible?: boolean }
+): ListInstance[] {
+  return [
+    instantiateList(listDefinitions.routineTasks, {
+      id: createListId(viewKey, filter),
+      viewKey,
+      indexInView: startIndex,
+      params: { filter },
       overrides,
     }),
   ]
@@ -599,6 +617,33 @@ const viewPatterns: ViewPattern[] = [
           expandLabel(viewKey, index, labelName, {
             collapsible: false,
           }),
+      }
+    },
+  },
+  {
+    match: (key) => key.startsWith("view:routine-tasks:"),
+    extract: (key) => ({
+      filter: key.replace("view:routine-tasks:", "") as RoutineTaskFilter,
+    }),
+    getDefinition: (extracted) => {
+      const filter = extracted.filter as RoutineTaskFilter
+      const viewKey = `view:routine-tasks:${filter}` as ViewKey
+
+      const routineTaskLabels: Record<RoutineTaskFilter, string> = {
+        overdue: "Overdue Routines",
+        morning: "Morning Routine",
+        night: "Night Routine",
+        todays: "Ready to Go",
+        "get-ahead": "Get Ahead",
+      }
+
+      return {
+        metadata: {
+          title: routineTaskLabels[filter],
+          icon: getViewIcon(viewKey, { size: "sm" }),
+        },
+        buildLists: (viewKey, index) =>
+          expandRoutineTask(viewKey, index, filter, { collapsible: false }),
       }
     },
   },

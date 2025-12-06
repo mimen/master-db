@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, CalendarRange, Filter, Flag, Folder, Inbox, Repeat, Settings, Sunrise, Tag } from "lucide-react"
+import { AlertCircle, Calendar, CalendarCheck, CalendarRange, FastForward, Filter, Flag, Folder, Inbox, Moon, Repeat, Settings, Sunrise, Tag } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { getProjectColor } from "../colors"
@@ -92,6 +92,27 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
 
   if (viewKey === "view:time:no-date") {
     return <Calendar className={cn(finalClassName, "text-gray-600 dark:text-gray-400")} />
+  }
+
+  // Routine task views
+  if (viewKey === "view:routine-tasks:overdue") {
+    return <AlertCircle className={cn(finalClassName, "text-red-600 dark:text-red-400")} />
+  }
+
+  if (viewKey === "view:routine-tasks:morning") {
+    return <Sunrise className={cn(finalClassName, "text-amber-600 dark:text-amber-400")} />
+  }
+
+  if (viewKey === "view:routine-tasks:night") {
+    return <Moon className={cn(finalClassName, "text-indigo-600 dark:text-indigo-400")} />
+  }
+
+  if (viewKey === "view:routine-tasks:todays") {
+    return <CalendarCheck className={cn(finalClassName, "text-green-600 dark:text-green-400")} />
+  }
+
+  if (viewKey === "view:routine-tasks:get-ahead") {
+    return <FastForward className={cn(finalClassName, "text-blue-600 dark:text-blue-400")} />
   }
 
   // Priority views (P1-P4) - always colored

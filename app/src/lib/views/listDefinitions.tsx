@@ -9,6 +9,7 @@ import type {
   ListInstanceOptions,
   ListPresentationContext,
   ListQueryInput,
+  RoutineTaskFilter,
   TimeRange,
 } from "./types"
 
@@ -448,6 +449,87 @@ const unassignedFoldersDefinition: ListDefinition = {
   }),
 }
 
+const routineTaskLabels: Record<RoutineTaskFilter, { title: string; description: string }> = {
+  overdue: {
+    title: "Overdue Routines",
+    description: "overdue routine tasks",
+  },
+  morning: {
+    title: "Morning Routine",
+    description: "morning routine tasks due today",
+  },
+  night: {
+    title: "Night Routine",
+    description: "night routine tasks due today",
+  },
+  todays: {
+    title: "Ready to Go",
+    description: "routine tasks ready now or due within 5 days",
+  },
+  "get-ahead": {
+    title: "Get Ahead",
+    description: "routine tasks with deadline beyond 5 days",
+  },
+}
+
+const routineTaskDefinition: ListDefinition<{ filter: RoutineTaskFilter }> = {
+  key: "list:routine-tasks",
+  defaults: {
+    collapsible: true,
+    startExpanded: true,
+  },
+  dependencies: {
+    labels: true,
+    projects: true,
+  },
+  buildQuery: ({ filter }): ListQueryInput => ({
+    type: "routine-tasks",
+    filter,
+    timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1,
+  }),
+  getHeader: ({ taskCount, params }) => {
+    const { title, description } = routineTaskLabels[params.filter]
+    const viewKey = `view:routine-tasks:${params.filter}` as const
+    const icon = getViewIcon(viewKey, { size: "lg", className: "mr-3" })
+
+    return {
+      title,
+      description: `${taskCount} ${description}`,
+      icon,
+    }
+  },
+  getEmptyState: ({ params }) => {
+    switch (params.filter) {
+      case "overdue":
+        return {
+          title: "No overdue routines!",
+          description: "All routine tasks are on schedule",
+        }
+      case "morning":
+        return {
+          title: "Morning routine complete!",
+          description: "No morning routine tasks due today",
+        }
+      case "night":
+        return {
+          title: "Night routine clear!",
+          description: "No night routine tasks due today",
+        }
+      case "todays":
+        return {
+          title: "All caught up!",
+          description: "No routine tasks due today or within the next 5 days",
+        }
+      case "get-ahead":
+      default:
+        return {
+          title: "Nothing to get ahead on!",
+          description: "No routine tasks with deadlines beyond 5 days",
+        }
+    }
+  },
+}
+
 export const listDefinitions = {
   inbox: inboxDefinition,
   time: timeDefinition,
@@ -460,6 +542,7 @@ export const listDefinitions = {
   unassignedFolders: unassignedFoldersDefinition,
   routines: routinesDefinition,
   projectRoutines: projectRoutinesDefinition,
+  routineTasks: routineTaskDefinition,
 } as const
 
 export type ListDefinitionKey = keyof typeof listDefinitions

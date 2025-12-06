@@ -115,6 +115,8 @@ export class CountRegistry {
         }
         case "label":
           return `list:label:${query.label}`
+        case "routine-tasks":
+          return `list:routine-tasks:${query.filter}`
       }
     }
 
@@ -175,6 +177,12 @@ export class CountRegistry {
     const labelMatch = listId.match(/view:label:([^:]+):/)
     if (labelMatch) {
       return `list:label:${labelMatch[1]}`
+    }
+
+    // Routine tasks: "view:routine-tasks:morning:morning"
+    const routineTaskMatch = listId.match(/view:routine-tasks:([^:]+):/)
+    if (routineTaskMatch) {
+      return `list:routine-tasks:${routineTaskMatch[1]}`
     }
 
     // If we can't parse it, log warning and return 0

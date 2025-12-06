@@ -43,6 +43,8 @@ export type ListViewSettings = {
 
 export type TimeRange = "overdue" | "today" | "upcoming" | "no-date"
 
+export type RoutineTaskFilter = "overdue" | "morning" | "night" | "todays" | "get-ahead"
+
 export type ListQueryDefinition =
   | { type: "inbox"; inboxProjectId?: string; timezoneOffsetMinutes?: number }
   | { type: "time"; range: TimeRange; timezoneOffsetMinutes?: number }
@@ -51,6 +53,7 @@ export type ListQueryDefinition =
   | { type: "routines"; projectId?: string; timezoneOffsetMinutes?: number }
   | { type: "priority"; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
   | { type: "label"; label: string; timezoneOffsetMinutes?: number }
+  | { type: "routine-tasks"; filter: RoutineTaskFilter; timezoneOffsetMinutes?: number }
 
 export type ListQueryInput = ListQueryDefinition & { view: ViewKey }
 
@@ -147,6 +150,7 @@ export type ViewKey =
   | `view:priority-projects:${"p1" | "p2" | "p3" | "p4"}`
   | `view:label:${string}`
   | `view:multi:${string}`
+  | `view:routine-tasks:${RoutineTaskFilter}`
 
 export interface ViewMetadata {
   title: string

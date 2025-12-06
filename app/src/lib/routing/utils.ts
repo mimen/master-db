@@ -27,6 +27,12 @@ export function viewKeyToPath(viewKey: ViewKey, context?: ViewBuildContext): str
   if (viewKey === "view:routines") return "/routines"
   if (viewKey === "view:settings") return "/settings"
 
+  // Routine task views
+  if (viewKey.startsWith("view:routine-tasks:")) {
+    const filter = viewKey.replace("view:routine-tasks:", "")
+    return `/routine-tasks/${filter}`
+  }
+
   // Routine project views
   if (viewKey.startsWith("view:routines:project:")) {
     const projectId = viewKey.replace("view:routines:project:", "")
@@ -110,6 +116,12 @@ export function pathToViewKey(path: string, context?: ViewBuildContext): ViewKey
   if (normalized === "/folders/unassigned") return "view:folders:unassigned"
   if (normalized === "/routines") return "view:routines"
   if (normalized === "/settings") return "view:settings"
+
+  // Routine task views
+  const routineTaskMatch = normalized.match(/^\/routine-tasks\/([^/]+)$/)
+  if (routineTaskMatch) {
+    return `view:routine-tasks:${routineTaskMatch[1]}` as ViewKey
+  }
 
   // Routine project views (with slug support)
   const routineProjectMatch = normalized.match(/^\/routines\/projects\/([^/]+)$/)

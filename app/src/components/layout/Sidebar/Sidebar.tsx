@@ -5,6 +5,7 @@ import { useSidebarState } from "./hooks/useSidebarState"
 import { LabelsSection } from "./sections/LabelsSection"
 import { PrioritiesSection } from "./sections/PrioritiesSection"
 import { ProjectsSection } from "./sections/ProjectsSection"
+import { RoutineTasksSection } from "./sections/RoutineTasksSection"
 import { TimeSection } from "./sections/TimeSection"
 import { ViewsSection } from "./sections/ViewsSection"
 import { buildViewItems } from "./utils/viewItems"
@@ -94,6 +95,14 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               viewContext={viewContext}
               isCollapsed={collapsed.time}
               onToggleCollapse={() => toggleSection("time")}
+            />
+
+            <RoutineTasksSection
+              currentViewKey={currentViewKey}
+              onViewChange={onViewChange}
+              viewContext={viewContext}
+              isCollapsed={collapsed.routineTasks}
+              onToggleCollapse={() => toggleSection("routineTasks")}
             />
 
             <ProjectsSection

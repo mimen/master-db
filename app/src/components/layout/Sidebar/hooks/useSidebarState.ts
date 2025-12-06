@@ -9,6 +9,7 @@ interface CollapsedSections {
   priorities: boolean
   labels: boolean
   routines: boolean
+  routineTasks: boolean
 }
 
 const STORAGE_KEYS = {
@@ -65,6 +66,7 @@ export function useSidebarState() {
       priorities: false,
       labels: false,
       routines: false,
+      routineTasks: false,
     })
   )
 

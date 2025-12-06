@@ -1,7 +1,7 @@
 import { Circle, Flag, Folder, Square } from "lucide-react"
 import type { ComponentType } from "react"
 
-import type { ViewKey } from "@/lib/views/types"
+import type { RoutineTaskFilter, ViewKey } from "@/lib/views/types"
 
 /**
  * Time filter item for sidebar and command palette
@@ -153,5 +153,51 @@ export const FOLDER_TYPE_ITEMS: FolderTypeFilterItem[] = [
     label: "Unassigned",
     icon: Folder,
     viewKey: "view:folders:unassigned",
+  },
+]
+
+/**
+ * Routine task filter item for sidebar
+ */
+export type RoutineTaskFilterItem = {
+  id: string
+  label: string
+  filterKey: RoutineTaskFilter
+  viewKey: ViewKey
+}
+
+/**
+ * Static routine task filter items
+ */
+export const ROUTINE_TASK_FILTER_ITEMS: RoutineTaskFilterItem[] = [
+  {
+    id: "overdue",
+    label: "Overdue",
+    filterKey: "overdue",
+    viewKey: "view:routine-tasks:overdue",
+  },
+  {
+    id: "morning",
+    label: "Morning Routine",
+    filterKey: "morning",
+    viewKey: "view:routine-tasks:morning",
+  },
+  {
+    id: "night",
+    label: "Night Routine",
+    filterKey: "night",
+    viewKey: "view:routine-tasks:night",
+  },
+  {
+    id: "todays",
+    label: "Ready to Go",
+    filterKey: "todays",
+    viewKey: "view:routine-tasks:todays",
+  },
+  {
+    id: "get-ahead",
+    label: "Get Ahead",
+    filterKey: "get-ahead",
+    viewKey: "view:routine-tasks:get-ahead",
   },
 ]
