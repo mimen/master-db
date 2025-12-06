@@ -32,6 +32,9 @@ export class CountRegistry {
    * - Multi-list views (Priority Queue, etc.)
    * - Project family views (parent + children)
    *
+   * For project views in hierarchy mode (when projectTree is in context),
+   * automatically includes counts from all descendant projects.
+   *
    * @param viewKey - The view to get count for
    * @param context - Optional context with projects/labels data for view resolution
    * @returns Total count of tasks in the view
@@ -41,18 +44,68 @@ export class CountRegistry {
       // Resolve view to get its lists
       const view = resolveView(viewKey, context)
 
-      // Sum all list counts
-      return view.lists.reduce((sum, list) => {
+      // Sum all list counts for this view
+      let count = view.lists.reduce((sum, list) => {
         // Map list instance ID to count key
         const countKey = this.getCountKeyFromListId(list.id, list.query)
-        const count = this.listCounts[countKey] ?? 0
-        return sum + count
+        const listCount = this.listCounts[countKey] ?? 0
+        return sum + listCount
       }, 0)
+
+      // For project views with hierarchy context, recursively add children counts
+      if (viewKey.startsWith("view:project:") && context?.projectTree) {
+        const projectId = viewKey.replace("view:project:", "")
+        const childrenCount = this.getProjectChildrenCount(projectId, context)
+        count += childrenCount
+      }
+
+      return count
     } catch (error) {
       // If view resolution fails, return 0
       console.warn(`Failed to resolve view ${viewKey}:`, error)
       return 0
     }
+  }
+
+  /**
+   * Recursively get count for all children of a project in the project tree.
+   *
+   * @private
+   */
+  private getProjectChildrenCount(projectId: string, context: ViewBuildContext): number {
+    const projectTree = context.projectTree || []
+
+    // Find project in tree (could be at any level)
+    const findProject = (nodes: any[]): any => {
+      for (const node of nodes) {
+        if (node.todoist_id === projectId) {
+          return node
+        }
+        if (node.children && node.children.length > 0) {
+          const found = findProject(node.children)
+          if (found) return found
+        }
+      }
+      return null
+    }
+
+    const project = findProject(projectTree)
+    if (!project || !project.children || project.children.length === 0) {
+      return 0
+    }
+
+    // Recursively sum children and their descendants
+    let total = 0
+    for (const child of project.children) {
+      // Add this child's count
+      const childCount = this.listCounts[`list:project:${child.todoist_id}`] ?? 0
+      total += childCount
+
+      // Recursively add this child's descendants
+      total += this.getProjectChildrenCount(child.todoist_id, context)
+    }
+
+    return total
   }
 
   /**

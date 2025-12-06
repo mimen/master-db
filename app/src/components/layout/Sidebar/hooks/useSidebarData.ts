@@ -1,11 +1,10 @@
 import { useQuery } from "convex/react"
 import { useMemo } from "react"
 
-import type { ProjectTreeNode } from "../types"
 import { buildProjectTree } from "../utils/projectTree"
 
 import { api } from "@/convex/_generated/api"
-import type { ViewBuildContext } from "@/lib/views/types"
+import type { ViewBuildContext, ProjectTreeNode } from "@/lib/views/types"
 import type {
   TodoistLabelDoc,
   TodoistProjects,
@@ -64,8 +63,9 @@ export function useSidebarData() {
       projects: basicProjects,
       projectsWithMetadata,
       labels,
+      projectTree: otherProjects as ProjectTreeNode[],
     }),
-    [basicProjects, projectsWithMetadata, labels]
+    [basicProjects, projectsWithMetadata, labels, otherProjects]
   )
 
   return {

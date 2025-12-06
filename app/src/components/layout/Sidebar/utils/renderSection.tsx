@@ -141,6 +141,34 @@ export function renderSection(
 }
 
 /**
+ * Get children for a project from the project tree (for hierarchy mode)
+ */
+function getProjectChildren(projectId: string, viewContext: ViewBuildContext): ViewKey[] {
+  const projectTree = viewContext.projectTree || []
+
+  // Find the project in the tree (could be at any level)
+  function findProject(nodes: any[]): any {
+    for (const node of nodes) {
+      if (node.todoist_id === projectId) {
+        return node
+      }
+      if (node.children && node.children.length > 0) {
+        const found = findProject(node.children)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  const project = findProject(projectTree)
+  if (project && project.children && project.children.length > 0) {
+    return project.children.map((child: any) => `view:project:${child.todoist_id}` as ViewKey)
+  }
+
+  return []
+}
+
+/**
  * Recursively render a view item with potential subviews
  */
 export function renderViewItem(
@@ -148,9 +176,23 @@ export function renderViewItem(
   props: CommonSectionProps,
   level: number = 0
 ): ReactNode {
-  // Check if this view has subviews
+  // Check if this view has subviews (either static or dynamic)
   const subviewDef = SIDEBAR_CONFIG.subviews[viewKey]
-  const hasChildren = !!subviewDef
+
+  // For project views, also check for dynamic hierarchy children
+  let children: ViewKey[] = []
+  let hasChildren = false
+
+  if (subviewDef) {
+    // Static subviews from config
+    children = resolveSubview(subviewDef, props.viewContext, props.getCountForView)
+    hasChildren = children.length > 0
+  } else if (viewKey.startsWith("view:project:")) {
+    // Dynamic hierarchy children for projects
+    const projectId = viewKey.replace("view:project:", "")
+    children = getProjectChildren(projectId, props.viewContext)
+    hasChildren = children.length > 0
+  }
 
   if (!hasChildren) {
     // Simple leaf item
@@ -167,12 +209,11 @@ export function renderViewItem(
   }
 
   // Item with children - determine collapse state
-  // Priority-projects use priority group collapse, others use a generic mechanism
   let isCollapsed = false
   let onToggleCollapse = () => {}
 
   if (viewKey.startsWith("view:priority-projects:")) {
-    // Extract priority from view-key
+    // Priority-projects use priority group collapse
     const priorityStr = viewKey.replace("view:priority-projects:", "")
     const priorityMap: Record<string, number> = { p1: 4, p2: 3, p3: 2, p4: 1 }
     const priority = priorityMap[priorityStr]
@@ -184,10 +225,12 @@ export function renderViewItem(
     // Priority queue uses its own collapse state
     isCollapsed = props.collapsed.priorityQueue ?? false
     onToggleCollapse = () => props.toggleSection("priorityQueue")
+  } else if (viewKey.startsWith("view:project:")) {
+    // Projects use project collapse state
+    const projectId = viewKey.replace("view:project:", "")
+    isCollapsed = props.isProjectCollapsed(projectId)
+    onToggleCollapse = () => props.toggleProjectCollapse(projectId)
   }
-
-  // Resolve children
-  const children = resolveSubview(subviewDef, props.viewContext, props.getCountForView)
 
   return (
     <Fragment key={viewKey}>

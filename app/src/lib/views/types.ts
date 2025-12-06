@@ -1,6 +1,12 @@
 import type { ReactNode } from "react"
 
-import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
+import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
+
+export type ProjectTreeNode = TodoistProjectWithMetadata & {
+  children: ProjectTreeNode[]
+  level?: number
+  isLastInGroup?: boolean
+}
 
 // ============= SORT & GROUP TYPES =============
 
@@ -168,4 +174,5 @@ export interface ViewBuildContext {
   projects?: TodoistProjects
   projectsWithMetadata?: TodoistProjectsWithMetadata
   labels?: TodoistLabelDoc[]
+  projectTree?: ProjectTreeNode[]
 }

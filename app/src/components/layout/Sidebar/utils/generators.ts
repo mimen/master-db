@@ -1,6 +1,4 @@
-import type { ProjectTreeNode } from "../types"
-
-import type { ViewBuildContext, ViewKey } from "@/lib/views/types"
+import type { ViewBuildContext, ViewKey, ProjectTreeNode } from "@/lib/views/types"
 
 /**
  * Resolves a generator source to an array of view-keys
@@ -58,24 +56,15 @@ function generateProjectsByPriority(
 }
 
 /**
- * Generate projects in hierarchy order (recursive tree traversal)
- * This preserves the project tree structure as view-keys
+ * Generate projects in hierarchy order (only root-level projects)
+ * Children are handled via dynamic subview resolution
  */
 function generateProjectsByHierarchy(viewContext: ViewBuildContext): ViewKey[] {
   const projectTree = viewContext.projectTree || []
 
-  function traverseTree(nodes: ProjectTreeNode[]): ViewKey[] {
-    const result: ViewKey[] = []
-    for (const node of nodes) {
-      result.push(`view:project:${node.todoist_id}` as ViewKey)
-      if (node.children && node.children.length > 0) {
-        result.push(...traverseTree(node.children))
-      }
-    }
-    return result
-  }
-
-  return traverseTree(projectTree)
+  // Only return root-level projects
+  // Children will be rendered via the subview system
+  return projectTree.map((node) => `view:project:${node.todoist_id}` as ViewKey)
 }
 
 /**
