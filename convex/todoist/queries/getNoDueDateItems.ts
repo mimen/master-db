@@ -32,6 +32,9 @@ export const getNoDueDateItems = query({
     );
 
     const noDueDateItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
+      // Exclude routine tasks from time filters
+      if (item.labels?.includes("routine")) return false;
+
       return !item.due || !item.due.date;
     });
 

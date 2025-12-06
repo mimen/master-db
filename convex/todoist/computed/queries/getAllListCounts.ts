@@ -80,7 +80,11 @@ export const getAllListCounts = query({
     };
 
     // Helper to check if item matches time filter
+    // Note: Items with @routine label are excluded from time filters
     const matchesTimeFilter = (item: Doc<"todoist_items">, filter: string): boolean => {
+      // Exclude routine tasks from time filters
+      if (item.labels?.includes("routine")) return false;
+
       if (filter === 'overdue') {
         if (!item.due?.date) return false;
         const dateOnly = extractDateOnly(item.due.date);
@@ -217,6 +221,71 @@ export const getAllListCounts = query({
       ).length;
       counts[`list:routines:${project.todoist_id}`] = count;
     }
+
+    // Routine task filter counts
+    const routineItems = filteredItems.filter(item =>
+      item.labels && item.labels.includes("routine")
+    );
+
+    // Calculate 5 days from today for Ready to Go filter
+    const fiveDaysLocal = new Date(nowLocal);
+    fiveDaysLocal.setUTCDate(fiveDaysLocal.getUTCDate() + 5);
+    const fiveDaysYear = fiveDaysLocal.getUTCFullYear();
+    const fiveDaysMonth = String(fiveDaysLocal.getUTCMonth() + 1).padStart(2, '0');
+    const fiveDaysDay = String(fiveDaysLocal.getUTCDate()).padStart(2, '0');
+    const fiveDaysISO = `${fiveDaysYear}-${fiveDaysMonth}-${fiveDaysDay}`;
+
+    // Overdue routines: either due date OR deadline is overdue
+    counts['list:routine-tasks:overdue'] = routineItems.filter(item => {
+      const dueDate = item.due?.date ? extractDateOnly(item.due.date) : null;
+      const deadlineDate = item.deadline?.date ?? null;
+      return (dueDate && dueDate < todayISO) || (deadlineDate && deadlineDate < todayISO);
+    }).length;
+
+    // Morning routine: due date is today + morning label
+    counts['list:routine-tasks:morning'] = routineItems.filter(item => {
+      if (!item.labels?.includes("morning")) return false;
+      if (!item.due?.date) return false;
+      const dueDate = extractDateOnly(item.due.date);
+      return dueDate === todayISO;
+    }).length;
+
+    // Night routine: due date is today + night label
+    counts['list:routine-tasks:night'] = routineItems.filter(item => {
+      if (!item.labels?.includes("night")) return false;
+      if (!item.due?.date) return false;
+      const dueDate = extractDateOnly(item.due.date);
+      return dueDate === todayISO;
+    }).length;
+
+    // Ready to Go: due date is today OR deadline within next 7 days
+    // Excludes morning/night routines with due date today (they have their own filters)
+    counts['list:routine-tasks:todays'] = routineItems.filter(item => {
+      const dueDate = item.due?.date ? extractDateOnly(item.due.date) : null;
+      const deadlineDate = item.deadline?.date ?? null;
+
+      // Due date is today (but not morning/night)
+      if (dueDate === todayISO) {
+        if (item.labels?.includes("morning") || item.labels?.includes("night")) {
+          return false;
+        }
+        return true;
+      }
+
+      // Deadline is within next 5 days (today through +5)
+      if (deadlineDate && deadlineDate >= todayISO && deadlineDate <= fiveDaysISO) {
+        return true;
+      }
+
+      return false;
+    }).length;
+
+    // Get ahead: deadline is beyond 5 days from now
+    counts['list:routine-tasks:get-ahead'] = routineItems.filter(item => {
+      const deadlineDate = item.deadline?.date ?? null;
+      if (!deadlineDate) return false;
+      return deadlineDate > fiveDaysISO;
+    }).length;
 
     return counts;
   },

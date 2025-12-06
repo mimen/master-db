@@ -36,6 +36,9 @@ export const getOverdueItems = query({
     const todayISODate = today.toISOString().split('T')[0];
 
     const overdueItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
+      // Exclude routine tasks from time filters
+      if (item.labels?.includes("routine")) return false;
+
       if (!item.due) return false;
 
       const dueDate = item.due.date;

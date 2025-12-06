@@ -52,6 +52,9 @@ export const getDueNext7DaysItems = query({
     const next7DaysLocalDate = `${next7Year}-${next7Month}-${next7Day}`;
 
     const dueNext7DaysItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
+      // Exclude routine tasks from time filters
+      if (item.labels?.includes("routine")) return false;
+
       if (!item.due) return false;
 
       const dueDate = item.due.date;

@@ -53,6 +53,9 @@ export const getDueTodayItems = query({
     const endOfTodayUTC = new Date(endOfTodayLocal.getTime() - offsetMs);
 
     const dueTodayItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
+      // Exclude routine tasks from time filters
+      if (item.labels?.includes("routine")) return false;
+
       if (!item.due) return false;
 
       const dueDate = item.due.date;
