@@ -87,6 +87,12 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
               onToggleRoutinesCollapse={() => toggleSection("routines")}
               routineSort={routineSort}
               onRoutineSortChange={setRoutineSort}
+              isPriorityQueueCollapsed={collapsed.priorityQueue}
+              onTogglePriorityQueueCollapse={() => toggleSection("priorityQueue")}
+              isPriorityQueueGroupCollapsed={isPriorityGroupCollapsed}
+              togglePriorityQueueGroupCollapse={togglePriorityGroupCollapse}
+              toggleProjectCollapse={toggleProjectCollapse}
+              isProjectCollapsed={isProjectCollapsed}
             />
 
             <TimeSection

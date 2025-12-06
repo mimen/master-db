@@ -201,3 +201,53 @@ export const ROUTINE_TASK_FILTER_ITEMS: RoutineTaskFilterItem[] = [
     viewKey: "view:routine-tasks:get-ahead",
   },
 ]
+
+/**
+ * Priority Queue filter item for sidebar
+ */
+export type PriorityQueueFilterItem = {
+  id: string
+  label: string
+  viewKey: ViewKey
+}
+
+/**
+ * Static priority queue filter items - constituent views of the Priority Queue
+ */
+export const PRIORITY_QUEUE_FILTER_ITEMS: PriorityQueueFilterItem[] = [
+  {
+    id: "overdue",
+    label: "Overdue",
+    viewKey: "view:time:overdue",
+  },
+  {
+    id: "today",
+    label: "Today",
+    viewKey: "view:today",
+  },
+  {
+    id: "inbox",
+    label: "Inbox",
+    viewKey: "view:inbox",
+  },
+  {
+    id: "p1-tasks",
+    label: "P1 Tasks",
+    viewKey: "view:priority:p1",
+  },
+  {
+    id: "p1-projects",
+    label: "P1 Projects",
+    viewKey: "view:priority-projects:p1",
+  },
+  {
+    id: "p2-projects",
+    label: "P2 Projects",
+    viewKey: "view:priority-projects:p2",
+  },
+  {
+    id: "upcoming",
+    label: "Upcoming",
+    viewKey: "view:upcoming",
+  },
+]

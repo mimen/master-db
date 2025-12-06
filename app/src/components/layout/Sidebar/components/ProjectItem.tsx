@@ -61,7 +61,7 @@ export function ProjectItem({
     toggleProjectCollapse(project.todoist_id)
   }
 
-  const projectIcon = <ProjectColorIndicator project={project} size="md" className="mr-2" />
+  const projectIcon = <ProjectColorIndicator project={project} size="md" className="mr-1" />
 
   return (
     <>

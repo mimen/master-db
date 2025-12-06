@@ -103,8 +103,8 @@ export function LabelsSection({
                 return (
                   <SidebarMenuItem key={label._id}>
                     <SidebarButton
-                      icon={<Tag className="h-4 w-4 mr-3" style={{ color: getProjectColor(label.color) }} />}
-                      label={`@${label.name}`}
+                      icon={<Tag className="h-4 w-4" style={{ color: getProjectColor(label.color) }} />}
+                      label={`${label.name}`}
                       count={count}
                       isActive={isActive}
                       onClick={() => onViewChange(resolveView(viewKey, viewContext))}

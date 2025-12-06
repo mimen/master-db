@@ -48,7 +48,7 @@ export function PriorityItem({
     <SidebarButton
       icon={
         <Icon
-          className={cn(colorClass, "h-4 w-4 mr-3")}
+          className={cn(colorClass, "h-4 w-4")}
           {...({ fill: "currentColor" } as SVGProps<SVGSVGElement>)}
         />
       }
