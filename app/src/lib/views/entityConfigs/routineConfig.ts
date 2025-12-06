@@ -9,7 +9,7 @@ export type Routine = {
   frequency?: "daily" | "weekly" | "biweekly" | "monthly"
   estimatedDuration?: number
   todoistProjectId?: string
-  defer?: boolean
+  defer: boolean
   createdAt: number
 }
 
@@ -48,6 +48,22 @@ export const routineSortOptions: SortOption<Routine>[] = [
  * Group options for routines
  */
 export const routineGroupOptions: GroupOption<Routine>[] = [
+  {
+    id: "status",
+    label: "Status",
+    groupFn: (routine) => (routine.defer ? "paused" : "active"),
+    getGroupLabel: (key) => {
+      const labels: Record<string, string> = {
+        active: "Active",
+        paused: "Paused",
+      }
+      return labels[key] ?? "Unknown"
+    },
+    groupSort: (a, b) => {
+      const order = ["active", "paused"]
+      return order.indexOf(a) - order.indexOf(b)
+    },
+  },
   {
     id: "duration",
     label: "Duration",

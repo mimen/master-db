@@ -1,14 +1,10 @@
+import { SIDEBAR_CONFIG } from "./config/sidebarConfig"
 import { NavHeader } from "./components/NavHeader"
 import { SidebarHoverProvider, useSidebarHover } from "./contexts/SidebarHoverContext"
 import { useSidebarData } from "./hooks/useSidebarData"
 import { useSidebarState } from "./hooks/useSidebarState"
-import { LabelsSection } from "./sections/LabelsSection"
-import { PrioritiesSection } from "./sections/PrioritiesSection"
-import { ProjectsSection } from "./sections/ProjectsSection"
-import { RoutineTasksSection } from "./sections/RoutineTasksSection"
-import { TimeSection } from "./sections/TimeSection"
-import { ViewsSection } from "./sections/ViewsSection"
 import { buildViewItems } from "./utils/viewItems"
+import { renderSection } from "./utils/renderSection"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -34,13 +30,10 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
   const { getCountForView } = useCountRegistry()
 
   const {
-    expandNested,
     projectSort,
     setProjectSort,
     labelSort,
     setLabelSort,
-    routineSort,
-    setRoutineSort,
     collapsed,
     toggleSection,
     toggleProjectCollapse,
@@ -51,13 +44,44 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
 
   const { setIsHovered } = useSidebarHover()
 
-  // Use CountRegistry for all view counts
+  // Use CountRegistry for all view counts (needed for NavHeader)
   const inboxCount = getCountForView("view:inbox", viewContext)
   const priorityQueueCount = getCountForView("view:multi:priority-queue", viewContext)
   const projectsCount = getCountForView("view:projects", viewContext)
   const routinesCount = getCountForView("view:routines", viewContext)
 
   const viewItems = buildViewItems(inboxCount, priorityQueueCount, projectsCount, routinesCount)
+
+  // Create unified sort mode object for config-driven rendering
+  const sortMode = {
+    folders: projectSort,
+    labels: labelSort,
+  }
+
+  // Create unified setSortMode function
+  const setSortMode = (section: string, mode: string) => {
+    if (section === "folders") {
+      setProjectSort(mode as typeof projectSort)
+    } else if (section === "labels") {
+      setLabelSort(mode as typeof labelSort)
+    }
+  }
+
+  // Common props for all sections
+  const commonSectionProps = {
+    currentViewKey,
+    onViewChange,
+    viewContext,
+    collapsed,
+    toggleSection,
+    sortMode,
+    setSortMode,
+    getCountForView,
+    isPriorityGroupCollapsed,
+    togglePriorityGroupCollapse,
+    isProjectCollapsed,
+    toggleProjectCollapse,
+  }
 
   return (
     <SidebarPrimitive
@@ -76,75 +100,9 @@ function SidebarContent_({ currentViewKey, onViewChange }: SidebarProps) {
       <SidebarContent className="p-0 overflow-hidden">
         <ScrollArea className="h-full mr-0.5">
           <div className="p-2 min-w-0 w-[265px]">
-            <ViewsSection
-              items={viewItems}
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              isFoldersCollapsed={collapsed.folders}
-              onToggleFoldersCollapse={() => toggleSection("folders")}
-              isRoutinesCollapsed={collapsed.routines}
-              onToggleRoutinesCollapse={() => toggleSection("routines")}
-              routineSort={routineSort}
-              onRoutineSortChange={setRoutineSort}
-              isPriorityQueueCollapsed={collapsed.priorityQueue}
-              onTogglePriorityQueueCollapse={() => toggleSection("priorityQueue")}
-              isPriorityQueueGroupCollapsed={isPriorityGroupCollapsed}
-              togglePriorityQueueGroupCollapse={togglePriorityGroupCollapse}
-              toggleProjectCollapse={toggleProjectCollapse}
-              isProjectCollapsed={isProjectCollapsed}
-            />
-
-            <TimeSection
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              isCollapsed={collapsed.time}
-              onToggleCollapse={() => toggleSection("time")}
-            />
-
-            <RoutineTasksSection
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              isCollapsed={collapsed.routineTasks}
-              onToggleCollapse={() => toggleSection("routineTasks")}
-            />
-
-            <ProjectsSection
-              projects={projectTree}
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              expandNested={expandNested}
-              sortMode={projectSort}
-              onSortChange={setProjectSort}
-              isCollapsed={collapsed.projects}
-              onToggleCollapse={() => toggleSection("projects")}
-              toggleProjectCollapse={toggleProjectCollapse}
-              isProjectCollapsed={isProjectCollapsed}
-              togglePriorityGroupCollapse={togglePriorityGroupCollapse}
-              isPriorityGroupCollapsed={isPriorityGroupCollapsed}
-            />
-
-            <PrioritiesSection
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              isCollapsed={collapsed.priorities}
-              onToggleCollapse={() => toggleSection("priorities")}
-            />
-
-            <LabelsSection
-              labels={labels}
-              currentViewKey={currentViewKey}
-              onViewChange={onViewChange}
-              viewContext={viewContext}
-              sortMode={labelSort}
-              onSortChange={setLabelSort}
-              isCollapsed={collapsed.labels}
-              onToggleCollapse={() => toggleSection("labels")}
-            />
+            {SIDEBAR_CONFIG.sections.map((section) =>
+              renderSection(section, commonSectionProps)
+            )}
           </div>
         </ScrollArea>
       </SidebarContent>

@@ -103,14 +103,33 @@ export function Layout() {
 
   // Sync view when URL changes (browser back/forward, direct navigation)
   // Also handles initial load from URL
+  // IMPORTANT: We must re-resolve when viewContext changes even if viewKey stays the same,
+  // because dynamic views (like priority-projects) depend on context data to build lists
   useEffect(() => {
     const viewKey = pathToViewKey(location, viewContext)
-    if (viewKey && viewKey !== activeView.key) {
-      const newView = resolveView(viewKey, viewContext)
-      setActiveView(newView)
-      resetTaskCounts()
+    if (viewKey) {
+      // Re-resolve if viewKey changed
+      if (viewKey !== activeView.key) {
+        const newView = resolveView(viewKey, viewContext)
+        setActiveView(newView)
+        resetTaskCounts()
+        return
+      }
+
+      // Re-resolve if same viewKey but view has empty lists and context now has data
+      // This handles the case where we initially loaded with empty context
+      const needsContextData =
+        viewKey.startsWith("view:priority-projects:") ||
+        viewKey.startsWith("view:project:") ||
+        viewKey.startsWith("view:project-family:")
+
+      if (needsContextData && activeView.lists.length === 0 && viewContext.projectsWithMetadata) {
+        const newView = resolveView(viewKey, viewContext)
+        setActiveView(newView)
+        resetTaskCounts()
+      }
     }
-  }, [location, activeView.key, viewContext, resetTaskCounts])
+  }, [location, activeView.key, activeView.lists.length, viewContext, resetTaskCounts])
 
   const handleTaskCountChangeWithUpdate = useCallback(
     (listId: string, count: number) => {

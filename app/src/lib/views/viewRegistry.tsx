@@ -1,9 +1,11 @@
+import { getProjectColor } from "../colors"
 import { getProjectIcon, getViewIcon } from "../icons/viewIcons"
 import { BUILT_IN_MULTI_LISTS } from "../multi-list/defaults"
 
 import { instantiateList, listDefinitions } from "./listDefinitions"
 import type {
   ListInstance,
+  ListInstanceOverrides,
   RoutineTaskFilter,
   TimeRange,
   ViewBuildContext,
@@ -133,7 +135,7 @@ function expandProject(
   viewKey: ViewKey,
   startIndex: number,
   projectId: string,
-  overrides?: { collapsible?: boolean; startExpanded?: boolean }
+  overrides?: ListInstanceOverrides
 ): ListInstance[] {
   return [
     instantiateList(listDefinitions.project, {
@@ -150,7 +152,7 @@ function expandRoutinesByProject(
   viewKey: ViewKey,
   startIndex: number,
   projectId: string,
-  overrides?: { collapsible?: boolean; startExpanded?: boolean }
+  overrides?: ListInstanceOverrides
 ): ListInstance[] {
   return [
     instantiateList(listDefinitions.projectRoutines, {
@@ -495,8 +497,8 @@ const viewPatterns: ViewPattern[] = [
     }),
     getDefinition: (extracted, context) => {
       const projectId = extracted.projectId as string
-      const projects = context?.projects ?? []
-      const project = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
+      const projects = context?.projectsWithMetadata ?? context?.projects ?? []
+      const project = projects.find((p) => p.todoist_id === projectId)
 
       return {
         metadata: {
@@ -510,6 +512,21 @@ const viewPatterns: ViewPattern[] = [
           // Tasks list (non-collapsible, primary content)
           lists.push(...expandProject(viewKey, 0, projectId, {
             collapsible: false,
+            getHeader: (ctx) => {
+              const projectWithMetadata = ctx.support.projectsWithMetadata?.find(p => p.todoist_id === projectId)
+              const projectIcon = projectWithMetadata ? (
+                <div
+                  className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
+                  style={{ backgroundColor: getProjectColor(projectWithMetadata.color) }}
+                />
+              ) : null
+
+              return {
+                title: "Tasks",
+                description: `${ctx.taskCount} tasks in this project`,
+                icon: projectIcon,
+              }
+            }
           }))
 
           // Routines list (collapsible, secondary content)
@@ -530,8 +547,8 @@ const viewPatterns: ViewPattern[] = [
     }),
     getDefinition: (extracted, context) => {
       const projectId = extracted.projectId as string
-      const projects = context?.projects ?? []
-      const project = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
+      const projects = context?.projectsWithMetadata ?? context?.projects ?? []
+      const project = projects.find((p) => p.todoist_id === projectId)
 
       return {
         metadata: {

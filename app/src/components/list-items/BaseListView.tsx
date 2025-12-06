@@ -188,6 +188,12 @@ export interface BaseListViewProps<T> {
   groupData?: GroupData
 
   /**
+   * Support data for list header rendering
+   * Contains projects, projectsWithMetadata, labels needed by getHeader/getEmptyState
+   */
+  supportData?: ListSupportData
+
+  /**
    * Default sort option ID
    * @default null (no sort)
    */
@@ -227,6 +233,7 @@ export function BaseListView<T>({
   sortOptions,
   groupOptions,
   groupData,
+  supportData,
   defaultSort,
   defaultGroup,
   className,
@@ -355,13 +362,13 @@ export function BaseListView<T>({
   const header = list.getHeader({
     params: list.params,
     taskCount: entities.length,
-    support: {} as ListSupportData,
+    support: supportData ?? ({} as ListSupportData),
   })
 
   const emptyState = list.getEmptyState({
     params: list.params,
     taskCount: entities.length,
-    support: {} as ListSupportData,
+    support: supportData ?? ({} as ListSupportData),
   })
 
   // Determine if we should show compact view

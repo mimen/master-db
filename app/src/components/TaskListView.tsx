@@ -11,6 +11,7 @@ import type {
   TodoistLabelDoc,
   TodoistProject,
   TodoistProjects,
+  TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
 
@@ -43,6 +44,11 @@ export function TaskListView({
   const projects: TodoistProjects | undefined = useQuery(
     api.todoist.queries.getProjects.getProjects,
     {} // Always fetch - needed for project/label grouping
+  )
+
+  const projectsWithMetadata: TodoistProjectsWithMetadata | undefined = useQuery(
+    api.todoist.computed.queries.getProjectsWithMetadata.getProjectsWithMetadata,
+    {} // Fetch for list headers
   )
 
   const labels: TodoistLabelDoc[] | undefined = useQuery(
@@ -115,6 +121,7 @@ export function TaskListView({
       sortOptions={taskSortOptions}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
+      supportData={{ projects, projectsWithMetadata, labels }}
       renderRow={(task, index, ref, query) => (
         <TaskListItem
           key={task._id}

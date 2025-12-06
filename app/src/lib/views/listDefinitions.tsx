@@ -182,17 +182,16 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
   },
   buildQuery: ({ projectId }): ListQueryInput => ({ type: "project", projectId }),
   getHeader: ({ taskCount, params, support }) => {
-    const project = support.projects?.find((p) => p.todoist_id === params.projectId)
     const projectWithMetadata = support.projectsWithMetadata?.find(
       (p) => p.todoist_id === params.projectId
     )
-    const title = project?.name ?? "Project"
+    const title = projectWithMetadata?.name ?? "Project"
     const description = `${taskCount} tasks in this project`
 
-    const projectIcon = project ? (
+    const projectIcon = projectWithMetadata ? (
       <div
         className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
-        style={{ backgroundColor: getProjectColor(project.color) }}
+        style={{ backgroundColor: getProjectColor(projectWithMetadata.color) }}
       />
     ) : null
 
@@ -356,8 +355,8 @@ const projectRoutinesDefinition: ListDefinition<{ projectId: string }> = {
   },
   buildQuery: ({ projectId }): ListQueryInput => ({ type: "routines", projectId }),
   getHeader: ({ taskCount, params, support }) => {
-    const project = support.projects?.find((p) => p.todoist_id === params.projectId)
-    const title = project?.name ? `${project.name} Routines` : "Project Routines"
+    const projectWithMetadata = support.projectsWithMetadata?.find((p) => p.todoist_id === params.projectId)
+    const title = projectWithMetadata?.name ? `${projectWithMetadata.name} Routines` : "Project Routines"
     const description = `${taskCount} ${taskCount === 1 ? "routine" : "routines"}`
 
     const icon = getViewIcon("view:routines", { size: "lg", className: "mr-3" })
