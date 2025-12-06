@@ -83,6 +83,11 @@ export const getFilteredActiveItems = internalQuery({
         return false;
       }
 
+      // Exclude routine tasks from priority filters
+      if (args.priority !== undefined && item.labels?.includes("routine")) {
+        return false;
+      }
+
       if (args.label && !item.labels.includes(args.label)) {
         return false;
       }

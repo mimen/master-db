@@ -132,6 +132,7 @@ export const getAllListCounts = query({
     }
 
     // Priority counts (remember: API priority 4 = UI P1, 3 = P2, 2 = P3, 1 = P4)
+    // Exclude routine tasks from priority filters
     const priorityMapping = [
       { uiLevel: 'p1', apiPriority: 4 },
       { uiLevel: 'p2', apiPriority: 3 },
@@ -139,7 +140,9 @@ export const getAllListCounts = query({
       { uiLevel: 'p4', apiPriority: 1 },
     ];
     for (const { uiLevel, apiPriority } of priorityMapping) {
-      const count = filteredItems.filter(item => item.priority === apiPriority).length;
+      const count = filteredItems.filter(item =>
+        item.priority === apiPriority && !item.labels?.includes("routine")
+      ).length;
       counts[`list:priority:${uiLevel}`] = count;
     }
 
