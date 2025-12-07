@@ -19,13 +19,14 @@ export const SIDEBAR_CONFIG: SidebarConfig = {
       ],
     },
     {
-      section: "time",
-      label: "Time",
+      section: "routineTasks",
+      label: "Routine Tasks",
       items: [
-        "view:time:overdue",
-        "view:time:today",
-        "view:time:upcoming",
-        "view:time:no-date",
+        "view:routine-tasks:overdue",
+        "view:routine-tasks:morning",
+        "view:routine-tasks:night",
+        "view:routine-tasks:todays",
+        "view:routine-tasks:get-ahead",
       ],
     },
     {
@@ -60,14 +61,13 @@ export const SIDEBAR_CONFIG: SidebarConfig = {
       ],
     },
     {
-      section: "routineTasks",
-      label: "Routine Tasks",
+      section: "time",
+      label: "Time",
       items: [
-        "view:routine-tasks:overdue",
-        "view:routine-tasks:morning",
-        "view:routine-tasks:night",
-        "view:routine-tasks:todays",
-        "view:routine-tasks:get-ahead",
+        "view:time:overdue",
+        "view:time:today",
+        "view:time:upcoming",
+        "view:time:no-date",
       ],
     },
     {
