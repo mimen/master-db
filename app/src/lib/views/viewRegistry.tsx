@@ -447,7 +447,7 @@ const viewPatterns: ViewPattern[] = [
     match: (key) => key === "view:folders:unassigned",
     getDefinition: () => ({
       metadata: {
-        title: "Unassigned Folders",
+        title: "Unassigned",
         icon: getViewIcon("view:folders:unassigned", { size: "sm" }),
       },
       buildLists: (viewKey, startIndex) => {
@@ -476,11 +476,12 @@ const viewPatterns: ViewPattern[] = [
       const projectId = extracted.projectId as string
       const projects = context?.projects ?? []
       const project = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
+      const viewKey = `view:routines:project:${projectId}` as ViewKey
 
       return {
         metadata: {
-          title: project?.name ? `${project.name} - Routines` : "Routines",
-          icon: project ? getProjectIcon(project.color, { size: "sm" }) : getViewIcon("view:routines", { size: "sm" }),
+          title: project?.name ?? "Unknown Project",
+          icon: getViewIcon(viewKey, { size: "sm", color: project?.color }),
         },
         buildLists: (viewKey, startIndex) => {
           return expandRoutinesByProject(viewKey, startIndex, projectId, {

@@ -437,7 +437,7 @@ const unassignedFoldersDefinition: ListDefinition = {
     const icon = getViewIcon("view:folders:unassigned", { size: "lg", className: "mr-3" })
 
     return {
-      title: "Unassigned Folders",
+      title: "Unassigned",
       description: `${taskCount} folders without type`,
       icon,
     }

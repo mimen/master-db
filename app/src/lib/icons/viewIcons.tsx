@@ -58,19 +58,37 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
   }
 
   if (viewKey === "view:folders:projects") {
-    return <Folder className={finalClassName} />
+    // Outline gray circle (matches project-type items which have outline)
+    // Always use "md" size to match individual project icons
+    return (
+      <div
+        className={cn("w-3 h-3 border-[1.5px] rounded-full flex-shrink-0 border-gray-500 dark:border-gray-400", className)}
+      />
+    )
   }
 
   if (viewKey === "view:folders:areas") {
-    return <Folder className={finalClassName} />
+    // Filled gray circle (matches area-of-responsibility items which are solid)
+    // Always use "md" size to match individual area icons
+    return (
+      <div
+        className={cn("w-3 h-3 rounded-full flex-shrink-0 bg-gray-500 dark:bg-gray-400", className)}
+      />
+    )
   }
 
   if (viewKey === "view:folders:unassigned") {
-    return <Folder className={cn(finalClassName, "text-muted-foreground")} />
+    // Render underscore character
+    // Use fixed w-3 h-3 size to match circles above
+    return (
+      <span className={cn("w-3 h-3 flex items-center justify-center text-gray-500 dark:text-gray-400 font-medium text-xs leading-none", className)}>
+        _
+      </span>
+    )
   }
 
   if (viewKey === "view:routines") {
-    return <Repeat className={cn(finalClassName, "text-purple-600 dark:text-purple-400")} />
+    return <Repeat className={finalClassName} />
   }
 
   if (viewKey === "view:settings") {
@@ -113,6 +131,19 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
 
   if (viewKey === "view:routine-tasks:get-ahead") {
     return <FastForward className={cn(finalClassName, "text-blue-600 dark:text-blue-400")} />
+  }
+
+  // Routine project views - colored to project color
+  if (viewKey.startsWith("view:routines:project:")) {
+    if (color) {
+      return (
+        <Repeat
+          className={finalClassName}
+          style={{ color: getProjectColor(color) }}
+        />
+      )
+    }
+    return <Repeat className={finalClassName} />
   }
 
   // Priority views (P1-P4) - always colored

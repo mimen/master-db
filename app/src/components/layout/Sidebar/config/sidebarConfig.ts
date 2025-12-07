@@ -1,5 +1,3 @@
-import type { ViewKey } from "@/lib/views/types"
-
 import type { SidebarConfig } from "./types"
 
 /**
@@ -111,6 +109,34 @@ export const SIDEBAR_CONFIG: SidebarConfig = {
         "view:priority-projects:p1",
         "view:priority-projects:p2",
         "view:time:upcoming",
+      ],
+    },
+    "view:folders": {
+      // Show folder type categories (Projects, Areas, Unassigned)
+      items: [
+        "view:folders:projects",
+        "view:folders:areas",
+        "view:folders:unassigned",
+      ],
+    },
+    "view:routines": {
+      // Sortable routine projects
+      sortOptions: [
+        {
+          key: "flat",
+          label: "Alphabetical",
+          source: "routinesByFlat",
+        },
+        {
+          key: "projectOrder",
+          label: "Project Order",
+          source: "routinesByProjectOrder",
+        },
+        {
+          key: "routineCount",
+          label: "Routine Count",
+          source: "routinesByCount",
+        },
       ],
     },
     "view:priority-projects:p1": {
