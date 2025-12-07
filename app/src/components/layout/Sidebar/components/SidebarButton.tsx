@@ -6,6 +6,8 @@ import { useSidebarHover } from "../contexts/SidebarHoverContext"
 
 import { CollapseCaret } from "./CollapseCaret"
 import { CountBadge } from "./CountBadge"
+import { SortDropdown } from "./SortDropdown"
+import type { SortConfig } from "./ViewItem"
 
 import { SidebarMenuButton } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
@@ -25,6 +27,7 @@ interface SidebarButtonProps {
   onToggleCollapse?: (e: MouseEvent) => void
   sortMode?: "hierarchy" | "priority" | "taskCount" | "alphabetical"
   onMoveClick?: (e: MouseEvent) => void
+  sortConfig?: SortConfig
 }
 
 export function SidebarButton({
@@ -42,6 +45,7 @@ export function SidebarButton({
   onToggleCollapse,
   sortMode,
   onMoveClick,
+  sortConfig,
 }: SidebarButtonProps) {
   const { isHovered } = useSidebarHover()
 
@@ -99,6 +103,7 @@ export function SidebarButton({
             <MoreVertical className="h-4 w-4" />
           </div>
         )}
+        {sortConfig && <SortDropdown {...sortConfig} />}
         {(hasCount || hasCaret) && (
           <div className="relative w-6 h-6 flex-shrink-0">
             {hasCount && (

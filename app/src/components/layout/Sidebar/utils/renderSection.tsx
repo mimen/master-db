@@ -48,9 +48,13 @@ function getSortIcon(mode: string): ElementType<{ className?: string }> {
     case "priority":
       return Flag
     case "taskCount":
+    case "routineCount":
       return Hash
     case "alphabetical":
+    case "flat":
       return ArrowDownAZ
+    case "projectOrder":
+      return Network
     default:
       return Hash // Default fallback
   }
@@ -152,6 +156,16 @@ export function renderSection(
 }
 
 /**
+ * Map view-key to sort mode key for views that support sorting
+ * Returns the key used in sortMode object (e.g., "folders", "routines")
+ */
+function getViewSortKey(viewKey: ViewKey): string | null {
+  if (viewKey === "view:folders") return "folders"
+  if (viewKey === "view:routines") return "routines"
+  return null
+}
+
+/**
  * Get children for a project from the project tree (for hierarchy mode)
  */
 function getProjectChildren(projectId: string, viewContext: ViewBuildContext): ViewKey[] {
@@ -194,10 +208,33 @@ export function renderViewItem(
   // For project views, also check for dynamic hierarchy children
   let children: ViewKey[] = []
   let hasChildren = false
+  let sortConfig: {
+    modes: readonly string[]
+    currentMode: string
+    getIcon: (mode: string) => ElementType<{ className?: string }>
+    onChange: (mode: string) => void
+  } | null = null
 
   if (subviewDef) {
-    // Static subviews from config
-    children = resolveSubview(subviewDef, props.viewContext, props.getCountForView)
+    // Check if this subview has sortOptions
+    const viewSortKey = getViewSortKey(viewKey)
+    let currentSort: string | undefined
+
+    if (subviewDef.sortOptions && viewSortKey) {
+      // Get current sort mode for this view
+      currentSort = props.sortMode[viewSortKey] || subviewDef.sortOptions[0].key
+
+      // Build sort dropdown config
+      sortConfig = {
+        modes: subviewDef.sortOptions.map((opt) => opt.key) as readonly string[],
+        currentMode: currentSort,
+        onChange: (mode: string) => props.setSortMode(viewSortKey, mode),
+        getIcon: getSortIcon,
+      }
+    }
+
+    // Resolve children with current sort mode
+    children = resolveSubview(subviewDef, props.viewContext, props.getCountForView, currentSort)
     hasChildren = children.length > 0
   } else if (viewKey.startsWith("view:project:")) {
     // Dynamic hierarchy children for projects
@@ -237,6 +274,7 @@ export function renderViewItem(
   return (
     <Fragment key={viewKey}>
       <ViewItem
+        key={viewKey}
         viewKey={viewKey}
         level={level}
         hasChildren={true}
@@ -245,6 +283,7 @@ export function renderViewItem(
         currentViewKey={props.currentViewKey}
         onViewChange={props.onViewChange}
         viewContext={props.viewContext}
+        sortConfig={sortConfig || undefined}
       />
       {!isCollapsed &&
         children.map((child) => {
@@ -258,19 +297,52 @@ export function renderViewItem(
 
 /**
  * Resolve a subview definition to an array of view-keys
+ * Handles both static items and sortable items
  */
 export function resolveSubview(
   def: SubviewDefinition,
   viewContext: ViewBuildContext,
-  getCountForView: (viewKey: ViewKey, ctx: ViewBuildContext) => number
+  getCountForView: (viewKey: ViewKey, ctx: ViewBuildContext) => number,
+  currentSort?: string
 ): ViewKey[] {
+  let staticItems: ViewKey[] = []
+  let dynamicItems: ViewKey[] = []
+
+  // Handle static items (always shown)
   if (def.items) {
-    return def.items
+    staticItems = def.items
   }
 
-  if (def.type === "generator" && def.source) {
+  // Handle sortable items
+  if (def.sortOptions && currentSort) {
+    const currentSortOption = def.sortOptions.find((opt) => opt.key === currentSort)
+    if (currentSortOption) {
+      if ("items" in currentSortOption) {
+        dynamicItems = currentSortOption.items
+      } else {
+        dynamicItems = resolveGenerator(
+          currentSortOption.source,
+          {},
+          viewContext,
+          getCountForView
+        )
+      }
+    }
+  } else if (def.sortOptions) {
+    // Default to first sort option if no current sort specified
+    const firstOption = def.sortOptions[0]
+    if ("items" in firstOption) {
+      dynamicItems = firstOption.items
+    } else {
+      dynamicItems = resolveGenerator(firstOption.source, {}, viewContext, getCountForView)
+    }
+  }
+
+  // Legacy generator support
+  if (def.type === "generator" && def.source && !def.sortOptions) {
     return resolveGenerator(def.source, def.params || {}, viewContext, getCountForView)
   }
 
-  return []
+  // Combine static and dynamic items (static items appear first)
+  return [...staticItems, ...dynamicItems]
 }

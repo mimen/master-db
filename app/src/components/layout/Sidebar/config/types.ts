@@ -20,12 +20,14 @@ export interface SidebarSection {
 
 /**
  * Definition for subviews (children of expandable views)
+ * Can have static items, sortable items, or both
  */
 export interface SubviewDefinition {
-  items?: ViewKey[] // Static children
-  type?: "generator" // Dynamic children
-  source?: string // Generator source name
-  params?: Record<string, any> // Generator parameters
+  items?: ViewKey[] // Static children (always shown)
+  sortOptions?: SortOption[] // Sortable children with multiple sort modes
+  type?: "generator" // Dynamic children (legacy, use sortOptions instead)
+  source?: string // Generator source name (legacy)
+  params?: Record<string, any> // Generator parameters (legacy)
 }
 
 /**

@@ -1,3 +1,5 @@
+import type { ElementType, ReactNode } from "react"
+
 import { SidebarButton } from "./SidebarButton"
 
 import { ProjectColorIndicator } from "@/components/ProjectColorIndicator"
@@ -7,6 +9,13 @@ import { getViewIcon } from "@/lib/icons/viewIcons"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 import { getViewDefinition } from "@/lib/views/viewRegistry"
+
+export interface SortConfig {
+  modes: readonly string[]
+  currentMode: string
+  onChange: (mode: string) => void
+  getIcon: (mode: string) => ElementType<{ className?: string }>
+}
 
 interface ViewItemProps {
   // Single source of truth
@@ -24,6 +33,9 @@ interface ViewItemProps {
   hasChildren?: boolean
   isCollapsed?: boolean
   onToggleCollapse?: () => void
+
+  // Sorting (for expandable views with sortOptions)
+  sortConfig?: SortConfig
 }
 
 /**
@@ -44,13 +56,14 @@ export function ViewItem({
   hasChildren = false,
   isCollapsed = false,
   onToggleCollapse,
+  sortConfig,
 }: ViewItemProps) {
   // 1. Get metadata from ViewRegistry
   const viewDef = getViewDefinition(viewKey, viewContext)
   const title = viewDef?.metadata?.title || "Unknown"
 
   // 2. Get icon - special handling for project views
-  let icon = getViewIcon(viewKey, { size: "sm" })
+  let icon: ReactNode = null
 
   // For project views, use colored circle indicator
   if (viewKey.startsWith("view:project:") && viewContext?.projectsWithMetadata) {
@@ -59,6 +72,18 @@ export function ViewItem({
     if (project) {
       icon = <ProjectColorIndicator project={project} size="md" className="mr-1" />
     }
+  } else if (viewKey.startsWith("view:routines:project:") && viewContext?.projectsWithMetadata) {
+    // For routine project views, pass project color to getViewIcon
+    const projectId = viewKey.replace("view:routines:project:", "")
+    const project = viewContext.projectsWithMetadata.find(p => p.todoist_id === projectId)
+    if (project) {
+      icon = getViewIcon(viewKey, { size: "sm", color: project.color })
+    }
+  }
+
+  // Fallback to default icon if not set
+  if (!icon) {
+    icon = getViewIcon(viewKey, { size: "sm" })
   }
 
   // 3. Get count from CountRegistry
@@ -90,6 +115,7 @@ export function ViewItem({
         hasChildren={hasChildren}
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
+        sortConfig={sortConfig}
       />
     </SidebarMenuItem>
   )
