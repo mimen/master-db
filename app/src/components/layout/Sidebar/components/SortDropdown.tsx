@@ -1,13 +1,13 @@
 import { Check } from "lucide-react"
 import { type ElementType } from "react"
 
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 interface SortDropdownProps<T extends string> {
   modes: readonly T[]
@@ -38,9 +38,18 @@ export function SortDropdown<T extends string>({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 flex-shrink-0">
+        <div
+          className={cn(
+            "h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center",
+            "rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+            "cursor-pointer transition-colors"
+          )}
+          role="button"
+          tabIndex={0}
+          aria-label="Sort options"
+        >
           <CurrentIcon className="h-2.5 w-2.5" />
-        </Button>
+        </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {modes.map((mode) => {
