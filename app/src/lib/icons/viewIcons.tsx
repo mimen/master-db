@@ -206,9 +206,16 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
 
 /**
  * Get a project icon (colored dot) for a given project
+ *
+ * @param color - Project color code
+ * @param options - Icon options including size, className, and optional isProjectType flag
+ * @param options.isProjectType - If true, renders hollow circle (project-type), otherwise solid (area-of-responsibility)
  */
-export function getProjectIcon(color: string, options: IconOptions = {}): ReactNode {
-  const { size = "md", className = "" } = options
+export function getProjectIcon(
+  color: string,
+  options: IconOptions & { isProjectType?: boolean } = {}
+): ReactNode {
+  const { size = "md", className = "", isProjectType = false } = options
 
   const dotSizes = {
     sm: "w-2.5 h-2.5",
@@ -216,8 +223,26 @@ export function getProjectIcon(color: string, options: IconOptions = {}): ReactN
     lg: "w-4 h-4",
   }
 
-  const dotSize = dotSizes[size]
+  const borderSizes = {
+    sm: "border",
+    md: "border-[1.5px]",
+    lg: "border-2",
+  }
 
+  const dotSize = dotSizes[size]
+  const borderSize = borderSizes[size]
+
+  if (isProjectType) {
+    // Hollow circle for Projects
+    return (
+      <div
+        className={cn(dotSize, borderSize, "rounded-full flex-shrink-0", className)}
+        style={{ borderColor: getProjectColor(color) }}
+      />
+    )
+  }
+
+  // Solid circle for Areas and Unassigned
   return (
     <div
       className={cn(dotSize, "rounded-full flex-shrink-0", className)}

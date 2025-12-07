@@ -500,11 +500,12 @@ const viewPatterns: ViewPattern[] = [
       const projectId = extracted.projectId as string
       const projects = context?.projectsWithMetadata ?? context?.projects ?? []
       const project = projects.find((p) => p.todoist_id === projectId)
+      const isProjectType = project?.metadata?.projectType === "project-type"
 
       return {
         metadata: {
           title: project?.name ?? "Project",
-          icon: project ? getProjectIcon(project.color, { size: "sm" }) : undefined
+          icon: project ? getProjectIcon(project.color, { size: "sm", isProjectType }) : undefined
         },
         buildLists: (viewKey) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -550,11 +551,12 @@ const viewPatterns: ViewPattern[] = [
       const projectId = extracted.projectId as string
       const projects = context?.projectsWithMetadata ?? context?.projects ?? []
       const project = projects.find((p) => p.todoist_id === projectId)
+      const isProjectType = project?.metadata?.projectType === "project-type"
 
       return {
         metadata: {
           title: project?.name ?? "Project",
-          icon: project ? getProjectIcon(project.color, { size: "sm" }) : undefined
+          icon: project ? getProjectIcon(project.color, { size: "sm", isProjectType }) : undefined
         },
         buildLists: (viewKey, index, context) =>
           expandProjectWithChildren(
