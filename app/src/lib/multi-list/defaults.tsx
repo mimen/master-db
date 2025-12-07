@@ -10,18 +10,18 @@ import type { MultiListConfig } from "@/types/multi-list"
  */
 export const BUILT_IN_MULTI_LISTS: MultiListConfig[] = [
   {
-    id: "priority-queue",
-    name: "Priority Queue",
-    icon: getViewIcon("view:multi:priority-queue", { size: "sm" }),
+    id: "daily-planning",
+    name: "Daily Planning",
+    icon: getViewIcon("view:multi:daily-planning", { size: "sm" }),
     isBuiltIn: true,
-    description: "Optimal task processing order: urgent → important → batched work",
-    estimatedMinutes: 120,
+    description: "See all available work and schedule your day",
+    estimatedMinutes: 45,
     sequence: [
       {
-        view: "time:overdue",
+        view: "routine-tasks:morning",
       },
       {
-        view: "today",
+        view: "routine-tasks:overdue",
       },
       {
         view: "inbox",
@@ -34,11 +34,47 @@ export const BUILT_IN_MULTI_LISTS: MultiListConfig[] = [
         view: "priority-projects:p1",
       },
       {
+        view: "priority:p2",
+      },
+      {
         view: "priority-projects:p2",
       },
       {
-        view: "upcoming",
-        maxTasks: 15,
+        view: "label:errand",
+      },
+      {
+        view: "label:convo",
+      },
+      {
+        view: "routine-tasks:get-ahead",
+      },
+    ],
+  },
+  {
+    id: "daily-execution",
+    name: "Daily Execution",
+    icon: getViewIcon("view:multi:daily-execution", { size: "sm" }),
+    isBuiltIn: true,
+    description: "Work through everything scheduled for today",
+    estimatedMinutes: 180,
+    sequence: [
+      {
+        view: "time:overdue",
+      },
+      {
+        view: "today",
+      },
+      {
+        view: "routine-tasks:todays",
+      },
+      {
+        view: "label:quick",
+      },
+      {
+        view: "label:needs followup",
+      },
+      {
+        view: "routine-tasks:night",
       },
     ],
   },

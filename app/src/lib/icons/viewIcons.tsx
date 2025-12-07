@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, CalendarCheck, CalendarRange, FastForward, Filter, Flag, Folder, Inbox, Moon, Repeat, Settings, Sunrise, Tag } from "lucide-react"
+import { AlertCircle, Calendar, CalendarCheck, CalendarRange, ClipboardList, FastForward, Filter, Flag, Folder, Inbox, Moon, Repeat, Settings, Sunrise, Tag, Zap } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { getProjectColor } from "../colors"
@@ -190,6 +190,14 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
   // Multi-list views
   if (viewKey === "view:multi:priority-queue") {
     return <Filter className={finalClassName} />
+  }
+
+  if (viewKey === "view:multi:daily-planning") {
+    return <ClipboardList className={finalClassName} />
+  }
+
+  if (viewKey === "view:multi:daily-execution") {
+    return <Zap className={finalClassName} />
   }
 
   if (viewKey === "view:multi:morning-review") {

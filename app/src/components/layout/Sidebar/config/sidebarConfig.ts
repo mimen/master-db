@@ -13,7 +13,8 @@ export const SIDEBAR_CONFIG: SidebarConfig = {
       // No label = no section header
       items: [
         "view:inbox",
-        "view:multi:priority-queue",
+        "view:multi:daily-planning",
+        "view:multi:daily-execution",
         "view:folders",
         "view:routines",
       ],
@@ -100,15 +101,28 @@ export const SIDEBAR_CONFIG: SidebarConfig = {
 
   // Subview definitions (children for expandable views)
   subviews: {
-    "view:multi:priority-queue": {
+    "view:multi:daily-planning": {
       items: [
-        "view:time:overdue",
-        "view:time:today",
+        "view:routine-tasks:morning",
+        "view:routine-tasks:overdue",
         "view:inbox",
         "view:priority:p1",
         "view:priority-projects:p1",
+        "view:priority:p2",
         "view:priority-projects:p2",
-        "view:time:upcoming",
+        "view:label:errand",
+        "view:label:convo",
+        "view:routine-tasks:get-ahead",
+      ],
+    },
+    "view:multi:daily-execution": {
+      items: [
+        "view:time:overdue",
+        "view:today",
+        "view:routine-tasks:todays",
+        "view:label:quick",
+        "view:label:needs followup",
+        "view:routine-tasks:night",
       ],
     },
     "view:folders": {
