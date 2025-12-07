@@ -63,12 +63,13 @@ export function resolveGenerator(
 
 /**
  * Generate projects filtered by priority
+ * Uses projectsExcludingInbox to avoid including Inbox in Folders section
  */
 function generateProjectsByPriority(
   priority: number,
   viewContext: ViewBuildContext
 ): ViewKey[] {
-  return (viewContext.projectsWithMetadata || [])
+  return (viewContext.projectsExcludingInbox || [])
     .filter((p) => (p.metadata?.priority || 1) === priority)
     .map((p) => `view:project:${p.todoist_id}` as ViewKey)
 }
@@ -76,6 +77,7 @@ function generateProjectsByPriority(
 /**
  * Generate projects in hierarchy order (only root-level projects)
  * Children are handled via dynamic subview resolution
+ * projectTree already excludes Inbox
  */
 function generateProjectsByHierarchy(viewContext: ViewBuildContext): ViewKey[] {
   const projectTree = viewContext.projectTree || []
@@ -87,9 +89,10 @@ function generateProjectsByHierarchy(viewContext: ViewBuildContext): ViewKey[] {
 
 /**
  * Generate projects sorted by task count (descending)
+ * Uses projectsExcludingInbox to avoid including Inbox in Folders section
  */
 function generateProjectsByTaskCount(viewContext: ViewBuildContext): ViewKey[] {
-  return (viewContext.projectsWithMetadata || [])
+  return (viewContext.projectsExcludingInbox || [])
     .slice() // Create copy to avoid mutating original
     .sort((a, b) => b.stats.activeCount - a.stats.activeCount)
     .map((p) => `view:project:${p.todoist_id}` as ViewKey)
@@ -97,9 +100,10 @@ function generateProjectsByTaskCount(viewContext: ViewBuildContext): ViewKey[] {
 
 /**
  * Generate projects sorted alphabetically
+ * Uses projectsExcludingInbox to avoid including Inbox in Folders section
  */
 function generateProjectsByAlphabetical(viewContext: ViewBuildContext): ViewKey[] {
-  return (viewContext.projectsWithMetadata || [])
+  return (viewContext.projectsExcludingInbox || [])
     .slice() // Create copy to avoid mutating original
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((p) => `view:project:${p.todoist_id}` as ViewKey)

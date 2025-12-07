@@ -62,7 +62,9 @@ export function ProjectsListView({
         } else if (list.query.projectType === "area-of-responsibility") {
           return projectType === "area-of-responsibility"
         } else if (list.query.projectType === "unassigned") {
-          return !projectType
+          // Exclude Inbox from unassigned folders
+          const isInbox = p.name === "Inbox" && !p.parent_id
+          return !projectType && !isInbox
         }
       }
 
@@ -94,7 +96,8 @@ export function ProjectsListView({
       sortOptions={projectSortOptions}
       groupOptions={projectGroupOptions}
       groupData={{ projects: visibleProjects }}
-      renderRow={(project, index, ref, query) => (
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      renderRow={(project, _index, ref, _query) => (
         <ProjectListItem
           key={project._id}
           project={project}

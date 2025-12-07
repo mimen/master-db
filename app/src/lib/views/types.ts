@@ -173,6 +173,7 @@ export interface ViewSelection {
 export interface ViewBuildContext {
   projects?: TodoistProjects
   projectsWithMetadata?: TodoistProjectsWithMetadata
+  projectsExcludingInbox?: TodoistProjectsWithMetadata
   labels?: TodoistLabelDoc[]
   projectTree?: ProjectTreeNode[]
 }

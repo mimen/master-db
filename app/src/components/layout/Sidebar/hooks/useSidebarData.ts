@@ -58,14 +58,20 @@ export function useSidebarData() {
 
   const otherProjects = projectTree.filter((project) => project.todoist_id !== inboxProject?.todoist_id)
 
+  // Filter out Inbox from projectsWithMetadata for use in Folders section
+  const projectsExcludingInbox = projectsWithMetadata?.filter(
+    (project) => !(project.name === "Inbox" && !project.parent_id)
+  )
+
   const viewContext: ViewBuildContext = useMemo(
     () => ({
       projects: basicProjects,
       projectsWithMetadata,
+      projectsExcludingInbox,
       labels,
       projectTree: otherProjects as ProjectTreeNode[],
     }),
-    [basicProjects, projectsWithMetadata, labels, otherProjects]
+    [basicProjects, projectsWithMetadata, projectsExcludingInbox, labels, otherProjects]
   )
 
   return {

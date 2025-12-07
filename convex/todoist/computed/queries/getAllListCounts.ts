@@ -22,10 +22,10 @@ import { query } from "../../../_generated/server";
  * - list:priority:p3 -> P3 task count (API priority 2)
  * - list:priority:p4 -> P4 task count (API priority 1)
  * - list:project:${projectId} -> project task count
- * - list:projects -> active projects count (all)
- * - list:projects-only -> projects with @project-type label count
- * - list:areas-only -> projects with @area-of-responsibility label count
- * - list:unassigned-folders -> projects without type labels count
+ * - list:projects -> active projects count (excludes Inbox)
+ * - list:projects-only -> projects with @project-type label count (excludes Inbox)
+ * - list:areas-only -> projects with @area-of-responsibility label count (excludes Inbox)
+ * - list:unassigned-folders -> projects without type labels count (excludes Inbox)
  * - list:label:${labelName} -> label task count
  * - list:routines -> active routines count (global)
  * - list:routines:${projectId} -> active routines count for specific project
@@ -178,9 +178,6 @@ export const getAllListCounts = query({
       counts[`list:label:${label.name}`] = count;
     }
 
-    // Projects count (total active projects)
-    counts['list:projects'] = projects.length;
-
     // Project type counts (for folder type filters)
     const projectsWithMetadata = await ctx.db
       .query("todoist_project_metadata")
@@ -188,12 +185,18 @@ export const getAllListCounts = query({
 
     const projectTypeMap = new Map(projectsWithMetadata.map(pm => [pm.project_id, pm]));
 
-    // Count projects by type
+    // Count projects by type (excluding Inbox from all counts)
     let projectsOnlyCount = 0;
     let areasOnlyCount = 0;
     let unassignedCount = 0;
 
     for (const project of projects) {
+      // Exclude Inbox from all folder counts
+      const isInbox = project.inbox_project || (project.name === "Inbox" && !project.parent_id);
+      if (isInbox) {
+        continue;
+      }
+
       const metadata = projectTypeMap.get(project.todoist_id);
       const projectType = metadata?.project_type;
 
@@ -209,6 +212,9 @@ export const getAllListCounts = query({
     counts['list:projects-only'] = projectsOnlyCount;
     counts['list:areas-only'] = areasOnlyCount;
     counts['list:unassigned-folders'] = unassignedCount;
+
+    // Projects count (total active projects, excluding Inbox)
+    counts['list:projects'] = projectsOnlyCount + areasOnlyCount + unassignedCount;
 
     // Routines count (total active routines)
     const routines = await ctx.db
