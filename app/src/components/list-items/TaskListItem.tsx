@@ -471,7 +471,7 @@ export const TaskListItem = memo(function TaskListItem({
           {!displayDue && (
             <GhostBadge
               icon={Calendar}
-              text="add schedule"
+              text="set schedule"
               onClick={(e) => {
                 e.stopPropagation()
                 onClick?.()
@@ -483,7 +483,7 @@ export const TaskListItem = memo(function TaskListItem({
           {!displayDeadline && (
             <GhostBadge
               icon={AlertCircle}
-              text="add deadline"
+              text="set deadline"
               onClick={(e) => {
                 e.stopPropagation()
                 onClick?.()
@@ -505,7 +505,7 @@ export const TaskListItem = memo(function TaskListItem({
           {routineTask && routineTask.status === "pending" && (
             <GhostBadge
               icon={SkipForward}
-              text="skip routine"
+              text="skip"
               onClick={(e) => {
                 e.stopPropagation()
                 void handleSkipRoutineTask()
