@@ -40,15 +40,16 @@ export function ProjectItem({
   const isActive = currentViewKey === projectViewKey || currentViewKey === projectFamilyKey
   const hasChildren = project.children.length > 0
   const isCollapsed = isProjectCollapsed(project.todoist_id)
+  const showChildren = sortMode === "hierarchy" && hasChildren
 
-  // When collapsed with children, show total count including descendants
-  const displayCount = isCollapsed && hasChildren
+  // When collapsed with children in hierarchy mode, show total count including descendants
+  const displayCount = isCollapsed && showChildren
     ? getTotalActiveCount(project)
     : project.stats.activeCount
   const hasActiveItems = displayCount > 0
 
   const handleProjectClick = () => {
-    if (expandNested && hasChildren) {
+    if (expandNested && showChildren) {
       const viewKey = `view:project-family:${project.todoist_id}` as ViewKey
       onViewChange(resolveView(viewKey, viewContext))
     } else {
@@ -73,7 +74,7 @@ export function ProjectItem({
           isActive={isActive}
           onClick={handleProjectClick}
           level={level}
-          hasChildren={hasChildren}
+          hasChildren={showChildren}
           isCollapsed={isCollapsed}
           onToggleCollapse={handleToggleCollapse}
           sortMode={sortMode}
@@ -81,7 +82,7 @@ export function ProjectItem({
         />
       </SidebarMenuItem>
 
-      {hasChildren &&
+      {showChildren &&
         !isCollapsed &&
         project.children.map((child: ProjectTreeNode) => (
           <ProjectItem

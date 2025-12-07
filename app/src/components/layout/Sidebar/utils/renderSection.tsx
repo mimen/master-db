@@ -237,10 +237,15 @@ export function renderViewItem(
     children = resolveSubview(subviewDef, props.viewContext, props.getCountForView, currentSort)
     hasChildren = children.length > 0
   } else if (viewKey.startsWith("view:project:")) {
-    // Dynamic hierarchy children for projects
-    const projectId = viewKey.replace("view:project:", "")
-    children = getProjectChildren(projectId, props.viewContext)
-    hasChildren = children.length > 0
+    // Dynamic hierarchy children for projects - ONLY in hierarchy mode
+    const currentSort = props.sortMode["folders"]
+    const isHierarchyMode = currentSort === "hierarchy"
+
+    if (isHierarchyMode) {
+      const projectId = viewKey.replace("view:project:", "")
+      children = getProjectChildren(projectId, props.viewContext)
+      hasChildren = children.length > 0
+    }
   }
 
   if (!hasChildren) {

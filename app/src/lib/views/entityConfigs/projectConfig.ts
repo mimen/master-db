@@ -50,13 +50,13 @@ export const projectSortOptions: SortOption<TodoistProjectWithMetadata>[] = [
 export const projectGroupOptions: GroupOption<TodoistProjectWithMetadata>[] = [
   {
     id: "parent",
-    label: "Parent Project",
+    label: "Hierarchy",
     groupFn: (project) => project.parent_id ?? "root",
     getGroupLabel: (projectId, groupData) => {
       if (projectId === "root") {
         return "Top Level"
       }
-      const projects = groupData.projects as any[]
+      const projects = groupData.projects as TodoistProjectWithMetadata[]
       const project = projects?.find((p) => p.todoist_id === projectId || p.id === projectId)
       // Note: If project not found, it's likely archived. Show a helpful message.
       return project?.name ?? `${projectId} (archived or deleted)`
