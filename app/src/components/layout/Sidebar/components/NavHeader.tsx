@@ -2,8 +2,9 @@ import { Repeat, Search, Tag } from "lucide-react"
 import type { ReactNode } from "react"
 import { useCallback, useEffect, useState } from "react"
 
+import { extractNavigableViews } from "../config/extractViews"
 import type { ProjectTreeNode, ViewNavItem } from "../types"
-import { PRIORITY_FILTER_ITEMS, PRIORITY_PROJECTS_ITEMS, TIME_FILTER_ITEMS } from "../utils/filterItems"
+import { PRIORITY_FILTER_ITEMS, PRIORITY_PROJECTS_ITEMS } from "../utils/filterItems"
 
 import {
   CommandDialog,
@@ -16,7 +17,7 @@ import {
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { getProjectColor } from "@/lib/colors"
-import { getViewIcon } from "@/lib/icons/viewIcons"
+import { getProjectIcon, getViewIcon } from "@/lib/icons/viewIcons"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { ViewKey, ViewSelection, ViewBuildContext } from "@/lib/views/types"
@@ -34,7 +35,7 @@ interface NavHeaderProps {
 interface SearchableItem {
   id: string
   label: string
-  category: "view" | "project" | "time" | "priority" | "priority-projects" | "label" | "routine"
+  category: "primary" | "project" | "time" | "priority" | "priority-projects" | "label" | "routine" | "folder-categories" | "routine-tasks"
   viewKey: ViewKey
   icon?: ReactNode
 }
@@ -49,26 +50,50 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
   useEffect(() => {
     const items: SearchableItem[] = []
 
-    // Views - use the actual viewItems passed in
-    viewItems.forEach((view) => {
-      const ViewIcon = view.icon
-      items.push({
-        id: view.key,
-        label: view.label,
-        category: "view",
-        viewKey: view.key,
-        icon: <ViewIcon className="h-4 w-4" />,
-      })
-    })
+    // Extract all navigable views from SIDEBAR_CONFIG (single source of truth)
+    const viewGroups = extractNavigableViews()
+    viewGroups.forEach((group) => {
+      group.viewKeys.forEach((viewKey) => {
+        // Get metadata from view registry
+        const icon = getViewIcon(viewKey, { size: "sm" })
 
-    // Time filters - from centralized definitions
-    TIME_FILTER_ITEMS.forEach((timeFilter) => {
-      items.push({
-        id: timeFilter.id,
-        label: timeFilter.label,
-        category: "time",
-        viewKey: timeFilter.viewKey,
-        icon: getViewIcon(timeFilter.viewKey, { size: "sm" }),
+        // Derive label from viewKey (we could also get this from viewDefinitions if needed)
+        let label = viewKey.replace("view:", "").replace("view:multi:", "")
+
+        // Special case handling for better labels
+        if (viewKey === "view:inbox") label = "Inbox"
+        else if (viewKey === "view:multi:priority-queue") label = "Priority Queue"
+        else if (viewKey === "view:folders") label = "Folders"
+        else if (viewKey === "view:routines") label = "Routines"
+        else if (viewKey === "view:folders:projects") label = "Projects"
+        else if (viewKey === "view:folders:areas") label = "Areas"
+        else if (viewKey === "view:folders:unassigned") label = "Unassigned"
+        else if (viewKey.startsWith("view:time:")) {
+          const timeRange = viewKey.replace("view:time:", "")
+          label = timeRange === "no-date"
+            ? "No Date"
+            : timeRange.charAt(0).toUpperCase() + timeRange.slice(1)
+        } else if (viewKey.startsWith("view:priority:")) {
+          label = viewKey.replace("view:priority:", "").toUpperCase()
+        } else if (viewKey.startsWith("view:routine-tasks:")) {
+          const filter = viewKey.replace("view:routine-tasks:", "")
+          const routineTaskLabels: Record<string, string> = {
+            overdue: "Overdue Routines",
+            morning: "Morning Routine",
+            night: "Night Routine",
+            todays: "Ready to Go",
+            "get-ahead": "Get Ahead",
+          }
+          label = routineTaskLabels[filter] ?? filter
+        }
+
+        items.push({
+          id: viewKey,
+          label,
+          category: group.category,
+          viewKey,
+          icon,
+        })
       })
     })
 
@@ -102,17 +127,14 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
     const flattenProjects = (projectList: ProjectTreeNode[], parentPath = ""): void => {
       projectList.forEach((project) => {
         const path = parentPath ? `${parentPath} > ${project.name}` : project.name
+        const isProjectType = project.metadata?.projectType === "project-type"
+        const viewKey = `view:project:${project.todoist_id}` as ViewKey
         items.push({
           id: `project-${project.todoist_id}`,
           label: path,
           category: "project",
-          viewKey: `view:project:${project.todoist_id}` as ViewKey,
-          icon: (
-            <div
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: getProjectColor(project.color) }}
-            />
-          ),
+          viewKey,
+          icon: getProjectIcon(project.color, { size: "sm", isProjectType }),
         })
         if (project.children.length > 0) {
           flattenProjects(project.children, path)
@@ -205,7 +227,7 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
 
           <CommandGroup heading="Views">
             {searchItems
-              .filter((item) => item.category === "view")
+              .filter((item) => item.category === "primary")
               .map((item) => (
                 <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
                   {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
@@ -217,6 +239,28 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
           <CommandGroup heading="Time Filters">
             {searchItems
               .filter((item) => item.category === "time")
+              .map((item) => (
+                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
+                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
+                  {item.label}
+                </CommandItem>
+              ))}
+          </CommandGroup>
+
+          <CommandGroup heading="Folder Categories">
+            {searchItems
+              .filter((item) => item.category === "folder-categories")
+              .map((item) => (
+                <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
+                  {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
+                  {item.label}
+                </CommandItem>
+              ))}
+          </CommandGroup>
+
+          <CommandGroup heading="Routine Tasks">
+            {searchItems
+              .filter((item) => item.category === "routine-tasks")
               .map((item) => (
                 <CommandItem key={item.id} onSelect={() => handleSelect(item.viewKey)}>
                   {item.icon && <span className="mr-2 flex items-center justify-center">{item.icon}</span>}
