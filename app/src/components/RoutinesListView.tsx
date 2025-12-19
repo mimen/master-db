@@ -70,12 +70,13 @@ export function RoutinesListView({
   }
 
   // Fetch routines - use project-specific query if projectId present
+  const projectId = list.query.type === "routines" ? list.query.projectId : undefined
   const allRoutines: Doc<"routines">[] | undefined = useQuery(
-    list.query.projectId
+    projectId
       ? api.routines.queries.getRoutinesByProject.getRoutinesByProject
       : api.routines.queries.getRoutinesByView.getRoutinesByView,
-    list.query.projectId
-      ? { projectId: list.query.projectId, includeDeferred: true }
+    projectId
+      ? { projectId, includeDeferred: true }
       : {
           list: {
             type: "routines",

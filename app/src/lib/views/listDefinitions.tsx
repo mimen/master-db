@@ -8,6 +8,7 @@ import type {
   ListInstance,
   ListInstanceOptions,
   ListPresentationContext,
+  ListQueryDefinition,
   ListQueryInput,
   RoutineTaskFilter,
   TimeRange,
@@ -81,7 +82,7 @@ const inboxDefinition: ListDefinition = {
     projects: true,
     labels: true,
   },
-  buildQuery: (): ListQueryInput => ({ type: "inbox" }),
+  buildQuery: (): ListQueryDefinition => ({ type: "inbox" }),
   getHeader: ({ taskCount }) => ({
     title: "Inbox",
     description: `${taskCount} tasks to process`,
@@ -121,7 +122,7 @@ const timeDefinition: ListDefinition<{ range: TimeRange }> = {
   dependencies: {
     labels: true,
   },
-  buildQuery: ({ range }): ListQueryInput => ({
+  buildQuery: ({ range }): ListQueryDefinition => ({
     type: "time",
     range,
     timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1, // Convert to IANA format (PST is -480)
@@ -180,7 +181,7 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
     projectMetadata: true,
     labels: true,
   },
-  buildQuery: ({ projectId }): ListQueryInput => ({ type: "project", projectId }),
+  buildQuery: ({ projectId }): ListQueryDefinition => ({ type: "project", projectId }),
   getHeader: ({ taskCount, params, support }) => {
     const projectWithMetadata = support.projectsWithMetadata?.find(
       (p) => p.todoist_id === params.projectId
@@ -241,7 +242,7 @@ const priorityDefinition: ListDefinition<{ level: 1 | 2 | 3 | 4 }> = {
   dependencies: {
     labels: true,
   },
-  buildQuery: ({ level }): ListQueryInput => ({ type: "priority", priority: level }),
+  buildQuery: ({ level }): ListQueryDefinition => ({ type: "priority", priority: level }),
   getHeader: ({ taskCount, params }) => {
     const priorityInfo = getPriorityInfo(params.level)
     const colorClass = getPriorityColorClass(params.level)
@@ -274,7 +275,7 @@ const labelDefinition: ListDefinition<{ label: string }> = {
   dependencies: {
     labels: true,
   },
-  buildQuery: ({ label }): ListQueryInput => ({ type: "label", label }),
+  buildQuery: ({ label }): ListQueryDefinition => ({ type: "label", label }),
   getHeader: ({ taskCount, params, support }) => {
     const labelDoc = support.labels?.find((l) => l.name === params.label)
 
@@ -306,7 +307,7 @@ const projectsDefinition: ListDefinition = {
   dependencies: {
     projectMetadata: true,
   },
-  buildQuery: (): ListQueryInput => ({ type: "projects" }),
+  buildQuery: (): ListQueryDefinition => ({ type: "projects" }),
   getHeader: ({ taskCount }) => {
     const icon = getViewIcon("view:projects", { size: "lg", className: "mr-3" })
 
@@ -328,7 +329,7 @@ const routinesDefinition: ListDefinition = {
     collapsible: false,
     startExpanded: true,
   },
-  buildQuery: (): ListQueryInput => ({ type: "routines" }),
+  buildQuery: (): ListQueryDefinition => ({ type: "routines" }),
   getHeader: ({ taskCount }) => {
     const icon = getViewIcon("view:routines", { size: "lg", className: "mr-3" })
 
@@ -353,7 +354,7 @@ const projectRoutinesDefinition: ListDefinition<{ projectId: string }> = {
   dependencies: {
     projects: true,
   },
-  buildQuery: ({ projectId }): ListQueryInput => ({ type: "routines", projectId }),
+  buildQuery: ({ projectId }): ListQueryDefinition => ({ type: "routines", projectId }),
   getHeader: ({ taskCount, params, support }) => {
     const projectWithMetadata = support.projectsWithMetadata?.find((p) => p.todoist_id === params.projectId)
     const title = projectWithMetadata?.name ? `${projectWithMetadata.name} Routines` : "Project Routines"
@@ -382,7 +383,7 @@ const projectsOnlyDefinition: ListDefinition = {
   dependencies: {
     projectMetadata: true,
   },
-  buildQuery: (): ListQueryInput => ({ type: "projects", projectType: "project-type" }),
+  buildQuery: (): ListQueryDefinition => ({ type: "projects", projectType: "project-type" }),
   getHeader: ({ taskCount }) => {
     const icon = getViewIcon("view:folders:projects", { size: "lg", className: "mr-3" })
 
@@ -407,7 +408,7 @@ const areasOnlyDefinition: ListDefinition = {
   dependencies: {
     projectMetadata: true,
   },
-  buildQuery: (): ListQueryInput => ({ type: "projects", projectType: "area-of-responsibility" }),
+  buildQuery: (): ListQueryDefinition => ({ type: "projects", projectType: "area-of-responsibility" }),
   getHeader: ({ taskCount }) => {
     const icon = getViewIcon("view:folders:areas", { size: "lg", className: "mr-3" })
 
@@ -432,7 +433,7 @@ const unassignedFoldersDefinition: ListDefinition = {
   dependencies: {
     projectMetadata: true,
   },
-  buildQuery: (): ListQueryInput => ({ type: "projects", projectType: "unassigned" }),
+  buildQuery: (): ListQueryDefinition => ({ type: "projects", projectType: "unassigned" }),
   getHeader: ({ taskCount }) => {
     const icon = getViewIcon("view:folders:unassigned", { size: "lg", className: "mr-3" })
 
@@ -481,7 +482,7 @@ const routineTaskDefinition: ListDefinition<{ filter: RoutineTaskFilter }> = {
     labels: true,
     projects: true,
   },
-  buildQuery: ({ filter }): ListQueryInput => ({
+  buildQuery: ({ filter }): ListQueryDefinition => ({
     type: "routine-tasks",
     filter,
     timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1,
