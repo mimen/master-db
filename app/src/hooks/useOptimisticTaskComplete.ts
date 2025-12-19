@@ -11,7 +11,11 @@ import { api } from "@/convex/_generated/api"
  * - On failure: removes optimistic update to show task again
  * - On success: task stays hidden (Convex removes it from queries naturally)
  */
-export const useOptimisticTaskComplete = createOptimisticHook<[]>({
+export const useOptimisticTaskComplete = createOptimisticHook<
+  [],
+  { todoistId: string },
+  unknown
+>({
   actionPath: api.todoist.actions.completeTask.completeTask,
   messages: {
     loading: "Completing task...",

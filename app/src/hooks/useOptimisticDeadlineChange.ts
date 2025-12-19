@@ -19,7 +19,9 @@ import { api } from "@/convex/_generated/api"
  * optimisticDeadlineChange(taskId, null)
  */
 export const useOptimisticDeadlineChange = createOptimisticHook<
-  [{ date: string } | null]
+  [{ date: string } | null],
+  { todoistId: string; deadlineDate: string | null },
+  unknown
 >({
   actionPath: api.todoist.actions.updateTask.updateTask,
   messages: {

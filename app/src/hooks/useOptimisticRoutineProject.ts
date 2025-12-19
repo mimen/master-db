@@ -7,7 +7,11 @@ import { api } from "@/convex/_generated/api"
  *
  * Sets which project tasks from this routine will be created in
  */
-export const useOptimisticRoutineProject = createOptimisticRoutineHook<[string | undefined]>({
+export const useOptimisticRoutineProject = createOptimisticRoutineHook<
+  [string | undefined],
+  { routineId: string; todoistProjectId: string | undefined },
+  unknown
+>({
   mutationPath: api.routines.internalMutations.updateRoutine.updateRoutine,
   messages: {
     loading: "Updating project...",

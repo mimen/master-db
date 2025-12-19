@@ -10,7 +10,11 @@ import { api } from "@/convex/_generated/api"
  * - On failure: removes optimistic update to revert priority
  * - On success: priority stays updated (Convex syncs naturally)
  */
-export const useOptimisticProjectPriority = createOptimisticProjectHook<[number]>({
+export const useOptimisticProjectPriority = createOptimisticProjectHook<
+  [number],
+  { projectId: string; priority: number },
+  unknown
+>({
   actionPath: api.todoist.actions.updateProjectMetadataPriority.updateProjectMetadataPriority,
   messages: {
     loading: "Updating project priority...",

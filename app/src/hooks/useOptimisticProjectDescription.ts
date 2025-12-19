@@ -10,7 +10,11 @@ import { api } from "@/convex/_generated/api"
  * - On failure: removes optimistic update to revert description
  * - On success: description stays updated (Convex syncs naturally)
  */
-export const useOptimisticProjectDescription = createOptimisticProjectHook<[string]>({
+export const useOptimisticProjectDescription = createOptimisticProjectHook<
+  [string],
+  { projectId: string; description: string },
+  unknown
+>({
   actionPath: api.todoist.actions.updateProjectMetadataDescription.updateProjectMetadataDescription,
   messages: {
     loading: "Updating description...",

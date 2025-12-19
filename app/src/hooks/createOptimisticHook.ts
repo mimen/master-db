@@ -24,7 +24,7 @@ import {
  * This prevents the "flash" bug where the UI briefly shows old state between
  * optimistic update removal and DB sync.
  */
-export function createOptimisticHook<TParams extends unknown[], TArgs, TResult>(config: {
+export function createOptimisticHook<TParams extends unknown[], TArgs extends Record<string, unknown>, TResult>(config: {
   actionPath: FunctionReference<"action", "public", TArgs, TResult>
   messages: {
     loading: string
@@ -67,7 +67,7 @@ export function createOptimisticHook<TParams extends unknown[], TArgs, TResult>(
  *
  * Same pattern as createOptimisticHook but for project entities
  */
-export function createOptimisticProjectHook<TParams extends unknown[], TArgs, TResult>(config: {
+export function createOptimisticProjectHook<TParams extends unknown[], TArgs extends Record<string, unknown>, TResult>(config: {
   actionPath: FunctionReference<"action", "public", TArgs, TResult>
   messages: {
     loading: string
@@ -109,7 +109,7 @@ export function createOptimisticProjectHook<TParams extends unknown[], TArgs, TR
  *
  * Uses mutations directly instead of actions (routines are internal to Convex)
  */
-export function createOptimisticRoutineHook<TParams extends unknown[], TArgs, TResult>(config: {
+export function createOptimisticRoutineHook<TParams extends unknown[], TArgs extends Record<string, unknown>, TResult>(config: {
   mutationPath: FunctionReference<"mutation", "internal", TArgs, TResult>
   messages: {
     loading: string
@@ -121,7 +121,7 @@ export function createOptimisticRoutineHook<TParams extends unknown[], TArgs, TR
 }) {
   return function useOptimisticRoutineUpdate() {
     const { addRoutineUpdate, removeRoutineUpdate } = useOptimisticUpdates()
-    const mutation = useMutation(config.mutationPath)
+    const mutation = useMutation(config.mutationPath as any)
 
     return async (routineId: string, ...params: TParams) => {
       const toastId = toast.loading(config.messages.loading)

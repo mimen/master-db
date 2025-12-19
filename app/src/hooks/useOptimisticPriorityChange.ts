@@ -11,7 +11,11 @@ import { api } from "@/convex/_generated/api"
  * - On failure: removes from context (rollback)
  * - On success: TaskRow's useEffect clears it when DB syncs
  */
-export const useOptimisticPriorityChange = createOptimisticHook<[number]>({
+export const useOptimisticPriorityChange = createOptimisticHook<
+  [number],
+  { todoistId: string; priority: number },
+  unknown
+>({
   actionPath: api.todoist.actions.updateTask.updateTask,
   messages: {
     loading: "Updating priority...",

@@ -11,7 +11,11 @@ import type { ProjectType } from "@/lib/projectTypes"
  * - On failure: removes optimistic update to revert type
  * - On success: type stays updated (Convex syncs naturally)
  */
-export const useOptimisticProjectType = createOptimisticProjectHook<[ProjectType | null]>({
+export const useOptimisticProjectType = createOptimisticProjectHook<
+  [ProjectType | null],
+  { projectId: string; projectType: ProjectType | null },
+  unknown
+>({
   actionPath: api.todoist.actions.updateProjectType.updateProjectType,
   messages: {
     loading: "Updating project type...",

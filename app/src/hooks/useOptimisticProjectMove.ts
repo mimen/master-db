@@ -11,7 +11,11 @@ import { api } from "@/convex/_generated/api"
  * - On failure: removes from context (rollback)
  * - On success: Convex reactivity updates the task in place (or hides in project views)
  */
-export const useOptimisticProjectMove = createOptimisticHook<[string]>({
+export const useOptimisticProjectMove = createOptimisticHook<
+  [string],
+  { todoistId: string; projectId: string },
+  unknown
+>({
   actionPath: api.todoist.actions.moveTask.moveTask,
   messages: {
     loading: "Moving task...",

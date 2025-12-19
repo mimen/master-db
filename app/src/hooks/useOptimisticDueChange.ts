@@ -22,7 +22,9 @@ import { api } from "@/convex/_generated/api"
  * optimisticDueChange(taskId, null)
  */
 export const useOptimisticDueChange = createOptimisticHook<
-  [{ date: string; datetime?: string } | null]
+  [{ date: string; datetime?: string } | null],
+  { todoistId: string; dueString?: string; dueDatetime?: string; dueDate?: string },
+  unknown
 >({
   actionPath: api.todoist.actions.updateTask.updateTask,
   messages: {

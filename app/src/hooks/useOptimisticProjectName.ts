@@ -10,7 +10,11 @@ import { api } from "@/convex/_generated/api"
  * - On failure: removes optimistic update to revert name
  * - On success: name stays updated (Convex syncs naturally)
  */
-export const useOptimisticProjectName = createOptimisticProjectHook<[string]>({
+export const useOptimisticProjectName = createOptimisticProjectHook<
+  [string],
+  { projectId: string; name: string },
+  unknown
+>({
   actionPath: api.todoist.actions.updateProjectName.updateProjectName,
   messages: {
     loading: "Updating project name...",
