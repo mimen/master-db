@@ -2,6 +2,9 @@ import type { ComponentType } from "react"
 
 import type { ViewKey, ViewSelection, ViewBuildContext, ProjectTreeNode } from "@/lib/views/types"
 
+// Re-export ProjectTreeNode for use in Sidebar components
+export type { ProjectTreeNode }
+
 export type ProjectSort = "hierarchy" | "priority" | "taskCount" | "alphabetical"
 export type LabelSort = "taskCount" | "alphabetical"
 export type RoutineSort = "flat" | "projectOrder" | "routineCount"

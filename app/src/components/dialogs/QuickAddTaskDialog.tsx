@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/convex/_generated/api'
 import { useTodoistAction } from '@/hooks/useTodoistAction'
 import { cn } from '@/lib/utils'
-import type { TodoistProject, TodoistLabel } from '@/types/convex/todoist'
+import type { TodoistProject, TodoistLabelDoc } from '@/types/convex/todoist'
 
 interface QuickAddTaskDialogProps {
   isOpen: boolean
@@ -307,7 +307,7 @@ export function QuickAddTaskDialog({ isOpen, onClose, defaultProjectId }: QuickA
               {selectedLabels.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                   {selectedLabels.map((labelName) => {
-                    const label = labels?.find((l: TodoistLabel) => l.name === labelName)
+                    const label = labels?.find((l: TodoistLabelDoc) => l.name === labelName)
                     return (
                       <span
                         key={labelName}
@@ -324,7 +324,7 @@ export function QuickAddTaskDialog({ isOpen, onClose, defaultProjectId }: QuickA
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                {labels?.filter((l: TodoistLabel) => !selectedLabels.includes(l.name)).map((label: TodoistLabel) => (
+                {labels?.filter((l: TodoistLabelDoc) => !selectedLabels.includes(l.name)).map((label: TodoistLabelDoc) => (
                   <button
                     key={label.todoist_id}
                     onClick={() => toggleLabel(label.name)}

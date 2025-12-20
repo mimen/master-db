@@ -1,3 +1,5 @@
+import type { ReactNode } from "react"
+
 /**
  * Multi-list system types
  *
@@ -17,7 +19,7 @@ export type MultiListItem = {
   name?: string
 
   /** Optional icon override */
-  icon?: string
+  icon?: ReactNode
 
   /** Optional limit on tasks shown from this view */
   maxTasks?: number
@@ -34,7 +36,7 @@ export type MultiListConfig = {
   name: string
 
   /** Optional icon */
-  icon?: string
+  icon?: ReactNode
 
   /** Ordered sequence of view items */
   sequence: MultiListItem[]
