@@ -66,36 +66,44 @@ export const createRoutineTaskInTodoist = internalAction({
       }
 
       // Build task args - following the same pattern as createTask.ts
-      const taskArgs: AddTaskArgs = {
+      // Build base arguments
+      const baseArgs: Pick<AddTaskArgs, 'content' | 'labels' | 'projectId'> = {
         content: routine.name,
         labels,
+        projectId: routine.todoistProjectId || "6fH56rR7WJ74jQFX",
       };
+
+      // Build optional fields conditionally
+      const optionalFields: Partial<Omit<AddTaskArgs, 'content' | 'labels' | 'projectId'>> = {};
 
       // Set due date or deadline based on routine type
       if (shouldUseDueDate) {
-        taskArgs.dueDate = taskDateStr;
+        optionalFields.dueDate = taskDateStr;
       } else {
-        taskArgs.deadlineDate = taskDateStr;
+        optionalFields.deadlineDate = taskDateStr;
       }
 
       // Add description if present
       if (routine.description) {
-        taskArgs.description = routine.description;
+        optionalFields.description = routine.description;
       }
 
       // Set priority if specified
       if (routine.priority) {
-        taskArgs.priority = routine.priority;
+        optionalFields.priority = routine.priority;
       }
 
-      // Set project - use Routines Inbox as default if no project specified
-      taskArgs.projectId = routine.todoistProjectId || "6fH56rR7WJ74jQFX";
-
-      // Set duration if specified
+      // Set duration if specified - MUST set both or neither (RequireAllOrNone constraint)
       if (routine.duration) {
-        taskArgs.duration = durationToMinutes(routine.duration);
-        taskArgs.durationUnit = "minute";
+        optionalFields.duration = durationToMinutes(routine.duration);
+        optionalFields.durationUnit = "minute";
       }
+
+      // Combine with proper typing
+      const taskArgs: AddTaskArgs = {
+        ...baseArgs,
+        ...optionalFields,
+      } as AddTaskArgs;
 
       // Create task in Todoist
       const task = await client.addTask(taskArgs);

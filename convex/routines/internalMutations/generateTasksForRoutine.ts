@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 
+import type { Id } from "../../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../../_generated/server";
 import { Frequency } from "../types/frequency";
 import { RoutineTaskStatus } from "../types/status";
@@ -187,10 +188,10 @@ export const generateTasksForRoutine = internalMutation({
  */
 async function createRoutineTask(
   ctx: MutationCtx,
-  routineId: string,
+  routineId: Id<"routines">,
   readyDate: number,
   dueDate: number
-): Promise<string> {
+): Promise<Id<"routineTasks">> {
   const now = Date.now();
 
   const routineTaskId = await ctx.db.insert("routineTasks", {

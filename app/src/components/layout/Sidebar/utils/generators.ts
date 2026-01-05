@@ -1,4 +1,5 @@
 import type { ViewBuildContext, ViewKey, ProjectTreeNode } from "@/lib/views/types"
+import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 /**
  * Resolves a generator source to an array of view-keys
@@ -70,8 +71,8 @@ function generateProjectsByPriority(
   viewContext: ViewBuildContext
 ): ViewKey[] {
   return (viewContext.projectsExcludingInbox || [])
-    .filter((p) => (p.metadata?.priority || 1) === priority)
-    .map((p) => `view:project:${p.todoist_id}` as ViewKey)
+    .filter((p: TodoistProjectWithMetadata) => (p.metadata?.priority || 1) === priority)
+    .map((p: TodoistProjectWithMetadata) => `view:project:${p.todoist_id}` as ViewKey)
 }
 
 /**
@@ -94,8 +95,8 @@ function generateProjectsByHierarchy(viewContext: ViewBuildContext): ViewKey[] {
 function generateProjectsByTaskCount(viewContext: ViewBuildContext): ViewKey[] {
   return (viewContext.projectsExcludingInbox || [])
     .slice() // Create copy to avoid mutating original
-    .sort((a, b) => b.stats.activeCount - a.stats.activeCount)
-    .map((p) => `view:project:${p.todoist_id}` as ViewKey)
+    .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => b.stats.activeCount - a.stats.activeCount)
+    .map((p: TodoistProjectWithMetadata) => `view:project:${p.todoist_id}` as ViewKey)
 }
 
 /**
@@ -105,8 +106,8 @@ function generateProjectsByTaskCount(viewContext: ViewBuildContext): ViewKey[] {
 function generateProjectsByAlphabetical(viewContext: ViewBuildContext): ViewKey[] {
   return (viewContext.projectsExcludingInbox || [])
     .slice() // Create copy to avoid mutating original
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((p) => `view:project:${p.todoist_id}` as ViewKey)
+    .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.name.localeCompare(b.name))
+    .map((p: TodoistProjectWithMetadata) => `view:project:${p.todoist_id}` as ViewKey)
 }
 
 /**
@@ -144,7 +145,7 @@ function getProjectsWithRoutines(
 ) {
   const projects = viewContext.projectsWithMetadata || []
 
-  return projects.filter((project) => {
+  return projects.filter((project: TodoistProjectWithMetadata) => {
     const viewKey = `view:routines:project:${project.todoist_id}` as ViewKey
     const count = getCountForView(viewKey, viewContext)
     return count > 0
@@ -168,15 +169,15 @@ function flattenProjectTree(nodes: ProjectTreeNode[]): ProjectTreeNode[] {
 /**
  * Build project tree from flat list of projects
  */
-function buildProjectTree(projects: any[]): ProjectTreeNode[] {
+function buildProjectTree(projects: TodoistProjectWithMetadata[]): ProjectTreeNode[] {
   // Find root projects (no parent)
-  const roots = projects.filter((p) => !p.parent_id)
+  const roots = projects.filter((p: TodoistProjectWithMetadata) => !p.parent_id)
 
   // Recursive function to build tree
-  function buildNode(project: any): ProjectTreeNode {
+  function buildNode(project: TodoistProjectWithMetadata): ProjectTreeNode {
     const children = projects
-      .filter((p) => p.parent_id === project.todoist_id)
-      .sort((a, b) => a.child_order - b.child_order)
+      .filter((p: TodoistProjectWithMetadata) => p.parent_id === project.todoist_id)
+      .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.child_order - b.child_order)
       .map(buildNode)
 
     return {
@@ -185,7 +186,7 @@ function buildProjectTree(projects: any[]): ProjectTreeNode[] {
     }
   }
 
-  return roots.sort((a, b) => a.child_order - b.child_order).map(buildNode)
+  return roots.sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.child_order - b.child_order).map(buildNode)
 }
 
 /**
@@ -198,8 +199,8 @@ function generateRoutinesByFlat(
   const projectsWithRoutines = getProjectsWithRoutines(viewContext, getCountForView)
   return projectsWithRoutines
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((p) => `view:routines:project:${p.todoist_id}` as ViewKey)
+    .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.name.localeCompare(b.name))
+    .map((p: TodoistProjectWithMetadata) => `view:routines:project:${p.todoist_id}` as ViewKey)
 }
 
 /**
@@ -224,13 +225,13 @@ function generateRoutinesByCount(
 ): ViewKey[] {
   const projectsWithRoutines = getProjectsWithRoutines(viewContext, getCountForView)
 
-  const projectsWithCounts = projectsWithRoutines.map((project) => {
+  const projectsWithCounts = projectsWithRoutines.map((project: TodoistProjectWithMetadata) => {
     const viewKey = `view:routines:project:${project.todoist_id}` as ViewKey
     const count = getCountForView(viewKey, viewContext)
     return { project, count }
   })
 
   return projectsWithCounts
-    .sort((a, b) => b.count - a.count)
-    .map((item) => `view:routines:project:${item.project.todoist_id}` as ViewKey)
+    .sort((a: { project: TodoistProjectWithMetadata; count: number }, b: { project: TodoistProjectWithMetadata; count: number }) => b.count - a.count)
+    .map((item: { project: TodoistProjectWithMetadata; count: number }) => `view:routines:project:${item.project.todoist_id}` as ViewKey)
 }

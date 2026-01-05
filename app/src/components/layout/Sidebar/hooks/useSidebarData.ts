@@ -7,8 +7,10 @@ import { api } from "@/convex/_generated/api"
 import type { ViewBuildContext, ProjectTreeNode } from "@/lib/views/types"
 import type {
   TodoistLabelDoc,
+  TodoistProject,
   TodoistProjects,
   TodoistProjectsWithMetadata,
+  TodoistProjectWithMetadata,
 } from "@/types/convex/todoist"
 
 export function useSidebarData() {
@@ -28,7 +30,7 @@ export function useSidebarData() {
     enhancedProjects && enhancedProjects.length > 0
       ? enhancedProjects
       : basicProjects
-        ?.map((project) => ({
+        ?.map((project: TodoistProject): TodoistProjectWithMetadata => ({
           ...project,
           metadata: {
             priority: 4,
@@ -53,14 +55,14 @@ export function useSidebarData() {
   const projectTree = projectsWithMetadata ? buildProjectTree(projectsWithMetadata) : []
 
   const inboxProject = projectsWithMetadata?.find(
-    (project) => project.name === "Inbox" && !project.parent_id
+    (project: TodoistProjectWithMetadata) => project.name === "Inbox" && !project.parent_id
   )
 
-  const otherProjects = projectTree.filter((project) => project.todoist_id !== inboxProject?.todoist_id)
+  const otherProjects = projectTree.filter((project: ProjectTreeNode) => project.todoist_id !== inboxProject?.todoist_id)
 
   // Filter out Inbox from projectsWithMetadata for use in Folders section
   const projectsExcludingInbox = projectsWithMetadata?.filter(
-    (project) => !(project.name === "Inbox" && !project.parent_id)
+    (project: TodoistProjectWithMetadata) => !(project.name === "Inbox" && !project.parent_id)
   )
 
   const viewContext: ViewBuildContext = useMemo(
