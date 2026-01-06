@@ -44,7 +44,7 @@ export function LabelDialog({ task, routine, onSelect, onClose }: LabelDialogPro
     } else if (routine) {
       setSearchTerm('')
       // Filter out "routine" label since it's automatically added to generated tasks
-      setSelectedLabels(routine.todoistLabels.filter(l => l !== "routine"))
+      setSelectedLabels(routine.todoistLabels.filter((l: string) => l !== "routine"))
       setSelectedIndex(0)
       setTimeout(() => searchInputRef.current?.focus(), 100)
     }

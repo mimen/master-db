@@ -9,11 +9,11 @@ export function buildProjectTree(projects: TodoistProjectsWithMetadata): Project
   const projectMap = new Map<string, ProjectTreeNode>()
   const rootProjects: ProjectTreeNode[] = []
 
-  projects.forEach((project) => {
+  projects.forEach((project: TodoistProjectsWithMetadata[number]) => {
     projectMap.set(project.todoist_id, { ...project, children: [] })
   })
 
-  projects.forEach((project) => {
+  projects.forEach((project: TodoistProjectsWithMetadata[number]) => {
     const projectWithChildren = projectMap.get(project.todoist_id)!
     if (project.parent_id && projectMap.has(project.parent_id)) {
       projectMap.get(project.parent_id)!.children.push(projectWithChildren)

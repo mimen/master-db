@@ -94,9 +94,9 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
           description: description.trim() || undefined,
           frequency,
           duration,
-          
-          timeOfDay,
-          idealDay,
+
+          timeOfDay: timeOfDay ?? undefined,
+          idealDay: idealDay ?? undefined,
           
           
           
@@ -108,9 +108,9 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
           description: description.trim() || undefined,
           frequency,
           duration,
-          
-          timeOfDay,
-          idealDay,
+
+          timeOfDay: timeOfDay ?? undefined,
+          idealDay: idealDay ?? undefined,
           
           
           

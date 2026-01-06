@@ -9,6 +9,7 @@ import { getViewIcon } from "@/lib/icons/viewIcons"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
 import { getViewDefinition } from "@/lib/views/viewRegistry"
+import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 export interface SortConfig {
   modes: readonly string[]
@@ -68,14 +69,14 @@ export function ViewItem({
   // For project views, use colored circle indicator
   if (viewKey.startsWith("view:project:") && viewContext?.projectsWithMetadata) {
     const projectId = viewKey.replace("view:project:", "")
-    const project = viewContext.projectsWithMetadata.find(p => p.todoist_id === projectId)
+    const project = viewContext.projectsWithMetadata.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
     if (project) {
       icon = <ProjectColorIndicator project={project} size="md" className="mr-1" />
     }
   } else if (viewKey.startsWith("view:routines:project:") && viewContext?.projectsWithMetadata) {
     // For routine project views, pass project color to getViewIcon
     const projectId = viewKey.replace("view:routines:project:", "")
-    const project = viewContext.projectsWithMetadata.find(p => p.todoist_id === projectId)
+    const project = viewContext.projectsWithMetadata.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
     if (project) {
       icon = getViewIcon(viewKey, { size: "sm", color: project.color })
     }

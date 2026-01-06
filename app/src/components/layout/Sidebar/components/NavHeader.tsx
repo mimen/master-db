@@ -22,7 +22,7 @@ import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { ViewKey, ViewSelection, ViewBuildContext } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
-import type { TodoistLabelDoc } from "@/types/convex/todoist"
+import type { TodoistLabelDoc, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 interface NavHeaderProps {
   onViewChange: (view: ViewSelection) => void
@@ -106,7 +106,7 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
         label: priority.label,
         category: "priority",
         viewKey: priority.viewKey,
-        icon: <PriorityIcon className={cn("h-4 w-4", colorClass)} fill="currentColor" />,
+        icon: <PriorityIcon className={cn("h-4 w-4", colorClass)} />,
       })
     })
 
@@ -119,7 +119,7 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
         label: priority.label,
         category: "priority-projects",
         viewKey: priority.viewKey,
-        icon: <PriorityIcon className={cn("h-4 w-4", colorClass)} fill="currentColor" />,
+        icon: <PriorityIcon className={cn("h-4 w-4", colorClass)} />,
       })
     })
 
@@ -146,13 +146,13 @@ export function NavHeader({ onViewChange, projects, labels, viewContext, viewIte
     // Routine Projects - projects that have routines
     if (viewContext.projectsWithMetadata) {
       const allCounts = registry.getAllCounts()
-      const projectsWithRoutines = viewContext.projectsWithMetadata.filter((project) => {
+      const projectsWithRoutines = viewContext.projectsWithMetadata.filter((project: TodoistProjectWithMetadata) => {
         const countKey = `list:routines:${project.todoist_id}`
         const count = allCounts[countKey] ?? 0
         return count > 0
       })
 
-      projectsWithRoutines.forEach((project) => {
+      projectsWithRoutines.forEach((project: TodoistProjectWithMetadata) => {
         items.push({
           id: `routine-${project.todoist_id}`,
           label: `Routines > ${project.name}`,

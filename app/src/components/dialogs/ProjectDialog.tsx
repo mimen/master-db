@@ -101,14 +101,14 @@ export function ProjectDialog({ task, routine, projectToMove, onSelect, onClose 
       // Find and add children (sorted by child_order)
       const children = projects
         .filter((p: TodoistProjectWithMetadata) => p.parent_id === project.todoist_id)
-        .sort((a, b) => a.child_order - b.child_order)
+        .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.child_order - b.child_order)
       children.forEach((child: TodoistProjectWithMetadata) => addProjectAndChildren(child, level + 1))
     }
 
     // Start with root projects (sorted by child_order)
     const rootProjects = projects
       .filter((p: TodoistProjectWithMetadata) => !p.parent_id)
-      .sort((a, b) => a.child_order - b.child_order)
+      .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.child_order - b.child_order)
     rootProjects.forEach((project: TodoistProjectWithMetadata) => addProjectAndChildren(project, 0))
 
     return options
@@ -119,7 +119,7 @@ export function ProjectDialog({ task, routine, projectToMove, onSelect, onClose 
 
     const rootProjects = projects
       .filter((p: TodoistProjectWithMetadata) => !p.parent_id)
-      .sort((a, b) => a.child_order - b.child_order)
+      .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.child_order - b.child_order)
 
     type ProjectWithLevel = TodoistProjectWithMetadata & { level: number }
     type CreateNewOption = { createNew: true }
@@ -135,7 +135,7 @@ export function ProjectDialog({ task, routine, projectToMove, onSelect, onClose 
 
       const children = projects
         .filter((p: TodoistProjectWithMetadata) => p.parent_id === project.todoist_id)
-        .sort((a, b) => a.child_order - b.child_order)
+        .sort((a: TodoistProjectWithMetadata, b: TodoistProjectWithMetadata) => a.child_order - b.child_order)
       children.forEach((child: TodoistProjectWithMetadata) => addProjectWithChildren(child, level + 1))
     }
 

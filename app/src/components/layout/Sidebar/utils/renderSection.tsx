@@ -7,7 +7,7 @@ import { CollapseCaret } from "../components/CollapseCaret"
 import { SortDropdown } from "../components/SortDropdown"
 import { ViewItem } from "../components/ViewItem"
 import { SIDEBAR_CONFIG } from "../config/sidebarConfig"
-import type { SidebarSection, SortOption, SubviewDefinition } from "../config/types"
+import type { SidebarSection, SubviewDefinition } from "../config/types"
 
 import { resolveGenerator } from "./generators"
 

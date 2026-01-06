@@ -132,7 +132,7 @@ export const RoutineListItem = memo(function RoutineListItem({
     <BaseListItem
       entity={routine}
       entityType="routine"
-      getEntityId={(r) => r._id}
+      getEntityId={(r: Doc<"routines">) => r._id}
       onElementRef={onElementRef}
       onClick={onClick}
       archivedClass={routine.defer ? "opacity-60" : undefined}
@@ -145,7 +145,7 @@ export const RoutineListItem = memo(function RoutineListItem({
         value: effectiveDescription,
         key: 'description'
       }}
-      onSave={async (changes) => {
+      onSave={async (changes: Record<string, string | undefined>) => {
         if (changes.name) {
           await updateRoutineName(routine._id, changes.name)
         }
@@ -158,7 +158,7 @@ export const RoutineListItem = memo(function RoutineListItem({
       )}
       renderPrimaryDisplay={() => effectiveName}
       renderSecondaryDisplay={() => effectiveDescription}
-      renderFixedBadges={(r, isHovered) => (
+      renderFixedBadges={(r: Doc<"routines">, _isHovered: boolean) => (
         <>
           {displayProject && (
             <ProjectBadge
@@ -273,7 +273,7 @@ export const RoutineListItem = memo(function RoutineListItem({
           </Badge>
         </>
       )}
-      renderHoverBadges={(r) => (
+      renderHoverBadges={(r: Doc<"routines">) => (
         <>
           {!priority?.showFlag && (
             <PriorityBadge

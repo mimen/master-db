@@ -221,9 +221,9 @@ export function BaseListView<T>({
   list,
   onEntityCountChange,
   onEntitiesChange,
-  onEntityClick,
+  onEntityClick: _onEntityClick,
   focusedEntityId,
-  onEntityRemoved,
+  onEntityRemoved: _onEntityRemoved,
   useEntityShortcuts,
   isMultiListView = false,
   isDismissed = false,
@@ -489,7 +489,7 @@ export function BaseListView<T>({
                     {/* Group Entities */}
                     {!collapsedGroups.has(group.groupKey) && (
                       <div className="space-y-1 pl-1">
-                        {group.entities.map((entity: T, groupEntityIndex: number) => {
+                        {group.entities.map((entity: T, _groupEntityIndex: number) => {
                           // Find index in visibleEntities array for focus management
                           const visibleIndex = visibleEntities.indexOf(entity)
                           const entityId = getEntityId(entity)

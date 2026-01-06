@@ -122,7 +122,7 @@ export function TaskListView({
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
       supportData={{ projects, projectsWithMetadata, labels }}
-      renderRow={(task, index, ref, query) => (
+      renderRow={(task, _index, ref, query) => (
         <TaskListItem
           key={task._id}
           task={task}

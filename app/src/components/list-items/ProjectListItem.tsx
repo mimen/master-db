@@ -80,7 +80,7 @@ export const ProjectListItem = memo(function ProjectListItem({
     <BaseListItem
       entity={project}
       entityType="project"
-      getEntityId={(proj) => proj.todoist_id}
+      getEntityId={(proj: TodoistProjectWithMetadata) => proj.todoist_id}
       onElementRef={onElementRef}
       onClick={onClick}
       data-project-id={project.todoist_id}
@@ -93,7 +93,7 @@ export const ProjectListItem = memo(function ProjectListItem({
         value: displayDescription,
         key: 'description'
       }}
-      onSave={async (changes) => {
+      onSave={async (changes: Record<string, string | undefined>) => {
         if (changes.name) {
           await updateProjectName(project.todoist_id, changes.name)
         }
@@ -109,7 +109,7 @@ export const ProjectListItem = memo(function ProjectListItem({
       )}
       renderPrimaryDisplay={() => displayName}
       renderSecondaryDisplay={() => displayDescription}
-      renderFixedBadges={(proj, isHovered) => (
+      renderFixedBadges={(proj: TodoistProjectWithMetadata, isHovered: boolean) => (
         <>
           {(priority?.showFlag || isHovered) && (
             <PriorityBadge

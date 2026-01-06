@@ -33,6 +33,7 @@ import { useTodoistAction } from '@/hooks/useTodoistAction'
 import { parseNaturalLanguageDate } from '@/lib/dateFormatters'
 import type { ProjectType } from '@/lib/projectTypes'
 import type { AppContextState } from '@/lib/shortcuts'
+import type { TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
 const EXPAND_NESTED_KEY = "sidebar:expandNested"
 
@@ -277,7 +278,7 @@ export function DialogManager() {
 
   // Get the selected parent project for the confirmation dialog
   const selectedParentProject = selectedParentProjectId
-    ? allProjects?.find((p) => p.todoist_id === selectedParentProjectId) || null
+    ? allProjects?.find((p: TodoistProjectWithMetadata) => p.todoist_id === selectedParentProjectId) || null
     : null
 
   return (

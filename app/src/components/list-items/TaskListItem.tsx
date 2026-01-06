@@ -24,7 +24,7 @@ import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
 import { cn, parseMarkdownLinks } from "@/lib/utils"
 import type { ListQueryInput } from "@/lib/views/types"
-import type { TodoistTaskWithProject, TodoistLabelDoc } from "@/types/convex/todoist"
+import type { TodoistTaskWithProject, TodoistLabelDoc, TodoistProject } from "@/types/convex/todoist"
 
 interface TaskListItemProps {
   task: TodoistTaskWithProject
@@ -95,7 +95,7 @@ export const TaskListItem = memo(function TaskListItem({
     : task.description
 
   const displayProject = optimisticUpdate?.type === "project-move"
-    ? allProjects?.find(p => p.todoist_id === optimisticUpdate.newProjectId)
+    ? allProjects?.find((p: TodoistProject) => p.todoist_id === optimisticUpdate.newProjectId)
     : task.project
 
   const displayLabels = optimisticUpdate?.type === "label-change"
@@ -253,7 +253,7 @@ export const TaskListItem = memo(function TaskListItem({
     <BaseListItem
       entity={task}
       entityType="task"
-      getEntityId={(task) => task.todoist_id}
+      getEntityId={(task: TodoistTaskWithProject) => task.todoist_id}
       onElementRef={onElementRef}
       onClick={onClick}
       data-task-id={task.todoist_id}
@@ -265,7 +265,7 @@ export const TaskListItem = memo(function TaskListItem({
         value: displayDescription,
         key: 'description'
       }}
-      onSave={async (changes) => {
+      onSave={async (changes: Record<string, string | undefined>) => {
         await optimisticTaskText(task.todoist_id, changes)
       }}
       renderLeftElement={() => (
@@ -349,7 +349,7 @@ export const TaskListItem = memo(function TaskListItem({
       )}
       renderSecondaryDisplay={() => displayDescription}
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      renderFixedBadges={(task, isHovered) => (
+      renderFixedBadges={(task: TodoistTaskWithProject, _isHovered: boolean) => (
         <>
           {displayProject && (
             <ProjectBadge

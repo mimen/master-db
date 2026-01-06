@@ -30,7 +30,7 @@ export function ProjectTypeDialog({ project, onSelect, onClose }: ProjectTypeDia
 
   useEffect(() => {
     if (project) {
-      const index = projectTypes.findIndex(t => t.value === currentType)
+      const index = projectTypes.findIndex((t: typeof projectTypes[number]) => t.value === currentType)
       setFocusedIndex(index >= 0 ? index : 2) // Default to "None" if not found
     }
   }, [project, currentType])
