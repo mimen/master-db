@@ -13,14 +13,15 @@ import type {
   ViewMetadata,
   TodoistProjects,
   TodoistProjectsWithMetadata,
+  ViewParams,
 } from "./types"
+import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 type ListBuilder = (
   viewKey: ViewKey,
   index: number,
   context: ViewBuildContext
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-) => ListInstance<any>[]
+) => ListInstance<ViewParams>[]
 
 interface ViewDefinition {
   metadata: ViewMetadata
@@ -48,69 +49,69 @@ function normalizeViewKey(view: string): ViewKey {
 }
 
 // Expansion functions - each builds a specific pattern of lists
-function expandInbox(viewKey: ViewKey, startIndex: number): ListInstance[] {
+function expandInbox(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.inbox, {
       id: createListId(viewKey, "main"),
       viewKey,
       indexInView: startIndex,
       params: {},
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
-function expandProjects(viewKey: ViewKey, startIndex: number): ListInstance[] {
+function expandProjects(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.projects, {
       id: createListId(viewKey, "main"),
       viewKey,
       indexInView: startIndex,
       params: {},
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
-function expandProjectsOnly(viewKey: ViewKey, startIndex: number): ListInstance[] {
+function expandProjectsOnly(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.projectsOnly, {
       id: createListId(viewKey, "main"),
       viewKey,
       indexInView: startIndex,
       params: {},
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
-function expandAreasOnly(viewKey: ViewKey, startIndex: number): ListInstance[] {
+function expandAreasOnly(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.areasOnly, {
       id: createListId(viewKey, "main"),
       viewKey,
       indexInView: startIndex,
       params: {},
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
-function expandUnassignedFolders(viewKey: ViewKey, startIndex: number): ListInstance[] {
+function expandUnassignedFolders(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.unassignedFolders, {
       id: createListId(viewKey, "main"),
       viewKey,
       indexInView: startIndex,
       params: {},
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
-function expandRoutines(viewKey: ViewKey, startIndex: number): ListInstance[] {
+function expandRoutines(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.routines, {
       id: createListId(viewKey, "main"),
       viewKey,
       indexInView: startIndex,
       params: {},
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -119,7 +120,7 @@ function expandTimeRange(
   startIndex: number,
   range: TimeRange,
   overrides?: { collapsible?: boolean }
-): ListInstance[] {
+): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.time, {
       id: createListId(viewKey, range),
@@ -127,7 +128,7 @@ function expandTimeRange(
       indexInView: startIndex,
       params: { range },
       overrides,
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -136,7 +137,7 @@ function expandProject(
   startIndex: number,
   projectId: string,
   overrides?: ListInstanceOverrides
-): ListInstance[] {
+): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.project, {
       id: createListId(viewKey, `project-${projectId}`),
@@ -144,7 +145,7 @@ function expandProject(
       indexInView: startIndex,
       params: { projectId },
       overrides,
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -153,7 +154,7 @@ function expandRoutinesByProject(
   startIndex: number,
   projectId: string,
   overrides?: ListInstanceOverrides
-): ListInstance[] {
+): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.projectRoutines, {
       id: createListId(viewKey, `routines-${projectId}`),
@@ -161,7 +162,7 @@ function expandRoutinesByProject(
       indexInView: startIndex,
       params: { projectId },
       overrides,
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -170,10 +171,8 @@ function expandProjectWithChildren(
   startIndex: number,
   context: ViewBuildContext,
   projectId: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): ListInstance<any>[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lists: ListInstance<any>[] = []
+): ListInstance<ViewParams>[] {
+  const lists: ListInstance<ViewParams>[] = []
   const projects = context.projects ?? []
 
   const parent = projects.find((p: TodoistProjects[number]) => p.todoist_id === projectId)
@@ -207,10 +206,8 @@ function expandProjectsByPriority(
   startIndex: number,
   context: ViewBuildContext,
   priorityLevel: 1 | 2 | 3 | 4
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): ListInstance<any>[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lists: ListInstance<any>[] = []
+): ListInstance<ViewParams>[] {
+  const lists: ListInstance<ViewParams>[] = []
   const projectsWithMetadata = context.projectsWithMetadata ?? []
 
   projectsWithMetadata
@@ -233,7 +230,7 @@ function expandPriority(
   startIndex: number,
   level: 1 | 2 | 3 | 4,
   overrides?: { collapsible?: boolean }
-): ListInstance[] {
+): ListInstance<ViewParams>[] {
   // Extract priority ID from viewKey (e.g., "view:priority:p1" -> "p1")
   const priorityId = viewKey.replace("view:priority:", "") as "p1" | "p2" | "p3" | "p4"
 
@@ -244,7 +241,7 @@ function expandPriority(
       indexInView: startIndex,
       params: { level },
       overrides,
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -253,7 +250,7 @@ function expandLabel(
   startIndex: number,
   label: string,
   overrides?: { collapsible?: boolean }
-): ListInstance[] {
+): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.label, {
       id: createListId(viewKey, `label-${label}`),
@@ -261,7 +258,7 @@ function expandLabel(
       indexInView: startIndex,
       params: { label },
       overrides,
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -270,7 +267,7 @@ function expandRoutineTask(
   startIndex: number,
   filter: RoutineTaskFilter,
   overrides?: { collapsible?: boolean }
-): ListInstance[] {
+): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.routineTasks, {
       id: createListId(viewKey, filter),
@@ -278,7 +275,7 @@ function expandRoutineTask(
       indexInView: startIndex,
       params: { filter },
       overrides,
-    }),
+    }) as ListInstance<ViewParams>,
   ]
 }
 
@@ -499,7 +496,7 @@ const viewPatterns: ViewPattern[] = [
     getDefinition: (extracted, context) => {
       const projectId = extracted.projectId as string
       const projects = context?.projectsWithMetadata ?? context?.projects ?? []
-      const project = projects.find((p) => p.todoist_id === projectId)
+      const project = projects.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
       const isProjectType = project?.metadata?.projectType === "project-type"
 
       return {
@@ -515,7 +512,7 @@ const viewPatterns: ViewPattern[] = [
           lists.push(...expandProject(viewKey, 0, projectId, {
             collapsible: false,
             getHeader: (ctx) => {
-              const projectWithMetadata = ctx.support.projectsWithMetadata?.find(p => p.todoist_id === projectId)
+              const projectWithMetadata = ctx.support.projectsWithMetadata?.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
               const projectIcon = projectWithMetadata ? (
                 <div
                   className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
@@ -550,7 +547,7 @@ const viewPatterns: ViewPattern[] = [
     getDefinition: (extracted, context) => {
       const projectId = extracted.projectId as string
       const projects = context?.projectsWithMetadata ?? context?.projects ?? []
-      const project = projects.find((p) => p.todoist_id === projectId)
+      const project = projects.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
       const isProjectType = project?.metadata?.projectType === "project-type"
 
       return {

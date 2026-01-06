@@ -2,6 +2,9 @@ import type { ReactNode } from "react"
 
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
+// Re-export Todoist types for use in view system
+export type { TodoistProjects, TodoistProjectsWithMetadata }
+
 export type ProjectTreeNode = TodoistProjectWithMetadata & {
   children: ProjectTreeNode[]
   level?: number
@@ -50,6 +53,31 @@ export type ListViewSettings = {
 export type TimeRange = "overdue" | "today" | "upcoming" | "no-date"
 
 export type RoutineTaskFilter = "overdue" | "morning" | "night" | "todays" | "get-ahead"
+
+// ============= VIEW PARAMETER TYPES =============
+
+/**
+ * Semantic parameter types for different view categories
+ * These represent the parameters needed to instantiate each type of list
+ */
+export type TimeRangeParams = { range: TimeRange }
+export type ProjectParams = { projectId: string }
+export type PriorityParams = { level: 1 | 2 | 3 | 4 }
+export type LabelParams = { label: string }
+export type RoutineFilterParams = { filter: RoutineTaskFilter }
+export type EmptyParams = Record<string, never>
+
+/**
+ * Union of all possible view parameters
+ * Used by ListBuilder to accept any valid parameter type
+ */
+export type ViewParams =
+  | TimeRangeParams
+  | ProjectParams
+  | PriorityParams
+  | LabelParams
+  | RoutineFilterParams
+  | EmptyParams
 
 export type ListQueryDefinition =
   | { type: "inbox"; inboxProjectId?: string; timezoneOffsetMinutes?: number }
