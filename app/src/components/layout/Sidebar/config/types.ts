@@ -35,5 +35,5 @@ export interface SubviewDefinition {
  */
 export interface SidebarConfig {
   sections: SidebarSection[] // Ordered array of sections
-  subviews: Record<ViewKey, SubviewDefinition> // Subview definitions for expandable views
+  subviews: Partial<Record<ViewKey, SubviewDefinition>> // Subview definitions for expandable views (only views with subviews need entries)
 }

@@ -8,6 +8,7 @@ import { SortDropdown } from "../components/SortDropdown"
 import { ViewItem } from "../components/ViewItem"
 import { SIDEBAR_CONFIG } from "../config/sidebarConfig"
 import type { SidebarSection, SubviewDefinition } from "../config/types"
+import type { CollapsedSections } from "../hooks/useSidebarState"
 
 import { resolveGenerator } from "./generators"
 
@@ -22,8 +23,8 @@ interface CommonSectionProps {
   currentViewKey: ViewKey
   onViewChange: (view: ViewSelection) => void
   viewContext: ViewBuildContext
-  collapsed: Record<string, boolean>
-  toggleSection: (section: string) => void
+  collapsed: CollapsedSections
+  toggleSection: (section: keyof CollapsedSections) => void
   sortMode: Record<string, string>
   setSortMode: (section: string, mode: string) => void
   getCountForView: (viewKey: ViewKey, ctx: ViewBuildContext) => number
@@ -70,8 +71,8 @@ export function renderSection(
   const { section: sectionKey, label, items, sortOptions } = section
 
   // Get collapse state for this section
-  const isCollapsed = props.collapsed[sectionKey] ?? false
-  const toggleCollapse = () => props.toggleSection(sectionKey)
+  const isCollapsed = props.collapsed[sectionKey as keyof CollapsedSections] ?? false
+  const toggleCollapse = () => props.toggleSection(sectionKey as keyof CollapsedSections)
 
   // Determine what to render
   let staticItems: ViewKey[] = []

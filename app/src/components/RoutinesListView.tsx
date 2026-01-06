@@ -11,11 +11,11 @@ import { api } from "@/convex/_generated/api"
 import type { Doc } from "@/convex/_generated/dataModel"
 import { useRoutineDialogShortcuts } from "@/hooks/useRoutineDialogShortcuts"
 import { routineSortOptions, routineGroupOptions } from "@/lib/views/entityConfigs/routineConfig"
-import type { ListInstance } from "@/lib/views/types"
+import type { ListInstance, ViewParams } from "@/lib/views/types"
 import type { TodoistProjects } from "@/types/convex/todoist"
 
 interface RoutinesListViewProps {
-  list: ListInstance
+  list: ListInstance<ViewParams>
   onRoutineCountChange?: (listId: string, count: number) => void
   onRoutineClick?: (listId: string, entityId: string) => void
   focusedEntityId: string | null

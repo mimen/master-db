@@ -5,7 +5,7 @@ import { BaseListView, TaskListItem } from "@/components/list-items"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
-import type { ListInstance, ListQueryInput } from "@/lib/views/types"
+import type { ListInstance, ListQueryInput, ViewParams } from "@/lib/views/types"
 import type {
   TodoistItemsByListWithProjects,
   TodoistLabelDoc,
@@ -16,7 +16,7 @@ import type {
 } from "@/types/convex/todoist"
 
 interface TaskListViewProps {
-  list: ListInstance
+  list: ListInstance<ViewParams>
   onTaskCountChange?: (listId: string, count: number) => void
   onTaskClick?: (listId: string, entityId: string) => void
   focusedEntityId: string | null

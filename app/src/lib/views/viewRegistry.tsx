@@ -136,7 +136,7 @@ function expandProject(
   viewKey: ViewKey,
   startIndex: number,
   projectId: string,
-  overrides?: ListInstanceOverrides
+  overrides?: ListInstanceOverrides<{ projectId: string }>
 ): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.project, {
@@ -153,7 +153,7 @@ function expandRoutinesByProject(
   viewKey: ViewKey,
   startIndex: number,
   projectId: string,
-  overrides?: ListInstanceOverrides
+  overrides?: ListInstanceOverrides<{ projectId: string }>
 ): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.projectRoutines, {

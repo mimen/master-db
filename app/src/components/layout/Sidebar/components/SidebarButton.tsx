@@ -57,7 +57,7 @@ export function SidebarButton({
       // If the element already has sizing classes, don't override them
       // Just add the color class if provided
       if (colorClass && icon.props.className) {
-        return cloneElement(icon, {
+        return cloneElement(icon as React.ReactElement<{ className?: string }>, {
           className: cn(icon.props.className, colorClass),
         })
       }
@@ -96,7 +96,7 @@ export function SidebarButton({
             onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                onMoveClick(e as MouseEvent)
+                onMoveClick(e.nativeEvent as unknown as MouseEvent)
               }
             }}
           >

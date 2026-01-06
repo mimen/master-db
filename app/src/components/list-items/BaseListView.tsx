@@ -11,7 +11,7 @@ import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
 import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
 import { cn } from "@/lib/utils"
 import { applyGroupingAndSorting } from "@/lib/views/sortAndGroup"
-import type { ListInstance, ListSupportData, SortOption, GroupOption, GroupData } from "@/lib/views/types"
+import type { ListInstance, ListSupportData, SortOption, GroupOption, GroupData, ViewParams } from "@/lib/views/types"
 
 /**
  * BaseListView - Generic, reusable list view component
@@ -86,7 +86,7 @@ export interface BaseListViewProps<T> {
    * ListInstance from views system
    * Provides header, empty state, and configuration
    */
-  list: ListInstance
+  list: ListInstance<ViewParams>
 
   /**
    * Parent callback: called when visible entity count changes
@@ -279,7 +279,7 @@ export function BaseListView<T>({
   }, [entities, activeSortOption, activeGroupOption, groupData])
 
   // Determine if data is grouped (array of GroupedEntities) vs flat (array of entities)
-  const isGrouped = Array.isArray(processedData) && processedData.length > 0 && "groupKey" in processedData[0]
+  const isGrouped = Array.isArray(processedData) && processedData.length > 0 && "groupKey" in (processedData[0] as object)
   const groupedData = isGrouped ? (processedData as any[]) : null
 
   // Build flat array of visible entities (excluding collapsed groups) for focus management

@@ -118,7 +118,7 @@ export function ProjectTypeDialog({ project, onSelect, onClose }: ProjectTypeDia
 
         <div className="mt-4 text-center text-sm text-muted-foreground">
           Current: <span className="font-semibold">
-            {currentType ? getProjectTypeDisplay(currentType).label : 'Unassigned'}
+            {getProjectTypeDisplay(currentType)?.label ?? 'Unassigned'}
           </span> • ESC to cancel
         </div>
       </DialogContent>

@@ -12,6 +12,7 @@ import type {
   ListQueryInput,
   RoutineTaskFilter,
   TimeRange,
+  ViewKey,
 } from "./types"
 
 import { Badge } from "@/components/ui/badge"
@@ -38,7 +39,7 @@ function createListInstance<P extends Record<string, unknown>>(
   const baseQuery = definition.buildQuery(params)
   const query: ListQueryInput = {
     ...baseQuery,
-    view: viewKey,
+    view: viewKey as ViewKey,
   }
   const dependencies = mergeDependencies(definition.dependencies)
 

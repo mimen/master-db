@@ -4,7 +4,7 @@ import type { ProjectSort, LabelSort, RoutineSort, CollapsedViewKey } from "../t
 
 import type { ViewKey } from "@/lib/views/types"
 
-interface CollapsedSections {
+export interface CollapsedSections {
   folders: boolean
   projects: boolean
   time: boolean

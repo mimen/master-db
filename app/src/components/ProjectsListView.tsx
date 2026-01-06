@@ -5,11 +5,11 @@ import { BaseListView, ProjectListItem } from "@/components/list-items"
 import { api } from "@/convex/_generated/api"
 import { useProjectDialogShortcuts } from "@/hooks/useProjectDialogShortcuts"
 import { projectSortOptions, projectGroupOptions } from "@/lib/views/entityConfigs/projectConfig"
-import type { ListInstance } from "@/lib/views/types"
+import type { ListInstance, ViewParams } from "@/lib/views/types"
 import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 interface ProjectsListViewProps {
-  list: ListInstance
+  list: ListInstance<ViewParams>
   onProjectCountChange?: (listId: string, count: number) => void
   onProjectClick?: (listId: string, entityId: string) => void
   focusedEntityId: string | null

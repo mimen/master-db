@@ -195,7 +195,7 @@ export interface ViewMetadata {
 export interface ViewSelection {
   key: ViewKey
   metadata: ViewMetadata
-  lists: ListInstance[]
+  lists: ListInstance<ViewParams>[]
 }
 
 export interface ViewBuildContext {
