@@ -1,4 +1,4 @@
-import type { SortOption, GroupOption, GroupData } from "@/lib/views/types"
+import type { SortOption, GroupOption } from "@/lib/views/types"
 import type { TodoistTaskWithProject } from "@/types/convex/todoist"
 
 /**

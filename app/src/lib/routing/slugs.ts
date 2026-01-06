@@ -1,4 +1,4 @@
-import type { TodoistLabelDoc, TodoistProjects } from "@/types/convex/todoist"
+import type { TodoistLabelDoc, TodoistProjects, TodoistProject } from "@/types/convex/todoist"
 
 /**
  * Convert a string to a URL-friendly slug
@@ -41,7 +41,7 @@ export function extractProjectIdFromSlug(
   if (!projects) return null
 
   // Find project where the slugified name matches the slug
-  const project = projects.find((p) => createSlug(p.name) === slug)
+  const project = projects.find((p: TodoistProject) => createSlug(p.name) === slug)
   return project?.todoist_id ?? null
 }
 
@@ -54,7 +54,7 @@ export function getProjectSlug(
 ): string {
   if (!projects) return projectId
 
-  const project = projects.find((p) => p.todoist_id === projectId)
+  const project = projects.find((p: TodoistProject) => p.todoist_id === projectId)
   if (!project) return projectId
 
   return createProjectSlug(project.name)

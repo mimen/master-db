@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { getProjectColor } from "@/lib/colors"
 import { getPriorityColorClass, getPriorityInfo } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
-import type { TodoistProjectsWithMetadata } from "@/types/convex/todoist"
+import type { TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 function mergeDependencies(...deps: Array<ListDependencies | undefined>): ListDependencies {
   return deps.reduce<ListDependencies>((acc, dep) => {
@@ -184,7 +184,7 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
   buildQuery: ({ projectId }): ListQueryDefinition => ({ type: "project", projectId }),
   getHeader: ({ taskCount, params, support }) => {
     const projectWithMetadata = support.projectsWithMetadata?.find(
-      (p) => p.todoist_id === params.projectId
+      (p: TodoistProjectWithMetadata) => p.todoist_id === params.projectId
     )
     const title = projectWithMetadata?.name ?? "Project"
     const description = `${taskCount} tasks in this project`
@@ -356,7 +356,7 @@ const projectRoutinesDefinition: ListDefinition<{ projectId: string }> = {
   },
   buildQuery: ({ projectId }): ListQueryDefinition => ({ type: "routines", projectId }),
   getHeader: ({ taskCount, params, support }) => {
-    const projectWithMetadata = support.projectsWithMetadata?.find((p) => p.todoist_id === params.projectId)
+    const projectWithMetadata = support.projectsWithMetadata?.find((p: TodoistProjectWithMetadata) => p.todoist_id === params.projectId)
     const title = projectWithMetadata?.name ? `${projectWithMetadata.name} Routines` : "Project Routines"
     const description = `${taskCount} ${taskCount === 1 ? "routine" : "routines"}`
 
@@ -559,7 +559,7 @@ export function getProjectPriorityLevel(
   projectsWithMetadata?: TodoistProjectsWithMetadata
 ): number | null {
   if (!projectsWithMetadata) return null
-  const found = projectsWithMetadata.find((p) => p.todoist_id === projectId)
+  const found = projectsWithMetadata.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
   return found?.metadata?.priority ?? null
 }
 
