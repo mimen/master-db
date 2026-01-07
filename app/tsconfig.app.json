@@ -30,5 +30,12 @@
     }
   },
   "include": ["src"],
-  "exclude": ["../convex/**/*", "!../convex/_generated/**/*"]
+  "exclude": [
+    "../convex/**/*",
+    "!../convex/_generated/**/*",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
 }
