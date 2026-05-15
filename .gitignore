@@ -56,4 +56,4 @@ tmp/
 temp/
 
 # Git worktrees
-.worktrees/
+.worktrees/.superpowers/
