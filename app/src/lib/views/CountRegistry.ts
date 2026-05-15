@@ -141,6 +141,8 @@ export class CountRegistry {
     // If we have query info, use it (most reliable)
     if (query) {
       switch (query.type) {
+        case "dashboard":
+          return "list:dashboard"
         case "inbox":
           return "list:inbox"
         case "time": {

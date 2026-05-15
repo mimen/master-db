@@ -1,8 +1,9 @@
 import { useQuery } from "convex/react"
-import { Keyboard, RefreshCw } from "lucide-react"
+import { Archive, Keyboard, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "wouter"
 
+import { DashboardView } from "../DashboardView"
 import { ProjectsListView } from "../ProjectsListView"
 import { RoutinesListView } from "../RoutinesListView"
 import { TaskListView } from "../TaskListView"
@@ -26,7 +27,7 @@ import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
 
 export function Layout() {
-  const { openShortcuts, openQuickAdd, openSync } = useDialogContext()
+  const { openShortcuts, openQuickAdd, openSync, openArchive } = useDialogContext()
   const { getCountForView } = useCountRegistry()
   const [location, setLocation] = useLocation()
 
@@ -57,6 +58,15 @@ export function Layout() {
 
   // Use CountRegistry for instant total count WITH viewContext
   const totalTaskCount = getCountForView(activeView.key, viewContext)
+
+  // Compute current project for archive action (project views only)
+  const currentProject = useMemo(() => {
+    if (!activeView.key.startsWith("view:project:") || activeView.key.includes("-family")) {
+      return null
+    }
+    const projectId = activeView.key.replace("view:project:", "")
+    return projectsWithMetadata?.find(p => p.todoist_id === projectId) ?? null
+  }, [activeView.key, projectsWithMetadata])
 
   const { updateTaskCount, resetTaskCounts, getTaskCounts } = useTaskCounts()
 
@@ -99,6 +109,56 @@ export function Layout() {
       setLocation(path)
     },
     [resetTaskCounts, setLocation, viewContext]
+  )
+
+  // DOM-based view navigation for Shift+Arrow keyboard shortcuts
+  const handleViewNavigation = useCallback(
+    (direction: 1 | -1) => {
+      // 1. Query all visible sidebar items (excludes collapsed children)
+      const sidebarItems = Array.from(
+        document.querySelectorAll('[data-sidebar-view-item="true"]')
+      ) as HTMLElement[]
+
+      if (sidebarItems.length === 0) {
+        console.warn("No navigable sidebar items found")
+        return
+      }
+
+      // 2. Find currently active item
+      // IMPORTANT: Use data-is-active to find the actual active element
+      // (not just first match by view key, to handle duplicates correctly)
+      const currentIndex = sidebarItems.findIndex(
+        (item) => item.getAttribute('data-is-active') === 'true'
+      )
+
+      // 3. Calculate target index with wrap-around
+      let targetIndex: number
+      if (currentIndex === -1) {
+        // Current view not in sidebar (edge case) - start from beginning or end
+        targetIndex = direction === 1 ? 0 : sidebarItems.length - 1
+      } else {
+        // Wrap around: (current + direction + length) % length
+        targetIndex = (currentIndex + direction + sidebarItems.length) % sidebarItems.length
+      }
+
+      // 4. Get target view key from DOM
+      const targetElement = sidebarItems[targetIndex]
+      const targetViewKey = targetElement.getAttribute('data-view-key') as ViewKey
+
+      if (!targetViewKey) {
+        console.error("Target element missing data-view-key")
+        return
+      }
+
+      // 5. Resolve and navigate
+      const targetView = resolveView(targetViewKey, viewContext)
+      if (targetView) {
+        handleViewChange(targetView)
+      } else {
+        console.error(`Failed to resolve view: ${targetViewKey}`)
+      }
+    },
+    [activeView.key, viewContext, handleViewChange]
   )
 
   // Sync view when URL changes (browser back/forward, direct navigation)
@@ -203,12 +263,20 @@ export function Layout() {
         case 'ArrowDown':
         case 'ArrowRight':
           event.preventDefault()
-          handleArrowNavigation(1)
+          if (event.shiftKey) {
+            handleViewNavigation(1)  // View navigation
+          } else {
+            handleArrowNavigation(1)  // Task navigation
+          }
           break
         case 'ArrowUp':
         case 'ArrowLeft':
           event.preventDefault()
-          handleArrowNavigation(-1)
+          if (event.shiftKey) {
+            handleViewNavigation(-1)  // View navigation
+          } else {
+            handleArrowNavigation(-1)  // Task navigation
+          }
           break
         case '?':
           if (event.shiftKey) {
@@ -228,7 +296,21 @@ export function Layout() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleArrowNavigation, openShortcuts, openQuickAdd, openSync, activeView.key])
+  }, [handleArrowNavigation, handleViewNavigation, openShortcuts, openQuickAdd, openSync, activeView.key])
+
+  // Redirect to inbox when viewing an archived project
+  useEffect(() => {
+    if (!activeView.key.startsWith("view:project:") || activeView.key.includes("-family")) {
+      return
+    }
+    const projectId = activeView.key.replace("view:project:", "")
+    const project = projectsWithMetadata?.find(p => p.todoist_id === projectId)
+
+    if (project?.is_archived) {
+      const inboxView = resolveView("view:inbox")
+      handleViewChange(inboxView)
+    }
+  }, [activeView.key, projectsWithMetadata, handleViewChange])
 
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1
@@ -256,6 +338,18 @@ export function Layout() {
           )}
           {/* Header slot for view settings (registered by BaseListView for single-list views) */}
           {slots.get("view-settings")}
+          {/* Archive button for project views (not for Inbox which can't be archived) */}
+          {currentProject && !currentProject.is_archived && !currentProject.is_inbox_project && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openArchive(currentProject)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Archive className="h-4 w-4 mr-1.5" />
+              Archive
+            </Button>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant="ghost"
@@ -279,6 +373,12 @@ export function Layout() {
         <ScrollArea className="h-[calc(100vh-4rem)]" data-task-scroll-container>
           <main className="space-y-6 p-6">
             {activeView.lists.map((list) => {
+              // Render DashboardView for the dashboard query type.
+              // It manages its own data fetching via useQuery internally.
+              if (list.query.type === "dashboard") {
+                return <DashboardView key={list.id} listId={list.id} />
+              }
+
               // Render ProjectsListView for projects-type queries
               if (list.query.type === "projects") {
                 return (

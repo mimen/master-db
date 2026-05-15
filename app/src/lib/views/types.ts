@@ -88,6 +88,7 @@ export type ListQueryDefinition =
   | { type: "priority"; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
   | { type: "label"; label: string; timezoneOffsetMinutes?: number }
   | { type: "routine-tasks"; filter: RoutineTaskFilter; timezoneOffsetMinutes?: number }
+  | { type: "dashboard"; timezoneOffsetMinutes?: number }
 
 export type ListQueryInput = ListQueryDefinition & { view: ViewKey }
 
@@ -165,6 +166,7 @@ export interface ListInstanceOptions<P extends Record<string, unknown> = Record<
 }
 
 export type ViewKey =
+  | "view:dashboard"
   | "view:inbox"
   | "view:today"
   | "view:upcoming"

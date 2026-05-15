@@ -1,4 +1,4 @@
-import { Filter, Folder, Inbox, Repeat, Settings } from "lucide-react"
+import { Filter, Folder, Inbox, LayoutDashboard, Repeat, Settings } from "lucide-react"
 
 import type { ViewNavItem } from "../types"
 
@@ -12,6 +12,12 @@ export function buildViewItems(
   routinesCount: number
 ): ViewNavItem[] {
   return [
+    {
+      key: "view:dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      count: null,
+    },
     {
       key: "view:inbox",
       label: "Inbox",

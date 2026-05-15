@@ -49,6 +49,17 @@ function normalizeViewKey(view: string): ViewKey {
 }
 
 // Expansion functions - each builds a specific pattern of lists
+function expandDashboard(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
+  return [
+    instantiateList(listDefinitions.dashboard, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }) as ListInstance<ViewParams>,
+  ]
+}
+
 function expandInbox(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.inbox, {
@@ -281,6 +292,16 @@ function expandRoutineTask(
 
 // View registry - maps view keys to their expansion logic
 const viewPatterns: ViewPattern[] = [
+  {
+    match: (key) => key === "view:dashboard",
+    getDefinition: () => ({
+      metadata: {
+        title: "Dashboard",
+        icon: getViewIcon("view:dashboard", { size: "sm" }),
+      },
+      buildLists: (viewKey, index) => expandDashboard(viewKey, index),
+    }),
+  },
   {
     match: (key) => key === "view:inbox",
     getDefinition: () => ({

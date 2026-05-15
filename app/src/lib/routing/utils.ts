@@ -17,6 +17,7 @@ export function viewKeyToPath(viewKey: ViewKey, context?: ViewBuildContext): str
   }
 
   // Static views
+  if (viewKey === "view:dashboard") return "/dashboard"
   if (viewKey === "view:today") return "/today"
   if (viewKey === "view:upcoming") return "/upcoming"
   if (viewKey === "view:projects") return "/projects"
@@ -107,6 +108,7 @@ export function pathToViewKey(path: string, context?: ViewBuildContext): ViewKey
   }
 
   // Static views
+  if (normalized === "/dashboard") return "view:dashboard"
   if (normalized === "/today") return "view:today"
   if (normalized === "/upcoming") return "view:upcoming"
   if (normalized === "/projects") return "view:projects"

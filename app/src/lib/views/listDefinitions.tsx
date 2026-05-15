@@ -1,4 +1,4 @@
-import { Flag, Inbox, Tag } from "lucide-react"
+import { Flag, Inbox, LayoutDashboard, Tag } from "lucide-react"
 
 import { getViewIcon } from "../icons/viewIcons"
 
@@ -71,6 +71,24 @@ function createListInstance<P extends Record<string, unknown>>(
     getHeader,
     getEmptyState,
   }
+}
+
+const dashboardDefinition: ListDefinition = {
+  key: "list:dashboard",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  buildQuery: (): ListQueryDefinition => ({ type: "dashboard" }),
+  getHeader: () => ({
+    title: "Dashboard",
+    description: "At-a-glance overview of tasks and routines",
+    icon: <LayoutDashboard className="h-6 w-6 mr-3" />,
+  }),
+  getEmptyState: () => ({
+    title: "No data yet",
+    description: "Sync Todoist to populate the dashboard",
+  }),
 }
 
 const inboxDefinition: ListDefinition = {
@@ -532,6 +550,7 @@ const routineTaskDefinition: ListDefinition<{ filter: RoutineTaskFilter }> = {
 }
 
 export const listDefinitions = {
+  dashboard: dashboardDefinition,
   inbox: inboxDefinition,
   time: timeDefinition,
   project: projectDefinition,

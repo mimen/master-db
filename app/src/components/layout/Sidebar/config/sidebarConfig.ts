@@ -12,6 +12,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = {
       section: "primary",
       // No label = no section header
       items: [
+        "view:dashboard",
         "view:inbox",
         "view:multi:daily-planning",
         "view:multi:daily-execution",

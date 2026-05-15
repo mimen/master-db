@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, CalendarCheck, CalendarRange, ClipboardList, FastForward, Filter, Flag, Folder, Inbox, Moon, Repeat, Settings, Sunrise, Tag, Zap } from "lucide-react"
+import { AlertCircle, Calendar, CalendarCheck, CalendarRange, ClipboardList, FastForward, Filter, Flag, Folder, Inbox, LayoutDashboard, Moon, Repeat, Settings, Sunrise, Tag, Zap } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { getProjectColor } from "../colors"
@@ -33,6 +33,10 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
   const finalClassName = cn(sizeClass, className)
 
   // Top-level views
+  if (viewKey === "view:dashboard") {
+    return <LayoutDashboard className={finalClassName} />
+  }
+
   if (viewKey === "view:inbox") {
     return <Inbox className={finalClassName} />
   }
