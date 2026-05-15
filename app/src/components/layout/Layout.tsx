@@ -376,7 +376,15 @@ export function Layout() {
               // Render DashboardView for the dashboard query type.
               // It manages its own data fetching via useQuery internally.
               if (list.query.type === "dashboard") {
-                return <DashboardView key={list.id} listId={list.id} />
+                return (
+                  <DashboardView
+                    key={list.id}
+                    listId={list.id}
+                    onNavigate={(viewKey) =>
+                      handleViewChange(resolveView(viewKey, viewContext))
+                    }
+                  />
+                )
               }
 
               // Render ProjectsListView for projects-type queries

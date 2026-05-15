@@ -7,9 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
+import type { ViewKey } from "@/lib/views/types"
 
 interface DashboardViewProps {
   listId: string
+  onNavigate?: (viewKey: ViewKey) => void
 }
 
 function getTimezoneOffsetMinutes(): number {
@@ -18,7 +20,10 @@ function getTimezoneOffsetMinutes(): number {
   return new Date().getTimezoneOffset()
 }
 
-export function DashboardView({ listId: _listId }: DashboardViewProps) {
+export function DashboardView({
+  listId: _listId,
+  onNavigate,
+}: DashboardViewProps) {
   const tzOffset = useMemo(() => getTimezoneOffsetMinutes(), [])
   const stats = useQuery(
     api.dashboard.queries.getDashboardStats.getDashboardStats,
@@ -37,33 +42,61 @@ export function DashboardView({ listId: _listId }: DashboardViewProps) {
           label="Overdue"
           value={stats.overdue}
           tone={stats.overdue > 0 ? "alert" : "neutral"}
+          onClick={onNavigate ? () => onNavigate("view:time:overdue") : undefined}
         />
-        <StatCard label="Due today" value={stats.dueToday} />
+        <StatCard
+          label="Due today"
+          value={stats.dueToday}
+          onClick={onNavigate ? () => onNavigate("view:today") : undefined}
+        />
         <StatCard
           label="Due this week"
           value={stats.dueThisWeek}
           sub="next 7 days"
+          onClick={onNavigate ? () => onNavigate("view:upcoming") : undefined}
         />
-        <StatCard label="Inbox" value={stats.inbox} sub="unprocessed" />
+        <StatCard
+          label="Inbox"
+          value={stats.inbox}
+          sub="unprocessed"
+          onClick={onNavigate ? () => onNavigate("view:inbox") : undefined}
+        />
         <StatCard
           label="P1 active"
           value={stats.p1Active}
           tone={stats.p1Active > 0 ? "alert" : "neutral"}
+          onClick={
+            onNavigate ? () => onNavigate("view:priority:p1") : undefined
+          }
         />
       </div>
 
       {/* Row 2: Distribution + Routines */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2">
-          <PriorityDistributionCard counts={stats.priorityCounts} />
+          <PriorityDistributionCard
+            counts={stats.priorityCounts}
+            onNavigate={onNavigate}
+          />
         </div>
-        <RoutinesCard routines={stats.routines} />
+        <RoutinesCard
+          routines={stats.routines}
+          onClick={onNavigate ? () => onNavigate("view:routines") : undefined}
+        />
       </div>
 
       {/* Row 3: Top projects + Today's queue */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <TopProjectsCard projects={stats.topProjects} />
-        <TodayQueueCard items={stats.todayQueue} />
+        <TopProjectsCard
+          projects={stats.topProjects}
+          onNavigate={onNavigate}
+        />
+        <TodayQueueCard
+          items={stats.todayQueue}
+          onTitleClick={
+            onNavigate ? () => onNavigate("view:today") : undefined
+          }
+        />
       </div>
     </div>
   )
@@ -77,14 +110,37 @@ interface StatCardProps {
   value: number
   sub?: string
   tone?: "neutral" | "alert"
+  onClick?: () => void
 }
 
-function StatCard({ label, value, sub, tone = "neutral" }: StatCardProps) {
+function StatCard({
+  label,
+  value,
+  sub,
+  tone = "neutral",
+  onClick,
+}: StatCardProps) {
+  const clickable = Boolean(onClick)
   return (
     <Card
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
       className={cn(
         "p-4 flex flex-col gap-1",
-        tone === "alert" && "border-red-500/40 bg-red-500/5"
+        tone === "alert" && "border-red-500/40 bg-red-500/5",
+        clickable &&
+          "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       )}
     >
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -109,15 +165,26 @@ interface PriorityDistributionCardProps {
     p4: number
     total: number
   }
+  onNavigate?: (viewKey: ViewKey) => void
 }
 
-function PriorityDistributionCard({ counts }: PriorityDistributionCardProps) {
+const PRIORITY_VIEW_KEYS: Record<"P1" | "P2" | "P3" | "P4", ViewKey> = {
+  P1: "view:priority:p1",
+  P2: "view:priority:p2",
+  P3: "view:priority:p3",
+  P4: "view:priority:p4",
+}
+
+function PriorityDistributionCard({
+  counts,
+  onNavigate,
+}: PriorityDistributionCardProps) {
   const max = Math.max(counts.p1, counts.p2, counts.p3, counts.p4, 1)
   const bars = [
-    { label: "P1", value: counts.p1, color: "bg-red-500" },
-    { label: "P2", value: counts.p2, color: "bg-orange-500" },
-    { label: "P3", value: counts.p3, color: "bg-blue-500" },
-    { label: "P4", value: counts.p4, color: "bg-muted-foreground/40" },
+    { label: "P1" as const, value: counts.p1, color: "bg-red-500" },
+    { label: "P2" as const, value: counts.p2, color: "bg-orange-500" },
+    { label: "P3" as const, value: counts.p3, color: "bg-blue-500" },
+    { label: "P4" as const, value: counts.p4, color: "bg-muted-foreground/40" },
   ]
   return (
     <Card className="p-5">
@@ -127,13 +194,23 @@ function PriorityDistributionCard({ counts }: PriorityDistributionCardProps) {
           {counts.total} active
         </div>
       </div>
-      <div className="flex items-end gap-3 h-24">
+      <div className="flex items-end gap-3 h-32">
         {bars.map((bar) => {
           const heightPct = (bar.value / max) * 100
+          const viewKey = PRIORITY_VIEW_KEYS[bar.label]
+          const clickable = Boolean(onNavigate)
           return (
-            <div
+            <button
               key={bar.label}
-              className="flex-1 flex flex-col items-center gap-1.5"
+              type="button"
+              disabled={!clickable}
+              onClick={onNavigate ? () => onNavigate(viewKey) : undefined}
+              className={cn(
+                "flex-1 flex flex-col items-center gap-1.5 rounded-md p-1 text-left",
+                clickable &&
+                  "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                !clickable && "cursor-default"
+              )}
             >
               <div className="w-full flex-1 flex items-end">
                 <div
@@ -147,7 +224,7 @@ function PriorityDistributionCard({ counts }: PriorityDistributionCardProps) {
               <div className="text-sm font-medium tabular-nums">
                 {bar.value}
               </div>
-            </div>
+            </button>
           )
         })}
       </div>
@@ -162,11 +239,32 @@ interface RoutinesCardProps {
     avgCompletion: number
     overdueRoutineTasks: number
   }
+  onClick?: () => void
 }
 
-function RoutinesCard({ routines }: RoutinesCardProps) {
+function RoutinesCard({ routines, onClick }: RoutinesCardProps) {
+  const clickable = Boolean(onClick)
   return (
-    <Card className="p-5 flex flex-col gap-3">
+    <Card
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        "p-5 flex flex-col gap-3",
+        clickable &&
+          "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      )}
+    >
       <div className="text-sm font-medium">Routines</div>
       <div className="flex gap-6 items-baseline">
         <div>
@@ -211,27 +309,42 @@ interface TopProjectsCardProps {
     color: string
     activeTaskCount: number
   }>
+  onNavigate?: (viewKey: ViewKey) => void
 }
 
-function TopProjectsCard({ projects }: TopProjectsCardProps) {
+function TopProjectsCard({ projects, onNavigate }: TopProjectsCardProps) {
   return (
     <Card className="p-5">
       <div className="text-sm font-medium mb-3">Top projects · active tasks</div>
       {projects.length === 0 ? (
         <div className="text-xs text-muted-foreground">No projects with active tasks</div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {projects.map((project) => (
-            <div
-              key={project.todoistId}
-              className="flex justify-between items-center text-sm"
-            >
-              <span className="truncate">{project.name}</span>
-              <span className="text-muted-foreground tabular-nums ml-2">
-                {project.activeTaskCount}
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col gap-0.5">
+          {projects.map((project) => {
+            const viewKey: ViewKey = `view:project:${project.todoistId}`
+            const clickable = Boolean(onNavigate)
+            return (
+              <button
+                key={project.todoistId}
+                type="button"
+                disabled={!clickable}
+                onClick={
+                  onNavigate ? () => onNavigate(viewKey) : undefined
+                }
+                className={cn(
+                  "flex justify-between items-center text-sm rounded-md px-2 py-1.5 -mx-2 text-left",
+                  clickable &&
+                    "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  !clickable && "cursor-default"
+                )}
+              >
+                <span className="truncate">{project.name}</span>
+                <span className="text-muted-foreground tabular-nums ml-2">
+                  {project.activeTaskCount}
+                </span>
+              </button>
+            )
+          })}
         </div>
       )}
     </Card>
@@ -245,12 +358,23 @@ interface TodayQueueCardProps {
     priority: number
     startTime: string | null
   }>
+  onTitleClick?: () => void
 }
 
-function TodayQueueCard({ items }: TodayQueueCardProps) {
+function TodayQueueCard({ items, onTitleClick }: TodayQueueCardProps) {
   return (
     <Card className="p-5">
-      <div className="text-sm font-medium mb-3">Today · what&apos;s next</div>
+      {onTitleClick ? (
+        <button
+          type="button"
+          onClick={onTitleClick}
+          className="text-sm font-medium mb-3 text-left rounded-md cursor-pointer hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Today · what&apos;s next →
+        </button>
+      ) : (
+        <div className="text-sm font-medium mb-3">Today · what&apos;s next</div>
+      )}
       {items.length === 0 ? (
         <div className="text-xs text-muted-foreground">
           Nothing scheduled for today
