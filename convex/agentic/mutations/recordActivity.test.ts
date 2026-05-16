@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import schema from "../../schema";
 import { normalizeModules } from "../../test-utils.vitest";
 
@@ -13,13 +14,13 @@ const modules = normalizeModules(
 describe("recordActivity", () => {
   test("creates a pending activity and resolves it later", async () => {
     const t = convexTest(schema, modules);
-    const id = await t.mutation(api.agentic.mutations.recordActivity.start, {
+    const id = (await t.mutation(api.agentic.mutations.recordActivity.start, {
       entity_ref: "todoist:task:abc",
       run_id: "01H1",
       kind: "tool_call",
       name: "Read",
       input_json: { path: "/x" },
-    });
+    })) as Id<"agenticThreadActivities">;
     const pending = await t.run(async (ctx) => ctx.db.get(id));
     expect(pending?.status).toBe("pending");
     expect(pending?.output_json).toBeNull();

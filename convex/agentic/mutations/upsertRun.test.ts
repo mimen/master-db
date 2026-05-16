@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import schema from "../../schema";
 import { normalizeModules } from "../../test-utils.vitest";
 
@@ -13,7 +14,7 @@ const modules = normalizeModules(
 describe("upsertRun", () => {
   test("creates a new row when none exists", async () => {
     const t = convexTest(schema, modules);
-    const id = await t.mutation(api.agentic.mutations.upsertRun.default, {
+    const id = (await t.mutation(api.agentic.mutations.upsertRun.default, {
       entity_ref: "todoist:task:abc",
       entity_type: "todoist_task",
       entity_id: "abc",
@@ -22,7 +23,7 @@ describe("upsertRun", () => {
       run_id: "01H1",
       traceparent: null,
       resume_cursor: null,
-    });
+    })) as Id<"agenticRuns">;
     const row = await t.run(async (ctx) => ctx.db.get(id));
     expect(row?.entity_ref).toBe("todoist:task:abc");
     expect(row?.status).toBe("discovering");
