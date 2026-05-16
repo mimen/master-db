@@ -9,14 +9,15 @@ export interface HealthDeps {
 
 export function createHealthRoute(deps: HealthDeps): Hono {
   const app = new Hono();
-  app.get("/healthz", (c) =>
-    c.json({
-      ok: deps.convexOk(),
+  app.get("/healthz", (c) => {
+    const convex_ok = deps.convexOk();
+    return c.json({
+      ok: convex_ok,
       uptime_ms: Date.now() - deps.startedAt,
       inflight: deps.inflightCount(),
       last_error: deps.lastError(),
-      convex_ok: deps.convexOk(),
-    }),
-  );
+      convex_ok,
+    });
+  });
   return app;
 }

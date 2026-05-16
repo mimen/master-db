@@ -22,10 +22,12 @@ describe("GET /healthz", () => {
       uptime_ms: number;
       inflight: number;
       convex_ok: boolean;
+      last_error: { ts: number; message: string } | null;
     };
     expect(body.ok).toBe(true);
     expect(body.uptime_ms).toBeGreaterThanOrEqual(1000);
     expect(body.inflight).toBe(3);
     expect(body.convex_ok).toBe(true);
+    expect(body.last_error).toBeNull();
   });
 });
