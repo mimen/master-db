@@ -10,11 +10,12 @@ This file captures **operational truth** — state that drifts and needs updatin
 |---|---|---|
 | Engine code | ✅ on `main` | `engine/` package + `convex/agentic/*` |
 | Convex tables | ✅ deployed | `shiny-gerbil-853` (master-db dev deployment) |
-| Engine process | ⚠️ ad-hoc | Run interactively via `bun --cwd engine start`. Not yet daemonized. |
-| launchd plist | 🔲 not installed | `engine/deploy/com.milad.agentic-engine.plist` exists; not copied to `~/Library/LaunchAgents/`. |
-| Cloudflare Tunnel | 🔲 not configured | Engine only reachable on `localhost:8787`. Public HTTPS pending. |
-| Secrets in 1Password | 🔲 not provisioned | `op://Sol/agentic-engine/server_token` does NOT exist yet. Token currently lives in `/tmp/agentic-smoke.env` (volatile). |
-| Convex Auth | 🔲 not configured | Convex queries are publicly callable. Separate workstream. |
+| Engine process | ✅ launchd | `com.milad.agentic-engine` LaunchAgent, `RunAtLoad` + `KeepAlive`. |
+| launchd plist | ✅ installed | `~/Library/LaunchAgents/com.milad.agentic-engine.plist` (mode 600, `OP_SERVICE_ACCOUNT_TOKEN` baked in). |
+| Wrapper script | ✅ installed | `~/.agentic-engine/start-with-secrets.sh` (outside `~/Documents` to bypass macOS TCC). The repo copy at `engine/deploy/start-with-secrets.sh` is a reference template only. |
+| Public ingress | ✅ Tailscale Funnel | `https://milads-mac-mini.taild31e9a.ts.net:10000` → `localhost:8787`. Bearer-gated. (Plan originally called for Cloudflare Tunnel; swapped to Funnel since Tailscale was already set up.) |
+| Secrets in 1Password | ✅ provisioned | `op://Sol/agentic-engine/server_token` + `convex_url`. Service-account read at every restart. |
+| Convex Auth | 🔲 not configured | Convex queries are publicly callable. Separate workstream (parallel agent). |
 | UX | 🔲 in progress (parallel branch) | `agentic-engine-ux` branch. |
 
 ## Smoke verified end-to-end (2026-05-15)
@@ -132,17 +133,78 @@ launchctl stop com.milad.agentic-engine
 launchctl start com.milad.agentic-engine
 ```
 
-## Install as launchd (when ready to daemonize)
+## Install as launchd
+
+Already installed on the Mac mini. Below is the recipe to redo it on a new machine or after a wipe.
+
+**Critical: the wrapper script must live OUTSIDE `~/Documents/`.** macOS TCC blocks `launchd` from executing scripts under `~/Documents/` with `Operation not permitted` (no clear error path — symptom is silent failure or `bash: ...: Operation not permitted` in `launchd.err.log`).
 
 ```bash
-chmod +x engine/deploy/start-with-secrets.sh
-cp engine/deploy/com.milad.agentic-engine.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.milad.agentic-engine.plist
-launchctl start com.milad.agentic-engine
+# 1. Copy the wrapper to ~/.agentic-engine/ (which TCC doesn't restrict)
+mkdir -p ~/.agentic-engine/logs
+install -m 755 engine/deploy/start-with-secrets.sh ~/.agentic-engine/
+
+# 2. Install the plist (with OP_SERVICE_ACCOUNT_TOKEN injected — launchd
+# doesn't source ~/.zshrc)
+command cat > ~/Library/LaunchAgents/com.milad.agentic-engine.plist <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>com.milad.agentic-engine</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/mimen1994/.agentic-engine/start-with-secrets.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key><string>/Users/mimen1994/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+      <key>HOME</key><string>/Users/mimen1994</string>
+      <key>LOG_DIR</key><string>/Users/mimen1994/.agentic-engine/logs</string>
+      <key>OP_SERVICE_ACCOUNT_TOKEN</key><string>${OP_SERVICE_ACCOUNT_TOKEN}</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/Users/mimen1994/.agentic-engine/launchd.out.log</string>
+    <key>StandardErrorPath</key><string>/Users/mimen1994/.agentic-engine/launchd.err.log</string>
+  </dict>
+</plist>
+PLIST
+chmod 600 ~/Library/LaunchAgents/com.milad.agentic-engine.plist
+
+# 3. Load
+launchctl load -w ~/Library/LaunchAgents/com.milad.agentic-engine.plist
+
+# 4. Verify
+launchctl print "gui/$(id -u)/com.milad.agentic-engine" | command grep -E "state|pid"
+curl -s http://localhost:8787/healthz | jq -c
 tail -f ~/.agentic-engine/launchd.err.log
 ```
 
-The plist points at `start-with-secrets.sh`, which reads `AGENTIC_SERVER_TOKEN` + `CONVEX_URL` from 1Password before exec'ing `bun start`. Provision those op items first or the script will fail.
+The wrapper `~/.agentic-engine/start-with-secrets.sh` reads `AGENTIC_SERVER_TOKEN` + `CONVEX_URL` from 1Password via `op read` before exec'ing `bun --cwd .../engine start`. Provision the 1Password item first (see "Provisioning 1Password items" below) or the script will exit at the first `op read`.
+
+## Public ingress via Tailscale Funnel
+
+Already up. Recipe to re-enable after a tailscale reset:
+
+```bash
+tailscale funnel --bg --https=10000 8787
+tailscale funnel status   # confirm "Funnel on" for :10000
+```
+
+The engine is then reachable at `https://milads-mac-mini.taild31e9a.ts.net:10000`. Bearer-gated; the public URL alone gets you 401.
+
+## Provisioning 1Password items
+
+The default service-account token (in `OP_SERVICE_ACCOUNT_TOKEN`) is read-only. Use `env -u OP_SERVICE_ACCOUNT_TOKEN op item create ...` to fall back to user-auth (Touch ID). See the `1password` skill for the canonical pattern.
+
+```bash
+TOKEN=$(openssl rand -hex 24)
+env -u OP_SERVICE_ACCOUNT_TOKEN op item create \
+  --category=password --vault=Sol --title='agentic-engine' \
+  "server_token=$TOKEN" \
+  'convex_url=https://shiny-gerbil-853.convex.cloud'
+```
 
 ## Set up Cloudflare Tunnel (when ready for public exposure)
 
