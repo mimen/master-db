@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { authedQuery } from "../../../_lib/authed";
+import { query } from "../../../_generated/server";
 
-export const getScheduledProjects = authedQuery({
+export const getScheduledProjects = query({
   args: {
     from: v.optional(v.string()), // ISO date string
     to: v.optional(v.string()), // ISO date string
