@@ -7,7 +7,6 @@ import { BaseListItem } from "./BaseListItem"
 import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge } from "@/components/badges/shared"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
@@ -51,9 +50,6 @@ export const TaskListItem = memo(function TaskListItem({
   // Get optimistic update
   const { getTaskUpdate } = useOptimisticUpdates()
   const optimisticUpdate = getTaskUpdate(task.todoist_id)
-
-  // Agent drawer
-  const { open: openAgent } = useAgentDrawer()
 
   // Dialog context
   const { openPriority, openProject, openLabel, openDueDate, openDeadline } = useDialogContext()
