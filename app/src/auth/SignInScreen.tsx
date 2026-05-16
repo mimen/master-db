@@ -19,7 +19,10 @@ export function SignInScreen() {
         <Button
           className="w-full"
           onClick={() => {
-            void signIn("google")
+            // Pass the current origin so Convex Auth bounces back here after
+            // Google auth, regardless of the SITE_URL env var. Server-side
+            // allowlist in convex/auth.ts validates the origin.
+            void signIn("google", { redirectTo: window.location.origin })
           }}
         >
           Sign in with Google

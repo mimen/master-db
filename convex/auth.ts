@@ -24,6 +24,22 @@ export function rejectIfNotAllowed(profile: Record<string, unknown>) {
   };
 }
 
+/**
+ * Allowed post-sign-in redirect origins. Convex Auth's default callback only
+ * accepts URLs matching the global `SITE_URL` env var — which forces a single
+ * frontend per Convex deployment. We have one deployment but two frontends
+ * (localhost dev + Heroku prod), so we override with a small allowlist. The
+ * client passes `redirectTo: window.location.origin` and we accept it iff
+ * the origin is on this list.
+ *
+ * Add new entries here when deploying to a new frontend host; no need to
+ * touch the `SITE_URL` env var.
+ */
+const ALLOWED_REDIRECT_ORIGINS = [
+  "http://localhost:3000",
+  "https://convex-db-master-d31d50f579b2.herokuapp.com",
+];
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Google({
@@ -32,6 +48,22 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       },
     }),
   ],
+  callbacks: {
+    async redirect({ redirectTo }) {
+      for (const origin of ALLOWED_REDIRECT_ORIGINS) {
+        if (
+          redirectTo === origin ||
+          redirectTo.startsWith(`${origin}/`) ||
+          redirectTo.startsWith(`${origin}?`)
+        ) {
+          return redirectTo;
+        }
+      }
+      throw new Error(
+        `Disallowed redirectTo: ${redirectTo}. Add the origin to ALLOWED_REDIRECT_ORIGINS in convex/auth.ts.`,
+      );
+    },
+  },
 });
 
 /**
