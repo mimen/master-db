@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 
 import { api } from "../../_generated/api";
 import schema from "../../schema";
-import { normalizeModules } from "../../test-utils";
+import { normalizeModules } from "../../test-utils.vitest";
 
 const modules = normalizeModules(
   import.meta.glob("../../**/*.*s"),
