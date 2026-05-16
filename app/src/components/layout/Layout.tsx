@@ -24,7 +24,7 @@ import { useTaskSelection } from "@/hooks/useTaskSelection"
 import { pathToViewKey, viewKeyToPath } from "@/lib/routing/utils"
 import type { ViewBuildContext, ViewKey, ViewSelection } from "@/lib/views/types"
 import { resolveView } from "@/lib/views/viewDefinitions"
-import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata } from "@/types/convex/todoist"
+import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 export function Layout() {
   const { openShortcuts, openQuickAdd, openSync, openArchive } = useDialogContext()
@@ -65,7 +65,7 @@ export function Layout() {
       return null
     }
     const projectId = activeView.key.replace("view:project:", "")
-    return projectsWithMetadata?.find(p => p.todoist_id === projectId) ?? null
+    return projectsWithMetadata?.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId) ?? null
   }, [activeView.key, projectsWithMetadata])
 
   const { updateTaskCount, resetTaskCounts, getTaskCounts } = useTaskCounts()
@@ -304,7 +304,7 @@ export function Layout() {
       return
     }
     const projectId = activeView.key.replace("view:project:", "")
-    const project = projectsWithMetadata?.find(p => p.todoist_id === projectId)
+    const project = projectsWithMetadata?.find((p: TodoistProjectWithMetadata) => p.todoist_id === projectId)
 
     if (project?.is_archived) {
       const inboxView = resolveView("view:inbox")

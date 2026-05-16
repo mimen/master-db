@@ -125,8 +125,8 @@ interface UseListItemEditingReturn {
   saveEditing: () => Promise<void>
 
   // Refs
-  primaryInputRef: React.RefObject<HTMLInputElement>
-  secondaryInputRef: React.RefObject<HTMLInputElement>
+  primaryInputRef: React.RefObject<HTMLInputElement | null>
+  secondaryInputRef: React.RefObject<HTMLInputElement | null>
 
   // Keyboard handlers
   handlePrimaryKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void

@@ -53,11 +53,11 @@ export function SidebarButton({
     if (!icon) return null
 
     // Render JSX elements directly - preserve their original classes
-    if (isValidElement(icon)) {
+    if (isValidElement<{ className?: string }>(icon)) {
       // If the element already has sizing classes, don't override them
       // Just add the color class if provided
       if (colorClass && icon.props.className) {
-        return cloneElement(icon as React.ReactElement<{ className?: string }>, {
+        return cloneElement(icon, {
           className: cn(icon.props.className, colorClass),
         })
       }
