@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { getProjectTypeIcon } from "@/lib/projectTypes"
-import { cn } from "@/lib/utils"
 import type { ProjectType } from "@/lib/projectTypes"
+import { cn } from "@/lib/utils"
 
 /**
  * Project Type Badge - Pure view component for displaying project type (Area vs Project)

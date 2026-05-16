@@ -348,7 +348,7 @@ export const TaskListItem = memo(function TaskListItem({
         </>
       )}
       renderSecondaryDisplay={() => displayDescription}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
       renderFixedBadges={(task: TodoistTaskWithProject, _isHovered: boolean) => (
         <>
           {displayProject && (

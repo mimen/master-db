@@ -12,6 +12,7 @@ import {
   matchesTodayFilter,
   matchesNext7DaysFilter,
 } from "../../../../convex/todoist/helpers/cursorFilters"
+
 import type { ListQueryInput } from "@/lib/views/types"
 import type { TodoistTaskWithProject } from "@/types/convex/todoist"
 

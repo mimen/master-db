@@ -85,7 +85,17 @@ export const runInitialSync = internalAction({
 
     // Save all labels
     if (syncData.labels) {
-      for (const label of syncData.labels) {
+      for (const rawLabel of syncData.labels) {
+        // Extract only the fields we need (insulates us from new Todoist API fields)
+        const label = {
+          id: rawLabel.id,
+          name: rawLabel.name,
+          color: rawLabel.color,
+          item_order: rawLabel.item_order,
+          is_deleted: rawLabel.is_deleted,
+          is_favorite: rawLabel.is_favorite,
+        };
+
         await ctx.runMutation(internal.todoist.internalMutations.upsertLabel.upsertLabel, {
           label,
         });
@@ -167,7 +177,18 @@ export const runInitialSync = internalAction({
 
     // Save all reminders
     if (syncData.reminders) {
-      for (const reminder of syncData.reminders) {
+      for (const rawReminder of syncData.reminders) {
+        // Extract only the fields we need (insulates us from new Todoist API fields)
+        const reminder = {
+          id: rawReminder.id,
+          notify_uid: rawReminder.notify_uid,
+          item_id: rawReminder.item_id,
+          type: rawReminder.type,
+          due: rawReminder.due,
+          mm_offset: rawReminder.mm_offset,
+          is_deleted: rawReminder.is_deleted,
+        };
+
         await ctx.runMutation(internal.todoist.internalMutations.upsertReminder.upsertReminder, {
           reminder,
         });

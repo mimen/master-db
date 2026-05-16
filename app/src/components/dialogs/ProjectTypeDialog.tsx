@@ -8,8 +8,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { getProjectTypeDisplay } from '@/lib/projectTypes'
-import { cn } from '@/lib/utils'
 import type { ProjectType } from '@/lib/projectTypes'
+import { cn } from '@/lib/utils'
 import type { TodoistProjectWithMetadata } from '@/types/convex/todoist'
 
 interface ProjectTypeDialogProps {

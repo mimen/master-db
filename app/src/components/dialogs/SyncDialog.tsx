@@ -4,6 +4,8 @@ import { AlertTriangle, CalendarClock, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 
+import { ClearRoutineTasksDialog } from "./ClearRoutineTasksDialog"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -18,7 +20,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
 import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
-import { ClearRoutineTasksDialog } from "./ClearRoutineTasksDialog"
 
 interface SyncDialogProps {
   isOpen: boolean

@@ -1,4 +1,3 @@
-
 import { Pause, Play } from "lucide-react"
 import { useEffect, useState } from "react"
 
@@ -63,10 +62,8 @@ const DAYS_OF_WEEK = [
   { value: 6, label: "Saturday" },
 ]
 
-
 export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogProps) {
   const { createRoutine, updateRoutine, deleteRoutine, deferRoutine, undeferRoutine } = useRoutineActions()
-
 
   // Form state
   const [name, setName] = useState(routine?.name || "")
@@ -97,9 +94,7 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
 
           timeOfDay: timeOfDay ?? undefined,
           idealDay: idealDay ?? undefined,
-          
-          
-          
+
         })
       } else if (routine) {
         await updateRoutine({
@@ -111,9 +106,7 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
 
           timeOfDay: timeOfDay ?? undefined,
           idealDay: idealDay ?? undefined,
-          
-          
-          
+
         })
       }
 
@@ -150,7 +143,6 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
       setIsToggling(false)
     }
   }
-
 
   // Reset form state when routine changes or dialog opens/closes
   useEffect(() => {
@@ -280,7 +272,6 @@ export function RoutineDialog({ isOpen, onClose, routine, mode }: RoutineDialogP
               </Select>
             </div>
           </div>
-
 
           {/* Time of Day */}
           <div className="space-y-2">

@@ -1,5 +1,6 @@
-import type { ViewBuildContext, ViewKey } from "@/lib/views/types"
 import { extractLabelNameFromSlug, extractProjectIdFromSlug, getLabelSlug, getProjectSlug } from "./slugs"
+
+import type { ViewBuildContext, ViewKey } from "@/lib/views/types"
 
 /**
  * Convert a ViewKey to a URL path

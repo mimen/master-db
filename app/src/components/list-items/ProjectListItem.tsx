@@ -2,17 +2,18 @@ import { Archive, ArchiveRestore } from "lucide-react"
 import { memo } from "react"
 import { useLocation } from "wouter"
 
-import { Badge } from "@/components/ui/badge"
+import { BaseListItem } from "./BaseListItem"
+
 import { PriorityBadge, ProjectTypeBadge } from "@/components/badges/shared"
+import { Badge } from "@/components/ui/badge"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
+import { useOptimisticSync } from "@/hooks/list-items"
 import { useOptimisticProjectDescription } from "@/hooks/useOptimisticProjectDescription"
 import { useOptimisticProjectName } from "@/hooks/useOptimisticProjectName"
-import { useOptimisticSync } from "@/hooks/list-items"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
 import { createProjectSlug } from "@/lib/routing/slugs"
-import { BaseListItem } from "./BaseListItem"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 interface ProjectListItemProps {

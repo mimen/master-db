@@ -138,7 +138,7 @@ export function RoutinesListView({
         sortOptions={routineSortOptions}
         groupOptions={routineGroupOptions}
         groupData={{ projects }}
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         renderRow={(routine, _index, ref, _query) => (
           <RoutineListItem
             key={routine._id}

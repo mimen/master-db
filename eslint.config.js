@@ -6,7 +6,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['**/node_modules/**', '**/convex/_generated/**', '**/dist/**'],
+    ignores: ['**/node_modules/**', '**/convex/_generated/**', '**/dist/**', '**/.worktrees/**'],
   },
   js.configs.recommended,
   {

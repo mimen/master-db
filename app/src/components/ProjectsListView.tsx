@@ -96,7 +96,7 @@ export function ProjectsListView({
       sortOptions={projectSortOptions}
       groupOptions={projectGroupOptions}
       groupData={{ projects: visibleProjects }}
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
       renderRow={(project, _index, ref, _query) => (
         <ProjectListItem
           key={project._id}

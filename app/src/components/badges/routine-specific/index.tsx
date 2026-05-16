@@ -46,7 +46,6 @@ export function EditBadge({ onClick, text = "Edit" }: EditBadgeProps) {
   )
 }
 
-
 interface PauseBadgeProps extends BaseBadgeProps {
   isPaused: boolean
 }

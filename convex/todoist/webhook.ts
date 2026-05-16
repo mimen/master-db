@@ -387,13 +387,18 @@ async function processLabelEvent(
   error?: string;
   eventDataSummary: { entity_id: string; entity_type: string };
 }> {
-  const label = event.event_data;
+  const rawLabel = event.event_data;
   const eventName = event.event_name;
 
-  // Handle deletion by setting is_deleted flag
-  if (eventName === "label:deleted") {
-    label.is_deleted = true;
-  }
+  // Extract only the fields we need (insulates us from new Todoist API fields)
+  const label = {
+    id: rawLabel.id,
+    name: rawLabel.name,
+    color: rawLabel.color,
+    item_order: rawLabel.item_order,
+    is_deleted: eventName === "label:deleted" ? true : rawLabel.is_deleted,
+    is_favorite: rawLabel.is_favorite,
+  };
 
   // Upsert the label
   await ctx.runMutation(internal.todoist.internalMutations.upsertLabel.upsertLabel, {
