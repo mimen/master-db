@@ -1,8 +1,24 @@
+import { AgentComposer } from "./AgentComposer"
 import { AgentTranscript } from "./AgentTranscript"
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
+import { useAgentRuntime } from "@/hooks/useAgentRuntime"
+
+function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
+  const { isRunning } = useAgentRuntime(entity_ref)
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-4">
+        <AgentTranscript entity_ref={entity_ref} />
+      </div>
+      <div className="border-t p-3">
+        <AgentComposer entity_ref={entity_ref} isRunning={isRunning} />
+      </div>
+    </>
+  )
+}
 
 export function AgentDrawer() {
   const { isOpen, activeEntityRef, close } = useAgentDrawer()
@@ -15,12 +31,7 @@ export function AgentDrawer() {
           </SheetTitle>
         </SheetHeader>
         <AgentComposerProvider>
-          <div className="flex-1 overflow-y-auto p-4">
-            {activeEntityRef ? <AgentTranscript entity_ref={activeEntityRef} /> : null}
-          </div>
-          <div className="border-t p-3">
-            <p className="text-sm text-muted-foreground">Composer lands in Task 11.</p>
-          </div>
+          {activeEntityRef ? <AgentDrawerBody entity_ref={activeEntityRef} /> : null}
         </AgentComposerProvider>
       </SheetContent>
     </Sheet>

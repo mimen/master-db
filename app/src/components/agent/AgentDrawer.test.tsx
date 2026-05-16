@@ -12,6 +12,14 @@ vi.mock("./AgentTranscript", () => ({
   ),
 }))
 
+vi.mock("@/hooks/useAgentRuntime", () => ({
+  useAgentRuntime: () => ({ isRunning: false, runtime: null, rows: [], run: null, isLoading: false }),
+}))
+
+vi.mock("@/hooks/useAgentPost", () => ({
+  useAgentPost: () => ({ send: vi.fn(), interrupt: vi.fn(), execute: vi.fn(), modify: vi.fn() }),
+}))
+
 function Harness() {
   const { open } = useAgentDrawer()
   return <button onClick={() => open("todoist:task:1")}>open</button>
