@@ -20,16 +20,16 @@ export function ProposalOptionRow({
   onModify: (id: string) => void
 }) {
   return (
-    <div className={`rounded-md border p-3 ${recommended ? "border-emerald-500 ring-1 ring-emerald-500" : "border-border"}`}>
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <div className="font-medium text-sm">{option.label}</div>
+    <div className={`rounded-md border p-4 ${recommended ? "border-emerald-500 ring-1 ring-emerald-500" : "border-border"}`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h3 className="font-semibold text-base leading-tight">{option.label}</h3>
         {recommended && (
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600">★ Recommended</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 shrink-0 mt-0.5">★ Recommended</span>
         )}
       </div>
-      <p className="text-xs text-muted-foreground mb-2">{option.description}</p>
+      <p className="text-sm text-muted-foreground mb-2 leading-snug">{option.description}</p>
       {option.rationale && (
-        <p className="text-xs text-muted-foreground/70 mb-2 italic">{option.rationale}</p>
+        <p className="text-xs text-muted-foreground/70 mb-3 italic leading-snug">{option.rationale}</p>
       )}
       <div className="flex flex-wrap gap-1 mb-3">
         <Badge variant="secondary" className="text-[10px]">{Math.round(option.confidence * 100)}% confident</Badge>
