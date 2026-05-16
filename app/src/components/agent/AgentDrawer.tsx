@@ -1,6 +1,5 @@
 import { useAction } from "convex/react"
-import { useEffect, useMemo, useRef } from "react"
-import { ulid } from "ulid"
+import { useEffect, useRef } from "react"
 
 import { AgentComposer } from "./AgentComposer"
 import { AgentTranscript } from "./AgentTranscript"
@@ -19,8 +18,13 @@ function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
   if (isRunning && startedAtRef.current === null) startedAtRef.current = Date.now()
   if (!isRunning) startedAtRef.current = null
 
-  // Auto-trigger on mount: idempotency key stable per mount.
-  const mountId = useMemo(() => ulid(), [])
+  // Auto-trigger on mount: idempotency key stable per entity_ref ONLY (not
+  // per mount). React 18 StrictMode double-mounts effects in dev — a per-mount
+  // key would generate two unique idempotency keys for the same effective
+  // "open this entity" action, defeating the server cache and producing
+  // duplicate discovery runs. Keying by entity alone collapses StrictMode's
+  // double-fire, browser back/forward re-mounts, and tab focus re-mounts into
+  // a single cached response (within the server's 24h Idempotency-Key TTL).
   const postRunAction = useAction(api.agentic.actions.postRun.default)
   useEffect(() => {
     let cancelled = false
@@ -29,11 +33,11 @@ function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
         const res = await postRunAction({
           entity_ref,
           message: null,
-          idempotency_key: `${entity_ref}:open:${mountId}`,
+          idempotency_key: `${entity_ref}:open`,
           multitask_strategy: "enqueue",
         })
         if (cancelled) return
-        // accepted=false means no-op (existing run / rejected). Convex query renders state regardless.
+        // accepted=false means no-op (existing run / busy / cached). Convex query renders state regardless.
         void res
       } catch (err) {
         // Engine unreachable: render nothing extra; transcript shows last-known state.
@@ -41,8 +45,6 @@ function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
       }
     })()
     return () => { cancelled = true }
-  // Only re-fire if entity_ref changes — mountId is stable for the lifetime.
-  // postRunAction omitted; stable per Convex docs.
   }, [entity_ref]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
