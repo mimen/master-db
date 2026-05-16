@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Single aggregate query that produces every value the Dashboard view needs.
@@ -261,7 +261,7 @@ export function aggregateDashboardStats(input: {
   };
 }
 
-export const getDashboardStats = query({
+export const getDashboardStats = authedQuery({
   args: {
     timezoneOffsetMinutes: v.optional(v.number()),
   },
