@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export default query({
+export default authedQuery({
   args: { run_id: v.string() },
   handler: async (ctx, args) =>
     ctx.db

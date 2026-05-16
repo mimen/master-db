@@ -1,10 +1,10 @@
 import { v } from "convex/values";
 
-import { mutation } from "../../_generated/server";
+import { authedMutation } from "../../_lib/authed";
 
 import { nextSequence } from "./_sequence";
 
-export const start = mutation({
+export const start = authedMutation({
   args: {
     entity_ref: v.string(),
     run_id: v.string(),
@@ -24,7 +24,7 @@ export const start = mutation({
   },
 });
 
-export const resolve = mutation({
+export const resolve = authedMutation({
   args: {
     id: v.id("agenticThreadActivities"),
     status: v.string(),

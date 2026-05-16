@@ -1,8 +1,8 @@
 import { v } from "convex/values"
 
-import { action } from "../../_generated/server"
+import { authedAction } from "../../_lib/authed"
 
-export default action({
+export default authedAction({
   args: { entity_ref: v.string() },
   handler: async (_ctx, { entity_ref }): Promise<{ status: string }> => {
     const url = process.env.AGENTIC_ENGINE_URL
