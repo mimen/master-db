@@ -1,3 +1,7 @@
+// Named `.vitest.ts` (not `.ts`) so the Convex bundler skips it. Convex's
+// bundler walks every `.ts` file under `convex/` and rejects `node:*`
+// imports at runtime; the double-dot extension matches its skip rule
+// (same convention as `*.test.ts`, `*.config.ts`).
 import * as path from "node:path";
 import * as url from "node:url";
 
