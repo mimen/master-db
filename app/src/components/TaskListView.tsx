@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react"
 import { useMemo } from "react"
 
+import { RunAgentOnListButton } from "@/components/agent/RunAgentOnListButton"
 import { BaseListView, TaskListItem } from "@/components/list-items"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
@@ -122,6 +123,7 @@ export function TaskListView({
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
       supportData={{ projects, projectsWithMetadata, labels }}
+      headerAction={<RunAgentOnListButton entities={visibleTasks} />}
       renderRow={(task, _index, ref, query) => (
         <TaskListItem
           key={task._id}

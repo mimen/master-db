@@ -194,6 +194,13 @@ export interface BaseListViewProps<T> {
   supportData?: ListSupportData
 
   /**
+   * Optional caller-supplied action button(s) rendered in the list header,
+   * inline with the title / count / view-settings dropdown. Used by
+   * TaskListView for the bulk "Run agent on all" button.
+   */
+  headerAction?: React.ReactNode
+
+  /**
    * Default sort option ID
    * @default null (no sort)
    */
@@ -236,6 +243,7 @@ export function BaseListView<T>({
   supportData,
   defaultSort,
   defaultGroup,
+  headerAction,
   className,
 }: BaseListViewProps<T>) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
@@ -443,6 +451,8 @@ export function BaseListView<T>({
                 ? `Showing ${entities.length} of ${totalCount}`
                 : totalCount}
             </Badge>
+            {/* Caller-supplied actions (e.g. agent bulk runner) */}
+            {headerAction}
             {/* Sort/Group Settings Dropdown (only inline for multi-list views) */}
             {viewSettingsDropdown}
             {entities.length > 0 && (
