@@ -22,4 +22,21 @@ describe("ToolCallCard", () => {
     render(<ToolCallCard name="Bash" status="pending" input={{}} output={null} />)
     expect(screen.getByText("pending")).toBeInTheDocument()
   })
+
+  test("Skill input shows skill name in collapsed header", () => {
+    render(<ToolCallCard name="Skill" status="ok" input={{ skill: "airtable" }} output={null} />)
+    expect(screen.getByText(": airtable")).toBeInTheDocument()
+  })
+
+  test("Bash input truncates long command at 60 chars with ellipsis", () => {
+    const longCmd = "a".repeat(80)
+    render(<ToolCallCard name="Bash" status="ok" input={{ command: longCmd }} output={null} />)
+    const preview = screen.getByText(new RegExp(`^: ${"a".repeat(60)}…$`))
+    expect(preview).toBeInTheDocument()
+  })
+
+  test("unknown tool name shows no preview", () => {
+    render(<ToolCallCard name="MyCustomTool" status="ok" input={{ foo: "bar" }} output={null} />)
+    expect(screen.queryByText(/^: /)).toBeNull()
+  })
 })

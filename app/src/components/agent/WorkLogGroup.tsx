@@ -60,10 +60,12 @@ export function WorkLogGroup({
               </li>
             )
           }
+          const content = (r.body_markdown ?? "").trim()
+          if (!content) return null
           return (
             <li key={r._id} className="py-1 text-foreground/80 flex items-center gap-1">
               <ChevronDown className="h-3 w-3 opacity-30" />
-              <span className="truncate">{r.body_markdown ?? r.kind}</span>
+              <span className="truncate">{content}</span>
             </li>
           )
         })}

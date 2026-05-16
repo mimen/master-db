@@ -42,4 +42,36 @@ describe("WorkLogGroup", () => {
     render(<WorkLogGroup items={items(3)} firstSequence={1} lastSequence={3} run_id="r1" />)
     expect(screen.queryByText(/Show all/)).toBeNull()
   })
+
+  test("reasoning row with null body_markdown is skipped — no orphan chevron", () => {
+    const mixedItems: ThreadRow[] = [
+      {
+        _id: "t1", row_type: "activity", sequence: 1, run_id: "r1",
+        kind: "tool_call", body_markdown: null, name: "Read",
+        input_json: {}, output_json: {}, status: "ok",
+        proposal_json: null, error_json: null, token_usage: null, checkpoint_id: null,
+        resolved_at: null,
+      },
+      {
+        _id: "r1", row_type: "message", sequence: 2, run_id: "r1",
+        kind: "reasoning", body_markdown: null, name: undefined,
+        input_json: {}, output_json: {}, status: "ok",
+        proposal_json: null, error_json: null, token_usage: null, checkpoint_id: null,
+        resolved_at: null,
+      },
+      {
+        _id: "t2", row_type: "activity", sequence: 3, run_id: "r1",
+        kind: "tool_call", body_markdown: null, name: "Bash",
+        input_json: {}, output_json: {}, status: "ok",
+        proposal_json: null, error_json: null, token_usage: null, checkpoint_id: null,
+        resolved_at: null,
+      },
+    ]
+    const { container } = render(
+      <WorkLogGroup items={mixedItems} firstSequence={1} lastSequence={3} run_id="r1" />
+    )
+    // Should have exactly 2 <li> items (the two tool_call rows), no phantom caret li
+    const listItems = container.querySelectorAll("ul > li")
+    expect(listItems).toHaveLength(2)
+  })
 })

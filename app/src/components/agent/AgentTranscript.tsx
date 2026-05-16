@@ -9,6 +9,7 @@ import { WorkLogGroup } from "./WorkLogGroup"
 import { useAgentPost } from "@/hooks/useAgentPost"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
 import { isProposal } from "@/lib/agent/proposalToParts"
+import { stripProposalTags } from "@/lib/agent/stripProposalTags"
 import { groupWorkLog } from "@/lib/agent/workLogGrouping"
 
 function Prose({ text }: { text: string }) {
@@ -27,6 +28,7 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="flex flex-col gap-3">
         <ThreadPrimitive.Viewport>
+          <div className="flex flex-col gap-3">
           {grouped.map((item) => {
             if (item.type === "group") {
               return (
@@ -53,7 +55,7 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
             if (r.kind === "assistant_message") {
               return (
                 <div key={r._id} className="text-sm">
-                  <Prose text={r.body_markdown ?? ""} />
+                  <Prose text={stripProposalTags(r.body_markdown ?? "")} />
                 </div>
               )
             }
@@ -70,7 +72,7 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
             if (r.kind === "execution_result") {
               return (
                 <div key={r._id} className="text-sm rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2">
-                  ✓ {r.body_markdown}
+                  ✓ {stripProposalTags(r.body_markdown ?? "")}
                 </div>
               )
             }
@@ -82,6 +84,7 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
             }
             return null
           })}
+          </div>
         </ThreadPrimitive.Viewport>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
