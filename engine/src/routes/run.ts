@@ -82,6 +82,71 @@ export function createRunRoutes(deps: RunRoutesDeps): Hono {
     return c.json(decision.body, decision.status);
   });
 
+  app.post("/run/:entity_ref/wait", async (c) => {
+    const entity_ref = c.req.param("entity_ref");
+    const rawBody = (await c.req.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    const parsed = RunBody.safeParse({ ...rawBody, entity_ref });
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    const idem =
+      c.req.header("Idempotency-Key") ?? c.req.header("idempotency-key");
+    const traceparent =
+      c.req.header("traceparent") ?? c.req.header("Traceparent") ?? null;
+    const timeoutSeconds = Number(c.req.query("timeout_seconds") ?? "90");
+
+    const decision = await deps.cache.runOnce(
+      { key: idem, entity_ref, route: "POST /run/:entity_ref/wait" },
+      async () => decideAndEnqueue(deps, parsed.data, traceparent),
+    );
+    if (!decision.body.accepted || decision.status !== 200) {
+      return c.json(decision.body, decision.status);
+    }
+    const run_id = decision.body.run_id;
+    if (!run_id) {
+      return c.json({ error: "no run_id from enqueue" }, 500);
+    }
+    const deadline = Date.now() + timeoutSeconds * 1000;
+    while (Date.now() < deadline) {
+      const run = (await deps.store.getRun(entity_ref)) as
+        | { last_run_id?: string | null; status?: string }
+        | null;
+      if (
+        run &&
+        run.last_run_id === run_id &&
+        (run.status === "awaiting_decision" || run.status === "error")
+      ) {
+        const thread = (await deps.store.getThread(entity_ref)) as Array<{
+          row_type: string;
+          run_id?: string;
+          kind?: string;
+        }>;
+        const terminal_message = [...thread]
+          .reverse()
+          .find(
+            (row) =>
+              row.row_type === "message" &&
+              row.run_id === run_id &&
+              row.kind !== undefined &&
+              ["proposal", "execution_result", "blocked", "error"].includes(
+                row.kind,
+              ),
+          );
+        return c.json({
+          entity_ref,
+          run_id,
+          status: run.status,
+          terminal_message,
+        });
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return c.json({ error: "timeout" }, 408);
+  });
+
   return app;
 }
 
