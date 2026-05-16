@@ -12,15 +12,20 @@ import { query } from "../../_generated/server";
 export interface DashboardTopProject {
   todoistId: string;
   name: string;
-  color: string;
+  color: string; // Todoist color name (e.g., "lavender")
   activeTaskCount: number;
+  priority: number | null; // Project metadata priority: 4 = P1 (highest), null if unset
+  scheduledDate: string | null; // YYYY-MM-DD from project metadata, when the project itself is scheduled
 }
 
-export interface DashboardTodayQueueItem {
+export interface DashboardFocusItem {
   todoistId: string;
   content: string;
   priority: number; // Todoist API priority: 4 = P1 (highest)
-  startTime: string | null; // "HH:MM" if the due has a datetime; null for all-day
+  projectName: string | null;
+  projectColor: string | null; // Todoist color name
+  dueDate: string | null; // YYYY-MM-DD if scheduled; null otherwise
+  isOverdue: boolean;
 }
 
 export interface DashboardPriorityCounts {
@@ -50,7 +55,7 @@ export interface DashboardStats {
   routines: DashboardRoutinesSummary;
   // Row 3
   topProjects: DashboardTopProject[];
-  todayQueue: DashboardTodayQueueItem[];
+  focusQueue: DashboardFocusItem[];
   // Metadata
   generatedAt: number;
 }
@@ -104,20 +109,34 @@ export function aggregateDashboardStats(input: {
   items: Doc<"todoist_items">[];
   projects: Doc<"todoist_projects">[];
   routines: Doc<"routines">[];
+  projectMetadata: Doc<"todoist_project_metadata">[];
   overdueRoutineTaskCount: number;
   todayISO: string;
   sevenDaysISO: string;
   nowMs: number;
 }): DashboardStats {
   const {
-    items,
+    items: rawItems,
     projects,
     routines,
+    projectMetadata,
     overdueRoutineTaskCount,
     todayISO,
     sevenDaysISO,
     nowMs,
   } = input;
+
+  // Strip out master-db's internal metadata tasks (content starts with "*").
+  // These special tasks encode per-project priority/scheduled-date and aren't
+  // real to-do items — including them would inflate every count on the
+  // dashboard. The same filter is used by
+  // convex/todoist/computed/mutations/extractProjectMetadata.ts.
+  const items = rawItems.filter((item) => !item.content.startsWith("*"));
+
+  // Project metadata lookup, keyed by todoist project id.
+  const metadataByProject = new Map(
+    projectMetadata.map((m) => [m.project_id, m])
+  );
 
   // Match the canonical fallback in
   // convex/todoist/computed/queries/getAllListCounts.ts: the `inbox_project`
@@ -186,50 +205,85 @@ export function aggregateDashboardStats(input: {
     }
   }
 
-  // Top projects: sort by active task count descending, take top 6, attach
-  // display fields.
+  // Top projects: rank by (priority desc, active task count desc). Projects
+  // without a metadata priority sort below all priority-set projects. Take
+  // top 6 and enrich with display fields. Only include projects that exist
+  // in the active project set; tasks pointing at archived/deleted projects
+  // are dropped from this card.
   const projectsByTodoistId = new Map(
     projects.map((p) => [p.todoist_id, p])
   );
   const topProjects: DashboardTopProject[] = Array.from(
     projectActiveCounts.entries()
   )
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 6)
     .map(([projectId, count]) => {
       const project = projectsByTodoistId.get(projectId);
+      if (!project) return null;
+      const meta = metadataByProject.get(projectId);
       return {
         todoistId: projectId,
-        name: project?.name ?? "Unknown",
-        color: project?.color ?? "grey",
+        name: project.name,
+        color: project.color,
         activeTaskCount: count,
+        priority: meta?.priority ?? null,
+        scheduledDate: meta?.scheduled_date ?? null,
       };
-    });
+    })
+    .filter((p): p is DashboardTopProject => p !== null)
+    .sort((a, b) => {
+      // Higher priority first (4 > 3 > 2 > 1 > null).
+      const ap = a.priority ?? 0;
+      const bp = b.priority ?? 0;
+      if (ap !== bp) return bp - ap;
+      return b.activeTaskCount - a.activeTaskCount;
+    })
+    .slice(0, 6);
 
-  // Today's queue: tasks due today, sorted by start time when present (timed
-  // items first, in order), then untimed items by content.
-  const todayItems = items.filter((item) => {
+  // Focus queue: surface what to work on next. Rank by priority (P1 > P2 > P3
+  // > P4), tiebreaker by dueness (overdue > today > this week > future > no
+  // date). Inbox tasks excluded since the Inbox card already surfaces them.
+  function duenessScore(item: Doc<"todoist_items">): number {
     const dateOnly = item.due?.date?.includes("T")
       ? item.due.date.split("T")[0]
       : item.due?.date;
-    return dateOnly === todayISO;
+    if (!dateOnly) return 1; // No date
+    if (dateOnly < todayISO) return 5; // Overdue
+    if (dateOnly === todayISO) return 4; // Today
+    if (dateOnly < sevenDaysISO) return 3; // This week
+    return 2; // Future
+  }
+  const focusCandidates = items.filter(
+    (item) => item.project_id !== inboxProjectId
+  );
+  focusCandidates.sort((a, b) => {
+    if (a.priority !== b.priority) return b.priority - a.priority;
+    const aDue = duenessScore(a);
+    const bDue = duenessScore(b);
+    if (aDue !== bDue) return bDue - aDue;
+    // Final tiebreaker: earlier due date wins (lexicographic on YYYY-MM-DD).
+    const aDate = a.due?.date ?? "9999";
+    const bDate = b.due?.date ?? "9999";
+    return aDate.localeCompare(bDate);
   });
-  todayItems.sort((a, b) => {
-    const at = extractStartTime(a.due);
-    const bt = extractStartTime(b.due);
-    if (at && bt) return at.localeCompare(bt);
-    if (at) return -1;
-    if (bt) return 1;
-    return a.content.localeCompare(b.content);
-  });
-  const todayQueue: DashboardTodayQueueItem[] = todayItems
+  const focusQueue: DashboardFocusItem[] = focusCandidates
     .slice(0, 6)
-    .map((item) => ({
-      todoistId: item.todoist_id,
-      content: item.content,
-      priority: item.priority,
-      startTime: extractStartTime(item.due),
-    }));
+    .map((item) => {
+      const project = item.project_id
+        ? projectsByTodoistId.get(item.project_id)
+        : undefined;
+      const dateOnly = item.due?.date?.includes("T")
+        ? item.due.date.split("T")[0]
+        : item.due?.date ?? null;
+      return {
+        todoistId: item.todoist_id,
+        content: item.content,
+        priority: item.priority,
+        projectName: project?.name ?? null,
+        projectColor: project?.color ?? null,
+        dueDate: dateOnly ?? null,
+        isOverdue: dateOnly ? dateOnly < todayISO : false,
+      };
+    });
 
   // Routines summary.
   const activeRoutines = routines.filter((r) => r.defer === false);
@@ -256,7 +310,7 @@ export function aggregateDashboardStats(input: {
       overdueRoutineTasks: overdueRoutineTaskCount,
     },
     topProjects,
-    todayQueue,
+    focusQueue,
     generatedAt: nowMs,
   };
 }
@@ -291,6 +345,10 @@ export const getDashboardStats = query({
       .query("routines")
       .collect();
 
+    const projectMetadata: Doc<"todoist_project_metadata">[] = await ctx.db
+      .query("todoist_project_metadata")
+      .collect();
+
     // Overdue routine tasks: pending status with a dueDate in the past.
     // routineTasks.dueDate is a timestamp (number), not an ISO string.
     const pendingRoutineTasks: Doc<"routineTasks">[] = await ctx.db
@@ -305,6 +363,7 @@ export const getDashboardStats = query({
       items,
       projects,
       routines,
+      projectMetadata,
       overdueRoutineTaskCount,
       todayISO,
       sevenDaysISO,

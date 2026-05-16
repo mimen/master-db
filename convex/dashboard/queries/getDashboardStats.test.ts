@@ -56,6 +56,18 @@ function makeRoutine(overrides: Partial<{
   };
 }
 
+function makeMetadata(overrides: Partial<{
+  project_id: string;
+  priority: number | undefined;
+  scheduled_date: string | undefined;
+}>): AnyDoc {
+  return {
+    project_id: overrides.project_id ?? "p1",
+    priority: overrides.priority,
+    scheduled_date: overrides.scheduled_date,
+  };
+}
+
 describe("computeDayBoundariesISO", () => {
   test("returns YYYY-MM-DD for today and today + 7 in UTC", () => {
     // Fixed instant: 2026-05-15 10:00 UTC. timezone offset 0.
@@ -109,12 +121,14 @@ describe("aggregateDashboardStats", () => {
     items: AnyDoc[];
     projects: AnyDoc[];
     routines: AnyDoc[];
+    projectMetadata: AnyDoc[];
     overdueRoutineTaskCount: number;
   }> = {}): DashboardStats {
     return aggregateDashboardStats({
       items: overrides.items ?? [],
       projects: overrides.projects ?? [],
       routines: overrides.routines ?? [],
+      projectMetadata: overrides.projectMetadata ?? [],
       overdueRoutineTaskCount: overrides.overdueRoutineTaskCount ?? 0,
       todayISO: today,
       sevenDaysISO: sevenDays,
@@ -131,7 +145,7 @@ describe("aggregateDashboardStats", () => {
     expect(stats.p1Active).toBe(0);
     expect(stats.priorityCounts).toEqual({ p1: 0, p2: 0, p3: 0, p4: 0, total: 0 });
     expect(stats.topProjects).toEqual([]);
-    expect(stats.todayQueue).toEqual([]);
+    expect(stats.focusQueue).toEqual([]);
     expect(stats.routines).toEqual({
       active: 0,
       paused: 0,
@@ -200,44 +214,193 @@ describe("aggregateDashboardStats", () => {
     });
     expect(stats.inbox).toBe(2);
     expect(stats.topProjects).toEqual([
-      { todoistId: "auf", name: "AUF", color: "grey", activeTaskCount: 3 },
-      { todoistId: "health", name: "Health", color: "grey", activeTaskCount: 1 },
+      {
+        todoistId: "auf",
+        name: "AUF",
+        color: "grey",
+        activeTaskCount: 3,
+        priority: null,
+        scheduledDate: null,
+      },
+      {
+        todoistId: "health",
+        name: "Health",
+        color: "grey",
+        activeTaskCount: 1,
+        priority: null,
+        scheduledDate: null,
+      },
     ]);
   });
 
-  test("today queue is ordered by start time, timed items first", () => {
+  test("top projects ranks by priority then by active count", () => {
+    const projects = [
+      makeProject({ todoist_id: "auf", name: "AUF" }),
+      makeProject({ todoist_id: "health", name: "Health" }),
+      makeProject({ todoist_id: "home", name: "Home" }),
+    ];
     const stats = build({
+      projects,
+      // Active counts: health=5, auf=3, home=1. But priority should override.
       items: [
+        makeItem({ project_id: "health" }),
+        makeItem({ project_id: "health" }),
+        makeItem({ project_id: "health" }),
+        makeItem({ project_id: "health" }),
+        makeItem({ project_id: "health" }),
+        makeItem({ project_id: "auf" }),
+        makeItem({ project_id: "auf" }),
+        makeItem({ project_id: "auf" }),
+        makeItem({ project_id: "home" }),
+      ],
+      projectMetadata: [
+        makeMetadata({ project_id: "auf", priority: 4 }), // P1
+        makeMetadata({ project_id: "home", priority: 3 }), // P2
+        // health has no priority metadata
+      ],
+    });
+    expect(stats.topProjects.map((p) => p.todoistId)).toEqual([
+      "auf", // P1, count 3
+      "home", // P2, count 1
+      "health", // null, count 5 (loses to priority-set projects)
+    ]);
+    expect(stats.topProjects[0].priority).toBe(4);
+  });
+
+  test("focus queue ranks by priority desc, then dueness (overdue > today > future)", () => {
+    const projects = [
+      makeProject({ todoist_id: "auf", name: "AUF", color: "lavender" }),
+    ];
+    const stats = build({
+      projects,
+      items: [
+        // P4 due today (low priority)
         makeItem({
-          todoist_id: "afternoon",
-          content: "Afternoon",
-          due: { date: today, datetime: `${today}T14:00:00Z` },
-        }),
-        makeItem({
-          todoist_id: "untimed-z",
-          content: "Z untimed",
+          todoist_id: "p4-today",
+          content: "P4 today",
+          priority: 1,
+          project_id: "auf",
           due: { date: today },
         }),
+        // P1 future (high priority)
         makeItem({
-          todoist_id: "morning",
-          content: "Morning",
-          due: { date: today, datetime: `${today}T09:00:00Z` },
+          todoist_id: "p1-future",
+          content: "P1 future",
+          priority: 4,
+          project_id: "auf",
+          due: { date: "2026-12-01" },
         }),
+        // P1 overdue (high priority, urgent)
         makeItem({
-          todoist_id: "untimed-a",
-          content: "A untimed",
+          todoist_id: "p1-overdue",
+          content: "P1 overdue",
+          priority: 4,
+          project_id: "auf",
+          due: { date: "2026-05-01" },
+        }),
+        // P2 today
+        makeItem({
+          todoist_id: "p2-today",
+          content: "P2 today",
+          priority: 3,
+          project_id: "auf",
           due: { date: today },
+        }),
+        // P1 no date
+        makeItem({
+          todoist_id: "p1-nodate",
+          content: "P1 nodate",
+          priority: 4,
+          project_id: "auf",
         }),
       ],
     });
-    expect(stats.todayQueue.map((q) => q.todoistId)).toEqual([
-      "morning",
-      "afternoon",
-      "untimed-a",
-      "untimed-z",
+    // Expected order: all P1 first (overdue > future > nodate within P1), then P2, then P4.
+    expect(stats.focusQueue.map((f) => f.todoistId)).toEqual([
+      "p1-overdue",
+      "p1-future",
+      "p1-nodate",
+      "p2-today",
+      "p4-today",
     ]);
-    expect(stats.todayQueue[0].startTime).toBe("09:00");
-    expect(stats.todayQueue[2].startTime).toBeNull();
+    expect(stats.focusQueue[0].isOverdue).toBe(true);
+    expect(stats.focusQueue[0].projectName).toBe("AUF");
+    expect(stats.focusQueue[0].projectColor).toBe("lavender");
+  });
+
+  test("strips master-db metadata tasks (content starts with *) from all counts", () => {
+    const projects = [
+      makeProject({ todoist_id: "auf", name: "AUF", inbox_project: false }),
+    ];
+    const stats = build({
+      projects,
+      items: [
+        // Real tasks
+        makeItem({
+          todoist_id: "real-1",
+          content: "Real task",
+          priority: 4,
+          project_id: "auf",
+          due: { date: today },
+        }),
+        makeItem({
+          todoist_id: "real-2",
+          content: "Another real task",
+          priority: 1,
+          project_id: "auf",
+        }),
+        // Master-db metadata tasks (start with *)
+        makeItem({
+          todoist_id: "meta-1",
+          content: "* P1",
+          priority: 4,
+          project_id: "auf",
+          due: { date: today },
+        }),
+        makeItem({
+          todoist_id: "meta-2",
+          content: "* AUF",
+          priority: 4,
+          project_id: "auf",
+        }),
+      ],
+    });
+    // 2 real items, not 4
+    expect(stats.priorityCounts.total).toBe(2);
+    expect(stats.p1Active).toBe(1); // only "real-1" is P1, not "meta-1"
+    expect(stats.dueToday).toBe(1); // only "real-1" due today
+    expect(stats.topProjects[0].activeTaskCount).toBe(2);
+    expect(stats.focusQueue.map((f) => f.todoistId)).toEqual([
+      "real-1",
+      "real-2",
+    ]);
+  });
+
+  test("focus queue excludes inbox tasks", () => {
+    const projects = [
+      makeProject({
+        todoist_id: "inbox",
+        name: "Inbox",
+        inbox_project: true,
+      }),
+      makeProject({ todoist_id: "auf", name: "AUF" }),
+    ];
+    const stats = build({
+      projects,
+      items: [
+        makeItem({
+          todoist_id: "inbox-p1",
+          priority: 4,
+          project_id: "inbox",
+        }),
+        makeItem({
+          todoist_id: "auf-p4",
+          priority: 1,
+          project_id: "auf",
+        }),
+      ],
+    });
+    expect(stats.focusQueue.map((f) => f.todoistId)).toEqual(["auf-p4"]);
   });
 
   test("routine summary averages only non-null completion rates", () => {

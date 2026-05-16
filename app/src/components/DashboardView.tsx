@@ -5,6 +5,7 @@ import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
+import { getProjectColor } from "@/lib/colors"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
 import type { ViewKey } from "@/lib/views/types"
@@ -85,17 +86,15 @@ export function DashboardView({
         />
       </div>
 
-      {/* Row 3: Top projects + Today's queue */}
+      {/* Row 3: Top projects + Focus queue */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <TopProjectsCard
           projects={stats.topProjects}
           onNavigate={onNavigate}
         />
-        <TodayQueueCard
-          items={stats.todayQueue}
-          onTitleClick={
-            onNavigate ? () => onNavigate("view:today") : undefined
-          }
+        <FocusCard
+          items={stats.focusQueue}
+          onNavigate={onNavigate}
         />
       </div>
     </div>
@@ -194,7 +193,7 @@ function PriorityDistributionCard({
           {counts.total} active
         </div>
       </div>
-      <div className="flex items-end gap-3 h-32">
+      <div className="flex items-stretch gap-3 h-40">
         {bars.map((bar) => {
           const heightPct = (bar.value / max) * 100
           const viewKey = PRIORITY_VIEW_KEYS[bar.label]
@@ -206,16 +205,18 @@ function PriorityDistributionCard({
               disabled={!clickable}
               onClick={onNavigate ? () => onNavigate(viewKey) : undefined}
               className={cn(
-                "flex-1 flex flex-col items-center gap-1.5 rounded-md p-1 text-left",
+                "flex-1 h-full flex flex-col items-center justify-end gap-1.5 rounded-md p-1 text-left",
                 clickable &&
                   "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 !clickable && "cursor-default"
               )}
             >
-              <div className="w-full flex-1 flex items-end">
+              {/* Bar: fixed-position absolute relative to the container is overkill;
+                  simpler — give it a percent height of the parent flex column. */}
+              <div className="w-full flex-1 flex items-end min-h-0">
                 <div
                   className={cn("w-full rounded-t-sm", bar.color)}
-                  style={{ height: `${Math.max(heightPct, 2)}%` }}
+                  style={{ height: `${Math.max(heightPct, 4)}%` }}
                 />
               </div>
               <div className="text-[10px] text-muted-foreground">
@@ -308,6 +309,8 @@ interface TopProjectsCardProps {
     name: string
     color: string
     activeTaskCount: number
+    priority: number | null
+    scheduledDate: string | null
   }>
   onNavigate?: (viewKey: ViewKey) => void
 }
@@ -315,7 +318,7 @@ interface TopProjectsCardProps {
 function TopProjectsCard({ projects, onNavigate }: TopProjectsCardProps) {
   return (
     <Card className="p-5">
-      <div className="text-sm font-medium mb-3">Top projects · active tasks</div>
+      <div className="text-sm font-medium mb-3">Top projects</div>
       {projects.length === 0 ? (
         <div className="text-xs text-muted-foreground">No projects with active tasks</div>
       ) : (
@@ -323,6 +326,10 @@ function TopProjectsCard({ projects, onNavigate }: TopProjectsCardProps) {
           {projects.map((project) => {
             const viewKey: ViewKey = `view:project:${project.todoistId}`
             const clickable = Boolean(onNavigate)
+            const priorityColor =
+              project.priority !== null && project.priority !== undefined
+                ? getPriorityColorClass(project.priority)
+                : null
             return (
               <button
                 key={project.todoistId}
@@ -332,14 +339,25 @@ function TopProjectsCard({ projects, onNavigate }: TopProjectsCardProps) {
                   onNavigate ? () => onNavigate(viewKey) : undefined
                 }
                 className={cn(
-                  "flex justify-between items-center text-sm rounded-md px-2 py-1.5 -mx-2 text-left",
+                  "flex items-center gap-2.5 text-sm rounded-md px-2 py-1.5 -mx-2 text-left",
                   clickable &&
                     "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   !clickable && "cursor-default"
                 )}
               >
-                <span className="truncate">{project.name}</span>
-                <span className="text-muted-foreground tabular-nums ml-2">
+                <span
+                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: getProjectColor(project.color) }}
+                  aria-hidden
+                />
+                <span className="truncate flex-1">{project.name}</span>
+                {priorityColor && (
+                  <Flag
+                    className={cn("h-3.5 w-3.5 shrink-0", priorityColor)}
+                    fill="currentColor"
+                  />
+                )}
+                <span className="text-muted-foreground tabular-nums shrink-0 w-10 text-right">
                   {project.activeTaskCount}
                 </span>
               </button>
@@ -351,59 +369,107 @@ function TopProjectsCard({ projects, onNavigate }: TopProjectsCardProps) {
   )
 }
 
-interface TodayQueueCardProps {
+interface FocusCardProps {
   items: Array<{
     todoistId: string
     content: string
     priority: number
-    startTime: string | null
+    projectName: string | null
+    projectColor: string | null
+    dueDate: string | null
+    isOverdue: boolean
   }>
-  onTitleClick?: () => void
+  onNavigate?: (viewKey: ViewKey) => void
 }
 
-function TodayQueueCard({ items, onTitleClick }: TodayQueueCardProps) {
+function formatDueLabel(item: FocusCardProps["items"][number]): string | null {
+  if (!item.dueDate) return null
+  if (item.isOverdue) return "overdue"
+  const today = new Date().toISOString().slice(0, 10)
+  if (item.dueDate === today) return "today"
+  // Lightweight relative format: "May 20" or "Aug 3"
+  const [, m, d] = item.dueDate.split("-").map((s) => parseInt(s, 10))
+  const month = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ][m - 1]
+  return `${month} ${d}`
+}
+
+function FocusCard({ items, onNavigate }: FocusCardProps) {
+  const titleClickable = Boolean(onNavigate)
   return (
     <Card className="p-5">
-      {onTitleClick ? (
+      {titleClickable ? (
         <button
           type="button"
-          onClick={onTitleClick}
+          onClick={() => onNavigate?.("view:priority:p1")}
           className="text-sm font-medium mb-3 text-left rounded-md cursor-pointer hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          Today · what&apos;s next →
+          Focus · what&apos;s next →
         </button>
       ) : (
-        <div className="text-sm font-medium mb-3">Today · what&apos;s next</div>
+        <div className="text-sm font-medium mb-3">Focus · what&apos;s next</div>
       )}
       {items.length === 0 ? (
         <div className="text-xs text-muted-foreground">
-          Nothing scheduled for today
+          Nothing active. Inbox zero achieved.
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-0.5">
           {items.map((item) => {
             const colorClass = getPriorityColorClass(item.priority)
             const showFlag = item.priority >= 2
+            const dueLabel = formatDueLabel(item)
             return (
               <div
                 key={item.todoistId}
-                className="flex justify-between items-center text-sm gap-2"
+                className="flex items-center gap-2 text-sm px-2 py-1.5 -mx-2"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  {item.startTime ? (
-                    <span className="text-muted-foreground tabular-nums text-xs w-10 shrink-0">
-                      {item.startTime}
-                    </span>
-                  ) : (
-                    <span className="w-10 shrink-0" />
-                  )}
-                  <span className="truncate">{item.content}</span>
-                </div>
-                {showFlag && (
+                {showFlag ? (
                   <Flag
                     className={cn("h-3.5 w-3.5 shrink-0", colorClass)}
                     fill="currentColor"
                   />
+                ) : (
+                  <span className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="truncate flex-1">{item.content}</span>
+                {item.projectName && (
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 min-w-0 max-w-[40%]">
+                    {item.projectColor && (
+                      <span
+                        className="h-1.5 w-1.5 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: getProjectColor(item.projectColor),
+                        }}
+                        aria-hidden
+                      />
+                    )}
+                    <span className="truncate">{item.projectName}</span>
+                  </span>
+                )}
+                {dueLabel && (
+                  <span
+                    className={cn(
+                      "text-xs shrink-0 tabular-nums w-14 text-right",
+                      item.isOverdue
+                        ? "text-red-500 dark:text-red-400"
+                        : "text-muted-foreground"
+                    )}
+                  >
+                    {dueLabel}
+                  </span>
                 )}
               </div>
             )
