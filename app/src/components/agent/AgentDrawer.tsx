@@ -1,3 +1,4 @@
+import { useAction } from "convex/react"
 import { useEffect, useMemo, useRef } from "react"
 import { ulid } from "ulid"
 
@@ -9,8 +10,8 @@ import { ThinkingIndicator } from "./ThinkingIndicator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
+import { api } from "@/convex/_generated/api"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
-import { postRun } from "@/lib/agent/engineClient"
 
 function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
   const { run, isRunning } = useAgentRuntime(entity_ref)
@@ -20,11 +21,12 @@ function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
 
   // Auto-trigger on mount: idempotency key stable per mount.
   const mountId = useMemo(() => ulid(), [])
+  const postRunAction = useAction(api.agentic.actions.postRun.default)
   useEffect(() => {
     let cancelled = false
     void (async () => {
       try {
-        const res = await postRun({
+        const res = await postRunAction({
           entity_ref,
           message: null,
           idempotency_key: `${entity_ref}:open:${mountId}`,
@@ -40,6 +42,7 @@ function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
     })()
     return () => { cancelled = true }
   // Only re-fire if entity_ref changes — mountId is stable for the lifetime.
+  // postRunAction omitted; stable per Convex docs.
   }, [entity_ref]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

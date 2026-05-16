@@ -1,11 +1,15 @@
+import { useAction } from "convex/react"
 import { useCallback } from "react"
 import { ulid } from "ulid"
 
-import { postInterrupt, postRun } from "@/lib/agent/engineClient"
+import { api } from "@/convex/_generated/api"
 
 export function useAgentPost(entity_ref: string) {
+  const postRun = useAction(api.agentic.actions.postRun.default)
+  const postInterrupt = useAction(api.agentic.actions.postInterrupt.default)
+
   const send = useCallback(
-    async (message: string, strategy: "enqueue" | "interrupt" = "enqueue") => {
+    async (message: string | null, strategy: "enqueue" | "interrupt" = "enqueue") => {
       return postRun({
         entity_ref,
         message,
@@ -13,7 +17,7 @@ export function useAgentPost(entity_ref: string) {
         multitask_strategy: strategy,
       })
     },
-    [entity_ref],
+    [entity_ref, postRun],
   )
 
   const execute = useCallback(
@@ -22,12 +26,11 @@ export function useAgentPost(entity_ref: string) {
   )
 
   const modify = useCallback(
-    (option_id: string, text: string) =>
-      send(`MODIFY: ${option_id}: ${text}`, "enqueue"),
+    (option_id: string, text: string) => send(`MODIFY: ${option_id}: ${text}`, "enqueue"),
     [send],
   )
 
-  const interrupt = useCallback(async () => postInterrupt(entity_ref), [entity_ref])
+  const interrupt = useCallback(async () => postInterrupt({ entity_ref }), [entity_ref, postInterrupt])
 
   return { send, execute, modify, interrupt }
 }

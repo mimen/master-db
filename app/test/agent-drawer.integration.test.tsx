@@ -16,9 +16,20 @@ beforeAll(() => {
 const postRunMock = vi.fn().mockResolvedValue({ run_id: "r1", status: "awaiting_decision", accepted: true })
 const postInterruptMock = vi.fn().mockResolvedValue({ status: "idle" })
 
-vi.mock("@/lib/agent/engineClient", () => ({
-  postRun: postRunMock,
-  postInterrupt: postInterruptMock,
+vi.mock("convex/react", () => ({
+  useQuery: (fn: unknown, args: unknown) => {
+    if (args === "skip") return undefined
+    const fnStr = String(fn ?? "")
+    if (fnStr.includes("getThread")) return happyThread
+    if (fnStr.includes("getRun")) return happyRun
+    return undefined
+  },
+  useAction: (fn: unknown) => {
+    const fnStr = String(fn ?? "")
+    if (fnStr.includes("postRun")) return postRunMock
+    if (fnStr.includes("postInterrupt")) return postInterruptMock
+    return vi.fn()
+  },
 }))
 
 const happyThread = [
@@ -35,21 +46,17 @@ const happyThread = [
 ]
 const happyRun = { entity_ref: "todoist:task:int", status: "awaiting_decision", last_run_id: "r1" }
 
-vi.mock("convex/react", () => ({
-  useQuery: (fn: unknown, args: unknown) => {
-    if (args === "skip") return undefined
-    const fnStr = String(fn ?? "")
-    if (fnStr.includes("getThread")) return happyThread
-    if (fnStr.includes("getRun")) return happyRun
-    return undefined
-  },
-}))
-
 vi.mock("@/convex/_generated/api", () => ({
-  api: { agentic: { queries: {
-    getThread: { default: "stub.getThread" },
-    getRun: { default: "stub.getRun" },
-  } } },
+  api: { agentic: {
+    queries: {
+      getThread: { default: "stub.getThread" },
+      getRun: { default: "stub.getRun" },
+    },
+    actions: {
+      postRun: { default: "stub.agentic.actions.postRun" },
+      postInterrupt: { default: "stub.agentic.actions.postInterrupt" },
+    },
+  } },
 }))
 
 const { AgentDrawer } = await import("@/components/agent/AgentDrawer")

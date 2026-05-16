@@ -13,6 +13,11 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as agentic_actions_postInterrupt from "../agentic/actions/postInterrupt.js";
+import type * as agentic_actions_postRun from "../agentic/actions/postRun.js";
+import type * as agentic_mutations_appendThreadMessage from "../agentic/mutations/appendThreadMessage.js";
+import type * as agentic_queries_getRun from "../agentic/queries/getRun.js";
+import type * as agentic_queries_getThread from "../agentic/queries/getThread.js";
 import type * as clear from "../clear.js";
 import type * as crons from "../crons.js";
 import type * as schema_sync_syncState from "../schema/sync/syncState.js";
@@ -112,6 +117,11 @@ import type * as todoist_types_syncApi from "../todoist/types/syncApi.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  "agentic/actions/postInterrupt": typeof agentic_actions_postInterrupt;
+  "agentic/actions/postRun": typeof agentic_actions_postRun;
+  "agentic/mutations/appendThreadMessage": typeof agentic_mutations_appendThreadMessage;
+  "agentic/queries/getRun": typeof agentic_queries_getRun;
+  "agentic/queries/getThread": typeof agentic_queries_getThread;
   clear: typeof clear;
   crons: typeof crons;
   "schema/sync/syncState": typeof schema_sync_syncState;

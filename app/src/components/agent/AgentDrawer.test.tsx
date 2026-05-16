@@ -6,6 +6,21 @@ import { AgentDrawer } from "./AgentDrawer"
 
 import { AgentDrawerProvider, useAgentDrawer } from "@/contexts/AgentDrawerContext"
 
+vi.mock("convex/react", () => ({
+  useAction: () => vi.fn().mockResolvedValue({ run_id: "r1", status: "idle", accepted: false }),
+}))
+
+vi.mock("@/convex/_generated/api", () => ({
+  api: {
+    agentic: {
+      actions: {
+        postRun: { default: "stub.agentic.actions.postRun" },
+        postInterrupt: { default: "stub.agentic.actions.postInterrupt" },
+      },
+    },
+  },
+}))
+
 vi.mock("./AgentTranscript", () => ({
   AgentTranscript: ({ entity_ref }: { entity_ref: string }) => (
     <div data-testid="agent-transcript">{entity_ref}</div>
