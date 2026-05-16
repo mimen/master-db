@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { action } from "../../_generated/server";
 import type { ProjectMetadata } from "../types/projectMetadata";
 
@@ -40,7 +40,7 @@ export const ensureAllProjectsHaveMetadata = action({
         } else {
           // Create default metadata
           await ctx.runMutation(
-            api.todoist.mutations.createProjectMetadata.createProjectMetadata,
+            internal.todoist.internalMutations.createProjectMetadata.createProjectMetadata,
             {
               project_id: project.todoist_id,
               last_updated: Date.now(),
@@ -89,7 +89,7 @@ export const ensureProjectHasMetadata = action({
 
     // Create default metadata
     const metadataId = await ctx.runMutation(
-      api.todoist.mutations.createProjectMetadata.createProjectMetadata,
+      internal.todoist.internalMutations.createProjectMetadata.createProjectMetadata,
       {
         project_id: args.projectId,
         last_updated: Date.now(),

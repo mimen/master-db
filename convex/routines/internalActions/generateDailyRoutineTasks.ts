@@ -1,5 +1,5 @@
-import { internalAction } from "../../_generated/server";
 import { internal } from "../../_generated/api";
+import { internalAction } from "../../_generated/server";
 import { getTodoistClient } from "../../todoist/actions/utils/todoistClient";
 
 /**
@@ -19,7 +19,6 @@ export const generateDailyRoutineTasks = internalAction({
 
     // Step 1: Update overdue tasks (mark as missed after 2 days)
     const overdueResult = await ctx.runMutation(
-      // @ts-expect-error - Convex type generation issue with internal API in barrel-exported internalMutations
       internal.routines.internalMutations.updateOverdueRoutineTasks.updateOverdueRoutineTasks
     );
 
@@ -57,13 +56,11 @@ export const generateDailyRoutineTasks = internalAction({
 
     // Step 3: Handle deferred routines
     const deferredResult = await ctx.runMutation(
-      // @ts-expect-error - Convex type generation issue with internal API in barrel-exported internalMutations
       internal.routines.internalMutations.handleDeferredRoutines.handleDeferredRoutines
     );
 
     // Step 4: Get routines needing generation
     const routines = await ctx.runQuery(
-      // @ts-expect-error - Convex type generation issue with internal API in barrel-exported internalQueries
       internal.routines.internalQueries.getRoutinesNeedingGeneration.getRoutinesNeedingGeneration
     );
 

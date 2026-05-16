@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 
 /**
  * Update queue progress when user completes, skips, or moves through tasks
  */
-export const updateQueueProgress = mutation({
+export const updateQueueProgress = internalMutation({
   args: {
     queueStateId: v.id("todoist_queue_states"),
     action: v.union(

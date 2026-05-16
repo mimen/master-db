@@ -66,7 +66,6 @@ export const startQueueSession = action({
     const taskSnapshot = tasks.map((task: { todoist_id: string }) => task.todoist_id);
 
     // Create queue state
-    // @ts-expect-error - Type resolution issue with generated API
     const queueStateId = await ctx.runMutation(internal.todoist.internalMutations.createQueueState.createQueueState, {
       queueId,
       taskSnapshot,

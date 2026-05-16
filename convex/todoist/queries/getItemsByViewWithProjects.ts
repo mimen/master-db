@@ -132,7 +132,7 @@ export const getItemsByViewWithProjects = query({
       });
     } else if (list.type === "routine-tasks") {
       // Get all active items with routine label
-      const allItems = await ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
+      const allItems: Doc<"todoist_items">[] = await ctx.runQuery(internal.todoist.internalQueries.getFilteredActiveItems.getFilteredActiveItems, {
         label: "routine",
         currentUserId: userId,
       });

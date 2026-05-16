@@ -1,10 +1,10 @@
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 import { v } from "convex/values";
 
 /**
  * Mark a routine task as missed (task was manually skipped or deleted in Todoist)
  */
-export const markRoutineTaskSkipped = mutation({
+export const markRoutineTaskSkipped = internalMutation({
   args: {
     routineTaskId: v.id("routineTasks"),
   },

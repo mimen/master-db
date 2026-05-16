@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 
 /**
  * Create or update a queue state for a user's queue session
  */
-export const createQueueState = mutation({
+export const createQueueState = internalMutation({
   args: {
     queueId: v.string(),
     taskSnapshot: v.array(v.string()), // Array of task IDs in queue order

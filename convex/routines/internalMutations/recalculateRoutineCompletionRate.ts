@@ -1,4 +1,4 @@
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 import { v } from "convex/values";
 
 /**
@@ -6,7 +6,7 @@ import { v } from "convex/values";
  * Overall: completed / (completed + missed) * 100
  * Monthly: same formula, but only tasks in last 30 days
  */
-export const recalculateRoutineCompletionRate = mutation({
+export const recalculateRoutineCompletionRate = internalMutation({
   args: { routineId: v.id("routines") },
   handler: async (ctx, { routineId }) => {
     // Get the routine

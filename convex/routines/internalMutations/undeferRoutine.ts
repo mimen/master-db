@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 
-export const undeferRoutine = mutation({
+export const undeferRoutine = internalMutation({
   args: {
     routineId: v.id("routines"),
   },

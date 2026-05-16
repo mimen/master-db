@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 
-export const createProjectMetadata = mutation({
+export const createProjectMetadata = internalMutation({
   args: {
     project_id: v.string(),
     priority: v.optional(v.number()),

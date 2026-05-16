@@ -1,10 +1,10 @@
-import { mutation } from "../../_generated/server";
+import { internalMutation } from "../../_generated/server";
 import { v } from "convex/values";
 
 /**
  * Mark a routine task as pending (task was uncompleted in Todoist)
  */
-export const markRoutineTaskPending = mutation({
+export const markRoutineTaskPending = internalMutation({
   args: {
     routineTaskId: v.id("routineTasks"),
   },

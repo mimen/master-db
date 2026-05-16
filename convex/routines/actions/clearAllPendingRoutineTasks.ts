@@ -1,4 +1,5 @@
-import { internal } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { action } from "../../_generated/server";
 import { getTodoistClient } from "../../todoist/actions/utils/todoistClient";
 
@@ -17,7 +18,7 @@ export const clearAllPendingRoutineTasks = action({
     try {
       // Get all pending routine tasks
       const pendingTasks = await ctx.runQuery(
-        internal.routines.queries.getPendingRoutineTasks.getPendingRoutineTasks
+        api.routines.queries.getPendingRoutineTasks.getPendingRoutineTasks
       );
 
       if (pendingTasks.count === 0) {
@@ -28,7 +29,7 @@ export const clearAllPendingRoutineTasks = action({
       let deleted = 0;
       let failed = 0;
       let skipped = 0;
-      const affectedRoutineIds = new Set<string>();
+      const affectedRoutineIds = new Set<Id<"routines">>();
 
       // Delete each task from Todoist and Convex
       for (const task of pendingTasks.tasks) {

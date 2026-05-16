@@ -1,5 +1,5 @@
-import { action } from "../../_generated/server";
 import { internal } from "../../_generated/api";
+import { internalAction } from "../../_generated/server";
 
 /**
  * Manually trigger routine task generation
@@ -11,10 +11,9 @@ import { internal } from "../../_generated/api";
  * - Total tasks created
  * - Any errors encountered
  */
-export const manuallyGenerateRoutineTasks = action({
+export const manuallyGenerateRoutineTasks = internalAction({
   handler: async (ctx) => {
     const result = await ctx.runAction(
-      // @ts-expect-error - Convex type generation issue with internal API in barrel-exported actions
       internal.routines.internalActions.generateDailyRoutineTasks
         .generateDailyRoutineTasks
     );

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { action } from "../../_generated/server";
 import type { ProjectMetadata, ProjectMetadataInput } from "../types/projectMetadata";
 
@@ -57,7 +57,7 @@ export const updateProjectMetadata = action({
     if (existingMetadata) {
       // Update existing metadata
       await ctx.runMutation(
-        api.todoist.mutations.updateProjectMetadata.updateProjectMetadata,
+        internal.todoist.internalMutations.updateProjectMetadata.updateProjectMetadata,
         {
           metadataId: existingMetadata._id,
           updates: metadataData,
@@ -79,7 +79,7 @@ export const updateProjectMetadata = action({
     } else {
       // Create new metadata
       const newMetadataId = await ctx.runMutation(
-        api.todoist.mutations.createProjectMetadata.createProjectMetadata,
+        internal.todoist.internalMutations.createProjectMetadata.createProjectMetadata,
         metadataData
       );
 
@@ -190,7 +190,7 @@ export const resetProjectMetadata = action({
     if (!existingMetadata) {
       // Create empty metadata if it doesn't exist
       await ctx.runMutation(
-        api.todoist.mutations.createProjectMetadata.createProjectMetadata,
+        internal.todoist.internalMutations.createProjectMetadata.createProjectMetadata,
         {
           project_id: args.projectId,
           last_updated: Date.now(),
@@ -207,7 +207,7 @@ export const resetProjectMetadata = action({
 
     // Reset by replacing the entire document
     await ctx.runMutation(
-      api.todoist.mutations.resetProjectMetadata.resetProjectMetadata,
+      internal.todoist.internalMutations.resetProjectMetadata.resetProjectMetadata,
       {
         metadataId: existingMetadata._id,
         projectId: args.projectId,

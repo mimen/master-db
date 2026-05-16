@@ -1,5 +1,5 @@
-import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
+import { internalAction } from "../_generated/server";
 
 /**
  * Daily routine task generation cron job
@@ -16,7 +16,6 @@ export const dailyRoutineGeneration = internalAction({
 
     try {
       const result = await ctx.runAction(
-        // @ts-expect-error - Convex type generation issue with internal API in barrel-exported internalActions
         internal.routines.internalActions.generateDailyRoutineTasks
           .generateDailyRoutineTasks
       );
