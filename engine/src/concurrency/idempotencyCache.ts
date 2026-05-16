@@ -1,3 +1,5 @@
+import { LRUCache } from "lru-cache";
+
 export interface IdempotencyKey {
   key: string | undefined;
   entity_ref: string;
@@ -8,59 +10,32 @@ export interface IdempotencyCache {
   runOnce<T>(key: IdempotencyKey, fn: () => Promise<T>): Promise<T>;
 }
 
-interface CacheEntry {
-  value: unknown;
-  expiresAt: number;
-}
-
 export function createIdempotencyCache(opts: {
   ttlMs: number;
   max?: number;
 }): IdempotencyCache {
-  const max = opts.max ?? 5000;
-  const map = new Map<string, CacheEntry>();
-  const insertOrder: string[] = [];
-
-  function evictExpired(): void {
-    const now = Date.now();
-    for (const [k, entry] of map) {
-      if (entry.expiresAt <= now) {
-        map.delete(k);
-      }
-    }
-  }
-
-  function set(cacheKey: string, value: unknown): void {
-    evictExpired();
-    if (!map.has(cacheKey)) {
-      insertOrder.push(cacheKey);
-    }
-    map.set(cacheKey, { value, expiresAt: Date.now() + opts.ttlMs });
-    // Enforce max size using insertion order
-    while (map.size > max && insertOrder.length > 0) {
-      const oldest = insertOrder.shift();
-      if (oldest) map.delete(oldest);
-    }
-  }
-
-  function get(cacheKey: string): unknown {
-    const entry = map.get(cacheKey);
-    if (!entry) return undefined;
-    if (entry.expiresAt <= Date.now()) {
-      map.delete(cacheKey);
-      return undefined;
-    }
-    return entry.value;
-  }
-
+  // Wrap stored values in a box so lru-cache v11's V extends {} constraint is satisfied
+  // even if fn() returns null. The undefined-return edge case is documented below.
+  type Box = { v: unknown };
+  // Use Date as perf provider: vitest fake timers replace the globalThis.performance
+  // object entirely (staling lru-cache's module-load-time reference), but Date.now
+  // is stubbed by reference and stays current under vi.useFakeTimers().
+  const lru = new LRUCache<string, Box>({
+    max: opts.max ?? 5000,
+    ttl: opts.ttlMs,
+    perf: Date,
+  });
   return {
     async runOnce<T>(k: IdempotencyKey, fn: () => Promise<T>): Promise<T> {
       if (!k.key) return fn();
       const cacheKey = `${k.route}|${k.entity_ref}|${k.key}`;
-      const cached = get(cacheKey) as T | undefined;
-      if (cached !== undefined) return cached;
+      const cached = lru.get(cacheKey);
+      // Note: if fn() ever returns undefined, cached.v would be undefined and
+      // we'd re-run fn(). At current call sites (HTTP handlers returning objects),
+      // undefined is never a real return value, so this is safe.
+      if (cached !== undefined) return cached.v as T;
       const result = await fn();
-      set(cacheKey, result);
+      lru.set(cacheKey, { v: result });
       return result;
     },
   };
