@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.milad.agentic-engine</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/Users/mimen1994/Documents/GitHub/master-db/engine/deploy/start-with-secrets.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>PATH</key>
+      <string>/Users/mimen1994/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+      <key>HOME</key>
+      <string>/Users/mimen1994</string>
+      <key>LOG_DIR</key>
+      <string>/Users/mimen1994/.agentic-engine/logs</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/mimen1994/.agentic-engine/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/mimen1994/.agentic-engine/launchd.err.log</string>
+  </dict>
+</plist>

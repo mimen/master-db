@@ -1,0 +1,9 @@
+# Example Cloudflare Tunnel ingress configuration for the agentic engine.
+# Copy to ~/.cloudflared/config.yml (or similar) and replace the placeholders.
+tunnel: <tunnel-uuid>
+credentials-file: /Users/mimen1994/.cloudflared/<tunnel-uuid>.json
+
+ingress:
+  - hostname: agentic.yourdomain.tld
+    service: http://localhost:8787
+  - service: http_status:404
