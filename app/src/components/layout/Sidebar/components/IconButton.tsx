@@ -19,7 +19,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         variant="ghost"
         onClick={onClick}
         asChild={asChild}
-        className={cn("h-6 w-6 p-0 flex-shrink-0", className)}
+        className={cn("h-6 w-6 p-0 shrink-0", className)}
       >
         {children}
       </Button>

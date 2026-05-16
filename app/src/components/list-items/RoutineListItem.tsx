@@ -155,7 +155,7 @@ export const RoutineListItem = memo(function RoutineListItem({
         }
       }}
       renderLeftElement={() => (
-        <Repeat className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" />
+        <Repeat className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
       )}
       renderPrimaryDisplay={() => effectiveName}
       renderSecondaryDisplay={() => effectiveDescription}

@@ -80,7 +80,7 @@ export function LabelBadge({
 
   return (
     <Badge
-      variant={isGhost ? "outline" : "secondary"}
+      variant={isGhost ? "outline-solid" : "secondary"}
       className={cn(
         "gap-1 font-normal cursor-pointer hover:bg-accent/80 transition-colors group/label",
         !isGhost && "border",

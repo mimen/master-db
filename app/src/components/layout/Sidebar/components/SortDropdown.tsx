@@ -40,7 +40,7 @@ export function SortDropdown<T extends string>({
       <DropdownMenuTrigger asChild>
         <div
           className={cn(
-            "h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center",
+            "h-6 w-6 p-0 shrink-0 flex items-center justify-center",
             "rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             "cursor-pointer transition-colors"
           )}

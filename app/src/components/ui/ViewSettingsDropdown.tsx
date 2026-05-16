@@ -82,7 +82,7 @@ export function ViewSettingsDropdown<T>({
         <Button
           size="sm"
           variant="ghost"
-          className="h-8 px-2 flex-shrink-0"
+          className="h-8 px-2 shrink-0"
           aria-label={triggerLabel}
         >
           <Settings2 className="h-4 w-4" />
@@ -105,12 +105,12 @@ export function ViewSettingsDropdown<T>({
                 className="cursor-pointer text-sm py-1.5"
               >
                 {option.icon && (
-                  <div className="mr-2 h-4 w-4 flex-shrink-0 flex items-center justify-center">
+                  <div className="mr-2 h-4 w-4 shrink-0 flex items-center justify-center">
                     {option.icon}
                   </div>
                 )}
                 <span className="flex-1">{option.label}</span>
-                {currentSort === option.id && <Check className="h-4 w-4 ml-2 flex-shrink-0" />}
+                {currentSort === option.id && <Check className="h-4 w-4 ml-2 shrink-0" />}
               </DropdownMenuItem>
             ))}
           </>
@@ -132,7 +132,7 @@ export function ViewSettingsDropdown<T>({
               className="cursor-pointer text-sm py-1.5"
             >
               <span className="flex-1">None</span>
-              {currentGroup === null && <Check className="h-4 w-4 ml-2 flex-shrink-0" />}
+              {currentGroup === null && <Check className="h-4 w-4 ml-2 shrink-0" />}
             </DropdownMenuItem>
 
             {/* Group options */}
@@ -143,12 +143,12 @@ export function ViewSettingsDropdown<T>({
                 className="cursor-pointer text-sm py-1.5"
               >
                 {option.icon && (
-                  <div className="mr-2 h-4 w-4 flex-shrink-0 flex items-center justify-center">
+                  <div className="mr-2 h-4 w-4 shrink-0 flex items-center justify-center">
                     {option.icon}
                   </div>
                 )}
                 <span className="flex-1">{option.label}</span>
-                {currentGroup === option.id && <Check className="h-4 w-4 ml-2 flex-shrink-0" />}
+                {currentGroup === option.id && <Check className="h-4 w-4 ml-2 shrink-0" />}
               </DropdownMenuItem>
             ))}
           </>

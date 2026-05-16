@@ -50,7 +50,7 @@ export function CollapsibleGroupHeader({
         "text-sm font-medium text-foreground",
         "rounded-md border border-transparent",
         "hover:bg-accent/50 transition-colors",
-        "focus:outline-none focus:bg-accent/50 focus:border-primary/30",
+        "focus:outline-hidden focus:bg-accent/50 focus:border-primary/30",
         "cursor-pointer text-left"
       )}
       aria-expanded={!isCollapsed}
@@ -59,8 +59,8 @@ export function CollapsibleGroupHeader({
       {/* Chevron Icon */}
       <ChevronDown
         className={cn(
-          "h-4 w-4 flex-shrink-0 transition-transform duration-150",
-          isCollapsed && "rotate-[-90deg]"
+          "h-4 w-4 shrink-0 transition-transform duration-150",
+          isCollapsed && "-rotate-90"
         )}
       />
 

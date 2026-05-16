@@ -66,7 +66,7 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
     // Always use "md" size to match individual project icons
     return (
       <div
-        className={cn("w-3 h-3 border-[1.5px] rounded-full flex-shrink-0 border-gray-500 dark:border-gray-400", className)}
+        className={cn("w-3 h-3 border-[1.5px] rounded-full shrink-0 border-gray-500 dark:border-gray-400", className)}
       />
     )
   }
@@ -76,7 +76,7 @@ export function getViewIcon(viewKey: ViewKey, options: IconOptions = {}): ReactN
     // Always use "md" size to match individual area icons
     return (
       <div
-        className={cn("w-3 h-3 rounded-full flex-shrink-0 bg-gray-500 dark:bg-gray-400", className)}
+        className={cn("w-3 h-3 rounded-full shrink-0 bg-gray-500 dark:bg-gray-400", className)}
       />
     )
   }
@@ -248,7 +248,7 @@ export function getProjectIcon(
     // Hollow circle for Projects
     return (
       <div
-        className={cn(dotSize, borderSize, "rounded-full flex-shrink-0", className)}
+        className={cn(dotSize, borderSize, "rounded-full shrink-0", className)}
         style={{ borderColor: getProjectColor(color) }}
       />
     )
@@ -257,7 +257,7 @@ export function getProjectIcon(
   // Solid circle for Areas and Unassigned
   return (
     <div
-      className={cn(dotSize, "rounded-full flex-shrink-0", className)}
+      className={cn(dotSize, "rounded-full shrink-0", className)}
       style={{ backgroundColor: getProjectColor(color) }}
     />
   )

@@ -140,7 +140,7 @@ function StatCard({
         "p-4 flex flex-col gap-1",
         tone === "alert" && "border-red-500/40 bg-red-500/5",
         clickable &&
-          "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       )}
     >
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -208,7 +208,7 @@ function PriorityDistributionCard({
               className={cn(
                 "flex-1 flex flex-col items-center gap-1.5 rounded-md p-1 text-left",
                 clickable &&
-                  "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                 !clickable && "cursor-default"
               )}
             >
@@ -262,7 +262,7 @@ function RoutinesCard({ routines, onClick }: RoutinesCardProps) {
       className={cn(
         "p-5 flex flex-col gap-3",
         clickable &&
-          "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       )}
     >
       <div className="text-sm font-medium">Routines</div>
@@ -334,7 +334,7 @@ function TopProjectsCard({ projects, onNavigate }: TopProjectsCardProps) {
                 className={cn(
                   "flex justify-between items-center text-sm rounded-md px-2 py-1.5 -mx-2 text-left",
                   clickable &&
-                    "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "cursor-pointer transition-colors hover:bg-accent/40 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                   !clickable && "cursor-default"
                 )}
               >
@@ -368,7 +368,7 @@ function TodayQueueCard({ items, onTitleClick }: TodayQueueCardProps) {
         <button
           type="button"
           onClick={onTitleClick}
-          className="text-sm font-medium mb-3 text-left rounded-md cursor-pointer hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="text-sm font-medium mb-3 text-left rounded-md cursor-pointer hover:text-foreground/80 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           Today · what&apos;s next →
         </button>

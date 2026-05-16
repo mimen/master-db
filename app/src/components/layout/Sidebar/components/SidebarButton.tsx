@@ -84,12 +84,12 @@ export function SidebarButton({
     >
       {renderIcon()}
       <span className="flex-1 truncate min-w-0">{label}</span>
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         {children}
         {showMoveButton && (
           <div
             onClick={onMoveClick}
-            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 cursor-pointer"
+            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors shrink-0 cursor-pointer"
             title="Move to different parent"
             role="button"
             tabIndex={0}
@@ -105,7 +105,7 @@ export function SidebarButton({
         )}
         {sortConfig && <SortDropdown {...sortConfig} />}
         {(hasCount || hasCaret) && (
-          <div className="relative w-6 h-6 flex-shrink-0">
+          <div className="relative w-6 h-6 shrink-0">
             {hasCount && (
               <div className={cn("absolute inset-0 flex items-center justify-center transition-opacity", hasCaret && isHovered && "opacity-0")}>
                 <CountBadge count={count} />

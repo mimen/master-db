@@ -30,7 +30,7 @@ export function RoutineProjectItem({
   // Routine icon colored to project color
   const routineIcon = (
     <Repeat
-      className="h-4 w-4 flex-shrink-0"
+      className="h-4 w-4 shrink-0"
       style={{ color: getProjectColor(project.color) }}
     />
   )

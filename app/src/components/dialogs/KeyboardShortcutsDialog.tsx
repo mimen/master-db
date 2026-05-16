@@ -73,7 +73,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose, contextState }: Keybo
                       )}
                     >
                       <span className="text-sm text-foreground">{shortcut.description}</span>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {shortcut.keys.map((key, keyIndex) => (
                           <span key={keyIndex} className="inline-flex items-center gap-1">
                             <Kbd>{key}</Kbd>

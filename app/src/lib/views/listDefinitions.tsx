@@ -210,7 +210,7 @@ const projectDefinition: ListDefinition<{ projectId: string }> = {
 
     const projectIcon = projectWithMetadata ? (
       <div
-        className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
+        className="w-4 h-4 rounded-full mr-3 shrink-0"
         style={{ backgroundColor: getProjectColor(projectWithMetadata.color) }}
       />
     ) : null

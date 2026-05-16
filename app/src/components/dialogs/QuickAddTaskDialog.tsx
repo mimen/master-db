@@ -145,7 +145,7 @@ export function QuickAddTaskDialog({ isOpen, onClose, defaultProjectId }: QuickA
       >
         <DialogHeader className="p-6 pb-4 border-b border-gray-200">
           <DialogTitle className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-linear-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
               <Plus className="w-4 h-4 text-white" />
             </div>
             Quick Add Task

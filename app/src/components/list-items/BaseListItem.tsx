@@ -241,7 +241,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
         className={cn(
           "group cursor-pointer transition-all duration-150 rounded-md border border-transparent p-2.5",
           "hover:bg-accent/50",
-          "focus:outline-none focus:bg-accent/50 focus:border-primary/30",
+          "focus:outline-hidden focus:bg-accent/50 focus:border-primary/30",
           archivedClass,
           className
         )}
@@ -253,7 +253,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
         <div className="flex items-start gap-2.5">
           {/* Left Element Slot */}
           {renderLeftElement && (
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               {renderLeftElement(isHovered)}
             </div>
           )}
@@ -270,11 +270,11 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
                   onChange={(e) => editing.setPrimaryValue(e.target.value)}
                   onKeyDown={editing.handlePrimaryKeyDown}
                   placeholder={primaryField?.placeholder || "Name"}
-                  className="block w-full bg-transparent px-0 py-0 m-0 text-sm font-medium leading-relaxed text-foreground outline-none border-none break-words"
+                  className="block w-full bg-transparent px-0 py-0 m-0 text-sm font-medium leading-relaxed text-foreground outline-hidden border-none wrap-break-word"
                   autoFocus
                 />
               ) : (
-                <div className="font-medium text-sm leading-relaxed break-words">
+                <div className="font-medium text-sm leading-relaxed wrap-break-word">
                   {renderPrimaryDisplay(entity)}
                 </div>
               )}
@@ -292,11 +292,11 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
                       onChange={(e) => editing.setSecondaryValue(e.target.value)}
                       onKeyDown={editing.handleSecondaryKeyDown}
                       placeholder={secondaryField.placeholder || "Description"}
-                      className="block w-full bg-transparent px-0 py-0 m-0 mt-1 text-xs leading-relaxed text-muted-foreground outline-none border-none placeholder:text-muted-foreground/70 break-words"
+                      className="block w-full bg-transparent px-0 py-0 m-0 mt-1 text-xs leading-relaxed text-muted-foreground outline-hidden border-none placeholder:text-muted-foreground/70 wrap-break-word"
                     />
                   )
                 ) : renderSecondaryDisplay ? (
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed break-words">
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed wrap-break-word">
                     {renderSecondaryDisplay(entity)}
                   </p>
                 ) : null}

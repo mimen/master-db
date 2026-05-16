@@ -17,7 +17,7 @@ export function CollapseCaret({ isCollapsed, onToggle }: CollapseCaretProps) {
     <div
       onClick={onToggle}
       className={cn(
-        "h-6 w-6 p-0 flex-shrink-0 flex items-center justify-center cursor-pointer rounded-md hover:bg-accent transition-opacity",
+        "h-6 w-6 p-0 shrink-0 flex items-center justify-center cursor-pointer rounded-md hover:bg-accent transition-opacity",
         isHovered ? "opacity-100" : "opacity-0"
       )}
     >
