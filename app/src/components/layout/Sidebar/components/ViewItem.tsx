@@ -105,7 +105,11 @@ export function ViewItem({
 
   // 6. Render with indentation
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem
+      data-sidebar-view-item="true"
+      data-view-key={viewKey}
+      data-is-active={isActive ? "true" : "false"}
+    >
       <SidebarButton
         icon={icon}
         label={title}

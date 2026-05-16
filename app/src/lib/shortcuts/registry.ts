@@ -46,6 +46,38 @@ export const SHORTCUT_REGISTRY: ShortcutDefinition[] = [
     context: 'always',
     visible: false, // Hide duplicate, shown in nav-next
   },
+  {
+    id: 'view-nav-next',
+    description: 'Navigate to next view',
+    keys: ['Shift', '↓'],
+    category: 'navigation',
+    context: 'always',
+    visible: true,
+  },
+  {
+    id: 'view-nav-next-alt',
+    description: 'Navigate to next view',
+    keys: ['Shift', '→'],
+    category: 'navigation',
+    context: 'always',
+    visible: false, // Hide duplicate
+  },
+  {
+    id: 'view-nav-previous',
+    description: 'Navigate to previous view',
+    keys: ['Shift', '↑'],
+    category: 'navigation',
+    context: 'always',
+    visible: true,
+  },
+  {
+    id: 'view-nav-previous-alt',
+    description: 'Navigate to previous view',
+    keys: ['Shift', '←'],
+    category: 'navigation',
+    context: 'always',
+    visible: false, // Hide duplicate
+  },
 
   // ========================================
   // GENERAL (always available)
