@@ -1,3 +1,4 @@
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema } from "convex/server";
 
 // Service table definitions
@@ -9,6 +10,9 @@ import * as todoist from "./schema/todoist";
 // Sync management tables
 
 export default defineSchema({
+  // Convex Auth tables (users, sessions, accounts, etc.)
+  ...authTables,
+
   // Todoist tables
   ...todoist,
 
