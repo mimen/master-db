@@ -5,14 +5,11 @@
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { useState } from "react"
 
+import { ToolCallCard } from "./ToolCallCard"
+
 import type { ThreadRow } from "@/lib/agent/convertMessage"
 
 const MAX_VISIBLE = 3
-
-function rowLabel(r: ThreadRow): string {
-  if (r.row_type === "activity") return `${r.name ?? "tool"} · ${r.status ?? ""}`
-  return r.body_markdown ?? r.kind
-}
 
 export function WorkLogGroup({
   items,
@@ -50,12 +47,26 @@ export function WorkLogGroup({
             </button>
           </li>
         )}
-        {visible.map((r) => (
-          <li key={r._id} className="py-1 text-foreground/80 flex items-center gap-1">
-            <ChevronDown className="h-3 w-3 opacity-30" />
-            <span className="truncate">{rowLabel(r)}</span>
-          </li>
-        ))}
+        {visible.map((r) => {
+          if (r.row_type === "activity" && r.kind === "tool_call") {
+            return (
+              <li key={r._id} className="py-1">
+                <ToolCallCard
+                  name={r.name ?? "unknown"}
+                  status={r.status ?? "pending"}
+                  input={r.input_json}
+                  output={r.output_json}
+                />
+              </li>
+            )
+          }
+          return (
+            <li key={r._id} className="py-1 text-foreground/80 flex items-center gap-1">
+              <ChevronDown className="h-3 w-3 opacity-30" />
+              <span className="truncate">{r.body_markdown ?? r.kind}</span>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
