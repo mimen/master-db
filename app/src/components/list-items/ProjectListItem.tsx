@@ -1,5 +1,6 @@
 import { Archive, ArchiveRestore } from "lucide-react"
 import { memo } from "react"
+import { useLocation } from "wouter"
 
 import { Badge } from "@/components/ui/badge"
 import { PriorityBadge, ProjectTypeBadge } from "@/components/badges/shared"
@@ -10,6 +11,7 @@ import { useOptimisticProjectName } from "@/hooks/useOptimisticProjectName"
 import { useOptimisticSync } from "@/hooks/list-items"
 import { getProjectColor } from "@/lib/colors"
 import { usePriority } from "@/lib/priorities"
+import { createProjectSlug } from "@/lib/routing/slugs"
 import { BaseListItem } from "./BaseListItem"
 import type { TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
@@ -26,6 +28,7 @@ export const ProjectListItem = memo(function ProjectListItem({
   onClick,
   onUnarchive
 }: ProjectListItemProps) {
+  const [, setLocation] = useLocation()
   const { openPriority, openArchive, openProjectType } = useDialogContext()
   const { getProjectUpdate, removeProjectUpdate } = useOptimisticUpdates()
 
@@ -136,7 +139,15 @@ export const ProjectListItem = memo(function ProjectListItem({
           )}
 
           {activeCount > 0 && (
-            <Badge variant="secondary" className="gap-1.5 font-normal">
+            <Badge
+              variant="secondary"
+              className="gap-1.5 font-normal cursor-pointer hover:bg-secondary/80 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                const slug = createProjectSlug(project.name)
+                setLocation(`/projects/${slug}`)
+              }}
+            >
               <span className="text-xs">{activeCount} task{activeCount !== 1 ? 's' : ''}</span>
             </Badge>
           )}
