@@ -277,6 +277,12 @@ export function BaseListView<T>({
     !isMultiListView ? viewSettingsDropdown : null
   )
 
+  // Same for caller-supplied header actions (e.g. agent bulk runner).
+  useHeaderSlotContent(
+    "header-action",
+    !isMultiListView ? headerAction ?? null : null
+  )
+
   // Find active sort/group options
   const activeSortOption = sortOptions?.find((opt) => opt.id === currentSort)
   const activeGroupOption = groupOptions?.find((opt) => opt.id === currentGroup)

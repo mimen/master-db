@@ -336,6 +336,8 @@ export function Layout() {
               {totalTaskCount}
             </Badge>
           )}
+          {/* Caller-supplied header actions (e.g. agent bulk runner) */}
+          {slots.get("header-action")}
           {/* Header slot for view settings (registered by BaseListView for single-list views) */}
           {slots.get("view-settings")}
           {/* Archive button for project views (not for Inbox which can't be archived) */}

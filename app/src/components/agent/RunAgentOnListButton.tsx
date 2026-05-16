@@ -16,11 +16,36 @@ import type { TodoistTaskWithProject } from "@/types/convex/todoist"
  * call hits an existing run (per the spec's POST /run semantics). We count
  * those as "skipped" and show a sonner toast with the totals.
  *
- * Concurrency: fires all calls in parallel via Promise.all. The engine's
- * per-entity queue serializes work for each entity_ref, so there's no race.
- * For very large lists we could cap concurrency, but typical list sizes
- * (<100) are fine.
+ * Concurrency is capped via a small sliding-window pool — caps the number of
+ * in-flight HTTP calls so very large lists don't briefly spike the engine.
  */
+
+const MAX_CONCURRENT_BULK = 6
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  let cursor = 0
+  async function next(): Promise<void> {
+    while (cursor < items.length) {
+      const idx = cursor++
+      try {
+        results[idx] = { status: "fulfilled", value: await worker(items[idx]) }
+      } catch (err) {
+        results[idx] = { status: "rejected", reason: err }
+      }
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    () => next(),
+  )
+  await Promise.all(workers)
+  return results
+}
 
 export interface RunAgentOnListButtonProps {
   entities: TodoistTaskWithProject[]
@@ -40,15 +65,16 @@ export function RunAgentOnListButton({ entities }: RunAgentOnListButtonProps) {
     setBusy(true)
     const t = toast.loading(`Kicking off agent on ${incomplete.length} task${incomplete.length === 1 ? "" : "s"}…`)
     try {
-      const results = await Promise.allSettled(
-        incomplete.map((task) =>
+      const results = await runWithConcurrency(
+        incomplete,
+        MAX_CONCURRENT_BULK,
+        (task) =>
           postRunAction({
             entity_ref: `todoist:task:${task.todoist_id}`,
             message: null,
             idempotency_key: ulid(),
             multitask_strategy: "enqueue",
           }),
-        ),
       )
       let started = 0
       let skipped = 0
