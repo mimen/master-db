@@ -1,4 +1,5 @@
-import { useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
+import { ulid } from "ulid"
 
 import { AgentComposer } from "./AgentComposer"
 import { AgentTranscript } from "./AgentTranscript"
@@ -9,12 +10,37 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
+import { postRun } from "@/lib/agent/engineClient"
 
 function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
   const { run, isRunning } = useAgentRuntime(entity_ref)
   const startedAtRef = useRef<number | null>(null)
   if (isRunning && startedAtRef.current === null) startedAtRef.current = Date.now()
   if (!isRunning) startedAtRef.current = null
+
+  // Auto-trigger on mount: idempotency key stable per mount.
+  const mountId = useMemo(() => ulid(), [])
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await postRun({
+          entity_ref,
+          message: null,
+          idempotency_key: `${entity_ref}:open:${mountId}`,
+          multitask_strategy: "enqueue",
+        })
+        if (cancelled) return
+        // accepted=false means no-op (existing run / rejected). Convex query renders state regardless.
+        void res
+      } catch (err) {
+        // Engine unreachable: render nothing extra; transcript shows last-known state.
+        console.warn("[agent] auto-trigger failed", err)
+      }
+    })()
+    return () => { cancelled = true }
+  // Only re-fire if entity_ref changes — mountId is stable for the lifetime.
+  }, [entity_ref]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
