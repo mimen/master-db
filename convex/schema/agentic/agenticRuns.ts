@@ -6,7 +6,10 @@ export const agenticRuns = defineTable({
   entity_type: v.string(),
   entity_id: v.string(),
   backend: v.string(),
-  resume_cursor: v.union(v.object({}), v.null()),
+  // resume_cursor is opaque to Convex/the server: each AgentRunner adapter
+  // owns the shape. Claude SDK: { session_id, resume_at, turn_count,
+  // checkpoint_id }. Codex/API adapters may store different shapes.
+  resume_cursor: v.union(v.any(), v.null()),
   status: v.string(),
   last_message_id: v.union(v.id("agenticThreadMessages"), v.null()),
   last_run_id: v.union(v.string(), v.null()),

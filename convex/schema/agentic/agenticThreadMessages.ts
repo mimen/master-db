@@ -1,3 +1,8 @@
+// SHARED SEQUENCE SPACE: this table and `agenticThreadActivities` share
+// a single monotonic `sequence` counter per `entity_ref`. Mutations that
+// insert into either table must compute the next sequence by reading the
+// max(sequence) across BOTH tables. See convex/agentic/mutations/recordActivity.ts
+// for the canonical nextSequence helper (added in a later task).
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
