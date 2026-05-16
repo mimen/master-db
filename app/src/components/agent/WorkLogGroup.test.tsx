@@ -41,6 +41,24 @@ describe("WorkLogGroup", () => {
   test("groups of <=3 do not show expand control", () => {
     render(<WorkLogGroup items={items(3)} firstSequence={1} lastSequence={3} run_id="r1" />)
     expect(screen.queryByText(/Show all/)).toBeNull()
+    expect(screen.queryByText(/Show fewer/)).toBeNull()
+  })
+
+  test("toggle is bidirectional — Show all expands, then Show fewer collapses back", () => {
+    render(<WorkLogGroup items={items(7)} firstSequence={1} lastSequence={7} run_id="r1" />)
+    // Initial: collapsed, step 0 hidden
+    expect(screen.queryByText("step 0")).toBeNull()
+    // Expand
+    fireEvent.click(screen.getByText(/Show all 7/))
+    expect(screen.getByText("step 0")).toBeInTheDocument()
+    // Toggle now reads "Show fewer"
+    const toggle = screen.getByText(/Show fewer/)
+    expect(toggle).toBeInTheDocument()
+    // Collapse back
+    fireEvent.click(toggle)
+    expect(screen.queryByText("step 0")).toBeNull()
+    // Toggle is back to "Show all"
+    expect(screen.getByText(/Show all 7/)).toBeInTheDocument()
   })
 
   test("reasoning row with null body_markdown is skipped — no orphan chevron", () => {

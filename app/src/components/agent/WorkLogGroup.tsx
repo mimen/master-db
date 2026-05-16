@@ -27,7 +27,6 @@ export function WorkLogGroup({
   const visible = expanded || items.length <= MAX_VISIBLE
     ? items
     : items.slice(items.length - MAX_VISIBLE)
-  const hiddenCount = items.length - visible.length
 
   return (
     <div className="my-2 rounded-md border bg-card/50">
@@ -35,15 +34,15 @@ export function WorkLogGroup({
         <span>Work log · {items.length} item{items.length === 1 ? "" : "s"}</span>
       </div>
       <ul className="px-3 py-1 text-xs">
-        {hiddenCount > 0 && !expanded && (
+        {items.length > MAX_VISIBLE && (
           <li>
             <button
               type="button"
-              onClick={() => setExpanded(true)}
+              onClick={() => setExpanded((v) => !v)}
               className="text-muted-foreground hover:text-foreground flex items-center gap-1 py-1"
             >
-              <ChevronRight className="h-3 w-3" />
-              Show all {items.length} →
+              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {expanded ? "Show fewer" : `Show all ${items.length}`}
             </button>
           </li>
         )}
