@@ -1,7 +1,9 @@
-import { ConvexProvider, ConvexReactClient } from "convex/react"
+import { ConvexAuthProvider } from "@convex-dev/auth/react"
+import { ConvexReactClient } from "convex/react"
 import { ThemeProvider } from "next-themes"
 import { Router } from "wouter"
 
+import { AuthGate } from "@/auth/AuthGate"
 import { AgentDrawer } from "@/components/agent/AgentDrawer"
 import { DialogManager } from "@/components/dialogs/DialogManager"
 import { Layout } from "@/components/layout/Layout"
@@ -40,27 +42,29 @@ function AgentKeybindingsHost() {
 export function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <ConvexProvider client={convex}>
-        <Router>
-          <CountProvider>
-            <OptimisticUpdatesProvider>
-              <AgentDrawerProvider>
-                <AgentKeybindingsHost />
-                <DialogProvider>
-                  <SidebarProvider defaultOpen>
-                    <HeaderSlotProvider>
-                      <Layout />
-                    </HeaderSlotProvider>
-                    <DialogManager />
-                    <AgentDrawer />
-                    <Toaster />
-                  </SidebarProvider>
-                </DialogProvider>
-              </AgentDrawerProvider>
-            </OptimisticUpdatesProvider>
-          </CountProvider>
-        </Router>
-      </ConvexProvider>
+      <ConvexAuthProvider client={convex}>
+        <AuthGate>
+          <Router>
+            <CountProvider>
+              <OptimisticUpdatesProvider>
+                <AgentDrawerProvider>
+                  <AgentKeybindingsHost />
+                  <DialogProvider>
+                    <SidebarProvider defaultOpen>
+                      <HeaderSlotProvider>
+                        <Layout />
+                      </HeaderSlotProvider>
+                      <DialogManager />
+                      <AgentDrawer />
+                      <Toaster />
+                    </SidebarProvider>
+                  </DialogProvider>
+                </AgentDrawerProvider>
+              </OptimisticUpdatesProvider>
+            </CountProvider>
+          </Router>
+        </AuthGate>
+      </ConvexAuthProvider>
     </ThemeProvider>
   )
 }
