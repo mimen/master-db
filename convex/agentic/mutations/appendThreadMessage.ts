@@ -2,6 +2,8 @@ import { v } from "convex/values";
 
 import { mutation } from "../../_generated/server";
 
+import { nextSequence } from "./_sequence";
+
 export default mutation({
   args: {
     entity_ref: v.string(),
@@ -14,14 +16,7 @@ export default mutation({
     checkpoint_id: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
-    const last = await ctx.db
-      .query("agenticThreadMessages")
-      .withIndex("by_entity_ref_and_sequence", (q) =>
-        q.eq("entity_ref", args.entity_ref)
-      )
-      .order("desc")
-      .first();
-    const sequence = (last?.sequence ?? 0) + 1;
+    const sequence = await nextSequence(ctx.db, args.entity_ref);
     return ctx.db.insert("agenticThreadMessages", { ...args, sequence });
   },
 });
