@@ -2,9 +2,11 @@ import { AssistantRuntimeProvider, ThreadPrimitive } from "@assistant-ui/react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
+import { ErrorState } from "./ErrorState"
 import { ProposalCard } from "./ProposalCard"
 import { WorkLogGroup } from "./WorkLogGroup"
 
+import { useAgentPost } from "@/hooks/useAgentPost"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
 import { isProposal } from "@/lib/agent/proposalToParts"
 import { groupWorkLog } from "@/lib/agent/workLogGrouping"
@@ -73,10 +75,9 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
               )
             }
             if (r.kind === "error") {
+              const errObj = (r.error_json ?? { message: "Unknown error" }) as { message: string; details?: unknown }
               return (
-                <div key={r._id} className="text-sm text-muted-foreground italic">
-                  [error renders in Task 13]
-                </div>
+                <ErrorRowWrapper key={r._id} entity_ref={entity_ref} error={errObj} />
               )
             }
             return null
@@ -84,5 +85,16 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
         </ThreadPrimitive.Viewport>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
+  )
+}
+
+function ErrorRowWrapper({ entity_ref, error }: { entity_ref: string; error: { message: string; details?: unknown } }) {
+  const { send } = useAgentPost(entity_ref)
+  return (
+    <ErrorState
+      entity_ref={entity_ref}
+      error={error}
+      onRetry={() => { void send("") }}
+    />
   )
 }
