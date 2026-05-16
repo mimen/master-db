@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
-import { describe, expect, test } from "vitest"
 import { render, screen, act } from "@testing-library/react"
+import { describe, expect, test, vi } from "vitest"
+
 import { AgentDrawer } from "./AgentDrawer"
+
 import { AgentDrawerProvider, useAgentDrawer } from "@/contexts/AgentDrawerContext"
+
+vi.mock("./AgentTranscript", () => ({
+  AgentTranscript: ({ entity_ref }: { entity_ref: string }) => (
+    <div data-testid="agent-transcript">{entity_ref}</div>
+  ),
+}))
 
 function Harness() {
   const { open } = useAgentDrawer()
