@@ -2,9 +2,11 @@ import { AssistantRuntimeProvider, ThreadPrimitive } from "@assistant-ui/react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 
+import { ProposalCard } from "./ProposalCard"
 import { WorkLogGroup } from "./WorkLogGroup"
 
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
+import { isProposal } from "@/lib/agent/proposalToParts"
 import { groupWorkLog } from "@/lib/agent/workLogGrouping"
 
 function Prose({ text }: { text: string }) {
@@ -53,11 +55,14 @@ export function AgentTranscript({ entity_ref }: { entity_ref: string }) {
                 </div>
               )
             }
-            if (r.kind === "proposal") {
+            if (r.kind === "proposal" && isProposal(r.proposal_json)) {
               return (
-                <div key={r._id} className="text-sm text-muted-foreground italic">
-                  [proposal renders in Task 10] · checkpoint_id={r.checkpoint_id}
-                </div>
+                <ProposalCard
+                  key={r._id}
+                  entity_ref={entity_ref}
+                  proposal={r.proposal_json}
+                  checkpoint_id={r.checkpoint_id ?? null}
+                />
               )
             }
             if (r.kind === "execution_result") {
