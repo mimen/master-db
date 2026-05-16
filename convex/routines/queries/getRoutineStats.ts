@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 import { RoutineTaskStatus } from "../types/status";
 
 /**
  * Get detailed statistics for a routine
  * Returns completion rates and recent task history
  */
-export const getRoutineStats = query({
+export const getRoutineStats = authedQuery({
   args: {
     routineId: v.id("routines"),
   },

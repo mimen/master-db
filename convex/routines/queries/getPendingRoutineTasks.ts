@@ -1,10 +1,10 @@
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Get all pending routine tasks
  * Used for UI display and clear action processing
  */
-export const getPendingRoutineTasks = query({
+export const getPendingRoutineTasks = authedQuery({
   handler: async (ctx) => {
     const pendingTasks = await ctx.db
       .query("routineTasks")

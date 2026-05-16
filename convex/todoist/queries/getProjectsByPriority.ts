@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import type { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Get all projects with a specific priority level
@@ -9,7 +9,7 @@ import { query } from "../../_generated/server";
  * Used for expanding priority-projects:p1, priority-projects:p2, etc.
  * into individual project views
  */
-export const getProjectsByPriority = query({
+export const getProjectsByPriority = authedQuery({
   args: {
     priorityLevel: v.number(), // 4 = P1, 3 = P2, 2 = P3, 1 = P4
   },

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 type TimeRange = "overdue" | "today" | "upcoming" | "no-date";
 
@@ -54,7 +54,7 @@ const listQueryValidator = v.union(
   })
 );
 
-export const getItemsByView = query({
+export const getItemsByView = authedQuery({
   args: {
     list: listQueryValidator,
   },

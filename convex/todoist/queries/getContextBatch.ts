@@ -2,10 +2,10 @@ import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 import { processQueue } from "../helpers/queueEngine";
 
-export const getContextBatch = query({
+export const getContextBatch = authedQuery({
   args: {
     context_type: v.union(
       v.literal("calls"),

@@ -2,11 +2,11 @@ import type { Task, AddTaskArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
-export const duplicateTask = action({
+export const duplicateTask = authedAction({
   args: {
     taskId: v.string(),
     options: v.optional(v.object({

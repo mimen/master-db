@@ -1,6 +1,6 @@
 import { api, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 import { getTodoistClient } from "../../todoist/actions/utils/todoistClient";
 
 /**
@@ -8,7 +8,7 @@ import { getTodoistClient } from "../../todoist/actions/utils/todoistClient";
  * Preserves completed, missed, and skipped tasks for historical tracking
  * Recalculates completion rates after deletion
  */
-export const clearAllPendingRoutineTasks = action({
+export const clearAllPendingRoutineTasks = authedAction({
   handler: async (ctx): Promise<{
     success: boolean;
     data?: { deleted: number; failed: number; skipped: number; routinesRecalculated: number };

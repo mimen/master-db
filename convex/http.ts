@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 
+import { auth } from "./auth";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
 /**
@@ -7,6 +8,13 @@ import { handleTodoistWebhook } from "./todoist/webhook";
  * Handles incoming HTTP requests and routes them to appropriate handlers
  */
 const http = httpRouter();
+
+/**
+ * Convex Auth — mounts /api/auth/* (Google OAuth callback, token refresh,
+ * sign-out). These endpoints are intentionally public; the whitelist is
+ * enforced in the Google provider's `profile()` callback.
+ */
+auth.addHttpRoutes(http);
 
 /**
  * Todoist webhook endpoint

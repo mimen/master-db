@@ -2,7 +2,7 @@ import type { PersonalProject, WorkspaceProject } from "@doist/todoist-api-types
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -10,7 +10,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  * Unarchives a project in Todoist.
  * Restores an archived project back to the active view.
  */
-export const unarchiveProject = action({
+export const unarchiveProject = authedAction({
   args: {
     projectId: v.string(),
   },

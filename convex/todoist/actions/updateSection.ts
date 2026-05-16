@@ -2,11 +2,11 @@ import type { Section, UpdateSectionArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
-export const updateSection = action({
+export const updateSection = authedAction({
   args: {
     sectionId: v.string(),
     name: v.string(),

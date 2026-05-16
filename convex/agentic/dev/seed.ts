@@ -1,8 +1,8 @@
 // Spike dev seed – reused by Task 12 of the agentic engine UX plan.
 // Field names verified against convex/schema/agentic/* (2026-05-15).
-import { mutation } from "../../_generated/server";
+import { authedMutation } from "../../_lib/authed";
 
-export const seedSpikeThread = mutation({
+export const seedSpikeThread = authedMutation({
   args: {},
   handler: async (ctx) => {
     const entity_ref = "todoist:task:spike-001";

@@ -2,9 +2,9 @@ import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getTimeFilterCounts = query({
+export const getTimeFilterCounts = authedQuery({
   args: {
     timezoneOffsetMinutes: v.optional(v.number()),
   },

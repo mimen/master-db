@@ -18,6 +18,8 @@
     "typecheck:convex": "cd convex && npx tsc --noEmit"
   },
   "dependencies": {
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.92",
     "@doist/todoist-api-typescript": "^5.5.0",
     "convex": "^1.39.1",
     "dotenv": "^17.2.2",

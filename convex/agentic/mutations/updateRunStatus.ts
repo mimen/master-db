@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { mutation } from "../../_generated/server";
+import { authedMutation } from "../../_lib/authed";
 
-export default mutation({
+export default authedMutation({
   args: {
     entity_ref: v.string(),
     status: v.string(),

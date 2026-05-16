@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { query } from "../../../_generated/server";
+import { authedQuery } from "../../../_lib/authed";
 
-export const getProjectsByPriority = query({
+export const getProjectsByPriority = authedQuery({
   args: {
     priority: v.number(), // 1-4
     includeStats: v.optional(v.boolean()),

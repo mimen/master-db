@@ -2,11 +2,11 @@ import type { Comment, UpdateCommentArgs } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
-export const updateComment = action({
+export const updateComment = authedAction({
   args: {
     commentId: v.string(),
     content: v.string(),

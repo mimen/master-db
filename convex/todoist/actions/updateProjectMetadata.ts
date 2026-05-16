@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 import type { ProjectMetadata, ProjectMetadataInput } from "../types/projectMetadata";
 
 /**
@@ -9,7 +9,7 @@ import type { ProjectMetadata, ProjectMetadataInput } from "../types/projectMeta
  * Creates metadata if it doesn't exist, updates if it does.
  * This ensures every project can have metadata.
  */
-export const updateProjectMetadata = action({
+export const updateProjectMetadata = authedAction({
   args: {
     projectId: v.string(), // Todoist project ID
     priority: v.optional(v.union(v.literal(1), v.literal(2), v.literal(3), v.literal(4))),
@@ -104,7 +104,7 @@ export const updateProjectMetadata = action({
  * Batch update metadata for multiple projects.
  * Useful for bulk operations.
  */
-export const batchUpdateProjectMetadata = action({
+export const batchUpdateProjectMetadata = authedAction({
   args: {
     updates: v.array(
       v.object({
@@ -171,7 +171,7 @@ export const batchUpdateProjectMetadata = action({
  * This doesn't delete the metadata, but resets all optional fields.
  * Useful when you want to clear custom settings while maintaining the record.
  */
-export const resetProjectMetadata = action({
+export const resetProjectMetadata = authedAction({
   args: {
     projectId: v.string(),
   },

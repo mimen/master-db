@@ -2,7 +2,7 @@ import type { Task } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -10,7 +10,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  * Updates the priority of a project's metadata task.
  * This updates the actual Todoist task and then extracts the metadata back to Convex.
  */
-export const updateProjectMetadataPriority = action({
+export const updateProjectMetadataPriority = authedAction({
   args: {
     projectId: v.string(),
     priority: v.union(v.literal(1), v.literal(2), v.literal(3), v.literal(4)),

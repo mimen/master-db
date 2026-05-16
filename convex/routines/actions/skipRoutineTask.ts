@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 import { getTodoistClient } from "../../todoist/actions/utils/todoistClient";
 
 /**
@@ -10,7 +10,7 @@ import { getTodoistClient } from "../../todoist/actions/utils/todoistClient";
  * - Completes task in Todoist (to remove from active list while keeping history)
  * - Recalculates routine completion rate
  */
-export const skipRoutineTask = action({
+export const skipRoutineTask = authedAction({
   args: {
     routineTaskId: v.id("routineTasks"),
   },

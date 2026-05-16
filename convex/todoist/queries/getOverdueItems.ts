@@ -2,9 +2,9 @@ import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getOverdueItems = query({
+export const getOverdueItems = authedQuery({
   args: {
     projectId: v.optional(v.string()),
     limit: v.optional(v.number()),

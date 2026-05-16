@@ -1,6 +1,6 @@
 import { v } from "convex/values"
 
-import { action } from "../../_generated/server"
+import { authedAction } from "../../_lib/authed"
 
 export type PostRunResponse = {
   entity_ref: string
@@ -9,7 +9,7 @@ export type PostRunResponse = {
   accepted: boolean
 }
 
-export default action({
+export default authedAction({
   args: {
     entity_ref: v.string(),
     message: v.union(v.string(), v.null()),

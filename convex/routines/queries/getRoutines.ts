@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getRoutines = query({
+export const getRoutines = authedQuery({
   args: {
     deferFilter: v.optional(v.union(v.literal("active"), v.literal("deferred"), v.literal("all"))),
   },

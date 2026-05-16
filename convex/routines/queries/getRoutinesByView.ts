@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Get routines for a view (includes deferred/paused routines)
  * Returns all routines sorted by defer status (active first) then by name
  */
-export const getRoutinesByView = query({
+export const getRoutinesByView = authedQuery({
   args: {
     list: v.object({
       type: v.literal("routines"),

@@ -1,10 +1,10 @@
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 import { SYSTEM_EXCLUDED_LABELS } from "../helpers/globalFilters";
 
 /**
  * Get all active labels, excluding system labels
  */
-export const getLabels = query({
+export const getLabels = authedQuery({
   handler: async (ctx) => {
     const labels = await ctx.db
       .query("todoist_labels")

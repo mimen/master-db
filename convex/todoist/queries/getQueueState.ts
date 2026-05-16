@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Get the current queue state for a user and queue
  */
-export const getQueueState = query({
+export const getQueueState = authedQuery({
   args: {
     queueId: v.string(),
   },
