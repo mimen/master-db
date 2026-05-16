@@ -37,9 +37,29 @@ describe("ProposalCard", () => {
     expect(screen.getAllByText(/Recommended/i)).toHaveLength(1)
   })
 
-  test("findings list rendered as list items", () => {
+  test("findings rendered inside collapsible receipts section", () => {
     render(<ProposalCard entity_ref="todoist:task:1" proposal={proposal} checkpoint_id="ck1" />)
+    // Findings are in the DOM (inside the <details>), accessible to getByText even when collapsed
     expect(screen.getByText("a")).toBeInTheDocument()
     expect(screen.getByText("b")).toBeInTheDocument()
+  })
+
+  test("receipts section is collapsed by default (<details> has no open attribute)", () => {
+    const { container } = render(
+      <ProposalCard entity_ref="todoist:task:1" proposal={proposal} checkpoint_id="ck1" />
+    )
+    const detailsEl = container.querySelector("details")
+    expect(detailsEl).toBeInTheDocument()
+    expect(detailsEl?.hasAttribute("open")).toBe(false)
+  })
+
+  test("receipts toggle label shows count", () => {
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={proposal} checkpoint_id="ck1" />)
+    expect(screen.getByText(/Receipts \(2\)/)).toBeInTheDocument()
+  })
+
+  test("decision section header shows option count", () => {
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={proposal} checkpoint_id="ck1" />)
+    expect(screen.getByText(/Decision · 2 options/)).toBeInTheDocument()
   })
 })

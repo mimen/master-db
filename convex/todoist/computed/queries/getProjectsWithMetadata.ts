@@ -2,9 +2,9 @@ import { v } from "convex/values";
 
 import { internal } from "../../../_generated/api";
 import { Doc } from "../../../_generated/dataModel";
-import { query } from "../../../_generated/server";
+import { authedQuery } from "../../../_lib/authed";
 
-export const getProjectsWithMetadata = query({
+export const getProjectsWithMetadata = authedQuery({
   args: {
     includeDeleted: v.optional(v.boolean()),
   },

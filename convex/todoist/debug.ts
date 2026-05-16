@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { query } from "../_generated/server";
+import { authedQuery } from "../_lib/authed";
 
-export const getRecentlyModifiedItems = query({
+export const getRecentlyModifiedItems = authedQuery({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("todoist_items")
@@ -22,7 +22,7 @@ export const getRecentlyModifiedItems = query({
   },
 });
 
-export const getCompletedItems = query({
+export const getCompletedItems = authedQuery({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("todoist_items")
@@ -38,7 +38,7 @@ export const getCompletedItems = query({
   },
 });
 
-export const getDeletedItems = query({
+export const getDeletedItems = authedQuery({
   handler: async (ctx) => {
     const items = await ctx.db
       .query("todoist_items")
@@ -54,7 +54,7 @@ export const getDeletedItems = query({
   },
 });
 
-export const searchItemByContent = query({
+export const searchItemByContent = authedQuery({
   args: { searchTerm: v.string() },
   handler: async (ctx, { searchTerm }) => {
     const items = await ctx.db
@@ -80,7 +80,7 @@ export const searchItemByContent = query({
   },
 });
 
-export const getItemByTodoistId = query({
+export const getItemByTodoistId = authedQuery({
   args: { todoistId: v.string() },
   handler: async (ctx, { todoistId }) => {
     const item = await ctx.db
@@ -92,7 +92,7 @@ export const getItemByTodoistId = query({
   },
 });
 
-export const getItemStats = query({
+export const getItemStats = authedQuery({
   handler: async (ctx) => {
     const items = await ctx.db.query("todoist_items").collect();
 
@@ -106,7 +106,7 @@ export const getItemStats = query({
   },
 });
 
-export const getRawSyncData = query({
+export const getRawSyncData = authedQuery({
   handler: async (ctx) => {
     const syncState = await ctx.db
       .query("sync_state")
@@ -121,7 +121,7 @@ export const getRawSyncData = query({
   },
 });
 
-export const getProjectByName = query({
+export const getProjectByName = authedQuery({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
     const projects = await ctx.db
@@ -143,7 +143,7 @@ export const getProjectByName = query({
   },
 });
 
-export const getLabelByName = query({
+export const getLabelByName = authedQuery({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
     const labels = await ctx.db
@@ -165,7 +165,7 @@ export const getLabelByName = query({
   },
 });
 
-export const getDeletedLabels = query({
+export const getDeletedLabels = authedQuery({
   handler: async (ctx) => {
     const labels = await ctx.db
       .query("todoist_labels")
@@ -181,7 +181,7 @@ export const getDeletedLabels = query({
   },
 });
 
-export const getSectionByName = query({
+export const getSectionByName = authedQuery({
   args: { name: v.string() },
   handler: async (ctx, { name }) => {
     const sections = await ctx.db
