@@ -1,7 +1,9 @@
 import Google from "@auth/core/providers/google";
 import { convexAuth } from "@convex-dev/auth/server";
+import { v } from "convex/values";
 
 import { ALLOWED_EMAIL } from "./_lib/authed";
+import { internalQuery } from "./_generated/server";
 
 /**
  * Reject any Google profile whose email does not match the whitelist.
@@ -30,4 +32,18 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       },
     }),
   ],
+});
+
+/**
+ * Internal helper used by `assertAllowed` in `_lib/authed.ts` to fetch a user's
+ * email when running inside an action ctx (which has no direct `ctx.db`).
+ * Underscored helper files in `convex/_lib` are excluded from Convex's API
+ * generation, so the internalQuery has to live here.
+ */
+export const _getUserEmail = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const user = await ctx.db.get(userId);
+    return user?.email ?? null;
+  },
 });

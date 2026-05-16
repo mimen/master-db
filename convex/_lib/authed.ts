@@ -1,6 +1,8 @@
 import { type ObjectType, type PropertyValidators } from "convex/values";
 import { ConvexError } from "convex/values";
 
+import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import {
   action,
   mutation,
@@ -19,15 +21,39 @@ import {
 export const ALLOWED_EMAIL = "milad@afternoonumbrellafriends.com";
 
 /**
- * Throw `Unauthorized` unless the calling identity matches `ALLOWED_EMAIL`.
- * Exported for unit testing; production callers should use the
- * `authedQuery` / `authedMutation` / `authedAction` wrappers below.
+ * Parse the Convex Auth identity subject (format: `<userId>|<sessionId>`) into
+ * the underlying user-table id. Exported for testing.
+ */
+export function userIdFromSubject(subject: string): Id<"users"> {
+  return (subject.includes("|") ? subject.split("|")[0] : subject) as Id<"users">;
+}
+
+/**
+ * Throw `Unauthorized` unless the calling identity exists in the users table
+ * with `email === ALLOWED_EMAIL`. The JWT subject only carries the user id,
+ * not the email, so we look up the user record.
+ *
+ * For query/mutation contexts we read `ctx.db` directly. For action contexts
+ * we route through `internal.auth._getUserEmail` since actions have no db.
  */
 export async function assertAllowed(
   ctx: QueryCtx | MutationCtx | ActionCtx,
 ): Promise<void> {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity || identity.email !== ALLOWED_EMAIL) {
+  if (!identity) {
+    throw new ConvexError("Unauthorized");
+  }
+  const userId = userIdFromSubject(identity.subject);
+
+  let email: string | null;
+  if ("db" in ctx) {
+    const user = await ctx.db.get(userId);
+    email = user?.email ?? null;
+  } else {
+    email = await ctx.runQuery(internal.auth._getUserEmail, { userId });
+  }
+
+  if (email !== ALLOWED_EMAIL) {
     throw new ConvexError("Unauthorized");
   }
 }
