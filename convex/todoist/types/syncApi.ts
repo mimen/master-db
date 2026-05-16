@@ -149,6 +149,7 @@ export const syncReminderSchema = v.object({
   mm_offset: v.optional(v.number()), // Minutes offset
   minute_offset: v.optional(v.number()), // Alternative field name
   is_deleted: v.optional(v.union(v.boolean(), v.number())),
+  is_urgent: v.optional(v.boolean()),
 });
 
 // Type inference helpers for TypeScript
