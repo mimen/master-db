@@ -1,26 +1,13 @@
-import * as path from "node:path";
-import * as url from "node:url";
-
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "../../_generated/api";
 import schema from "../../schema";
+import { normalizeModules } from "../../test-utils";
 
-// import.meta.glob from a subdirectory of convex/ produces inconsistent keys:
-// files in the same directory get "./filename" while others get "../../other/filename".
-// convex-test's findModulesRoot uses the _generated key to find the prefix and then
-// looks up "prefix + functionPath" — so keys must all use the same prefix.
-// We normalize all keys to be relative to the convex/ root (prefixed with "../../").
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const rawModules = import.meta.glob("../../**/*.*s");
-const convexRoot = path.resolve(__dirname, "../..");
-const modules = Object.fromEntries(
-  Object.entries(rawModules).map(([key, loader]) => {
-    const abs = path.resolve(__dirname, key);
-    const rel = "../../" + path.relative(convexRoot, abs).replace(/\\/g, "/");
-    return [rel, loader];
-  }),
+const modules = normalizeModules(
+  import.meta.glob("../../**/*.*s"),
+  import.meta.url,
 );
 
 describe("upsertRun", () => {
