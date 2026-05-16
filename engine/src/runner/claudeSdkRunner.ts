@@ -72,7 +72,25 @@ export interface ClaudeSdkRunnerOpts {
     | "auto";
   model?: string;
   cwd?: string;
+  /**
+   * Extra dirs the agent's filesystem tools can reach beyond `cwd`.
+   * Defaults to the vault + GitHub roots.
+   */
+  additionalDirectories?: string[];
+  /**
+   * Claude Code setting sources to load. `'user'` pulls everything from
+   * `~/.claude/` including symlinked skills. Default: `['user']`.
+   */
+  settingSources?: Array<"user" | "project" | "local">;
 }
+
+const HOME = process.env.HOME ?? "";
+const DEFAULT_CWD = `${HOME}/Documents`;
+const DEFAULT_ADDITIONAL_DIRS = [
+  `${HOME}/Documents/milad-vault`,
+  `${HOME}/Documents/GitHub`,
+];
+const DEFAULT_SETTING_SOURCES: Array<"user" | "project" | "local"> = ["user"];
 
 // ---------------------------------------------------------------------------
 // Default system prompt
@@ -142,9 +160,12 @@ export function createClaudeSdkRunner(
         prompt: userPrompt,
         options: {
           systemPrompt: opts.systemPrompt ?? DEFAULT_SYSTEM,
-          permissionMode: opts.permissionMode ?? "auto",
+          permissionMode: opts.permissionMode ?? "bypassPermissions",
           model: opts.model,
-          cwd: opts.cwd,
+          cwd: opts.cwd ?? DEFAULT_CWD,
+          additionalDirectories:
+            opts.additionalDirectories ?? DEFAULT_ADDITIONAL_DIRS,
+          settingSources: opts.settingSources ?? DEFAULT_SETTING_SOURCES,
           resume: ctx.session_id ?? undefined,
           abortController: ctx.abort,
         },
