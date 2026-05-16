@@ -62,4 +62,52 @@ describe("ProposalCard", () => {
     render(<ProposalCard entity_ref="todoist:task:1" proposal={proposal} checkpoint_id="ck1" />)
     expect(screen.getByText(/Decision · 2 options/)).toBeInTheDocument()
   })
+
+  test("renders nothing in urgency slot when urgency is undefined", () => {
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={proposal} checkpoint_id="ck1" />)
+    expect(screen.queryByTestId("urgency-pill")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("urgency-block")).not.toBeInTheDocument()
+  })
+
+  test("renders urgency pill + reasoning when present", () => {
+    const withUrgency: Proposal = {
+      ...proposal,
+      urgency: 0.9,
+      urgency_reasoning: "due tomorrow",
+    }
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={withUrgency} checkpoint_id="ck1" />)
+    const pill = screen.getByTestId("urgency-pill")
+    expect(pill).toBeInTheDocument()
+    expect(pill).toHaveTextContent(/0\.90/)
+    expect(screen.getByText("due tomorrow")).toBeInTheDocument()
+  })
+
+  test("urgency >= 0.85 tints rose", () => {
+    const high: Proposal = { ...proposal, urgency: 0.9 }
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={high} checkpoint_id="ck1" />)
+    expect(screen.getByTestId("urgency-pill").className).toMatch(/rose/)
+  })
+
+  test("urgency in 0.5..0.85 tints amber", () => {
+    const mid: Proposal = { ...proposal, urgency: 0.6 }
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={mid} checkpoint_id="ck1" />)
+    expect(screen.getByTestId("urgency-pill").className).toMatch(/amber/)
+  })
+
+  test("urgency < 0.5 tints muted (no rose/amber)", () => {
+    const low: Proposal = { ...proposal, urgency: 0.2 }
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={low} checkpoint_id="ck1" />)
+    const cls = screen.getByTestId("urgency-pill").className
+    expect(cls).toMatch(/muted/)
+    expect(cls).not.toMatch(/rose/)
+    expect(cls).not.toMatch(/amber/)
+  })
+
+  test("renders pill without reasoning when reasoning omitted", () => {
+    const noReason: Proposal = { ...proposal, urgency: 0.4 }
+    render(<ProposalCard entity_ref="todoist:task:1" proposal={noReason} checkpoint_id="ck1" />)
+    expect(screen.getByTestId("urgency-pill")).toBeInTheDocument()
+    // No reasoning text should be present
+    expect(screen.queryByText(/due tomorrow/)).not.toBeInTheDocument()
+  })
 })

@@ -1,9 +1,10 @@
 import { useAction, useQuery } from "convex/react"
 import { Bot } from "lucide-react"
+import type { MouseEvent } from "react"
 import { ulid } from "ulid"
 
-import { api } from "@/convex/_generated/api"
 import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
+import { api } from "@/convex/_generated/api"
 
 /**
  * Agent Status Badge
@@ -68,9 +69,20 @@ export function AgentStatusBadge({ entity_ref }: AgentStatusBadgeProps) {
   if (run === undefined || run === null) return null
 
   const status = (run as { status: string }).status
-  const variant = STATUS_VARIANT[status] ?? STATUS_VARIANT.idle
+  const lastUrgency = (run as { last_urgency?: number | null }).last_urgency
+  const baseVariant = STATUS_VARIANT[status] ?? STATUS_VARIANT.idle
+  const urgentOverride =
+    status === "awaiting_decision" &&
+    typeof lastUrgency === "number" &&
+    lastUrgency >= 0.85
+  const variant = urgentOverride
+    ? {
+        ...baseVariant,
+        cls: "bg-rose-500/15 text-rose-600 border-rose-500/30",
+      }
+    : baseVariant
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = (e: MouseEvent) => {
     e.stopPropagation()
     if (status === "idle") {
       // Kick off a fresh discovery; do NOT open the drawer. Convex reactivity

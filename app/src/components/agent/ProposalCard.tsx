@@ -15,10 +15,17 @@ type Props = {
   checkpoint_id: string | null
 }
 
+function urgencyTint(score: number): string {
+  if (score >= 0.85) return "bg-rose-500/15 border-rose-500/30 text-rose-600"
+  if (score >= 0.5) return "bg-amber-500/15 border-amber-500/30 text-amber-700"
+  return "bg-muted text-muted-foreground border-border"
+}
+
 export function ProposalCard({ entity_ref, proposal, checkpoint_id }: Props) {
   const { execute } = useAgentPost(entity_ref)
   const composer = useAgentComposerHandle()
   const optionCount = proposal.options.length
+  const urgency = proposal.urgency
 
   return (
     <div className="rounded-lg border bg-card p-4 space-y-4">
@@ -26,6 +33,20 @@ export function ProposalCard({ entity_ref, proposal, checkpoint_id }: Props) {
       <div className="prose prose-sm dark:prose-invert max-w-none">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{proposal.summary}</ReactMarkdown>
       </div>
+
+      {urgency !== undefined && (
+        <div className="space-y-1" data-testid="urgency-block">
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${urgencyTint(urgency)}`}
+            data-testid="urgency-pill"
+          >
+            Urgency · {urgency.toFixed(2)}
+          </span>
+          {proposal.urgency_reasoning && (
+            <p className="text-xs text-muted-foreground">{proposal.urgency_reasoning}</p>
+          )}
+        </div>
+      )}
 
       {/* Section 2: Receipts — collapsed by default */}
       {proposal.findings && proposal.findings.length > 0 && (

@@ -14,8 +14,10 @@ export const agenticRuns = defineTable({
   last_message_id: v.union(v.id("agenticThreadMessages"), v.null()),
   last_run_id: v.union(v.string(), v.null()),
   last_traceparent: v.union(v.string(), v.null()),
+  last_urgency: v.optional(v.union(v.number(), v.null())),
   updated_at: v.number(),
 })
   .index("by_entity_ref", ["entity_ref"])
   .index("by_entity_type", ["entity_type"])
-  .index("by_status_and_updated_at", ["status", "updated_at"]);
+  .index("by_status_and_updated_at", ["status", "updated_at"])
+  .index("by_status_and_urgency", ["status", "last_urgency"]);

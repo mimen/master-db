@@ -18,6 +18,8 @@ export type Proposal = {
   recommended_option_id?: string
   free_text_allowed: boolean
   question?: string
+  urgency?: number
+  urgency_reasoning?: string
 }
 
 const PROPOSAL_KINDS = new Set(["clarification", "proposal", "execution_result", "blocked"])
@@ -39,6 +41,9 @@ function isOption(v: unknown): v is ProposalOption {
 export function isProposal(v: unknown): v is Proposal {
   if (typeof v !== "object" || v === null) return false
   const o = v as Record<string, unknown>
+  if (o.urgency !== undefined && typeof o.urgency !== "number") return false
+  if (o.urgency_reasoning !== undefined && typeof o.urgency_reasoning !== "string")
+    return false
   return (
     typeof o.kind === "string" &&
     PROPOSAL_KINDS.has(o.kind) &&

@@ -140,8 +140,18 @@ The JSON inside <proposal> MUST conform to this schema EXACTLY. Field names and 
   ],
   "recommended_option_id": string | omit,   // optional — id of the recommended option
   "free_text_allowed": boolean,             // REQUIRED — true if user may reply freeform
-  "question": string | omit                 // include when kind="clarification"
+  "question": string | omit,                // include when kind="clarification"
+  "urgency": number | omit,                 // float in [0, 1], see urgency block below
+  "urgency_reasoning": string | omit        // one sentence explaining the score
 }
+
+**Urgency.** Every proposal MUST include a \`urgency\` score from 0.0 to 1.0 reflecting how time-sensitive this decision is, plus a one-sentence \`urgency_reasoning\`. Anchor:
+- 0.0–0.2: no time pressure; can sit indefinitely.
+- 0.3–0.5: should decide this week; nothing breaks if delayed a few days.
+- 0.6–0.8: should decide today or tomorrow; downstream work is mildly blocked.
+- 0.9–1.0: blocking active work or an external party is waiting right now.
+
+Calibrate against the task's own due date, deadline, and dependent work. If urgency is genuinely ambiguous, prefer the lower score and explain in \`urgency_reasoning\`.
 
 Kind semantics:
 - "clarification": you need more information before proposing actions; populate "question" and use "options" as suggested answers.

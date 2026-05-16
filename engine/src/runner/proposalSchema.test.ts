@@ -61,4 +61,64 @@ describe("ProposalSchema", () => {
       }),
     ).toThrow();
   });
+
+  test("accepts proposal with urgency + urgency_reasoning", () => {
+    const p = ProposalSchema.parse({
+      kind: "proposal",
+      summary: "x",
+      options: [],
+      free_text_allowed: false,
+      urgency: 0.85,
+      urgency_reasoning: "due tomorrow",
+    });
+    expect(p.urgency).toBe(0.85);
+    expect(p.urgency_reasoning).toBe("due tomorrow");
+  });
+
+  test("accepts proposal without urgency fields (rollout tolerance)", () => {
+    const p = ProposalSchema.parse({
+      kind: "proposal",
+      summary: "x",
+      options: [],
+      free_text_allowed: false,
+    });
+    expect(p.urgency).toBeUndefined();
+    expect(p.urgency_reasoning).toBeUndefined();
+  });
+
+  test("rejects urgency > 1", () => {
+    expect(() =>
+      ProposalSchema.parse({
+        kind: "proposal",
+        summary: "x",
+        options: [],
+        free_text_allowed: false,
+        urgency: 1.1,
+      }),
+    ).toThrow();
+  });
+
+  test("rejects urgency < 0", () => {
+    expect(() =>
+      ProposalSchema.parse({
+        kind: "proposal",
+        summary: "x",
+        options: [],
+        free_text_allowed: false,
+        urgency: -0.1,
+      }),
+    ).toThrow();
+  });
+
+  test("accepts urgency without urgency_reasoning", () => {
+    const p = ProposalSchema.parse({
+      kind: "proposal",
+      summary: "x",
+      options: [],
+      free_text_allowed: false,
+      urgency: 0.4,
+    });
+    expect(p.urgency).toBe(0.4);
+    expect(p.urgency_reasoning).toBeUndefined();
+  });
 });

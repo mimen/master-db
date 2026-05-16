@@ -18,6 +18,8 @@ export const ProposalSchema = z.object({
   recommended_option_id: z.string().optional(),
   free_text_allowed: z.boolean(),
   question: z.string().optional(),
+  urgency: z.number().min(0).max(1).optional(),
+  urgency_reasoning: z.string().optional(),
 });
 
 export type Proposal = z.infer<typeof ProposalSchema>;
