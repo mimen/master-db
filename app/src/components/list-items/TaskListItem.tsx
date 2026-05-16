@@ -4,7 +4,7 @@ import { memo, useEffect } from "react"
 
 import { BaseListItem } from "./BaseListItem"
 
-import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge } from "@/components/badges/shared"
+import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge, AgentStartGhost } from "@/components/badges/shared"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useDialogContext } from "@/contexts/DialogContext"
@@ -515,6 +515,7 @@ export const TaskListItem = memo(function TaskListItem({
             />
           )}
 
+          <AgentStartGhost entity_ref={`todoist:task:${task.todoist_id}`} />
         </>
       )}
     />
