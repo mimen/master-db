@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { internal } from "../../../_generated/api";
 import { Doc } from "../../../_generated/dataModel";
-import { query } from "../../../_generated/server";
+import { authedQuery } from "../../../_lib/authed";
 
 /**
  * Unified count query that returns all list counts in a single call.
@@ -30,7 +30,7 @@ import { query } from "../../../_generated/server";
  * - list:routines -> active routines count (global)
  * - list:routines:${projectId} -> active routines count for specific project
  */
-export const getAllListCounts = query({
+export const getAllListCounts = authedQuery({
   args: {
     timezoneOffsetMinutes: v.optional(v.number()),
   },
