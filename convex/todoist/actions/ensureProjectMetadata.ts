@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 import type { ProjectMetadata } from "../types/projectMetadata";
 
 /**
@@ -9,7 +9,7 @@ import type { ProjectMetadata } from "../types/projectMetadata";
  * Creates default metadata for projects that don't have any.
  * This can be called after sync operations to maintain consistency.
  */
-export const ensureAllProjectsHaveMetadata = action({
+export const ensureAllProjectsHaveMetadata = authedAction({
   args: {},
   handler: async (ctx): Promise<{
     totalProjects: number;
@@ -65,7 +65,7 @@ export const ensureAllProjectsHaveMetadata = action({
  * Ensures a single project has metadata.
  * Creates default metadata if it doesn't exist.
  */
-export const ensureProjectHasMetadata = action({
+export const ensureProjectHasMetadata = authedAction({
   args: {
     projectId: v.string(),
   },

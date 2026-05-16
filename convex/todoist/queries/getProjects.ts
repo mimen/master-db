@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getProjects = query({
+export const getProjects = authedQuery({
   handler: async (ctx) => {
     const projects = await ctx.db
       .query("todoist_projects")
@@ -13,7 +13,7 @@ export const getProjects = query({
   },
 });
 
-export const getProjectByTodoistId = query({
+export const getProjectByTodoistId = authedQuery({
   args: {
     todoistId: v.string(),
   },

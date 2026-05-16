@@ -2,7 +2,7 @@ import type { Task } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -11,7 +11,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  * Creates the task if it doesn't exist, returns existing task ID if it does.
  * The metadata task is a special task with the "project-metadata" label.
  */
-export const ensureProjectMetadataTask = action({
+export const ensureProjectMetadataTask = authedAction({
   args: {
     projectId: v.string(),
   },

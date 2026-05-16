@@ -33,14 +33,14 @@ export async function assertAllowed(
 }
 
 export function authedQuery<
-  ArgsValidator extends PropertyValidators,
-  Output,
+  ArgsValidator extends PropertyValidators = Record<never, never>,
+  Output = unknown,
 >(def: {
-  args: ArgsValidator;
+  args?: ArgsValidator;
   handler: (ctx: QueryCtx, args: ObjectType<ArgsValidator>) => Output | Promise<Output>;
 }) {
   return query({
-    args: def.args,
+    args: (def.args ?? {}) as ArgsValidator,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handler: async (ctx: QueryCtx, args: any) => {
       await assertAllowed(ctx);
@@ -50,14 +50,14 @@ export function authedQuery<
 }
 
 export function authedMutation<
-  ArgsValidator extends PropertyValidators,
-  Output,
+  ArgsValidator extends PropertyValidators = Record<never, never>,
+  Output = unknown,
 >(def: {
-  args: ArgsValidator;
+  args?: ArgsValidator;
   handler: (ctx: MutationCtx, args: ObjectType<ArgsValidator>) => Output | Promise<Output>;
 }) {
   return mutation({
-    args: def.args,
+    args: (def.args ?? {}) as ArgsValidator,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handler: async (ctx: MutationCtx, args: any) => {
       await assertAllowed(ctx);
@@ -67,14 +67,14 @@ export function authedMutation<
 }
 
 export function authedAction<
-  ArgsValidator extends PropertyValidators,
-  Output,
+  ArgsValidator extends PropertyValidators = Record<never, never>,
+  Output = unknown,
 >(def: {
-  args: ArgsValidator;
+  args?: ArgsValidator;
   handler: (ctx: ActionCtx, args: ObjectType<ArgsValidator>) => Output | Promise<Output>;
 }) {
   return action({
-    args: def.args,
+    args: (def.args ?? {}) as ArgsValidator,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handler: async (ctx: ActionCtx, args: any) => {
       await assertAllowed(ctx);

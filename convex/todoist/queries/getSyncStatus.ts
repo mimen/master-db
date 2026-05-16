@@ -1,6 +1,6 @@
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getSyncStatus = query({
+export const getSyncStatus = authedQuery({
   handler: async (ctx) => {
     const syncState = await ctx.db
       .query("sync_state")

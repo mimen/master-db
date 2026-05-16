@@ -2,7 +2,7 @@ import type { Task } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -16,7 +16,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  *
  * This action ensures only one type label exists at a time.
  */
-export const updateProjectType = action({
+export const updateProjectType = authedAction({
   args: {
     projectId: v.string(),
     projectType: v.union(

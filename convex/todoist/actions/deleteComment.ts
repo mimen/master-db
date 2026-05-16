@@ -1,11 +1,11 @@
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
-export const deleteComment = action({
+export const deleteComment = authedAction({
   args: {
     commentId: v.string(),
   },

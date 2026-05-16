@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 type TimeRange = "overdue" | "today" | "upcoming" | "no-date";
 type RoutineTaskFilter = "overdue" | "morning" | "night" | "todays" | "get-ahead";
@@ -78,7 +78,7 @@ export type TodoistItemWithProject = Doc<"todoist_items"> & {
   } | null;
 };
 
-export const getItemsByViewWithProjects = query({
+export const getItemsByViewWithProjects = authedQuery({
   args: {
     list: listQueryValidator,
   },

@@ -2,10 +2,10 @@ import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 import { processQueue } from "../helpers/queueEngine";
 
-export const getFocusedTasks = query({
+export const getFocusedTasks = authedQuery({
   args: {
     context: v.optional(v.union(
       v.literal("work"),

@@ -2,7 +2,7 @@ import type { Task } from "@doist/todoist-api-typescript";
 import { v } from "convex/values";
 
 import { api, internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -10,7 +10,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  * Updates the description of a project's metadata task.
  * This updates the actual Todoist task and then extracts the metadata back to Convex.
  */
-export const updateProjectMetadataDescription = action({
+export const updateProjectMetadataDescription = authedAction({
   args: {
     projectId: v.string(),
     description: v.string(),

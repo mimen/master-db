@@ -1,7 +1,7 @@
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
-export const clearAllData = action({
+export const clearAllData = authedAction({
   args: {},
   handler: async (ctx) => {
     console.warn("WARNING: Clearing all Todoist data from the database");

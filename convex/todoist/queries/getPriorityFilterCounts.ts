@@ -1,8 +1,8 @@
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getPriorityFilterCounts = query({
+export const getPriorityFilterCounts = authedQuery({
   args: {},
   handler: async (ctx): Promise<{
     totalRawTasks: number;

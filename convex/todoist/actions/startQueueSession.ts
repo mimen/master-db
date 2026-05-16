@@ -1,12 +1,13 @@
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { ActionCtx, action } from "../../_generated/server";
+import { ActionCtx } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 /**
  * Start a new queue session - creates queue state and returns initial task
  */
-export const startQueueSession = action({
+export const startQueueSession = authedAction({
   args: {
     queueType: v.union(
       v.literal("priority"),

@@ -2,7 +2,7 @@ import type { PersonalProject, WorkspaceProject } from "@doist/todoist-api-types
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -10,7 +10,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  * Move a project to a new parent and/or update its position (child_order)
  * The API supports parent_id and child_order even though UpdateProjectArgs doesn't include them
  */
-export const moveProject = action({
+export const moveProject = authedAction({
   args: {
     projectId: v.string(),
     parentId: v.optional(v.union(v.string(), v.null())), // null = move to root

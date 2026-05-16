@@ -2,11 +2,11 @@ import type { PersonalProject, WorkspaceProject, AddProjectArgs } from "@doist/t
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
-export const createProject = action({
+export const createProject = authedAction({
   args: {
     name: v.string(),
     parentId: v.optional(v.string()),

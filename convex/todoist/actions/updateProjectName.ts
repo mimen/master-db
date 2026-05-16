@@ -2,7 +2,7 @@ import type { PersonalProject, WorkspaceProject } from "@doist/todoist-api-types
 import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
-import { action } from "../../_generated/server";
+import { authedAction } from "../../_lib/authed";
 
 import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
 
@@ -10,7 +10,7 @@ import { ActionResponse, getTodoistClient } from "./utils/todoistClient";
  * Updates a project's name in Todoist and syncs to Convex.
  * This is a focused action for the Projects view name editing feature.
  */
-export const updateProjectName = action({
+export const updateProjectName = authedAction({
   args: {
     projectId: v.string(),
     name: v.string(),

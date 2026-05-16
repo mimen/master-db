@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { internal } from "../../_generated/api";
 import { Doc } from "../../_generated/dataModel";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 // Date comparison helper functions
 const getDateComparisons = () => {
@@ -92,7 +92,7 @@ const itemMatchesTimeFilter = (
  * Get active Todoist items with global filters applied.
  * Filters out: star prefix tasks, system labels, completed tasks, and applies assignee filtering.
  */
-export const getActiveItems = query({
+export const getActiveItems = authedQuery({
   args: {
     projectId: v.optional(v.string()),
     limit: v.optional(v.number()),

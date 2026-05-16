@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
-export const getProjectWithItemCount = query({
+export const getProjectWithItemCount = authedQuery({
   args: {
     projectId: v.string(),
   },
