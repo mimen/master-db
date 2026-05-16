@@ -5,6 +5,7 @@ set -euo pipefail
 
 export AGENTIC_SERVER_TOKEN="$(op read op://Sol/agentic-engine/server_token)"
 export CONVEX_URL="$(op read op://Sol/agentic-engine/convex_url)"
+export CONVEX_DEPLOY_KEY="$(op read op://Sol/agentic-engine/convex_deploy_key)"
 export PORT="${PORT:-8787}"
 export LOG_DIR="${LOG_DIR:-$HOME/.agentic-engine/logs}"
 

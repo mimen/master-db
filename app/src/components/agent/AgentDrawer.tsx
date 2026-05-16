@@ -6,7 +6,7 @@ import { AgentTranscript } from "./AgentTranscript"
 import { StatusPill } from "./StatusPill"
 import { ThinkingIndicator } from "./ThinkingIndicator"
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
 import { api } from "@/convex/_generated/api"
@@ -53,6 +53,9 @@ function AgentDrawerBody({ entity_ref }: { entity_ref: string }) {
         <SheetTitle className="text-sm">
           <span className="font-mono text-xs text-muted-foreground">{entity_ref}</span>
         </SheetTitle>
+        <SheetDescription className="sr-only">
+          Agent thread for entity {entity_ref}. Transcript, decisions, and composer below.
+        </SheetDescription>
         <StatusPill status={run?.status ?? "idle"} />
       </SheetHeader>
       <div className="flex-1 overflow-y-auto p-4">

@@ -120,6 +120,34 @@ if (import.meta.main) {
   // Lazy import the real Convex client at boot to avoid pulling its types into test environments.
   const { ConvexHttpClient } = await import("convex/browser");
   const convexClient = new ConvexHttpClient(env.convexUrl);
+  // Backend service auth: when CONVEX_DEPLOY_KEY is set, impersonate the
+  // single allowed user so auth-gated queries/mutations let the engine through.
+  // The deploy key authenticates us as a deployment admin; `actingAs` populates
+  // identity.email which `assertAllowed` fast-paths on.
+  if (env.convexDeployKey) {
+    // setAdminAuth exists at runtime (used by Convex CLI internally) but is
+    // not exposed in @convex/browser's .d.ts. Cast through to call it.
+    // The `actingAs` payload populates ctx.auth.getUserIdentity() inside
+    // Convex functions, letting `assertAllowed` fast-path on identity.email.
+    const adminClient = convexClient as unknown as {
+      setAdminAuth(
+        token: string,
+        actingAs?: { tokenIdentifier: string; subject: string; issuer: string; email?: string; name?: string },
+      ): void;
+    };
+    adminClient.setAdminAuth(env.convexDeployKey, {
+      tokenIdentifier: "engine-service",
+      subject: "engine-service",
+      issuer: "agentic-engine",
+      email: "milad@afternoonumbrellafriends.com",
+      name: "Agentic Engine",
+    });
+    log.info("agentic-engine.convex.admin-auth.enabled");
+  } else {
+    log.warn("agentic-engine.convex.admin-auth.missing", {
+      hint: "CONVEX_DEPLOY_KEY not set — auth-gated Convex calls will fail",
+    });
+  }
   const runner = createClaudeSdkRunner();
   const sources = createSourceRegistry({
     todoist_task: createTodoistTaskSource(convexClient),

@@ -43,6 +43,15 @@ export async function assertAllowed(
   if (!identity) {
     throw new ConvexError("Unauthorized");
   }
+
+  // Fast path: admin-impersonated callers (e.g. the agentic-engine service
+  // using setAdminAuth with `actingAs: { email: ALLOWED_EMAIL }`) populate
+  // identity.email directly. Regular Convex Auth users don't — their JWT only
+  // carries `subject`, so we fall through to the users-table lookup below.
+  if (identity.email === ALLOWED_EMAIL) {
+    return;
+  }
+
   const userId = userIdFromSubject(identity.subject);
 
   let email: string | null;
