@@ -4,6 +4,7 @@ import { defineSchema } from "convex/server";
 import { sync_state } from "./schema/sync/syncState";
 import * as todoist from "./schema/todoist";
 import * as routines from "./schema/routines";
+import * as agentic from "./schema/agentic";
 
 // Sync management tables
 
@@ -13,6 +14,9 @@ export default defineSchema({
 
   // Routines tables
   ...routines,
+
+  // Agentic engine tables
+  ...agentic,
 
   // Sync management
   sync_state,
