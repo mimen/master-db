@@ -1,11 +1,11 @@
 import { internal } from "../../_generated/api";
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Get routine generation status for display in sync dialog
  * Returns counts for routines needing generation and pending tasks
  */
-export const getRoutineGenerationStatus = query({
+export const getRoutineGenerationStatus = authedQuery({
   handler: async (ctx) => {
     // Get routines that need generation
     const routinesNeedingGeneration = await ctx.runQuery(

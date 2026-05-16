@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Get routines for a specific project
  * Filters routines by todoistProjectId and excludes deferred routines
  * Returns active routines sorted alphabetically by name
  */
-export const getRoutinesByProject = query({
+export const getRoutinesByProject = authedQuery({
   args: {
     projectId: v.string(),
     includeDeferred: v.optional(v.boolean()), // Optional: include deferred routines

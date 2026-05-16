@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
-import { internalQuery, query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 
 /**
  * Find a routine task by its Todoist task ID (internal version)
@@ -20,7 +21,7 @@ export const getRoutineTaskByTodoistId = internalQuery({
  * Find a routine task by its Todoist task ID (public version)
  * Used by UI to check if a task is a routine task
  */
-export const getRoutineTaskByTodoistIdPublic = query({
+export const getRoutineTaskByTodoistIdPublic = authedQuery({
   args: { todoistTaskId: v.string() },
   handler: async (ctx, { todoistTaskId }) => {
     return await ctx.db

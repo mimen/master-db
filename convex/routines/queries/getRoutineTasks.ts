@@ -1,9 +1,9 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { authedQuery } from "../../_lib/authed";
 import { RoutineTaskStatus } from "../types/status";
 
-export const getRoutineTasks = query({
+export const getRoutineTasks = authedQuery({
   args: {
     routineId: v.id("routines"),
     statusFilter: v.optional(
