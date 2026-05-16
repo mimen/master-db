@@ -457,13 +457,7 @@ export const TaskListItem = memo(function TaskListItem({
             </Badge>
           )}
 
-          <AgentStatusBadge
-            entity_ref={`todoist:task:${task.todoist_id}`}
-            onClick={(e) => {
-              e.stopPropagation()
-              openAgent(`todoist:task:${task.todoist_id}`)
-            }}
-          />
+          <AgentStatusBadge entity_ref={`todoist:task:${task.todoist_id}`} />
         </>
       )}
       renderHoverBadges={() => (

@@ -1,7 +1,9 @@
-import { useQuery } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 import { Bot } from "lucide-react"
+import { ulid } from "ulid"
 
 import { api } from "@/convex/_generated/api"
+import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
 
 /**
  * Agent Status Badge
@@ -14,8 +16,12 @@ import { api } from "@/convex/_generated/api"
  * Matches the visual idiom of the other shared badges (PriorityBadge,
  * LabelBadge, DateBadge): inline-flex rounded-full pill with a 3x3 icon.
  *
- * Status → label/color mapping mirrors StatusPill in the agent drawer header,
- * with shorter labels appropriate for a row-level chip.
+ * Click behavior depends on status:
+ *  - idle: fire a fresh discovery run (POST /run with null message) and
+ *    do NOT open the drawer. Badge transitions to "Thinking" reactively
+ *    as the run progresses.
+ *  - anything else (discovering / awaiting_decision / executing / error):
+ *    open the drawer to view / interact.
  */
 
 const STATUS_VARIANT: Record<
@@ -51,11 +57,12 @@ const STATUS_VARIANT: Record<
 
 export interface AgentStatusBadgeProps {
   entity_ref: string
-  onClick: (e: React.MouseEvent) => void
 }
 
-export function AgentStatusBadge({ entity_ref, onClick }: AgentStatusBadgeProps) {
+export function AgentStatusBadge({ entity_ref }: AgentStatusBadgeProps) {
   const run = useQuery(api.agentic.queries.getRun.default, { entity_ref })
+  const postRunAction = useAction(api.agentic.actions.postRun.default)
+  const { open } = useAgentDrawer()
 
   // Loading or no run row → hidden entirely (the "completely unstarted" case).
   if (run === undefined || run === null) return null
@@ -63,12 +70,28 @@ export function AgentStatusBadge({ entity_ref, onClick }: AgentStatusBadgeProps)
   const status = (run as { status: string }).status
   const variant = STATUS_VARIANT[status] ?? STATUS_VARIANT.idle
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (status === "idle") {
+      // Kick off a fresh discovery; do NOT open the drawer. Convex reactivity
+      // will flip the badge to "Thinking" within ~a few hundred ms.
+      void postRunAction({
+        entity_ref,
+        message: null,
+        idempotency_key: ulid(),
+        multitask_strategy: "enqueue",
+      }).catch((err) => console.warn("[agent-badge] start failed", err))
+      return
+    }
+    open(entity_ref)
+  }
+
   return (
     <button
       type="button"
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-normal gap-1.5 cursor-pointer hover:bg-accent/80 transition-colors ${variant.cls} ${variant.pulse ? "animate-pulse" : ""}`}
-      onClick={onClick}
-      aria-label={`Open Agent — ${variant.label}`}
+      onClick={handleClick}
+      aria-label={status === "idle" ? "Start Agent run" : `Open Agent — ${variant.label}`}
     >
       <Bot className="h-3 w-3" />
       <span>{variant.label}</span>
