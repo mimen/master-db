@@ -29,6 +29,7 @@ export { ProjectBadge, type ProjectBadgeProps } from "./ProjectBadge"
 export { ProjectTypeBadge, type ProjectTypeBadgeProps } from "./ProjectTypeBadge"
 export { LabelBadge, type LabelBadgeProps } from "./LabelBadge"
 export { GhostBadge, type GhostBadgeProps } from "./GhostBadge"
+export { AgentStatusBadge, type AgentStatusBadgeProps } from "./AgentStatusBadge"
 
 // Date/Time badges
 export { DateBadge, type DateBadgeProps } from "./DateBadge"

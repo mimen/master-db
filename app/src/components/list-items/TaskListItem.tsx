@@ -1,10 +1,10 @@
 import { useQuery } from "convex/react"
-import { AlertCircle, Bot, Calendar, Check, RefreshCw, SkipForward, Tag, User } from "lucide-react"
+import { AlertCircle, Calendar, Check, RefreshCw, SkipForward, Tag, User } from "lucide-react"
 import { memo, useEffect } from "react"
 
 import { BaseListItem } from "./BaseListItem"
 
-import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge } from "@/components/badges/shared"
+import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge } from "@/components/badges/shared"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAgentDrawer } from "@/contexts/AgentDrawerContext"
@@ -456,6 +456,14 @@ export const TaskListItem = memo(function TaskListItem({
               <span>{assignee}</span>
             </Badge>
           )}
+
+          <AgentStatusBadge
+            entity_ref={`todoist:task:${task.todoist_id}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              openAgent(`todoist:task:${task.todoist_id}`)
+            }}
+          />
         </>
       )}
       renderHoverBadges={() => (
@@ -517,22 +525,6 @@ export const TaskListItem = memo(function TaskListItem({
             />
           )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="p-1 rounded hover:bg-accent text-muted-foreground"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  openAgent(`todoist:task:${task.todoist_id}`)
-                }}
-                aria-label="Open Agent"
-              >
-                <Bot className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Open Agent (g a)</TooltipContent>
-          </Tooltip>
         </>
       )}
     />
