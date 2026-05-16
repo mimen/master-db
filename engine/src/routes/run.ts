@@ -160,13 +160,20 @@ async function decideAndEnqueue(
     | null;
   const busy = deps.queue.isBusy(body.entity_ref);
 
-  if (!body.message && existingRun) {
+  // No-op when there's nothing new to ask. Two cases:
+  //  - an `agenticRuns` row exists (a prior turn already ran for this entity)
+  //  - a worker is currently in flight or queued for this entity (busy)
+  // The second case closes the TOCTOU window between `getRun` and `enqueue`:
+  // two concurrent auto-triggers without unique idempotency keys would each
+  // see `existingRun === null`, but only the first reaches `queue.enqueue`
+  // synchronously — the second's `busy === true` check catches it.
+  if (!body.message && (existingRun || busy)) {
     return {
       status: 200,
       body: {
         entity_ref: body.entity_ref,
-        run_id: existingRun.last_run_id,
-        status: existingRun.status,
+        run_id: existingRun?.last_run_id ?? null,
+        status: existingRun?.status ?? "discovering",
         accepted: false,
       },
     };
