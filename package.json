@@ -12,8 +12,9 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
-    "typecheck": "bun run typecheck:app && bun run typecheck:convex",
+    "typecheck": "bun run typecheck:app && bun run typecheck:convex && bun run typecheck:engine",
     "typecheck:app": "bun --cwd app tsc --noEmit",
+    "typecheck:engine": "bun --cwd engine tsc --noEmit",
     "typecheck:convex": "cd convex && npx tsc --noEmit"
   },
   "dependencies": {
