@@ -33,7 +33,9 @@ export function AgentModeLayout({
         className="flex flex-col border-r overflow-hidden"
       >
         {header}
-        {children}
+        {/* Scroll region: min-h-0 lets this flex child shrink so the long
+            list scrolls within the panel instead of overflowing it. */}
+        <div className="flex-1 min-h-0 overflow-y-auto">{children}</div>
       </ResizablePanel>
       <ResizableHandle withHandle />
       <ResizablePanel defaultSize={58} className="flex flex-col overflow-hidden">
