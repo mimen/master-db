@@ -1,46 +1,35 @@
-import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Native-scroll replacement for the Radix ScrollArea primitive.
+ *
+ * `@radix-ui/react-scroll-area@1.2.10` infinite-loops under React 19: its
+ * Root does `useComposedRefs(forwardedRef, (node) => setScrollArea(node))`
+ * with a fresh inline ref every render, so React detaches/re-attaches the
+ * callback ref each commit (setScrollArea(null) → setScrollArea(node)),
+ * re-rendering forever ("Maximum update depth exceeded"). No fixed stable
+ * version exists (latest is 1.2.10). We don't need the custom-drawn
+ * scrollbar, so this drops the dependency and uses native overflow scroll.
+ * API (ScrollArea / ScrollBar) is preserved so callers don't change.
+ */
 const ScrollArea = React.forwardRef<
-  React.ElementRef<typeof ScrollAreaPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root>
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
 >(({ className, children, ...props }, ref) => (
-  <ScrollAreaPrimitive.Root
+  <div
     ref={ref}
-    className={cn("relative overflow-hidden", className)}
+    className={cn("overflow-y-auto overflow-x-hidden", className)}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
-      {children}
-    </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
-    <ScrollAreaPrimitive.Corner />
-  </ScrollAreaPrimitive.Root>
+    {children}
+  </div>
 ))
-ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName
+ScrollArea.displayName = "ScrollArea"
 
-const ScrollBar = React.forwardRef<
-  React.ElementRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>,
-  React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>
->(({ className, orientation = "vertical", ...props }, ref) => (
-  <ScrollAreaPrimitive.ScrollAreaScrollbar
-    ref={ref}
-    orientation={orientation}
-    className={cn(
-      "flex touch-none select-none transition-colors",
-      orientation === "vertical" &&
-        "h-full w-1.5 border-l border-l-transparent p-[0.5px]",
-      orientation === "horizontal" &&
-        "h-1.5 flex-col border-t border-t-transparent p-[0.5px]",
-      className
-    )}
-    {...props}
-  >
-    <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-black/30 dark:bg-white/20" />
-  </ScrollAreaPrimitive.ScrollAreaScrollbar>
-))
-ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName
+// Retained for API compatibility; native scrollbars need no element.
+const ScrollBar = (_props: React.HTMLAttributes<HTMLDivElement>) => null
+ScrollBar.displayName = "ScrollBar"
 
 export { ScrollArea, ScrollBar }

@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { useCountRegistry } from "@/contexts/CountContext"
 import { useDialogContext } from "@/contexts/DialogContext"
-import { useHeaderSlot } from "@/contexts/HeaderSlotContext"
+import { HeaderSlotOutlet } from "@/contexts/HeaderSlotContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskCounts } from "@/hooks/useTaskCounts"
 import { useTaskSelection } from "@/hooks/useTaskSelection"
@@ -316,9 +316,6 @@ export function Layout() {
   const sidebarViewKey: ViewKey = activeView.key
   const isMultiListView = activeView.lists.length > 1
 
-  // Get header slot content (registered by BaseListView for single-list views)
-  const { slots } = useHeaderSlot()
-
   return (
     <>
       <Sidebar currentViewKey={sidebarViewKey} onViewChange={handleViewChange} />
@@ -337,10 +334,10 @@ export function Layout() {
               {totalTaskCount}
             </Badge>
           )}
-          {/* Caller-supplied header actions (e.g. agent bulk runner) */}
-          {slots.get("header-action")}
-          {/* Header slot for view settings (registered by BaseListView for single-list views) */}
-          {slots.get("view-settings")}
+          {/* Caller-supplied header actions + view settings, registered by
+              BaseListView for single-list views. Isolated in a leaf outlet so
+              slot registration doesn't re-render Layout (would loop). */}
+          <HeaderSlotOutlet ids={["header-action", "view-settings"]} />
           {/* Archive button for project views (not for Inbox which can't be archived) */}
           {currentProject && !currentProject.is_archived && !currentProject.is_inbox_project && (
             <Button
