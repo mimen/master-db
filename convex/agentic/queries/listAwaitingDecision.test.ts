@@ -23,6 +23,7 @@ async function seedRun(
     priority?: number
     due?: string
     project?: { todoist_id: string; name: string; color: string }
+    checked?: boolean
   },
 ) {
   await t.run(async (ctx) => {
@@ -61,7 +62,7 @@ async function seedRun(
       ...(args.project && { project_id: args.project.todoist_id }),
       labels: [],
       comment_count: 0,
-      checked: false,
+      checked: args.checked ?? false,
       is_deleted: false,
       added_at: "2026-01-01T00:00:00Z",
       user_id: "u1",
@@ -160,5 +161,38 @@ describe("listAwaitingDecision", () => {
       limit: 5,
     })
     expect(rows).toHaveLength(5)
+  })
+
+  test("excludes completed (checked) tasks from open results", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, { entity_id: "open", status: "awaiting_decision", checked: false })
+    await seedRun(t, { entity_id: "done", status: "awaiting_decision", checked: true })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows.map((r: { entity_id: string }) => r.entity_id)).toEqual(["open"])
+  })
+
+  test("closed mode returns only completed tasks (across open statuses)", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, { entity_id: "open", status: "awaiting_decision", checked: false })
+    await seedRun(t, { entity_id: "done", status: "awaiting_decision", checked: true })
+    await seedRun(t, { entity_id: "done2", status: "executing", checked: true })
+    await seedRun(t, { entity_id: "idle-done", status: "idle", checked: true })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {
+      closed: true,
+    })
+    expect(rows.map((r: { entity_id: string }) => r.entity_id).sort()).toEqual([
+      "done",
+      "done2",
+    ])
+  })
+
+  test("returned rows carry the checked flag", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, { entity_id: "a", status: "awaiting_decision", checked: false })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows[0]?.checked).toBe(false)
   })
 })

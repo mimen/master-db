@@ -15,6 +15,7 @@ export type EnrichedQueueRun = Doc<"agenticRuns"> & {
   priority: number | null
   due: string | null
   project: { name: string; color: string } | null
+  checked: boolean
 }
 
 /**
@@ -34,6 +35,7 @@ export async function enrichQueueRun(
       priority: null,
       due: null,
       project: null,
+      checked: false,
     }
   }
 
@@ -59,5 +61,6 @@ export async function enrichQueueRun(
     priority: task?.priority ?? null,
     due: task?.due?.date ?? null,
     project,
+    checked: task?.checked ?? false,
   }
 }

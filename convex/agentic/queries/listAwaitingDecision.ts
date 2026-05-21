@@ -5,14 +5,25 @@ import { authedQuery } from "../../_lib/authed"
 
 import { enrichQueueRun } from "./_enrichQueueRun"
 
+/**
+ * The queue's "open" status set — runs that still want attention. Excludes
+ * "idle". Closed mode scans these statuses because a completed task keeps its
+ * run status; only its task.checked flips to true.
+ */
+const OPEN_STATUSES = ["awaiting_decision", "discovering", "executing", "error"]
+
 export default authedQuery({
   args: {
     statuses: v.optional(v.array(v.string())),
     sort: v.optional(v.string()),
     limit: v.optional(v.number()),
+    closed: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const statuses = args.statuses ?? ["awaiting_decision"]
+    const closed = args.closed ?? false
+    // Closed mode spans the open status set (ignores the statuses arg);
+    // open mode honours the requested statuses (default awaiting_decision).
+    const statuses = closed ? OPEN_STATUSES : (args.statuses ?? ["awaiting_decision"])
     const limit = Math.min(args.limit ?? 200, 500)
     const sort = args.sort ?? "urgency"
 
@@ -41,7 +52,10 @@ export default authedQuery({
       allRows.map((run) => enrichQueueRun(ctx, run)),
     )
 
-    const sorted = enriched.sort((a, b) => {
+    // Open queues exclude completed tasks; closed mode keeps only completed.
+    const filtered = enriched.filter((r) => (closed ? r.checked : !r.checked))
+
+    const sorted = filtered.sort((a, b) => {
       const au = a.updated_at
       const bu = b.updated_at
       if (sort === "oldest") return au - bu
