@@ -3,7 +3,6 @@ import { Archive, Keyboard, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "wouter"
 
-import { QueueView } from "../agent/QueueView"
 import { DashboardView } from "../DashboardView"
 import { ProjectsListView } from "../ProjectsListView"
 import { RoutinesListView } from "../RoutinesListView"
@@ -373,17 +372,6 @@ export function Layout() {
         <ScrollArea className="h-[calc(100vh-4rem)]" data-task-scroll-container>
           <main className="space-y-6 p-6">
             {activeView.lists.map((list) => {
-              // Render QueueView (agent burndown queue) for the agent-queue
-              // query type. It manages its own data fetching internally and
-              // owns a full-height two-pane layout.
-              if (list.query.type === "agent-queue") {
-                return (
-                  <div key={list.id} className="h-[calc(100vh-7rem)]">
-                    <QueueView />
-                  </div>
-                )
-              }
-
               // Render DashboardView for the dashboard query type.
               // It manages its own data fetching via useQuery internally.
               if (list.query.type === "dashboard") {
@@ -436,11 +424,15 @@ export function Layout() {
                 )
               }
 
-              // Render TaskListView for all other query types
-              return (
+              // Render TaskListView for all other query types. The agent-queue
+              // view renders through TaskListView in agentMode (two-pane layout),
+              // which is h-full and therefore needs a bounded-height wrapper.
+              const isAgentQueue = list.query.type === "agent-queue"
+              const taskListView = (
                 <TaskListView
                   key={list.id}
                   list={list}
+                  agentMode={isAgentQueue}
                   onTaskCountChange={handleTaskCountChangeWithUpdate}
                   onTaskClick={handleEntityClick}
                   focusedEntityId={selection.listId === list.id ? selection.entityId : null}
@@ -452,6 +444,16 @@ export function Layout() {
                   isMultiListView={isMultiListView}
                 />
               )
+
+              if (isAgentQueue) {
+                return (
+                  <div key={list.id} className="h-[calc(100vh-7rem)]">
+                    {taskListView}
+                  </div>
+                )
+              }
+
+              return taskListView
             })}
           </main>
         </ScrollArea>

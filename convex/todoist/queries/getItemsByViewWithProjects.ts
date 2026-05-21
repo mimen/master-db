@@ -13,8 +13,9 @@ type ProjectQuery = { type: "project"; view: string; projectId: string; timezone
 type PriorityQuery = { type: "priority"; view: string; priority: 1 | 2 | 3 | 4; timezoneOffsetMinutes?: number }
 type LabelQuery = { type: "label"; view: string; label: string; timezoneOffsetMinutes?: number }
 type RoutineTaskQuery = { type: "routine-tasks"; view: string; filter: RoutineTaskFilter; timezoneOffsetMinutes?: number }
+type AgentQueueQuery = { type: "agent-queue"; view: string; timezoneOffsetMinutes?: number }
 
-type ListQueryInput = InboxQuery | TimeQuery | ProjectQuery | PriorityQuery | LabelQuery | RoutineTaskQuery;
+type ListQueryInput = InboxQuery | TimeQuery | ProjectQuery | PriorityQuery | LabelQuery | RoutineTaskQuery | AgentQueueQuery;
 
 const timeRangeValidator = v.union(
   v.literal("overdue"),
@@ -66,6 +67,11 @@ const listQueryValidator = v.union(
     type: v.literal("routine-tasks"),
     view: v.string(),
     filter: routineTaskFilterValidator,
+    timezoneOffsetMinutes: v.optional(v.number()),
+  }),
+  v.object({
+    type: v.literal("agent-queue"),
+    view: v.string(),
     timezoneOffsetMinutes: v.optional(v.number()),
   })
 );
@@ -213,6 +219,32 @@ export const getItemsByViewWithProjects = authedQuery({
           return deadlineDate > fiveDaysISO;
         });
       }
+    } else if (list.type === "agent-queue") {
+      // Agent queue = all todoist_items that have an agenticRun row.
+      // Include tasks regardless of checked state (completed tasks are still
+      // "has-run"; the UI's open/closed filter handles visibility). We do skip
+      // deleted/missing items to stay consistent with the other branches.
+      const runs = await ctx.db
+        .query("agenticRuns")
+        .withIndex("by_entity_type", (q) => q.eq("entity_type", "todoist_task"))
+        .collect();
+
+      const seen = new Set<string>();
+      const collected: Doc<"todoist_items">[] = [];
+      for (const run of runs) {
+        if (seen.has(run.entity_id)) continue;
+        seen.add(run.entity_id);
+
+        const item = await ctx.db
+          .query("todoist_items")
+          .withIndex("by_todoist_id", (q) => q.eq("todoist_id", run.entity_id))
+          .first();
+
+        if (!item || item.is_deleted) continue;
+        collected.push(item);
+      }
+
+      items = collected;
     }
 
     // Enrich items with project information
