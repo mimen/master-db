@@ -122,7 +122,7 @@ export function TaskListView({
 
   // Batch-fetch the per-task agent overlay for the currently visible tasks.
   const entityRefs = useMemo(
-    () => visibleTasks.map((task) => `todoist:task:${task.todoist_id}`),
+    () => visibleTasks.map((task: TodoistTaskWithProject) => `todoist:task:${task.todoist_id}`),
     [visibleTasks]
   )
   const overlay =
