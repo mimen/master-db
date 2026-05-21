@@ -1,8 +1,8 @@
-import { Bot } from "lucide-react"
+import { AlertCircle, Bot, Calendar } from "lucide-react"
 
 import { StatusPill } from "./StatusPill"
 
-import { PriorityBadge, ProjectBadge } from "@/components/badges/shared"
+import { DateBadge, LabelBadge, PriorityBadge, ProjectBadge } from "@/components/badges/shared"
 import { getProjectColor } from "@/lib/colors"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
@@ -16,6 +16,8 @@ export interface QueueRowItem {
   updated_at: number
   priority: number | null
   due: string | null
+  deadline: string | null
+  labels: Array<{ name: string; color: string }>
   project: { name: string; color: string } | null
 }
 
@@ -50,7 +52,10 @@ export function QueueRow({
 }) {
   const urgency = item.last_urgency
   const priority = usePriority(item.priority ?? undefined)
-  const due = item.due ? formatSmartDate(item.due) : null
+  // Derive shared date chips, mirroring AgentSurface/TaskListItem: due uses the
+  // Calendar icon, deadline uses AlertCircle; status comes from formatSmartDate.
+  const dueInfo = item.due ? formatSmartDate(item.due) : null
+  const deadlineInfo = item.deadline ? formatSmartDate(item.deadline) : null
   return (
     <button
       type="button"
@@ -90,9 +95,49 @@ export function QueueRow({
         {priority?.showFlag && (
           <PriorityBadge priority={priority} onClick={(e) => e.stopPropagation()} />
         )}
-        {due && (
-          <span className="text-[10px] text-muted-foreground shrink-0">{due.text}</span>
+        {dueInfo && (
+          <DateBadge
+            date={dueInfo.text}
+            status={
+              dueInfo.isOverdue ? "overdue" :
+              dueInfo.isToday ? "today" :
+              dueInfo.isTomorrow ? "tomorrow" :
+              "future"
+            }
+            icon={Calendar}
+            onClick={(e) => e.stopPropagation()}
+            showRemoveButton={false}
+          />
         )}
+        {deadlineInfo && (
+          <DateBadge
+            date={deadlineInfo.text}
+            status={
+              deadlineInfo.isOverdue ? "overdue" :
+              deadlineInfo.isToday ? "today" :
+              "future"
+            }
+            icon={AlertCircle}
+            onClick={(e) => e.stopPropagation()}
+            showRemoveButton={false}
+          />
+        )}
+        {item.labels
+          .filter((label) => label.name !== "routine")
+          .map((label) => {
+            const color = getProjectColor(label.color)
+            return (
+              <LabelBadge
+                key={label.name}
+                label={{
+                  name: label.name,
+                  borderColor: `${color}40`,
+                  backgroundColor: `${color}15`,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            )
+          })}
       </div>
     </button>
   )

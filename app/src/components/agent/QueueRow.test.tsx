@@ -13,6 +13,8 @@ const item: QueueRowItem = {
   updated_at: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
   priority: 4, // Todoist API 4 = UI P1 (highest)
   due: "2099-01-15",
+  deadline: "2099-02-20",
+  labels: [{ name: "urgent", color: "red" }],
   project: { name: "AUF", color: "lavender" },
 }
 
@@ -71,5 +73,23 @@ describe("QueueRow", () => {
       <QueueRow item={item} focused={false} onFocus={() => {}} showStatus={false} />,
     )
     expect(screen.queryByText(/Awaiting/i)).toBeNull()
+  })
+
+  test("renders due and deadline date chips", () => {
+    render(<QueueRow item={item} focused={false} onFocus={() => {}} />)
+    expect(screen.getByText(/Jan 15, 2099/)).toBeInTheDocument()
+    expect(screen.getByText(/Feb 20, 2099/)).toBeInTheDocument()
+  })
+
+  test("renders a label badge for each label", () => {
+    render(<QueueRow item={item} focused={false} onFocus={() => {}} />)
+    expect(screen.getByText("urgent")).toBeInTheDocument()
+  })
+
+  test("does not render a label badge when labels is empty", () => {
+    render(
+      <QueueRow item={{ ...item, labels: [] }} focused={false} onFocus={() => {}} />,
+    )
+    expect(screen.queryByText("urgent")).toBeNull()
   })
 })
