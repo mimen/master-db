@@ -61,6 +61,17 @@ function expandDashboard(viewKey: ViewKey, startIndex: number): ListInstance<Vie
   ]
 }
 
+function expandAgentQueue(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
+  return [
+    instantiateList(listDefinitions.agentQueue, {
+      id: createListId(viewKey, "main"),
+      viewKey,
+      indexInView: startIndex,
+      params: {},
+    }) as ListInstance<ViewParams>,
+  ]
+}
+
 function expandInbox(viewKey: ViewKey, startIndex: number): ListInstance<ViewParams>[] {
   return [
     instantiateList(listDefinitions.inbox, {
@@ -301,6 +312,16 @@ const viewPatterns: ViewPattern[] = [
         icon: getViewIcon("view:dashboard", { size: "sm" }),
       },
       buildLists: (viewKey, index) => expandDashboard(viewKey, index),
+    }),
+  },
+  {
+    match: (key) => key === "view:agent-queue",
+    getDefinition: () => ({
+      metadata: {
+        title: "Agent queue",
+        icon: getViewIcon("view:agent-queue", { size: "sm" }),
+      },
+      buildLists: (viewKey, index) => expandAgentQueue(viewKey, index),
     }),
   },
   {

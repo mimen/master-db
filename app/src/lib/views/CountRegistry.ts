@@ -143,6 +143,8 @@ export class CountRegistry {
       switch (query.type) {
         case "dashboard":
           return "list:dashboard"
+        case "agent-queue":
+          return "list:agent-queue"
         case "inbox":
           return "list:inbox"
         case "time": {

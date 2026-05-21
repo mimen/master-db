@@ -1,4 +1,4 @@
-import { Flag, Inbox, LayoutDashboard, Tag } from "lucide-react"
+import { Bot, Flag, Inbox, LayoutDashboard, Tag } from "lucide-react"
 
 import { getViewIcon } from "../icons/viewIcons"
 
@@ -88,6 +88,24 @@ const dashboardDefinition: ListDefinition = {
   getEmptyState: () => ({
     title: "No data yet",
     description: "Sync Todoist to populate the dashboard",
+  }),
+}
+
+const agentQueueDefinition: ListDefinition = {
+  key: "list:agent-queue",
+  defaults: {
+    collapsible: false,
+    startExpanded: true,
+  },
+  buildQuery: (): ListQueryDefinition => ({ type: "agent-queue" }),
+  getHeader: () => ({
+    title: "Agent queue",
+    description: "Items awaiting your decision",
+    icon: <Bot className="h-6 w-6 mr-3" />,
+  }),
+  getEmptyState: () => ({
+    title: "Inbox zero",
+    description: "Nothing awaiting your decision",
   }),
 }
 
@@ -551,6 +569,7 @@ const routineTaskDefinition: ListDefinition<{ filter: RoutineTaskFilter }> = {
 
 export const listDefinitions = {
   dashboard: dashboardDefinition,
+  agentQueue: agentQueueDefinition,
   inbox: inboxDefinition,
   time: timeDefinition,
   project: projectDefinition,
