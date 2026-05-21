@@ -19,6 +19,7 @@ import { useOptimisticLabelChange } from "@/hooks/useOptimisticLabelChange"
 import { useOptimisticTaskComplete } from "@/hooks/useOptimisticTaskComplete"
 import { useOptimisticTaskText } from "@/hooks/useOptimisticTaskText"
 import { useRoutineActions } from "@/hooks/useRoutineActions"
+import { relativeTime, urgencyClass, type WithAgent } from "@/lib/agent/agentOverlay"
 import { getProjectColor } from "@/lib/colors"
 import { applyOptimisticTaskUpdate } from "@/lib/cursor/applyOptimisticUpdate"
 import { matchesViewFilter } from "@/lib/cursor/filters"
@@ -36,6 +37,19 @@ interface TaskListItemProps {
   onEntityRemoved?: (listId: string, entityId: string) => void
   listId?: string
   query: ListQueryInput
+  /**
+   * Agent mode. When true, the row reads the task's `_agent` overlay and
+   * decorates the fixed badges with an urgency chip + last-activity time, and
+   * routes AgentStatusBadge clicks to `onAgentSelect` instead of the drawer.
+   */
+  agentMode?: boolean
+  /**
+   * Hide the AgentStatusBadge entirely (true when the list is already filtered
+   * to a single agent status, making the per-row status redundant).
+   */
+  hideAgentStatus?: boolean
+  /** Selector the AgentStatusBadge calls on click in agent mode. */
+  onAgentSelect?: (entity_ref: string) => void
 }
 
 export const TaskListItem = memo(function TaskListItem({
@@ -45,7 +59,10 @@ export const TaskListItem = memo(function TaskListItem({
   allLabels,
   onEntityRemoved,
   listId,
-  query
+  query,
+  agentMode = false,
+  hideAgentStatus = false,
+  onAgentSelect
 }: TaskListItemProps) {
   // ============= ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS =============
 
@@ -115,6 +132,10 @@ export const TaskListItem = memo(function TaskListItem({
   const { skipRoutineTask } = useRoutineActions()
 
   const assignee = task.assigned_by_uid || task.responsible_uid
+
+  // Agent overlay (only present at runtime when TaskListView decorated the task
+  // in agent mode). Read structurally — the prop type is the undecorated task.
+  const agentOverlay = (task as WithAgent<TodoistTaskWithProject>)._agent
 
   // Notify cursor system when task no longer matches filter (use effect to avoid setState during render)
   useEffect(() => {
@@ -395,7 +416,27 @@ export const TaskListItem = memo(function TaskListItem({
             </Badge>
           )}
 
-          <AgentStatusBadge entity_ref={`todoist:task:${task.todoist_id}`} />
+          {agentMode && agentOverlay && agentOverlay.last_urgency != null && (
+            <span
+              className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${urgencyClass(agentOverlay.last_urgency)}`}
+            >
+              {agentOverlay.last_urgency.toFixed(2)}
+            </span>
+          )}
+
+          {agentMode && agentOverlay && (
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              {relativeTime(agentOverlay.last_chatted_at)}
+            </span>
+          )}
+
+          {!(agentMode && hideAgentStatus) && (
+            <AgentStatusBadge
+              entity_ref={`todoist:task:${task.todoist_id}`}
+              agentMode={agentMode}
+              onSelect={onAgentSelect}
+            />
+          )}
         </>
       )}
       renderHoverBadges={() => (

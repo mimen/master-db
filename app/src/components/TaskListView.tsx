@@ -12,7 +12,7 @@ import { api } from "@/convex/_generated/api"
 import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
 import { useAgentQueueKeybindings } from "@/hooks/useAgentQueueKeybindings"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
-import { type AgentFilterKey, filterByAgent, mergeAgentOverlay } from "@/lib/agent/agentOverlay"
+import { type AgentFilterKey, filterByAgent, mergeAgentOverlay, OPEN_STATUSES } from "@/lib/agent/agentOverlay"
 import { agentSortOptions, taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
 import { applyGroupingAndSorting } from "@/lib/views/sortAndGroup"
 import type { ListInstance, ListQueryInput, ViewParams } from "@/lib/views/types"
@@ -227,6 +227,10 @@ export function TaskListView({
     [decoratedTasks, agentFilter]
   )
 
+  // When the list is already filtered to a single agent status, the per-row
+  // status badge is redundant — hide it. (all-open / closed / no-run keep it.)
+  const hideAgentStatus = (OPEN_STATUSES as readonly string[]).includes(agentFilter)
+
   // The sort/group option arrays handed to BaseListView. Hoisted out of the JSX
   // so the keyboard navigation below can replicate BaseListView's displayed
   // order. Default agent sort = "urgency" (mirrors BaseListView's defaultSort).
@@ -340,6 +344,9 @@ export function TaskListView({
           onEntityRemoved={onEntityRemoved}
           listId={list.id}
           query={query}
+          agentMode={effectiveAgentMode}
+          hideAgentStatus={hideAgentStatus}
+          onAgentSelect={setSelectedRef}
         />
       )}
     />

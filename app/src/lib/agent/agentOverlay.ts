@@ -17,6 +17,33 @@ export interface AgentOverlay {
 export type WithAgent<T> = T & { _agent?: AgentOverlay }
 
 /**
+ * Compact relative-time formatter for agent-mode last-activity chips
+ * ("4d ago"). Mirrors the helper QueueRow used; extracted here so the
+ * decoration can move into the shared TaskListItem.
+ */
+export function relativeTime(ms: number): string {
+  const diff = Date.now() - ms
+  const s = Math.floor(diff / 1000)
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 48) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  return `${d}d ago`
+}
+
+/**
+ * Band-colored urgency chip classes: rose at >=0.85, amber at >=0.5, muted
+ * otherwise. Mirrors the helper QueueRow used.
+ */
+export function urgencyClass(u: number): string {
+  if (u >= 0.85) return "bg-rose-500/15 text-rose-600 border-rose-500/30"
+  if (u >= 0.5) return "bg-amber-500/15 text-amber-700 border-amber-500/30"
+  return "bg-muted text-muted-foreground border-border"
+}
+
+/**
  * Open run statuses (mirrors the OPEN set in convex/agentic/types/runStatus.ts —
  * everything except `idle`). A run in one of these is still in flight / needs
  * attention; anything else (e.g. `idle`) is treated as "closed".

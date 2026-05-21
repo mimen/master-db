@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
 import { AgentStatusBadge } from "./AgentStatusBadge"
@@ -10,10 +10,12 @@ type RunRow = {
 } | null | undefined
 
 let mockRun: RunRow = null
+const mockOpen = vi.fn()
+const mockPostRun = vi.fn().mockResolvedValue(undefined)
 
 vi.mock("convex/react", () => ({
   useQuery: () => mockRun,
-  useAction: () => vi.fn().mockResolvedValue(undefined),
+  useAction: () => mockPostRun,
 }))
 
 vi.mock("@/convex/_generated/api", () => ({
@@ -26,12 +28,14 @@ vi.mock("@/convex/_generated/api", () => ({
 }))
 
 vi.mock("@/contexts/AgentDrawerContext", () => ({
-  useAgentDrawer: () => ({ open: vi.fn() }),
+  useAgentDrawer: () => ({ open: mockOpen }),
 }))
 
 describe("AgentStatusBadge", () => {
   beforeEach(() => {
     mockRun = null
+    mockOpen.mockClear()
+    mockPostRun.mockClear()
   })
 
   test("renders nothing when no run row exists", () => {
@@ -87,5 +91,57 @@ describe("AgentStatusBadge", () => {
     mockRun = { status: "idle" }
     render(<AgentStatusBadge entity_ref="todoist:task:1" />)
     expect(screen.getByText("Agent")).toBeInTheDocument()
+  })
+
+  describe("standard mode (no agentMode)", () => {
+    test("clicking an idle badge fires discovery and does NOT open the drawer", () => {
+      mockRun = { status: "idle" }
+      render(<AgentStatusBadge entity_ref="todoist:task:1" />)
+      fireEvent.click(screen.getByRole("button"))
+      expect(mockPostRun).toHaveBeenCalledTimes(1)
+      expect(mockOpen).not.toHaveBeenCalled()
+    })
+
+    test("clicking a non-idle badge opens the drawer", () => {
+      mockRun = { status: "awaiting_decision", last_urgency: 0.4 }
+      render(<AgentStatusBadge entity_ref="todoist:task:1" />)
+      fireEvent.click(screen.getByRole("button"))
+      expect(mockOpen).toHaveBeenCalledWith("todoist:task:1")
+      expect(mockPostRun).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("agent mode", () => {
+    test("clicking calls onSelect with the entity_ref and does NOT open the drawer or fire discovery", () => {
+      mockRun = { status: "awaiting_decision", last_urgency: 0.4 }
+      const onSelect = vi.fn()
+      render(
+        <AgentStatusBadge entity_ref="todoist:task:1" agentMode onSelect={onSelect} />,
+      )
+      fireEvent.click(screen.getByRole("button"))
+      expect(onSelect).toHaveBeenCalledWith("todoist:task:1")
+      expect(mockOpen).not.toHaveBeenCalled()
+      expect(mockPostRun).not.toHaveBeenCalled()
+    })
+
+    test("clicking an idle badge in agent mode selects rather than firing discovery", () => {
+      mockRun = { status: "idle" }
+      const onSelect = vi.fn()
+      render(
+        <AgentStatusBadge entity_ref="todoist:task:1" agentMode onSelect={onSelect} />,
+      )
+      fireEvent.click(screen.getByRole("button"))
+      expect(onSelect).toHaveBeenCalledWith("todoist:task:1")
+      expect(mockPostRun).not.toHaveBeenCalled()
+      expect(mockOpen).not.toHaveBeenCalled()
+    })
+
+    test("renders null when no run even in agent mode", () => {
+      mockRun = null
+      const { container } = render(
+        <AgentStatusBadge entity_ref="todoist:task:1" agentMode onSelect={vi.fn()} />,
+      )
+      expect(container.firstChild).toBeNull()
+    })
   })
 })

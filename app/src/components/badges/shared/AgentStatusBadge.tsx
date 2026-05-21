@@ -23,6 +23,11 @@ import { api } from "@/convex/_generated/api"
  *    as the run progresses.
  *  - anything else (discovering / awaiting_decision / executing / error):
  *    open the drawer to view / interact.
+ *
+ * In agent mode (`agentMode`), the click behavior is replaced entirely:
+ * clicking calls `onSelect(entity_ref)` to select the task into the right pane
+ * (which mounts AgentSurface and auto-triggers discovery itself) and never
+ * opens the drawer or fires a separate discovery call.
  */
 
 const STATUS_VARIANT: Record<
@@ -58,9 +63,16 @@ const STATUS_VARIANT: Record<
 
 export interface AgentStatusBadgeProps {
   entity_ref: string
+  /**
+   * Agent mode. When true, clicking selects the task into the right pane via
+   * `onSelect` instead of opening the drawer or firing discovery.
+   */
+  agentMode?: boolean
+  /** Selector invoked on click in agent mode. */
+  onSelect?: (entity_ref: string) => void
 }
 
-export function AgentStatusBadge({ entity_ref }: AgentStatusBadgeProps) {
+export function AgentStatusBadge({ entity_ref, agentMode = false, onSelect }: AgentStatusBadgeProps) {
   const run = useQuery(api.agentic.queries.getRun.default, { entity_ref })
   const postRunAction = useAction(api.agentic.actions.postRun.default)
   const { open } = useAgentDrawer()
@@ -84,6 +96,12 @@ export function AgentStatusBadge({ entity_ref }: AgentStatusBadgeProps) {
 
   const handleClick = (e: MouseEvent) => {
     e.stopPropagation()
+    if (agentMode) {
+      // Selecting the task mounts AgentSurface in the right pane, which
+      // auto-triggers discovery itself. Do not open the drawer or post a run.
+      onSelect?.(entity_ref)
+      return
+    }
     if (status === "idle") {
       // Kick off a fresh discovery; do NOT open the drawer. Convex reactivity
       // will flip the badge to "Thinking" within ~a few hundred ms.
