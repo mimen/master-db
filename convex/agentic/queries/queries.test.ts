@@ -10,7 +10,10 @@ const modules = normalizeModules(
   import.meta.url,
 );
 
-async function seed(t: ReturnType<typeof convexTest>, entity_ref: string) {
+async function seed(
+  t: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>,
+  entity_ref: string,
+) {
   await t.mutation(api.agentic.mutations.upsertRun.default, {
     entity_ref,
     entity_type: "todoist_task",
@@ -52,7 +55,7 @@ async function seed(t: ReturnType<typeof convexTest>, entity_ref: string) {
 
 describe("agentic queries", () => {
   test("getRun returns the row or null", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await seed(t, "todoist:task:abc");
     const r = await t.query(api.agentic.queries.getRun.default, {
       entity_ref: "todoist:task:abc",
@@ -65,7 +68,7 @@ describe("agentic queries", () => {
   });
 
   test("getThread returns messages and activities interleaved by sequence", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await seed(t, "todoist:task:abc");
     const thread = await t.query(api.agentic.queries.getThread.default, {
       entity_ref: "todoist:task:abc",
@@ -79,7 +82,7 @@ describe("agentic queries", () => {
   });
 
   test("getActivities filters by run_id", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await seed(t, "todoist:task:abc");
     const acts = await t.query(api.agentic.queries.getActivities.default, {
       run_id: "01H1",

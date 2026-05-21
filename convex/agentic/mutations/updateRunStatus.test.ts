@@ -12,7 +12,7 @@ const modules = normalizeModules(
 
 describe("updateRunStatus", () => {
   test("patches status and last_message_id", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await t.mutation(api.agentic.mutations.upsertRun.default, {
       entity_ref: "todoist:task:abc",
       entity_type: "todoist_task",
@@ -51,7 +51,7 @@ describe("updateRunStatus", () => {
   });
 
   test("throws if no run exists", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await expect(
       t.mutation(api.agentic.mutations.updateRunStatus.default, {
         entity_ref: "missing",

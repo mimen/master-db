@@ -13,7 +13,7 @@ const modules = normalizeModules(
 
 describe("upsertRun", () => {
   test("creates a new row when none exists", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     const id = (await t.mutation(api.agentic.mutations.upsertRun.default, {
       entity_ref: "todoist:task:abc",
       entity_type: "todoist_task",
@@ -31,7 +31,7 @@ describe("upsertRun", () => {
   });
 
   test("updates the existing row when one exists", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await t.mutation(api.agentic.mutations.upsertRun.default, {
       entity_ref: "todoist:task:abc",
       entity_type: "todoist_task",

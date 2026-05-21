@@ -13,7 +13,7 @@ const modules = normalizeModules(
 
 describe("recordActivity", () => {
   test("creates a pending activity and resolves it later", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     const id = (await t.mutation(api.agentic.mutations.recordActivity.start, {
       entity_ref: "todoist:task:abc",
       run_id: "01H1",
@@ -38,7 +38,7 @@ describe("recordActivity", () => {
   });
 
   test("activity sequences share space with messages per entity", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await t.mutation(api.agentic.mutations.appendThreadMessage.default, {
       entity_ref: "todoist:task:abc",
       run_id: "01H1",

@@ -12,7 +12,7 @@ const modules = normalizeModules(
 
 describe("appendThreadMessage", () => {
   test("assigns monotonic sequence per entity", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     const id1 = await t.mutation(api.agentic.mutations.appendThreadMessage.default, {
       entity_ref: "todoist:task:abc",
       run_id: "01H1",
@@ -184,7 +184,7 @@ describe("appendThreadMessage", () => {
   });
 
   test("separate entities have independent sequences", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({ email: "milad@afternoonumbrellafriends.com" });
     await t.mutation(api.agentic.mutations.appendThreadMessage.default, {
       entity_ref: "todoist:task:abc",
       run_id: "01H1",
