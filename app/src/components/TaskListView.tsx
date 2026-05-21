@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useSearch } from "wouter"
 
 import { AgentModeLayout } from "@/components/agent/AgentModeLayout"
@@ -50,6 +50,12 @@ function readAgentFilterFromSearch(search: string): AgentFilterKey {
 /** Parse the view mode from the URL `?mode=` param. `mode=agent` => agent. */
 function readModeFromSearch(search: string): ViewMode {
   return new URLSearchParams(search).get("mode") === "agent" ? "agent" : "standard"
+}
+
+/** Parse the initial selected task (entity_ref) from the URL `?task=` param. */
+function readTaskFromSearch(search: string): string | null {
+  const task = new URLSearchParams(search).get("task")
+  return task && task.length > 0 ? task : null
 }
 
 interface TaskListViewProps {
@@ -151,14 +157,24 @@ export function TaskListView({
   // behavior is gated via the useQuery "skip" arg and the agentMode flag so
   // standard mode performs no overlay fetch and renders exactly as before.
 
-  // Selected task ref, drives the right-pane AgentSurface in agent mode.
-  const [selectedRef, setSelectedRef] = useState<string | null>(null)
-
-  // The URL search string is the source of truth for both the agent filter
-  // (`?status=`) and the view mode (`?mode=`). `useLocation` returns the
-  // pathname only, so writing the search string never affects view resolution.
+  // The URL search string is the source of truth for the agent filter
+  // (`?status=`), the view mode (`?mode=`), and the initially-selected task
+  // (`?task=`). `useLocation` returns the pathname only, so writing the search
+  // string never affects view resolution.
   const search = useSearch()
   const [, navigate] = useLocation()
+
+  // Selected task ref, drives the right-pane AgentSurface in agent mode. Seeded
+  // once from `?task=` on mount; after that, state is the source of truth and
+  // the URL is a write target (mirroring the retiring QueueView).
+  const [selectedRef, setSelectedRef] = useState<string | null>(() =>
+    readTaskFromSearch(search)
+  )
+
+  // Tracks an explicit user clear (Escape). Suppresses the auto-focus effect so
+  // a deliberate "no selection" isn't immediately re-populated with the first
+  // row. Reset whenever the selection is set to a real ref again.
+  const userClearedRef = useRef(false)
 
   // Effective agent mode = the forced-on prop (e.g. the agent-queue preset) OR
   // the URL `?mode=agent` flag, so any single-list task view can flip into the
@@ -271,19 +287,55 @@ export function TaskListView({
     [orderedAgentTasks]
   )
 
+  // Single entry point for changing the selection in agent mode. Updates state,
+  // mirrors it into `?task=` (merging into the live search params so `?mode=` /
+  // `?status=` survive; removing `task` when null), and tracks explicit clears
+  // so the auto-focus effect doesn't fight an intentional Escape. State is the
+  // source of truth post-mount; the URL is purely a write target here.
+  const selectRef = useCallback(
+    (next: string | null) => {
+      userClearedRef.current = next === null
+      setSelectedRef(next)
+      const params = new URLSearchParams(search)
+      if (next) {
+        params.set("task", next)
+      } else {
+        params.delete("task")
+      }
+      const qs = params.toString()
+      navigate(qs ? `?${qs}` : "", { replace: true })
+    },
+    [navigate, search]
+  )
+
+  // Auto-focus the first ordered row when nothing is selected (or the selected
+  // ref dropped out of the current list), mirroring QueueView. Skipped after an
+  // explicit Escape (userClearedRef) so a deliberate clear isn't overridden.
+  // Loop guard: once focus lands on a present ref, indexOf >= 0 and selectedRef
+  // != null, so the condition short-circuits. Standard mode is gated out.
+  const firstRef = orderedRefs.length > 0 ? orderedRefs[0] : null
+  const selectedInOrder = selectedRef !== null && orderedRefs.indexOf(selectedRef) >= 0
+  useEffect(() => {
+    if (!effectiveAgentMode) return
+    if (userClearedRef.current) return
+    if (firstRef && !selectedInOrder) {
+      selectRef(firstRef)
+    }
+  }, [effectiveAgentMode, firstRef, selectedInOrder, selectRef])
+
   useAgentQueueKeybindings({
     enabled: effectiveAgentMode,
     onNext: () => {
       if (orderedRefs.length === 0) return
       const idx = selectedRef ? orderedRefs.indexOf(selectedRef) : -1
       const next = idx === -1 ? 0 : Math.min(idx + 1, orderedRefs.length - 1)
-      setSelectedRef(orderedRefs[next])
+      selectRef(orderedRefs[next])
     },
     onPrev: () => {
       if (orderedRefs.length === 0) return
       const idx = selectedRef ? orderedRefs.indexOf(selectedRef) : -1
       const prev = idx === -1 ? 0 : Math.max(idx - 1, 0)
-      setSelectedRef(orderedRefs[prev])
+      selectRef(orderedRefs[prev])
     },
     // Decision keys are Phase-3 no-op stubs: executing an option / modifying /
     // executing the recommended action needs an imperative handle into the
@@ -298,14 +350,14 @@ export function TaskListView({
     onExecuteRecommended: () => {
       /* TODO Phase 3 */
     },
-    onClearFocus: () => setSelectedRef(null),
+    onClearFocus: () => selectRef(null),
   })
 
   // In agent mode, a row click selects the task into the right pane (and still
   // forwards onTaskClick for any parent-level wiring). Standard mode is unchanged.
   const handleEntityClick = (listId: string, todoistId: string) => {
     if (effectiveAgentMode) {
-      setSelectedRef(`todoist:task:${todoistId}`)
+      selectRef(`todoist:task:${todoistId}`)
     }
     onTaskClick?.(listId, todoistId)
   }
@@ -346,7 +398,7 @@ export function TaskListView({
           query={query}
           agentMode={effectiveAgentMode}
           hideAgentStatus={hideAgentStatus}
-          onAgentSelect={setSelectedRef}
+          onAgentSelect={selectRef}
         />
       )}
     />

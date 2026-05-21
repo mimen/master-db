@@ -147,11 +147,19 @@ describe("TaskListView agent mode", () => {
     expect(screen.queryByText("First task")).toBeNull()
   })
 
-  test("two-pane layout present with empty right pane initially", async () => {
-    renderAgentMode()
-    await screen.findByText("First task")
-    // No selection yet -> surface absent, empty-state copy shown.
-    expect(screen.queryByTestId("agent-surface")).toBeNull()
+  test("two-pane layout present with empty right pane when nothing to focus", async () => {
+    // The no-run filter shows task "b" (no overlay) — but auto-focus restores
+    // the first row into the right pane, so the surface IS present. Clearing
+    // focus (Escape) reverts the right pane to its empty state.
+    renderAgentMode("/agent?status=no-run")
+    await screen.findByText("Second task")
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:b")
+    })
+    fireEvent.keyDown(window, { key: "Escape" })
+    await waitFor(() => {
+      expect(screen.queryByTestId("agent-surface")).toBeNull()
+    })
     expect(screen.getByText(/Select a task/i)).toBeInTheDocument()
   })
 
@@ -164,19 +172,22 @@ describe("TaskListView agent mode", () => {
     })
   })
 
-  test("pressing j selects the first displayed task; Escape clears it", async () => {
-    // Default all-open filter shows only task "a" (the open run).
+  test("pressing j keeps the first displayed task focused; Escape clears it", async () => {
+    // Default all-open filter shows only task "a" (the open run). It is
+    // auto-focused on load, so the surface is already present.
     renderAgentMode()
-    await screen.findByText("First task")
-    expect(screen.queryByTestId("agent-surface")).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+    })
 
-    // j with nothing selected -> select the first displayed task.
+    // j stays on the single displayed task.
     fireEvent.keyDown(window, { key: "j" })
     await waitFor(() => {
       expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
     })
 
-    // Escape clears the selection -> right pane reverts to the empty state.
+    // Escape clears the selection -> right pane reverts to the empty state and
+    // STAYS cleared (auto-focus does not fight an explicit clear).
     fireEvent.keyDown(window, { key: "Escape" })
     await waitFor(() => {
       expect(screen.queryByTestId("agent-surface")).toBeNull()
@@ -202,6 +213,34 @@ describe("TaskListView agent mode", () => {
     expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
   })
 
+  test("restores the selected task from ?task= on load", async () => {
+    // ?task= seeds the selection on mount — the right pane shows the restored
+    // ref, NOT the auto-focused first row. Use all-open so both runs are shown;
+    // task "b" has no overlay though, so widen to a filter that includes it.
+    // The restored ref must win regardless of list order.
+    renderAgentMode("/agent?status=no-run&task=todoist:task:b")
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:b")
+    })
+  })
+
+  test("auto-focuses the first task when no ?task= present", async () => {
+    // Default all-open filter shows only task "a". With no ?task=, the first
+    // ordered row is auto-focused into the right pane on load.
+    renderAgentMode()
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+    })
+  })
+
+  test("standard mode does not auto-focus a task", async () => {
+    // Standard mode never auto-focuses: no two-pane layout, no surface.
+    renderUrlDriven("/today")
+    await screen.findByText("First task")
+    expect(screen.queryByTestId("agent-surface")).toBeNull()
+    expect(screen.queryByText(/Select a task/i)).toBeNull()
+  })
+
   test("standard mode does not bind the agent keyboard", async () => {
     // Without agent mode, pressing j must NOT open a right-pane surface (there
     // is no two-pane layout in standard mode at all).
@@ -215,8 +254,11 @@ describe("TaskListView agent mode", () => {
 describe("TaskListView URL-driven mode (no agentMode prop)", () => {
   test("?mode=agent flips a normal list into the two-pane agent layout", async () => {
     renderUrlDriven("/today?mode=agent")
-    // Two-pane agent layout: the right-pane empty state is present.
-    expect(await screen.findByText(/Select a task/i)).toBeInTheDocument()
+    // Two-pane agent layout: the default all-open filter shows task "a", which
+    // is auto-focused into the right-pane surface on load.
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+    })
   })
 
   test("without ?mode= a normal list renders standard (no two-pane)", async () => {
