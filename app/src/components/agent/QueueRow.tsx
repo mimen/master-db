@@ -41,10 +41,12 @@ export function QueueRow({
   item,
   focused,
   onFocus,
+  showStatus = true,
 }: {
   item: QueueRowItem
   focused: boolean
   onFocus: (entity_ref: string) => void
+  showStatus?: boolean
 }) {
   const urgency = item.last_urgency
   const priority = usePriority(item.priority ?? undefined)
@@ -75,7 +77,7 @@ export function QueueRow({
 
       {/* Line 2: metadata */}
       <div className="flex flex-wrap items-center gap-1.5 min-w-0 pl-5 mt-0.5">
-        <StatusPill status={item.status} />
+        {showStatus && <StatusPill status={item.status} />}
         {item.project && (
           <ProjectBadge
             project={{

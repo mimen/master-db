@@ -60,4 +60,16 @@ describe("QueueRow", () => {
     )
     expect(screen.queryByText("AUF")).toBeNull()
   })
+
+  test("shows the status pill by default", () => {
+    render(<QueueRow item={item} focused={false} onFocus={() => {}} />)
+    expect(screen.getByText(/Awaiting/i)).toBeInTheDocument()
+  })
+
+  test("hides the status pill when showStatus is false", () => {
+    render(
+      <QueueRow item={item} focused={false} onFocus={() => {}} showStatus={false} />,
+    )
+    expect(screen.queryByText(/Awaiting/i)).toBeNull()
+  })
 })

@@ -4,7 +4,11 @@ import { useEffect, useState } from "react"
 
 import { AgentSurface } from "./AgentSurface"
 import { QueueEmptyState } from "./QueueEmptyState"
-import { type QueueSort, QueueFilterBar } from "./QueueFilterBar"
+import {
+  type QueueFilterKey,
+  type QueueSort,
+  QueueFilterBar,
+} from "./QueueFilterBar"
 import { QueueRow } from "./QueueRow"
 
 import {
@@ -20,14 +24,24 @@ type AwaitingDecisionItem = FunctionReturnType<
   typeof api.agentic.queries.listAwaitingDecision.default
 >[number]
 
+const OPEN_STATUSES = ["awaiting_decision", "discovering", "executing", "error"]
+
 export function QueueView() {
-  const [statuses, setStatuses] = useState<string[]>(["awaiting_decision"])
+  const [filter, setFilter] = useState<QueueFilterKey>("all-open")
   const [sort, setSort] = useState<QueueSort>("urgency")
   const [focused, setFocused] = useState<string | null>(null)
 
+  const queryArgs =
+    filter === "closed"
+      ? { closed: true, sort }
+      : filter === "all-open"
+        ? { statuses: OPEN_STATUSES, sort }
+        : { statuses: [filter], sort }
+  const showStatus = filter === "all-open" || filter === "closed"
+
   const rows: AwaitingDecisionItem[] | undefined = useQuery(
     api.agentic.queries.listAwaitingDecision.default,
-    { statuses, sort },
+    queryArgs,
   )
 
   const items = rows ?? []
@@ -82,9 +96,9 @@ export function QueueView() {
         className="flex flex-col border-r"
       >
         <QueueFilterBar
-          statuses={statuses}
+          filter={filter}
           sort={sort}
-          onStatusesChange={setStatuses}
+          onFilterChange={setFilter}
           onSortChange={setSort}
         />
         {rows === undefined ? (
@@ -99,6 +113,7 @@ export function QueueView() {
                 item={item}
                 focused={item.entity_ref === focused}
                 onFocus={setFocused}
+                showStatus={showStatus}
               />
             ))}
           </div>

@@ -1,13 +1,26 @@
 export type QueueSort = "urgency" | "recent" | "oldest"
 
+export type QueueFilterKey =
+  | "all-open"
+  | "closed"
+  | "awaiting_decision"
+  | "discovering"
+  | "executing"
+  | "error"
+
 export interface QueueFilterBarProps {
-  statuses: string[]
+  filter: QueueFilterKey
   sort: QueueSort
-  onStatusesChange: (statuses: string[]) => void
+  onFilterChange: (filter: QueueFilterKey) => void
   onSortChange: (sort: QueueSort) => void
 }
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+const PRIMARY_OPTIONS: Array<{ value: QueueFilterKey; label: string }> = [
+  { value: "all-open", label: "All open" },
+  { value: "closed", label: "Closed" },
+]
+
+const STATUS_OPTIONS: Array<{ value: QueueFilterKey; label: string }> = [
   { value: "awaiting_decision", label: "Awaiting decision" },
   { value: "discovering", label: "Thinking" },
   { value: "executing", label: "Running" },
@@ -20,37 +33,44 @@ const SORT_OPTIONS: Array<{ value: QueueSort; label: string }> = [
   { value: "oldest", label: "Oldest" },
 ]
 
+function chipClass(active: boolean): string {
+  return `text-[11px] rounded-full px-2 py-0.5 border transition-colors ${
+    active
+      ? "bg-primary text-primary-foreground border-primary"
+      : "border-border text-muted-foreground hover:bg-accent/50"
+  }`
+}
+
 export function QueueFilterBar({
-  statuses,
+  filter,
   sort,
-  onStatusesChange,
+  onFilterChange,
   onSortChange,
 }: QueueFilterBarProps) {
-  function toggleStatus(value: string) {
-    if (statuses.includes(value)) onStatusesChange(statuses.filter((s) => s !== value))
-    else onStatusesChange([...statuses, value])
-  }
-
   return (
     <div className="px-3 py-2 border-b flex items-center gap-2 flex-wrap">
       <div className="flex items-center gap-1 flex-wrap">
-        {STATUS_OPTIONS.map((opt) => {
-          const active = statuses.includes(opt.value)
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => toggleStatus(opt.value)}
-              className={`text-[11px] rounded-full px-2 py-0.5 border transition-colors ${
-                active
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-border text-muted-foreground hover:bg-accent/50"
-              }`}
-            >
-              {opt.label}
-            </button>
-          )
-        })}
+        {PRIMARY_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onFilterChange(opt.value)}
+            className={chipClass(filter === opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+        {STATUS_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onFilterChange(opt.value)}
+            className={chipClass(filter === opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
       <div className="ml-auto">
         <label className="text-[11px] text-muted-foreground mr-1" htmlFor="queue-sort">
