@@ -8,11 +8,15 @@ import { AgentDrawerProvider, useAgentDrawer } from "@/contexts/AgentDrawerConte
 
 vi.mock("convex/react", () => ({
   useAction: () => vi.fn().mockResolvedValue({ run_id: "r1", status: "idle", accepted: false }),
+  useQuery: () => undefined,
 }))
 
 vi.mock("@/convex/_generated/api", () => ({
   api: {
     agentic: {
+      queries: {
+        getQueueEntityMeta: { default: "stub.agentic.queries.getQueueEntityMeta" },
+      },
       actions: {
         postRun: { default: "stub.agentic.actions.postRun" },
         postInterrupt: { default: "stub.agentic.actions.postInterrupt" },

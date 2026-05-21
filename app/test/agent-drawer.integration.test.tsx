@@ -51,6 +51,7 @@ vi.mock("@/convex/_generated/api", () => ({
     queries: {
       getThread: { default: "stub.getThread" },
       getRun: { default: "stub.getRun" },
+      getQueueEntityMeta: { default: "stub.getQueueEntityMeta" },
     },
     actions: {
       postRun: { default: "stub.agentic.actions.postRun" },
