@@ -7,6 +7,11 @@ import { QueueEmptyState } from "./QueueEmptyState"
 import { type QueueSort, QueueFilterBar } from "./QueueFilterBar"
 import { QueueRow } from "./QueueRow"
 
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 import { api } from "@/convex/_generated/api"
 import { useAgentQueueKeybindings } from "@/hooks/useAgentQueueKeybindings"
@@ -65,8 +70,17 @@ export function QueueView() {
   })
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="w-[440px] shrink-0 flex flex-col border-r">
+    <ResizablePanelGroup
+      direction="horizontal"
+      autoSaveId="agent-queue-panels"
+      className="h-full"
+    >
+      <ResizablePanel
+        defaultSize={32}
+        minSize={20}
+        maxSize={55}
+        className="flex flex-col border-r"
+      >
         <QueueFilterBar
           statuses={statuses}
           sort={sort}
@@ -89,8 +103,9 @@ export function QueueView() {
             ))}
           </div>
         )}
-      </div>
-      <div className="flex-1 flex flex-col overflow-hidden">
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize={68} className="flex flex-col overflow-hidden">
         <AgentComposerProvider>
           {focused ? (
             <AgentSurface entity_ref={focused} />
@@ -98,7 +113,7 @@ export function QueueView() {
             <QueueEmptyState message="Select a task to view its agent thread." />
           )}
         </AgentComposerProvider>
-      </div>
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   )
 }
