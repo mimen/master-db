@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 export interface UseAgentQueueKeybindingsOpts {
   enabled: boolean
@@ -19,38 +19,45 @@ function isTypingTarget(el: EventTarget | null): boolean {
 }
 
 export function useAgentQueueKeybindings(opts: UseAgentQueueKeybindingsOpts) {
+  // Keep the latest callbacks in a ref so the listener binds once per
+  // `enabled` change rather than re-binding on every render (callers pass a
+  // fresh opts object literal). The handler always reads current callbacks.
+  const optsRef = useRef(opts)
+  optsRef.current = opts
+
   useEffect(() => {
     if (!opts.enabled) return
     function onKey(e: KeyboardEvent) {
       if (isTypingTarget(document.activeElement)) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
+      const o = optsRef.current
       switch (e.key) {
         case "j":
         case "ArrowDown":
-          opts.onNext()
+          o.onNext()
           return
         case "k":
         case "ArrowUp":
-          opts.onPrev()
+          o.onPrev()
           return
         case "1":
         case "2":
         case "3":
         case "4":
-          opts.onExecuteOption(Number(e.key) - 1)
+          o.onExecuteOption(Number(e.key) - 1)
           return
         case "m":
-          opts.onModify()
+          o.onModify()
           return
         case "e":
-          opts.onExecuteRecommended()
+          o.onExecuteRecommended()
           return
         case "Escape":
-          opts.onClearFocus()
+          o.onClearFocus()
           return
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [opts])
+  }, [opts.enabled])
 }

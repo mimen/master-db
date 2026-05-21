@@ -94,4 +94,15 @@ describe("useAgentQueueKeybindings", () => {
     expect(cbs.onExecuteOption).not.toHaveBeenCalled()
     expect(cbs.onClearFocus).not.toHaveBeenCalled()
   })
+
+  test("modifier+key (cmd/ctrl/alt) does not fire any binding", () => {
+    const cbs = { onNext: vi.fn(), onPrev: vi.fn(), onExecuteOption: vi.fn(), onModify: vi.fn(), onExecuteRecommended: vi.fn(), onClearFocus: vi.fn() }
+    renderHook(() => useAgentQueueKeybindings({ enabled: true, ...cbs }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "1", metaKey: true, bubbles: true }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "j", ctrlKey: true, bubbles: true }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", altKey: true, bubbles: true }))
+    expect(cbs.onExecuteOption).not.toHaveBeenCalled()
+    expect(cbs.onNext).not.toHaveBeenCalled()
+    expect(cbs.onExecuteRecommended).not.toHaveBeenCalled()
+  })
 })
