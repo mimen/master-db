@@ -16,6 +16,11 @@ vi.mock("@/hooks/useAgentPost", () => ({
   }),
 }))
 
+const focusMock = vi.fn()
+vi.mock("@/contexts/AgentComposerContext", () => ({
+  useAgentComposerHandle: () => ({ focus: focusMock, startModify: vi.fn() }),
+}))
+
 const clarification: Proposal = {
   kind: "clarification",
   summary: "Need to know which Watty.",
@@ -28,7 +33,10 @@ const clarification: Proposal = {
 }
 
 describe("ClarificationCard", () => {
-  beforeEach(() => sendMock.mockClear())
+  beforeEach(() => {
+    sendMock.mockClear()
+    focusMock.mockClear()
+  })
 
   test("renders the question prominently", () => {
     render(<ClarificationCard entity_ref="todoist:task:1" proposal={clarification} />)
@@ -50,5 +58,12 @@ describe("ClarificationCard", () => {
   test("renders no Execute button (not a proposal)", () => {
     render(<ClarificationCard entity_ref="todoist:task:1" proposal={clarification} />)
     expect(screen.queryByText("Execute")).not.toBeInTheDocument()
+  })
+
+  test("'type my own answer' button focuses the composer and sends nothing", () => {
+    render(<ClarificationCard entity_ref="todoist:task:1" proposal={clarification} />)
+    fireEvent.click(screen.getByText(/type my own answer/i))
+    expect(focusMock).toHaveBeenCalled()
+    expect(sendMock).not.toHaveBeenCalled()
   })
 })

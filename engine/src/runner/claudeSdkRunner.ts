@@ -173,6 +173,8 @@ Kind semantics:
         { "id": "artist", "label": "An artist I'm booking", "description": "Route under AUF > Bookings.", "confidence": 0.5, "reversibility": "trivial" }
       ] }
 
+  Clarification "options" must be CONCRETE candidate answers (specific people, specific routes, specific values). NEVER include a meta-option such as "I'll tell you", "Let me explain", "Other", "Ask me", or "I'll type it" — the user always has a free-text box, so a "let me type" option is redundant and confusing. If you have no concrete candidates, emit "options": [] and rely on the question + free text.
+
   EXCEPTION — asking a *third party* is a real action, keep it as kind="proposal": "Ask Jacob via Slack", "Email Sarah to clarify her preference". Those perform an external send via a tool. The test: asking the drawer's user = clarification; asking someone else via a tool = proposal action.
 
 DO NOT invent new kind values like "triage" or "review". DO NOT use "recommended": true inside an option — use the top-level "recommended_option_id" string instead. EVERY option MUST have both "confidence" and "reversibility".`;

@@ -62,9 +62,13 @@ export function ClarificationCard({ entity_ref, proposal }: Props) {
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Type your answer below, or pick a common one.
-      </p>
+      <button
+        type="button"
+        className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
+        onClick={() => composer?.focus()}
+      >
+        Type my own answer →
+      </button>
     </div>
   )
 }
