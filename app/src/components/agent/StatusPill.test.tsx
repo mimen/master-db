@@ -11,10 +11,16 @@ describe("StatusPill", () => {
     expect(container.querySelector(".animate-pulse")).toBeTruthy()
   })
 
-  test("renders Awaiting you for awaiting_decision (no pulse)", () => {
+  test("renders Awaiting decision for awaiting_decision (no pulse)", () => {
     const { container } = render(<StatusPill status="awaiting_decision" />)
-    expect(screen.getByText("Awaiting you")).toBeInTheDocument()
+    expect(screen.getByText("Awaiting decision")).toBeInTheDocument()
     expect(container.querySelector(".animate-pulse")).toBeNull()
+  })
+
+  test("renders Running with pulse for executing", () => {
+    const { container } = render(<StatusPill status="executing" />)
+    expect(screen.getByText("Running")).toBeInTheDocument()
+    expect(container.querySelector(".animate-pulse")).toBeTruthy()
   })
 
   test("renders Error for error", () => {

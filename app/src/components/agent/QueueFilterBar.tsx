@@ -1,3 +1,5 @@
+import { STATUS_LABEL } from "@/lib/agent/statusMeta"
+
 export type QueueSort = "urgency" | "recent" | "oldest"
 
 export type QueueFilterKey =
@@ -21,10 +23,10 @@ const PRIMARY_OPTIONS: Array<{ value: QueueFilterKey; label: string }> = [
 ]
 
 const STATUS_OPTIONS: Array<{ value: QueueFilterKey; label: string }> = [
-  { value: "awaiting_decision", label: "Awaiting decision" },
-  { value: "discovering", label: "Thinking" },
-  { value: "executing", label: "Running" },
-  { value: "error", label: "Error" },
+  { value: "awaiting_decision", label: STATUS_LABEL.awaiting_decision },
+  { value: "discovering", label: STATUS_LABEL.discovering },
+  { value: "executing", label: STATUS_LABEL.executing },
+  { value: "error", label: STATUS_LABEL.error },
 ]
 
 const SORT_OPTIONS: Array<{ value: QueueSort; label: string }> = [

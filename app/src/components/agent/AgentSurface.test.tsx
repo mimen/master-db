@@ -122,7 +122,7 @@ describe("AgentSurface", () => {
         <AgentSurface entity_ref="todoist:task:abc" />
       </AgentComposerProvider>,
     )
-    expect(screen.getByText(/Awaiting you/i)).toBeInTheDocument()
+    expect(screen.getByText(/Awaiting decision/i)).toBeInTheDocument()
   })
 
   test("clicking the circle when open calls completeTask with the meta entity_id", () => {
