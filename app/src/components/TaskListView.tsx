@@ -7,7 +7,7 @@ import { BaseListView, TaskListItem } from "@/components/list-items"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { mergeAgentOverlay } from "@/lib/agent/agentOverlay"
-import { taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
+import { agentSortOptions, taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
 import type { ListInstance, ListQueryInput, ViewParams } from "@/lib/views/types"
 import type {
   TodoistItemsByListWithProjects,
@@ -165,7 +165,8 @@ export function TaskListView({
       onEntityCountChange={onTaskCountChange}
       onEntitiesChange={onEntitiesChange}
       onEntityClick={handleEntityClick}
-      sortOptions={taskSortOptions}
+      sortOptions={agentMode ? [...agentSortOptions, ...taskSortOptions] : taskSortOptions}
+      defaultSort={agentMode ? "urgency" : undefined}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
       supportData={{ projects, projectsWithMetadata, labels }}

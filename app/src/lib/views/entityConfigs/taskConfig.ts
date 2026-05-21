@@ -1,5 +1,49 @@
+import type { WithAgent } from "@/lib/agent/agentOverlay"
 import type { SortOption, GroupOption } from "@/lib/views/types"
 import type { TodoistTaskWithProject } from "@/types/convex/todoist"
+
+/**
+ * Agent-mode sort options. The runtime entities in agent mode are
+ * `WithAgent<TodoistTaskWithProject>` (decorated by `mergeAgentOverlay`), so
+ * these compareFns read the `_agent` overlay off each task. Typed against the
+ * undecorated task so they can sit beside `taskSortOptions` and be handed to
+ * the same `BaseListView<TodoistTaskWithProject>`.
+ *
+ * Mirrors the server comparator in
+ * `convex/agentic/queries/listAwaitingDecision.ts`: urgency numbers descending,
+ * null/undefined (incl. tasks with no agent run) sorted last, ties broken by
+ * `last_chatted_at` descending.
+ */
+export const agentSortOptions: SortOption<TodoistTaskWithProject>[] = [
+  {
+    id: "urgency",
+    label: "Urgency",
+    compareFn: (a, b) => {
+      const aAgent = (a as WithAgent<TodoistTaskWithProject>)._agent
+      const bAgent = (b as WithAgent<TodoistTaskWithProject>)._agent
+      const aUrg = aAgent?.last_urgency
+      const bUrg = bAgent?.last_urgency
+      const aChatted = aAgent?.last_chatted_at ?? 0
+      const bChatted = bAgent?.last_chatted_at ?? 0
+      const aNull = aUrg == null
+      const bNull = bUrg == null
+      if (aNull && bNull) return bChatted - aChatted
+      if (aNull) return 1
+      if (bNull) return -1
+      if (aUrg !== bUrg) return bUrg - aUrg
+      return bChatted - aChatted
+    },
+  },
+  {
+    id: "last-chatted",
+    label: "Last chatted",
+    compareFn: (a, b) => {
+      const aChatted = (a as WithAgent<TodoistTaskWithProject>)._agent?.last_chatted_at ?? 0
+      const bChatted = (b as WithAgent<TodoistTaskWithProject>)._agent?.last_chatted_at ?? 0
+      return bChatted - aChatted
+    },
+  },
+]
 
 /**
  * Sort options for tasks
