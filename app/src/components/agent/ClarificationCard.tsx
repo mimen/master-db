@@ -41,10 +41,18 @@ export function ClarificationCard({ entity_ref, proposal }: Props) {
         </div>
       )}
 
+      <Button
+        size="sm"
+        className="w-full bg-sky-600 text-white hover:bg-sky-700"
+        onClick={() => composer?.focus()}
+      >
+        Type my own answer →
+      </Button>
+
       {proposal.options.length > 0 && (
         <div className="space-y-1">
           <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Common answers
+            Or pick a common answer
           </div>
           <div className="flex flex-wrap gap-2">
             {proposal.options.map((o) => (
@@ -61,14 +69,6 @@ export function ClarificationCard({ entity_ref, proposal }: Props) {
           </div>
         </div>
       )}
-
-      <button
-        type="button"
-        className="text-xs font-medium text-sky-600 hover:text-sky-700 hover:underline"
-        onClick={() => composer?.focus()}
-      >
-        Type my own answer →
-      </button>
     </div>
   )
 }

@@ -16,7 +16,11 @@ import type {
 } from "@anthropic-ai/sdk/resources/beta/messages/messages.mjs";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources/messages/messages.mjs";
 
-import { ProposalSchema, type Proposal } from "./proposalSchema";
+import {
+  dropRedundantClarificationOptions,
+  ProposalSchema,
+  type Proposal,
+} from "./proposalSchema";
 import type {
   AgentRunInput,
   AgentRunResult,
@@ -444,7 +448,7 @@ function tryParseProposal(text: string): Proposal | null {
   const json = text.slice(open + "<proposal>".length, close).trim();
   try {
     const obj: unknown = JSON.parse(json);
-    return ProposalSchema.parse(obj);
+    return dropRedundantClarificationOptions(ProposalSchema.parse(obj));
   } catch {
     return null;
   }
