@@ -61,6 +61,7 @@ vi.mock("@/convex/_generated/api", () => ({
   todoist: {
     actions: {
       completeTask: { completeTask: "stub.todoist.actions.completeTask" },
+      reopenTask: { reopenTask: "stub.todoist.actions.reopenTask" },
     },
   } },
 }))

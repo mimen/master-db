@@ -3,8 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, test, vi } from "vitest"
 
 const items = [
-  { entity_ref: "todoist:task:a", entity_type: "todoist_task", entity_id: "a", entity_title: "First task", status: "awaiting_decision", last_urgency: 0.9, updated_at: 100 },
-  { entity_ref: "todoist:task:b", entity_type: "todoist_task", entity_id: "b", entity_title: "Second task", status: "awaiting_decision", last_urgency: 0.5, updated_at: 50 },
+  { entity_ref: "todoist:task:a", entity_type: "todoist_task", entity_id: "a", entity_title: "First task", status: "awaiting_decision", last_urgency: 0.9, updated_at: 100, priority: 1, due: null, deadline: null, project: null, labels: [], checked: false },
+  { entity_ref: "todoist:task:b", entity_type: "todoist_task", entity_id: "b", entity_title: "Second task", status: "awaiting_decision", last_urgency: 0.5, updated_at: 50, priority: 1, due: null, deadline: null, project: null, labels: [], checked: false },
 ]
 
 vi.mock("convex/react", () => ({
