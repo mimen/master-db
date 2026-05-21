@@ -16,9 +16,14 @@ const overlay = (status: string): AgentOverlay => ({
   last_chatted_at: 0,
 })
 
-type T = { todoist_id: string; content: string }
+type T = { todoist_id: string; content: string; checked?: boolean }
 const withAgent = (id: string, status?: string): WithAgent<T> =>
   status === undefined ? task(id) : { ...task(id), _agent: overlay(status) }
+const completed = (id: string, status: string): WithAgent<T> => ({
+  ...task(id),
+  checked: true,
+  _agent: overlay(status),
+})
 
 describe("mergeAgentOverlay", () => {
   test("attaches _agent by entity_ref (todoist:task:<id>)", () => {
@@ -42,18 +47,18 @@ describe("filterByAgent", () => {
     withAgent("open-disc", "discovering"),
     withAgent("open-exec", "executing"),
     withAgent("open-err", "error"),
-    withAgent("closed-idle", "idle"),
+    completed("done-await", "awaiting_decision"), // completed task, still an open run status
     withAgent("no-run"), // no _agent
   ]
 
-  test("all-open keeps open-status runs, drops closed + no-run", () => {
+  test("all-open keeps open-status uncompleted runs, drops completed + no-run", () => {
     const ids = filterByAgent(tasks, "all-open").map((t) => t.todoist_id)
     expect(ids).toEqual(["open-await", "open-disc", "open-exec", "open-err"])
   })
 
-  test("closed keeps runs with a non-open status, drops open + no-run", () => {
+  test("closed keeps completed (checked) tasks regardless of run status", () => {
     const ids = filterByAgent(tasks, "closed").map((t) => t.todoist_id)
-    expect(ids).toEqual(["closed-idle"])
+    expect(ids).toEqual(["done-await"])
   })
 
   test("no-run keeps only tasks without an _agent overlay", () => {

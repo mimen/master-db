@@ -44,17 +44,22 @@ export type AgentFilterKey = QueueFilterKey | "no-run"
  */
 export function filterByAgent<T>(tasks: WithAgent<T>[], filter: AgentFilterKey): WithAgent<T>[] {
   const isOpen = (status: string): boolean => (OPEN_STATUSES as readonly string[]).includes(status)
+  // "Closed" = the task is completed (checked). The task object carries the
+  // completion flag (the agent overlay does not), so read it off the entity.
+  // Completed tasks are excluded from the open / single-status filters so that
+  // completing a task moves it out of the active queues and into "Closed".
+  const isCompleted = (t: WithAgent<T>): boolean => (t as { checked?: boolean }).checked === true
   return tasks.filter((t) => {
     const agent = t._agent
     switch (filter) {
       case "no-run":
         return agent === undefined
       case "all-open":
-        return agent !== undefined && isOpen(agent.status)
+        return agent !== undefined && isOpen(agent.status) && !isCompleted(t)
       case "closed":
-        return agent !== undefined && !isOpen(agent.status)
+        return isCompleted(t)
       default:
-        return agent?.status === filter
+        return agent?.status === filter && !isCompleted(t)
     }
   })
 }
