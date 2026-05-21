@@ -296,9 +296,9 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
                     />
                   )
                 ) : renderSecondaryDisplay ? (
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed wrap-break-word">
+                  <div className="text-xs text-muted-foreground mt-1 leading-relaxed wrap-break-word">
                     {renderSecondaryDisplay(entity)}
-                  </p>
+                  </div>
                 ) : null}
               </div>
             )}
