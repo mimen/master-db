@@ -57,6 +57,11 @@ vi.mock("@/convex/_generated/api", () => ({
       postRun: { default: "stub.agentic.actions.postRun" },
       postInterrupt: { default: "stub.agentic.actions.postInterrupt" },
     },
+  },
+  todoist: {
+    actions: {
+      completeTask: { completeTask: "stub.todoist.actions.completeTask" },
+    },
   } },
 }))
 
