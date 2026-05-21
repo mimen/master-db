@@ -1,10 +1,21 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react"
-import { describe, expect, test, vi } from "vitest"
+import { beforeEach, describe, expect, test, vi } from "vitest"
+
+const META = {
+  entity_title: "Email Sarah re: venue",
+  priority: 4,
+  due: null,
+  project: { name: "AUF", color: "lavender" },
+  status: "awaiting_decision",
+}
+
+let queryResult: unknown = META
 
 vi.mock("convex/react", () => ({
   useAction: () => vi.fn().mockResolvedValue({ accepted: true }),
-  useQuery: vi.fn().mockReturnValue(undefined),
+  // Single fn; AgentTranscript is mocked so only getQueueEntityMeta consumes this.
+  useQuery: () => queryResult,
 }))
 vi.mock("@/convex/_generated/api", () => ({
   api: {
@@ -13,7 +24,11 @@ vi.mock("@/convex/_generated/api", () => ({
         postRun: { default: "stub" },
         postInterrupt: { default: "stub" },
       },
-      queries: { getThread: { default: "stub" }, getRun: { default: "stub" } },
+      queries: {
+        getThread: { default: "stub" },
+        getRun: { default: "stub" },
+        getQueueEntityMeta: { default: "stub" },
+      },
     },
   },
 }))
@@ -35,7 +50,23 @@ import { AgentSurface } from "./AgentSurface"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 
 describe("AgentSurface", () => {
-  test("renders entity_ref in the header", () => {
+  beforeEach(() => {
+    queryResult = META
+  })
+
+  test("renders the real task title and project from meta", () => {
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.getByText("Email Sarah re: venue")).toBeInTheDocument()
+    expect(screen.queryByText("todoist:task:abc")).not.toBeInTheDocument()
+    expect(screen.getByText("AUF")).toBeInTheDocument()
+  })
+
+  test("falls back to entity_ref slug when meta is null", () => {
+    queryResult = null
     render(
       <AgentComposerProvider>
         <AgentSurface entity_ref="todoist:task:abc" />
