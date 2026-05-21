@@ -1,10 +1,12 @@
 import { useQuery } from "convex/react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
+import { AgentModeLayout } from "@/components/agent/AgentModeLayout"
 import { RunAgentOnListButton } from "@/components/agent/RunAgentOnListButton"
 import { BaseListView, TaskListItem } from "@/components/list-items"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
+import { mergeAgentOverlay } from "@/lib/agent/agentOverlay"
 import { taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
 import type { ListInstance, ListQueryInput, ViewParams } from "@/lib/views/types"
 import type {
@@ -27,6 +29,14 @@ interface TaskListViewProps {
   onDismiss?: (listId: string) => void
   onRestore?: (listId: string) => void
   isMultiListView?: boolean
+  /**
+   * Read-only agent mode. When true, decorates the fetched tasks with their
+   * per-task agent overlay and renders the list inside a two-pane
+   * AgentModeLayout where row selection drives the right-pane AgentSurface.
+   * Standard mode (default) is unchanged: the overlay query is skipped and no
+   * layout wrapper is applied.
+   */
+  agentMode?: boolean
 }
 
 export function TaskListView({
@@ -39,7 +49,8 @@ export function TaskListView({
   isDismissed = false,
   onDismiss,
   onRestore,
-  isMultiListView = false
+  isMultiListView = false,
+  agentMode = false
 }: TaskListViewProps) {
   // Fetch support data (always fetch if we need them for grouping)
   const projects: TodoistProjects | undefined = useQuery(
@@ -101,10 +112,45 @@ export function TaskListView({
     }
   }, [list, resolvedQuery])
 
+  // ============= AGENT MODE =============
+  // Hooks below are always called (unconditional + stable order). Agent-only
+  // behavior is gated via the useQuery "skip" arg and the agentMode flag so
+  // standard mode performs no overlay fetch and renders exactly as before.
+
+  // Selected task ref, drives the right-pane AgentSurface in agent mode.
+  const [selectedRef, setSelectedRef] = useState<string | null>(null)
+
+  // Batch-fetch the per-task agent overlay for the currently visible tasks.
+  const entityRefs = useMemo(
+    () => visibleTasks.map((task) => `todoist:task:${task.todoist_id}`),
+    [visibleTasks]
+  )
+  const overlay =
+    useQuery(
+      api.agentic.queries.agentOverlayByEntityRefs.default,
+      agentMode ? { entity_refs: entityRefs } : "skip"
+    ) ?? {}
+
+  // Decorate tasks with their overlay (only meaningful in agent mode). WithAgent<T>
+  // is structurally T, so renderRow / TaskListItem work unchanged.
+  const decoratedTasks = useMemo(
+    () => mergeAgentOverlay(visibleTasks, overlay),
+    [visibleTasks, overlay]
+  )
+
+  // In agent mode, a row click selects the task into the right pane (and still
+  // forwards onTaskClick for any parent-level wiring). Standard mode is unchanged.
+  const handleEntityClick = (listId: string, todoistId: string) => {
+    if (agentMode) {
+      setSelectedRef(`todoist:task:${todoistId}`)
+    }
+    onTaskClick?.(listId, todoistId)
+  }
+
   // BaseListView handles all list-level rendering (header, empty state, collapse, focus, count)
-  return (
+  const listView = (
     <BaseListView<TodoistTaskWithProject>
-      entities={visibleTasks}
+      entities={agentMode ? decoratedTasks : visibleTasks}
       entityType="task"
       getEntityId={(task) => task.todoist_id}
       list={listWithResolvedQuery}
@@ -118,7 +164,7 @@ export function TaskListView({
       useEntityShortcuts={useTaskDialogShortcuts}
       onEntityCountChange={onTaskCountChange}
       onEntitiesChange={onEntitiesChange}
-      onEntityClick={onTaskClick}
+      onEntityClick={handleEntityClick}
       sortOptions={taskSortOptions}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
@@ -129,7 +175,7 @@ export function TaskListView({
           key={task._id}
           task={task}
           onElementRef={ref}
-          onClick={() => onTaskClick?.(list.id, task.todoist_id)}
+          onClick={() => handleEntityClick(list.id, task.todoist_id)}
           allLabels={labels}
           onEntityRemoved={onEntityRemoved}
           listId={list.id}
@@ -138,4 +184,10 @@ export function TaskListView({
       )}
     />
   )
+
+  if (agentMode) {
+    return <AgentModeLayout selectedEntityRef={selectedRef}>{listView}</AgentModeLayout>
+  }
+
+  return listView
 }
