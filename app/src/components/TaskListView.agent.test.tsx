@@ -163,6 +163,53 @@ describe("TaskListView agent mode", () => {
       expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
     })
   })
+
+  test("pressing j selects the first displayed task; Escape clears it", async () => {
+    // Default all-open filter shows only task "a" (the open run).
+    renderAgentMode()
+    await screen.findByText("First task")
+    expect(screen.queryByTestId("agent-surface")).toBeNull()
+
+    // j with nothing selected -> select the first displayed task.
+    fireEvent.keyDown(window, { key: "j" })
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+    })
+
+    // Escape clears the selection -> right pane reverts to the empty state.
+    fireEvent.keyDown(window, { key: "Escape" })
+    await waitFor(() => {
+      expect(screen.queryByTestId("agent-surface")).toBeNull()
+    })
+    expect(screen.getByText(/Select a task/i)).toBeInTheDocument()
+  })
+
+  test("j/k clamp at the boundaries of the displayed order", async () => {
+    // The all-open filter shows a single open-run task ("a"). j selects it, and
+    // repeated j/k clamp at that single-item boundary rather than wrapping.
+    renderAgentMode("/agent?status=all-open")
+    await screen.findByText("First task")
+
+    fireEvent.keyDown(window, { key: "j" })
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+    })
+    // j again clamps at the last item (still "a").
+    fireEvent.keyDown(window, { key: "j" })
+    expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+    // k clamps at the first item (still "a").
+    fireEvent.keyDown(window, { key: "k" })
+    expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
+  })
+
+  test("standard mode does not bind the agent keyboard", async () => {
+    // Without agent mode, pressing j must NOT open a right-pane surface (there
+    // is no two-pane layout in standard mode at all).
+    renderUrlDriven("/today")
+    await screen.findByText("First task")
+    fireEvent.keyDown(window, { key: "j" })
+    expect(screen.queryByTestId("agent-surface")).toBeNull()
+  })
 })
 
 describe("TaskListView URL-driven mode (no agentMode prop)", () => {

@@ -9,9 +9,12 @@ import { RunAgentOnListButton } from "@/components/agent/RunAgentOnListButton"
 import { BaseListView, TaskListItem } from "@/components/list-items"
 import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
 import { api } from "@/convex/_generated/api"
+import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
+import { useAgentQueueKeybindings } from "@/hooks/useAgentQueueKeybindings"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { type AgentFilterKey, filterByAgent, mergeAgentOverlay } from "@/lib/agent/agentOverlay"
 import { agentSortOptions, taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
+import { applyGroupingAndSorting } from "@/lib/views/sortAndGroup"
 import type { ListInstance, ListQueryInput, ViewParams } from "@/lib/views/types"
 import type {
   TodoistItemsByListWithProjects,
@@ -224,6 +227,76 @@ export function TaskListView({
     [decoratedTasks, agentFilter]
   )
 
+  // The sort/group option arrays handed to BaseListView. Hoisted out of the JSX
+  // so the keyboard navigation below can replicate BaseListView's displayed
+  // order. Default agent sort = "urgency" (mirrors BaseListView's defaultSort).
+  const sortOptions = effectiveAgentMode
+    ? [...agentSortOptions, ...taskSortOptions]
+    : taskSortOptions
+  const defaultSort = effectiveAgentMode ? "urgency" : undefined
+
+  // ============= AGENT-MODE KEYBOARD NAVIGATION =============
+  // BaseListView owns the displayed order (it applies the active sort/group from
+  // localStorage via useListViewSettings + applyGroupingAndSorting). To let j/k
+  // traverse the *visible* order, we read the SAME persisted settings (keyed by
+  // list.id) and apply the SAME helper to the filtered+decorated tasks here.
+  // The hook is always called for stable hook order; navigation only fires when
+  // effectiveAgentMode is true (enabled flag).
+  const { currentSort, currentGroup } = useListViewSettings(list.id, defaultSort)
+  const orderedAgentTasks = useMemo(() => {
+    const activeSortOption = sortOptions.find((opt) => opt.id === currentSort)
+    const activeGroupOption = taskGroupOptions.find((opt) => opt.id === currentGroup)
+    const processed = applyGroupingAndSorting(
+      agentFilteredTasks,
+      activeSortOption,
+      activeGroupOption,
+      { projects, labels }
+    )
+    // applyGroupingAndSorting returns grouped buckets when a group is active;
+    // flatten them in group-sort order to match BaseListView's traversal. (We
+    // do not exclude collapsed groups here — a minor edge limitation; collapsed
+    // groups are still navigable by keyboard.)
+    if (Array.isArray(processed) && processed.length > 0 && "groupKey" in (processed[0] as object)) {
+      return (processed as { entities: TodoistTaskWithProject[] }[]).flatMap((g) => g.entities)
+    }
+    return processed as TodoistTaskWithProject[]
+  }, [agentFilteredTasks, sortOptions, currentSort, currentGroup, projects, labels])
+
+  const orderedRefs = useMemo(
+    () => orderedAgentTasks.map((task) => `todoist:task:${task.todoist_id}`),
+    [orderedAgentTasks]
+  )
+
+  useAgentQueueKeybindings({
+    enabled: effectiveAgentMode,
+    onNext: () => {
+      if (orderedRefs.length === 0) return
+      const idx = selectedRef ? orderedRefs.indexOf(selectedRef) : -1
+      const next = idx === -1 ? 0 : Math.min(idx + 1, orderedRefs.length - 1)
+      setSelectedRef(orderedRefs[next])
+    },
+    onPrev: () => {
+      if (orderedRefs.length === 0) return
+      const idx = selectedRef ? orderedRefs.indexOf(selectedRef) : -1
+      const prev = idx === -1 ? 0 : Math.max(idx - 1, 0)
+      setSelectedRef(orderedRefs[prev])
+    },
+    // Decision keys are Phase-3 no-op stubs: executing an option / modifying /
+    // executing the recommended action needs an imperative handle into the
+    // focused AgentSurface, which owns its own composer state. The original
+    // QueueView stubbed these identically.
+    onExecuteOption: () => {
+      /* TODO Phase 3: bridge keyboard execution into AgentSurface */
+    },
+    onModify: () => {
+      /* TODO Phase 3 */
+    },
+    onExecuteRecommended: () => {
+      /* TODO Phase 3 */
+    },
+    onClearFocus: () => setSelectedRef(null),
+  })
+
   // In agent mode, a row click selects the task into the right pane (and still
   // forwards onTaskClick for any parent-level wiring). Standard mode is unchanged.
   const handleEntityClick = (listId: string, todoistId: string) => {
@@ -251,8 +324,8 @@ export function TaskListView({
       onEntityCountChange={onTaskCountChange}
       onEntitiesChange={onEntitiesChange}
       onEntityClick={handleEntityClick}
-      sortOptions={effectiveAgentMode ? [...agentSortOptions, ...taskSortOptions] : taskSortOptions}
-      defaultSort={effectiveAgentMode ? "urgency" : undefined}
+      sortOptions={sortOptions}
+      defaultSort={defaultSort}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
       supportData={{ projects, projectsWithMetadata, labels }}
