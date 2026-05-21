@@ -1,24 +1,29 @@
 import { useQuery } from "convex/react"
+import type { FunctionReturnType } from "convex/server"
 import { useEffect, useState } from "react"
 
 import { AgentSurface } from "./AgentSurface"
 import { QueueEmptyState } from "./QueueEmptyState"
 import { type QueueSort, QueueFilterBar } from "./QueueFilterBar"
-import { QueueRow, type QueueRowItem } from "./QueueRow"
+import { QueueRow } from "./QueueRow"
 
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 import { api } from "@/convex/_generated/api"
 import { useAgentQueueKeybindings } from "@/hooks/useAgentQueueKeybindings"
+
+type AwaitingDecisionItem = FunctionReturnType<
+  typeof api.agentic.queries.listAwaitingDecision.default
+>[number]
 
 export function QueueView() {
   const [statuses, setStatuses] = useState<string[]>(["awaiting_decision"])
   const [sort, setSort] = useState<QueueSort>("urgency")
   const [focused, setFocused] = useState<string | null>(null)
 
-  const rows = useQuery(api.agentic.queries.listAwaitingDecision.default, {
-    statuses,
-    sort,
-  }) as QueueRowItem[] | undefined
+  const rows: AwaitingDecisionItem[] | undefined = useQuery(
+    api.agentic.queries.listAwaitingDecision.default,
+    { statuses, sort },
+  )
 
   const items = rows ?? []
   const focusedIndex = focused ? items.findIndex((r) => r.entity_ref === focused) : -1
