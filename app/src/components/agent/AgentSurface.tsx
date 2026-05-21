@@ -11,6 +11,7 @@ import { ThinkingIndicator } from "./ThinkingIndicator"
 import { DateBadge, LabelBadge, PriorityBadge, ProjectBadge } from "@/components/badges/shared"
 import { TaskCompleteCircle } from "@/components/list-items/TaskCompleteCircle"
 import { MarkdownLinkText } from "@/components/shared/MarkdownLinkText"
+import { Prose } from "@/components/shared/Prose"
 import { SheetHeader } from "@/components/ui/sheet"
 import { api } from "@/convex/_generated/api"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
@@ -198,6 +199,11 @@ export function AgentSurface({ entity_ref }: { entity_ref: string }) {
                   )
                 })}
             </div>
+            {meta?.description && meta.description.trim() && (
+              <div className="min-w-0 text-sm text-muted-foreground">
+                <Prose text={meta.description} />
+              </div>
+            )}
           </div>
         </div>
         <p className="sr-only">

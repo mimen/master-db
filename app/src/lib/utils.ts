@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Truncate text to `max` characters, appending an ellipsis when shortened.
+ * Returns the input unchanged when it's already within the limit.
+ */
+export function truncate(text: string, max: number): string {
+  if (text.length <= max) return text
+  return text.slice(0, max) + "…"
+}
+
 export interface MarkdownLinkPart {
   type: 'text' | 'link'
   content: string

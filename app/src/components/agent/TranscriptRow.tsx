@@ -1,22 +1,12 @@
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-
 import { ClarificationCard } from "./ClarificationCard"
 import { ErrorState } from "./ErrorState"
 import { ProposalCard } from "./ProposalCard"
 
+import { Prose } from "@/components/shared/Prose"
 import { useAgentPost } from "@/hooks/useAgentPost"
 import type { ThreadRow } from "@/lib/agent/convertMessage"
 import { isProposal } from "@/lib/agent/proposalToParts"
 import { stripProposalTags } from "@/lib/agent/stripProposalTags"
-
-export function Prose({ text }: { text: string }) {
-  return (
-    <div className="prose prose-sm dark:prose-invert max-w-none">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-    </div>
-  )
-}
 
 function ErrorRowWrapper({
   entity_ref,

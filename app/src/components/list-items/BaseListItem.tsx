@@ -304,7 +304,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
             )}
 
             {/* Badges Container */}
-            <div className="flex flex-wrap items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1 min-w-0">
               {/* Fixed Badges */}
               {renderFixedBadges?.(entity, isHovered)}
 

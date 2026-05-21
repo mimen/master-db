@@ -7,6 +7,7 @@ import { TaskCompleteCircle } from "./TaskCompleteCircle"
 
 import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge, AgentStartGhost } from "@/components/badges/shared"
 import { MarkdownLinkText } from "@/components/shared/MarkdownLinkText"
+import { Prose } from "@/components/shared/Prose"
 import { Badge } from "@/components/ui/badge"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
@@ -23,6 +24,7 @@ import { applyOptimisticTaskUpdate } from "@/lib/cursor/applyOptimisticUpdate"
 import { matchesViewFilter } from "@/lib/cursor/filters"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
+import { truncate } from "@/lib/utils"
 import type { ListQueryInput } from "@/lib/views/types"
 import type { TodoistTaskWithProject, TodoistLabelDoc, TodoistProject } from "@/types/convex/todoist"
 
@@ -279,7 +281,15 @@ export const TaskListItem = memo(function TaskListItem({
         />
       )}
       renderPrimaryDisplay={() => <MarkdownLinkText text={displayContent} />}
-      renderSecondaryDisplay={() => displayDescription}
+      renderSecondaryDisplay={() => {
+        const desc = displayDescription?.trim()
+        if (!desc) return null
+        return (
+          <span className="block min-w-0 line-clamp-3 [&_.prose]:text-xs [&_.prose>*]:my-0 [&_.prose>*+*]:mt-1">
+            <Prose text={truncate(desc, 300)} />
+          </span>
+        )
+      }}
 
       renderFixedBadges={(task: TodoistTaskWithProject, _isHovered: boolean) => (
         <>

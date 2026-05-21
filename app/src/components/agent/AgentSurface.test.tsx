@@ -14,6 +14,7 @@ const META = {
   project: { name: "AUF", color: "lavender" },
   status: "awaiting_decision",
   checked: false,
+  description: "Confirm the [venue](https://venue.example) booking",
 }
 
 let queryResult: unknown = META
@@ -183,6 +184,27 @@ describe("AgentSurface", () => {
       </AgentComposerProvider>,
     )
     expect(screen.getByText("urgent")).toBeInTheDocument()
+  })
+
+  test("renders the full description from meta as markdown with a link", () => {
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    const link = screen.getByRole("link", { name: "venue" })
+    expect(link).toHaveAttribute("href", "https://venue.example")
+    expect(link).toHaveAttribute("target", "_blank")
+  })
+
+  test("renders no description element when meta.description is null", () => {
+    queryResult = { ...META, description: null }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.queryByRole("link", { name: "venue" })).not.toBeInTheDocument()
   })
 
   test("renders due and deadline date chips from meta", () => {
