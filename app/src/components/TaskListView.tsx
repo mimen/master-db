@@ -3,9 +3,11 @@ import { useCallback, useMemo, useState } from "react"
 import { useLocation, useSearch } from "wouter"
 
 import { AgentModeLayout } from "@/components/agent/AgentModeLayout"
+import { AgentModeToggle, type ViewMode } from "@/components/agent/AgentModeToggle"
 import { QueueFilterBar } from "@/components/agent/QueueFilterBar"
 import { RunAgentOnListButton } from "@/components/agent/RunAgentOnListButton"
 import { BaseListView, TaskListItem } from "@/components/list-items"
+import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { type AgentFilterKey, filterByAgent, mergeAgentOverlay } from "@/lib/agent/agentOverlay"
@@ -40,6 +42,11 @@ function isAgentFilterKey(value: string | null): value is AgentFilterKey {
 function readAgentFilterFromSearch(search: string): AgentFilterKey {
   const status = new URLSearchParams(search).get("status")
   return isAgentFilterKey(status) ? status : DEFAULT_AGENT_FILTER
+}
+
+/** Parse the view mode from the URL `?mode=` param. `mode=agent` => agent. */
+function readModeFromSearch(search: string): ViewMode {
+  return new URLSearchParams(search).get("mode") === "agent" ? "agent" : "standard"
 }
 
 interface TaskListViewProps {
@@ -144,6 +151,18 @@ export function TaskListView({
   // Selected task ref, drives the right-pane AgentSurface in agent mode.
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
 
+  // The URL search string is the source of truth for both the agent filter
+  // (`?status=`) and the view mode (`?mode=`). `useLocation` returns the
+  // pathname only, so writing the search string never affects view resolution.
+  const search = useSearch()
+  const [, navigate] = useLocation()
+
+  // Effective agent mode = the forced-on prop (e.g. the agent-queue preset) OR
+  // the URL `?mode=agent` flag, so any single-list task view can flip into the
+  // two-pane agent view. The prop stays the always-on signal for agent-queue.
+  const urlMode = readModeFromSearch(search)
+  const effectiveAgentMode = agentMode || urlMode === "agent"
+
   // Batch-fetch the per-task agent overlay for the currently visible tasks.
   const entityRefs = useMemo(
     () => visibleTasks.map((task: TodoistTaskWithProject) => `todoist:task:${task.todoist_id}`),
@@ -152,7 +171,7 @@ export function TaskListView({
   const overlay =
     useQuery(
       api.agentic.queries.agentOverlayByEntityRefs.default,
-      agentMode ? { entity_refs: entityRefs } : "skip"
+      effectiveAgentMode ? { entity_refs: entityRefs } : "skip"
     ) ?? {}
 
   // Decorate tasks with their overlay (only meaningful in agent mode). WithAgent<T>
@@ -162,14 +181,31 @@ export function TaskListView({
     [visibleTasks, overlay]
   )
 
-  // Agent filter dimension (status + has-run/no-run). The URL `?status=` param
-  // is the source of truth; we seed local state from it on mount and write back
-  // on change (wouter — same pattern as the legacy QueueView). `useLocation`
-  // returns the pathname only, so writing the search string never affects view
-  // resolution. These hooks are unconditional; the filter is only applied to
-  // the rendered entities when `agentMode` is true.
-  const search = useSearch()
-  const [, navigate] = useLocation()
+  // Header toggle (single-list views only). Writing `?mode=` merges into the
+  // existing search params via navigate(replace) so `?status=`/`?task=` survive.
+  const setMode = useCallback(
+    (next: ViewMode) => {
+      const params = new URLSearchParams(search)
+      if (next === "agent") {
+        params.set("mode", "agent")
+      } else {
+        params.delete("mode")
+      }
+      const qs = params.toString()
+      navigate(qs ? `?${qs}` : "", { replace: true })
+    },
+    [navigate, search]
+  )
+  useHeaderSlotContent(
+    "agent-mode-toggle",
+    isMultiListView ? null : (
+      <AgentModeToggle mode={effectiveAgentMode ? "agent" : "standard"} onChange={setMode} />
+    )
+  )
+
+  // Agent filter dimension (status + has-run/no-run), seeded from `?status=`
+  // and written back on change. Only applied to the rendered entities when
+  // agent mode is active; the hooks themselves are unconditional.
   const [agentFilter, setAgentFilterState] = useState<AgentFilterKey>(() =>
     readAgentFilterFromSearch(search)
   )
@@ -191,7 +227,7 @@ export function TaskListView({
   // In agent mode, a row click selects the task into the right pane (and still
   // forwards onTaskClick for any parent-level wiring). Standard mode is unchanged.
   const handleEntityClick = (listId: string, todoistId: string) => {
-    if (agentMode) {
+    if (effectiveAgentMode) {
       setSelectedRef(`todoist:task:${todoistId}`)
     }
     onTaskClick?.(listId, todoistId)
@@ -200,7 +236,7 @@ export function TaskListView({
   // BaseListView handles all list-level rendering (header, empty state, collapse, focus, count)
   const listView = (
     <BaseListView<TodoistTaskWithProject>
-      entities={agentMode ? agentFilteredTasks : visibleTasks}
+      entities={effectiveAgentMode ? agentFilteredTasks : visibleTasks}
       entityType="task"
       getEntityId={(task) => task.todoist_id}
       list={listWithResolvedQuery}
@@ -215,8 +251,8 @@ export function TaskListView({
       onEntityCountChange={onTaskCountChange}
       onEntitiesChange={onEntitiesChange}
       onEntityClick={handleEntityClick}
-      sortOptions={agentMode ? [...agentSortOptions, ...taskSortOptions] : taskSortOptions}
-      defaultSort={agentMode ? "urgency" : undefined}
+      sortOptions={effectiveAgentMode ? [...agentSortOptions, ...taskSortOptions] : taskSortOptions}
+      defaultSort={effectiveAgentMode ? "urgency" : undefined}
       groupOptions={taskGroupOptions}
       groupData={{ projects, labels }}
       supportData={{ projects, projectsWithMetadata, labels }}
@@ -236,7 +272,7 @@ export function TaskListView({
     />
   )
 
-  if (agentMode) {
+  if (effectiveAgentMode) {
     // Filter-only variant of QueueFilterBar: BaseListView's own sort dropdown
     // (urgency / last-chatted + standard task sorts) owns sorting, so we omit
     // the bar's sort control to avoid two competing sort UIs.

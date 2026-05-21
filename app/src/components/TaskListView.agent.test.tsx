@@ -109,6 +109,11 @@ function renderAgentMode(path = "/agent") {
   return renderAt(<TaskListView list={makeList()} focusedEntityId={null} agentMode />, path)
 }
 
+/** Render WITHOUT the agentMode prop — agent mode is driven by the URL only. */
+function renderUrlDriven(path = "/today") {
+  return renderAt(<TaskListView list={makeList()} focusedEntityId={null} />, path)
+}
+
 function Providers({ children }: { children: ReactNode }) {
   return (
     <CountProvider>
@@ -157,5 +162,22 @@ describe("TaskListView agent mode", () => {
     await waitFor(() => {
       expect(screen.getByTestId("agent-surface")).toHaveTextContent("todoist:task:a")
     })
+  })
+})
+
+describe("TaskListView URL-driven mode (no agentMode prop)", () => {
+  test("?mode=agent flips a normal list into the two-pane agent layout", async () => {
+    renderUrlDriven("/today?mode=agent")
+    // Two-pane agent layout: the right-pane empty state is present.
+    expect(await screen.findByText(/Select a task/i)).toBeInTheDocument()
+  })
+
+  test("without ?mode= a normal list renders standard (no two-pane)", async () => {
+    renderUrlDriven("/today")
+    // Standard mode: both tasks visible (no agent filter), no right pane.
+    expect(await screen.findByText("First task")).toBeInTheDocument()
+    expect(screen.getByText("Second task")).toBeInTheDocument()
+    expect(screen.queryByText(/Select a task/i)).toBeNull()
+    expect(screen.queryByTestId("agent-surface")).toBeNull()
   })
 })

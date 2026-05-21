@@ -336,7 +336,7 @@ export function Layout() {
           {/* Caller-supplied header actions + view settings, registered by
               BaseListView for single-list views. Isolated in a leaf outlet so
               slot registration doesn't re-render Layout (would loop). */}
-          <HeaderSlotOutlet ids={["header-action", "view-settings"]} />
+          <HeaderSlotOutlet ids={["agent-mode-toggle", "header-action", "view-settings"]} />
           {/* Archive button for project views (not for Inbox which can't be archived) */}
           {currentProject && !currentProject.is_archived && !currentProject.is_inbox_project && (
             <Button
