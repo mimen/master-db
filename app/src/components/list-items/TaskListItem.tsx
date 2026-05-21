@@ -1,12 +1,12 @@
 import { useQuery } from "convex/react"
-import { AlertCircle, Calendar, Check, RefreshCw, SkipForward, Tag, User } from "lucide-react"
+import { AlertCircle, Calendar, SkipForward, Tag, User } from "lucide-react"
 import { memo, useEffect } from "react"
 
 import { BaseListItem } from "./BaseListItem"
+import { TaskCompleteCircle } from "./TaskCompleteCircle"
 
 import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge, AgentStartGhost } from "@/components/badges/shared"
 import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
 import { api } from "@/convex/_generated/api"
@@ -22,7 +22,7 @@ import { applyOptimisticTaskUpdate } from "@/lib/cursor/applyOptimisticUpdate"
 import { matchesViewFilter } from "@/lib/cursor/filters"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
-import { cn, parseMarkdownLinks } from "@/lib/utils"
+import { parseMarkdownLinks } from "@/lib/utils"
 import type { ListQueryInput } from "@/lib/views/types"
 import type { TodoistTaskWithProject, TodoistLabelDoc, TodoistProject } from "@/types/convex/todoist"
 
@@ -269,63 +269,15 @@ export const TaskListItem = memo(function TaskListItem({
         await optimisticTaskText(task.todoist_id, changes)
       }}
       renderLeftElement={() => (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void handleComplete()
-                }}
-                className={cn(
-                  "group/checkbox mt-0.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full relative",
-                  "transition-colors transition-opacity duration-150",
-                  "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                  isRoutineTask
-                    ? "border-transparent hover:border"
-                    : "border ring-1",
-                  isRoutineTask && priority?.colorClass === "text-red-500"
-                    ? "text-red-500 hover:bg-red-500 hover:border-red-500/60 hover:ring-1 hover:ring-red-500"
-                    : isRoutineTask && priority?.colorClass === "text-orange-500"
-                    ? "text-orange-500 hover:bg-orange-500 hover:border-orange-500/60 hover:ring-1 hover:ring-orange-500"
-                    : isRoutineTask && priority?.colorClass === "text-blue-500"
-                    ? "text-blue-500 hover:bg-blue-500 hover:border-blue-500/60 hover:ring-1 hover:ring-blue-500"
-                    : isRoutineTask
-                    ? "text-foreground/60 hover:bg-foreground/80 hover:border-foreground hover:ring-1 hover:ring-foreground/60"
-                    : !isRoutineTask && priority?.colorClass === "text-red-500"
-                    ? "text-red-500 border-red-500/60 ring-red-500 hover:bg-red-500 hover:ring-red-500/10"
-                    : !isRoutineTask && priority?.colorClass === "text-orange-500"
-                    ? "text-orange-500 border-orange-500/60 ring-orange-500 hover:bg-orange-500 hover:ring-orange-500/10"
-                    : !isRoutineTask && priority?.colorClass === "text-blue-500"
-                    ? "text-blue-500 border-blue-500/60 ring-blue-500 hover:bg-blue-500 hover:ring-blue-500/10"
-                    : !isRoutineTask && "border-foreground/20 ring-foreground/60 hover:border-foreground hover:bg-foreground/80 hover:ring-foreground/10"
-                )}
-                aria-label={isRoutineTask ? "Complete routine task" : "Complete task"}
-              >
-                {isRoutineTask ? (
-                  <>
-                    <RefreshCw
-                      className="h-[21px] w-[21px] absolute left-1/2 top-1/2 translate-x-[-11px] -translate-y-1/2 transition-opacity duration-150 group-hover/checkbox:opacity-0"
-                      strokeWidth={2}
-                    />
-                    <Check
-                      className="h-3 w-3 text-background absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-150 group-hover/checkbox:opacity-100"
-                      strokeWidth={3}
-                    />
-                  </>
-                ) : (
-                  <Check
-                    className="h-3 w-3 text-background opacity-0 transition-opacity duration-150 group-hover/checkbox:opacity-100"
-                    strokeWidth={3}
-                  />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {isRoutineTask ? "Complete routine task" : "Complete task"}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <TaskCompleteCircle
+          priorityColorClass={priority?.colorClass}
+          isRoutine={isRoutineTask}
+          onToggle={(event) => {
+            event.stopPropagation()
+            void handleComplete()
+          }}
+          tooltip={isRoutineTask ? "Complete routine task" : "Complete task"}
+        />
       )}
       renderPrimaryDisplay={() => (
         <>
