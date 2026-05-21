@@ -25,43 +25,41 @@ describe("WorkLogGroup", () => {
     expect(screen.getByText(/Work log · 5 items/)).toBeInTheDocument()
   })
 
-  test("renders only the last 3 items by default", () => {
+  test("singular item count in header", () => {
+    render(<WorkLogGroup items={items(1)} firstSequence={1} lastSequence={1} run_id="r1" />)
+    expect(screen.getByText(/Work log · 1 item$/)).toBeInTheDocument()
+  })
+
+  test("collapsed by default — no items rendered", () => {
+    render(<WorkLogGroup items={items(7)} firstSequence={1} lastSequence={7} run_id="r1" />)
+    // Header present
+    expect(screen.getByText(/Work log · 7 items/)).toBeInTheDocument()
+    // No tool-call names and no log-entry text visible
+    expect(screen.queryByText("step 0")).toBeNull()
+    expect(screen.queryByText("step 6")).toBeNull()
+    expect(screen.queryByText("Read")).toBeNull()
+  })
+
+  test("clicking the header expands to reveal all items", () => {
     render(<WorkLogGroup items={items(7)} firstSequence={1} lastSequence={7} run_id="r1" />)
     expect(screen.queryByText("step 0")).toBeNull()
+    fireEvent.click(screen.getByText(/Work log · 7 items/))
+    // All items now render — first, last, and a tool-call name
+    expect(screen.getByText("step 0")).toBeInTheDocument()
     expect(screen.getByText("step 6")).toBeInTheDocument()
+    expect(screen.getAllByText("Read").length).toBeGreaterThan(0)
   })
 
-  test("Show all expands to reveal hidden items", () => {
+  test("clicking the header again collapses back", () => {
     render(<WorkLogGroup items={items(7)} firstSequence={1} lastSequence={7} run_id="r1" />)
-    expect(screen.queryByText("step 0")).toBeNull()
-    fireEvent.click(screen.getByText(/Show all 7/))
+    const header = screen.getByText(/Work log · 7 items/)
+    fireEvent.click(header)
     expect(screen.getByText("step 0")).toBeInTheDocument()
-  })
-
-  test("groups of <=3 do not show expand control", () => {
-    render(<WorkLogGroup items={items(3)} firstSequence={1} lastSequence={3} run_id="r1" />)
-    expect(screen.queryByText(/Show all/)).toBeNull()
-    expect(screen.queryByText(/Show fewer/)).toBeNull()
-  })
-
-  test("toggle is bidirectional — Show all expands, then Show fewer collapses back", () => {
-    render(<WorkLogGroup items={items(7)} firstSequence={1} lastSequence={7} run_id="r1" />)
-    // Initial: collapsed, step 0 hidden
+    fireEvent.click(header)
     expect(screen.queryByText("step 0")).toBeNull()
-    // Expand
-    fireEvent.click(screen.getByText(/Show all 7/))
-    expect(screen.getByText("step 0")).toBeInTheDocument()
-    // Toggle now reads "Show fewer"
-    const toggle = screen.getByText(/Show fewer/)
-    expect(toggle).toBeInTheDocument()
-    // Collapse back
-    fireEvent.click(toggle)
-    expect(screen.queryByText("step 0")).toBeNull()
-    // Toggle is back to "Show all"
-    expect(screen.getByText(/Show all 7/)).toBeInTheDocument()
   })
 
-  test("reasoning row with null body_markdown is skipped — no orphan chevron", () => {
+  test("reasoning row with null body_markdown is skipped when expanded — no orphan chevron", () => {
     const mixedItems: ThreadRow[] = [
       {
         _id: "t1", row_type: "activity", sequence: 1, run_id: "r1",
@@ -88,6 +86,8 @@ describe("WorkLogGroup", () => {
     const { container } = render(
       <WorkLogGroup items={mixedItems} firstSequence={1} lastSequence={3} run_id="r1" />
     )
+    // Expand the group first
+    fireEvent.click(screen.getByText(/Work log · 3 items/))
     // Should have exactly 2 <li> items (the two tool_call rows), no phantom caret li
     const listItems = container.querySelectorAll("ul > li")
     expect(listItems).toHaveLength(2)
