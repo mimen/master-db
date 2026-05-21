@@ -86,7 +86,11 @@ export function QueueView() {
   )
 
   const setFilter = useCallback(
-    (next: QueueFilterKey) => {
+    (next: QueueFilterKey | "no-run") => {
+      // The shared QueueFilterBar now also offers a "no-run" chip used by the
+      // agent-mode list. This legacy queue is status-query driven and has no
+      // notion of "no run", so it ignores that selection.
+      if (next === "no-run") return
       setFilterState(next)
       // Changing the filter reloads the list; drop the task so a stale ref
       // doesn't linger in the URL — auto-focus will repopulate it.

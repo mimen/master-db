@@ -12,9 +12,12 @@ import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 
 export function AgentModeLayout({
   selectedEntityRef,
+  header,
   children,
 }: {
   selectedEntityRef: string | null
+  /** Optional fixed header rendered above the scrolling list (e.g. the filter strip). */
+  header?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -29,6 +32,7 @@ export function AgentModeLayout({
         maxSize={65}
         className="flex flex-col border-r overflow-hidden"
       >
+        {header}
         {children}
       </ResizablePanel>
       <ResizableHandle withHandle />

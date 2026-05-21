@@ -1,12 +1,14 @@
 import { useQuery } from "convex/react"
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
+import { useLocation, useSearch } from "wouter"
 
 import { AgentModeLayout } from "@/components/agent/AgentModeLayout"
+import { QueueFilterBar } from "@/components/agent/QueueFilterBar"
 import { RunAgentOnListButton } from "@/components/agent/RunAgentOnListButton"
 import { BaseListView, TaskListItem } from "@/components/list-items"
 import { api } from "@/convex/_generated/api"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
-import { mergeAgentOverlay } from "@/lib/agent/agentOverlay"
+import { type AgentFilterKey, filterByAgent, mergeAgentOverlay } from "@/lib/agent/agentOverlay"
 import { agentSortOptions, taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
 import type { ListInstance, ListQueryInput, ViewParams } from "@/lib/views/types"
 import type {
@@ -17,6 +19,28 @@ import type {
   TodoistProjectsWithMetadata,
   TodoistTaskWithProject,
 } from "@/types/convex/todoist"
+
+const AGENT_FILTER_KEYS: AgentFilterKey[] = [
+  "all-open",
+  "closed",
+  "awaiting_decision",
+  "discovering",
+  "executing",
+  "error",
+  "no-run",
+]
+
+const DEFAULT_AGENT_FILTER: AgentFilterKey = "all-open"
+
+function isAgentFilterKey(value: string | null): value is AgentFilterKey {
+  return value !== null && (AGENT_FILTER_KEYS as string[]).includes(value)
+}
+
+/** Parse the initial agent filter from the URL `?status=` param. */
+function readAgentFilterFromSearch(search: string): AgentFilterKey {
+  const status = new URLSearchParams(search).get("status")
+  return isAgentFilterKey(status) ? status : DEFAULT_AGENT_FILTER
+}
 
 interface TaskListViewProps {
   list: ListInstance<ViewParams>
@@ -138,6 +162,32 @@ export function TaskListView({
     [visibleTasks, overlay]
   )
 
+  // Agent filter dimension (status + has-run/no-run). The URL `?status=` param
+  // is the source of truth; we seed local state from it on mount and write back
+  // on change (wouter — same pattern as the legacy QueueView). `useLocation`
+  // returns the pathname only, so writing the search string never affects view
+  // resolution. These hooks are unconditional; the filter is only applied to
+  // the rendered entities when `agentMode` is true.
+  const search = useSearch()
+  const [, navigate] = useLocation()
+  const [agentFilter, setAgentFilterState] = useState<AgentFilterKey>(() =>
+    readAgentFilterFromSearch(search)
+  )
+  const setAgentFilter = useCallback(
+    (next: AgentFilterKey) => {
+      setAgentFilterState(next)
+      const params = new URLSearchParams(search)
+      params.set("status", next)
+      navigate(`?${params.toString()}`, { replace: true })
+    },
+    [navigate, search]
+  )
+
+  const agentFilteredTasks = useMemo(
+    () => filterByAgent(decoratedTasks, agentFilter),
+    [decoratedTasks, agentFilter]
+  )
+
   // In agent mode, a row click selects the task into the right pane (and still
   // forwards onTaskClick for any parent-level wiring). Standard mode is unchanged.
   const handleEntityClick = (listId: string, todoistId: string) => {
@@ -150,7 +200,7 @@ export function TaskListView({
   // BaseListView handles all list-level rendering (header, empty state, collapse, focus, count)
   const listView = (
     <BaseListView<TodoistTaskWithProject>
-      entities={agentMode ? decoratedTasks : visibleTasks}
+      entities={agentMode ? agentFilteredTasks : visibleTasks}
       entityType="task"
       getEntityId={(task) => task.todoist_id}
       list={listWithResolvedQuery}
@@ -187,7 +237,19 @@ export function TaskListView({
   )
 
   if (agentMode) {
-    return <AgentModeLayout selectedEntityRef={selectedRef}>{listView}</AgentModeLayout>
+    // Filter-only variant of QueueFilterBar: BaseListView's own sort dropdown
+    // (urgency / last-chatted + standard task sorts) owns sorting, so we omit
+    // the bar's sort control to avoid two competing sort UIs.
+    return (
+      <AgentModeLayout
+        selectedEntityRef={selectedRef}
+        header={
+          <QueueFilterBar filter={agentFilter} onFilterChange={setAgentFilter} />
+        }
+      >
+        {listView}
+      </AgentModeLayout>
+    )
   }
 
   return listView

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { ReactNode } from "react"
+import type { ReactElement, ReactNode } from "react"
 import { describe, expect, test, vi } from "vitest"
+import { Router } from "wouter"
+import { memoryLocation } from "wouter/memory-location"
 
 import { TaskListView } from "@/components/TaskListView"
 import { CountProvider } from "@/contexts/CountContext"
@@ -93,12 +95,18 @@ function makeList(): ListInstance<ViewParams> {
   }
 }
 
-function renderAgentMode() {
+/** Render inside a wouter Router seeded at the given path (incl. ?status=). */
+function renderAt(ui: ReactElement, path = "/agent") {
+  const { hook, searchHook } = memoryLocation({ path })
   return render(
-    <Providers>
-      <TaskListView list={makeList()} focusedEntityId={null} agentMode />
-    </Providers>,
+    <Router hook={hook} searchHook={searchHook}>
+      <Providers>{ui}</Providers>
+    </Router>,
   )
+}
+
+function renderAgentMode(path = "/agent") {
+  return renderAt(<TaskListView list={makeList()} focusedEntityId={null} agentMode />, path)
 }
 
 function Providers({ children }: { children: ReactNode }) {
@@ -112,10 +120,26 @@ function Providers({ children }: { children: ReactNode }) {
 }
 
 describe("TaskListView agent mode", () => {
-  test("renders the task rows", async () => {
+  test("default all-open filter shows only open-run tasks, hides no-run", async () => {
+    // Task "a" has an open (awaiting_decision) run; "b" has no overlay (no-run).
+    // Default filter is "all-open" -> only "a" is visible.
     renderAgentMode()
     expect(await screen.findByText("First task")).toBeInTheDocument()
-    expect(screen.getByText("Second task")).toBeInTheDocument()
+    expect(screen.queryByText("Second task")).toBeNull()
+  })
+
+  test("No run filter shows only tasks without an agentic run", async () => {
+    renderAgentMode("/agent?status=no-run")
+    expect(await screen.findByText("Second task")).toBeInTheDocument()
+    expect(screen.queryByText("First task")).toBeNull()
+  })
+
+  test("clicking the No run chip switches the filter", async () => {
+    renderAgentMode()
+    await screen.findByText("First task")
+    fireEvent.click(screen.getByText("No run"))
+    expect(await screen.findByText("Second task")).toBeInTheDocument()
+    expect(screen.queryByText("First task")).toBeNull()
   })
 
   test("two-pane layout present with empty right pane initially", async () => {

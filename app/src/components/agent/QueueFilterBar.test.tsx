@@ -68,4 +68,32 @@ describe("QueueFilterBar", () => {
     fireEvent.change(dropdownTrigger, { target: { value: "recent" } })
     expect(onSortChange).toHaveBeenCalledWith("recent")
   })
+
+  test("renders the No run chip", () => {
+    render(<QueueFilterBar {...defaults} />)
+    expect(screen.getByText("No run")).toBeInTheDocument()
+  })
+
+  test("clicking No run emits no-run", () => {
+    const onFilterChange = vi.fn()
+    render(<QueueFilterBar {...defaults} onFilterChange={onFilterChange} />)
+    fireEvent.click(screen.getByText("No run"))
+    expect(onFilterChange).toHaveBeenCalledWith("no-run")
+  })
+
+  test("No run chip highlights when active", () => {
+    render(<QueueFilterBar {...defaults} filter="no-run" />)
+    const noRun = screen.getByText("No run").closest("button")
+    expect(noRun?.className).toContain("bg-primary")
+  })
+
+  test("omits the sort control when sort props are absent (filter-only variant)", () => {
+    render(
+      <QueueFilterBar filter="all-open" onFilterChange={vi.fn()} />,
+    )
+    expect(screen.queryByLabelText(/Sort/i)).toBeNull()
+    // chips still render
+    expect(screen.getByText("All open")).toBeInTheDocument()
+    expect(screen.getByText("No run")).toBeInTheDocument()
+  })
 })

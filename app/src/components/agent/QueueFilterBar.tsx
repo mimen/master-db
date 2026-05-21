@@ -10,19 +10,33 @@ export type QueueFilterKey =
   | "executing"
   | "error"
 
+/**
+ * The agent-mode filter dimension extends the queue's single-select with
+ * `"no-run"` (tasks that never had an agentic run). Mirrors `AgentFilterKey`
+ * in `@/lib/agent/agentOverlay`; declared inline here to avoid a circular
+ * import (agentOverlay imports `QueueFilterKey` from this module).
+ */
+type BarFilterKey = QueueFilterKey | "no-run"
+
 export interface QueueFilterBarProps {
-  filter: QueueFilterKey
-  sort: QueueSort
-  onFilterChange: (filter: QueueFilterKey) => void
-  onSortChange: (sort: QueueSort) => void
+  filter: BarFilterKey
+  onFilterChange: (filter: BarFilterKey) => void
+  /**
+   * Sort control is optional. When `sort`/`onSortChange` are omitted (the
+   * agent-mode filter-only variant), the sort `<select>` is not rendered and
+   * BaseListView's own sort dropdown owns sorting instead.
+   */
+  sort?: QueueSort
+  onSortChange?: (sort: QueueSort) => void
 }
 
-const PRIMARY_OPTIONS: Array<{ value: QueueFilterKey; label: string }> = [
+const PRIMARY_OPTIONS: Array<{ value: BarFilterKey; label: string }> = [
   { value: "all-open", label: "All open" },
   { value: "closed", label: "Closed" },
+  { value: "no-run", label: "No run" },
 ]
 
-const STATUS_OPTIONS: Array<{ value: QueueFilterKey; label: string }> = [
+const STATUS_OPTIONS: Array<{ value: BarFilterKey; label: string }> = [
   { value: "awaiting_decision", label: STATUS_LABEL.awaiting_decision },
   { value: "discovering", label: STATUS_LABEL.discovering },
   { value: "executing", label: STATUS_LABEL.executing },
@@ -74,24 +88,26 @@ export function QueueFilterBar({
           </button>
         ))}
       </div>
-      <div className="ml-auto">
-        <label className="text-[11px] text-muted-foreground mr-1" htmlFor="queue-sort">
-          Sort
-        </label>
-        <select
-          id="queue-sort"
-          aria-label="Sort"
-          value={sort}
-          onChange={(e) => onSortChange(e.target.value as QueueSort)}
-          className="text-[11px] rounded-md border bg-background px-1.5 py-0.5"
-        >
-          {SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {sort !== undefined && onSortChange ? (
+        <div className="ml-auto">
+          <label className="text-[11px] text-muted-foreground mr-1" htmlFor="queue-sort">
+            Sort
+          </label>
+          <select
+            id="queue-sort"
+            aria-label="Sort"
+            value={sort}
+            onChange={(e) => onSortChange(e.target.value as QueueSort)}
+            className="text-[11px] rounded-md border bg-background px-1.5 py-0.5"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
     </div>
   )
 }
