@@ -2,6 +2,11 @@ import { Bot } from "lucide-react"
 
 import { StatusPill } from "./StatusPill"
 
+import { PriorityBadge, ProjectBadge } from "@/components/badges/shared"
+import { getProjectColor } from "@/lib/colors"
+import { formatSmartDate } from "@/lib/dateFormatters"
+import { usePriority } from "@/lib/priorities"
+
 export interface QueueRowItem {
   entity_ref: string
   entity_type: string
@@ -9,6 +14,9 @@ export interface QueueRowItem {
   status: string
   last_urgency: number | null | undefined
   updated_at: number
+  priority: number | null
+  due: string | null
+  project: { name: string; color: string } | null
 }
 
 function relativeTime(ms: number): string {
@@ -39,27 +47,51 @@ export function QueueRow({
   onFocus: (entity_ref: string) => void
 }) {
   const urgency = item.last_urgency
+  const priority = usePriority(item.priority ?? undefined)
+  const due = item.due ? formatSmartDate(item.due) : null
   return (
     <button
       type="button"
       onClick={() => onFocus(item.entity_ref)}
-      className={`w-full text-left px-3 py-2 border-l-2 hover:bg-accent/40 transition-colors flex items-center gap-2 ${
+      className={`w-full text-left px-3 py-2 border-l-2 hover:bg-accent/40 transition-colors flex flex-col ${
         focused ? "bg-accent/60 border-l-primary" : "border-l-transparent"
       }`}
     >
-      <Bot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      <span className="flex-1 truncate text-sm">{item.entity_title}</span>
-      <StatusPill status={item.status} />
-      {urgency != null && (
-        <span
-          className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${urgencyClass(urgency)}`}
-        >
-          {urgency.toFixed(2)}
+      {/* Line 1: triage signal */}
+      <div className="flex items-center gap-2">
+        <Bot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="flex-1 truncate text-sm">{item.entity_title}</span>
+        {urgency != null && (
+          <span
+            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${urgencyClass(urgency)}`}
+          >
+            {urgency.toFixed(2)}
+          </span>
+        )}
+        <span className="text-[10px] text-muted-foreground shrink-0 w-14 text-right">
+          {relativeTime(item.updated_at)}
         </span>
-      )}
-      <span className="text-[10px] text-muted-foreground shrink-0 w-14 text-right">
-        {relativeTime(item.updated_at)}
-      </span>
+      </div>
+
+      {/* Line 2: metadata */}
+      <div className="flex flex-wrap items-center gap-1.5 min-w-0 pl-5 mt-0.5">
+        <StatusPill status={item.status} />
+        {item.project && (
+          <ProjectBadge
+            project={{
+              name: item.project.name,
+              color: getProjectColor(item.project.color),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
+        {priority?.showFlag && (
+          <PriorityBadge priority={priority} onClick={(e) => e.stopPropagation()} />
+        )}
+        {due && (
+          <span className="text-[10px] text-muted-foreground shrink-0">{due.text}</span>
+        )}
+      </div>
     </button>
   )
 }

@@ -11,6 +11,9 @@ const item: QueueRowItem = {
   status: "awaiting_decision",
   last_urgency: 0.92,
   updated_at: Date.now() - 2 * 60 * 60 * 1000, // 2 hours ago
+  priority: 4, // Todoist API 4 = UI P1 (highest)
+  due: "2099-01-15",
+  project: { name: "AUF", color: "lavender" },
 }
 
 describe("QueueRow", () => {
@@ -38,5 +41,23 @@ describe("QueueRow", () => {
   test("focused=true adds focus accent class", () => {
     const { container } = render(<QueueRow item={item} focused onFocus={() => {}} />)
     expect(container.querySelector(".border-l-primary")).toBeTruthy()
+  })
+
+  test("renders the project name when project is present", () => {
+    render(<QueueRow item={item} focused={false} onFocus={() => {}} />)
+    expect(screen.getByText("AUF")).toBeInTheDocument()
+  })
+
+  test("renders a priority flag for a flagged priority", () => {
+    render(<QueueRow item={item} focused={false} onFocus={() => {}} />)
+    // Todoist API priority 4 maps to UI P1 (highest, flagged)
+    expect(screen.getByText("P1")).toBeInTheDocument()
+  })
+
+  test("does not render a project badge when project is null", () => {
+    render(
+      <QueueRow item={{ ...item, project: null }} focused={false} onFocus={() => {}} />,
+    )
+    expect(screen.queryByText("AUF")).toBeNull()
   })
 })
