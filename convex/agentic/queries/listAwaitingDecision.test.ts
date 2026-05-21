@@ -20,6 +20,7 @@ async function seedRun(
     last_urgency?: number | null
     updated_at?: number
     task_content?: string
+    description?: string
     priority?: number
     due?: string
     deadline?: string
@@ -71,6 +72,7 @@ async function seedRun(
     await ctx.db.insert("todoist_items", {
       todoist_id: args.entity_id,
       content: args.task_content ?? `Task ${args.entity_id}`,
+      ...(args.description !== undefined && { description: args.description }),
       child_order: 0,
       priority: args.priority ?? 1,
       ...(args.due !== undefined && { due: { date: args.due } }),
@@ -168,6 +170,19 @@ describe("listAwaitingDecision", () => {
     expect(rows[0]?.project).toBeNull()
     expect(rows[0]?.deadline).toBeNull()
     expect(rows[0]?.labels).toEqual([])
+    expect(rows[0]?.description).toBeNull()
+  })
+
+  test("enriches rows with the task description", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, {
+      entity_id: "a",
+      status: "awaiting_decision",
+      description: "Long-form notes about this task",
+    })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows[0]?.description).toBe("Long-form notes about this task")
   })
 
   test("enriches rows with deadline and resolved labels", async () => {

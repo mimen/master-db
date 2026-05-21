@@ -41,6 +41,7 @@ async function seed(
     await ctx.db.insert("todoist_items", {
       todoist_id: "a",
       content: "Email Sarah",
+      description: "re: the venue contract",
       project_id: "p1",
       child_order: 0,
       priority: 4,
@@ -65,6 +66,7 @@ describe("getQueueEntityMeta", () => {
       entity_ref: "todoist:task:a",
     })
     expect(meta?.entity_title).toBe("Email Sarah")
+    expect(meta?.description).toBe("re: the venue contract")
     expect(meta?.priority).toBe(4)
     expect(meta?.due).toBe("2026-06-01")
     expect(meta?.project).toEqual({ name: "AUF", color: "lavender" })

@@ -12,6 +12,7 @@ import type { QueryCtx } from "../../_generated/server"
  */
 export type EnrichedQueueRun = Doc<"agenticRuns"> & {
   entity_title: string
+  description: string | null
   priority: number | null
   due: string | null
   deadline: string | null
@@ -34,6 +35,7 @@ export async function enrichQueueRun(
     return {
       ...run,
       entity_title: run.entity_ref,
+      description: null,
       priority: null,
       due: null,
       deadline: null,
@@ -72,6 +74,7 @@ export async function enrichQueueRun(
   return {
     ...run,
     entity_title: task?.content ?? "(missing)",
+    description: task?.description ?? null,
     priority: task?.priority ?? null,
     due: task?.due?.date ?? null,
     deadline: task?.deadline?.date ?? null,
