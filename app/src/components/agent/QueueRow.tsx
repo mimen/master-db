@@ -3,6 +3,7 @@ import { AlertCircle, Bot, Calendar } from "lucide-react"
 import { StatusPill } from "./StatusPill"
 
 import { DateBadge, LabelBadge, PriorityBadge, ProjectBadge } from "@/components/badges/shared"
+import { MarkdownLinkText } from "@/components/shared/MarkdownLinkText"
 import { getProjectColor } from "@/lib/colors"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
@@ -67,7 +68,9 @@ export function QueueRow({
       {/* Line 1: triage signal */}
       <div className="flex items-center gap-2">
         <Bot className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="flex-1 truncate text-sm">{item.entity_title}</span>
+        <span className="flex-1 truncate text-sm">
+          <MarkdownLinkText text={item.entity_title} />
+        </span>
         {urgency != null && (
           <span
             className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${urgencyClass(urgency)}`}

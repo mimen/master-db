@@ -94,6 +94,17 @@ describe("AgentSurface", () => {
     expect(screen.getByText("AUF")).toBeInTheDocument()
   })
 
+  test("renders a markdown-link title as an anchor", () => {
+    queryResult = { ...META, entity_title: "See [doc](https://x.com)" }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    const link = screen.getByRole("link", { name: "doc" })
+    expect(link).toHaveAttribute("href", "https://x.com")
+  })
+
   test("falls back to entity_ref slug as title when meta is null", () => {
     queryResult = null
     render(

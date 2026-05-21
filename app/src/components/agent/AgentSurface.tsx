@@ -10,6 +10,7 @@ import { ThinkingIndicator } from "./ThinkingIndicator"
 
 import { DateBadge, LabelBadge, PriorityBadge, ProjectBadge } from "@/components/badges/shared"
 import { TaskCompleteCircle } from "@/components/list-items/TaskCompleteCircle"
+import { MarkdownLinkText } from "@/components/shared/MarkdownLinkText"
 import { SheetHeader } from "@/components/ui/sheet"
 import { api } from "@/convex/_generated/api"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
@@ -136,7 +137,9 @@ export function AgentSurface({ entity_ref }: { entity_ref: string }) {
             />
           )}
           <div className="flex flex-col gap-1 min-w-0">
-            <h2 className="text-sm font-semibold text-foreground truncate">{title}</h2>
+            <h2 className="text-sm font-semibold text-foreground truncate">
+              <MarkdownLinkText text={title} />
+            </h2>
             <span className="font-mono text-xs text-muted-foreground truncate">{entity_ref}</span>
             <div className="flex flex-wrap items-center gap-1.5">
               {meta?.project && (

@@ -26,6 +26,18 @@ describe("QueueRow", () => {
     expect(screen.getByText("0.92")).toBeInTheDocument()
   })
 
+  test("renders a markdown-link title as an anchor", () => {
+    render(
+      <QueueRow
+        item={{ ...item, entity_title: "See [doc](https://x.com)" }}
+        focused={false}
+        onFocus={() => {}}
+      />,
+    )
+    const link = screen.getByRole("link", { name: "doc" })
+    expect(link).toHaveAttribute("href", "https://x.com")
+  })
+
   test("hides urgency chip when last_urgency is null", () => {
     render(
       <QueueRow item={{ ...item, last_urgency: null }} focused={false} onFocus={() => {}} />,

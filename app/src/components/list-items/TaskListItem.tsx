@@ -6,6 +6,7 @@ import { BaseListItem } from "./BaseListItem"
 import { TaskCompleteCircle } from "./TaskCompleteCircle"
 
 import { PriorityBadge, ProjectBadge, LabelBadge, DateBadge, GhostBadge, AgentStatusBadge, AgentStartGhost } from "@/components/badges/shared"
+import { MarkdownLinkText } from "@/components/shared/MarkdownLinkText"
 import { Badge } from "@/components/ui/badge"
 import { useDialogContext } from "@/contexts/DialogContext"
 import { useOptimisticUpdates } from "@/contexts/OptimisticUpdatesContext"
@@ -22,7 +23,6 @@ import { applyOptimisticTaskUpdate } from "@/lib/cursor/applyOptimisticUpdate"
 import { matchesViewFilter } from "@/lib/cursor/filters"
 import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
-import { parseMarkdownLinks } from "@/lib/utils"
 import type { ListQueryInput } from "@/lib/views/types"
 import type { TodoistTaskWithProject, TodoistLabelDoc, TodoistProject } from "@/types/convex/todoist"
 
@@ -113,7 +113,6 @@ export const TaskListItem = memo(function TaskListItem({
   const { skipRoutineTask } = useRoutineActions()
 
   const assignee = task.assigned_by_uid || task.responsible_uid
-  const markdownSegments = parseMarkdownLinks(displayContent)
 
   // Notify cursor system when task no longer matches filter (use effect to avoid setState during render)
   useEffect(() => {
@@ -279,26 +278,7 @@ export const TaskListItem = memo(function TaskListItem({
           tooltip={isRoutineTask ? "Complete routine task" : "Complete task"}
         />
       )}
-      renderPrimaryDisplay={() => (
-        <>
-          {markdownSegments.map((segment, index) =>
-            segment.type === "text" ? (
-              <span key={index}>{segment.content}</span>
-            ) : (
-              <a
-                key={index}
-                href={segment.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-primary transition-colors"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {segment.content}
-              </a>
-            )
-          )}
-        </>
-      )}
+      renderPrimaryDisplay={() => <MarkdownLinkText text={displayContent} />}
       renderSecondaryDisplay={() => displayDescription}
 
       renderFixedBadges={(task: TodoistTaskWithProject, _isHovered: boolean) => (
