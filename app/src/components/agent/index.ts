@@ -1,5 +1,7 @@
 export { AgentDrawer } from "./AgentDrawer"
 export { AgentTranscript } from "./AgentTranscript"
+export { TranscriptRow } from "./TranscriptRow"
+export { ClarificationCard } from "./ClarificationCard"
 export { WorkLogGroup } from "./WorkLogGroup"
 export { ToolCallCard } from "./ToolCallCard"
 export { ProposalCard } from "./ProposalCard"
