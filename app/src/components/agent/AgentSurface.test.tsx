@@ -8,7 +8,9 @@ const META = {
   entity_ref: "todoist:task:abc",
   entity_title: "Email Sarah re: venue",
   priority: 4,
-  due: null,
+  due: "2026-06-01",
+  deadline: "2026-06-10",
+  labels: [{ name: "urgent", color: "red" }],
   project: { name: "AUF", color: "lavender" },
   status: "awaiting_decision",
   checked: false,
@@ -16,15 +18,21 @@ const META = {
 
 let queryResult: unknown = META
 
-// Distinct mock fns so the test can assert specifically on completeTask.
+// Distinct mock fns so the test can assert specifically on each action.
 const completeTaskMock = vi.fn().mockResolvedValue({ success: true, data: true })
+const reopenTaskMock = vi.fn().mockResolvedValue({ success: true, data: true })
 const genericActionMock = vi.fn().mockResolvedValue({ accepted: true })
 
 vi.mock("convex/react", () => ({
-  // The action ref string identifies which action is being bound; the
-  // completeTask action ref is "todoist.completeTask" (see api mock below).
+  // The action ref string identifies which action is being bound (see api mock
+  // below): "todoist.completeTask" → completeTaskMock, "todoist.reopenTask" →
+  // reopenTaskMock, anything else (e.g. postRun) → genericActionMock.
   useAction: (ref: unknown) =>
-    ref === "todoist.completeTask" ? completeTaskMock : genericActionMock,
+    ref === "todoist.completeTask"
+      ? completeTaskMock
+      : ref === "todoist.reopenTask"
+        ? reopenTaskMock
+        : genericActionMock,
   // Single fn; AgentTranscript is mocked so only getQueueEntityMeta consumes this.
   useQuery: () => queryResult,
 }))
@@ -44,6 +52,7 @@ vi.mock("@/convex/_generated/api", () => ({
     todoist: {
       actions: {
         completeTask: { completeTask: "todoist.completeTask" },
+        reopenTask: { reopenTask: "todoist.reopenTask" },
       },
     },
   },
@@ -69,6 +78,7 @@ describe("AgentSurface", () => {
   beforeEach(() => {
     queryResult = META
     completeTaskMock.mockClear()
+    reopenTaskMock.mockClear()
     genericActionMock.mockClear()
   })
 
@@ -104,7 +114,7 @@ describe("AgentSurface", () => {
     expect(screen.getByText(/Awaiting you/i)).toBeInTheDocument()
   })
 
-  test("clicking Complete calls completeTask with the meta entity_id", () => {
+  test("clicking the circle when open calls completeTask with the meta entity_id", () => {
     render(
       <AgentComposerProvider>
         <AgentSurface entity_ref="todoist:task:abc" />
@@ -113,6 +123,20 @@ describe("AgentSurface", () => {
     fireEvent.click(screen.getByRole("button", { name: /complete task/i }))
     expect(completeTaskMock).toHaveBeenCalledTimes(1)
     expect(completeTaskMock).toHaveBeenCalledWith({ todoistId: "abc" })
+    expect(reopenTaskMock).not.toHaveBeenCalled()
+  })
+
+  test("clicking the circle when already completed calls reopenTask (uncomplete toggle)", () => {
+    queryResult = { ...META, checked: true }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /reopen task/i }))
+    expect(reopenTaskMock).toHaveBeenCalledTimes(1)
+    expect(reopenTaskMock).toHaveBeenCalledWith({ todoistId: "abc" })
+    expect(completeTaskMock).not.toHaveBeenCalled()
   })
 
   test("falls back to parsing entity_ref for the id when meta is null", () => {
@@ -126,17 +150,7 @@ describe("AgentSurface", () => {
     expect(completeTaskMock).toHaveBeenCalledWith({ todoistId: "xyz" })
   })
 
-  test("does not show an active Complete button when the task is already completed", () => {
-    queryResult = { ...META, checked: true }
-    render(
-      <AgentComposerProvider>
-        <AgentSurface entity_ref="todoist:task:abc" />
-      </AgentComposerProvider>,
-    )
-    expect(screen.queryByRole("button", { name: /complete task/i })).not.toBeInTheDocument()
-  })
-
-  test("does not render a Complete button for non-todoist entities", () => {
+  test("does not render the complete circle for non-todoist entities", () => {
     queryResult = {
       ...META,
       entity_type: "gmail_thread",
@@ -148,5 +162,27 @@ describe("AgentSurface", () => {
       </AgentComposerProvider>,
     )
     expect(screen.queryByRole("button", { name: /complete task/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /reopen task/i })).not.toBeInTheDocument()
+  })
+
+  test("renders a label chip from meta.labels", () => {
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.getByText("urgent")).toBeInTheDocument()
+  })
+
+  test("renders due and deadline date chips from meta", () => {
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    // due (2026-06-01) and deadline (2026-06-10) are distinct future dates;
+    // formatSmartDate renders absolute "Jun 1" / "Jun 10" style text.
+    expect(screen.getByText(/Jun 1\b/)).toBeInTheDocument()
+    expect(screen.getByText(/Jun 10/)).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { useAction, useQuery } from "convex/react"
-import { Check } from "lucide-react"
+import { AlertCircle, Calendar } from "lucide-react"
 import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { toast } from "sonner"
 
@@ -8,12 +8,13 @@ import { AgentTranscript } from "./AgentTranscript"
 import { StatusPill } from "./StatusPill"
 import { ThinkingIndicator } from "./ThinkingIndicator"
 
-import { PriorityBadge, ProjectBadge } from "@/components/badges/shared"
-import { Button } from "@/components/ui/button"
+import { DateBadge, LabelBadge, PriorityBadge, ProjectBadge } from "@/components/badges/shared"
+import { TaskCompleteCircle } from "@/components/list-items/TaskCompleteCircle"
 import { SheetHeader } from "@/components/ui/sheet"
 import { api } from "@/convex/_generated/api"
 import { useAgentRuntime } from "@/hooks/useAgentRuntime"
 import { getProjectColor } from "@/lib/colors"
+import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
 
 /**
@@ -39,36 +40,44 @@ export function AgentSurface({ entity_ref }: { entity_ref: string }) {
   const priority = usePriority(meta?.priority ?? undefined)
   const title = meta?.entity_title ?? entity_ref
 
-  // Complete action: only meaningful for todoist tasks. The action checks the
-  // task in Convex + syncs to Todoist; the listAwaitingDecision query already
-  // excludes completed tasks, so the queue reactively drops it and advances
-  // focus — no manual refetch/focus change needed here.
+  // Complete / reopen toggle: only meaningful for todoist tasks. completeTask
+  // checks the task in Convex + syncs to Todoist; reopenTask reverses it. The
+  // listAwaitingDecision query excludes completed tasks, so the queue reactively
+  // advances on complete — no manual refetch/focus change needed here.
   const completeTask = useAction(api.todoist.actions.completeTask.completeTask)
+  const reopenTask = useAction(api.todoist.actions.reopenTask.reopenTask)
   const [isCompleting, setIsCompleting] = useState(false)
   const isTodoistTask =
     meta?.entity_type === "todoist_task" || entity_ref.startsWith("todoist:task:")
   const isChecked = meta?.checked === true
   const todoistId = resolveTodoistId(entity_ref, meta?.entity_id)
-  const showComplete = isTodoistTask && !isChecked
 
-  const handleComplete = (e: MouseEvent) => {
+  const handleToggleComplete = (e: MouseEvent) => {
     e.stopPropagation()
     if (isCompleting || !todoistId) return
     setIsCompleting(true)
     void (async () => {
       try {
-        const res = await completeTask({ todoistId })
+        const res = isChecked
+          ? await reopenTask({ todoistId })
+          : await completeTask({ todoistId })
         if (!res.success) {
-          toast.error(res.error ?? "Failed to complete task")
+          toast.error(res.error ?? (isChecked ? "Failed to reopen task" : "Failed to complete task"))
         }
       } catch (err) {
-        console.warn("[agent] complete task failed", err)
-        toast.error("Failed to complete task")
+        console.warn("[agent] toggle task completion failed", err)
+        toast.error(isChecked ? "Failed to reopen task" : "Failed to complete task")
       } finally {
         setIsCompleting(false)
       }
     })()
   }
+
+  // Derive shared date chips from meta, mirroring TaskListItem's renderFixedBadges:
+  // due uses the Calendar icon, deadline uses AlertCircle; status comes from
+  // formatSmartDate (overdue/today/tomorrow/future).
+  const dueInfo = meta?.due ? formatSmartDate(meta.due) : null
+  const deadlineInfo = meta?.deadline ? formatSmartDate(meta.deadline) : null
 
   // Auto-scroll the transcript to the bottom on open / entity change so the
   // latest messages are visible without manual scrolling. Depends on
@@ -117,41 +126,81 @@ export function AgentSurface({ entity_ref }: { entity_ref: string }) {
   return (
     <>
       <SheetHeader className="px-4 py-3 border-b flex items-start justify-between flex-row gap-3">
-        <div className="flex flex-col gap-1 min-w-0">
-          <h2 className="text-sm font-semibold text-foreground truncate">{title}</h2>
-          <span className="font-mono text-xs text-muted-foreground truncate">{entity_ref}</span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {meta?.project && (
-              <ProjectBadge
-                project={{
-                  name: meta.project.name,
-                  color: getProjectColor(meta.project.color),
-                }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            )}
-            {priority?.showFlag && (
-              <PriorityBadge priority={priority} onClick={(e) => e.stopPropagation()} />
-            )}
+        <div className="flex items-start gap-2.5 min-w-0">
+          {isTodoistTask && todoistId && (
+            <TaskCompleteCircle
+              checked={isChecked}
+              priorityColorClass={priority?.colorClass}
+              tooltip={isChecked ? "Reopen task" : "Complete task"}
+              onToggle={handleToggleComplete}
+            />
+          )}
+          <div className="flex flex-col gap-1 min-w-0">
+            <h2 className="text-sm font-semibold text-foreground truncate">{title}</h2>
+            <span className="font-mono text-xs text-muted-foreground truncate">{entity_ref}</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {meta?.project && (
+                <ProjectBadge
+                  project={{
+                    name: meta.project.name,
+                    color: getProjectColor(meta.project.color),
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )}
+              {priority?.showFlag && (
+                <PriorityBadge priority={priority} onClick={(e) => e.stopPropagation()} />
+              )}
+              {dueInfo && (
+                <DateBadge
+                  date={dueInfo.text}
+                  status={
+                    dueInfo.isOverdue ? "overdue" :
+                    dueInfo.isToday ? "today" :
+                    dueInfo.isTomorrow ? "tomorrow" :
+                    "future"
+                  }
+                  icon={Calendar}
+                  onClick={(e) => e.stopPropagation()}
+                  showRemoveButton={false}
+                />
+              )}
+              {deadlineInfo && (
+                <DateBadge
+                  date={deadlineInfo.text}
+                  status={
+                    deadlineInfo.isOverdue ? "overdue" :
+                    deadlineInfo.isToday ? "today" :
+                    "future"
+                  }
+                  icon={AlertCircle}
+                  onClick={(e) => e.stopPropagation()}
+                  showRemoveButton={false}
+                />
+              )}
+              {meta?.labels
+                ?.filter((label) => label.name !== "routine")
+                .map((label) => {
+                  const color = getProjectColor(label.color)
+                  return (
+                    <LabelBadge
+                      key={label.name}
+                      label={{
+                        name: label.name,
+                        borderColor: `${color}40`,
+                        backgroundColor: `${color}15`,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )
+                })}
+            </div>
           </div>
         </div>
         <p className="sr-only">
           Agent thread for entity {entity_ref}. Transcript, decisions, and composer below.
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          {showComplete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleComplete}
-              disabled={isCompleting || !todoistId}
-              aria-label="Complete task"
-              title="Complete task"
-            >
-              <Check />
-              Complete
-            </Button>
-          )}
           <StatusPill status={run?.status ?? "idle"} />
         </div>
       </SheetHeader>
