@@ -87,6 +87,13 @@ export interface BaseListItemProps<T> {
    */
   renderHoverBadges?: (entity: T) => React.ReactNode
 
+  /**
+   * Render content pinned to the top-right of the row (top-aligned), e.g. the
+   * agent-mode last-activity timestamp.
+   * @param entity Current entity
+   */
+  renderTopRight?: (entity: T) => React.ReactNode
+
   // ============= EDITING CONFIGURATION =============
 
   /**
@@ -167,6 +174,7 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
       renderSecondaryDisplay,
       renderFixedBadges,
       renderHoverBadges,
+      renderTopRight,
       primaryField,
       secondaryField,
       onSave,
@@ -312,6 +320,11 @@ export const BaseListItem = forwardRef<HTMLDivElement, BaseListItemProps<any> & 
               {isHovered && renderHoverBadges?.(entity)}
             </div>
           </div>
+
+          {/* Top-right slot (top-aligned), e.g. agent last-activity timestamp */}
+          {renderTopRight && (
+            <div className="shrink-0">{renderTopRight(entity)}</div>
+          )}
         </div>
       </div>
     )

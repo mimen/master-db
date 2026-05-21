@@ -312,6 +312,15 @@ export const TaskListItem = memo(function TaskListItem({
         )
       }}
 
+      renderTopRight={
+        agentMode && agentOverlay
+          ? () => (
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                {relativeTime(agentOverlay.last_chatted_at)}
+              </span>
+            )
+          : undefined
+      }
       renderFixedBadges={(task: TodoistTaskWithProject, _isHovered: boolean) => (
         <>
           {displayProject && (
@@ -421,12 +430,6 @@ export const TaskListItem = memo(function TaskListItem({
               className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${urgencyClass(agentOverlay.last_urgency)}`}
             >
               {agentOverlay.last_urgency.toFixed(2)}
-            </span>
-          )}
-
-          {agentMode && agentOverlay && (
-            <span className="text-[10px] text-muted-foreground shrink-0">
-              {relativeTime(agentOverlay.last_chatted_at)}
             </span>
           )}
 
