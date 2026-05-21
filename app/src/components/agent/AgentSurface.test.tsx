@@ -1,19 +1,30 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, test, vi } from "vitest"
 
 const META = {
+  entity_id: "abc",
+  entity_type: "todoist_task",
+  entity_ref: "todoist:task:abc",
   entity_title: "Email Sarah re: venue",
   priority: 4,
   due: null,
   project: { name: "AUF", color: "lavender" },
   status: "awaiting_decision",
+  checked: false,
 }
 
 let queryResult: unknown = META
 
+// Distinct mock fns so the test can assert specifically on completeTask.
+const completeTaskMock = vi.fn().mockResolvedValue({ success: true, data: true })
+const genericActionMock = vi.fn().mockResolvedValue({ accepted: true })
+
 vi.mock("convex/react", () => ({
-  useAction: () => vi.fn().mockResolvedValue({ accepted: true }),
+  // The action ref string identifies which action is being bound; the
+  // completeTask action ref is "todoist.completeTask" (see api mock below).
+  useAction: (ref: unknown) =>
+    ref === "todoist.completeTask" ? completeTaskMock : genericActionMock,
   // Single fn; AgentTranscript is mocked so only getQueueEntityMeta consumes this.
   useQuery: () => queryResult,
 }))
@@ -28,6 +39,11 @@ vi.mock("@/convex/_generated/api", () => ({
         getThread: { default: "stub" },
         getRun: { default: "stub" },
         getQueueEntityMeta: { default: "stub" },
+      },
+    },
+    todoist: {
+      actions: {
+        completeTask: { completeTask: "todoist.completeTask" },
       },
     },
   },
@@ -52,6 +68,8 @@ import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 describe("AgentSurface", () => {
   beforeEach(() => {
     queryResult = META
+    completeTaskMock.mockClear()
+    genericActionMock.mockClear()
   })
 
   test("renders the real task title, the thread id, and project from meta", () => {
@@ -84,5 +102,51 @@ describe("AgentSurface", () => {
       </AgentComposerProvider>,
     )
     expect(screen.getByText(/Awaiting you/i)).toBeInTheDocument()
+  })
+
+  test("clicking Complete calls completeTask with the meta entity_id", () => {
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /complete task/i }))
+    expect(completeTaskMock).toHaveBeenCalledTimes(1)
+    expect(completeTaskMock).toHaveBeenCalledWith({ todoistId: "abc" })
+  })
+
+  test("falls back to parsing entity_ref for the id when meta is null", () => {
+    queryResult = null
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:xyz" />
+      </AgentComposerProvider>,
+    )
+    fireEvent.click(screen.getByRole("button", { name: /complete task/i }))
+    expect(completeTaskMock).toHaveBeenCalledWith({ todoistId: "xyz" })
+  })
+
+  test("does not show an active Complete button when the task is already completed", () => {
+    queryResult = { ...META, checked: true }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.queryByRole("button", { name: /complete task/i })).not.toBeInTheDocument()
+  })
+
+  test("does not render a Complete button for non-todoist entities", () => {
+    queryResult = {
+      ...META,
+      entity_type: "gmail_thread",
+      entity_ref: "gmail:thread:123",
+    }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="gmail:thread:123" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.queryByRole("button", { name: /complete task/i })).not.toBeInTheDocument()
   })
 })
