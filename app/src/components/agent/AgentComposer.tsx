@@ -45,11 +45,19 @@ export function AgentComposer({
     }
   }
 
-  function onKey(e: { key: string; metaKey: boolean; ctrlKey: boolean; preventDefault: () => void }) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      void submit()
-    }
+  function onKey(e: {
+    key: string
+    metaKey: boolean
+    ctrlKey: boolean
+    shiftKey: boolean
+    preventDefault: () => void
+  }) {
+    // Shift+Enter inserts a newline (default textarea behavior — do nothing).
+    if (e.key !== "Enter" || e.shiftKey) return
+    // Enter (or Cmd/Ctrl+Enter) submits. Block while a send is in flight.
+    e.preventDefault()
+    if (isRunning) return
+    void submit()
   }
 
   return (

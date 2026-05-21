@@ -32,6 +32,33 @@ describe("AgentComposer", () => {
     expect(send).toHaveBeenCalledWith("hello")
   })
 
+  test("plain Enter sends typed text", () => {
+    send.mockClear()
+    wrap(<AgentComposer entity_ref="todoist:task:1" isRunning={false} />)
+    const ta = screen.getByRole("textbox")
+    fireEvent.change(ta, { target: { value: "hello" } })
+    fireEvent.keyDown(ta, { key: "Enter" })
+    expect(send).toHaveBeenCalledWith("hello")
+  })
+
+  test("Shift+Enter does not send (inserts a newline)", () => {
+    send.mockClear()
+    wrap(<AgentComposer entity_ref="todoist:task:1" isRunning={false} />)
+    const ta = screen.getByRole("textbox")
+    fireEvent.change(ta, { target: { value: "hello" } })
+    fireEvent.keyDown(ta, { key: "Enter", shiftKey: true })
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  test("Enter does not send while a run is in flight", () => {
+    send.mockClear()
+    wrap(<AgentComposer entity_ref="todoist:task:1" isRunning />)
+    const ta = screen.getByRole("textbox")
+    fireEvent.change(ta, { target: { value: "hello" } })
+    fireEvent.keyDown(ta, { key: "Enter" })
+    expect(send).not.toHaveBeenCalled()
+  })
+
   test("empty Cmd+Enter is a no-op", () => {
     send.mockClear()
     wrap(<AgentComposer entity_ref="todoist:task:1" isRunning={false} />)

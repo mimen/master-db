@@ -54,25 +54,27 @@ describe("AgentSurface", () => {
     queryResult = META
   })
 
-  test("renders the real task title and project from meta", () => {
+  test("renders the real task title, the thread id, and project from meta", () => {
     render(
       <AgentComposerProvider>
         <AgentSurface entity_ref="todoist:task:abc" />
       </AgentComposerProvider>,
     )
     expect(screen.getByText("Email Sarah re: venue")).toBeInTheDocument()
-    expect(screen.queryByText("todoist:task:abc")).not.toBeInTheDocument()
+    // Thread id (entity_ref slug) now always renders as muted secondary text.
+    expect(screen.getByText("todoist:task:abc")).toBeInTheDocument()
     expect(screen.getByText("AUF")).toBeInTheDocument()
   })
 
-  test("falls back to entity_ref slug when meta is null", () => {
+  test("falls back to entity_ref slug as title when meta is null", () => {
     queryResult = null
     render(
       <AgentComposerProvider>
         <AgentSurface entity_ref="todoist:task:abc" />
       </AgentComposerProvider>,
     )
-    expect(screen.getByText("todoist:task:abc")).toBeInTheDocument()
+    // Slug appears both as the fallback title and the secondary thread id.
+    expect(screen.getAllByText("todoist:task:abc").length).toBeGreaterThanOrEqual(1)
   })
 
   test("renders status pill from run.status", () => {

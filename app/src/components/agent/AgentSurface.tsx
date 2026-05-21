@@ -68,6 +68,7 @@ export function AgentSurface({ entity_ref }: { entity_ref: string }) {
       <SheetHeader className="px-4 py-3 border-b flex items-start justify-between flex-row gap-3">
         <div className="flex flex-col gap-1 min-w-0">
           <h2 className="text-sm font-semibold text-foreground truncate">{title}</h2>
+          <span className="font-mono text-xs text-muted-foreground truncate">{entity_ref}</span>
           <div className="flex flex-wrap items-center gap-1.5">
             {meta?.project && (
               <ProjectBadge
