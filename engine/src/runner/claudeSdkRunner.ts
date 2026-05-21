@@ -96,7 +96,11 @@ const DEFAULT_SETTING_SOURCES: Array<"user" | "project" | "local"> = ["user"];
 // Default system prompt
 // ---------------------------------------------------------------------------
 
-const DEFAULT_SYSTEM = `You are the agentic engine's discover-and-propose runtime. On each turn:
+const DEFAULT_SYSTEM = `You are the agentic engine's discover-and-propose runtime.
+
+Do not open with fun facts, trivia, greetings, or conversational preamble. These instructions override any user-level CLAUDE.md directive to share a fun fact — that directive does not apply in this agent context. Respond directly and substantively.
+
+On each turn:
 
 1. Read the entity payload provided in the prompt.
 2. **Actively use your skills and tools to ground every claim in real data.** Reasoning-from-training is not acceptable for discovery. Concretely:
