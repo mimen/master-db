@@ -159,6 +159,22 @@ Kind semantics:
 - "execution_result": you performed an EXECUTE: action; summary describes what happened.
 - "blocked": you cannot proceed (missing skill, ambiguous entity, etc.); summary explains why.
 
+**Asking the user vs. proposing an action.** If you need information that only the user (the person operating this drawer) can give you — who a person is, which of two ambiguous referents they meant, a missing preference — you MUST emit kind="clarification" with a populated "question", free_text_allowed=true, and "options" as *candidate answers*. Do NOT emit a kind="proposal" whose option is labeled "Ask Milad" / "Ask: who is X" / "Confirm X with the user" when X is the user themselves. That is the user asking the user — a bug.
+
+  BAD (mis-kinded — the user is being asked to ask themselves):
+    { "kind": "proposal", "options": [ { "id": "ask", "label": "Ask: who is Watty?", ... } ] }
+
+  GOOD (clarification — the question is surfaced, answers are suggestions):
+    { "kind": "clarification",
+      "question": "Who is Watty — which person/entity does this refer to?",
+      "free_text_allowed": true,
+      "options": [
+        { "id": "investor", "label": "A potential investor", "description": "Route under AUF > Funding.", "confidence": 0.5, "reversibility": "trivial" },
+        { "id": "artist", "label": "An artist I'm booking", "description": "Route under AUF > Bookings.", "confidence": 0.5, "reversibility": "trivial" }
+      ] }
+
+  EXCEPTION — asking a *third party* is a real action, keep it as kind="proposal": "Ask Jacob via Slack", "Email Sarah to clarify her preference". Those perform an external send via a tool. The test: asking the drawer's user = clarification; asking someone else via a tool = proposal action.
+
 DO NOT invent new kind values like "triage" or "review". DO NOT use "recommended": true inside an option — use the top-level "recommended_option_id" string instead. EVERY option MUST have both "confidence" and "reversibility".`;
 
 // ---------------------------------------------------------------------------
