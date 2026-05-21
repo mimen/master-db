@@ -3,6 +3,8 @@ import { v } from "convex/values"
 import type { Doc } from "../../_generated/dataModel"
 import { authedQuery } from "../../_lib/authed"
 
+import { enrichQueueRun } from "./_enrichQueueRun"
+
 export default authedQuery({
   args: {
     statuses: v.optional(v.array(v.string())),
@@ -36,16 +38,7 @@ export default authedQuery({
     }
 
     const enriched = await Promise.all(
-      allRows.map(async (run) => {
-        if (run.entity_type === "todoist_task") {
-          const task = await ctx.db
-            .query("todoist_items")
-            .withIndex("by_todoist_id", (q) => q.eq("todoist_id", run.entity_id))
-            .unique()
-          return { ...run, entity_title: task?.content ?? "(missing)" }
-        }
-        return { ...run, entity_title: run.entity_ref }
-      }),
+      allRows.map((run) => enrichQueueRun(ctx, run)),
     )
 
     const sorted = enriched.sort((a, b) => {

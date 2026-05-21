@@ -20,6 +20,9 @@ async function seedRun(
     last_urgency?: number | null
     updated_at?: number
     task_content?: string
+    priority?: number
+    due?: string
+    project?: { todoist_id: string; name: string; color: string }
   },
 ) {
   await t.run(async (ctx) => {
@@ -36,11 +39,26 @@ async function seedRun(
       ...(args.last_urgency !== undefined && { last_urgency: args.last_urgency }),
       updated_at: args.updated_at ?? Date.now(),
     })
+    if (args.project) {
+      await ctx.db.insert("todoist_projects", {
+        todoist_id: args.project.todoist_id,
+        name: args.project.name,
+        color: args.project.color,
+        child_order: 0,
+        is_deleted: false,
+        is_archived: false,
+        is_favorite: false,
+        view_style: "list",
+        sync_version: 1,
+      })
+    }
     await ctx.db.insert("todoist_items", {
       todoist_id: args.entity_id,
       content: args.task_content ?? `Task ${args.entity_id}`,
       child_order: 0,
-      priority: 1,
+      priority: args.priority ?? 1,
+      ...(args.due !== undefined && { due: { date: args.due } }),
+      ...(args.project && { project_id: args.project.todoist_id }),
       labels: [],
       comment_count: 0,
       checked: false,
@@ -105,6 +123,32 @@ describe("listAwaitingDecision", () => {
 
     const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
     expect(rows[0]?.entity_title).toBe("Email Sarah re: venue")
+  })
+
+  test("enriches rows with priority, due, and project (raw color)", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, {
+      entity_id: "a",
+      status: "awaiting_decision",
+      task_content: "Email Sarah",
+      priority: 4,
+      due: "2026-06-01",
+      project: { todoist_id: "p1", name: "AUF", color: "lavender" },
+    })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows[0]?.priority).toBe(4)
+    expect(rows[0]?.due).toBe("2026-06-01")
+    expect(rows[0]?.project).toEqual({ name: "AUF", color: "lavender" })
+  })
+
+  test("null priority/due/project when task has no metadata", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, { entity_id: "a", status: "awaiting_decision" })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows[0]?.due).toBeNull()
+    expect(rows[0]?.project).toBeNull()
   })
 
   test("limit clamps at 500", async () => {
