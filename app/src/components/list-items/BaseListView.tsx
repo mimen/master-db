@@ -212,6 +212,40 @@ export interface BaseListViewProps<T> {
    */
   defaultGroup?: string
 
+  // ============= CONTROLLED SORT/GROUP (optional) =============
+
+  /**
+   * Controlled sort value. When provided (including null), the caller owns the
+   * sort state and BaseListView's internal useListViewSettings sort is ignored
+   * for sorting/dropdown. Pair with onSortChange. Leave undefined to use the
+   * internal (localStorage-backed) sort — the default backward-compatible path.
+   */
+  sortValue?: string | null
+
+  /**
+   * Callback fired when the sort changes. Used with sortValue for the controlled
+   * path. Falls back to the internal setter when omitted.
+   */
+  onSortChange?: (id: string | null) => void
+
+  /**
+   * Controlled group value. See sortValue.
+   */
+  groupValue?: string | null
+
+  /**
+   * Callback fired when the group changes. See onSortChange.
+   */
+  onGroupChange?: (id: string | null) => void
+
+  /**
+   * When true, the view-settings dropdown is NOT registered to the header slot.
+   * Used by callers (e.g. TaskListView agent mode) that render their own sort
+   * control elsewhere so there is no duplicate. Backward-compatible: defaults to
+   * false (header dropdown unchanged).
+   */
+  hideViewSettings?: boolean
+
   // ============= OPTIONAL STYLING =============
 
   /**
@@ -243,15 +277,30 @@ export function BaseListView<T>({
   supportData,
   defaultSort,
   defaultGroup,
+  sortValue,
+  onSortChange,
+  groupValue,
+  onGroupChange,
+  hideViewSettings = false,
   headerAction,
   className,
 }: BaseListViewProps<T>) {
   const [isExpanded, setIsExpanded] = useState(list.startExpanded)
   const { registry } = useCountRegistry()
 
-  // Load sort/group settings from localStorage
+  // Load sort/group settings from localStorage. Always called (owns the
+  // collapsedGroups state + the uncontrolled default path).
   const { currentSort, setCurrentSort, currentGroup, setCurrentGroup, collapsedGroups, toggleGroupCollapse } =
     useListViewSettings(list.id, defaultSort, defaultGroup)
+
+  // Effective sort/group: when the caller passes controlled values (sortValue /
+  // groupValue, including null) it owns the state — we use those + its setter.
+  // Otherwise fall back to the internal localStorage-backed state. This keeps
+  // uncontrolled callers (standard mode) behaving exactly as before.
+  const effectiveSort = sortValue !== undefined ? sortValue : currentSort
+  const effectiveSetSort = onSortChange ?? setCurrentSort
+  const effectiveGroup = groupValue !== undefined ? groupValue : currentGroup
+  const effectiveSetGroup = onGroupChange ?? setCurrentGroup
 
   // Build the view settings dropdown (used in both single-list and multi-list views)
   // IMPORTANT: Memoize to prevent infinite re-render loop in HeaderSlotContext
@@ -260,21 +309,22 @@ export function BaseListView<T>({
     return (
       <ViewSettingsDropdown<T>
         sortOptions={sortOptions}
-        currentSort={currentSort}
-        onSortChange={setCurrentSort}
+        currentSort={effectiveSort}
+        onSortChange={effectiveSetSort}
         groupOptions={groupOptions}
-        currentGroup={currentGroup}
-        onGroupChange={setCurrentGroup}
+        currentGroup={effectiveGroup}
+        onGroupChange={effectiveSetGroup}
         triggerLabel="View"
       />
     )
-  }, [sortOptions, currentSort, setCurrentSort, groupOptions, currentGroup, setCurrentGroup])
+  }, [sortOptions, effectiveSort, effectiveSetSort, groupOptions, effectiveGroup, effectiveSetGroup])
 
-  // Register dropdown to header slot for single-list views
-  // For multi-list views, dropdown renders inline in each list's header
+  // Register dropdown to header slot for single-list views, unless the caller
+  // renders its own sort control (hideViewSettings) — avoids a duplicate UI.
+  // For multi-list views, dropdown renders inline in each list's header.
   useHeaderSlotContent(
     "view-settings",
-    !isMultiListView ? viewSettingsDropdown : null
+    !isMultiListView && !hideViewSettings ? viewSettingsDropdown : null
   )
 
   // Same for caller-supplied header actions (e.g. agent bulk runner).
@@ -283,9 +333,9 @@ export function BaseListView<T>({
     !isMultiListView ? headerAction ?? null : null
   )
 
-  // Find active sort/group options
-  const activeSortOption = sortOptions?.find((opt) => opt.id === currentSort)
-  const activeGroupOption = groupOptions?.find((opt) => opt.id === currentGroup)
+  // Find active sort/group options (driven by the effective controlled/uncontrolled value)
+  const activeSortOption = sortOptions?.find((opt) => opt.id === effectiveSort)
+  const activeGroupOption = groupOptions?.find((opt) => opt.id === effectiveGroup)
 
   // Apply sorting and grouping to entities
   const processedData = useMemo(() => {

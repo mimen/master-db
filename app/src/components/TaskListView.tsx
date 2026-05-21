@@ -7,6 +7,7 @@ import { AgentModeToggle, type ViewMode } from "@/components/agent/AgentModeTogg
 import { QueueFilterBar } from "@/components/agent/QueueFilterBar"
 import { RunAgentOnListButton } from "@/components/agent/RunAgentOnListButton"
 import { BaseListView, TaskListItem } from "@/components/list-items"
+import { ViewSettingsDropdown } from "@/components/ui/ViewSettingsDropdown"
 import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
 import { api } from "@/convex/_generated/api"
 import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
@@ -262,7 +263,7 @@ export function TaskListView({
   // list.id) and apply the SAME helper to the filtered+decorated tasks here.
   // The hook is always called for stable hook order; navigation only fires when
   // effectiveAgentMode is true (enabled flag).
-  const { currentSort, currentGroup } = useListViewSettings(list.id, defaultSort)
+  const { currentSort, setCurrentSort, currentGroup, setCurrentGroup } = useListViewSettings(list.id, defaultSort)
   const orderedAgentTasks = useMemo(() => {
     const activeSortOption = sortOptions.find((opt) => opt.id === currentSort)
     const activeGroupOption = taskGroupOptions.find((opt) => opt.id === currentGroup)
@@ -383,6 +384,16 @@ export function TaskListView({
       sortOptions={sortOptions}
       defaultSort={defaultSort}
       groupOptions={taskGroupOptions}
+      // Agent mode: TaskListView owns the single useListViewSettings instance and
+      // drives BaseListView's sort/group via controlled props, so the relocated
+      // dropdown (rendered in the filter strip below) actually re-sorts the list.
+      // The header view-settings slot is suppressed to avoid a duplicate control.
+      // Standard mode passes none of these -> BaseListView's own header dropdown.
+      sortValue={effectiveAgentMode ? currentSort : undefined}
+      onSortChange={effectiveAgentMode ? setCurrentSort : undefined}
+      groupValue={effectiveAgentMode ? currentGroup : undefined}
+      onGroupChange={effectiveAgentMode ? setCurrentGroup : undefined}
+      hideViewSettings={effectiveAgentMode}
       groupData={{ projects, labels }}
       supportData={{ projects, projectsWithMetadata, labels }}
       headerAction={<RunAgentOnListButton entities={visibleTasks} />}
@@ -405,14 +416,30 @@ export function TaskListView({
   )
 
   if (effectiveAgentMode) {
-    // Filter-only variant of QueueFilterBar: BaseListView's own sort dropdown
-    // (urgency / last-chatted + standard task sorts) owns sorting, so we omit
-    // the bar's sort control to avoid two competing sort UIs.
+    // Filter strip = the agent status filters + the relocated sort dropdown,
+    // sitting together as one top-of-list row. The sort dropdown is wired to
+    // TaskListView's single useListViewSettings instance (also passed to
+    // BaseListView as controlled props), so changing it actually re-sorts.
+    // QueueFilterBar carries its own padding; the wrapper only adds the trailing
+    // gap + right padding for the dropdown so the strip reads as one unit.
     return (
       <AgentModeLayout
         selectedEntityRef={selectedRef}
         header={
-          <QueueFilterBar filter={agentFilter} onFilterChange={setAgentFilter} />
+          <div className="flex items-center gap-2 border-b pr-2">
+            <div className="flex-1 min-w-0">
+              <QueueFilterBar filter={agentFilter} onFilterChange={setAgentFilter} />
+            </div>
+            <ViewSettingsDropdown<TodoistTaskWithProject>
+              sortOptions={sortOptions}
+              currentSort={currentSort}
+              onSortChange={setCurrentSort}
+              groupOptions={taskGroupOptions}
+              currentGroup={currentGroup}
+              onGroupChange={setCurrentGroup}
+              triggerLabel="Sort"
+            />
+          </div>
         }
       >
         {listView}

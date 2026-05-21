@@ -249,6 +249,26 @@ describe("TaskListView agent mode", () => {
     fireEvent.keyDown(window, { key: "j" })
     expect(screen.queryByTestId("agent-surface")).toBeNull()
   })
+
+  test("sort control renders in the filter strip in agent mode", async () => {
+    // The relocated sort dropdown (triggerLabel "Sort") is rendered inline at the
+    // top of the list (the filter strip), NOT in the header slot. The header slot
+    // outlet isn't mounted in this test tree, so any header-registered "View"
+    // dropdown wouldn't render — only the relocated one should be present.
+    renderAgentMode()
+    await screen.findByText("First task")
+    expect(screen.getByRole("button", { name: "Sort" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "View" })).toBeNull()
+  })
+
+  test("standard mode keeps the sort control out of the list (header only)", async () => {
+    // In standard mode the sort dropdown stays registered to the header slot
+    // (triggerLabel "View"), which isn't rendered in this test tree. The relocated
+    // "Sort" trigger must NOT appear inline.
+    renderUrlDriven("/today")
+    await screen.findByText("First task")
+    expect(screen.queryByRole("button", { name: "Sort" })).toBeNull()
+  })
 })
 
 describe("TaskListView URL-driven mode (no agentMode prop)", () => {
