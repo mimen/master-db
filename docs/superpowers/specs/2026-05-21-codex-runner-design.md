@@ -24,13 +24,33 @@ Codex is already installed and authenticated on the host: `~/.codex/auth.json` h
 
 ## Architecture
 
+### The platform boundary (the core principle)
+
+The overriding design constraint: **changes to how agentic responses are formatted must never require platform-specific work.** We achieve that by drawing one hard line.
+
+- A **platform adapter** (Claude, Codex, …) knows only two things: how to drive its SDK's *session lifecycle* (start/resume/interrupt) and how to *translate its raw stream* into our neutral transcript vocabulary. It knows **nothing** about proposals, the `<proposal>` contract, the schema, terminal-event derivation, or the system prompt's protocol section.
+- A **shared run harness** wraps every adapter and owns **everything** about response shape: it injects the protocol system prompt, consumes the adapter's neutral stream, accumulates the final assistant text, parses/validates the `<proposal>`, derives the terminal event, runs the fallback parse, and emits errors. It also owns the agent-tagged cursor envelope.
+
+| Concern | Where it lives | Changing it touches |
+|---|---|---|
+| `<proposal>` contract, `DEFAULT_SYSTEM`, schema, parsing, terminal-event derivation, fallback parse | **Shared harness + `proposalProtocol.ts`** | one place, all platforms at once |
+| `CanonicalEvent` / transcript vocabulary | **Shared (`runner/types.ts`)** | one place |
+| Agent-tagged cursor, selection/stickiness | **Shared selection layer** | one place |
+| SDK construction + subscription auth | Adapter | that adapter only |
+| Session/thread resume semantics | Adapter | that adapter only |
+| Raw stream item → neutral transcript event | Adapter | that adapter only |
+| Interrupt/abort mechanism | Adapter | that adapter only |
+| How skills/tools + instructions are surfaced to the platform | Adapter | that adapter only |
+
+If a future change to the response format forces an edit inside `claudeAdapter.ts` or `codexAdapter.ts`, the boundary has been drawn in the wrong place and is a bug in the design.
+
 ### 1. Runner registry (selection layer)
 
-`AgentRunner` is already the provider interface. We make the engine hold a keyed set of them instead of one.
+`AgentRunner` (the existing `run` + `interrupt` interface the server consumes) stays the contract the server sees. Each entry in the registry is a thin **adapter** wrapped by the shared harness into an `AgentRunner` (see §3). We make the engine hold a keyed set instead of one.
 
 - Introduce `type AgentId = "claude" | "codex"` (string-typed and extensible — OpenCode is a plausible third later).
 - `BuildServerOpts.runner: AgentRunner` becomes:
-  - `runners: Record<AgentId, AgentRunner>`
+  - `runners: Record<AgentId, AgentRunner>` — each built as `createRunner(adapter)`
   - `defaultAgent: AgentId` (= `"claude"`)
 - A small resolver picks the runner for a run: explicit `agent` on the request → else the run's previously-recorded agent (for follow-ups) → else `defaultAgent`.
 
@@ -50,38 +70,78 @@ Codex is already installed and authenticated on the host: `~/.codex/auth.json` h
 
 > Storage note: the engine persists run state in Convex via `engine/src/store/convex.ts`. The recorded agent rides along inside the tagged cursor (already persisted), so **no Convex schema change is required for v1**. If we later want to query/sort runs by agent in the UI, denormalize an `agent` column then — out of scope here.
 
-### 3. Shared proposal-protocol module
+### 3. The shared run harness + adapter contract (the platform-agnostic core)
 
-Extract from `claudeSdkRunner.ts` into a new `engine/src/runner/proposalProtocol.ts`:
+This is where the boundary is enforced. Two pieces.
 
-- `DEFAULT_SYSTEM` (the full proposal-protocol + grounding + drafting-conventions prompt),
-- `ProposalSchema` re-export and `tryParseProposal(text): Proposal | null`,
-- a shared `proposalToTerminalEvent(proposal, checkpoint_id): CanonicalTerminalEvent` helper (the kind→event mapping currently inline in `normalize`).
+**(a) The adapter contract** — `engine/src/runner/types.ts`:
 
-`proposalSchema.ts` stays where it is; the protocol module composes it. Both runners import from here, guaranteeing Claude and Codex emit and parse the identical `<proposal>…</proposal>` contract. This is the one targeted refactor that makes parity cheap; it is behavior-preserving for the Claude runner (covered by existing tests).
+```ts
+// Neutral transcript events an adapter emits — the non-terminal CanonicalEvents.
+type TranscriptEvent = Exclude<CanonicalEvent, CanonicalTerminalEvent>;
+// i.e. user_message | assistant_message | reasoning | tool_call_started | tool_call_resolved
 
-### 4. `codexSdkRunner.ts`
+// Internal turn-completion sentinel (not forwarded to consumers as-is).
+interface TurnComplete {
+  type: "turn_complete";
+  final_text: string;            // the text the harness scans for <proposal>
+  usage?: TokenUsage;
+  native_error?: { message: string; details?: unknown };  // SDK turn error (max turns, abort…)
+  session_id: string | null;     // platform-native resume handle for the next turn
+}
 
-New file implementing `AgentRunner` over `@openai/codex-sdk`, structurally mirroring `claudeSdkRunner.ts`.
+type AdapterEvent = TranscriptEvent | TurnComplete;
 
-- **Construction.** `new Codex()` (reuses `~/.codex` auth). A factory `createCodexSdkRunner(opts)` parallel to `createClaudeSdkRunnerOpts` — `systemPrompt`, `model`, `workingDirectory`, `additionalDirectories`-equivalent, defaulting to the same vault + GitHub roots.
-- **Per-entity session.** Keep a `Map<entity_ref, { threadId: string | null; turn_count; ...}>`, mirroring the Claude runner's `SessionContext`. First turn: `codex.startThread({ workingDirectory, sandboxMode: 'danger-full-access', skipGitRepoCheck: true })`. Resume: `codex.resumeThread(threadId)`. (`danger-full-access` + skip-git mirror the Claude runner's `bypassPermissions`; the host's `codex` alias already runs in this mode, so this matches established local posture for an unattended trusted agent.)
-- **Run + streaming.** Call `thread.runStreamed(prompt)` and iterate `result.events`. The prompt is the same JSON envelope `buildUserPrompt` produces today (`{ entity_ref, entity_payload, user_message }`), so the user-facing contract is identical.
-- **Event normalization.** Translate Codex stream items → `CanonicalEvent`:
+interface AdapterTurnInput {
+  entity_ref: string;
+  prompt: string;                // the JSON envelope built by the shared harness
+  system_prompt: string;         // DEFAULT_SYSTEM, injected by the harness
+  session_id: string | null;     // from the previous turn's TurnComplete, or null
+}
 
-  | Codex stream item | CanonicalEvent |
+interface AgentAdapter {
+  id: AgentId;
+  // Drive one turn: yield transcript events as they stream, end with exactly one TurnComplete.
+  run(input: AdapterTurnInput): AsyncIterable<AdapterEvent>;
+  interrupt(entity_ref: string): Promise<void>;
+}
+```
+
+The adapter never imports `ProposalSchema`, never sees `Proposal`, never constructs a terminal event. It translates its SDK stream into `TranscriptEvent`s and reports turn completion with the raw final text + native resume handle. That is the entire platform-specific surface.
+
+**(b) The harness** — `engine/src/runner/createRunner.ts` + `engine/src/runner/proposalProtocol.ts`:
+
+- `proposalProtocol.ts` holds the response-format logic, extracted from `claudeSdkRunner.ts`: `DEFAULT_SYSTEM`, `tryParseProposal(text): Proposal | null`, and `proposalToTerminalEvent(proposal, checkpoint_id): CanonicalTerminalEvent` (the kind→event mapping currently inline in `normalize`). `proposalSchema.ts` stays put; this module composes it.
+- `createRunner(adapter: AgentAdapter): AgentRunner` is the wrapper every registry entry uses. Per turn it:
+  1. Builds the prompt envelope (`buildUserPrompt`) and passes `DEFAULT_SYSTEM` as `system_prompt`.
+  2. Iterates the adapter's `AdapterEvent`s. Each `TranscriptEvent` is forwarded verbatim to `on_event`; assistant text is accumulated.
+  3. On `TurnComplete`: parse `final_text` for `<proposal>` (or fall back to the accumulated transcript), validate via the schema, derive the terminal `CanonicalEvent` via `proposalToTerminalEvent`, and emit it. If `native_error` is set and no proposal parses, emit a terminal `error`.
+  4. Returns `{ resume_cursor, terminal }`, with `resume_cursor` carrying the adapter's `session_id` (then wrapped by the selection layer's agent tag — §2).
+
+**Why this matters for Milad's constraint:** every decision about response shape — the protocol prompt, what counts as a valid proposal, how a parsed proposal becomes a terminal event, the fallback behavior — lives in (b) and runs identically for all platforms. Adding OpenCode, or changing the proposal schema, never touches an adapter. The existing Claude logic is *moved*, not rewritten, so the change is behavior-preserving and guarded by the current `claudeSdkRunner` tests (which become `claudeAdapter` + harness tests).
+
+### 4. The two adapters
+
+Both are thin: SDK lifecycle + stream translation only. Neither imports the protocol module.
+
+**`claudeAdapter.ts` (refactor of today's `claudeSdkRunner.ts`).** The existing file's `normalize()` already produces the transcript events; the change is to *stop* it parsing proposals or building terminal events inline. Instead it yields `TranscriptEvent`s and, when the SDK's `result` message arrives, yields a single `TurnComplete { final_text: result.result, usage, native_error, session_id }`. `DEFAULT_SYSTEM`, `tryParseProposal`, and the kind→event mapping move to `proposalProtocol.ts`. Construction (`settingSources: ['user']`, `bypassPermissions`, cwd/additionalDirectories) is unchanged. Behavior-preserving, guarded by the migrated tests.
+
+**`codexAdapter.ts` (new).** Implements `AgentAdapter` over `@openai/codex-sdk`.
+
+- **Construction.** `new Codex()` (reuses `~/.codex` auth). Factory `createCodexAdapter(opts)` — `model`, `workingDirectory`, additional reachable dirs — defaulting to the same vault + GitHub roots as the Claude adapter.
+- **Per-entity session.** `Map<entity_ref, { threadId: string | null }>`. First turn: `codex.startThread({ workingDirectory, sandboxMode: 'danger-full-access', skipGitRepoCheck: true })`; resume: `codex.resumeThread(session_id)`. (`danger-full-access` + skip-git mirror the Claude adapter's `bypassPermissions`; the host's `codex` alias already runs this way — established posture for an unattended trusted agent.)
+- **Run + streaming.** `thread.runStreamed(input.prompt)`; iterate `result.events`, translating each into a `TranscriptEvent`:
+
+  | Codex stream item | TranscriptEvent |
   |---|---|
-  | assistant message text | `assistant_message` (+ `token_usage` when present) |
+  | assistant message text | `assistant_message` (+ `token_usage` when the SDK exposes it) |
   | reasoning / thinking item | `reasoning` |
   | command/tool execution begin | `tool_call_started` (`activity_key` = Codex item id) |
   | command/tool execution end | `tool_call_resolved` (`status` ok/error, `output`) |
-  | final assistant turn | parse `<proposal>` → `proposal` / `execution_result` / `blocked` via the shared protocol module |
-  | error / aborted turn | `error` |
 
-  The exact Codex item type names are pinned during planning against `@openai/codex-sdk` at the version we install (verify `runStreamed` event shapes — `item.completed`, `item.started`, `turn.completed`, etc. — empirically; do not assume from this table).
-- **Fallback parse.** Same as Claude: accumulate assistant text and, if no terminal event surfaced, `tryParseProposal` the transcript; else emit a structured `error`.
-- **Cursor.** Inner cursor `{ thread_id, turn_count }`; the selection layer wraps it as `{ agent: "codex", cursor: {...} }`.
-- **Interrupt.** Abort the in-flight `runStreamed` (AbortController if the SDK accepts a signal; otherwise the SDK's documented cancel/turn-abort) and drop the session entry, mirroring the Claude runner.
+  When the stream ends, yield one `TurnComplete { final_text, usage, native_error, session_id: threadId }`. `final_text` is the last assistant turn's text (the harness scans it for `<proposal>`; the adapter does not). The exact Codex item type names are pinned during planning against the installed `@openai/codex-sdk` (`item.completed`, `item.started`, `turn.completed`, etc. — verified empirically, not assumed from this table).
+- **Interrupt.** Abort the in-flight `runStreamed` (AbortSignal if the SDK accepts one; otherwise the SDK's documented cancel/turn-abort) and drop the session entry.
+- **No proposal logic.** The adapter never parses `<proposal>` or emits terminal events — the harness does, identically to Claude.
 
 ### 5. Full tool parity for Codex
 
@@ -117,8 +177,12 @@ Reads (`GET /run/:entity_ref[/status]`), interrupt, and health are unchanged exc
 
 ## Testing
 
-- `engine/src/runner/codexSdkRunner.test.ts` mirroring `claudeSdkRunner.test.ts`: feed a faked SDK stream and assert the `CanonicalEvent` sequence, cursor round-trip (`thread_id`/`turn_count`), and proposal/execution_result/blocked/error parsing.
-- `engine/src/runner/proposalProtocol.test.ts`: move/keep the `tryParseProposal` + schema tests here; assert Claude-runner behavior is unchanged (no regression from the extraction).
+The adapter/harness split makes each layer testable in isolation:
+
+- `engine/src/runner/proposalProtocol.test.ts`: the moved `tryParseProposal` + schema + `proposalToTerminalEvent` tests. This is where all response-format behavior is asserted, once, platform-independently.
+- `engine/src/runner/createRunner.test.ts`: drive the harness with a **fake adapter** that emits a scripted `AdapterEvent` sequence; assert transcript passthrough, proposal/execution_result/blocked/error derivation, fallback parse, and cursor round-trip. No SDK involved — this proves the format logic works for *any* adapter.
+- `engine/src/runner/codexAdapter.test.ts`: feed a faked `@openai/codex-sdk` stream; assert it yields the right `TranscriptEvent`s + a well-formed `TurnComplete`. Asserts translation only — never proposals.
+- `engine/src/runner/claudeAdapter.test.ts`: the migrated `claudeSdkRunner` tests, narrowed to translation + `TurnComplete` (proposal assertions move to the harness/protocol tests). Confirms the refactor is behavior-preserving.
 - Selection-layer tests: explicit-agent routing, cursor-tag stickiness on follow-ups, agent/cursor conflict ⇒ 400, interrupt routes to the recorded runner. Place alongside the run/interrupt route tests.
 - `echoRunner` stays the default test double; the registry makes injecting per-test runners trivial.
 - Validation gate (repo standard): `bun run typecheck && bun run lint && bun test` clean before merge.
@@ -126,7 +190,7 @@ Reads (`GET /run/:entity_ref[/status]`), interrupt, and health are unchanged exc
 ## Rollout
 
 - Ship behind the per-run `agent` param **defaulting to `claude`**. Nothing changes for existing callers until a request opts in with `agent: "codex"`.
-- Boot wiring: `createSourceRegistry` pattern already exists; add `runners: { claude: createClaudeSdkRunner(), codex: createCodexSdkRunner() }` and `defaultAgent: "claude"` in `server.ts`'s `import.meta.main` block.
+- Boot wiring: `createSourceRegistry` pattern already exists; add `runners: { claude: createRunner(createClaudeAdapter()), codex: createRunner(createCodexAdapter()) }` and `defaultAgent: "claude"` in `server.ts`'s `import.meta.main` block.
 - Manual parity check before declaring done: run the same Todoist entity through both agents (`agent: "claude"` then `agent: "codex"` on a fresh entity_ref) and compare proposals for grounding quality and schema validity.
 - `engine/README.md` updated: new `agent` field, the `~/.codex/skills` symlink prerequisite, and `codex login` as a host prerequisite alongside the Claude subscription.
 
