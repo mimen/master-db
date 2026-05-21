@@ -22,6 +22,8 @@ async function seedRun(
     task_content?: string
     priority?: number
     due?: string
+    deadline?: string
+    labels?: Array<{ name: string; color: string }>
     project?: { todoist_id: string; name: string; color: string }
     checked?: boolean
   },
@@ -53,14 +55,28 @@ async function seedRun(
         sync_version: 1,
       })
     }
+    if (args.labels) {
+      for (const label of args.labels) {
+        await ctx.db.insert("todoist_labels", {
+          todoist_id: `lbl-${label.name}`,
+          name: label.name,
+          color: label.color,
+          order: 0,
+          is_deleted: false,
+          is_favorite: false,
+          sync_version: 1,
+        })
+      }
+    }
     await ctx.db.insert("todoist_items", {
       todoist_id: args.entity_id,
       content: args.task_content ?? `Task ${args.entity_id}`,
       child_order: 0,
       priority: args.priority ?? 1,
       ...(args.due !== undefined && { due: { date: args.due } }),
+      ...(args.deadline !== undefined && { deadline: { date: args.deadline, lang: "en" } }),
       ...(args.project && { project_id: args.project.todoist_id }),
-      labels: [],
+      labels: args.labels ? args.labels.map((l) => l.name) : [],
       comment_count: 0,
       checked: args.checked ?? false,
       is_deleted: false,
@@ -150,6 +166,62 @@ describe("listAwaitingDecision", () => {
     const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
     expect(rows[0]?.due).toBeNull()
     expect(rows[0]?.project).toBeNull()
+    expect(rows[0]?.deadline).toBeNull()
+    expect(rows[0]?.labels).toEqual([])
+  })
+
+  test("enriches rows with deadline and resolved labels", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await seedRun(t, {
+      entity_id: "a",
+      status: "awaiting_decision",
+      deadline: "2026-06-15",
+      labels: [
+        { name: "urgent", color: "red" },
+        { name: "waiting", color: "blue" },
+      ],
+    })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows[0]?.deadline).toBe("2026-06-15")
+    expect(rows[0]?.labels).toEqual([
+      { name: "urgent", color: "red" },
+      { name: "waiting", color: "blue" },
+    ])
+  })
+
+  test("unknown label name falls back to charcoal color", async () => {
+    const t = convexTest(schema, modules).withIdentity({ email: ALLOWED_EMAIL })
+    await t.run(async (ctx) => {
+      await ctx.db.insert("agenticRuns", {
+        entity_ref: "todoist:task:z",
+        entity_type: "todoist_task",
+        entity_id: "z",
+        backend: "claude_sdk",
+        resume_cursor: null,
+        status: "awaiting_decision",
+        last_message_id: null,
+        last_run_id: "01H",
+        last_traceparent: null,
+        updated_at: Date.now(),
+      })
+      await ctx.db.insert("todoist_items", {
+        todoist_id: "z",
+        content: "Task z",
+        child_order: 0,
+        priority: 1,
+        labels: ["ghost"],
+        comment_count: 0,
+        checked: false,
+        is_deleted: false,
+        added_at: "2026-01-01T00:00:00Z",
+        user_id: "u1",
+        sync_version: 1,
+      })
+    })
+
+    const rows = await t.query(api.agentic.queries.listAwaitingDecision.default, {})
+    expect(rows[0]?.labels).toEqual([{ name: "ghost", color: "charcoal" }])
   })
 
   test("limit clamps at 500", async () => {

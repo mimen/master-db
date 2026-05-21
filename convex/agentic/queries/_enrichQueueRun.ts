@@ -14,6 +14,8 @@ export type EnrichedQueueRun = Doc<"agenticRuns"> & {
   entity_title: string
   priority: number | null
   due: string | null
+  deadline: string | null
+  labels: Array<{ name: string; color: string }>
   project: { name: string; color: string } | null
   checked: boolean
 }
@@ -34,6 +36,8 @@ export async function enrichQueueRun(
       entity_title: run.entity_ref,
       priority: null,
       due: null,
+      deadline: null,
+      labels: [],
       project: null,
       checked: false,
     }
@@ -55,11 +59,23 @@ export async function enrichQueueRun(
     }
   }
 
+  const labels = await Promise.all(
+    (task?.labels ?? []).map(async (labelName) => {
+      const label = await ctx.db
+        .query("todoist_labels")
+        .withIndex("by_name", (q) => q.eq("name", labelName))
+        .unique()
+      return { name: labelName, color: label?.color ?? "charcoal" }
+    }),
+  )
+
   return {
     ...run,
     entity_title: task?.content ?? "(missing)",
     priority: task?.priority ?? null,
     due: task?.due?.date ?? null,
+    deadline: task?.deadline?.date ?? null,
+    labels,
     project,
     checked: task?.checked ?? false,
   }
