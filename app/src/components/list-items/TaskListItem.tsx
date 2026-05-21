@@ -285,8 +285,8 @@ export const TaskListItem = memo(function TaskListItem({
         const desc = displayDescription?.trim()
         if (!desc) return null
         return (
-          <span className="block min-w-0 line-clamp-3 [&_.prose]:text-xs [&_.prose>*]:my-0 [&_.prose>*+*]:mt-1">
-            <Prose text={truncate(desc, 300)} />
+          <span className="block min-w-0 line-clamp-2 [&_.prose]:text-xs [&_.prose>*]:my-0 [&_.prose>*+*]:mt-1">
+            <Prose text={truncate(desc, 140)} />
           </span>
         )
       }}
