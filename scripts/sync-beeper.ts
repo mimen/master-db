@@ -484,12 +484,14 @@ async function main(): Promise<void> {
     }
 
     totalMessages += messages.length;
-    doneSet.add(c.id);
-    saveProgress({
-      account: ARGS.account,
-      done: Array.from(doneSet),
-      lastUpdated: new Date().toISOString(),
-    });
+    if (!ARGS.dryRun) {
+      doneSet.add(c.id);
+      saveProgress({
+        account: ARGS.account,
+        done: Array.from(doneSet),
+        lastUpdated: new Date().toISOString(),
+      });
+    }
 
     const elapsed = (Date.now() - started) / 1000;
     console.log(
