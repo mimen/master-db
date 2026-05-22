@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 
+import { handleIngest as handleBeeperIngest } from "./beeper/sync/handleIngest";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
 /**
@@ -28,6 +29,23 @@ http.route({
   path: "/todoist/webhook",
   method: "POST",
   handler: handleTodoistWebhook,
+});
+
+/**
+ * Beeper ingest endpoint
+ * POST /beeper/ingest
+ *
+ * Receives batched accounts/chats/messages from the local Beeper sync script.
+ * Auth: Bearer token matching the BEEPER_INGEST_SECRET env var on this
+ * deployment (same value as the local script's $BEEPER_INGEST_SECRET).
+ *
+ * See convex/beeper/README.md for the payload shape and the local script at
+ * scripts/sync-beeper.ts in this repo.
+ */
+http.route({
+  path: "/beeper/ingest",
+  method: "POST",
+  handler: handleBeeperIngest,
 });
 
 export default http;

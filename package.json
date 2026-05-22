@@ -9,6 +9,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "sync:initial": "bunx convex run todoist/sync:runInitialSync",
+    "sync:beeper": "bun run scripts/sync-beeper.ts",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
