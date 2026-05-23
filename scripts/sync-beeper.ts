@@ -232,27 +232,42 @@ async function fetchAllMessages(chatId: string): Promise<BeeperMessage[]> {
 
 // ---------------------------- shape conversion -------------------------------
 
+/**
+ * Convex `v.optional(v.string())` validators accept `undefined` but reject
+ * `null`. Beeper returns `null` for many "no value" fields. Drop nulls before
+ * serializing so the optional-field semantics match.
+ */
+function stripNulls<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== null) out[k] = v;
+  }
+  return out as T;
+}
+
 function reshapeAccount(a: BeeperAccount): Record<string, unknown> {
-  return {
+  return stripNulls({
     account_id: a.accountID,
     network: a.network,
-    display_name: a.user?.displayName ?? undefined,
-    phone_number: a.user?.phoneNumber ?? undefined,
+    display_name: a.user?.displayName,
+    phone_number: a.user?.phoneNumber,
     is_active: true,
     raw: JSON.stringify(a),
-  };
+  });
 }
 
 function reshapeChat(c: BeeperChat): Record<string, unknown> {
-  const participants = (c.participants?.items ?? []).map((p) => ({
-    id: p.id,
-    phone_number: p.phoneNumber,
-    full_name: p.fullName,
-    is_self: p.isSelf,
-    is_admin: p.isAdmin,
-    img_url: p.imgURL,
-  }));
-  return {
+  const participants = (c.participants?.items ?? []).map((p) =>
+    stripNulls({
+      id: p.id,
+      phone_number: p.phoneNumber,
+      full_name: p.fullName,
+      is_self: p.isSelf,
+      is_admin: p.isAdmin,
+      img_url: p.imgURL,
+    }),
+  );
+  return stripNulls({
     account_id: c.accountID,
     network: c.network,
     chat_id: c.id,
@@ -260,7 +275,7 @@ function reshapeChat(c: BeeperChat): Record<string, unknown> {
     title: c.title,
     description: c.description,
     type: c.type,
-    img_url: c.imgURL ?? undefined,
+    img_url: c.imgURL,
     participants,
     last_activity: c.lastActivity,
     is_archived: c.isArchived ?? false,
@@ -269,30 +284,32 @@ function reshapeChat(c: BeeperChat): Record<string, unknown> {
     is_read_only: c.isReadOnly ?? false,
     unread_count: c.unreadCount ?? 0,
     raw: JSON.stringify(c),
-  };
+  });
 }
 
 function reshapeMessage(m: BeeperMessage): Record<string, unknown> {
-  const attachments = (m.attachments ?? []).map((a) => ({
-    mxc_id: a.id,
-    type: a.type,
-    mime_type: a.mimeType,
-    file_name: a.fileName,
-    file_size: a.fileSize,
-    width: a.size?.width,
-    height: a.size?.height,
-    duration_ms: a.duration,
-    is_gif: a.isGif,
-    is_sticker: a.isSticker,
-    beeper_src_url: a.srcURL,
-  }));
+  const attachments = (m.attachments ?? []).map((a) =>
+    stripNulls({
+      mxc_id: a.id,
+      type: a.type,
+      mime_type: a.mimeType,
+      file_name: a.fileName,
+      file_size: a.fileSize,
+      width: a.size?.width,
+      height: a.size?.height,
+      duration_ms: a.duration,
+      is_gif: a.isGif,
+      is_sticker: a.isSticker,
+      beeper_src_url: a.srcURL,
+    }),
+  );
   const reactions = (m.reactions ?? [])
     .filter((r) => r.participantID && r.reactionKey)
     .map((r) => ({
       participant_id: r.participantID as string,
       emoji_or_key: r.reactionKey as string,
     }));
-  return {
+  return stripNulls({
     account_id: m.accountID,
     network: "WhatsApp", // overwritten below from chat context
     chat_id: m.chatID,
@@ -310,7 +327,7 @@ function reshapeMessage(m: BeeperMessage): Record<string, unknown> {
     is_deleted: m.isDeleted ?? false,
     is_hidden: m.isHidden ?? false,
     raw: JSON.stringify(m),
-  };
+  });
 }
 
 // ---------------------------- Convex POST ------------------------------------
