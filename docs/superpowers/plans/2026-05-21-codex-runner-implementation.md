@@ -1022,3 +1022,12 @@ git commit -m "docs(engine): document codex agent option + parity setup"
 - **Spec coverage:** registry (T6), per-run `agent` + stickiness + conflict (T1+T6), shared harness/protocol (T2+T3), thin adapters with no proposal logic (T4+T5), full tool parity via skill symlink (T7), tests per layer (T1–T6), rollout default-claude (T6 Step 2), README (T7). All spec sections map to a task.
 - **Cursor double-wrap guard:** the harness stores a plain `{ session_id }` inner cursor; the route wraps it once as `{ agent, cursor }`. The route always `unwrapCursor`s before calling the runner, so no nesting accrues across turns.
 - **Open SDK items (carried from spec):** Codex stream event taxonomy, system-prompt injection mechanism, interrupt API, token-usage availability — all resolved empirically in Task 5 Step 1 and reflected in Steps 4/5. The plan deliberately front-loads that verification before the adapter is written.
+
+---
+
+## Future work (NOT in this plan — do not implement)
+
+Recorded so the executing agent doesn't roll either of these into the current tasks. Both are deliberately out of scope; each becomes its own spec/plan when picked up.
+
+- **Agent-picker UX.** How a human chooses `agent` (per-entity default, per-run override on the `AgentSurface`, an engine-wide setting) belongs to the `agent-mode-convergence` surface, not this engine plan. The backend contract is stable: `POST /run { agent? }`, 409 on conflict, recorded agent on the run.
+- **Cross-agent context transfer.** The engine already persists the full thread agent-agnostically, so transfer is purely additive on top of what this plan delivers — **prompt-level history replay**, not SDK session resume. The two pieces, when ready: (a) a `POST /run/:entity_ref/handoff { to: AgentId }` route that clears the tagged cursor and writes a synthesized `user_message` summarizing the prior thread, and (b) a `renderThreadForHandoff(thread): string` helper next to `proposalProtocol.ts` so neither adapter knows about it. Tagged-cursor stickiness still wins for normal turns; handoff is a one-shot break-glass.

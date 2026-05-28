@@ -196,11 +196,21 @@ The adapter/harness split makes each layer testable in isolation:
 
 ## Out of scope (v1)
 
-- Frontend agent picker / per-run agent badge in the UI (backend accepts the param; UI surfacing is a later, small follow-up — and intersects the in-flight `agent-mode-convergence` work).
+- **Frontend agent picker / per-run agent badge.** Backend accepts `agent` on `/run`; how a human picks it (per-entity default, per-run override on the `AgentSurface` right pane, an engine-wide knob) is a separate UX spec, naturally absorbed into the in-flight `agent-mode-convergence` work. See **Future work** below.
+- **Cross-agent context transfer.** v1 pins each run to the agent that started it (tagged cursor + 409 on conflict) for coherence — SDK-level resume can't cross providers. Transfer is left as a future, purely additive capability. See **Future work** below.
 - Convex schema column for `agent` (cursor-tag carries it; denormalize only if/when the UI needs to filter/sort by agent).
 - A third provider (OpenCode). The registry is intentionally open-ended, but only claude + codex are built here.
 - A/B / dual-run comparison harness and automatic failover. Per-run choice is the v1 surface; orchestration policies layer on top of the registry later.
 - MCP servers for any non-CLI skill — audited in planning, deferred unless a required discovery skill genuinely needs one.
+
+## Future work (deliberately deferred — design notes)
+
+These don't change v1 architecture; they're recorded so a future spec author inherits the constraints.
+
+- **Agent-picker UX.** Owned by the `agent-mode-convergence` surface, not this engine spec. The backend contract (`POST /run { agent? }`, 409 on conflict, agent on the recorded run) is the stable hook.
+- **Cross-agent context transfer.** The engine already persists the full thread (`assistant_message`, `reasoning`, `tool_call_*`, `proposal`) via `store.appendThreadMessage`, agent-agnostic. So transfer is **prompt-level history replay**, not SDK session resume: drop the tagged cursor, start a fresh session on the new agent, and have the shared harness synthesize a "context handoff" prefix from the stored thread for the first user prompt. Two purely additive pieces, no adapter or harness contract changes:
+  1. A route like `POST /run/:entity_ref/handoff { to: AgentId }` that clears the cursor and writes a `user_message` carrying the rendered prior thread + "you are picking up from {claude|codex}; here is what was discussed and decided."
+  2. A `renderThreadForHandoff(thread): string` helper next to the protocol module — same residence as `DEFAULT_SYSTEM`, so neither adapter needs to know. The tagged cursor still wins for normal stickiness; handoff is a one-shot break-glass that creates the new session.
 
 ## Open questions for planning
 
