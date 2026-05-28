@@ -64,7 +64,7 @@ export function QueueFilterBar({
   onSortChange,
 }: QueueFilterBarProps) {
   return (
-    <div className="px-3 py-2 border-b flex items-center gap-2 flex-wrap">
+    <div className="px-3 py-2 flex items-center gap-2 flex-wrap">
       <div className="flex items-center gap-1 flex-wrap">
         {PRIMARY_OPTIONS.map((opt) => (
           <button
