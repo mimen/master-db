@@ -61,3 +61,7 @@ temp/
 # Local dev artifacts
 .dev-screenshots/
 .superpowers/
+
+# Local progress state for the Beeper sync/upload scripts (per-account, per-machine)
+scripts/.beeper-sync-progress.json
+scripts/.beeper-attachments-progress.json

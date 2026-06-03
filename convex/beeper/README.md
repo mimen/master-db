@@ -97,7 +97,46 @@ That's the laptop or Mac Mini running `bun run scripts/sync-beeper.ts`. Real-tim
 
 ## Phase plan
 
-- **Phase A** (this directory, shipped): Schema + ingest + local script + sync of chats/messages metadata.
-- **Phase B** (next): Upload referenced attachments (~29 GB across all networks) to Convex File Storage. Adds dedup by `mxc_id`, a `generateUploadUrl` mutation, and a parallel/resumable uploader.
+- **Phase A** (shipped): Schema + ingest + local script + sync of chats/messages metadata.
+- **Phase B** (shipped): Upload referenced attachments to Convex File Storage. Dedupes by Matrix `mxc_id` so a media file shared across many messages (forwards, group blasts) is uploaded once.
 - **Phase C** (later): Long-running WS subscriber for realtime updates, run via launchd on the Mac Mini.
-- **Phase D** (later): Other networks (`--account telegram`, `--account local-telegram_...`, `slackgo.*`, etc.) — same script, no schema changes needed.
+- **Phase D** (later): Other networks (`--account telegram`, `--account local-telegram_...`, `slackgo.*`, etc.) — same scripts, no schema changes needed.
+
+## Phase B — attachment pipeline
+
+Beeper Desktop caches every attachment locally under `~/Library/Application Support/BeeperTexts/media/<homeserver>/<key>`. Each message we ingest in Phase A carries a `mxc_id` per attachment that points back into that cache. Phase B walks every chat once, collects every unique `mxc_id`, and uploads the referenced bytes into Convex File Storage.
+
+Three HTTP routes are added (all share the same `BEEPER_INGEST_SECRET` bearer auth as `/beeper/ingest`):
+
+| Route                              | Body                            | Purpose |
+| ---------------------------------- | ------------------------------- | ------- |
+| `POST /beeper/attachments/discover`  | `{ mxc_ids: string[] }`         | Partition into already-uploaded vs missing — drives resumability. |
+| `POST /beeper/attachments/uploadUrl` | `{}`                            | Returns a short-lived single-use URL the uploader POSTs file bytes to. |
+| `POST /beeper/attachments/record`    | `{ mxc_id, convex_storage_id, network, mime_type?, ... }` | Persists the mapping in `beeper_attachments`. |
+
+The new `beeper_attachments` table is the single source of truth for "where are the bytes" — `beeper_messages.attachments[].convex_storage_id` is intentionally left unpopulated so the messages table stays immutable post-Phase-A. Reads join through `getAttachmentUrl(mxc_id)`.
+
+### Running the Phase B uploader
+
+```bash
+cd ~/Programming/Repos/convex-db
+eval "$(op read 'op://Sol/Beeper Env/notesPlain')"
+source <(grep -E '^(BEEPER_URL|BEEPER_INGEST_SECRET)=' .env.local)
+export CONVEX_INGEST_URL="https://blessed-egret-906.convex.site/beeper/ingest"
+
+bun run scripts/upload-beeper-attachments.ts --limit 10 --dry-run   # smoke test
+bun run scripts/upload-beeper-attachments.ts                        # full WhatsApp
+bun run scripts/upload-beeper-attachments.ts --account gmessages    # later networks
+```
+
+Progress lives at `scripts/.beeper-attachments-progress.json`: per-account map of `mxc_id → convex_storage_id` plus a `failed` map of `mxc_id → last error`. Re-runs ask Convex's `/discover` endpoint up front so already-uploaded files are skipped without any local state.
+
+### Resolving an attachment
+
+```bash
+bunx convex run beeper/queries/getAttachmentUrl:getAttachmentUrl \
+  '{"mxc_id":"mxc://local.beeper.com/...xxx"}'
+# → { mxc_id, convex_storage_id, url, mime_type, file_name, file_size }
+```
+
+`url` is a short-lived signed URL from `ctx.storage.getUrl(...)`; refetch on every render rather than persist it.

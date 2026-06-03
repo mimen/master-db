@@ -1,5 +1,10 @@
 import { httpRouter } from "convex/server";
 
+import {
+  handleDiscover as handleBeeperAttachmentsDiscover,
+  handleRecord as handleBeeperAttachmentsRecord,
+  handleUploadUrl as handleBeeperAttachmentsUploadUrl,
+} from "./beeper/sync/handleAttachments";
 import { handleIngest as handleBeeperIngest } from "./beeper/sync/handleIngest";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
@@ -46,6 +51,32 @@ http.route({
   path: "/beeper/ingest",
   method: "POST",
   handler: handleBeeperIngest,
+});
+
+/**
+ * Beeper attachments — Phase B upload pipeline.
+ *
+ * /beeper/attachments/discover — body { mxc_ids: string[] } → which are already uploaded
+ * /beeper/attachments/uploadUrl — body {} → short-lived signed PUT URL
+ * /beeper/attachments/record   — body { mxc_id, convex_storage_id, ... } → register
+ *
+ * All three use the same Bearer-secret auth as /beeper/ingest. See
+ * scripts/upload-beeper-attachments.ts in this repo for the client side.
+ */
+http.route({
+  path: "/beeper/attachments/discover",
+  method: "POST",
+  handler: handleBeeperAttachmentsDiscover,
+});
+http.route({
+  path: "/beeper/attachments/uploadUrl",
+  method: "POST",
+  handler: handleBeeperAttachmentsUploadUrl,
+});
+http.route({
+  path: "/beeper/attachments/record",
+  method: "POST",
+  handler: handleBeeperAttachmentsRecord,
 });
 
 export default http;

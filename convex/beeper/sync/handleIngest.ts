@@ -1,6 +1,8 @@
 import { internal } from "../../_generated/api";
 import { httpAction } from "../../_generated/server";
 
+import { checkBeeperIngestAuth, jsonResponse } from "./auth";
+
 /**
  * Ingest endpoint for the Beeper local sync script.
  *
@@ -22,36 +24,14 @@ import { httpAction } from "../../_generated/server";
  * Response: { ok: true, counts: { accounts, chats, messages } }
  */
 export const handleIngest = httpAction(async (ctx, req) => {
-  const expectedSecret = process.env.BEEPER_INGEST_SECRET;
-  if (!expectedSecret) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: "BEEPER_INGEST_SECRET is not configured on the Convex deployment",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
-  }
-
-  const authHeader = req.headers.get("authorization") ?? "";
-  const provided = authHeader.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length)
-    : "";
-  if (provided !== expectedSecret) {
-    return new Response(
-      JSON.stringify({ ok: false, error: "unauthorized" }),
-      { status: 401, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  const authErr = checkBeeperIngestAuth(req);
+  if (authErr) return authErr;
 
   let body: IngestBody;
   try {
     body = (await req.json()) as IngestBody;
   } catch {
-    return new Response(
-      JSON.stringify({ ok: false, error: "invalid JSON body" }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return jsonResponse({ ok: false, error: "invalid JSON body" }, 400);
   }
 
   const counts = { accounts: 0, chats: 0, messages: 0 };
@@ -96,10 +76,7 @@ export const handleIngest = httpAction(async (ctx, req) => {
     );
   }
 
-  return new Response(JSON.stringify({ ok: true, counts }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return jsonResponse({ ok: true, counts });
 });
 
 // Loose types for the ingest payload. The strict per-row validators live in
