@@ -41,6 +41,7 @@ import { fileURLToPath } from "node:url";
 type Args = {
   account: string;
   limit?: number;
+  limitChats?: number;
   concurrency: number;
   dryRun: boolean;
   refresh: boolean;
@@ -52,6 +53,7 @@ function parseArgs(argv: string[]): Args {
     const a = argv[i];
     if (a === "--account") args.account = argv[++i] ?? args.account;
     else if (a === "--limit") args.limit = Number(argv[++i]);
+    else if (a === "--limit-chats") args.limitChats = Number(argv[++i]);
     else if (a === "--concurrency") args.concurrency = Math.max(1, Number(argv[++i]));
     else if (a === "--dry-run") args.dryRun = true;
     else if (a === "--refresh") args.refresh = true;
@@ -61,7 +63,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 function usage(): string {
-  return `Usage: bun run scripts/upload-beeper-attachments.ts [--account whatsapp] [--limit N] [--concurrency N] [--dry-run] [--refresh]`;
+  return `Usage: bun run scripts/upload-beeper-attachments.ts [--account whatsapp] [--limit-chats N] [--limit N] [--concurrency N] [--dry-run] [--refresh]`;
 }
 
 const ARGS = parseArgs(Bun.argv.slice(2));
@@ -218,18 +220,32 @@ function fileURLToLocalPath(srcURL: string): string | undefined {
 
 type Progress = {
   account: string;
+  deployment: string;
   uploaded: Record<string, string>; // mxc_id → storage_id
   failed: Record<string, string>;   // mxc_id → last error
   updatedAt: string;
 };
 
+// Storage IDs are deployment-scoped, so we key progress by (deployment_host,
+// account). Same script, two deployments → two independent buckets.
+function deploymentKey(): string {
+  if (ARGS.dryRun) return "dry-run";
+  try { return new URL(INGEST_BASE).host; } catch { return "unknown"; }
+}
+
+function progressKey(account: string): string {
+  return `${deploymentKey()}::${account}`;
+}
+
 function loadProgress(account: string): Progress {
+  const key = progressKey(account);
   if (!existsSync(PROGRESS_PATH)) {
-    return { account, uploaded: {}, failed: {}, updatedAt: new Date().toISOString() };
+    return { account, deployment: deploymentKey(), uploaded: {}, failed: {}, updatedAt: new Date().toISOString() };
   }
   const all = JSON.parse(readFileSync(PROGRESS_PATH, "utf8")) as Record<string, Progress>;
-  return all[account] ?? {
-    account, uploaded: {}, failed: {}, updatedAt: new Date().toISOString(),
+  return all[key] ?? {
+    account, deployment: deploymentKey(),
+    uploaded: {}, failed: {}, updatedAt: new Date().toISOString(),
   };
 }
 
@@ -239,7 +255,7 @@ function saveProgress(p: Progress): void {
     all = JSON.parse(readFileSync(PROGRESS_PATH, "utf8")) as Record<string, Progress>;
   }
   p.updatedAt = new Date().toISOString();
-  all[p.account] = p;
+  all[progressKey(p.account)] = p;
   writeFileSync(PROGRESS_PATH, JSON.stringify(all, null, 2));
 }
 
@@ -315,8 +331,12 @@ async function main(): Promise<void> {
 
   // 1) enumerate chats
   console.log(`\n[1/4] fetching all chats for ${ARGS.account}...`);
-  const chats = await fetchAllChats(ARGS.account);
+  let chats = await fetchAllChats(ARGS.account);
   console.log(`  found ${chats.length} chats`);
+  if (ARGS.limitChats !== undefined) {
+    chats = chats.slice(0, ARGS.limitChats);
+    console.log(`  capped at ${chats.length} chats (--limit-chats)`);
+  }
 
   // 2) collect attachment refs (dedupe by mxc_id, keep first occurrence)
   console.log(`\n[2/4] collecting attachment refs from messages...`);
