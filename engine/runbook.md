@@ -4,15 +4,15 @@ Operational reference for the engine running on Milad's Mac mini. For *what it i
 
 This file captures **operational truth** — state that drifts and needs updating as the deploy evolves.
 
-## Current deployment state (as of 2026-05-15)
+## Current deployment state (as of 2026-05-20)
 
 | Layer | Status | Notes |
 |---|---|---|
 | Engine code | ✅ on `main` | `engine/` package + `convex/agentic/*` |
 | Convex tables | ✅ deployed | `shiny-gerbil-853` (master-db dev deployment) |
 | Engine process | ✅ launchd | `com.milad.agentic-engine` LaunchAgent, `RunAtLoad` + `KeepAlive`. |
-| launchd plist | ✅ installed | `~/Library/LaunchAgents/com.milad.agentic-engine.plist` (mode 600, `OP_SERVICE_ACCOUNT_TOKEN` baked in). |
-| Wrapper script | ✅ installed | `~/.agentic-engine/start-with-secrets.sh` (outside `~/Documents` to bypass macOS TCC). The repo copy at `engine/deploy/start-with-secrets.sh` is a reference template only. |
+| launchd plist | ✅ installed | `~/Library/LaunchAgents/com.milad.agentic-engine.plist` (mode 600, `OP_SERVICE_ACCOUNT_TOKEN` baked into `EnvironmentVariables`). **If this key is missing/empty, `op read` falls back to the desktop-app integration and prompts on every restart** — the install step below guards against writing it empty. |
+| Deployed engine | ✅ installed | Whole `engine/` package copied to `~/.agentic-engine/engine/` (incl. `node_modules`), outside `~/Documents` to bypass macOS TCC. The wrapper runs from `~/.agentic-engine/engine/deploy/start-with-secrets.sh`; its `--cwd …/..` resolves to `~/.agentic-engine/engine`. The repo copies under `engine/` are the source template. The standalone `~/.agentic-engine/start-with-secrets.sh` is vestigial (older single-file layout) and not what the plist runs. |
 | Public ingress | ✅ Tailscale Funnel | `https://milads-mac-mini.taild31e9a.ts.net:10000` → `localhost:8787`. Bearer-gated. (Plan originally called for Cloudflare Tunnel; swapped to Funnel since Tailscale was already set up.) |
 | Secrets in 1Password | ✅ provisioned | `op://Sol/agentic-engine/server_token` + `convex_url`. Service-account read at every restart. |
 | Convex Auth | 🔲 not configured | Convex queries are publicly callable. Separate workstream (parallel agent). |
@@ -137,15 +137,23 @@ launchctl start com.milad.agentic-engine
 
 Already installed on the Mac mini. Below is the recipe to redo it on a new machine or after a wipe.
 
-**Critical: the wrapper script must live OUTSIDE `~/Documents/`.** macOS TCC blocks `launchd` from executing scripts under `~/Documents/` with `Operation not permitted` (no clear error path — symptom is silent failure or `bash: ...: Operation not permitted` in `launchd.err.log`).
+**Critical: the engine must live OUTSIDE `~/Documents/`.** macOS TCC blocks `launchd` from executing scripts under `~/Documents/` with `Operation not permitted` (no clear error path — symptom is silent failure or `bash: ...: Operation not permitted` in `launchd.err.log`). So the whole `engine/` package is deployed to `~/.agentic-engine/engine/`, and the plist runs the wrapper from there.
+
+**Critical: `OP_SERVICE_ACCOUNT_TOKEN` must be present and non-empty before you install the plist.** launchd does NOT source `~/.zshrc`, so the token has to be baked into the plist's `EnvironmentVariables`. If it's missing/empty, every `op read` in the wrapper silently falls back to the 1Password **desktop-app integration**, which prompts for approval — and with `KeepAlive`, you get a prompt on every restart. The guard on step 0 fails loudly instead of writing an empty value.
 
 ```bash
-# 1. Copy the wrapper to ~/.agentic-engine/ (which TCC doesn't restrict)
+# 0. GUARD: refuse to proceed if the service-account token isn't in this shell.
+#    (Open a fresh interactive shell so ~/.zshrc has exported it.)
+: "${OP_SERVICE_ACCOUNT_TOKEN:?Set OP_SERVICE_ACCOUNT_TOKEN before installing — launchd can't read ~/.zshrc, so an empty value here causes desktop-app prompts on every restart}"
+
+# 1. Deploy the whole engine package to ~/.agentic-engine/engine/ (TCC-safe).
 mkdir -p ~/.agentic-engine/logs
-install -m 755 engine/deploy/start-with-secrets.sh ~/.agentic-engine/
+rsync -a --delete --exclude node_modules engine/ ~/.agentic-engine/engine/
+( cd ~/.agentic-engine/engine && bun install --frozen-lockfile )
 
 # 2. Install the plist (with OP_SERVICE_ACCOUNT_TOKEN injected — launchd
-# doesn't source ~/.zshrc)
+#    doesn't source ~/.zshrc). Heredoc delimiter is UNQUOTED so the token
+#    and PATH expand here; step 0 guarantees the token is non-empty.
 command cat > ~/Library/LaunchAgents/com.milad.agentic-engine.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -154,7 +162,7 @@ command cat > ~/Library/LaunchAgents/com.milad.agentic-engine.plist <<PLIST
     <key>Label</key><string>com.milad.agentic-engine</string>
     <key>ProgramArguments</key>
     <array>
-      <string>/Users/mimen1994/.agentic-engine/start-with-secrets.sh</string>
+      <string>/Users/mimen1994/.agentic-engine/engine/deploy/start-with-secrets.sh</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -172,16 +180,30 @@ command cat > ~/Library/LaunchAgents/com.milad.agentic-engine.plist <<PLIST
 PLIST
 chmod 600 ~/Library/LaunchAgents/com.milad.agentic-engine.plist
 
-# 3. Load
+# 3. VERIFY the token actually landed non-empty before loading (catches a stale
+#    plist or an empty expansion — the exact drift that caused desktop prompts).
+/usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:OP_SERVICE_ACCOUNT_TOKEN" \
+  ~/Library/LaunchAgents/com.milad.agentic-engine.plist | command grep -q '^ops_' \
+  && echo "✅ token baked in" \
+  || { echo "❌ token missing/empty in plist — fix before loading"; exit 1; }
+
+# 4. Load
 launchctl load -w ~/Library/LaunchAgents/com.milad.agentic-engine.plist
 
-# 4. Verify
+# 5. Verify the running service uses the SERVICE_ACCOUNT (not desktop fallback)
 launchctl print "gui/$(id -u)/com.milad.agentic-engine" | command grep -E "state|pid"
+op whoami | command grep -E "User Type"   # expect: SERVICE_ACCOUNT
 curl -s http://localhost:8787/healthz | jq -c
 tail -f ~/.agentic-engine/launchd.err.log
 ```
 
-The wrapper `~/.agentic-engine/start-with-secrets.sh` reads `AGENTIC_SERVER_TOKEN` + `CONVEX_URL` from 1Password via `op read` before exec'ing `bun --cwd .../engine start`. Provision the 1Password item first (see "Provisioning 1Password items" below) or the script will exit at the first `op read`.
+The wrapper `~/.agentic-engine/engine/deploy/start-with-secrets.sh` reads `AGENTIC_SERVER_TOKEN` + `CONVEX_URL` from 1Password via `op read` before exec'ing `bun --cwd .../engine start`. Provision the 1Password item first (see "Provisioning 1Password items" below) or the script will exit at the first `op read`.
+
+> To reload after an env/plist change on an already-installed machine, use `bootout` + `bootstrap` (plain `stop`/`start` does not re-read `EnvironmentVariables`):
+> ```bash
+> launchctl bootout gui/$(id -u)/com.milad.agentic-engine
+> launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.milad.agentic-engine.plist
+> ```
 
 ## Public ingress via Tailscale Funnel
 

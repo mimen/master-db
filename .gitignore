@@ -61,3 +61,6 @@ temp/
 # Local dev artifacts
 .dev-screenshots/
 .superpowers/
+
+# Local Claude Code state
+.claude/
