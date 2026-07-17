@@ -1,29 +1,40 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatSummary, Message } from "../../shared/types";
-import { useMessages } from "@/hooks/use-messages";
+import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { api } from "@/lib/api";
-import { formatDayDivider, initials, sameDay } from "@/lib/format";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { formatDayDivider, sameDay } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Composer } from "@/components/composer";
+import { ContactAvatar } from "@/components/contact-avatar";
 import { MessageBubble } from "@/components/message-bubble";
-import { Archive, ChevronLeft, Users } from "lucide-react";
+import { Archive, ArrowDown, ChevronLeft } from "lucide-react";
 
 interface ThreadProps {
   chat: ChatSummary;
   privateApi: boolean;
+  jumpTarget: JumpTarget | null;
   onBack: () => void;
   onChanged: () => void;
   registerUpsert: (fn: (message: Message) => void) => void;
 }
 
-export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: ThreadProps) {
-  const { messages, loading, hasMore, loadOlder, upsert } = useMessages(chat.guid);
+export function Thread({
+  chat,
+  privateApi,
+  jumpTarget,
+  onBack,
+  onChanged,
+  registerUpsert,
+}: ThreadProps) {
+  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp } =
+    useMessages(chat.guid, jumpTarget);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  const jumpedTo = useRef<string | null>(null);
 
   useEffect(() => {
     registerUpsert(upsert);
@@ -31,14 +42,26 @@ export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: 
 
   useEffect(() => {
     setReplyTo(null);
-    stickToBottom.current = true;
+    stickToBottom.current = jumpTarget === null;
+    jumpedTo.current = null;
     void api.markRead(chat.guid);
-  }, [chat.guid]);
+  }, [chat.guid, jumpTarget]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    if (!el) return;
+    if (jumpTarget && jumpedTo.current !== jumpTarget.guid && messages.length > 0) {
+      const node = el.querySelector(`[data-guid="${CSS.escape(jumpTarget.guid)}"]`);
+      if (node) {
+        jumpedTo.current = jumpTarget.guid;
+        node.scrollIntoView({ block: "center" });
+        setHighlightGuid(jumpTarget.guid);
+        const timer = setTimeout(() => setHighlightGuid(null), 2500);
+        return () => clearTimeout(timer);
+      }
+    }
+    if (stickToBottom.current) el.scrollTop = el.scrollHeight;
+  }, [messages, jumpTarget]);
 
   // Keep pinned to bottom as images/media load and grow the content.
   useEffect(() => {
@@ -60,8 +83,21 @@ export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: 
     };
   }, [chat.guid]);
 
+  const retry = (failed: Message) => {
+    const revived: Message = { ...failed, pending: true, failed: false };
+    replaceTemp(failed.guid, revived);
+    api
+      .sendText(chat.guid, { text: failed.text, replyToGuid: failed.replyToGuid ?? undefined })
+      .then((message) => {
+        replaceTemp(revived.guid, message);
+        onChanged();
+      })
+      .catch(() => replaceTemp(revived.guid, { ...revived, pending: false, failed: true }));
+  };
+
   const visible = messages.filter((m) => !m.isGroupEvent || m.text);
-  const latestOutgoingGuid = [...visible].reverse().find((m) => m.isFromMe)?.guid ?? null;
+  const latestOutgoingGuid =
+    [...visible].reverse().find((m) => m.isFromMe && !m.pending && !m.failed)?.guid ?? null;
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
@@ -69,11 +105,7 @@ export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: 
         <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} aria-label="Back">
           <ChevronLeft className="size-5" />
         </Button>
-        <Avatar className="size-8">
-          <AvatarFallback className="text-xs">
-            {chat.isGroup ? <Users className="size-4" /> : initials(chat.displayName)}
-          </AvatarFallback>
-        </Avatar>
+        <ContactAvatar chat={chat} name={chat.displayName} className="size-8" fallbackClassName="text-xs" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{chat.displayName}</div>
           {chat.isGroup && (
@@ -99,10 +131,14 @@ export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: 
         className="flex-1 overflow-y-auto px-3 py-3 md:px-5"
         onScroll={(e) => {
           const el = e.currentTarget;
-          stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+          stickToBottom.current =
+            !hasNewer && el.scrollHeight - el.scrollTop - el.clientHeight < 60;
           if (el.scrollTop < 80 && hasMore && !loading) {
             stickToBottom.current = false;
             loadOlder();
+          }
+          if (hasNewer && el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+            loadNewer();
           }
         }}
       >
@@ -140,7 +176,7 @@ export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: 
             next.sender?.address === message.sender?.address &&
             next.dateCreated - message.dateCreated < 10 * 60 * 1000;
           return (
-            <div key={message.guid}>
+            <div key={message.guid} data-guid={message.guid}>
               {newDay && (
                 <div className="my-4 flex items-center gap-3">
                   <Separator className="flex-1" />
@@ -162,20 +198,37 @@ export function Thread({ chat, privateApi, onBack, onChanged, registerUpsert }: 
                   isGroupChat={chat.isGroup}
                   isLatestOutgoing={message.guid === latestOutgoingGuid}
                   privateApi={privateApi}
+                  highlighted={highlightGuid === message.guid}
                   onReply={setReplyTo}
+                  onRetry={retry}
                 />
               )}
             </div>
           );
         })}
+        {hasNewer && (
+          <div className="mt-2 flex justify-center">
+            <Button variant="ghost" size="sm" className="text-xs" onClick={loadNewer}>
+              <ArrowDown className="size-3" /> Load newer messages
+            </Button>
+          </div>
+        )}
       </div>
 
       <Composer
         chatGuid={chat.guid}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
+        onOptimistic={(message) => {
+          stickToBottom.current = !hasNewer;
+          upsert(message);
+        }}
+        onSettled={(tempGuid, message) => {
+          replaceTemp(tempGuid, message);
+          onChanged();
+        }}
         onSent={(message) => {
-          stickToBottom.current = true;
+          stickToBottom.current = !hasNewer;
           upsert(message);
           onChanged();
         }}

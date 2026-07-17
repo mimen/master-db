@@ -8,6 +8,7 @@ import { Thread } from "@/components/thread";
 import { Toaster } from "@/components/ui/sonner";
 import { useChats } from "@/hooks/use-chats";
 import { usePrivateApi } from "@/hooks/use-health";
+import type { JumpTarget } from "@/hooks/use-messages";
 import { useServerEvents } from "@/hooks/use-server-events";
 import { cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
@@ -16,6 +17,7 @@ export default function App() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [selected, setSelected] = useState<ChatSummary | null>(null);
+  const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const privateApi = usePrivateApi();
@@ -47,7 +49,8 @@ export default function App() {
   useServerEvents(handleEvent);
 
   const openChatByGuid = useCallback(
-    (chatGuid: string) => {
+    (chatGuid: string, target?: JumpTarget) => {
+      setJumpTarget(target ?? null);
       const existing = chats.find((chat) => chat.guid === chatGuid);
       if (existing) {
         setSelected(existing);
@@ -102,7 +105,10 @@ export default function App() {
             loading={loading}
             selectedGuid={selected?.guid ?? null}
             stateFilter={stateFilter}
-            onSelect={setSelected}
+            onSelect={(chat) => {
+              setJumpTarget(null);
+              setSelected(chat);
+            }}
             onChanged={refresh}
           />
         </div>
@@ -113,6 +119,7 @@ export default function App() {
           <Thread
             chat={selected}
             privateApi={privateApi}
+            jumpTarget={jumpTarget}
             onBack={() => setSelected(null)}
             onChanged={refresh}
             registerUpsert={registerUpsert}
@@ -125,8 +132,16 @@ export default function App() {
         )}
       </main>
 
-      <NewChatDialog open={newChatOpen} onOpenChange={setNewChatOpen} onCreated={openChatByGuid} />
-      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} onPick={openChatByGuid} />
+      <NewChatDialog
+        open={newChatOpen}
+        onOpenChange={setNewChatOpen}
+        onCreated={(chatGuid) => openChatByGuid(chatGuid)}
+      />
+      <SearchDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        onPick={(chatGuid, target) => openChatByGuid(chatGuid, target)}
+      />
       <Toaster position="top-center" />
     </div>
   );

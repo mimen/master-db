@@ -1,6 +1,7 @@
 import type {
   ChatSummary,
   Contact,
+  LinkPreviewData,
   Message,
   NewChatRequest,
   ReactRequest,
@@ -25,9 +26,19 @@ export const api = {
   chats(state: StateFilter, type: TypeFilter): Promise<ChatSummary[]> {
     return request(`/api/chats?state=${state}&type=${type}`);
   },
-  messages(chatGuid: string, before?: number): Promise<Message[]> {
-    const qs = before ? `?before=${before}` : "";
+  messages(
+    chatGuid: string,
+    window?: { before?: number; after?: number; around?: number },
+  ): Promise<Message[]> {
+    const params = new URLSearchParams();
+    if (window?.before) params.set("before", String(window.before));
+    if (window?.after) params.set("after", String(window.after));
+    if (window?.around) params.set("around", String(window.around));
+    const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/messages${qs}`);
+  },
+  linkPreview(url: string): Promise<LinkPreviewData | null> {
+    return request(`/api/link-preview?url=${encodeURIComponent(url)}`);
   },
   sendText(chatGuid: string, body: SendTextRequest): Promise<Message> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/send`, {

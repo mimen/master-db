@@ -82,15 +82,16 @@ export class BlueBubblesClient {
 
   chatMessages(
     chatGuid: string,
-    options: { limit?: number; before?: number } = {},
+    options: { limit?: number; before?: number; after?: number; sort?: "ASC" | "DESC" } = {},
   ): Promise<Result<BBMessage[]>> {
     const params: Record<string, string> = {
       limit: String(options.limit ?? 75),
       offset: "0",
-      sort: "DESC",
+      sort: options.sort ?? "DESC",
       with: "attachment,handle,message.attributedBody",
     };
     if (options.before) params.before = String(options.before);
+    if (options.after) params.after = String(options.after);
     return this.get<BBMessage[]>(`/api/v1/chat/${chatGuid}/message`, params);
   }
 
@@ -162,7 +163,11 @@ export class BlueBubblesClient {
   }
 
   contacts(): Promise<Result<BBContact[]>> {
-    return this.get<BBContact[]>("/api/v1/contact");
+    return this.get<BBContact[]>("/api/v1/contact", { extraProperties: "avatar" });
+  }
+
+  getChat(chatGuid: string): Promise<Result<BBChat>> {
+    return this.get<BBChat>(`/api/v1/chat/${chatGuid}`, { with: "participants" });
   }
 
   attachmentMeta(guid: string): Promise<Result<BBAttachment>> {

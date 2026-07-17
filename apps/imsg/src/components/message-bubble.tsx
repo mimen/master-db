@@ -2,11 +2,12 @@ import { useState } from "react";
 import type { Message } from "../../shared/types";
 import { api, attachmentUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { LinkPreviewCard, firstUrl } from "@/components/link-preview-card";
 import { cn } from "@/lib/utils";
-import { CheckCheck, Reply, SmilePlus } from "lucide-react";
+import { CheckCheck, Reply, RotateCcw, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 
 const TAPBACKS: Array<{ type: string; emoji: string }> = [
@@ -28,7 +29,9 @@ interface MessageBubbleProps {
   isGroupChat: boolean;
   isLatestOutgoing: boolean;
   privateApi: boolean;
+  highlighted: boolean;
   onReply: (message: Message) => void;
+  onRetry: (message: Message) => void;
 }
 
 function AttachmentView({ message }: { message: Message }) {
@@ -36,6 +39,9 @@ function AttachmentView({ message }: { message: Message }) {
     <div className="flex flex-col gap-1.5">
       {message.attachments.map((att) => {
         const url = attachmentUrl(att.guid);
+        if (att.mimeType?.startsWith("audio/") || /\.(caf|amr|m4a|mp3)$/i.test(att.filename ?? "")) {
+          return <audio key={att.guid} src={url} controls preload="metadata" className="max-w-full" />;
+        }
         if (att.mimeType?.startsWith("image/")) {
           return (
             <a key={att.guid} href={url} target="_blank" rel="noreferrer">
@@ -76,11 +82,14 @@ export function MessageBubble({
   isGroupChat,
   isLatestOutgoing,
   privateApi,
+  highlighted,
   onReply,
+  onRetry,
 }: MessageBubbleProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const mine = message.isFromMe;
   const senderName = message.sender?.name ?? message.sender?.address ?? "";
+  const url = message.text ? firstUrl(message.text) : null;
 
   const react = (type: string) => {
     setPickerOpen(false);
@@ -102,6 +111,12 @@ export function MessageBubble({
         <div className="w-7 shrink-0">
           {groupEnd && (
             <Avatar className="size-7">
+              {message.sender?.address && (
+                <AvatarImage
+                  src={`/api/avatars/${encodeURIComponent(message.sender.address)}`}
+                  alt={senderName}
+                />
+              )}
               <AvatarFallback className="text-[10px]">{initials(senderName)}</AvatarFallback>
             </Avatar>
           )}
@@ -121,16 +136,20 @@ export function MessageBubble({
         <div className="relative">
           <div
             className={cn(
-              "rounded-2xl px-3 py-1.5 text-[15px] leading-snug break-words whitespace-pre-wrap",
+              "rounded-2xl px-3 py-1.5 text-[15px] leading-snug break-words whitespace-pre-wrap transition-colors duration-700",
               mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
               mine && !groupEnd && "rounded-br-md",
               mine && groupEnd && "rounded-br-sm",
               !mine && !groupEnd && "rounded-bl-md",
               !mine && groupEnd && "rounded-bl-sm",
+              message.pending && "opacity-60",
+              message.failed && "bg-destructive/15 text-foreground",
+              highlighted && "ring-primary/60 ring-2",
             )}
           >
             {message.attachments.length > 0 && <AttachmentView message={message} />}
             {message.text}
+            {url && <LinkPreviewCard url={url} mine={mine} />}
           </div>
 
           {message.reactions.length > 0 && (
@@ -158,16 +177,28 @@ export function MessageBubble({
           )}
         </div>
 
-        {groupEnd && (
-          <span className="text-muted-foreground mt-0.5 flex items-center gap-1 px-1 text-[10px]">
-            {formatBubbleTime(message.dateCreated)}
-            {mine && isLatestOutgoing && (
-              <span className="flex items-center gap-0.5">
-                <CheckCheck className="size-3" />
-                {message.dateRead ? "Read" : message.dateDelivered ? "Delivered" : "Sent"}
-              </span>
-            )}
-          </span>
+        {message.failed ? (
+          <button
+            type="button"
+            onClick={() => onRetry(message)}
+            className="text-destructive mt-0.5 flex items-center gap-1 px-1 text-[10px] font-medium"
+          >
+            <RotateCcw className="size-3" /> Failed — tap to retry
+          </button>
+        ) : message.pending ? (
+          <span className="text-muted-foreground mt-0.5 px-1 text-[10px]">Sending…</span>
+        ) : (
+          groupEnd && (
+            <span className="text-muted-foreground mt-0.5 flex items-center gap-1 px-1 text-[10px]">
+              {formatBubbleTime(message.dateCreated)}
+              {mine && isLatestOutgoing && (
+                <span className="flex items-center gap-0.5">
+                  <CheckCheck className="size-3" />
+                  {message.dateRead ? "Read" : message.dateDelivered ? "Delivered" : "Sent"}
+                </span>
+              )}
+            </span>
+          )
         )}
       </div>
 

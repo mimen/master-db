@@ -1,7 +1,7 @@
 import type { ChatSummary, StateFilter } from "../../shared/types";
 import { api } from "@/lib/api";
-import { formatListTimestamp, initials } from "@/lib/format";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { formatListTimestamp } from "@/lib/format";
+import { ContactAvatar } from "@/components/contact-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Archive, ArchiveRestore, BellOff, CheckCheck, MoreHorizontal, Users } from "lucide-react";
+import { Archive, ArchiveRestore, BellOff, CheckCheck, MoreHorizontal } from "lucide-react";
 
 interface ChatListProps {
   chats: ChatSummary[];
@@ -124,13 +124,11 @@ export function ChatList({
             )}
           >
             <div className="relative shrink-0">
-              <Avatar className="size-11">
-                <AvatarFallback className="text-sm">
-                  {chat.isGroup ? <Users className="size-5" /> : initials(chat.displayName)}
-                </AvatarFallback>
-              </Avatar>
+              <ContactAvatar chat={chat} name={chat.displayName} className="size-11" />
               {chat.flags.unread && (
-                <span className="bg-primary absolute -top-0.5 -right-0.5 size-3 rounded-full ring-2 ring-white dark:ring-neutral-900" />
+                <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-white dark:ring-neutral-900">
+                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                </span>
               )}
             </div>
             <div className="min-w-0 flex-1">

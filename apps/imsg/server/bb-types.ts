@@ -69,6 +69,8 @@ export interface BBContact {
   displayName?: string | null;
   nickname?: string | null;
   sourceType?: string;
+  /** Base64 image bytes, present when requested with extraProperties=avatar. */
+  avatar?: string | null;
 }
 
 export interface BBServerInfo {

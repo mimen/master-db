@@ -129,6 +129,7 @@ export function mapChat(
   chat: BBChat,
   state: ChatState | undefined,
   contacts: ContactBook,
+  scannedUnread?: number,
 ): ChatSummary {
   const last = chat.lastMessage ?? null;
   const isGroup = chat.guid.includes(";+;") || (chat.participants ?? []).length > 1;
@@ -147,8 +148,13 @@ export function mapChat(
         hasAttachments: (last.attachments ?? []).length > 0,
       }
     : null;
-  const unreadCount =
-    last && last.isFromMe !== true && !last.dateRead && !isGroupEvent(last) ? 1 : 0;
+  // The scanned count only covers the recent global window; the last-message
+  // heuristic catches unread chats that fell outside it.
+  const heuristic =
+    last && last.isFromMe !== true && !last.dateRead && !isGroupEvent(last) && !isTapback(last)
+      ? 1
+      : 0;
+  const unreadCount = Math.max(scannedUnread ?? 0, heuristic);
   const flagInput = last
     ? { guid: last.guid, dateCreated: last.dateCreated ?? 0, isFromMe: last.isFromMe === true }
     : null;

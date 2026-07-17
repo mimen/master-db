@@ -11,29 +11,59 @@ interface ComposerProps {
   replyTo: Message | null;
   onClearReply: () => void;
   onSent: (message: Message) => void;
+  /** Optimistic-send hooks: temp bubble immediately, settle/replace on response. */
+  onOptimistic: (message: Message) => void;
+  onSettled: (tempGuid: string, message: Message) => void;
 }
 
-export function Composer({ chatGuid, replyTo, onClearReply, onSent }: ComposerProps) {
+function tempMessage(chatGuid: string, text: string, replyTo: Message | null): Message {
+  return {
+    guid: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    chatGuid,
+    text,
+    dateCreated: Date.now(),
+    dateRead: null,
+    dateDelivered: null,
+    isFromMe: true,
+    sender: null,
+    attachments: [],
+    reactions: [],
+    replyToGuid: replyTo?.guid ?? null,
+    replyToPreview: replyTo ? replyTo.text.slice(0, 120) : null,
+    isGroupEvent: false,
+    error: 0,
+    pending: true,
+  };
+}
+
+export function Composer({
+  chatGuid,
+  replyTo,
+  onClearReply,
+  onSent,
+  onOptimistic,
+  onSettled,
+}: ComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const send = async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
-    setSending(true);
+    if (!trimmed) return;
+    const temp = tempMessage(chatGuid, trimmed, replyTo);
+    const reply = replyTo;
+    setText("");
+    onClearReply();
+    onOptimistic(temp);
     try {
       const message = await api.sendText(chatGuid, {
         text: trimmed,
-        replyToGuid: replyTo?.guid,
+        replyToGuid: reply?.guid,
       });
-      setText("");
-      onClearReply();
-      onSent(message);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Send failed");
-    } finally {
-      setSending(false);
+      onSettled(temp.guid, message);
+    } catch {
+      onSettled(temp.guid, { ...temp, pending: false, failed: true });
     }
   };
 

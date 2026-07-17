@@ -41,6 +41,17 @@ export interface Message {
   replyToPreview: string | null;
   isGroupEvent: boolean;
   error: number;
+  /** Client-only optimistic-send states; never set by the server. */
+  pending?: boolean;
+  failed?: boolean;
+}
+
+export interface LinkPreviewData {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  siteName: string | null;
 }
 
 export interface ChatFlags {

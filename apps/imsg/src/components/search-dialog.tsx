@@ -13,7 +13,7 @@ import { formatListTimestamp } from "@/lib/format";
 interface SearchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPick: (chatGuid: string) => void;
+  onPick: (chatGuid: string, target: { guid: string; dateCreated: number }) => void;
 }
 
 export function SearchDialog({ open, onOpenChange, onPick }: SearchDialogProps) {
@@ -60,7 +60,7 @@ export function SearchDialog({ open, onOpenChange, onPick }: SearchDialogProps) 
             value={`${message.text} ${message.guid}`}
             onSelect={() => {
               if (message.chatGuid) {
-                onPick(message.chatGuid);
+                onPick(message.chatGuid, { guid: message.guid, dateCreated: message.dateCreated });
                 onOpenChange(false);
               }
             }}

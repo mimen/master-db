@@ -8,7 +8,9 @@ import { loadConfig } from "./config";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { matchesFilters } from "./filters";
+import { fetchLinkPreview } from "./link-preview";
 import { buildThread, mapChat, mapMessage } from "./map";
+import { transcodeAttachment } from "./transcode";
 import type { ServerEvent, StateFilter, TypeFilter } from "../shared/types";
 
 const config = loadConfig();
@@ -75,6 +77,29 @@ for (const event of ["group-name-change", "participant-added", "participant-remo
 
 // ------------------------------------------------------------------- routes
 
+// ------------------------------------------------------- unread count scan
+
+const UNREAD_TTL_MS = 30_000;
+let unreadScan: { at: number; counts: Map<string, number> } = { at: 0, counts: new Map() };
+
+async function unreadCounts(): Promise<Map<string, number>> {
+  if (Date.now() - unreadScan.at < UNREAD_TTL_MS) return unreadScan.counts;
+  const counts = new Map<string, number>();
+  const batch = await bb.queryMessages({ limit: 1000, offset: 0 });
+  if (batch.ok) {
+    for (const message of batch.value) {
+      if (message.isFromMe === true || message.dateRead) continue;
+      if (message.associatedMessageGuid && message.associatedMessageType) continue;
+      if ((message.itemType ?? 0) !== 0 || (message.groupActionType ?? 0) !== 0) continue;
+      const chatGuid = message.chats?.[0]?.guid;
+      if (!chatGuid) continue;
+      counts.set(chatGuid, (counts.get(chatGuid) ?? 0) + 1);
+    }
+    unreadScan = { at: Date.now(), counts };
+  }
+  return counts;
+}
+
 const app = new Hono();
 
 app.onError((err, c) => {
@@ -92,9 +117,10 @@ app.get("/api/chats", async (c) => {
   const result = await bb.queryChats();
   if (!result.ok) return c.json({ error: result.error }, 502);
   await contacts.refresh();
+  const unread = await unreadCounts();
   const overlay = db.getAll();
   const chats = result.value
-    .map((chat) => mapChat(chat, overlay.get(chat.guid), contacts))
+    .map((chat) => mapChat(chat, overlay.get(chat.guid), contacts, unread.get(chat.guid)))
     .filter((chat) => chat.lastMessage !== null)
     .filter((chat) => matchesFilters(chat, state, type))
     .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
@@ -104,11 +130,90 @@ app.get("/api/chats", async (c) => {
 app.get("/api/chats/:guid/messages", async (c) => {
   const chatGuid = c.req.param("guid");
   const before = c.req.query("before");
+  const after = c.req.query("after");
+  const around = c.req.query("around");
+
+  if (around) {
+    // Jump-to-message: fetch a window on both sides of the target timestamp.
+    const target = Number(around);
+    const [older, newer] = await Promise.all([
+      bb.chatMessages(chatGuid, { before: target + 1, limit: 40, sort: "DESC" }),
+      bb.chatMessages(chatGuid, { after: target, limit: 40, sort: "ASC" }),
+    ]);
+    if (!older.ok) return c.json({ error: older.error }, 502);
+    const merged = new Map((newer.ok ? newer.value : []).map((m) => [m.guid, m]));
+    for (const m of older.value) merged.set(m.guid, m);
+    return c.json(buildThread([...merged.values()], chatGuid, contacts));
+  }
+
   const result = await bb.chatMessages(chatGuid, {
     before: before ? Number(before) : undefined,
+    after: after ? Number(after) : undefined,
+    sort: after ? "ASC" : "DESC",
   });
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(buildThread(result.value, chatGuid, contacts));
+});
+
+app.get("/api/avatars/:address", async (c) => {
+  const address = c.req.param("address");
+  const headers = { "Cache-Control": "private, max-age=3600" };
+
+  // Primary source: thumbnails exported from the local AddressBook
+  // (scripts/export-avatars.ts) — BlueBubbles doesn't surface contact photos.
+  const digits = address.replace(/\D/g, "");
+  const keys = [
+    digits.length >= 7 ? digits.slice(-10) : null,
+    address.toLowerCase().replace(/[^a-z0-9@._+-]/g, "_"),
+  ].filter((k): k is string => k !== null);
+  for (const key of keys) {
+    const file = Bun.file(`.cache/avatars/${key}.img`);
+    if (await file.exists()) {
+      const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+      const isPng = head[0] === 0x89 && head[1] === 0x50;
+      return new Response(file, {
+        headers: { ...headers, "Content-Type": isPng ? "image/png" : "image/jpeg" },
+      });
+    }
+  }
+
+  // Fallback: whatever BlueBubbles returns (empty on current server version).
+  await contacts.refresh();
+  const b64 = contacts.avatar(address);
+  if (!b64) return c.body(null, 404);
+  const bytes = Buffer.from(b64, "base64");
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
+  return new Response(new Uint8Array(bytes), {
+    headers: { ...headers, "Content-Type": isPng ? "image/png" : "image/jpeg" },
+  });
+});
+
+const groupPhotoCache = new Map<string, { at: number; photoGuid: string | null }>();
+
+app.get("/api/chats/:guid/photo", async (c) => {
+  const guid = c.req.param("guid");
+  let cached = groupPhotoCache.get(guid);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    const chat = await bb.getChat(guid);
+    cached = {
+      at: Date.now(),
+      photoGuid: chat.ok ? (chat.value.properties?.[0]?.groupPhotoGuid ?? null) : null,
+    };
+    groupPhotoCache.set(guid, cached);
+  }
+  const photoGuid = cached.photoGuid;
+  if (!photoGuid) return c.body(null, 404);
+  const download = await bb.downloadAttachment(photoGuid);
+  if (!download.ok || !download.body) return c.body(null, 404);
+  return new Response(download.body, {
+    headers: { "Cache-Control": "private, max-age=3600" },
+  });
+});
+
+app.get("/api/link-preview", async (c) => {
+  const url = c.req.query("url");
+  if (!url) return c.json({ error: "url required" }, 400);
+  return c.json(await fetchLinkPreview(url));
 });
 
 app.post("/api/chats/:guid/send", async (c) => {
@@ -221,10 +326,25 @@ app.get("/api/search", async (c) => {
 app.get("/api/attachments/:guid", async (c) => {
   const guid = c.req.param("guid");
   const meta = await bb.attachmentMeta(guid);
+  const mimeType = meta.ok ? (meta.value.mimeType ?? null) : null;
+  const filename = meta.ok ? (meta.value.transferName ?? null) : null;
+
+  const transcoded = await transcodeAttachment(guid, mimeType, filename, () =>
+    bb.downloadAttachment(guid),
+  );
+  if (transcoded) {
+    return new Response(Bun.file(transcoded.path), {
+      headers: {
+        "Content-Type": transcoded.contentType,
+        "Cache-Control": "private, max-age=86400",
+      },
+    });
+  }
+
   const download = await bb.downloadAttachment(guid);
   if (!download.ok || !download.body) return c.json({ error: "download failed" }, 502);
   const headers = new Headers({ "Cache-Control": "private, max-age=86400" });
-  if (meta.ok && meta.value.mimeType) headers.set("Content-Type", meta.value.mimeType);
+  if (mimeType) headers.set("Content-Type", mimeType);
   return new Response(download.body, { headers });
 });
 
