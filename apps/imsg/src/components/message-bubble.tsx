@@ -204,45 +204,60 @@ export function MessageBubble({
 
       <div
         className={cn(
-          "flex shrink-0 items-center gap-0.5 self-center opacity-0 transition-opacity group-hover/msg:opacity-100",
+          "flex shrink-0 items-center gap-0.5 self-center opacity-0 transition-opacity group-hover/msg:opacity-100 max-md:opacity-60",
           mine && "order-first",
         )}
       >
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              disabled={!privateApi}
-              title={privateApi ? "React" : "Needs BlueBubbles private API"}
-            >
-              <SmilePlus className="size-3.5" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent side="top" className="flex w-auto gap-1 p-1.5">
-            {TAPBACKS.map((t) => (
-              <button
-                key={t.type}
-                type="button"
-                onClick={() => react(t.type)}
-                className={cn(
-                  "hover:bg-accent rounded-full p-1 text-lg transition-transform hover:scale-110",
-                  message.reactions.some((r) => r.isFromMe && r.type === t.type) && "bg-accent",
-                )}
-              >
-                {t.emoji}
-              </button>
-            ))}
-          </PopoverContent>
-        </Popover>
+        {privateApi ? (
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-6" title="React">
+                <SmilePlus className="size-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent side="top" className="flex w-auto gap-1 p-1.5">
+              {TAPBACKS.map((t) => (
+                <button
+                  key={t.type}
+                  type="button"
+                  onClick={() => react(t.type)}
+                  className={cn(
+                    "hover:bg-accent rounded-full p-1 text-lg transition-transform hover:scale-110",
+                    message.reactions.some((r) => r.isFromMe && r.type === t.type) && "bg-accent",
+                  )}
+                >
+                  {t.emoji}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            title="React"
+            onClick={() =>
+              toast.info(
+                "Reactions need the BlueBubbles Private API — enable it on the Mini (SIP step pending) and this lights up.",
+              )
+            }
+          >
+            <SmilePlus className="size-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
           className="size-6"
-          disabled={!privateApi}
-          title={privateApi ? "Reply" : "Needs BlueBubbles private API"}
-          onClick={() => onReply(message)}
+          title="Reply"
+          onClick={() =>
+            privateApi
+              ? onReply(message)
+              : toast.info(
+                  "Threaded replies need the BlueBubbles Private API — enable it on the Mini and this lights up.",
+                )
+          }
         >
           <Reply className="size-3.5" />
         </Button>
