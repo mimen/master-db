@@ -1,7 +1,9 @@
+import { useRef } from "react";
 import type { ChatSummary, StateFilter } from "../../shared/types";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { ContactAvatar } from "@/components/contact-avatar";
+import { longPress } from "@/hooks/use-long-press";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -30,15 +32,95 @@ interface ChatListProps {
   onChanged: () => void;
 }
 
+/** Interactive swipe: right reveals read/unread toggle, left reveals archive. */
+function SwipeableRow({
+  chat,
+  onChanged,
+  children,
+}: {
+  chat: ChatSummary;
+  onChanged: () => void;
+  children: React.ReactNode;
+}) {
+  const inner = useRef<HTMLDivElement>(null);
+  const drag = useRef({ x: 0, y: 0, dx: 0, horizontal: false });
+  const THRESHOLD = 88;
+
+  const settle = (commit: "unread" | "archive" | null) => {
+    const el = inner.current;
+    if (!el) return;
+    el.style.transition = "transform 200ms ease-out";
+    el.style.transform = "translateX(0)";
+    if (commit === "unread") {
+      void (chat.flags.unread ? api.markRead(chat.guid) : api.markUnread(chat.guid))
+        .then(onChanged)
+        .catch(onChanged);
+    } else if (commit === "archive") {
+      void api.setArchived(chat.guid, !chat.flags.archived).then(onChanged).catch(onChanged);
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden" style={{ touchAction: "pan-y" }}>
+      {/* Action backdrops */}
+      <div className="absolute inset-y-0 left-0 flex w-24 items-center justify-start bg-[#0a84ff] pl-5 text-white">
+        {chat.flags.unread ? <MailCheck className="size-6" /> : <MailQuestion className="size-6" />}
+      </div>
+      <div className="absolute inset-y-0 right-0 flex w-24 items-center justify-end bg-amber-500 pr-5 text-white">
+        <Archive className="size-6" />
+      </div>
+      <div
+        ref={inner}
+        className="bg-background relative"
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          if (!t || window.innerWidth >= 768) return;
+          drag.current = { x: t.clientX, y: t.clientY, dx: 0, horizontal: false };
+          if (inner.current) inner.current.style.transition = "none";
+        }}
+        onTouchMove={(e) => {
+          const t = e.touches[0];
+          const el = inner.current;
+          if (!t || !el || window.innerWidth >= 768) return;
+          const dx = t.clientX - drag.current.x;
+          const dy = t.clientY - drag.current.y;
+          if (!drag.current.horizontal) {
+            if (Math.abs(dx) > 14 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+              drag.current.horizontal = true;
+            } else {
+              return;
+            }
+          }
+          drag.current.dx = Math.max(-110, Math.min(110, dx));
+          el.style.transform = `translateX(${drag.current.dx}px)`;
+        }}
+        onTouchEnd={() => {
+          if (!drag.current.horizontal) return;
+          const dx = drag.current.dx;
+          settle(dx > THRESHOLD ? "unread" : dx < -THRESHOLD ? "archive" : null);
+          drag.current = { x: 0, y: 0, dx: 0, horizontal: false };
+        }}
+        onTouchCancel={() => settle(null)}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function ChatRowMenu({ chat, onChanged }: { chat: ChatSummary; onChanged: () => void }) {
   const run = (action: Promise<unknown>) => {
     void action.then(onChanged).catch(onChanged);
   };
   return (
     <ContextMenuContent className="min-w-44">
-      {chat.flags.unread && (
+      {chat.flags.unread ? (
         <ContextMenuItem onSelect={() => run(api.markRead(chat.guid))}>
           <MailCheck /> Mark as read
+        </ContextMenuItem>
+      ) : (
+        <ContextMenuItem onSelect={() => run(api.markUnread(chat.guid))}>
+          <MailQuestion /> Mark as unread
         </ContextMenuItem>
       )}
       {chat.flags.unresponded && (
@@ -109,7 +191,7 @@ export function ChatList({
 
   return (
     <div className="flex flex-col">
-      {chats.map((chat) => {
+      {chats.map((chat, index) => {
         const last = chat.lastMessage;
         const snippet = last
           ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
@@ -117,47 +199,52 @@ export function ChatList({
             }`
           : "";
         return (
-          <ContextMenu key={chat.guid}>
+          <div key={chat.guid}>
+            {index > 0 && <div className="border-border/70 ml-[5.5rem] border-t md:ml-[4.5rem]" />}
+            <SwipeableRow chat={chat} onChanged={onChanged}>
+            <ContextMenu>
             <ContextMenuTrigger asChild>
               <button
                 type="button"
                 onClick={() => onSelect(chat)}
+                {...longPress()}
                 className={cn(
-                  "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors md:py-2.5",
+                  "flex w-full items-center gap-3 px-3 py-3.5 text-left transition-colors [-webkit-touch-callout:none] select-none md:select-auto md:py-2.5",
                   selectedGuid === chat.guid ? "bg-accent" : "hover:bg-accent/50",
                 )}
               >
-                <div className="relative shrink-0">
-                  <ContactAvatar
-                    chat={chat}
-                    name={chat.displayName}
-                    className="size-12 md:size-11"
-                  />
-                  {chat.flags.unread && (
-                    <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-white dark:ring-neutral-900">
-                      {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
-                    </span>
+                {/* iMessage-style unread indicator */}
+                <span
+                  className={cn(
+                    "size-2.5 shrink-0 rounded-full",
+                    chat.flags.unread ? "bg-[#0a84ff]" : "bg-transparent",
                   )}
-                </div>
+                  aria-hidden
+                />
+                <ContactAvatar
+                  chat={chat}
+                  name={chat.displayName}
+                  className="size-13 shrink-0 md:size-11"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <span
                       className={cn(
-                        "truncate text-[15px] md:text-sm",
+                        "truncate text-[17px] md:text-sm",
                         chat.flags.unread ? "font-semibold" : "font-medium",
                       )}
                     >
                       {chat.displayName}
                     </span>
                     {last && (
-                      <span className="text-muted-foreground shrink-0 text-xs">
+                      <span className="text-muted-foreground shrink-0 text-[15px] md:text-xs">
                         {formatListTimestamp(last.dateCreated)}
                       </span>
                     )}
                   </div>
                   <span
                     className={cn(
-                      "line-clamp-1 text-[13px] md:text-xs",
+                      "line-clamp-2 text-[15px] leading-snug md:line-clamp-1 md:text-xs",
                       chat.flags.unread ? "text-foreground" : "text-muted-foreground",
                     )}
                   >
@@ -167,7 +254,9 @@ export function ChatList({
               </button>
             </ContextMenuTrigger>
             <ChatRowMenu chat={chat} onChanged={onChanged} />
-          </ContextMenu>
+            </ContextMenu>
+            </SwipeableRow>
+          </div>
         );
       })}
     </div>

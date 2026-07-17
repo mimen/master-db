@@ -33,7 +33,7 @@ export function computeFlags(
     archived,
     unresponded,
     waiting,
-    unread: unreadCount > 0,
+    unread: unreadCount > 0 || state?.markedUnread === 1,
     mutedUnresponded: state?.mutedUnresponded === 1,
   };
 }

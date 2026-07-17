@@ -283,9 +283,18 @@ app.post("/api/chats/:guid/read", async (c) => {
   if (result.ok) {
     localReadAt.set(guid, Date.now());
     unreadScan.counts.set(guid, 0);
+    db.setMarkedUnread(guid, false);
     broadcast({ kind: "chats-changed" });
   }
   return c.json({ ok: result.ok });
+});
+
+app.post("/api/chats/:guid/unread", async (c) => {
+  const guid = c.req.param("guid");
+  db.setMarkedUnread(guid, true);
+  localReadAt.delete(guid);
+  broadcast({ kind: "chats-changed" });
+  return c.json({ ok: true });
 });
 
 app.post("/api/chats/:guid/archive", async (c) => {

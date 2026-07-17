@@ -107,24 +107,52 @@ export function Thread({
   const latestOutgoingGuid =
     [...visible].reverse().find((m) => m.isFromMe && !m.pending && !m.failed)?.guid ?? null;
 
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const drag = useRef({ x: 0, y: 0, dx: 0, horizontal: false });
 
   return (
     <div
-      className="flex h-full min-w-0 flex-1 flex-col"
+      ref={paneRef}
+      className="bg-background flex h-full min-w-0 flex-1 flex-col"
+      style={{ touchAction: "pan-y" }}
       onTouchStart={(e) => {
         const t = e.touches[0];
-        touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+        if (!t || window.innerWidth >= 768) return;
+        drag.current = { x: t.clientX, y: t.clientY, dx: 0, horizontal: false };
+        if (paneRef.current) paneRef.current.style.transition = "none";
       }}
-      onTouchEnd={(e) => {
-        const start = touchStart.current;
-        const t = e.changedTouches[0];
-        touchStart.current = null;
-        if (!start || !t) return;
-        const dx = t.clientX - start.x;
-        const dy = t.clientY - start.y;
-        // Horizontal swipe (either direction) navigates back to the list.
-        if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) onBack();
+      onTouchMove={(e) => {
+        const t = e.touches[0];
+        const el = paneRef.current;
+        if (!t || !el || window.innerWidth >= 768) return;
+        const dx = t.clientX - drag.current.x;
+        const dy = t.clientY - drag.current.y;
+        if (!drag.current.horizontal) {
+          if (Math.abs(dx) > 16 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+            drag.current.horizontal = true;
+          } else {
+            return;
+          }
+        }
+        drag.current.dx = dx;
+        el.style.transform = `translateX(${dx}px)`;
+      }}
+      onTouchEnd={() => {
+        const el = paneRef.current;
+        if (!el || !drag.current.horizontal) return;
+        const dx = drag.current.dx;
+        drag.current = { x: 0, y: 0, dx: 0, horizontal: false };
+        el.style.transition = "transform 220ms ease-out";
+        if (Math.abs(dx) > window.innerWidth / 3) {
+          el.style.transform = `translateX(${dx > 0 ? 105 : -105}%)`;
+          setTimeout(() => {
+            onBack();
+            el.style.transition = "none";
+            el.style.transform = "translateX(0)";
+          }, 210);
+        } else {
+          el.style.transform = "translateX(0)";
+        }
       }}
     >
       <div className="flex items-center gap-2 border-b px-2 py-2 md:px-4">

@@ -10,6 +10,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { LinkPreviewCard, firstUrl } from "@/components/link-preview-card";
+import { longPress } from "@/hooks/use-long-press";
 import { cn } from "@/lib/utils";
 import { CheckCheck, Copy, Pencil, Reply, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
@@ -184,8 +185,9 @@ export function MessageBubble({
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div
+                {...longPress()}
                 className={cn(
-                  "rounded-2xl px-3 py-1.5 text-base leading-snug wrap-anywhere whitespace-pre-wrap md:text-[15px] transition-colors duration-700",
+                  "rounded-2xl px-3 py-1.5 text-base leading-snug wrap-anywhere whitespace-pre-wrap [-webkit-touch-callout:none] select-none md:select-auto md:text-[15px] transition-colors duration-700",
                   mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                   mine && !groupEnd && "rounded-br-md",
                   mine && groupEnd && "rounded-br-sm",
@@ -215,7 +217,7 @@ export function MessageBubble({
                           title={t.label}
                           onSelect={() => react(t.type)}
                           className={cn(
-                            "flex size-8 items-center justify-center rounded-full p-0 transition-transform hover:scale-110",
+                            "flex size-8 items-center justify-center rounded-full p-0 transition-transform hover:scale-110 max-md:size-11",
                             active && "bg-sky-500 focus:bg-sky-500",
                           )}
                         >

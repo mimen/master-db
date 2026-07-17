@@ -10,6 +10,8 @@ export interface ChatState {
   dismissedWaitingGuid: string | null;
   /** Chat never appears in the unresponded filter (group mute). */
   mutedUnresponded: number;
+  /** Manually marked unread; cleared on next mark-read. */
+  markedUnread: number;
 }
 
 export class OverlayDb {
@@ -27,13 +29,18 @@ export class OverlayDb {
         muted_unresponded INTEGER NOT NULL DEFAULT 0
       );
     `);
+    try {
+      this.db.exec("ALTER TABLE chat_state ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+      // column already exists
+    }
   }
 
   getAll(): Map<string, ChatState> {
     const rows = this.db
       .query(
         `SELECT chat_guid, archived_at, dismissed_unresponded_guid,
-                dismissed_waiting_guid, muted_unresponded
+                dismissed_waiting_guid, muted_unresponded, marked_unread
          FROM chat_state`,
       )
       .all() as Array<{
@@ -42,6 +49,7 @@ export class OverlayDb {
       dismissed_unresponded_guid: string | null;
       dismissed_waiting_guid: string | null;
       muted_unresponded: number;
+      marked_unread: number;
     }>;
     const map = new Map<string, ChatState>();
     for (const row of rows) {
@@ -51,6 +59,7 @@ export class OverlayDb {
         dismissedUnrespondedGuid: row.dismissed_unresponded_guid,
         dismissedWaitingGuid: row.dismissed_waiting_guid,
         mutedUnresponded: row.muted_unresponded,
+        markedUnread: row.marked_unread,
       });
     }
     return map;
@@ -79,5 +88,9 @@ export class OverlayDb {
 
   setMutedUnresponded(chatGuid: string, muted: boolean): void {
     this.upsert(chatGuid, "muted_unresponded", muted ? 1 : 0);
+  }
+
+  setMarkedUnread(chatGuid: string, unread: boolean): void {
+    this.upsert(chatGuid, "marked_unread", unread ? 1 : 0);
   }
 }

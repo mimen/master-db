@@ -177,17 +177,17 @@ export default function App() {
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="bg-muted/80 text-muted-foreground flex h-11 flex-1 items-center gap-2 rounded-full border px-4 text-[15px] shadow-lg backdrop-blur"
+            className="bg-muted/90 text-muted-foreground flex h-[52px] flex-1 items-center gap-2.5 rounded-full border px-5 text-[17px] shadow-lg backdrop-blur"
           >
-            <SearchIcon className="size-4" /> Search
+            <SearchIcon className="size-5" /> Search
           </button>
           <button
             type="button"
             onClick={() => setNewChatOpen(true)}
             aria-label="New message"
-            className="bg-muted/80 text-foreground flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur"
+            className="bg-muted/90 text-foreground flex size-[52px] shrink-0 items-center justify-center rounded-full border shadow-lg backdrop-blur"
           >
-            <SquarePen className="size-5" />
+            <SquarePen className="size-6" />
           </button>
         </div>
       </aside>

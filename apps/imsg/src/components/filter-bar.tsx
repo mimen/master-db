@@ -1,7 +1,14 @@
 import type { StateCounts, StateFilter, TypeFilter } from "../../shared/types";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MessageSquarePlus, Search } from "lucide-react";
+import { Check, ListFilter, MessageSquarePlus, Search } from "lucide-react";
 
 const STATES: Array<{ value: StateFilter; label: string }> = [
   { value: "all", label: "All" },
@@ -74,10 +81,12 @@ export function FilterBar({
   onNewChat,
   onSearch,
 }: FilterBarProps) {
+  const activeFilters = (state !== "all" ? 1 : 0) + (type !== "all" ? 1 : 0);
+
   return (
-    <div className="flex flex-col gap-2 border-b px-3 py-2">
+    <div className="flex flex-col gap-2 border-b px-4 py-2 md:px-3">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Messages</h1>
+        <h1 className="text-[28px] font-bold md:text-lg md:font-semibold">Messages</h1>
         <div className="flex items-center gap-1 max-md:hidden">
           <Button variant="ghost" size="icon" onClick={onSearch} aria-label="Search messages">
             <Search className="size-4" />
@@ -86,8 +95,49 @@ export function FilterBar({
             <MessageSquarePlus className="size-4" />
           </Button>
         </div>
+        {/* Mobile: filters live in a menu, iMessage-style */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Filters"
+              className="bg-muted relative flex size-10 items-center justify-center rounded-full md:hidden"
+            >
+              <ListFilter className="size-5" />
+              {activeFilters > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex size-4.5 items-center justify-center rounded-full bg-[#0a84ff] text-[10px] font-semibold text-white">
+                  {activeFilters}
+                </span>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-52">
+            {STATES.map((item) => (
+              <DropdownMenuItem
+                key={item.value}
+                onSelect={() => onStateChange(item.value)}
+                className="justify-between"
+              >
+                <span className="flex items-center gap-2">
+                  <Check className={cn("size-4", state === item.value ? "" : "invisible")} />
+                  {item.label}
+                </span>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {counts?.[item.value] ?? ""}
+                </span>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            {TYPES.map((item) => (
+              <DropdownMenuItem key={item.value} onSelect={() => onTypeChange(item.value)}>
+                <Check className={cn("size-4", type === item.value ? "" : "invisible")} />
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1 max-md:hidden">
         {STATES.map((item) => (
           <SectionPill
             key={item.value}
@@ -98,7 +148,7 @@ export function FilterBar({
           />
         ))}
       </div>
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1 max-md:hidden">
         {TYPES.map((item) => (
           <SectionPill
             key={item.value}

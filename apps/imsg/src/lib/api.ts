@@ -63,6 +63,9 @@ export const api = {
   markRead(chatGuid: string): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/read`, { method: "POST" });
   },
+  markUnread(chatGuid: string): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/unread`, { method: "POST" });
+  },
   setArchived(chatGuid: string, archived: boolean): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/archive`, {
       method: "POST",
