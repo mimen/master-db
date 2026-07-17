@@ -30,6 +30,7 @@ function tempMessage(chatGuid: string, text: string, replyTo: Message | null): M
     reactions: [],
     replyToGuid: replyTo?.guid ?? null,
     replyToPreview: replyTo ? replyTo.text.slice(0, 120) : null,
+    replyToFromMe: replyTo?.isFromMe ?? null,
     isGroupEvent: false,
     error: 0,
     pending: true,

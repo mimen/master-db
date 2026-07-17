@@ -10,16 +10,28 @@ import { cn } from "@/lib/utils";
 import { CheckCheck, Reply, RotateCcw, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 
-const TAPBACKS: Array<{ type: string; emoji: string }> = [
-  { type: "love", emoji: "❤️" },
-  { type: "like", emoji: "👍" },
-  { type: "dislike", emoji: "👎" },
-  { type: "laugh", emoji: "😂" },
-  { type: "emphasize", emoji: "‼️" },
-  { type: "question", emoji: "❓" },
+const TAPBACKS: Array<{ type: string; emoji: string; label: string }> = [
+  { type: "love", emoji: "❤️", label: "Love" },
+  { type: "like", emoji: "👍", label: "Like" },
+  { type: "dislike", emoji: "👎", label: "Dislike" },
+  { type: "laugh", emoji: "😂", label: "Haha" },
+  { type: "emphasize", emoji: "‼️", label: "Emphasize" },
+  { type: "question", emoji: "❓", label: "Question" },
 ];
 
 const TAPBACK_EMOJI = new Map(TAPBACKS.map((t) => [t.type, t.emoji]));
+
+function TapbackGlyph({ type, emoji }: { type: string; emoji: string }) {
+  if (type === "laugh") {
+    return (
+      <span className="flex flex-col items-center leading-none font-black tracking-tight text-sky-400">
+        <span className="text-[9px]">HA</span>
+        <span className="text-[9px]">HA</span>
+      </span>
+    );
+  }
+  return <span className="text-xl leading-none">{emoji}</span>;
+}
 
 interface MessageBubbleProps {
   message: Message;
@@ -128,8 +140,29 @@ export function MessageBubble({
           <span className="text-muted-foreground mb-0.5 px-1 text-[11px]">{senderName}</span>
         )}
         {message.replyToPreview !== null && (
-          <div className="text-muted-foreground border-border mb-0.5 max-w-full truncate rounded-lg border-l-2 bg-transparent px-2 py-0.5 text-[11px] italic">
-            {message.replyToPreview || "Original message"}
+          <div className={cn("mb-0 flex w-full flex-col", mine ? "items-end" : "items-start")}>
+            {/* Quoted original: outlined bubble in the original sender's tint */}
+            <div
+              className={cn(
+                "max-w-full rounded-2xl border-[1.5px] bg-transparent px-3 py-1.5 text-[13px] leading-snug",
+                message.replyToFromMe
+                  ? "border-primary/50 text-primary/90"
+                  : "border-muted-foreground/40 text-muted-foreground",
+                "line-clamp-2",
+              )}
+            >
+              {message.replyToPreview || "Original message"}
+            </div>
+            {/* Connector curve from quote down to the reply bubble */}
+            <div
+              className={cn(
+                "h-3 w-5 border-[1.5px] border-t-0",
+                mine
+                  ? "mr-4 rounded-br-xl border-l-0 border-muted-foreground/40"
+                  : "ml-4 rounded-bl-xl border-r-0 border-muted-foreground/40",
+              )}
+              aria-hidden
+            />
           </div>
         )}
 
@@ -215,20 +248,27 @@ export function MessageBubble({
                 <SmilePlus className="size-3.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent side="top" className="flex w-auto gap-1 p-1.5">
-              {TAPBACKS.map((t) => (
-                <button
-                  key={t.type}
-                  type="button"
-                  onClick={() => react(t.type)}
-                  className={cn(
-                    "hover:bg-accent rounded-full p-1 text-lg transition-transform hover:scale-110",
-                    message.reactions.some((r) => r.isFromMe && r.type === t.type) && "bg-accent",
-                  )}
-                >
-                  {t.emoji}
-                </button>
-              ))}
+            <PopoverContent
+              side="top"
+              className="flex w-auto gap-0.5 rounded-full border-neutral-700/60 bg-neutral-800/95 px-2 py-1.5 shadow-xl backdrop-blur dark:bg-neutral-800"
+            >
+              {TAPBACKS.map((t) => {
+                const active = message.reactions.some((r) => r.isFromMe && r.type === t.type);
+                return (
+                  <button
+                    key={t.type}
+                    type="button"
+                    title={t.label}
+                    onClick={() => react(t.type)}
+                    className={cn(
+                      "flex size-9 items-center justify-center rounded-full transition-all hover:scale-115 hover:bg-neutral-700/70",
+                      active && "bg-sky-500",
+                    )}
+                  >
+                    <TapbackGlyph type={t.type} emoji={t.emoji} />
+                  </button>
+                );
+              })}
             </PopoverContent>
           </Popover>
         ) : (

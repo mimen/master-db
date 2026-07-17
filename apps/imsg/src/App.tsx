@@ -10,6 +10,7 @@ import { useChats } from "@/hooks/use-chats";
 import { usePrivateApi } from "@/hooks/use-health";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useServerEvents } from "@/hooks/use-server-events";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
 
@@ -38,6 +39,10 @@ export default function App() {
       if (event.kind === "new-message" || event.kind === "updated-message") {
         if (event.chatGuid === selectedGuidRef.current) {
           threadUpsert.current?.(event.message);
+          // Viewing the chat = reading it; keep iMessage read state in sync.
+          if (event.kind === "new-message" && !event.message.isFromMe) {
+            void api.markRead(event.chatGuid);
+          }
         }
         refresh();
       } else if (event.kind === "chats-changed") {

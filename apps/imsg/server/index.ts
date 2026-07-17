@@ -28,6 +28,10 @@ if (!info.ok) {
 }
 await contacts.refresh(true);
 
+// Re-check server info periodically so a BlueBubbles restart or private-API
+// toggle is picked up without restarting this service.
+setInterval(() => void bb.connect(), 5 * 60_000);
+
 // ---------------------------------------------------------------- SSE fanout
 
 type SSEClient = { id: number; send: (event: ServerEvent) => void };
@@ -120,7 +124,16 @@ app.get("/api/chats", async (c) => {
   const unread = await unreadCounts();
   const overlay = db.getAll();
   const chats = result.value
-    .map((chat) => mapChat(chat, overlay.get(chat.guid), contacts, unread.get(chat.guid)))
+    .map((chat) => {
+      const summary = mapChat(chat, overlay.get(chat.guid), contacts, unread.get(chat.guid));
+      // Mark-read override: trust our own recent mark-read over BB's lagging DB.
+      const readAt = localReadAt.get(chat.guid);
+      if (readAt && (summary.lastMessage?.dateCreated ?? 0) <= readAt) {
+        summary.unreadCount = 0;
+        summary.flags.unread = false;
+      }
+      return summary;
+    })
     .filter((chat) => chat.lastMessage !== null)
     .filter((chat) => matchesFilters(chat, state, type))
     .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
@@ -240,8 +253,17 @@ app.post("/api/chats/:guid/attachment", async (c) => {
   return c.json(mapMessage(result.value, chatGuid, contacts));
 });
 
+// Chats we've marked read, ahead of BlueBubbles' DB reflecting it.
+const localReadAt = new Map<string, number>();
+
 app.post("/api/chats/:guid/read", async (c) => {
-  const result = await bb.markRead(c.req.param("guid"));
+  const guid = c.req.param("guid");
+  const result = await bb.markRead(guid);
+  if (result.ok) {
+    localReadAt.set(guid, Date.now());
+    unreadScan.counts.set(guid, 0);
+    broadcast({ kind: "chats-changed" });
+  }
   return c.json({ ok: result.ok });
 });
 

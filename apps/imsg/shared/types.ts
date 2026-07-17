@@ -39,6 +39,8 @@ export interface Message {
   replyToGuid: string | null;
   /** Preview of the replied-to message, resolved server-side when available. */
   replyToPreview: string | null;
+  /** Whether the replied-to message was sent by me (null when unresolved). */
+  replyToFromMe: boolean | null;
   isGroupEvent: boolean;
   error: number;
   /** Client-only optimistic-send states; never set by the server. */

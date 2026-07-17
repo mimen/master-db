@@ -67,6 +67,7 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
     // replyToGuid on ordinary consecutive messages too.
     replyToGuid: m.threadOriginatorGuid ?? null,
     replyToPreview: null,
+    replyToFromMe: null,
     isGroupEvent: isGroupEvent(m),
     error: m.error ?? 0,
   };
@@ -109,6 +110,7 @@ export function buildThread(
       const target = byGuid.get(stripPartPrefix(message.replyToGuid));
       if (target) {
         message.replyToPreview = target.text.slice(0, 120) || (target.attachments.length > 0 ? "Attachment" : "");
+        message.replyToFromMe = target.isFromMe;
       }
     }
   }
