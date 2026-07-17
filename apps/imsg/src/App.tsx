@@ -22,7 +22,7 @@ export default function App() {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const privateApi = usePrivateApi();
-  const { chats, loading, refresh } = useChats(stateFilter, typeFilter);
+  const { chats, counts, loading, refresh } = useChats(stateFilter, typeFilter);
   const threadUpsert = useRef<((message: Message) => void) | null>(null);
   const selectedGuidRef = useRef<string | null>(null);
   selectedGuidRef.current = selected?.guid ?? null;
@@ -99,6 +99,7 @@ export default function App() {
         <FilterBar
           state={stateFilter}
           type={typeFilter}
+          counts={counts}
           onStateChange={setStateFilter}
           onTypeChange={setTypeFilter}
           onNewChat={() => setNewChatOpen(true)}

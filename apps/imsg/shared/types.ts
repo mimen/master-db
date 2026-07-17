@@ -81,6 +81,8 @@ export interface ChatSummary {
   flags: ChatFlags;
 }
 
+export type StateCounts = Record<StateFilter, number>;
+
 export interface Contact {
   address: string;
   name: string;

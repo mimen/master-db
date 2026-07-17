@@ -115,11 +115,11 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
 });
 
-app.get("/api/chats", async (c) => {
-  const state = (c.req.query("state") ?? "all") as StateFilter;
-  const type = (c.req.query("type") ?? "all") as TypeFilter;
+async function buildChatSummaries(): Promise<
+  { ok: true; chats: import("../shared/types").ChatSummary[] } | { ok: false; error: string }
+> {
   const result = await bb.queryChats();
-  if (!result.ok) return c.json({ error: result.error }, 502);
+  if (!result.ok) return { ok: false, error: result.error };
   await contacts.refresh();
   const unread = await unreadCounts();
   const overlay = db.getAll();
@@ -135,9 +135,30 @@ app.get("/api/chats", async (c) => {
       return summary;
     })
     .filter((chat) => chat.lastMessage !== null)
-    .filter((chat) => matchesFilters(chat, state, type))
     .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
-  return c.json(chats);
+  return { ok: true, chats };
+}
+
+app.get("/api/chats", async (c) => {
+  const state = (c.req.query("state") ?? "all") as StateFilter;
+  const type = (c.req.query("type") ?? "all") as TypeFilter;
+  const result = await buildChatSummaries();
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.chats.filter((chat) => matchesFilters(chat, state, type)));
+});
+
+app.get("/api/counts", async (c) => {
+  const type = (c.req.query("type") ?? "all") as TypeFilter;
+  const result = await buildChatSummaries();
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const states: StateFilter[] = ["all", "unread", "unresponded", "waiting", "archived"];
+  const counts = Object.fromEntries(
+    states.map((state) => [
+      state,
+      result.chats.filter((chat) => matchesFilters(chat, state, type)).length,
+    ]),
+  );
+  return c.json(counts);
 });
 
 app.get("/api/chats/:guid/messages", async (c) => {

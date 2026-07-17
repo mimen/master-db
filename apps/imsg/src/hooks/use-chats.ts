@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatSummary, StateFilter, TypeFilter } from "../../shared/types";
+import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "../../shared/types";
 import { api } from "@/lib/api";
 
 interface UseChatsResult {
   chats: ChatSummary[];
+  counts: StateCounts | null;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -11,17 +12,18 @@ interface UseChatsResult {
 
 export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
   const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [counts, setCounts] = useState<StateCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
 
   const refresh = useCallback(() => {
     const gen = ++generation.current;
-    api
-      .chats(state, type)
-      .then((result) => {
+    Promise.all([api.chats(state, type), api.counts(type)])
+      .then(([result, stateCounts]) => {
         if (generation.current !== gen) return;
         setChats(result);
+        setCounts(stateCounts);
         setError(null);
         setLoading(false);
       })
@@ -37,5 +39,5 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
     refresh();
   }, [refresh]);
 
-  return { chats, loading, error, refresh };
+  return { chats, counts, loading, error, refresh };
 }

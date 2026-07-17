@@ -6,6 +6,7 @@ import type {
   NewChatRequest,
   ReactRequest,
   SendTextRequest,
+  StateCounts,
   StateFilter,
   TypeFilter,
 } from "../../shared/types";
@@ -25,6 +26,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   chats(state: StateFilter, type: TypeFilter): Promise<ChatSummary[]> {
     return request(`/api/chats?state=${state}&type=${type}`);
+  },
+  counts(type: TypeFilter): Promise<StateCounts> {
+    return request(`/api/counts?type=${type}`);
   },
   messages(
     chatGuid: string,
