@@ -117,6 +117,20 @@
     --sidebar-ring: oklch(0.556 0 0);
 }
 
+body {
+    /* Kill double-tap zoom and gesture zoom inside the app */
+    touch-action: manipulation;
+}
+
+/* iOS auto-zooms on focus when an input's font-size is under 16px */
+@media (max-width: 767px) {
+    input,
+    textarea,
+    [contenteditable] {
+        font-size: 16px !important;
+    }
+}
+
 .no-scrollbar {
     scrollbar-width: none;
 }
