@@ -111,7 +111,10 @@ export function Composer({
   };
 
   return (
-    <div className="border-t px-3 py-2" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+    <div
+      className="border-t px-3 py-2"
+      style={{ paddingBottom: "max(0.5rem, var(--kb-safe-bottom, env(safe-area-inset-bottom)))" }}
+    >
       {replyTo && !editing && (
         <div className="bg-muted/60 mb-1.5 flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-xs">
           <span className="truncate">

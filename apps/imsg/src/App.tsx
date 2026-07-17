@@ -28,19 +28,41 @@ export default function App() {
   selectedGuidRef.current = selected?.guid ?? null;
 
   // iOS keyboard: the OS keyboard overlays the page without resizing it, so
-  // pin the app shell to the visual viewport's actual height.
+  // pin the app shell to the visual viewport's actual height. Re-apply for a
+  // few frames after each change — iOS reports intermediate heights while the
+  // keyboard animates.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+    let settleTimer: ReturnType<typeof setInterval> | null = null;
     const apply = () => {
-      document.documentElement.style.setProperty("--app-height", `${vv.height}px`);
+      const keyboardOpen = window.innerHeight - vv.height > 120;
+      document.documentElement.style.setProperty(
+        "--app-height",
+        `${vv.height + vv.offsetTop}px`,
+      );
+      // Safe-area bottom padding is meaningless while the keyboard covers it.
+      document.documentElement.style.setProperty(
+        "--kb-safe-bottom",
+        keyboardOpen ? "0px" : "env(safe-area-inset-bottom)",
+      );
       window.scrollTo(0, 0);
     };
+    const applyAndSettle = () => {
+      apply();
+      if (settleTimer) clearInterval(settleTimer);
+      let ticks = 0;
+      settleTimer = setInterval(() => {
+        apply();
+        if (++ticks >= 8 && settleTimer) clearInterval(settleTimer);
+      }, 80);
+    };
     apply();
-    vv.addEventListener("resize", apply);
+    vv.addEventListener("resize", applyAndSettle);
     vv.addEventListener("scroll", apply);
     return () => {
-      vv.removeEventListener("resize", apply);
+      if (settleTimer) clearInterval(settleTimer);
+      vv.removeEventListener("resize", applyAndSettle);
       vv.removeEventListener("scroll", apply);
     };
   }, []);
