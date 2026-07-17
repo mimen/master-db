@@ -27,3 +27,6 @@ dist-ssr
 *.db
 *.db-*
 .cache/
+client/dist
+client/node_modules
+client/.expo

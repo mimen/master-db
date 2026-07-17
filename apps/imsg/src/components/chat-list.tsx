@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { motion, useMotionValue, useTransform } from "motion/react";
 import type { ChatSummary, StateFilter } from "../../shared/types";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
@@ -42,68 +42,50 @@ function SwipeableRow({
   onChanged: () => void;
   children: React.ReactNode;
 }) {
-  const inner = useRef<HTMLDivElement>(null);
-  const drag = useRef({ x: 0, y: 0, dx: 0, horizontal: false });
-  const THRESHOLD = 88;
-
-  const settle = (commit: "unread" | "archive" | null) => {
-    const el = inner.current;
-    if (!el) return;
-    el.style.transition = "transform 200ms ease-out";
-    el.style.transform = "translateX(0)";
-    if (commit === "unread") {
-      void (chat.flags.unread ? api.markRead(chat.guid) : api.markUnread(chat.guid))
-        .then(onChanged)
-        .catch(onChanged);
-    } else if (commit === "archive") {
-      void api.setArchived(chat.guid, !chat.flags.archived).then(onChanged).catch(onChanged);
-    }
-  };
+  const x = useMotionValue(0);
+  const leftOpacity = useTransform(x, [0, 40, 90], [0, 0.4, 1]);
+  const rightOpacity = useTransform(x, [-90, -40, 0], [1, 0.4, 0]);
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const THRESHOLD = 80;
 
   return (
     <div className="relative overflow-hidden" style={{ touchAction: "pan-y" }}>
       {/* Action backdrops */}
-      <div className="absolute inset-y-0 left-0 flex w-24 items-center justify-start bg-[#0a84ff] pl-5 text-white">
+      <motion.div
+        style={{ opacity: leftOpacity }}
+        className="absolute inset-y-0 left-0 flex w-28 items-center justify-start bg-[#0a84ff] pl-5 text-white"
+      >
         {chat.flags.unread ? <MailCheck className="size-6" /> : <MailQuestion className="size-6" />}
-      </div>
-      <div className="absolute inset-y-0 right-0 flex w-24 items-center justify-end bg-amber-500 pr-5 text-white">
+      </motion.div>
+      <motion.div
+        style={{ opacity: rightOpacity }}
+        className="absolute inset-y-0 right-0 flex w-28 items-center justify-end bg-amber-500 pr-5 text-white"
+      >
         <Archive className="size-6" />
-      </div>
-      <div
-        ref={inner}
+      </motion.div>
+      <motion.div
         className="bg-background relative"
-        onTouchStart={(e) => {
-          const t = e.touches[0];
-          if (!t || window.innerWidth >= 768) return;
-          drag.current = { x: t.clientX, y: t.clientY, dx: 0, horizontal: false };
-          if (inner.current) inner.current.style.transition = "none";
-        }}
-        onTouchMove={(e) => {
-          const t = e.touches[0];
-          const el = inner.current;
-          if (!t || !el || window.innerWidth >= 768) return;
-          const dx = t.clientX - drag.current.x;
-          const dy = t.clientY - drag.current.y;
-          if (!drag.current.horizontal) {
-            if (Math.abs(dx) > 14 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
-              drag.current.horizontal = true;
-            } else {
-              return;
-            }
+        style={{ x }}
+        drag={isMobile ? "x" : false}
+        dragDirectionLock
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0.35, right: 0.35 }}
+        dragSnapToOrigin
+        dragTransition={{ bounceStiffness: 600, bounceDamping: 35 }}
+        onDragEnd={(_, info) => {
+          const dx = info.offset.x;
+          const fast = Math.abs(info.velocity.x) > 500;
+          if (dx > THRESHOLD || (fast && dx > 30)) {
+            void (chat.flags.unread ? api.markRead(chat.guid) : api.markUnread(chat.guid))
+              .then(onChanged)
+              .catch(onChanged);
+          } else if (dx < -THRESHOLD || (fast && dx < -30)) {
+            void api.setArchived(chat.guid, !chat.flags.archived).then(onChanged).catch(onChanged);
           }
-          drag.current.dx = Math.max(-110, Math.min(110, dx));
-          el.style.transform = `translateX(${drag.current.dx}px)`;
         }}
-        onTouchEnd={() => {
-          if (!drag.current.horizontal) return;
-          const dx = drag.current.dx;
-          settle(dx > THRESHOLD ? "unread" : dx < -THRESHOLD ? "archive" : null);
-          drag.current = { x: 0, y: 0, dx: 0, horizontal: false };
-        }}
-        onTouchCancel={() => settle(null)}
       >
         {children}
-      </div>
+      </motion.div>
     </div>
   );
 }

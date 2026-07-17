@@ -457,10 +457,16 @@ app.get("/events", (c) => {
   });
 });
 
-// -------------------------------------------------------------- static SPA
+// -------------------------------------------------------------- static app
+// Primary client: the universal Expo web export. Expo static output has one
+// HTML file per route, so dynamic segments need explicit rewrites.
+// The previous Vite app stays reachable at /legacy during the transition.
 
-app.use("/*", serveStatic({ root: "./dist" }));
-app.get("*", serveStatic({ path: "./dist/index.html" }));
+app.use("/legacy/*", serveStatic({ root: "./dist", rewriteRequestPath: (p) => p.replace(/^\/legacy/, "") }));
+app.get("/legacy", serveStatic({ path: "./dist/index.html" }));
+
+app.use("/*", serveStatic({ root: "./client/dist" }));
+app.get("*", serveStatic({ path: "./client/dist/index.html" }));
 
 export default {
   port: config.port,

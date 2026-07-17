@@ -138,12 +138,7 @@ export default function App() {
         paddingTop: "env(safe-area-inset-top)",
       }}
     >
-      <aside
-        className={cn(
-          "relative flex h-full w-full flex-col border-r md:w-90 md:shrink-0",
-          selected && "max-md:hidden",
-        )}
-      >
+      <aside className="relative flex h-full w-full flex-col border-r md:w-90 md:shrink-0">
         <FilterBar
           state={stateFilter}
           type={typeFilter}
@@ -192,7 +187,14 @@ export default function App() {
         </div>
       </aside>
 
-      <main className={cn("h-full min-w-0 flex-1", !selected && "max-md:hidden")}>
+      {/* On mobile the thread overlays the list so drag-back reveals it beneath */}
+      <main
+        className={cn(
+          "h-full min-w-0 flex-1 max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-20",
+          !selected && "max-md:hidden",
+        )}
+        style={{ top: "env(safe-area-inset-top)" }}
+      >
         {selected ? (
           <Thread
             chat={selected}

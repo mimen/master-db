@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { animate, motion, useMotionValue } from "motion/react";
 import type { ChatSummary, Message } from "../../shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { api } from "@/lib/api";
@@ -107,52 +108,33 @@ export function Thread({
   const latestOutgoingGuid =
     [...visible].reverse().find((m) => m.isFromMe && !m.pending && !m.failed)?.guid ?? null;
 
-  const paneRef = useRef<HTMLDivElement>(null);
-  const drag = useRef({ x: 0, y: 0, dx: 0, horizontal: false });
+  const x = useMotionValue(0);
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   return (
-    <div
-      ref={paneRef}
+    <motion.div
       className="bg-background flex h-full min-w-0 flex-1 flex-col"
-      style={{ touchAction: "pan-y" }}
-      onTouchStart={(e) => {
-        const t = e.touches[0];
-        if (!t || window.innerWidth >= 768) return;
-        drag.current = { x: t.clientX, y: t.clientY, dx: 0, horizontal: false };
-        if (paneRef.current) paneRef.current.style.transition = "none";
-      }}
-      onTouchMove={(e) => {
-        const t = e.touches[0];
-        const el = paneRef.current;
-        if (!t || !el || window.innerWidth >= 768) return;
-        const dx = t.clientX - drag.current.x;
-        const dy = t.clientY - drag.current.y;
-        if (!drag.current.horizontal) {
-          if (Math.abs(dx) > 16 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
-            drag.current.horizontal = true;
-          } else {
-            return;
-          }
-        }
-        drag.current.dx = dx;
-        el.style.transform = `translateX(${dx}px)`;
-      }}
-      onTouchEnd={() => {
-        const el = paneRef.current;
-        if (!el || !drag.current.horizontal) return;
-        const dx = drag.current.dx;
-        drag.current = { x: 0, y: 0, dx: 0, horizontal: false };
-        el.style.transition = "transform 220ms ease-out";
-        if (Math.abs(dx) > window.innerWidth / 3) {
-          el.style.transform = `translateX(${dx > 0 ? 105 : -105}%)`;
-          setTimeout(() => {
-            onBack();
-            el.style.transition = "none";
-            el.style.transform = "translateX(0)";
-          }, 210);
-        } else {
-          el.style.transform = "translateX(0)";
-        }
+      style={{ x, touchAction: "pan-y" }}
+      drag={isMobile ? "x" : false}
+      dragDirectionLock
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.9}
+      dragSnapToOrigin
+      dragTransition={{ bounceStiffness: 500, bounceDamping: 40 }}
+      onDragEnd={(_, info) => {
+        const commit =
+          Math.abs(info.offset.x) > window.innerWidth / 3 || Math.abs(info.velocity.x) > 550;
+        if (!commit) return;
+        const direction = info.offset.x > 0 ? 1 : -1;
+        void animate(x, direction * window.innerWidth, {
+          type: "spring",
+          stiffness: 400,
+          damping: 40,
+          velocity: info.velocity.x,
+        }).then(() => {
+          onBack();
+          x.set(0);
+        });
       }}
     >
       <div className="flex items-center gap-2 border-b px-2 py-2 md:px-4">
@@ -297,6 +279,6 @@ export function Thread({
           onChanged();
         }}
       />
-    </div>
+    </motion.div>
   );
 }
