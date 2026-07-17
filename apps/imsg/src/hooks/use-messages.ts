@@ -104,14 +104,32 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
         next[index] = message;
         return next;
       }
-      return sortByDate([...current, message]);
+      // The socket echo of our own send can beat the HTTP response that
+      // settles the optimistic bubble — absorb the matching temp instead of
+      // showing both.
+      let next = [...current, message];
+      if (message.isFromMe) {
+        const tempIndex = current.findIndex(
+          (m) => m.pending && m.guid.startsWith("temp-") && m.text === message.text,
+        );
+        if (tempIndex >= 0) next = next.filter((m) => m.guid !== current[tempIndex]?.guid);
+      }
+      return sortByDate(next);
     });
   }, []);
 
   const replaceTemp = useCallback((tempGuid: string, message: Message) => {
-    setMessages((current) =>
-      sortByDate(current.map((m) => (m.guid === tempGuid ? message : m))),
-    );
+    setMessages((current) => {
+      const withoutTemp = current.filter((m) => m.guid !== tempGuid);
+      const index = withoutTemp.findIndex((m) => m.guid === message.guid);
+      if (index >= 0) {
+        // The settled message already arrived via SSE — keep that copy.
+        const next = [...withoutTemp];
+        next[index] = message;
+        return sortByDate(next);
+      }
+      return sortByDate([...withoutTemp, message]);
+    });
   }, []);
 
   return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp };
