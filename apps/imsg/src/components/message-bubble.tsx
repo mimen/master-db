@@ -137,7 +137,7 @@ export function MessageBubble({
         </div>
       )}
 
-      <div className={cn("flex max-w-[78%] flex-col md:max-w-[65%]", mine ? "items-end" : "items-start")}>
+      <div className={cn("flex min-w-0 max-w-[78%] flex-col md:max-w-[65%]", mine ? "items-end" : "items-start")}>
         {!mine && isGroupChat && groupStart && senderName && (
           <span className="text-muted-foreground mb-0.5 px-1 text-[11px]">{senderName}</span>
         )}
@@ -146,7 +146,7 @@ export function MessageBubble({
             {/* Quoted original: outlined bubble in the original sender's tint */}
             <div
               className={cn(
-                "max-w-full rounded-2xl border-[1.5px] bg-transparent px-3 py-1.5 text-[13px] leading-snug",
+                "max-w-full rounded-2xl border-[1.5px] bg-transparent px-3 py-1.5 text-[13px] leading-snug wrap-anywhere",
                 message.replyToFromMe
                   ? "border-primary/50 text-primary/90"
                   : "border-muted-foreground/40 text-muted-foreground",
@@ -168,12 +168,12 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className="relative">
+        <div className="relative min-w-0 max-w-full">
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div
                 className={cn(
-                  "rounded-2xl px-3 py-1.5 text-[15px] leading-snug break-words whitespace-pre-wrap transition-colors duration-700",
+                  "rounded-2xl px-3 py-1.5 text-[15px] leading-snug wrap-anywhere whitespace-pre-wrap transition-colors duration-700",
                   mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                   mine && !groupEnd && "rounded-br-md",
                   mine && groupEnd && "rounded-br-sm",

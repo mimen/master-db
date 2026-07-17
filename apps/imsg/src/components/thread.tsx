@@ -128,7 +128,7 @@ export function Thread({
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-3 py-3 md:px-5"
+        className="flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 md:px-5"
         onScroll={(e) => {
           const el = e.currentTarget;
           stickToBottom.current =

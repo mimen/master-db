@@ -91,7 +91,10 @@ export default function App() {
   }, []);
 
   return (
-    <div className="bg-background flex h-dvh overflow-hidden">
+    <div
+      className="bg-background flex h-dvh overflow-hidden"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
       <aside
         className={cn(
           "flex h-full w-full flex-col border-r md:w-90 md:shrink-0",
@@ -107,7 +110,10 @@ export default function App() {
           onNewChat={() => setNewChatOpen(true)}
           onSearch={() => setSearchOpen(true)}
         />
-        <div className="flex-1 overflow-y-auto">
+        <div
+          className="flex-1 overflow-y-auto"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           <ChatList
             chats={chats}
             loading={loading}
