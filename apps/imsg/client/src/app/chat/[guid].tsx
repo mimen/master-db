@@ -1,7 +1,5 @@
 import { Stack, useLocalSearchParams } from "expo-router";
-// SDK 56: expo-router vendors react-navigation; this is the supported path
-// for header measurements since @react-navigation/* can't be installed alongside.
-import { useHeaderHeight } from "expo-router/build/react-navigation/elements";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { ThreadView } from "@/components/thread-view";
 import type { JumpTarget } from "@/hooks/use-messages";
 
