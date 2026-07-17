@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { showToast } from "@/lib/toast";
+import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
 import type { Message } from "@/lib/types";
@@ -53,13 +57,52 @@ export function Composer({
   onSent,
 }: ComposerProps) {
   const theme = useTheme();
+  const showSheet = useActionSheet();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+  const typingActive = useRef(false);
+  const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (editing) setText(editing.text);
   }, [editing]);
 
+  // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows submit on web).
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const node = inputRef.current as unknown as HTMLTextAreaElement | null;
+    if (!node || typeof node.addEventListener !== "function") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendRef.current();
+      }
+    };
+    node.addEventListener("keydown", onKeyDown);
+    return () => node.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const setTyping = (active: boolean) => {
+    if (typingActive.current === active) return;
+    typingActive.current = active;
+    void fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/typing`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active }),
+    }).catch(() => undefined);
+  };
+
+  const onChangeText = (value: string) => {
+    setText(value);
+    if (!editing) {
+      setTyping(value.length > 0);
+      if (typingIdle.current) clearTimeout(typingIdle.current);
+      typingIdle.current = setTimeout(() => setTyping(false), 5000);
+    }
+  };
+
+  const sendRef = useRef<() => void>(() => undefined);
   const send = async () => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -72,13 +115,14 @@ export function Composer({
         setText("");
         onClearEditing();
       } catch {
-        // leave text for retry
+        showToast("Edit failed — edits are only allowed for ~15 minutes");
       } finally {
         setBusy(false);
       }
       return;
     }
 
+    setTyping(false);
     const temp = tempMessage(chatGuid, trimmed, replyTo);
     const reply = replyTo;
     setText("");
@@ -95,32 +139,58 @@ export function Composer({
     }
   };
 
-  const attach = async () => {
+  sendRef.current = () => void send();
+
+  const uploadAsset = async (uri: string, name: string, mimeType: string) => {
+    const form = new FormData();
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(uri)).blob();
+      form.append("attachment", new File([blob], name));
+    } else {
+      form.append("attachment", { uri, name, type: mimeType } as unknown as Blob);
+    }
+    const res = await fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/attachment`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    onSent((await res.json()) as Message);
+  };
+
+  const pickPhotos = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images", "videos"],
+      allowsMultipleSelection: true,
+      selectionLimit: 8,
       quality: 0.9,
     });
-    const asset = result.assets?.[0];
-    if (!asset) return;
+    if (!result.assets?.length) return;
     setBusy(true);
     try {
-      const form = new FormData();
-      const name = asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`;
-      if (Platform.OS === "web") {
-        const blob = await (await fetch(asset.uri)).blob();
-        form.append("attachment", new File([blob], name));
-      } else {
-        form.append("attachment", {
-          uri: asset.uri,
-          name,
-          type: asset.mimeType ?? "image/jpeg",
-        } as unknown as Blob);
+      for (const asset of result.assets) {
+        await uploadAsset(
+          asset.uri,
+          asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
+          asset.mimeType ?? "image/jpeg",
+        );
       }
-      const res = await fetch(
-        `${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/attachment`,
-        { method: "POST", body: form },
-      );
-      if (res.ok) onSent((await res.json()) as Message);
+    } catch {
+      showToast("Attachment failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickFiles = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ multiple: true });
+    if (result.canceled || !result.assets?.length) return;
+    setBusy(true);
+    try {
+      for (const asset of result.assets) {
+        await uploadAsset(asset.uri, asset.name, asset.mimeType ?? "application/octet-stream");
+      }
+    } catch {
+      showToast("Attachment failed");
     } finally {
       setBusy(false);
     }
@@ -155,12 +225,25 @@ export function Composer({
         </View>
       )}
       <View style={styles.inputRow}>
-        <Pressable onPress={() => void attach()} disabled={busy} hitSlop={8} style={styles.attachButton}>
-          <Text style={{ fontSize: 22, color: theme.textSecondary }}>＋</Text>
+        <Pressable
+          onPress={() =>
+            showSheet({
+              actions: [
+                { label: "Photo or Video", onPress: () => void pickPhotos() },
+                { label: "File", onPress: () => void pickFiles() },
+              ],
+            })
+          }
+          disabled={busy}
+          hitSlop={8}
+          style={styles.attachButton}
+        >
+          <Ionicons name="add-circle-outline" size={26} color={theme.textSecondary} />
         </Pressable>
         <TextInput
+          ref={inputRef}
           value={text}
-          onChangeText={setText}
+          onChangeText={onChangeText}
           placeholder={editing ? "Edit message" : "iMessage"}
           placeholderTextColor={theme.textSecondary}
           multiline
@@ -184,7 +267,7 @@ export function Composer({
             { backgroundColor: text.trim() ? theme.bubbleMine : theme.backgroundElement },
           ]}
         >
-          <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700" }}>↑</Text>
+          <Ionicons name="arrow-up" size={20} color="#fff" />
         </Pressable>
       </View>
     </View>

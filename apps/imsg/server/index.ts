@@ -289,6 +289,13 @@ app.post("/api/chats/:guid/read", async (c) => {
   return c.json({ ok: result.ok });
 });
 
+app.post("/api/chats/:guid/typing", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ ok: false });
+  const body = (await c.req.json().catch(() => ({ active: true }))) as { active?: boolean };
+  const result = await bb.setTyping(c.req.param("guid"), body.active !== false);
+  return c.json({ ok: result.ok });
+});
+
 app.post("/api/chats/:guid/unread", async (c) => {
   const guid = c.req.param("guid");
   db.setMarkedUnread(guid, true);

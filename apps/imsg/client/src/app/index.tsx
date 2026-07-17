@@ -1,14 +1,19 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { onSelectChat } from "@/lib/selection";
 import { useChats } from "@/hooks/use-chats";
 import { useTheme } from "@/hooks/use-theme";
 import { useServerEvents } from "@/lib/sse";
 import type { ChatSummary, StateFilter, TypeFilter } from "@/lib/types";
 import { ChatRow } from "@/components/chat-row";
 import { FilterMenu } from "@/components/filter-menu";
+import { PillBar } from "@/components/pills";
+import { SkeletonList } from "@/components/skeleton-list";
 import { ThreadView } from "@/components/thread-view";
+import type { JumpTarget } from "@/hooks/use-messages";
 
 export default function ChatListScreen() {
   const theme = useTheme();
@@ -18,18 +23,61 @@ export default function ChatListScreen() {
   const [type, setType] = useState<TypeFilter>("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
-  const { chats, counts, refresh } = useChats(state, type);
+  const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
+  const { chats, counts, loading, refresh } = useChats(state, type);
 
   useServerEvents(useCallback(() => refresh(), [refresh]));
 
+  // Wide-mode: modals publish chats to open here instead of navigating.
+  useEffect(() => {
+    if (!wide) return;
+    return onSelectChat((selection) => {
+      const known = chats.find((c) => c.guid === selection.guid);
+      setJumpTarget(selection.jumpTarget ?? null);
+      setSelected(
+        known ?? {
+          guid: selection.guid,
+          displayName: selection.name ?? selection.guid,
+          isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
+          known: true,
+          isSpam: false,
+          participants: [],
+          lastMessage: null,
+          unreadCount: 0,
+          flags: {
+            archived: false,
+            unresponded: false,
+            waiting: false,
+            unread: false,
+            mutedUnresponded: false,
+          },
+        },
+      );
+    });
+  }, [wide, chats]);
+
+  // Keep the selected chat's flags fresh as the list refreshes.
+  useEffect(() => {
+    if (!selected) return;
+    const updated = chats.find((c) => c.guid === selected.guid);
+    if (updated && updated !== selected) setSelected(updated);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chats]);
+
   const openChat = (chat: ChatSummary) => {
     if (wide) {
+      setJumpTarget(null);
       setSelected(chat);
       return;
     }
     router.push({
       pathname: "/chat/[guid]",
-      params: { guid: chat.guid, name: chat.displayName, isGroup: chat.isGroup ? "1" : "0" },
+      params: {
+        guid: chat.guid,
+        name: chat.displayName,
+        isGroup: chat.isGroup ? "1" : "0",
+        count: String(chat.participants.length),
+      },
     });
   };
 
@@ -47,23 +95,35 @@ export default function ChatListScreen() {
             onPress={() => router.push("/search")}
             style={[styles.headerButton, { backgroundColor: theme.backgroundElement }]}
           >
-            <Text style={{ fontSize: 15 }}>🔍</Text>
+            <Ionicons name="search" size={18} color={theme.text} />
           </Pressable>
           <Pressable
             onPress={() => router.push("/new-chat")}
             style={[styles.headerButton, { backgroundColor: theme.backgroundElement }]}
           >
-            <Text style={{ fontSize: 15 }}>✏️</Text>
+            <Ionicons name="create-outline" size={18} color={theme.text} />
           </Pressable>
           <Pressable
             onPress={() => setFilterOpen(true)}
             style={[styles.headerButton, { backgroundColor: theme.backgroundElement }]}
           >
-            <Text style={{ fontSize: 15, color: theme.text }}>☰</Text>
+            <Ionicons name="filter" size={18} color={theme.text} />
             {activeFilters > 0 && <View style={styles.filterBadge} />}
           </Pressable>
         </View>
       </View>
+      {wide && (
+        <PillBar
+          state={state}
+          type={type}
+          counts={counts}
+          onStateChange={setState}
+          onTypeChange={setType}
+        />
+      )}
+      {loading && chats.length === 0 ? (
+        <SkeletonList />
+      ) : (
       <FlatList
         data={chats}
         keyExtractor={(chat) => chat.guid}
@@ -79,6 +139,7 @@ export default function ChatListScreen() {
           />
         )}
       />
+      )}
       <FilterMenu
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
@@ -100,7 +161,13 @@ export default function ChatListScreen() {
       {list}
       <View style={styles.threadPane}>
         {selected ? (
-          <ThreadView key={selected.guid} chatGuid={selected.guid} isGroup={selected.isGroup} />
+          <ThreadView
+            key={selected.guid + (jumpTarget?.guid ?? "")}
+            chatGuid={selected.guid}
+            isGroup={selected.isGroup}
+            jumpTarget={jumpTarget}
+            headerChat={selected}
+          />
         ) : (
           <View style={styles.empty}>
             <Text style={{ color: theme.textSecondary }}>Select a conversation</Text>

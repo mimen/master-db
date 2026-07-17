@@ -5,6 +5,8 @@ import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
 import type { Message } from "@/lib/types";
 import { useTheme } from "@/hooks/use-theme";
+import { AudioBubble, VideoBubble } from "./media";
+import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 
 export const TAPBACK_EMOJI = new Map([
@@ -16,11 +18,20 @@ export const TAPBACK_EMOJI = new Map([
   ["question", "❓"],
 ]);
 
-function Attachments({ message }: { message: Message }) {
+function Attachments({ message, mine }: { message: Message; mine: boolean }) {
   return (
     <View style={{ gap: 6 }}>
       {message.attachments.map((att) => {
         const url = attachmentUrl(att.guid);
+        if (
+          att.mimeType?.startsWith("audio/") ||
+          /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "")
+        ) {
+          return <AudioBubble key={att.guid} url={url} mine={mine} />;
+        }
+        if (att.mimeType?.startsWith("video/") || /\.(mov|mp4|m4v)$/i.test(att.filename ?? "")) {
+          return <VideoBubble key={att.guid} url={url} />;
+        }
         if (att.mimeType?.startsWith("image/")) {
           const ratio =
             att.width && att.height && att.width > 0 && att.height > 0
@@ -52,8 +63,10 @@ interface BubbleProps {
   groupEnd: boolean;
   isGroupChat: boolean;
   isLatestOutgoing: boolean;
+  highlighted?: boolean;
   onLongPress: (message: Message) => void;
   onRetry: (message: Message) => void;
+  onShowReactions: (message: Message) => void;
 }
 
 export const Bubble = memo(function Bubble({
@@ -62,10 +75,13 @@ export const Bubble = memo(function Bubble({
   groupEnd,
   isGroupChat,
   isLatestOutgoing,
+  highlighted = false,
   onLongPress,
   onRetry,
+  onShowReactions,
 }: BubbleProps) {
   const theme = useTheme();
+  const contextRef = useWebContextMenu<View>(() => onLongPress(message));
   const mine = message.isFromMe;
   const senderName = message.sender?.name ?? message.sender?.address ?? "";
   const url = message.text ? firstUrl(message.text) : null;
@@ -135,10 +151,12 @@ export const Bubble = memo(function Bubble({
           )}
           <View>
             <Pressable
+              ref={contextRef as never}
               onLongPress={() => onLongPress(message)}
               delayLongPress={280}
               style={[
                 styles.bubble,
+                highlighted && styles.highlighted,
                 mine
                   ? { backgroundColor: theme.bubbleMine, borderBottomRightRadius: groupEnd ? 6 : 18 }
                   : { backgroundColor: theme.bubbleTheirs, borderBottomLeftRadius: groupEnd ? 6 : 18 },
@@ -146,9 +164,10 @@ export const Bubble = memo(function Bubble({
                 message.failed && { backgroundColor: "rgba(255,69,58,0.25)" },
               ]}
             >
-              {message.attachments.length > 0 && <Attachments message={message} />}
+              {message.attachments.length > 0 && <Attachments message={message} mine={mine} />}
               {message.text !== "" && (
                 <Text
+                  selectable
                   style={{
                     fontSize: 17,
                     lineHeight: 22,
@@ -163,13 +182,22 @@ export const Bubble = memo(function Bubble({
 
             {message.reactions.length > 0 && (
               <View style={[styles.reactionRow, mine ? { left: -10 } : { right: -10 }]}>
-                {[...new Set(message.reactions.map((r) => r.type))].map((type) => (
-                  <View
+                {Object.entries(
+                  message.reactions.reduce<Record<string, number>>((acc, r) => {
+                    acc[r.type] = (acc[r.type] ?? 0) + 1;
+                    return acc;
+                  }, {}),
+                ).map(([type, count]) => (
+                  <Pressable
                     key={type}
+                    onPress={() => onShowReactions(message)}
                     style={[styles.reactionChip, { backgroundColor: theme.backgroundElement }]}
                   >
-                    <Text style={{ fontSize: 12 }}>{TAPBACK_EMOJI.get(type) ?? type}</Text>
-                  </View>
+                    <Text style={{ fontSize: 12 }}>
+                      {TAPBACK_EMOJI.get(type) ?? type}
+                      {count > 1 ? ` ${count}` : ""}
+                    </Text>
+                  </Pressable>
                 ))}
               </View>
             )}
@@ -203,6 +231,10 @@ export const Bubble = memo(function Bubble({
 });
 
 const styles = StyleSheet.create({
+  highlighted: {
+    borderWidth: 2,
+    borderColor: "#0A84FF",
+  },
   bubble: {
     borderRadius: 18,
     paddingHorizontal: 12,

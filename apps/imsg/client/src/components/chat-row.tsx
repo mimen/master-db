@@ -6,6 +6,8 @@ import { formatListTimestamp } from "@/lib/format";
 import type { ChatSummary } from "@/lib/types";
 import { useActionSheet } from "@/lib/action-sheet";
 import { useTheme } from "@/hooks/use-theme";
+import { showToast } from "@/lib/toast";
+import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { ChatAvatar } from "./avatar";
 
 const ACTION_WIDTH = 84;
@@ -58,8 +60,13 @@ export function ChatRow({
     : "";
 
   const run = (action: Promise<unknown>) => {
-    void action.then(onChanged).catch(onChanged);
+    void action.then(onChanged).catch(() => {
+      showToast("Action failed");
+      onChanged();
+    });
   };
+
+  const contextRef = useWebContextMenu<typeof Pressable>(() => openMenu());
 
   const openMenu = () => {
     const actions = [
@@ -113,6 +120,7 @@ export function ChatRow({
       }}
     >
       <Pressable
+        ref={contextRef as never}
         onPress={onPress}
         onLongPress={openMenu}
         style={({ pressed }) => [

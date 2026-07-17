@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ActionSheetProvider } from "@/lib/action-sheet";
+import { ToastHost } from "@/lib/toast";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -17,6 +18,7 @@ export default function RootLayout() {
             <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
             <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New Message" }} />
           </Stack>
+          <ToastHost />
           <StatusBar style="auto" />
         </ActionSheetProvider>
       </ThemeProvider>

@@ -17,7 +17,10 @@ import type { Message } from "@/lib/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
+import { showToast } from "@/lib/toast";
+import type { ChatSummary } from "@/lib/types";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
+import { ChatAvatar } from "./avatar";
 import { Composer } from "./composer";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -36,9 +39,17 @@ interface ThreadViewProps {
   isGroup: boolean;
   jumpTarget?: JumpTarget | null;
   headerOffset?: number;
+  /** When set (wide split-pane), render an in-pane header for this chat. */
+  headerChat?: ChatSummary | null;
 }
 
-export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset = 0 }: ThreadViewProps) {
+export function ThreadView({
+  chatGuid,
+  isGroup,
+  jumpTarget = null,
+  headerOffset = 0,
+  headerChat = null,
+}: ThreadViewProps) {
   const theme = useTheme();
   const privateApi = usePrivateApi();
   const showSheet = useActionSheet();
@@ -48,6 +59,9 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
   );
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
+  const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
 
   useEffect(() => {
@@ -56,6 +70,25 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
     void api.markRead(chatGuid);
   }, [chatGuid]);
 
+
+  // Web: RNW's inverted-list wheel handling is broken (reversed / inert), so
+  // drive the scroll ourselves. Inverted container ⇒ wheel-up must increase
+  // scrollTop (toward older messages).
+  const [listMounted, setListMounted] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !listMounted) return;
+    const node = (
+      listRef.current as unknown as { getScrollableNode?: () => HTMLElement } | null
+    )?.getScrollableNode?.();
+    if (!node || typeof node.addEventListener !== "function") return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      node.scrollTop -= event.deltaY;
+    };
+    node.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => node.removeEventListener("wheel", onWheel, { capture: true });
+  }, [listMounted]);
 
   useServerEvents(
     useCallback(
@@ -67,6 +100,13 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
           upsert(event.message);
           if (event.kind === "new-message" && !event.message.isFromMe) {
             void api.markRead(chatGuid);
+            setPeerTyping(false);
+          }
+        } else if (event.kind === "typing" && event.chatGuid === chatGuid) {
+          setPeerTyping(event.display);
+          if (typingClear.current) clearTimeout(typingClear.current);
+          if (event.display) {
+            typingClear.current = setTimeout(() => setPeerTyping(false), 12000);
           }
         }
       },
@@ -106,6 +146,8 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
     jumped.current = jumpTarget.guid;
     setTimeout(() => {
       listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
+      setHighlightGuid(jumpTarget.guid);
+      setTimeout(() => setHighlightGuid(null), 2600);
     }, 150);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpTarget, rows]);
@@ -127,6 +169,19 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
     [chatGuid, replaceTemp],
   );
 
+  const showReactions = useCallback(
+    (message: Message) => {
+      showSheet({
+        title: "Reactions",
+        actions: message.reactions.map((r) => ({
+          label: `${TAPBACK_EMOJI.get(r.type) ?? r.type}  ${r.isFromMe ? "You" : (r.senderName ?? r.senderAddress ?? "Unknown")}`,
+          onPress: () => undefined,
+        })),
+      });
+    },
+    [showSheet],
+  );
+
   const openMessageSheet = useCallback(
     (message: Message) => {
       const mine = message.isFromMe;
@@ -143,11 +198,9 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
                       return {
                         label: `${emoji}${active ? " ✓" : ""}`,
                         onPress: () => {
-                          void api.react(message.guid, {
-                            chatGuid,
-                            reaction: type,
-                            remove: active,
-                          });
+                          void api
+                            .react(message.guid, { chatGuid, reaction: type, remove: active })
+                            .catch(() => showToast("Reaction failed"));
                         },
                       };
                     }),
@@ -158,7 +211,14 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
             ]
           : []),
         ...(message.text
-          ? [{ label: "Copy", onPress: () => void Clipboard.setStringAsync(message.text) }]
+          ? [
+              {
+                label: "Copy",
+                onPress: () => {
+                  void Clipboard.setStringAsync(message.text).then(() => showToast("Copied"));
+                },
+              },
+            ]
           : []),
         ...(mine && privateApi && message.text && age < EDIT_WINDOW_MS && !message.pending
           ? [{ label: "Edit", onPress: () => setEditing(message) }]
@@ -169,7 +229,10 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
                 label: "Unsend",
                 destructive: true,
                 onPress: () => {
-                  void api.unsend(message.guid).then(() => upsert({ ...message, retracted: true }));
+                  void api
+                    .unsend(message.guid)
+                    .then(() => upsert({ ...message, retracted: true }))
+                    .catch(() => showToast("Unsend failed — messages can only be unsent for ~2 minutes"));
                 },
               },
             ]
@@ -186,13 +249,31 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={headerOffset}
     >
+      {headerChat && (
+        <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
+          <ChatAvatar chat={headerChat} size={32} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16, fontWeight: "600" }}>
+              {headerChat.displayName}
+            </Text>
+            {headerChat.isGroup && (
+              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {headerChat.participants.length} people
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
       {loading && messages.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator />
         </View>
       ) : (
         <FlatList
-          ref={listRef}
+          ref={(ref) => {
+            (listRef as React.MutableRefObject<FlatList<Row> | null>).current = ref;
+            if (ref && !listMounted) setListMounted(true);
+          }}
           data={rows}
           inverted
           keyExtractor={(row) => row.message.guid}
@@ -207,6 +288,15 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
           }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           contentContainerStyle={{ paddingVertical: 10 }}
+          ListHeaderComponent={
+            peerTyping ? (
+              <View style={styles.typingRow}>
+                <View style={[styles.typingBubble, { backgroundColor: theme.bubbleTheirs }]}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 20, letterSpacing: 2 }}>•••</Text>
+                </View>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
             <View>
               {item.newDay && (
@@ -225,8 +315,10 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
                   groupEnd={item.groupEnd}
                   isGroupChat={isGroup}
                   isLatestOutgoing={item.message.guid === latestOutgoingGuid}
+                  highlighted={item.message.guid === highlightGuid}
                   onLongPress={openMessageSheet}
                   onRetry={retry}
+                  onShowReactions={showReactions}
                 />
               )}
             </View>
@@ -249,6 +341,24 @@ export function ThreadView({ chatGuid, isGroup, jumpTarget = null, headerOffset 
 }
 
 const styles = StyleSheet.create({
+  paneHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  typingRow: {
+    paddingHorizontal: 42,
+    paddingVertical: 6,
+    alignItems: "flex-start",
+  },
+  typingBubble: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
   loading: {
     flex: 1,
     alignItems: "center",

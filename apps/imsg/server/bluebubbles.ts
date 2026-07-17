@@ -153,6 +153,14 @@ export class BlueBubblesClient {
     return this.post(`/api/v1/chat/${chatGuid}/read`, null);
   }
 
+  /** Private API only. Shows/hides the typing indicator on the recipient's side. */
+  setTyping(chatGuid: string, active: boolean): Promise<Result<unknown>> {
+    if (active) return this.post(`/api/v1/chat/${chatGuid}/typing`, null);
+    return fetch(this.url(`/api/v1/chat/${chatGuid}/typing`), { method: "DELETE" }).then((res) =>
+      this.unwrap(res),
+    );
+  }
+
   /** Private API only. Apple allows unsend within ~2 minutes. */
   unsend(messageGuid: string, partIndex = 0): Promise<Result<unknown>> {
     return this.post(`/api/v1/message/${messageGuid}/unsend`, { partIndex });

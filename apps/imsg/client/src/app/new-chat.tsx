@@ -9,6 +9,8 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
+import { useWindowDimensions } from "react-native";
+import { selectChat } from "@/lib/selection";
 import { api } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { useTheme } from "@/hooks/use-theme";
@@ -20,6 +22,8 @@ export default function NewChatScreen() {
   const [selected, setSelected] = useState<Contact[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const { width } = useWindowDimensions();
+  const wide = width >= 768;
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -41,7 +45,9 @@ export default function NewChatScreen() {
         text: text.trim(),
       });
       router.dismiss();
-      router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid } });
+      if (!(wide && selectChat({ guid: chatGuid }))) {
+        router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid } });
+      }
     } finally {
       setSending(false);
     }

@@ -8,6 +8,8 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
+import { useWindowDimensions } from "react-native";
+import { selectChat } from "@/lib/selection";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import type { Contact, Message } from "@/lib/types";
@@ -46,11 +48,15 @@ export default function SearchScreen() {
     return () => clearTimeout(handle);
   }, [query]);
 
+  const { width } = useWindowDimensions();
+  const wide = width >= 768;
+
   const openContact = (contact: Contact) => {
     api
       .findChat(contact.address)
       .then(({ chatGuid }) => {
         router.dismiss();
+        if (wide && selectChat({ guid: chatGuid, name: contact.name })) return;
         router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid, name: contact.name } });
       })
       .catch(() => undefined);
@@ -58,6 +64,8 @@ export default function SearchScreen() {
 
   const openMessage = (message: Message) => {
     router.dismiss();
+    const jumpTarget = { guid: message.guid, dateCreated: message.dateCreated };
+    if (wide && selectChat({ guid: message.chatGuid, jumpTarget })) return;
     router.push({
       pathname: "/chat/[guid]",
       params: {
