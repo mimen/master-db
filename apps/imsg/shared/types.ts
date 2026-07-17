@@ -43,6 +43,8 @@ export interface Message {
   replyToFromMe: boolean | null;
   isGroupEvent: boolean;
   error: number;
+  edited: boolean;
+  retracted: boolean;
   /** Client-only optimistic-send states; never set by the server. */
   pending?: boolean;
   failed?: boolean;

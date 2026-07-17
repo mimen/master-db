@@ -28,9 +28,10 @@ export function Thread({
   onChanged,
   registerUpsert,
 }: ThreadProps) {
-  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp } =
+  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove } =
     useMessages(chat.guid, jumpTarget);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -42,6 +43,7 @@ export function Thread({
 
   useEffect(() => {
     setReplyTo(null);
+    setEditing(null);
     stickToBottom.current = jumpTarget === null;
     jumpedTo.current = null;
     void api.markRead(chat.guid);
@@ -77,9 +79,15 @@ export function Thread({
       if (stickToBottom.current) el.scrollTop = el.scrollHeight;
     });
     mutation.observe(el, { childList: true, subtree: true });
+    // Keyboard open/close changes the app height — stay pinned to bottom.
+    const onViewport = () => {
+      if (stickToBottom.current) el.scrollTop = el.scrollHeight;
+    };
+    window.visualViewport?.addEventListener("resize", onViewport);
     return () => {
       observer.disconnect();
       mutation.disconnect();
+      window.visualViewport?.removeEventListener("resize", onViewport);
     };
   }, [chat.guid]);
 
@@ -219,6 +227,13 @@ export function Thread({
                   highlighted={highlightGuid === message.guid}
                   onReply={setReplyTo}
                   onRetry={retry}
+                  onEdit={setEditing}
+                  onUnsend={(target) => {
+                    void api
+                      .unsend(target.guid)
+                      .then(() => remove(target.guid))
+                      .catch(() => undefined);
+                  }}
                 />
               )}
             </div>
@@ -236,7 +251,10 @@ export function Thread({
       <Composer
         chatGuid={chat.guid}
         replyTo={replyTo}
+        editing={editing}
         onClearReply={() => setReplyTo(null)}
+        onClearEditing={() => setEditing(null)}
+        onEdited={upsert}
         onOptimistic={(message) => {
           stickToBottom.current = !hasNewer;
           upsert(message);

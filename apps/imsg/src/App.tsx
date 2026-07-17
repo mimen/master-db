@@ -27,6 +27,24 @@ export default function App() {
   const selectedGuidRef = useRef<string | null>(null);
   selectedGuidRef.current = selected?.guid ?? null;
 
+  // iOS keyboard: the OS keyboard overlays the page without resizing it, so
+  // pin the app shell to the visual viewport's actual height.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      document.documentElement.style.setProperty("--app-height", `${vv.height}px`);
+      window.scrollTo(0, 0);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
+  }, []);
+
   // Keep the selected chat object fresh as list data changes.
   useEffect(() => {
     if (!selected) return;
@@ -92,8 +110,11 @@ export default function App() {
 
   return (
     <div
-      className="bg-background flex h-dvh overflow-hidden"
-      style={{ paddingTop: "env(safe-area-inset-top)" }}
+      className="bg-background flex overflow-hidden"
+      style={{
+        height: "var(--app-height, 100dvh)",
+        paddingTop: "env(safe-area-inset-top)",
+      }}
     >
       <aside
         className={cn(

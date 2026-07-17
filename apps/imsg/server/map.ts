@@ -70,6 +70,8 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
     replyToFromMe: null,
     isGroupEvent: isGroupEvent(m),
     error: m.error ?? 0,
+    edited: Boolean(m.dateEdited),
+    retracted: Boolean(m.dateRetracted),
   };
 }
 
@@ -99,7 +101,7 @@ export function buildThread(
   }
 
   const messages = raw
-    .filter((m) => !isTapback(m))
+    .filter((m) => !isTapback(m) && !m.dateRetracted)
     .map((m) => mapMessage(m, chatGuid, contacts))
     .sort((a, b) => a.dateCreated - b.dateCreated);
 

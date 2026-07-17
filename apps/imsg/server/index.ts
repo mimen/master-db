@@ -351,6 +351,22 @@ app.get("/api/chats/find", async (c) => {
   return c.json({ chatGuid: chat.guid });
 });
 
+app.post("/api/messages/:guid/unsend", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const result = await bb.unsend(c.req.param("guid"));
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json({ ok: true });
+});
+
+app.post("/api/messages/:guid/edit", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const body = (await c.req.json()) as { text: string };
+  if (!body.text?.trim()) return c.json({ error: "text required" }, 400);
+  const result = await bb.edit(c.req.param("guid"), body.text.trim());
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json({ ok: true });
+});
+
 app.get("/api/contacts", async (c) => {
   await contacts.refresh();
   return c.json(contacts.search(c.req.query("q") ?? "", 25));

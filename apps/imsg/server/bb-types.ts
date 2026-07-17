@@ -47,6 +47,8 @@ export interface BBMessage {
   dateCreated?: number;
   dateRead?: number | null;
   dateDelivered?: number | null;
+  dateEdited?: number | null;
+  dateRetracted?: number | null;
   isFromMe?: boolean;
   handle?: BBHandle | null;
   attachments?: BBAttachment[];

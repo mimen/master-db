@@ -11,8 +11,12 @@ import {
 } from "@/components/ui/context-menu";
 import { LinkPreviewCard, firstUrl } from "@/components/link-preview-card";
 import { cn } from "@/lib/utils";
-import { CheckCheck, Copy, Reply, RotateCcw } from "lucide-react";
+import { CheckCheck, Copy, Pencil, Reply, RotateCcw, Undo2 } from "lucide-react";
 import { toast } from "sonner";
+
+/** Apple's server-side limits for iMessage edit/unsend. */
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+const UNSEND_WINDOW_MS = 2 * 60 * 1000;
 
 const TAPBACKS: Array<{ type: string; emoji: string; label: string }> = [
   { type: "love", emoji: "❤️", label: "Love" },
@@ -48,6 +52,8 @@ interface MessageBubbleProps {
   highlighted: boolean;
   onReply: (message: Message) => void;
   onRetry: (message: Message) => void;
+  onEdit: (message: Message) => void;
+  onUnsend: (message: Message) => void;
 }
 
 function AttachmentView({ message }: { message: Message }) {
@@ -101,6 +107,8 @@ export function MessageBubble({
   highlighted,
   onReply,
   onRetry,
+  onEdit,
+  onUnsend,
 }: MessageBubbleProps) {
   const mine = message.isFromMe;
   const senderName = message.sender?.name ?? message.sender?.address ?? "";
@@ -238,6 +246,20 @@ export function MessageBubble({
                   <Copy /> Copy text
                 </ContextMenuItem>
               )}
+              {mine && privateApi && !message.pending && !message.failed && (
+                <>
+                  {message.text && Date.now() - message.dateCreated < EDIT_WINDOW_MS && (
+                    <ContextMenuItem onSelect={() => onEdit(message)}>
+                      <Pencil /> Edit
+                    </ContextMenuItem>
+                  )}
+                  {Date.now() - message.dateCreated < UNSEND_WINDOW_MS && (
+                    <ContextMenuItem variant="destructive" onSelect={() => onUnsend(message)}>
+                      <Undo2 /> Unsend
+                    </ContextMenuItem>
+                  )}
+                </>
+              )}
             </ContextMenuContent>
           </ContextMenu>
 
@@ -277,9 +299,10 @@ export function MessageBubble({
         ) : message.pending ? (
           <span className="text-muted-foreground mt-0.5 px-1 text-[10px]">Sending…</span>
         ) : (
-          groupEnd && (
+          (groupEnd || message.edited) && (
             <span className="text-muted-foreground mt-0.5 flex items-center gap-1 px-1 text-[10px]">
-              {formatBubbleTime(message.dateCreated)}
+              {message.edited && <span className="font-medium">Edited</span>}
+              {groupEnd && formatBubbleTime(message.dateCreated)}
               {mine && isLatestOutgoing && (
                 <span className="flex items-center gap-0.5">
                   <CheckCheck className="size-3" />

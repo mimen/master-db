@@ -153,6 +153,20 @@ export class BlueBubblesClient {
     return this.post(`/api/v1/chat/${chatGuid}/read`, null);
   }
 
+  /** Private API only. Apple allows unsend within ~2 minutes. */
+  unsend(messageGuid: string, partIndex = 0): Promise<Result<unknown>> {
+    return this.post(`/api/v1/message/${messageGuid}/unsend`, { partIndex });
+  }
+
+  /** Private API only. Apple allows edits within ~15 minutes. */
+  edit(messageGuid: string, editedMessage: string, partIndex = 0): Promise<Result<BBMessage>> {
+    return this.post<BBMessage>(`/api/v1/message/${messageGuid}/edit`, {
+      editedMessage,
+      backwardsCompatibilityMessage: `Edited: ${editedMessage}`,
+      partIndex,
+    });
+  }
+
   createChat(addresses: string[], message: string): Promise<Result<BBChat>> {
     return this.post<BBChat>("/api/v1/chat/new", {
       addresses,

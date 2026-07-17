@@ -81,6 +81,15 @@ export const api = {
       body: JSON.stringify({ muted }),
     });
   },
+  unsend(messageGuid: string): Promise<{ ok: boolean }> {
+    return request(`/api/messages/${encodeURIComponent(messageGuid)}/unsend`, { method: "POST" });
+  },
+  edit(messageGuid: string, text: string): Promise<{ ok: boolean }> {
+    return request(`/api/messages/${encodeURIComponent(messageGuid)}/edit`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  },
   react(messageGuid: string, body: ReactRequest): Promise<{ ok: boolean }> {
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/react`, {
       method: "POST",

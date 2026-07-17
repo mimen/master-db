@@ -19,6 +19,8 @@ interface UseMessagesResult {
   upsert: (message: Message) => void;
   /** Swap an optimistic temp message for its settled version (or failure marker). */
   replaceTemp: (tempGuid: string, message: Message) => void;
+  /** Drop a message from the local view (unsend). */
+  remove: (guid: string) => void;
 }
 
 function sortByDate(messages: Message[]): Message[] {
@@ -96,8 +98,13 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
       .catch(() => undefined);
   }, [chatGuid, messages]);
 
+  const remove = useCallback((guid: string) => {
+    setMessages((current) => current.filter((m) => m.guid !== guid));
+  }, []);
+
   const upsert = useCallback((message: Message) => {
     setMessages((current) => {
+      if (message.retracted) return current.filter((m) => m.guid !== message.guid);
       const index = current.findIndex((m) => m.guid === message.guid);
       if (index >= 0) {
         const next = [...current];
@@ -132,5 +139,5 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
     });
   }, []);
 
-  return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp };
+  return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove };
 }
