@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { api } from "@/lib/api";
 import { computeCounts, matchesFilters } from "@/lib/filters";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@/lib/types";
@@ -49,6 +50,19 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
 
   const chats = useMemo(() => all.filter((c) => matchesFilters(c, state, type)), [all, state, type]);
   const counts = useMemo(() => computeCounts(all, type), [all, type]);
+
+  // Dock/home-screen unread badge (Safari web apps + installed PWAs).
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (!nav.setAppBadge) return;
+    const unread = all.filter((c) => c.flags.unread && !c.flags.archived && !c.isSpam).length;
+    if (unread > 0) void nav.setAppBadge(unread).catch(() => undefined);
+    else void nav.clearAppBadge?.().catch(() => undefined);
+  }, [all]);
 
   return { chats, counts, loading, error, refresh };
 }
