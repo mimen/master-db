@@ -64,6 +64,7 @@ export interface ChatFlags {
   waiting: boolean;
   unread: boolean;
   mutedUnresponded: boolean;
+  pinned: boolean;
 }
 
 export interface ChatSummary {

@@ -16,9 +16,17 @@ export interface SheetAction {
   onPress: () => void;
 }
 
+export interface SheetTapback {
+  emoji: string;
+  active: boolean;
+  onPress: () => void;
+}
+
 interface SheetRequest {
   title?: string;
   actions: SheetAction[];
+  /** Optional horizontal reaction pill rendered above the actions. */
+  tapbacks?: SheetTapback[];
 }
 
 type ShowSheet = (request: SheetRequest) => void;
@@ -38,7 +46,8 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
   const theme = useTheme();
 
   const show = useCallback((req: SheetRequest) => {
-    if (Platform.OS === "ios") {
+    // The tapback pill needs the custom sheet on every platform.
+    if (Platform.OS === "ios" && !req.tapbacks) {
       const labels = [...req.actions.map((a) => a.label), "Cancel"];
       const destructiveIndexes = req.actions
         .map((a, i) => (a.destructive ? i : -1))
@@ -70,6 +79,22 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
       >
         <Pressable style={styles.backdrop} onPress={() => setRequest(null)}>
           <View style={[styles.sheet, { backgroundColor: theme.backgroundElement }]}>
+            {request?.tapbacks && (
+              <View style={styles.tapbackRow}>
+                {request.tapbacks.map((t) => (
+                  <Pressable
+                    key={t.emoji}
+                    onPress={() => {
+                      setRequest(null);
+                      t.onPress();
+                    }}
+                    style={[styles.tapback, t.active && styles.tapbackActive]}
+                  >
+                    <Text style={{ fontSize: 24 }}>{t.emoji}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
             {request?.title && (
               <Text style={[styles.title, { color: theme.textSecondary }]}>{request.title}</Text>
             )}
@@ -122,6 +147,23 @@ const styles = StyleSheet.create({
   action: {
     paddingVertical: 13,
     paddingHorizontal: 20,
+  },
+  tapbackRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  tapback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tapbackActive: {
+    backgroundColor: "#0A84FF",
   },
   actionLabel: {
     fontSize: 17,

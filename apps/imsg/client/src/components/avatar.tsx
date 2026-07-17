@@ -5,6 +5,14 @@ import { initials } from "@/lib/format";
 import type { ChatSummary } from "@/lib/types";
 import { useTheme } from "@/hooks/use-theme";
 
+/** Deterministic pastel per contact, iOS-style. */
+function avatarColor(key: string): { bg: string; fg: string } {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return { bg: `hsl(${hue}, 45%, 62%)`, fg: "#ffffff" };
+}
+
 function PersonAvatar({
   address,
   name,
@@ -14,7 +22,7 @@ function PersonAvatar({
   name: string;
   size: number;
 }) {
-  const theme = useTheme();
+  const color = avatarColor(address ?? name);
   return (
     <View
       style={[
@@ -23,11 +31,11 @@ function PersonAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: theme.backgroundElement,
+          backgroundColor: color.bg,
         },
       ]}
     >
-      <Text style={{ fontSize: size * 0.34, fontWeight: "600", color: theme.textSecondary }}>
+      <Text style={{ fontSize: size * 0.34, fontWeight: "600", color: color.fg }}>
         {initials(name)}
       </Text>
       {address && (

@@ -69,6 +69,12 @@ export const api = {
       body: JSON.stringify({ kind }),
     });
   },
+  setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/pin`, {
+      method: "POST",
+      body: JSON.stringify({ pinned }),
+    });
+  },
   setMuted(chatGuid: string, muted: boolean): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/mute`, {
       method: "POST",

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
@@ -19,6 +19,8 @@ export const TAPBACK_EMOJI = new Map([
 ]);
 
 function Attachments({ message, mine }: { message: Message; mine: boolean }) {
+  const { width: winW } = useWindowDimensions();
+  const mediaW = Math.min(340, Math.round(winW * 0.62));
   return (
     <View style={{ gap: 6 }}>
       {message.attachments.map((att) => {
@@ -41,7 +43,7 @@ function Attachments({ message, mine }: { message: Message; mine: boolean }) {
             <Image
               key={att.guid}
               source={{ uri: url }}
-              style={{ width: 220, aspectRatio: ratio, borderRadius: 14 }}
+              style={{ width: mediaW, aspectRatio: ratio, borderRadius: 14 }}
               contentFit="cover"
               transition={100}
             />
@@ -158,8 +160,8 @@ export const Bubble = memo(function Bubble({
                 styles.bubble,
                 highlighted && styles.highlighted,
                 mine
-                  ? { backgroundColor: theme.bubbleMine, borderBottomRightRadius: groupEnd ? 6 : 18 }
-                  : { backgroundColor: theme.bubbleTheirs, borderBottomLeftRadius: groupEnd ? 6 : 18 },
+                  ? { backgroundColor: theme.bubbleMine }
+                  : { backgroundColor: theme.bubbleTheirs },
                 message.pending && { opacity: 0.6 },
                 message.failed && { backgroundColor: "rgba(255,69,58,0.25)" },
               ]}
@@ -178,6 +180,25 @@ export const Bubble = memo(function Bubble({
                 </Text>
               )}
               {url && <LinkPreviewCard url={url} mine={mine} />}
+              {groupEnd && !message.pending && !message.failed && (
+                <>
+                  <View
+                    style={[
+                      styles.tail,
+                      mine
+                        ? { right: -5.5, backgroundColor: theme.bubbleMine }
+                        : { left: -5.5, backgroundColor: theme.bubbleTheirs },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.tailCut,
+                      mine ? { right: -10 } : { left: -10 },
+                      { backgroundColor: theme.background },
+                    ]}
+                  />
+                </>
+              )}
             </Pressable>
 
             {message.reactions.length > 0 && (
@@ -216,7 +237,7 @@ export const Bubble = memo(function Bubble({
                 {groupEnd ? formatBubbleTime(message.dateCreated) : ""}
                 {mine && isLatestOutgoing
                   ? message.dateRead
-                    ? " · Read"
+                    ? ` · Read ${formatBubbleTime(message.dateRead)}`
                     : message.dateDelivered
                       ? " · Delivered"
                       : " · Sent"
@@ -234,6 +255,22 @@ const styles = StyleSheet.create({
   highlighted: {
     borderWidth: 2,
     borderColor: "#0A84FF",
+  },
+  tail: {
+    position: "absolute",
+    bottom: 0,
+    width: 18,
+    height: 16,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    zIndex: -1,
+  },
+  tailCut: {
+    position: "absolute",
+    bottom: -1,
+    width: 12,
+    height: 20,
+    borderRadius: 10,
   },
   bubble: {
     borderRadius: 18,

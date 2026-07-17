@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { api } from "@/lib/api";
@@ -53,6 +53,8 @@ export function ChatRow({
 }) {
   const theme = useTheme();
   const showSheet = useActionSheet();
+  const { width: winW } = useWindowDimensions();
+  const compact = winW >= 768;
   const last = chat.lastMessage;
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
@@ -80,6 +82,9 @@ export function ChatRow({
       ...(chat.flags.waiting
         ? [{ label: "Not waiting on this", onPress: () => run(api.dismiss(chat.guid, "waiting")) }]
         : []),
+      chat.flags.pinned
+        ? { label: "Unpin", onPress: () => run(api.setPinned(chat.guid, false)) }
+        : { label: "Pin", onPress: () => run(api.setPinned(chat.guid, true)) },
       chat.flags.archived
         ? { label: "Unarchive", onPress: () => run(api.setArchived(chat.guid, false)) }
         : { label: "Archive", destructive: true, onPress: () => run(api.setArchived(chat.guid, true)) },
@@ -128,18 +133,19 @@ export function ChatRow({
         onLongPress={openMenu}
         style={({ pressed }) => [
           styles.row,
+          compact && styles.rowCompact,
           { backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background },
         ]}
       >
         <View style={styles.dotColumn}>
           {chat.flags.unread && <View style={styles.unreadDot} />}
         </View>
-        <ChatAvatar chat={chat} size={52} />
+        <ChatAvatar chat={chat} size={compact ? 40 : 52} />
         <View style={styles.content}>
           <View style={styles.topLine}>
             <Text
               numberOfLines={1}
-              style={[styles.name, { color: theme.text, fontWeight: chat.flags.unread ? "700" : "600" }]}
+              style={[styles.name, compact && styles.nameCompact, { color: theme.text, fontWeight: chat.flags.unread ? "700" : "600" }]}
             >
               {chat.displayName}
             </Text>
@@ -149,7 +155,7 @@ export function ChatRow({
               </Text>
             )}
           </View>
-          <Text numberOfLines={2} style={[styles.snippet, { color: theme.textSecondary }]}>
+          <Text numberOfLines={compact ? 1 : 2} style={[styles.snippet, compact && styles.snippetCompact, { color: theme.textSecondary }]}>
             {snippet}
           </Text>
         </View>
@@ -165,6 +171,16 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingRight: 16,
     gap: 10,
+  },
+  rowCompact: {
+    paddingVertical: 7,
+  },
+  nameCompact: {
+    fontSize: 14,
+  },
+  snippetCompact: {
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   dotColumn: {
     width: 16,

@@ -15,6 +15,9 @@ import { SearchContent } from "@/components/search-content";
 import { NewChatContent } from "@/components/new-chat-content";
 import { Modal } from "react-native";
 import { SkeletonList } from "@/components/skeleton-list";
+import { ChatAvatar } from "@/components/avatar";
+import { playReceive } from "@/lib/sounds";
+import { TextInput } from "react-native";
 import { ThreadView } from "@/components/thread-view";
 import type { JumpTarget } from "@/hooks/use-messages";
 
@@ -31,7 +34,16 @@ export default function ChatListScreen() {
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const { chats, counts, loading, refresh } = useChats(state, type);
 
-  useServerEvents(useCallback(() => refresh(), [refresh]));
+  useServerEvents(
+    useCallback(
+      (event) => {
+        if (event.kind === "new-message" && !event.message.isFromMe) playReceive();
+        refresh();
+      },
+      [refresh],
+    ),
+  );
+  const [listFilter, setListFilter] = useState("");
 
   // Wide-mode: modals publish chats to open here instead of navigating.
   useEffect(() => {
@@ -55,6 +67,7 @@ export default function ChatListScreen() {
             waiting: false,
             unread: false,
             mutedUnresponded: false,
+            pinned: false,
           },
         },
       );
@@ -87,6 +100,16 @@ export default function ChatListScreen() {
   };
 
   const activeFilters = (state !== "all" ? 1 : 0) + (type !== "all" ? 1 : 0);
+  const needle = listFilter.trim().toLowerCase();
+  const visibleChats = needle
+    ? chats.filter(
+        (c) =>
+          c.displayName.toLowerCase().includes(needle) ||
+          (c.lastMessage?.text ?? "").toLowerCase().includes(needle),
+      )
+    : chats;
+  const pinnedChats = chats.filter((c) => c.flags.pinned);
+  const listChats = visibleChats.filter((c) => !c.flags.pinned);
 
   const list = (
     <SafeAreaView
@@ -118,6 +141,24 @@ export default function ChatListScreen() {
         </View>
       </View>
       {wide && (
+        <TextInput
+          value={listFilter}
+          onChangeText={setListFilter}
+          placeholder="Search"
+          placeholderTextColor={theme.textSecondary}
+          style={{
+            marginHorizontal: 12,
+            marginBottom: 8,
+            borderRadius: 9,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            fontSize: 13,
+            color: theme.text,
+            backgroundColor: theme.backgroundElement,
+          }}
+        />
+      )}
+      {wide && (
         <PillBar
           state={state}
           type={type}
@@ -129,8 +170,22 @@ export default function ChatListScreen() {
       {loading && chats.length === 0 ? (
         <SkeletonList />
       ) : (
+      <>
+      {pinnedChats.length > 0 && !needle && (
+        <View style={styles.pinnedRow}>
+          {pinnedChats.slice(0, 8).map((chat) => (
+            <Pressable key={chat.guid} onPress={() => openChat(chat)} style={styles.pinnedItem}>
+              <ChatAvatar chat={chat} size={wide ? 48 : 62} />
+              {chat.flags.unread && <View style={styles.pinnedDot} />}
+              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 11, maxWidth: 70 }}>
+                {chat.displayName}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <FlatList
-        data={chats}
+        data={listChats}
         keyExtractor={(chat) => chat.guid}
         ItemSeparatorComponent={() => (
           <View style={[styles.separator, { backgroundColor: theme.divider }]} />
@@ -144,6 +199,7 @@ export default function ChatListScreen() {
           />
         )}
       />
+      </>
       )}
       <FilterMenu
         visible={filterOpen}
@@ -256,6 +312,26 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     marginLeft: 88,
+  },
+  pinnedRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  pinnedItem: {
+    alignItems: "center",
+    gap: 3,
+  },
+  pinnedDot: {
+    position: "absolute",
+    top: 0,
+    right: 4,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#0A84FF",
   },
   overlayBackdrop: {
     flex: 1,

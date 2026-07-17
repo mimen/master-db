@@ -35,6 +35,7 @@ export function computeFlags(
     waiting,
     unread: unreadCount > 0 || state?.markedUnread === 1,
     mutedUnresponded: state?.mutedUnresponded === 1,
+    pinned: state?.pinned === 1,
   };
 }
 

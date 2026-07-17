@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Reanimated, { FadeInDown } from "react-native-reanimated";
 import {
   ActivityIndicator,
   FlatList,
@@ -61,6 +62,20 @@ export function ThreadView({
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
+  const [dayChip, setDayChip] = useState<string | null>(null);
+  const dayChipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // FlatList requires stable identities for viewability callbacks.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 10 }).current;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ item: unknown }> }) => {
+      const top = viewableItems[viewableItems.length - 1];
+      const row = top?.item as Row | undefined;
+      if (!row) return;
+      setDayChip(formatDayDivider(row.message.dateCreated));
+      if (dayChipTimer.current) clearTimeout(dayChipTimer.current);
+      dayChipTimer.current = setTimeout(() => setDayChip(null), 1200);
+    },
+  ).current;
   const typingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
 
@@ -186,30 +201,22 @@ export function ThreadView({
     (message: Message) => {
       const mine = message.isFromMe;
       const age = Date.now() - message.dateCreated;
-      const actions = [
-        ...(privateApi
-          ? [
-              {
-                label: "React…",
-                onPress: () => {
-                  showSheet({
-                    actions: [...TAPBACK_EMOJI.entries()].map(([type, emoji]) => {
-                      const active = message.reactions.some((r) => r.isFromMe && r.type === type);
-                      return {
-                        label: `${emoji}${active ? " ✓" : ""}`,
-                        onPress: () => {
-                          void api
-                            .react(message.guid, { chatGuid, reaction: type, remove: active })
-                            .catch(() => showToast("Reaction failed"));
-                        },
-                      };
-                    }),
-                  });
-                },
+      const tapbacks = privateApi
+        ? [...TAPBACK_EMOJI.entries()].map(([type, emoji]) => {
+            const active = message.reactions.some((r) => r.isFromMe && r.type === type);
+            return {
+              emoji,
+              active,
+              onPress: () => {
+                void api
+                  .react(message.guid, { chatGuid, reaction: type, remove: active })
+                  .catch(() => showToast("Reaction failed"));
               },
-              { label: "Reply", onPress: () => setReplyTo(message) },
-            ]
-          : []),
+            };
+          })
+        : undefined;
+      const actions = [
+        ...(privateApi ? [{ label: "Reply", onPress: () => setReplyTo(message) }] : []),
         ...(message.text
           ? [
               {
@@ -238,7 +245,7 @@ export function ThreadView({
             ]
           : []),
       ];
-      if (actions.length > 0) showSheet({ actions });
+      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks });
     },
     [chatGuid, privateApi, showSheet, upsert],
   );
@@ -287,18 +294,24 @@ export function ThreadView({
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
           }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           contentContainerStyle={{ paddingVertical: 10 }}
           ListHeaderComponent={
             peerTyping ? (
               <View style={styles.typingRow}>
                 <View style={[styles.typingBubble, { backgroundColor: theme.bubbleTheirs }]}>
-                  <Text style={{ color: theme.textSecondary, fontSize: 20, letterSpacing: 2 }}>•••</Text>
+                  <TypingDots color={theme.textSecondary} />
                 </View>
               </View>
             ) : null
           }
           renderItem={({ item }) => (
-            <View>
+            <Reanimated.View
+              entering={
+                Date.now() - item.message.dateCreated < 4000 ? FadeInDown.springify().damping(18) : undefined
+              }
+            >
               {item.newDay && (
                 <Text style={[styles.dayDivider, { color: theme.textSecondary }]}>
                   {formatDayDivider(item.message.dateCreated)}
@@ -321,9 +334,18 @@ export function ThreadView({
                   onShowReactions={showReactions}
                 />
               )}
-            </View>
+            </Reanimated.View>
           )}
         />
+      )}
+      {dayChip && (
+        <View pointerEvents="none" style={styles.dayChipWrap}>
+          <View style={[styles.dayChip, { backgroundColor: theme.backgroundElement }]}>
+            <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
+              {dayChip}
+            </Text>
+          </View>
+        </View>
       )}
       <Composer
         chatGuid={chatGuid}
@@ -340,6 +362,30 @@ export function ThreadView({
   );
 }
 
+function TypingDots({ color }: { color: string }) {
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setPhase((p) => (p + 1) % 3), 350);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <View style={{ flexDirection: "row", gap: 4, paddingVertical: 6, paddingHorizontal: 2 }}>
+      {[0, 1, 2].map((i) => (
+        <View
+          key={i}
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: color,
+            opacity: phase === i ? 1 : 0.35,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   paneHeader: {
     flexDirection: "row",
@@ -348,6 +394,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dayChipWrap: {
+    position: "absolute",
+    top: 10,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  dayChip: {
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   typingRow: {
     paddingHorizontal: 42,

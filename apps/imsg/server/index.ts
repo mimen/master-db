@@ -350,6 +350,14 @@ app.post("/api/chats/:guid/dismiss", async (c) => {
   return c.json({ ok: true });
 });
 
+app.post("/api/chats/:guid/pin", async (c) => {
+  const body = (await c.req.json()) as { pinned: boolean };
+  db.setPinned(c.req.param("guid"), body.pinned);
+  invalidateSummaries();
+  broadcast({ kind: "chats-changed" });
+  return c.json({ ok: true });
+});
+
 app.post("/api/chats/:guid/mute", async (c) => {
   const body = (await c.req.json()) as { muted: boolean };
   db.setMutedUnresponded(c.req.param("guid"), body.muted);

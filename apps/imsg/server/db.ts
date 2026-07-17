@@ -10,6 +10,7 @@ export interface ChatState {
   dismissedWaitingGuid: string | null;
   /** Chat never appears in the unresponded filter (group mute). */
   mutedUnresponded: number;
+  pinned: number;
   /** Manually marked unread; cleared on next mark-read. */
   markedUnread: number;
 }
@@ -29,10 +30,15 @@ export class OverlayDb {
         muted_unresponded INTEGER NOT NULL DEFAULT 0
       );
     `);
-    try {
-      this.db.exec("ALTER TABLE chat_state ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;");
-    } catch {
-      // column already exists
+    for (const ddl of [
+      "ALTER TABLE chat_state ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;",
+      "ALTER TABLE chat_state ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
+    ]) {
+      try {
+        this.db.exec(ddl);
+      } catch {
+        // column already exists
+      }
     }
   }
 
@@ -40,7 +46,7 @@ export class OverlayDb {
     const rows = this.db
       .query(
         `SELECT chat_guid, archived_at, dismissed_unresponded_guid,
-                dismissed_waiting_guid, muted_unresponded, marked_unread
+                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned
          FROM chat_state`,
       )
       .all() as Array<{
@@ -50,6 +56,7 @@ export class OverlayDb {
       dismissed_waiting_guid: string | null;
       muted_unresponded: number;
       marked_unread: number;
+      pinned: number;
     }>;
     const map = new Map<string, ChatState>();
     for (const row of rows) {
@@ -60,6 +67,7 @@ export class OverlayDb {
         dismissedWaitingGuid: row.dismissed_waiting_guid,
         mutedUnresponded: row.muted_unresponded,
         markedUnread: row.marked_unread,
+        pinned: row.pinned,
       });
     }
     return map;
@@ -92,5 +100,9 @@ export class OverlayDb {
 
   setMarkedUnread(chatGuid: string, unread: boolean): void {
     this.upsert(chatGuid, "marked_unread", unread ? 1 : 0);
+  }
+
+  setPinned(chatGuid: string, pinned: boolean): void {
+    this.upsert(chatGuid, "pinned", pinned ? 1 : 0);
   }
 }

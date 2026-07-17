@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { showToast } from "@/lib/toast";
+import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
@@ -67,6 +68,27 @@ export function Composer({
   useEffect(() => {
     if (editing) setText(editing.text);
   }, [editing]);
+
+  // Desktop web: autofocus on chat open, and typing anywhere focuses the composer.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined" || window.innerWidth < 768) return;
+    inputRef.current?.focus();
+    const onGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const active = document.activeElement;
+      const inField =
+        active instanceof HTMLElement &&
+        (active.tagName === "TEXTAREA" || active.tagName === "INPUT" || active.isContentEditable);
+      if (inField) return;
+      if (event.key.length === 1) {
+        inputRef.current?.focus();
+        setText((t) => t + event.key);
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("keydown", onGlobalKeyDown);
+    return () => document.removeEventListener("keydown", onGlobalKeyDown);
+  }, [chatGuid]);
 
   // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows submit on web).
   useEffect(() => {
@@ -133,6 +155,7 @@ export function Composer({
         text: trimmed,
         replyToGuid: reply?.guid,
       });
+      playSend();
       onSettled(temp.guid, message);
     } catch {
       onSettled(temp.guid, { ...temp, pending: false, failed: true });

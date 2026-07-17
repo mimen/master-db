@@ -121,12 +121,16 @@ export function buildThread(
 
 function chatDisplayName(chat: BBChat, contacts: ContactBook): string {
   if (chat.displayName?.trim()) return chat.displayName.trim();
-  const names = (chat.participants ?? []).map(
-    (p) => contacts.lookup(p.address) ?? p.address,
-  );
+  const participants = chat.participants ?? [];
+  const names = participants.map((p) => contacts.lookup(p.address) ?? p.address);
   if (names.length === 0) return chat.chatIdentifier ?? chat.guid;
-  if (names.length <= 3) return names.join(", ");
-  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
+  if (names.length === 1) return names[0] ?? chat.guid;
+  // Groups: Apple-style first names — "Marissa, Sarah & Mike".
+  const firsts = names.map((n) => (n.startsWith("+") || /@/.test(n) ? n : (n.split(/\s+/)[0] ?? n)));
+  if (firsts.length <= 4) {
+    return `${firsts.slice(0, -1).join(", ")} & ${firsts[firsts.length - 1]}`;
+  }
+  return `${firsts.slice(0, 3).join(", ")} +${firsts.length - 3}`;
 }
 
 export function mapChat(
@@ -179,10 +183,19 @@ export function mapChat(
   };
 }
 
+const TAPBACK_VERBS: Record<string, string> = {
+  love: "Loved a message",
+  like: "Liked a message",
+  dislike: "Disliked a message",
+  laugh: "Laughed at a message",
+  emphasize: "Emphasized a message",
+  question: "Questioned a message",
+};
+
 function summarizeLast(m: BBMessage): string {
   if (isTapback(m)) {
     const type = tapbackType(m.associatedMessageType);
-    return type ? `Reacted ${type}` : "Removed a reaction";
+    return type ? (TAPBACK_VERBS[type] ?? `Reacted ${type}`) : "Removed a reaction";
   }
   const text = cleanText(m);
   if (text) return text;
