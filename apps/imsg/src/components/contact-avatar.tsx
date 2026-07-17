@@ -28,7 +28,7 @@ function PersonAvatar({
   return (
     <Avatar className={className}>
       {address && (
-        <AvatarImage src={`/api/avatars/${encodeURIComponent(address)}`} alt={name} />
+        <AvatarImage src={`/api/avatars/${encodeURIComponent(address)}?v=2`} alt={name} />
       )}
       <AvatarFallback className={cn("text-sm", fallbackClassName)}>
         {initials(name)}
@@ -81,7 +81,7 @@ export function ContactAvatar({
     return (
       <Avatar className={cn("overflow-visible", className)}>
         <AvatarImage
-          src={`/api/chats/${encodeURIComponent(chat.guid)}/photo`}
+          src={`/api/chats/${encodeURIComponent(chat.guid)}/photo?v=2`}
           alt={name}
           className="rounded-full"
         />

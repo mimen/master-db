@@ -127,7 +127,7 @@ export function MessageBubble({
             <Avatar className="size-7">
               {message.sender?.address && (
                 <AvatarImage
-                  src={`/api/avatars/${encodeURIComponent(message.sender.address)}`}
+                  src={`/api/avatars/${encodeURIComponent(message.sender.address)}?v=2`}
                   alt={senderName}
                 />
               )}

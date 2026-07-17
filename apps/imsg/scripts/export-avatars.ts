@@ -33,25 +33,49 @@ function keyOfPhone(raw: string): string | null {
 }
 
 /**
- * ZTHUMBNAILIMAGEDATA is either raw image bytes or a pointer blob:
- * 0x02 followed by an ASCII UUID naming a file in the store's
- * .AddressBook-v22_SUPPORT/_EXTERNAL_DATA/ directory.
+ * ZTHUMBNAILIMAGEDATA formats seen in the wild:
+ *   0x01 + raw image bytes            (inline)
+ *   0x02 + ASCII UUID                 (pointer into .AddressBook-v22_SUPPORT/_EXTERNAL_DATA/)
+ *   raw image bytes                   (no prefix)
  */
+function looksLikeImage(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return true; // JPEG
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return true; // PNG
+  const ftyp = new TextDecoder().decode(bytes.slice(4, 8));
+  return ftyp === "ftyp"; // HEIC/HEIF
+}
+
 async function resolveImage(dbPath: string, blob: Uint8Array): Promise<Uint8Array | null> {
   if (blob.length > 2 && blob[0] === 0x02 && blob.length < 64) {
     const uuid = new TextDecoder().decode(blob.slice(1)).replace(/[^A-Za-z0-9-]/g, "");
-    const external = join(
-      dbPath,
-      "..",
-      ".AddressBook-v22_SUPPORT",
-      "_EXTERNAL_DATA",
-      uuid,
-    );
+    const external = join(dbPath, "..", ".AddressBook-v22_SUPPORT", "_EXTERNAL_DATA", uuid);
     const file = Bun.file(external);
     if (await file.exists()) return new Uint8Array(await file.arrayBuffer());
     return null;
   }
-  return blob;
+  if (looksLikeImage(blob)) return blob;
+  const stripped = blob.slice(1);
+  if (looksLikeImage(stripped)) return stripped;
+  return null;
+}
+
+/** HEIC/HEIF → JPEG via sips; JPEG/PNG pass through. */
+async function normalizeToBrowserImage(pk: number, bytes: Uint8Array): Promise<Uint8Array> {
+  const isHeif = new TextDecoder().decode(bytes.slice(4, 8)) === "ftyp";
+  if (!isHeif) return bytes;
+  const tmpIn = join(OUT_DIR, `.tmp-${pk}.heic`);
+  const tmpOut = join(OUT_DIR, `.tmp-${pk}.jpg`);
+  await Bun.write(tmpIn, bytes.slice().buffer as ArrayBuffer);
+  const proc = Bun.spawn(["sips", "-s", "format", "jpeg", tmpIn, "--out", tmpOut], {
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  const ok = (await proc.exited) === 0 && (await Bun.file(tmpOut).exists());
+  const result = ok ? new Uint8Array(await Bun.file(tmpOut).arrayBuffer()) : bytes;
+  await Bun.file(tmpIn).delete().catch(() => undefined);
+  await Bun.file(tmpOut).delete().catch(() => undefined);
+  return result;
 }
 
 let written = 0;
@@ -67,7 +91,9 @@ for (const path of dbPaths) {
     const images = new Map<number, Uint8Array>();
     for (const r of records) {
       const resolved = await resolveImage(path, r.img);
-      if (resolved && resolved.length > 100) images.set(r.pk, resolved);
+      if (resolved && resolved.length > 100) {
+        images.set(r.pk, await normalizeToBrowserImage(r.pk, resolved));
+      }
     }
 
     const phones = db
