@@ -33,8 +33,8 @@ function SectionPill({ label, count, active, small, onClick }: SectionPillProps)
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex shrink-0 items-center gap-1 rounded-full font-medium transition-colors",
-        small ? "px-2 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]",
+        "flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors",
+        small ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs",
         active
           ? "bg-primary text-primary-foreground"
           : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -44,7 +44,7 @@ function SectionPill({ label, count, active, small, onClick }: SectionPillProps)
       {count !== undefined && (
         <span
           className={cn(
-            "text-[9px] leading-3 font-semibold tabular-nums",
+            "text-[10px] leading-4 font-semibold tabular-nums",
             active ? "text-primary-foreground/70" : "text-muted-foreground/70",
           )}
         >
@@ -78,7 +78,7 @@ export function FilterBar({
     <div className="flex flex-col gap-2 border-b px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">Messages</h1>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 max-md:hidden">
           <Button variant="ghost" size="icon" onClick={onSearch} aria-label="Search messages">
             <Search className="size-4" />
           </Button>

@@ -12,7 +12,7 @@ import type { JumpTarget } from "@/hooks/use-messages";
 import { useServerEvents } from "@/hooks/use-server-events";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Search as SearchIcon, SquarePen } from "lucide-react";
 
 export default function App() {
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
@@ -97,7 +97,7 @@ export default function App() {
     >
       <aside
         className={cn(
-          "flex h-full w-full flex-col border-r md:w-90 md:shrink-0",
+          "relative flex h-full w-full flex-col border-r md:w-90 md:shrink-0",
           selected && "max-md:hidden",
         )}
       >
@@ -111,7 +111,7 @@ export default function App() {
           onSearch={() => setSearchOpen(true)}
         />
         <div
-          className="flex-1 overflow-y-auto"
+          className="flex-1 overflow-y-auto max-md:pb-24"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <ChatList
@@ -125,6 +125,27 @@ export default function App() {
             }}
             onChanged={refresh}
           />
+        </div>
+        {/* iOS Messages-style bottom bar (mobile only) */}
+        <div
+          className="absolute inset-x-0 bottom-0 flex items-center gap-3 px-4 pt-2 md:hidden"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        >
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="bg-muted/80 text-muted-foreground flex h-11 flex-1 items-center gap-2 rounded-full border px-4 text-[15px] shadow-lg backdrop-blur"
+          >
+            <SearchIcon className="size-4" /> Search
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewChatOpen(true)}
+            aria-label="New message"
+            className="bg-muted/80 text-foreground flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur"
+          >
+            <SquarePen className="size-5" />
+          </button>
         </div>
       </aside>
 

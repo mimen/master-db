@@ -123,12 +123,16 @@ export function ChatList({
                 type="button"
                 onClick={() => onSelect(chat)}
                 className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                  "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors md:py-2.5",
                   selectedGuid === chat.guid ? "bg-accent" : "hover:bg-accent/50",
                 )}
               >
                 <div className="relative shrink-0">
-                  <ContactAvatar chat={chat} name={chat.displayName} className="size-11" />
+                  <ContactAvatar
+                    chat={chat}
+                    name={chat.displayName}
+                    className="size-12 md:size-11"
+                  />
                   {chat.flags.unread && (
                     <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-white dark:ring-neutral-900">
                       {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
@@ -139,7 +143,7 @@ export function ChatList({
                   <div className="flex items-baseline justify-between gap-2">
                     <span
                       className={cn(
-                        "truncate text-sm",
+                        "truncate text-[15px] md:text-sm",
                         chat.flags.unread ? "font-semibold" : "font-medium",
                       )}
                     >
@@ -153,7 +157,7 @@ export function ChatList({
                   </div>
                   <span
                     className={cn(
-                      "line-clamp-1 text-xs",
+                      "line-clamp-1 text-[13px] md:text-xs",
                       chat.flags.unread ? "text-foreground" : "text-muted-foreground",
                     )}
                   >

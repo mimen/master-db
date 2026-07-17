@@ -99,8 +99,26 @@ export function Thread({
   const latestOutgoingGuid =
     [...visible].reverse().find((m) => m.isFromMe && !m.pending && !m.failed)?.guid ?? null;
 
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div
+      className="flex h-full min-w-0 flex-1 flex-col"
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        touchStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+      }}
+      onTouchEnd={(e) => {
+        const start = touchStart.current;
+        const t = e.changedTouches[0];
+        touchStart.current = null;
+        if (!start || !t) return;
+        const dx = t.clientX - start.x;
+        const dy = t.clientY - start.y;
+        // Horizontal swipe (either direction) navigates back to the list.
+        if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) onBack();
+      }}
+    >
       <div className="flex items-center gap-2 border-b px-2 py-2 md:px-4">
         <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} aria-label="Back">
           <ChevronLeft className="size-5" />

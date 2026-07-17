@@ -114,6 +114,37 @@ export function MessageBubble({
   };
 
   return (
+    <>
+      {message.replyToPreview !== null && (
+        <div
+          className={cn(
+            "flex w-full flex-col",
+            // Quote sits on the ORIGINAL sender's side, like Messages.
+            message.replyToFromMe ? "items-end" : "items-start pl-9",
+          )}
+        >
+          <div
+            className={cn(
+              "max-w-[70%] rounded-2xl border-[1.5px] bg-transparent px-3 py-1.5 text-[13px] leading-snug wrap-anywhere line-clamp-2 md:max-w-[55%]",
+              message.replyToFromMe
+                ? "border-primary/50 text-primary/90"
+                : "border-muted-foreground/40 text-muted-foreground",
+            )}
+          >
+            {message.replyToPreview || "Original message"}
+          </div>
+          {/* Connector curve from the quote down toward the reply bubble */}
+          <div
+            className={cn(
+              "border-muted-foreground/40 h-3 w-5 border-[1.5px] border-t-0",
+              mine
+                ? "mr-6 self-end rounded-br-xl border-l-0"
+                : "ml-6 self-start rounded-bl-xl border-r-0",
+            )}
+            aria-hidden
+          />
+        </div>
+      )}
     <div
       className={cn(
         "group/msg flex w-full items-end gap-2",
@@ -137,43 +168,16 @@ export function MessageBubble({
         </div>
       )}
 
-      <div className={cn("flex min-w-0 max-w-[78%] flex-col md:max-w-[65%]", mine ? "items-end" : "items-start")}>
+      <div className={cn("flex min-w-0 max-w-[85%] flex-col md:max-w-[65%]", mine ? "items-end" : "items-start")}>
         {!mine && isGroupChat && groupStart && senderName && (
           <span className="text-muted-foreground mb-0.5 px-1 text-[11px]">{senderName}</span>
         )}
-        {message.replyToPreview !== null && (
-          <div className={cn("mb-0 flex w-full flex-col", mine ? "items-end" : "items-start")}>
-            {/* Quoted original: outlined bubble in the original sender's tint */}
-            <div
-              className={cn(
-                "max-w-full rounded-2xl border-[1.5px] bg-transparent px-3 py-1.5 text-[13px] leading-snug wrap-anywhere",
-                message.replyToFromMe
-                  ? "border-primary/50 text-primary/90"
-                  : "border-muted-foreground/40 text-muted-foreground",
-                "line-clamp-2",
-              )}
-            >
-              {message.replyToPreview || "Original message"}
-            </div>
-            {/* Connector curve from quote down to the reply bubble */}
-            <div
-              className={cn(
-                "h-3 w-5 border-[1.5px] border-t-0",
-                mine
-                  ? "mr-4 rounded-br-xl border-l-0 border-muted-foreground/40"
-                  : "ml-4 rounded-bl-xl border-r-0 border-muted-foreground/40",
-              )}
-              aria-hidden
-            />
-          </div>
-        )}
-
         <div className="relative min-w-0 max-w-full">
           <ContextMenu>
             <ContextMenuTrigger asChild>
               <div
                 className={cn(
-                  "rounded-2xl px-3 py-1.5 text-[15px] leading-snug wrap-anywhere whitespace-pre-wrap transition-colors duration-700",
+                  "rounded-2xl px-3 py-1.5 text-base leading-snug wrap-anywhere whitespace-pre-wrap md:text-[15px] transition-colors duration-700",
                   mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                   mine && !groupEnd && "rounded-br-md",
                   mine && groupEnd && "rounded-br-sm",
@@ -286,7 +290,7 @@ export function MessageBubble({
           )
         )}
       </div>
-
     </div>
+    </>
   );
 }
