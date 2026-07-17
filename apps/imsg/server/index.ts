@@ -331,6 +331,26 @@ app.post("/api/messages/:guid/react", async (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/api/chats/find", async (c) => {
+  const address = c.req.query("address") ?? "";
+  if (!address) return c.json({ error: "address required" }, 400);
+  const result = await buildChatSummaries();
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const digits = address.replace(/\D/g, "");
+  const matches = (candidate: string) => {
+    if (candidate === address || candidate.toLowerCase() === address.toLowerCase()) return true;
+    const candidateDigits = candidate.replace(/\D/g, "");
+    return (
+      digits.length >= 7 && candidateDigits.length >= 7 && candidateDigits.slice(-10) === digits.slice(-10)
+    );
+  };
+  const chat = result.chats.find(
+    (x) => !x.isGroup && x.participants.some((p) => matches(p.address)),
+  );
+  if (!chat) return c.json({ error: "no conversation" }, 404);
+  return c.json({ chatGuid: chat.guid });
+});
+
 app.get("/api/contacts", async (c) => {
   await contacts.refresh();
   return c.json(contacts.search(c.req.query("q") ?? "", 25));

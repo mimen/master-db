@@ -39,8 +39,14 @@ export function computeFlags(
 }
 
 export function matchesFilters(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {
-  if (type === "dm" && chat.isGroup) return false;
+  if (type === "dm" && (chat.isGroup || !chat.known)) return false;
   if (type === "group" && !chat.isGroup) return false;
+  if (type === "unknown" && chat.known) return false;
+  // Spam and unknown senders stay out of the attention filters unless
+  // you're explicitly looking at the Unknown lens.
+  if (type !== "unknown" && state !== "all" && state !== "archived") {
+    if (chat.isSpam || !chat.known) return false;
+  }
   switch (state) {
     case "all":
       return !chat.flags.archived;

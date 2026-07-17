@@ -68,6 +68,8 @@ export default function App() {
         guid: chatGuid,
         displayName: chatGuid.split(";").pop() ?? chatGuid,
         isGroup: chatGuid.includes(";+;"),
+        known: true,
+        isSpam: false,
         participants: [],
         lastMessage: null,
         unreadCount: 0,

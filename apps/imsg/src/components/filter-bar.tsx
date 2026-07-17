@@ -15,6 +15,7 @@ const TYPES: Array<{ value: TypeFilter; label: string }> = [
   { value: "all", label: "Everyone" },
   { value: "dm", label: "DMs" },
   { value: "group", label: "Groups" },
+  { value: "unknown", label: "Unknown" },
 ];
 
 interface SectionPillProps {
@@ -32,8 +33,8 @@ function SectionPill({ label, count, active, small, onClick }: SectionPillProps)
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors",
-        small ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-xs",
+        "flex shrink-0 items-center gap-1 rounded-full font-medium transition-colors",
+        small ? "px-2 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]",
         active
           ? "bg-primary text-primary-foreground"
           : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -43,8 +44,8 @@ function SectionPill({ label, count, active, small, onClick }: SectionPillProps)
       {count !== undefined && (
         <span
           className={cn(
-            "rounded-full px-1.5 py-px text-[10px] leading-4 font-semibold tabular-nums",
-            active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-background/80 text-muted-foreground",
+            "text-[9px] leading-3 font-semibold tabular-nums",
+            active ? "text-primary-foreground/70" : "text-muted-foreground/70",
           )}
         >
           {count > 999 ? "999+" : count}
@@ -86,7 +87,7 @@ export function FilterBar({
           </Button>
         </div>
       </div>
-      <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3">
+      <div className="flex flex-wrap gap-1">
         {STATES.map((item) => (
           <SectionPill
             key={item.value}
@@ -97,7 +98,7 @@ export function FilterBar({
           />
         ))}
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap gap-1">
         {TYPES.map((item) => (
           <SectionPill
             key={item.value}

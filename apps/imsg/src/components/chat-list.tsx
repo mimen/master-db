@@ -3,15 +3,23 @@ import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { ContactAvatar } from "@/components/contact-avatar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { Archive, ArchiveRestore, BellOff, CheckCheck, MoreHorizontal } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  BellOff,
+  BellRing,
+  CheckCheck,
+  MailCheck,
+  MailQuestion,
+} from "lucide-react";
 
 interface ChatListProps {
   chats: ChatSummary[];
@@ -22,53 +30,48 @@ interface ChatListProps {
   onChanged: () => void;
 }
 
-function ChatRowActions({ chat, onChanged }: { chat: ChatSummary; onChanged: () => void }) {
+function ChatRowMenu({ chat, onChanged }: { chat: ChatSummary; onChanged: () => void }) {
   const run = (action: Promise<unknown>) => {
     void action.then(onChanged).catch(onChanged);
   };
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Chat actions"
+    <ContextMenuContent className="min-w-44">
+      {chat.flags.unread && (
+        <ContextMenuItem onSelect={() => run(api.markRead(chat.guid))}>
+          <MailCheck /> Mark as read
+        </ContextMenuItem>
+      )}
+      {chat.flags.unresponded && (
+        <ContextMenuItem onSelect={() => run(api.dismiss(chat.guid, "unresponded"))}>
+          <CheckCheck /> No reply needed
+        </ContextMenuItem>
+      )}
+      {chat.flags.waiting && (
+        <ContextMenuItem onSelect={() => run(api.dismiss(chat.guid, "waiting"))}>
+          <MailQuestion /> Not waiting on this
+        </ContextMenuItem>
+      )}
+      {(chat.flags.unread || chat.flags.unresponded || chat.flags.waiting) && (
+        <ContextMenuSeparator />
+      )}
+      {chat.flags.archived ? (
+        <ContextMenuItem onSelect={() => run(api.setArchived(chat.guid, false))}>
+          <ArchiveRestore /> Unarchive
+        </ContextMenuItem>
+      ) : (
+        <ContextMenuItem onSelect={() => run(api.setArchived(chat.guid, true))}>
+          <Archive /> Archive
+        </ContextMenuItem>
+      )}
+      {chat.isGroup && (
+        <ContextMenuItem
+          onSelect={() => run(api.setMuted(chat.guid, !chat.flags.mutedUnresponded))}
         >
-          <MoreHorizontal className="size-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-        {chat.flags.archived ? (
-          <DropdownMenuItem onClick={() => run(api.setArchived(chat.guid, false))}>
-            <ArchiveRestore className="size-4" /> Unarchive
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem onClick={() => run(api.setArchived(chat.guid, true))}>
-            <Archive className="size-4" /> Archive
-          </DropdownMenuItem>
-        )}
-        {chat.flags.unresponded && (
-          <DropdownMenuItem onClick={() => run(api.dismiss(chat.guid, "unresponded"))}>
-            <CheckCheck className="size-4" /> No reply needed
-          </DropdownMenuItem>
-        )}
-        {chat.flags.waiting && (
-          <DropdownMenuItem onClick={() => run(api.dismiss(chat.guid, "waiting"))}>
-            <CheckCheck className="size-4" /> Not waiting on this
-          </DropdownMenuItem>
-        )}
-        {chat.isGroup && (
-          <DropdownMenuItem
-            onClick={() => run(api.setMuted(chat.guid, !chat.flags.mutedUnresponded))}
-          >
-            <BellOff className="size-4" />
-            {chat.flags.mutedUnresponded ? "Show in Unresponded" : "Hide from Unresponded"}
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {chat.flags.mutedUnresponded ? <BellRing /> : <BellOff />}
+          {chat.flags.mutedUnresponded ? "Show in Unresponded" : "Hide from Unresponded"}
+        </ContextMenuItem>
+      )}
+    </ContextMenuContent>
   );
 }
 
@@ -114,52 +117,53 @@ export function ChatList({
             }`
           : "";
         return (
-          <button
-            key={chat.guid}
-            type="button"
-            onClick={() => onSelect(chat)}
-            className={cn(
-              "group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-              selectedGuid === chat.guid ? "bg-accent" : "hover:bg-accent/50",
-            )}
-          >
-            <div className="relative shrink-0">
-              <ContactAvatar chat={chat} name={chat.displayName} className="size-11" />
-              {chat.flags.unread && (
-                <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-white dark:ring-neutral-900">
-                  {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
-                </span>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <span
-                  className={cn(
-                    "truncate text-sm",
-                    chat.flags.unread ? "font-semibold" : "font-medium",
-                  )}
-                >
-                  {chat.displayName}
-                </span>
-                {last && (
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {formatListTimestamp(last.dateCreated)}
-                  </span>
+          <ContextMenu key={chat.guid}>
+            <ContextMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onSelect(chat)}
+                className={cn(
+                  "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                  selectedGuid === chat.guid ? "bg-accent" : "hover:bg-accent/50",
                 )}
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span
-                  className={cn(
-                    "truncate text-xs",
-                    chat.flags.unread ? "text-foreground" : "text-muted-foreground",
+              >
+                <div className="relative shrink-0">
+                  <ContactAvatar chat={chat} name={chat.displayName} className="size-11" />
+                  {chat.flags.unread && (
+                    <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-white dark:ring-neutral-900">
+                      {chat.unreadCount > 99 ? "99+" : chat.unreadCount}
+                    </span>
                   )}
-                >
-                  {snippet}
-                </span>
-                <ChatRowActions chat={chat} onChanged={onChanged} />
-              </div>
-            </div>
-          </button>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span
+                      className={cn(
+                        "truncate text-sm",
+                        chat.flags.unread ? "font-semibold" : "font-medium",
+                      )}
+                    >
+                      {chat.displayName}
+                    </span>
+                    {last && (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {formatListTimestamp(last.dateCreated)}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={cn(
+                      "line-clamp-1 text-xs",
+                      chat.flags.unread ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {snippet}
+                  </span>
+                </div>
+              </button>
+            </ContextMenuTrigger>
+            <ChatRowMenu chat={chat} onChanged={onChanged} />
+          </ContextMenu>
         );
       })}
     </div>

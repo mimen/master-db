@@ -32,6 +32,28 @@ function keyOfPhone(raw: string): string | null {
   return digits.slice(-10);
 }
 
+/**
+ * ZTHUMBNAILIMAGEDATA is either raw image bytes or a pointer blob:
+ * 0x02 followed by an ASCII UUID naming a file in the store's
+ * .AddressBook-v22_SUPPORT/_EXTERNAL_DATA/ directory.
+ */
+async function resolveImage(dbPath: string, blob: Uint8Array): Promise<Uint8Array | null> {
+  if (blob.length > 2 && blob[0] === 0x02 && blob.length < 64) {
+    const uuid = new TextDecoder().decode(blob.slice(1)).replace(/[^A-Za-z0-9-]/g, "");
+    const external = join(
+      dbPath,
+      "..",
+      ".AddressBook-v22_SUPPORT",
+      "_EXTERNAL_DATA",
+      uuid,
+    );
+    const file = Bun.file(external);
+    if (await file.exists()) return new Uint8Array(await file.arrayBuffer());
+    return null;
+  }
+  return blob;
+}
+
 let written = 0;
 for (const path of dbPaths) {
   const db = new Database(`file:${path}?mode=ro`, { readonly: true });
@@ -42,7 +64,11 @@ for (const path of dbPaths) {
       )
       .all() as Array<{ pk: number; img: Uint8Array }>;
     if (records.length === 0) continue;
-    const images = new Map(records.map((r) => [r.pk, r.img]));
+    const images = new Map<number, Uint8Array>();
+    for (const r of records) {
+      const resolved = await resolveImage(path, r.img);
+      if (resolved && resolved.length > 100) images.set(r.pk, resolved);
+    }
 
     const phones = db
       .query("SELECT ZOWNER as owner, ZFULLNUMBER as value FROM ZABCDPHONENUMBER")

@@ -56,6 +56,7 @@ export interface BBMessage {
   replyToGuid?: string | null;
   itemType?: number;
   groupActionType?: number;
+  isSpam?: boolean;
   groupTitle?: string | null;
   error?: number;
   chats?: BBChat[];

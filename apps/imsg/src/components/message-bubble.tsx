@@ -1,13 +1,17 @@
-import { useState } from "react";
 import type { Message } from "../../shared/types";
 import { api, attachmentUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { LinkPreviewCard, firstUrl } from "@/components/link-preview-card";
 import { cn } from "@/lib/utils";
-import { CheckCheck, Reply, RotateCcw, SmilePlus } from "lucide-react";
+import { CheckCheck, Copy, Reply, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 const TAPBACKS: Array<{ type: string; emoji: string; label: string }> = [
@@ -98,13 +102,11 @@ export function MessageBubble({
   onReply,
   onRetry,
 }: MessageBubbleProps) {
-  const [pickerOpen, setPickerOpen] = useState(false);
   const mine = message.isFromMe;
   const senderName = message.sender?.name ?? message.sender?.address ?? "";
   const url = message.text ? firstUrl(message.text) : null;
 
   const react = (type: string) => {
-    setPickerOpen(false);
     const mineAlready = message.reactions.some((r) => r.isFromMe && r.type === type);
     api
       .react(message.guid, { chatGuid: message.chatGuid, reaction: type, remove: mineAlready })
@@ -167,23 +169,73 @@ export function MessageBubble({
         )}
 
         <div className="relative">
-          <div
-            className={cn(
-              "rounded-2xl px-3 py-1.5 text-[15px] leading-snug break-words whitespace-pre-wrap transition-colors duration-700",
-              mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-              mine && !groupEnd && "rounded-br-md",
-              mine && groupEnd && "rounded-br-sm",
-              !mine && !groupEnd && "rounded-bl-md",
-              !mine && groupEnd && "rounded-bl-sm",
-              message.pending && "opacity-60",
-              message.failed && "bg-destructive/15 text-foreground",
-              highlighted && "ring-primary/60 ring-2",
-            )}
-          >
-            {message.attachments.length > 0 && <AttachmentView message={message} />}
-            {message.text}
-            {url && <LinkPreviewCard url={url} mine={mine} />}
-          </div>
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div
+                className={cn(
+                  "rounded-2xl px-3 py-1.5 text-[15px] leading-snug break-words whitespace-pre-wrap transition-colors duration-700",
+                  mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                  mine && !groupEnd && "rounded-br-md",
+                  mine && groupEnd && "rounded-br-sm",
+                  !mine && !groupEnd && "rounded-bl-md",
+                  !mine && groupEnd && "rounded-bl-sm",
+                  message.pending && "opacity-60",
+                  message.failed && "bg-destructive/15 text-foreground",
+                  highlighted && "ring-primary/60 ring-2",
+                )}
+              >
+                {message.attachments.length > 0 && <AttachmentView message={message} />}
+                {message.text}
+                {url && <LinkPreviewCard url={url} mine={mine} />}
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="min-w-44">
+              {privateApi && (
+                <>
+                  <div className="flex gap-0.5 px-1 py-0.5">
+                    {TAPBACKS.map((t) => {
+                      const active = message.reactions.some(
+                        (r) => r.isFromMe && r.type === t.type,
+                      );
+                      return (
+                        <ContextMenuItem
+                          key={t.type}
+                          title={t.label}
+                          onSelect={() => react(t.type)}
+                          className={cn(
+                            "flex size-8 items-center justify-center rounded-full p-0 transition-transform hover:scale-110",
+                            active && "bg-sky-500 focus:bg-sky-500",
+                          )}
+                        >
+                          <TapbackGlyph type={t.type} emoji={t.emoji} />
+                        </ContextMenuItem>
+                      );
+                    })}
+                  </div>
+                  <ContextMenuSeparator />
+                </>
+              )}
+              <ContextMenuItem
+                onSelect={() =>
+                  privateApi
+                    ? onReply(message)
+                    : toast.info("Threaded replies need the BlueBubbles Private API.")
+                }
+              >
+                <Reply /> Reply
+              </ContextMenuItem>
+              {message.text && (
+                <ContextMenuItem
+                  onSelect={() => {
+                    void navigator.clipboard.writeText(message.text);
+                    toast.success("Copied");
+                  }}
+                >
+                  <Copy /> Copy text
+                </ContextMenuItem>
+              )}
+            </ContextMenuContent>
+          </ContextMenu>
 
           {message.reactions.length > 0 && (
             <div
@@ -235,73 +287,6 @@ export function MessageBubble({
         )}
       </div>
 
-      <div
-        className={cn(
-          "flex shrink-0 items-center gap-0.5 self-center opacity-0 transition-opacity group-hover/msg:opacity-100 max-md:opacity-60",
-          mine && "order-first",
-        )}
-      >
-        {privateApi ? (
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-6" title="React">
-                <SmilePlus className="size-3.5" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              className="flex w-auto gap-0.5 rounded-full border-neutral-700/60 bg-neutral-800/95 px-2 py-1.5 shadow-xl backdrop-blur dark:bg-neutral-800"
-            >
-              {TAPBACKS.map((t) => {
-                const active = message.reactions.some((r) => r.isFromMe && r.type === t.type);
-                return (
-                  <button
-                    key={t.type}
-                    type="button"
-                    title={t.label}
-                    onClick={() => react(t.type)}
-                    className={cn(
-                      "flex size-9 items-center justify-center rounded-full transition-all hover:scale-115 hover:bg-neutral-700/70",
-                      active && "bg-sky-500",
-                    )}
-                  >
-                    <TapbackGlyph type={t.type} emoji={t.emoji} />
-                  </button>
-                );
-              })}
-            </PopoverContent>
-          </Popover>
-        ) : (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            title="React"
-            onClick={() =>
-              toast.info(
-                "Reactions need the BlueBubbles Private API — enable it on the Mini (SIP step pending) and this lights up.",
-              )
-            }
-          >
-            <SmilePlus className="size-3.5" />
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          title="Reply"
-          onClick={() =>
-            privateApi
-              ? onReply(message)
-              : toast.info(
-                  "Threaded replies need the BlueBubbles Private API — enable it on the Mini and this lights up.",
-                )
-          }
-        >
-          <Reply className="size-3.5" />
-        </Button>
-      </div>
     </div>
   );
 }

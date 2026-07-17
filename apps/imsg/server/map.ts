@@ -160,14 +160,17 @@ export function mapChat(
   const flagInput = last
     ? { guid: last.guid, dateCreated: last.dateCreated ?? 0, isFromMe: last.isFromMe === true }
     : null;
+  const participants = (chat.participants ?? []).map((p) => ({
+    address: p.address,
+    name: contacts.lookup(p.address),
+  }));
   return {
     guid: chat.guid,
     displayName: chatDisplayName(chat, contacts),
     isGroup,
-    participants: (chat.participants ?? []).map((p) => ({
-      address: p.address,
-      name: contacts.lookup(p.address),
-    })),
+    known: participants.some((p) => p.name !== null),
+    isSpam: last?.isSpam === true,
+    participants,
     lastMessage: lastSummary,
     unreadCount,
     flags: computeFlags(state, flagInput, unreadCount),

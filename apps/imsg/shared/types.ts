@@ -1,5 +1,5 @@
 export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "archived";
-export type TypeFilter = "all" | "dm" | "group";
+export type TypeFilter = "all" | "dm" | "group" | "unknown";
 
 export interface Participant {
   address: string;
@@ -68,6 +68,10 @@ export interface ChatSummary {
   guid: string;
   displayName: string;
   isGroup: boolean;
+  /** True when at least one participant matches a contact. */
+  known: boolean;
+  /** Last message was flagged by Apple's junk detection. */
+  isSpam: boolean;
   participants: Participant[];
   lastMessage: {
     guid: string;

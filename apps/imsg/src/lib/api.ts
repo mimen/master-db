@@ -90,6 +90,9 @@ export const api = {
   contacts(q: string): Promise<Contact[]> {
     return request(`/api/contacts?q=${encodeURIComponent(q)}`);
   },
+  findChat(address: string): Promise<{ chatGuid: string }> {
+    return request(`/api/chats/find?address=${encodeURIComponent(address)}`);
+  },
   newChat(body: NewChatRequest): Promise<{ chatGuid: string }> {
     return request("/api/chats/new", { method: "POST", body: JSON.stringify(body) });
   },
