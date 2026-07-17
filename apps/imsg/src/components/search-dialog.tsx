@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Message } from "../../shared/types";
 import { api } from "@/lib/api";
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandInput,
@@ -47,17 +48,18 @@ export function SearchDialog({ open, onOpenChange, onPick }: SearchDialogProps) 
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search messages" description="Search recent message history">
-      <CommandInput
-        placeholder="Search messages…"
-        value={query}
-        onValueChange={setQuery}
-      />
-      <CommandList>
+      <Command shouldFilter={false}>
+        <CommandInput
+          placeholder="Search messages…"
+          value={query}
+          onValueChange={setQuery}
+        />
+        <CommandList>
         <CommandEmpty>{searching ? "Searching…" : "No results"}</CommandEmpty>
         {results.map((message) => (
           <CommandItem
             key={message.guid}
-            value={`${message.text} ${message.guid}`}
+            value={message.guid}
             onSelect={() => {
               if (message.chatGuid) {
                 onPick(message.chatGuid, { guid: message.guid, dateCreated: message.dateCreated });
@@ -77,7 +79,8 @@ export function SearchDialog({ open, onOpenChange, onPick }: SearchDialogProps) 
             <span className="text-muted-foreground line-clamp-2 text-xs">{message.text}</span>
           </CommandItem>
         ))}
-      </CommandList>
+        </CommandList>
+      </Command>
     </CommandDialog>
   );
 }
