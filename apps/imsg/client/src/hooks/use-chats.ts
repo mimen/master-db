@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { computeCounts, matchesFilters } from "@/lib/filters";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@/lib/types";
+
+// Module-level cache: the full unfiltered list survives remounts, so
+// navigation and filter changes render instantly from memory.
+let fullCache: ChatSummary[] | null = null;
 
 interface UseChatsResult {
   chats: ChatSummary[];
@@ -10,20 +15,24 @@ interface UseChatsResult {
   refresh: () => void;
 }
 
+/**
+ * Fetches the complete chat list once and filters locally — filter/lens
+ * switches are pure computation, no network.
+ */
 export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
-  const [chats, setChats] = useState<ChatSummary[]>([]);
-  const [counts, setCounts] = useState<StateCounts | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [all, setAll] = useState<ChatSummary[]>(fullCache ?? []);
+  const [loading, setLoading] = useState(fullCache === null);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
 
   const refresh = useCallback(() => {
     const gen = ++generation.current;
-    Promise.all([api.chats(state, type), api.counts(type)])
-      .then(([result, stateCounts]) => {
+    api
+      .allChats()
+      .then((result) => {
         if (generation.current !== gen) return;
-        setChats(result);
-        setCounts(stateCounts);
+        fullCache = result;
+        setAll(result);
         setError(null);
         setLoading(false);
       })
@@ -32,12 +41,14 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
         setError(e instanceof Error ? e.message : String(e));
         setLoading(false);
       });
-  }, [state, type]);
+  }, []);
 
   useEffect(() => {
-    setLoading(true);
     refresh();
   }, [refresh]);
+
+  const chats = useMemo(() => all.filter((c) => matchesFilters(c, state, type)), [all, state, type]);
+  const counts = useMemo(() => computeCounts(all, type), [all, type]);
 
   return { chats, counts, loading, error, refresh };
 }

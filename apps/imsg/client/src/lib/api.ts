@@ -24,6 +24,10 @@ export const api = {
   chats(state: StateFilter, type: TypeFilter): Promise<ChatSummary[]> {
     return request(`/api/chats?state=${state}&type=${type}`);
   },
+  /** Raw list including archived — for clients that filter locally. */
+  allChats(): Promise<ChatSummary[]> {
+    return request(`/api/chats?state=any`);
+  },
   counts(type: TypeFilter): Promise<StateCounts> {
     return request(`/api/counts?type=${type}`);
   },

@@ -11,6 +11,9 @@ import type { ChatSummary, StateFilter, TypeFilter } from "@/lib/types";
 import { ChatRow } from "@/components/chat-row";
 import { FilterMenu } from "@/components/filter-menu";
 import { PillBar } from "@/components/pills";
+import { SearchContent } from "@/components/search-content";
+import { NewChatContent } from "@/components/new-chat-content";
+import { Modal } from "react-native";
 import { SkeletonList } from "@/components/skeleton-list";
 import { ThreadView } from "@/components/thread-view";
 import type { JumpTarget } from "@/hooks/use-messages";
@@ -22,6 +25,8 @@ export default function ChatListScreen() {
   const [state, setState] = useState<StateFilter>("all");
   const [type, setType] = useState<TypeFilter>("all");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [newChatOpen, setNewChatOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const { chats, counts, loading, refresh } = useChats(state, type);
@@ -92,13 +97,13 @@ export default function ChatListScreen() {
         <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
         <View style={styles.headerButtons}>
           <Pressable
-            onPress={() => router.push("/search")}
+            onPress={() => (wide ? setSearchOpen(true) : router.push("/search"))}
             style={[styles.headerButton, { backgroundColor: theme.backgroundElement }]}
           >
             <Ionicons name="search" size={18} color={theme.text} />
           </Pressable>
           <Pressable
-            onPress={() => router.push("/new-chat")}
+            onPress={() => (wide ? setNewChatOpen(true) : router.push("/new-chat"))}
             style={[styles.headerButton, { backgroundColor: theme.backgroundElement }]}
           >
             <Ionicons name="create-outline" size={18} color={theme.text} />
@@ -159,6 +164,21 @@ export default function ChatListScreen() {
   return (
     <View style={[styles.split, { backgroundColor: theme.background }]}>
       {list}
+      {/* Desktop overlay panels — centered, Spotlight-style */}
+      <Modal visible={searchOpen} transparent animationType="fade" onRequestClose={() => setSearchOpen(false)}>
+        <Pressable style={styles.overlayBackdrop} onPress={() => setSearchOpen(false)}>
+          <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
+            <SearchContent onClose={() => setSearchOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal visible={newChatOpen} transparent animationType="fade" onRequestClose={() => setNewChatOpen(false)}>
+        <Pressable style={styles.overlayBackdrop} onPress={() => setNewChatOpen(false)}>
+          <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
+            <NewChatContent onClose={() => setNewChatOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
       <View style={styles.threadPane}>
         {selected ? (
           <ThreadView
@@ -236,5 +256,23 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     marginLeft: 88,
+  },
+  overlayBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    paddingTop: 90,
+  },
+  overlayPanel: {
+    width: 600,
+    maxWidth: "90%",
+    height: 560,
+    maxHeight: "75%",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 16 },
   },
 });

@@ -60,6 +60,8 @@ socket.on("connect_error", (err: Error) => console.error("socket.io error:", err
 
 function onMessageEvent(kind: "new-message" | "updated-message") {
   return (payload: BBMessage) => {
+    invalidateSummaries();
+    unreadScan.at = 0;
     const chatGuid = chatGuidOf(payload);
     if (!chatGuid) {
       broadcast({ kind: "chats-changed" });
@@ -71,12 +73,19 @@ function onMessageEvent(kind: "new-message" | "updated-message") {
 
 socket.on("new-message", onMessageEvent("new-message"));
 socket.on("updated-message", onMessageEvent("updated-message"));
-socket.on("chat-read-status-changed", () => broadcast({ kind: "chats-changed" }));
+socket.on("chat-read-status-changed", () => {
+  invalidateSummaries();
+  unreadScan.at = 0;
+  broadcast({ kind: "chats-changed" });
+});
 socket.on("typing-indicator", (payload: { display: boolean; guid: string }) => {
   broadcast({ kind: "typing", chatGuid: payload.guid, display: payload.display });
 });
 for (const event of ["group-name-change", "participant-added", "participant-removed", "participant-left"]) {
-  socket.on(event, () => broadcast({ kind: "chats-changed" }));
+  socket.on(event, () => {
+    invalidateSummaries();
+    broadcast({ kind: "chats-changed" });
+  });
 }
 
 // ------------------------------------------------------------------- routes
@@ -115,9 +124,19 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
 });
 
+let summaryCache: { at: number; chats: import("../shared/types").ChatSummary[] } | null = null;
+const SUMMARY_TTL_MS = 15_000;
+
+function invalidateSummaries(): void {
+  summaryCache = null;
+}
+
 async function buildChatSummaries(): Promise<
   { ok: true; chats: import("../shared/types").ChatSummary[] } | { ok: false; error: string }
 > {
+  if (summaryCache && Date.now() - summaryCache.at < SUMMARY_TTL_MS) {
+    return { ok: true, chats: summaryCache.chats };
+  }
   const result = await bb.queryChats();
   if (!result.ok) return { ok: false, error: result.error };
   await contacts.refresh();
@@ -136,15 +155,18 @@ async function buildChatSummaries(): Promise<
     })
     .filter((chat) => chat.lastMessage !== null)
     .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
+  summaryCache = { at: Date.now(), chats };
   return { ok: true, chats };
 }
 
 app.get("/api/chats", async (c) => {
-  const state = (c.req.query("state") ?? "all") as StateFilter;
+  const stateQ = c.req.query("state") ?? "all";
   const type = (c.req.query("type") ?? "all") as TypeFilter;
   const result = await buildChatSummaries();
   if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(result.chats.filter((chat) => matchesFilters(chat, state, type)));
+  // "any" returns the raw list (archived included) for clients that filter locally.
+  if (stateQ === "any") return c.json(result.chats);
+  return c.json(result.chats.filter((chat) => matchesFilters(chat, stateQ as StateFilter, type)));
 });
 
 app.get("/api/counts", async (c) => {
@@ -281,6 +303,7 @@ app.post("/api/chats/:guid/read", async (c) => {
   const guid = c.req.param("guid");
   const result = await bb.markRead(guid);
   if (result.ok) {
+    invalidateSummaries();
     localReadAt.set(guid, Date.now());
     unreadScan.counts.set(guid, 0);
     db.setMarkedUnread(guid, false);
@@ -307,6 +330,7 @@ app.post("/api/chats/:guid/unread", async (c) => {
 app.post("/api/chats/:guid/archive", async (c) => {
   const body = (await c.req.json()) as { archived: boolean };
   db.setArchived(c.req.param("guid"), body.archived);
+  invalidateSummaries();
   broadcast({ kind: "chats-changed" });
   return c.json({ ok: true });
 });
@@ -321,6 +345,7 @@ app.post("/api/chats/:guid/dismiss", async (c) => {
   if (!lastGuid) return c.json({ error: "chat has no last message" }, 404);
   if (body.kind === "unresponded") db.dismissUnresponded(chatGuid, lastGuid);
   else db.dismissWaiting(chatGuid, lastGuid);
+  invalidateSummaries();
   broadcast({ kind: "chats-changed" });
   return c.json({ ok: true });
 });
@@ -328,6 +353,7 @@ app.post("/api/chats/:guid/dismiss", async (c) => {
 app.post("/api/chats/:guid/mute", async (c) => {
   const body = (await c.req.json()) as { muted: boolean };
   db.setMutedUnresponded(c.req.param("guid"), body.muted);
+  invalidateSummaries();
   broadcast({ kind: "chats-changed" });
   return c.json({ ok: true });
 });
@@ -399,17 +425,25 @@ app.post("/api/chats/new", async (c) => {
   return c.json({ chatGuid: result.value.guid });
 });
 
+let searchCorpus: { at: number; messages: BBMessage[] } | null = null;
+
 app.get("/api/search", async (c) => {
   const q = (c.req.query("q") ?? "").toLowerCase();
   if (q.length < 2) return c.json([]);
-  const found: BBMessage[] = [];
-  for (let offset = 0; offset < 3000 && found.length < 50; offset += 1000) {
-    const batch = await bb.queryMessages({ limit: 1000, offset });
-    if (!batch.ok) break;
-    for (const message of batch.value) {
-      if ((message.text ?? "").toLowerCase().includes(q)) found.push(message);
+  if (!searchCorpus || Date.now() - searchCorpus.at > 30_000) {
+    const messages: BBMessage[] = [];
+    for (let offset = 0; offset < 3000; offset += 1000) {
+      const batch = await bb.queryMessages({ limit: 1000, offset });
+      if (!batch.ok) break;
+      messages.push(...batch.value);
+      if (batch.value.length < 1000) break;
     }
-    if (batch.value.length < 1000) break;
+    searchCorpus = { at: Date.now(), messages };
+  }
+  const found: BBMessage[] = [];
+  for (const message of searchCorpus.messages) {
+    if (found.length >= 50) break;
+    if ((message.text ?? "").toLowerCase().includes(q)) found.push(message);
   }
   return c.json(
     found

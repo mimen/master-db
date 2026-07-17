@@ -8,6 +8,7 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { useTheme } from "@/hooks/use-theme";
 import { showToast } from "@/lib/toast";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
+import { prefetchThread } from "@/hooks/use-messages";
 import { ChatAvatar } from "./avatar";
 
 const ACTION_WIDTH = 84;
@@ -122,6 +123,8 @@ export function ChatRow({
       <Pressable
         ref={contextRef as never}
         onPress={onPress}
+        onPressIn={() => prefetchThread(chat.guid)}
+        onHoverIn={() => prefetchThread(chat.guid)}
         onLongPress={openMenu}
         style={({ pressed }) => [
           styles.row,
