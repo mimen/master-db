@@ -4,12 +4,15 @@ import { streamSSE } from "hono/streaming";
 import { io } from "socket.io-client";
 import type { BBMessage } from "./bb-types";
 import { BlueBubblesClient } from "./bluebubbles";
+import { ChatDirectory } from "./chat-directory";
 import { loadConfig } from "./config";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
-import { applyMessage, computeCounts, matchesFilters } from "../shared/chat-state";
+import { GroupPhotos } from "./group-photos";
+import { MessageSearch } from "./message-search";
+import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
-import { buildThread, mapChat, mapMessage } from "./map";
+import { buildThread, mapMessage } from "./map";
 import { transcodeAttachment } from "./transcode";
 import type { ServerEvent, StateFilter, TypeFilter } from "../shared/types";
 
@@ -17,6 +20,9 @@ const config = loadConfig();
 const bb = new BlueBubblesClient(config.bbUrl, config.bbPassword);
 const db = new OverlayDb(config.dbPath);
 const contacts = new ContactBook(bb);
+const directory = new ChatDirectory(bb, db, contacts);
+const search = new MessageSearch(bb, contacts);
+const photos = new GroupPhotos(bb);
 
 const info = await bb.connect();
 if (!info.ok) {
@@ -42,6 +48,9 @@ function broadcast(event: ServerEvent): void {
   for (const client of sseClients) client.send(event);
 }
 
+// Any directory invalidation fans out as a chats-changed event.
+directory.onEvent(() => broadcast({ kind: "chats-changed" }));
+
 // ------------------------------------------------- BlueBubbles socket events
 
 function chatGuidOf(message: BBMessage): string | null {
@@ -60,60 +69,27 @@ socket.on("connect_error", (err: Error) => console.error("socket.io error:", err
 
 function onMessageEvent(kind: "new-message" | "updated-message") {
   return (payload: BBMessage) => {
-    unreadScan.at = 0;
     const chatGuid = chatGuidOf(payload);
-    if (!chatGuid) {
-      invalidateSummaries();
+    const mapped = directory.applyMessage(chatGuid, payload);
+    if (!chatGuid || mapped === null) {
       broadcast({ kind: "chats-changed" });
       return;
     }
-    const mapped = mapMessage(payload, chatGuid, contacts);
-    patchSummaries(chatGuid, mapped);
     broadcast({ kind, chatGuid, message: mapped });
   };
 }
 
 socket.on("new-message", onMessageEvent("new-message"));
 socket.on("updated-message", onMessageEvent("updated-message"));
-socket.on("chat-read-status-changed", () => {
-  invalidateSummaries();
-  unreadScan.at = 0;
-  broadcast({ kind: "chats-changed" });
-});
+socket.on("chat-read-status-changed", () => directory.invalidate(true));
 socket.on("typing-indicator", (payload: { display: boolean; guid: string }) => {
   broadcast({ kind: "typing", chatGuid: payload.guid, display: payload.display });
 });
 for (const event of ["group-name-change", "participant-added", "participant-removed", "participant-left"]) {
-  socket.on(event, () => {
-    invalidateSummaries();
-    broadcast({ kind: "chats-changed" });
-  });
+  socket.on(event, () => directory.invalidate());
 }
 
 // ------------------------------------------------------------------- routes
-
-// ------------------------------------------------------- unread count scan
-
-const UNREAD_TTL_MS = 30_000;
-let unreadScan: { at: number; counts: Map<string, number> } = { at: 0, counts: new Map() };
-
-async function unreadCounts(): Promise<Map<string, number>> {
-  if (Date.now() - unreadScan.at < UNREAD_TTL_MS) return unreadScan.counts;
-  const counts = new Map<string, number>();
-  const batch = await bb.queryMessages({ limit: 1000, offset: 0 });
-  if (batch.ok) {
-    for (const message of batch.value) {
-      if (message.isFromMe === true || message.dateRead) continue;
-      if (message.associatedMessageGuid && message.associatedMessageType) continue;
-      if ((message.itemType ?? 0) !== 0 || (message.groupActionType ?? 0) !== 0) continue;
-      const chatGuid = message.chats?.[0]?.guid;
-      if (!chatGuid) continue;
-      counts.set(chatGuid, (counts.get(chatGuid) ?? 0) + 1);
-    }
-    unreadScan = { at: Date.now(), counts };
-  }
-  return counts;
-}
 
 const app = new Hono();
 
@@ -126,61 +102,10 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
 });
 
-let summaryCache: { at: number; chats: import("../shared/types").ChatSummary[] } | null = null;
-const SUMMARY_TTL_MS = 15_000;
-
-function invalidateSummaries(): void {
-  summaryCache = null;
-}
-
-/**
- * Applies a message we already know about directly to the cached summaries.
- * Correct data immediately, even if BlueBubbles' own DB lags behind the
- * socket event; the next TTL rebuild reconciles fully.
- */
-function patchSummaries(chatGuid: string, m: import("../shared/types").Message): void {
-  if (!summaryCache) return;
-  const result = applyMessage(summaryCache.chats, chatGuid, m);
-  if (result === null) {
-    invalidateSummaries();
-    return;
-  }
-  if (result === summaryCache.chats) return; // stale message — nothing changed
-  summaryCache = { at: summaryCache.at, chats: result };
-}
-
-async function buildChatSummaries(): Promise<
-  { ok: true; chats: import("../shared/types").ChatSummary[] } | { ok: false; error: string }
-> {
-  if (summaryCache && Date.now() - summaryCache.at < SUMMARY_TTL_MS) {
-    return { ok: true, chats: summaryCache.chats };
-  }
-  const result = await bb.queryChats();
-  if (!result.ok) return { ok: false, error: result.error };
-  await contacts.refresh();
-  const unread = await unreadCounts();
-  const overlay = db.getAll();
-  const chats = result.value
-    .map((chat) => {
-      const summary = mapChat(chat, overlay.get(chat.guid), contacts, unread.get(chat.guid));
-      // Mark-read override: trust our own recent mark-read over BB's lagging DB.
-      const readAt = localReadAt.get(chat.guid);
-      if (readAt && (summary.lastMessage?.dateCreated ?? 0) <= readAt) {
-        summary.unreadCount = 0;
-        summary.flags.unread = false;
-      }
-      return summary;
-    })
-    .filter((chat) => chat.lastMessage !== null)
-    .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
-  summaryCache = { at: Date.now(), chats };
-  return { ok: true, chats };
-}
-
 app.get("/api/chats", async (c) => {
   const stateQ = c.req.query("state") ?? "all";
   const type = (c.req.query("type") ?? "all") as TypeFilter;
-  const result = await buildChatSummaries();
+  const result = await directory.summaries();
   if (!result.ok) return c.json({ error: result.error }, 502);
   // "any" returns the raw list (archived included) for clients that filter locally.
   if (stateQ === "any") return c.json(result.chats);
@@ -189,7 +114,7 @@ app.get("/api/chats", async (c) => {
 
 app.get("/api/counts", async (c) => {
   const type = (c.req.query("type") ?? "all") as TypeFilter;
-  const result = await buildChatSummaries();
+  const result = await directory.summaries();
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(computeCounts(result.chats, type));
 });
@@ -255,26 +180,10 @@ app.get("/api/avatars/:address", async (c) => {
   });
 });
 
-const groupPhotoCache = new Map<string, { at: number; photoGuid: string | null }>();
-
 app.get("/api/chats/:guid/photo", async (c) => {
-  const guid = c.req.param("guid");
-  let cached = groupPhotoCache.get(guid);
-  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
-    const chat = await bb.getChat(guid);
-    cached = {
-      at: Date.now(),
-      photoGuid: chat.ok ? (chat.value.properties?.[0]?.groupPhotoGuid ?? null) : null,
-    };
-    groupPhotoCache.set(guid, cached);
-  }
-  const photoGuid = cached.photoGuid;
-  if (!photoGuid) return c.body(null, 404);
-  const download = await bb.downloadAttachment(photoGuid);
-  if (!download.ok || !download.body) return c.body(null, 404);
-  return new Response(download.body, {
-    headers: { "Cache-Control": "private, max-age=3600" },
-  });
+  const photo = await photos.photo(c.req.param("guid"));
+  if (!photo) return c.body(null, 404);
+  return photo;
 });
 
 app.get("/api/link-preview", async (c) => {
@@ -294,7 +203,7 @@ app.post("/api/chats/:guid/send", async (c) => {
   );
   if (!result.ok) return c.json({ error: result.error }, 502);
   const mapped = mapMessage(result.value, chatGuid, contacts);
-  patchSummaries(chatGuid, mapped);
+  directory.applyKnownMessage(chatGuid, mapped);
   return c.json(mapped);
 });
 
@@ -309,20 +218,9 @@ app.post("/api/chats/:guid/attachment", async (c) => {
   return c.json(mapMessage(result.value, chatGuid, contacts));
 });
 
-// Chats we've marked read, ahead of BlueBubbles' DB reflecting it.
-const localReadAt = new Map<string, number>();
-
 app.post("/api/chats/:guid/read", async (c) => {
-  const guid = c.req.param("guid");
-  const result = await bb.markRead(guid);
-  if (result.ok) {
-    invalidateSummaries();
-    localReadAt.set(guid, Date.now());
-    unreadScan.counts.set(guid, 0);
-    db.setMarkedUnread(guid, false);
-    broadcast({ kind: "chats-changed" });
-  }
-  return c.json({ ok: result.ok });
+  const ok = await directory.markRead(c.req.param("guid"));
+  return c.json({ ok });
 });
 
 app.post("/api/chats/:guid/typing", async (c) => {
@@ -333,49 +231,33 @@ app.post("/api/chats/:guid/typing", async (c) => {
 });
 
 app.post("/api/chats/:guid/unread", async (c) => {
-  const guid = c.req.param("guid");
-  db.setMarkedUnread(guid, true);
-  localReadAt.delete(guid);
-  broadcast({ kind: "chats-changed" });
+  directory.markUnread(c.req.param("guid"));
   return c.json({ ok: true });
 });
 
 app.post("/api/chats/:guid/archive", async (c) => {
   const body = (await c.req.json()) as { archived: boolean };
-  db.setArchived(c.req.param("guid"), body.archived);
-  invalidateSummaries();
-  broadcast({ kind: "chats-changed" });
+  directory.setArchived(c.req.param("guid"), body.archived);
   return c.json({ ok: true });
 });
 
 app.post("/api/chats/:guid/dismiss", async (c) => {
   const chatGuid = c.req.param("guid");
   const body = (await c.req.json()) as { kind: "unresponded" | "waiting" };
-  const result = await bb.queryChats(1000);
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  const chat = result.value.find((x) => x.guid === chatGuid);
-  const lastGuid = chat?.lastMessage?.guid;
-  if (!lastGuid) return c.json({ error: "chat has no last message" }, 404);
-  if (body.kind === "unresponded") db.dismissUnresponded(chatGuid, lastGuid);
-  else db.dismissWaiting(chatGuid, lastGuid);
-  invalidateSummaries();
-  broadcast({ kind: "chats-changed" });
+  const result = await directory.dismiss(chatGuid, body.kind);
+  if (!result.ok) return c.json({ error: result.error }, result.status ?? 502);
   return c.json({ ok: true });
 });
 
 app.post("/api/chats/:guid/pin", async (c) => {
   const body = (await c.req.json()) as { pinned: boolean };
-  db.setPinned(c.req.param("guid"), body.pinned);
-  invalidateSummaries();
-  broadcast({ kind: "chats-changed" });
+  directory.setPinned(c.req.param("guid"), body.pinned);
   return c.json({ ok: true });
 });
 
 app.post("/api/chats/:guid/mute", async (c) => {
   const body = (await c.req.json()) as { muted: boolean };
-  db.setMutedUnresponded(c.req.param("guid"), body.muted);
-  invalidateSummaries();
-  broadcast({ kind: "chats-changed" });
+  directory.setMutedUnresponded(c.req.param("guid"), body.muted);
   return c.json({ ok: true });
 });
 
@@ -397,21 +279,11 @@ app.post("/api/messages/:guid/react", async (c) => {
 app.get("/api/chats/find", async (c) => {
   const address = c.req.query("address") ?? "";
   if (!address) return c.json({ error: "address required" }, 400);
-  const result = await buildChatSummaries();
+  const result = await directory.summaries();
   if (!result.ok) return c.json({ error: result.error }, 502);
-  const digits = address.replace(/\D/g, "");
-  const matches = (candidate: string) => {
-    if (candidate === address || candidate.toLowerCase() === address.toLowerCase()) return true;
-    const candidateDigits = candidate.replace(/\D/g, "");
-    return (
-      digits.length >= 7 && candidateDigits.length >= 7 && candidateDigits.slice(-10) === digits.slice(-10)
-    );
-  };
-  const chat = result.chats.find(
-    (x) => !x.isGroup && x.participants.some((p) => matches(p.address)),
-  );
-  if (!chat) return c.json({ error: "no conversation" }, 404);
-  return c.json({ chatGuid: chat.guid });
+  const chatGuid = await directory.findByAddress(address);
+  if (!chatGuid) return c.json({ error: "no conversation" }, 404);
+  return c.json({ chatGuid });
 });
 
 app.post("/api/messages/:guid/unsend", async (c) => {
@@ -446,31 +318,8 @@ app.post("/api/chats/new", async (c) => {
   return c.json({ chatGuid: result.value.guid });
 });
 
-let searchCorpus: { at: number; messages: BBMessage[] } | null = null;
-
 app.get("/api/search", async (c) => {
-  const q = (c.req.query("q") ?? "").toLowerCase();
-  if (q.length < 2) return c.json([]);
-  if (!searchCorpus || Date.now() - searchCorpus.at > 30_000) {
-    const messages: BBMessage[] = [];
-    for (let offset = 0; offset < 3000; offset += 1000) {
-      const batch = await bb.queryMessages({ limit: 1000, offset });
-      if (!batch.ok) break;
-      messages.push(...batch.value);
-      if (batch.value.length < 1000) break;
-    }
-    searchCorpus = { at: Date.now(), messages };
-  }
-  const found: BBMessage[] = [];
-  for (const message of searchCorpus.messages) {
-    if (found.length >= 50) break;
-    if ((message.text ?? "").toLowerCase().includes(q)) found.push(message);
-  }
-  return c.json(
-    found
-      .slice(0, 50)
-      .map((m) => mapMessage(m, m.chats?.[0]?.guid ?? "", contacts)),
-  );
+  return c.json(await search.search(c.req.query("q") ?? ""));
 });
 
 app.get("/api/attachments/:guid", async (c) => {
