@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -44,6 +44,10 @@ export default function ChatListScreen() {
     ),
   );
   const [listFilter, setListFilter] = useState("");
+  // Preserve the conversation list's scroll position across refreshes — data
+  // reorders (new message → chat moves to top) must never yank the viewport.
+  const chatListRef = useRef<FlatList<ChatSummary>>(null);
+  const listScrollOffset = useRef(0);
 
   // Wide-mode: modals publish chats to open here instead of navigating.
   useEffect(() => {
@@ -73,6 +77,22 @@ export default function ChatListScreen() {
       );
     });
   }, [wide, chats]);
+
+  // Web fallback: if a data reorder still snapped the list to the top while
+  // the user was scrolled down, restore their position.
+  useEffect(() => {
+    if (listScrollOffset.current <= 60) return;
+    const frame = requestAnimationFrame(() => {
+      const node = (
+        chatListRef.current as unknown as { getScrollableNode?: () => HTMLElement } | null
+      )?.getScrollableNode?.();
+      const current = Platform.OS === "web" && node ? node.scrollTop : null;
+      if (current !== null && current < 8) {
+        chatListRef.current?.scrollToOffset({ offset: listScrollOffset.current, animated: false });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [chats]);
 
   // Keep the selected chat's flags fresh as the list refreshes.
   useEffect(() => {
@@ -185,8 +205,14 @@ export default function ChatListScreen() {
         </View>
       )}
       <FlatList
+        ref={chatListRef}
         data={listChats}
         keyExtractor={(chat) => chat.guid}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        onScroll={(e) => {
+          listScrollOffset.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={32}
         ItemSeparatorComponent={() => (
           <View style={[styles.separator, { backgroundColor: theme.divider }]} />
         )}
