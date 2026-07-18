@@ -1,8 +1,8 @@
 import type { BBChat, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction } from "../shared/types";
-import type { ChatState } from "./db";
+import type { ChatState } from "../shared/chat-state";
+import { computeFlags } from "../shared/chat-state";
 import type { ContactBook } from "./contacts";
-import { computeFlags } from "./filters";
 
 const TAPBACK_NAMES = ["love", "like", "dislike", "laugh", "emphasize", "question"] as const;
 

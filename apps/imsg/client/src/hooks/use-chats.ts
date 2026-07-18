@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
 import { getChats, setChats, subscribeChats } from "@/lib/chat-store";
-import { computeCounts, matchesFilters } from "@/lib/filters";
-import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@/lib/types";
+import { computeCounts, matchesFilters } from "@shared/chat-state";
+import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
 interface UseChatsResult {
   chats: ChatSummary[];

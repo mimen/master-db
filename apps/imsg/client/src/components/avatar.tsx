@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
-import type { ChatSummary } from "@/lib/types";
+import type { ChatSummary } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
 /** Deterministic pastel per contact, iOS-style. */

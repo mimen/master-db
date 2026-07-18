@@ -7,7 +7,7 @@ import { onSelectChat } from "@/lib/selection";
 import { useChats } from "@/hooks/use-chats";
 import { useTheme } from "@/hooks/use-theme";
 import { useServerEvents } from "@/lib/sse";
-import type { ChatSummary, StateFilter, TypeFilter } from "@/lib/types";
+import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { ChatRow } from "@/components/chat-row";
 import { FilterMenu } from "@/components/filter-menu";
 import { PillBar } from "@/components/pills";

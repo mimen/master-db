@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
-import type { StateCounts, StateFilter, TypeFilter } from "@/lib/types";
+import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
 const STATES: Array<{ value: StateFilter; label: string }> = [
   { value: "all", label: "All" },

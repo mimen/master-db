@@ -3,7 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from 
 import { Image } from "expo-image";
 import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
-import type { Message } from "@/lib/types";
+import type { Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 import { AudioBubble, VideoBubble } from "./media";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";

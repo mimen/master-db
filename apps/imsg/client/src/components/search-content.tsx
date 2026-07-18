@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { selectChat } from "@/lib/selection";
-import type { Contact, Message } from "@/lib/types";
+import type { Contact, Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
 type SearchRow =

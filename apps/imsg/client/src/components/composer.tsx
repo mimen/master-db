@@ -8,7 +8,7 @@ import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
-import type { Message } from "@/lib/types";
+import type { Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
 interface ComposerProps {

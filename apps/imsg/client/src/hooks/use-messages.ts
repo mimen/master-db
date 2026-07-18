@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { Message } from "@/lib/types";
+import type { Message } from "@shared/types";
 
 export interface JumpTarget {
   guid: string;

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import EventSourceNative from "react-native-sse";
 import { BASE_URL } from "./config";
-import type { ServerEvent } from "./types";
+import type { ServerEvent } from "@shared/types";
 
 /** Single SSE subscription to the server's event stream, cross-platform. */
 export function useServerEvents(onEvent: (event: ServerEvent) => void): void {

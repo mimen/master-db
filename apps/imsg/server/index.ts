@@ -7,7 +7,7 @@ import { BlueBubblesClient } from "./bluebubbles";
 import { loadConfig } from "./config";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
-import { matchesFilters } from "./filters";
+import { applyMessage, computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
 import { buildThread, mapChat, mapMessage } from "./map";
 import { transcodeAttachment } from "./transcode";
@@ -140,35 +140,13 @@ function invalidateSummaries(): void {
  */
 function patchSummaries(chatGuid: string, m: import("../shared/types").Message): void {
   if (!summaryCache) return;
-  const index = summaryCache.chats.findIndex((c) => c.guid === chatGuid);
-  if (index < 0) {
+  const result = applyMessage(summaryCache.chats, chatGuid, m);
+  if (result === null) {
     invalidateSummaries();
     return;
   }
-  const chat = summaryCache.chats[index];
-  if (!chat || (chat.lastMessage?.dateCreated ?? 0) > m.dateCreated) return;
-  const updated = {
-    ...chat,
-    lastMessage: {
-      guid: m.guid,
-      text: m.text || (m.attachments.length > 0 ? "Attachment" : ""),
-      dateCreated: m.dateCreated,
-      isFromMe: m.isFromMe,
-      senderName: m.sender?.name ?? m.sender?.address ?? null,
-      hasAttachments: m.attachments.length > 0,
-    },
-    flags: {
-      ...chat.flags,
-      unresponded: m.isFromMe ? false : !chat.flags.mutedUnresponded,
-      waiting: m.isFromMe,
-      unread: m.isFromMe ? chat.flags.unread : true,
-      archived: m.isFromMe ? chat.flags.archived : false,
-    },
-  };
-  const chats = [...summaryCache.chats];
-  chats.splice(index, 1);
-  chats.unshift(updated);
-  summaryCache = { at: summaryCache.at, chats };
+  if (result === summaryCache.chats) return; // stale message — nothing changed
+  summaryCache = { at: summaryCache.at, chats: result };
 }
 
 async function buildChatSummaries(): Promise<
@@ -213,14 +191,7 @@ app.get("/api/counts", async (c) => {
   const type = (c.req.query("type") ?? "all") as TypeFilter;
   const result = await buildChatSummaries();
   if (!result.ok) return c.json({ error: result.error }, 502);
-  const states: StateFilter[] = ["all", "unread", "unresponded", "waiting", "archived"];
-  const counts = Object.fromEntries(
-    states.map((state) => [
-      state,
-      result.chats.filter((chat) => matchesFilters(chat, state, type)).length,
-    ]),
-  );
-  return c.json(counts);
+  return c.json(computeCounts(result.chats, type));
 });
 
 app.get("/api/chats/:guid/messages", async (c) => {

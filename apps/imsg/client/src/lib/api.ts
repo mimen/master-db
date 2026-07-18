@@ -6,7 +6,7 @@ import type {
   StateCounts,
   StateFilter,
   TypeFilter,
-} from "./types";
+} from "@shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

@@ -12,7 +12,7 @@ import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
-import type { Contact } from "@/lib/types";
+import type { Contact } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
 /** New-message UI shared by the mobile route and the desktop overlay panel. */

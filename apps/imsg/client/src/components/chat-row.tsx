@@ -5,7 +5,7 @@ import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeabl
 import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
-import type { ChatSummary } from "@/lib/types";
+import type { ChatSummary } from "@shared/types";
 import { useActionSheet } from "@/lib/action-sheet";
 import { useTheme } from "@/hooks/use-theme";
 import { showToast } from "@/lib/toast";

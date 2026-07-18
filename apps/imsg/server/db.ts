@@ -1,19 +1,5 @@
 import { Database } from "bun:sqlite";
-
-export interface ChatState {
-  chatGuid: string;
-  /** Epoch ms when the chat was archived; null = not archived. */
-  archivedAt: number | null;
-  /** Last-message GUID at the moment "unresponded" was dismissed. */
-  dismissedUnrespondedGuid: string | null;
-  /** Last-message GUID at the moment "waiting on them" was dismissed. */
-  dismissedWaitingGuid: string | null;
-  /** Chat never appears in the unresponded filter (group mute). */
-  mutedUnresponded: number;
-  pinned: number;
-  /** Manually marked unread; cleared on next mark-read. */
-  markedUnread: number;
-}
+import type { ChatState } from "../shared/chat-state";
 
 export class OverlayDb {
   private db: Database;
