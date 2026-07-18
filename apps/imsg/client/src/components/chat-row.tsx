@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useEffect, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
@@ -74,6 +74,26 @@ export function ChatRow({
 
   const contextRef = useWebContextMenu<typeof Pressable>(() => openMenu());
 
+  // Hover via DOM mouseenter/mouseleave: unlike RNW's hover events these do
+  // not fire when the pointer moves onto a child (the archive button).
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const node = contextRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== "function") return;
+    const enter = () => {
+      setHovered(true);
+      prefetchThread(chat.guid);
+    };
+    const leave = () => setHovered(false);
+    node.addEventListener("mouseenter", enter);
+    node.addEventListener("mouseleave", leave);
+    return () => {
+      node.removeEventListener("mouseenter", enter);
+      node.removeEventListener("mouseleave", leave);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.guid]);
+
   const openMenu = () => {
     const actions = [
       chat.flags.unread
@@ -132,11 +152,6 @@ export function ChatRow({
         ref={contextRef as never}
         onPress={onPress}
         onPressIn={() => prefetchThread(chat.guid)}
-        onHoverIn={() => {
-          prefetchThread(chat.guid);
-          setHovered(true);
-        }}
-        onHoverOut={() => setHovered(false)}
         onLongPress={openMenu}
         style={({ pressed }) => [
           styles.row,
