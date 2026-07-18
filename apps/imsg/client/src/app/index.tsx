@@ -17,6 +17,7 @@ import { Modal } from "react-native";
 import { SkeletonList } from "@/components/skeleton-list";
 import { ChatAvatar } from "@/components/avatar";
 import { playReceive } from "@/lib/sounds";
+import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import { TextInput } from "react-native";
 import { ThreadView } from "@/components/thread-view";
 import type { JumpTarget } from "@/hooks/use-messages";
@@ -34,11 +35,17 @@ export default function ChatListScreen() {
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const { chats, counts, loading, refresh } = useChats(state, type);
 
+  const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
   useServerEvents(
     useCallback(
       (event) => {
-        if (event.kind === "new-message" && !event.message.isFromMe) playReceive();
-        refresh();
+        if (event.kind === "new-message" || event.kind === "updated-message") {
+          if (event.kind === "new-message" && !event.message.isFromMe) playReceive();
+          // Instant local patch; server refetch reconciles shortly after.
+          patchChatWithMessage(event.chatGuid, event.message);
+        }
+        if (reconcile.current) clearTimeout(reconcile.current);
+        reconcile.current = setTimeout(() => refresh(), 1200);
       },
       [refresh],
     ),
@@ -103,6 +110,8 @@ export default function ChatListScreen() {
   }, [chats]);
 
   const openChat = (chat: ChatSummary) => {
+    // Opening clears unread immediately in the sidebar (server confirms behind).
+    if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
     if (wide) {
       setJumpTarget(null);
       setSelected(chat);

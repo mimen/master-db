@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
+import { getChats, setChats, subscribeChats } from "@/lib/chat-store";
 import { computeCounts, matchesFilters } from "@/lib/filters";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@/lib/types";
-
-// Module-level cache: the full unfiltered list survives remounts, so
-// navigation and filter changes render instantly from memory.
-let fullCache: ChatSummary[] | null = null;
 
 interface UseChatsResult {
   chats: ChatSummary[];
@@ -21,8 +18,8 @@ interface UseChatsResult {
  * switches are pure computation, no network.
  */
 export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
-  const [all, setAll] = useState<ChatSummary[]>(fullCache ?? []);
-  const [loading, setLoading] = useState(fullCache === null);
+  const [all, setAll] = useState<ChatSummary[]>(getChats() ?? []);
+  const [loading, setLoading] = useState(getChats() === null);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
 
@@ -32,8 +29,7 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
       .allChats()
       .then((result) => {
         if (generation.current !== gen) return;
-        fullCache = result;
-        setAll(result);
+        setChats(result);
         setError(null);
         setLoading(false);
       })
@@ -45,7 +41,9 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = subscribeChats(setAll);
     refresh();
+    return unsubscribe;
   }, [refresh]);
 
   const chats = useMemo(() => all.filter((c) => matchesFilters(c, state, type)), [all, state, type]);

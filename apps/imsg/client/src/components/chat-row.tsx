@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { api } from "@/lib/api";
@@ -55,6 +57,7 @@ export function ChatRow({
   const showSheet = useActionSheet();
   const { width: winW } = useWindowDimensions();
   const compact = winW >= 768;
+  const [hovered, setHovered] = useState(false);
   const last = chat.lastMessage;
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
@@ -129,7 +132,11 @@ export function ChatRow({
         ref={contextRef as never}
         onPress={onPress}
         onPressIn={() => prefetchThread(chat.guid)}
-        onHoverIn={() => prefetchThread(chat.guid)}
+        onHoverIn={() => {
+          prefetchThread(chat.guid);
+          setHovered(true);
+        }}
+        onHoverOut={() => setHovered(false)}
         onLongPress={openMenu}
         style={({ pressed }) => [
           styles.row,
@@ -159,6 +166,23 @@ export function ChatRow({
             {snippet}
           </Text>
         </View>
+        {compact && hovered && (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              run(api.setArchived(chat.guid, !chat.flags.archived));
+              showToast(chat.flags.archived ? "Unarchived" : "Archived");
+            }}
+            hitSlop={6}
+            style={[styles.hoverArchive, { backgroundColor: theme.backgroundElement }]}
+          >
+            <Ionicons
+              name={chat.flags.archived ? "arrow-undo-outline" : "checkmark"}
+              size={16}
+              color={theme.textSecondary}
+            />
+          </Pressable>
+        )}
       </Pressable>
     </ReanimatedSwipeable>
   );
@@ -213,6 +237,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 19,
     marginTop: 1,
+  },
+  hoverArchive: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 4,
   },
   swipeAction: {
     width: ACTION_WIDTH,

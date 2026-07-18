@@ -19,6 +19,7 @@ import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
 import { showToast } from "@/lib/toast";
+import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@/lib/types";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar } from "./avatar";
@@ -354,9 +355,18 @@ export function ThreadView({
         onClearReply={() => setReplyTo(null)}
         onClearEditing={() => setEditing(null)}
         onEdited={upsert}
-        onOptimistic={upsert}
-        onSettled={replaceTemp}
-        onSent={upsert}
+        onOptimistic={(message) => {
+          upsert(message);
+          patchChatWithMessage(chatGuid, message);
+        }}
+        onSettled={(tempGuid, message) => {
+          replaceTemp(tempGuid, message);
+          if (!message.failed) patchChatWithMessage(chatGuid, message);
+        }}
+        onSent={(message) => {
+          upsert(message);
+          patchChatWithMessage(chatGuid, message);
+        }}
       />
     </KeyboardAvoidingView>
   );

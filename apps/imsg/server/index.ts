@@ -60,14 +60,16 @@ socket.on("connect_error", (err: Error) => console.error("socket.io error:", err
 
 function onMessageEvent(kind: "new-message" | "updated-message") {
   return (payload: BBMessage) => {
-    invalidateSummaries();
     unreadScan.at = 0;
     const chatGuid = chatGuidOf(payload);
     if (!chatGuid) {
+      invalidateSummaries();
       broadcast({ kind: "chats-changed" });
       return;
     }
-    broadcast({ kind, chatGuid, message: mapMessage(payload, chatGuid, contacts) });
+    const mapped = mapMessage(payload, chatGuid, contacts);
+    patchSummaries(chatGuid, mapped);
+    broadcast({ kind, chatGuid, message: mapped });
   };
 }
 
@@ -129,6 +131,44 @@ const SUMMARY_TTL_MS = 15_000;
 
 function invalidateSummaries(): void {
   summaryCache = null;
+}
+
+/**
+ * Applies a message we already know about directly to the cached summaries.
+ * Correct data immediately, even if BlueBubbles' own DB lags behind the
+ * socket event; the next TTL rebuild reconciles fully.
+ */
+function patchSummaries(chatGuid: string, m: import("../shared/types").Message): void {
+  if (!summaryCache) return;
+  const index = summaryCache.chats.findIndex((c) => c.guid === chatGuid);
+  if (index < 0) {
+    invalidateSummaries();
+    return;
+  }
+  const chat = summaryCache.chats[index];
+  if (!chat || (chat.lastMessage?.dateCreated ?? 0) > m.dateCreated) return;
+  const updated = {
+    ...chat,
+    lastMessage: {
+      guid: m.guid,
+      text: m.text || (m.attachments.length > 0 ? "Attachment" : ""),
+      dateCreated: m.dateCreated,
+      isFromMe: m.isFromMe,
+      senderName: m.sender?.name ?? m.sender?.address ?? null,
+      hasAttachments: m.attachments.length > 0,
+    },
+    flags: {
+      ...chat.flags,
+      unresponded: m.isFromMe ? false : !chat.flags.mutedUnresponded,
+      waiting: m.isFromMe,
+      unread: m.isFromMe ? chat.flags.unread : true,
+      archived: m.isFromMe ? chat.flags.archived : false,
+    },
+  };
+  const chats = [...summaryCache.chats];
+  chats.splice(index, 1);
+  chats.unshift(updated);
+  summaryCache = { at: summaryCache.at, chats };
 }
 
 async function buildChatSummaries(): Promise<
@@ -282,7 +322,9 @@ app.post("/api/chats/:guid/send", async (c) => {
     body.replyToGuid ? { guid: body.replyToGuid, part: body.replyToPart ?? 0 } : undefined,
   );
   if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(mapMessage(result.value, chatGuid, contacts));
+  const mapped = mapMessage(result.value, chatGuid, contacts);
+  patchSummaries(chatGuid, mapped);
+  return c.json(mapped);
 });
 
 app.post("/api/chats/:guid/attachment", async (c) => {
