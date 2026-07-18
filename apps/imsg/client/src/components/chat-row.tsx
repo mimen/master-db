@@ -166,7 +166,7 @@ export function ChatRow({
             {snippet}
           </Text>
         </View>
-        {compact && hovered && (
+        {compact && (
           <Pressable
             onPress={(e) => {
               e.stopPropagation();
@@ -174,12 +174,16 @@ export function ChatRow({
               showToast(chat.flags.archived ? "Unarchived" : "Archived");
             }}
             hitSlop={6}
-            style={[styles.hoverArchive, { backgroundColor: theme.backgroundElement }]}
+            pointerEvents={hovered ? "auto" : "none"}
+            style={[
+              styles.hoverArchive,
+              { backgroundColor: theme.backgroundSelected, opacity: hovered ? 1 : 0 },
+            ]}
           >
             <Ionicons
               name={chat.flags.archived ? "arrow-undo-outline" : "checkmark"}
               size={16}
-              color={theme.textSecondary}
+              color={theme.text}
             />
           </Pressable>
         )}
@@ -239,12 +243,20 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   hoverArchive: {
+    position: "absolute",
+    right: 10,
+    top: "50%",
+    marginTop: -14,
     width: 28,
     height: 28,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 4,
+    zIndex: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
   },
   swipeAction: {
     width: ACTION_WIDTH,
