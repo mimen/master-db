@@ -1,5 +1,5 @@
 import type { BBMessage } from "./bb-types";
-import type { BlueBubblesClient } from "./bluebubbles";
+import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import { mapMessage } from "./map";
 import type { Message } from "../shared/types";
@@ -11,7 +11,7 @@ export class MessageSearch {
   private corpus: { at: number; messages: BBMessage[] } | null = null;
 
   constructor(
-    private bb: BlueBubblesClient,
+    private bb: BlueBubbles,
     private contacts: ContactBook,
   ) {}
 

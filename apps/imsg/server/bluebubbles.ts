@@ -1,3 +1,4 @@
+import { io, type Socket } from "socket.io-client";
 import type {
   BBAttachment,
   BBChat,
@@ -9,17 +10,108 @@ import type {
 
 export type Result<T, E = string> = { ok: true; value: T } | { ok: false; error: E };
 
+/**
+ * Inbound events from BlueBubbles, normalized off the raw socket.io stream.
+ * The four group-* socket events collapse into one `group-changed` because
+ * every consumer treats them identically.
+ */
+export type BBEvent =
+  | { kind: "new-message"; message: BBMessage }
+  | { kind: "updated-message"; message: BBMessage }
+  | { kind: "chat-read-status-changed" }
+  | { kind: "typing"; chatGuid: string; display: boolean }
+  | { kind: "group-changed" };
+
+/**
+ * The BlueBubbles seam: the single interface to BlueBubbles — REST operations
+ * plus the inbound event stream. Two adapters implement it: the HTTP/socket.io
+ * client in production and an in-memory fake in tests.
+ */
+export interface BlueBubbles {
+  connect(): Promise<Result<BBServerInfo>>;
+  readonly hasPrivateApi: boolean;
+  queryChats(limit?: number): Promise<Result<BBChat[]>>;
+  chatMessages(
+    chatGuid: string,
+    options?: { limit?: number; before?: number; after?: number; sort?: "ASC" | "DESC" },
+  ): Promise<Result<BBMessage[]>>;
+  queryMessages(options: { limit: number; offset: number }): Promise<Result<BBMessage[]>>;
+  sendText(
+    chatGuid: string,
+    message: string,
+    replyTo?: { guid: string; part: number },
+  ): Promise<Result<BBMessage>>;
+  sendAttachment(chatGuid: string, filename: string, bytes: Uint8Array): Promise<Result<BBMessage>>;
+  react(
+    chatGuid: string,
+    messageGuid: string,
+    reaction: string,
+    partIndex?: number,
+  ): Promise<Result<unknown>>;
+  markRead(chatGuid: string): Promise<Result<unknown>>;
+  setTyping(chatGuid: string, active: boolean): Promise<Result<unknown>>;
+  unsend(messageGuid: string, partIndex?: number): Promise<Result<unknown>>;
+  edit(messageGuid: string, editedMessage: string, partIndex?: number): Promise<Result<BBMessage>>;
+  createChat(addresses: string[], message: string): Promise<Result<BBChat>>;
+  contacts(): Promise<Result<BBContact[]>>;
+  getChat(chatGuid: string): Promise<Result<BBChat>>;
+  attachmentMeta(guid: string): Promise<Result<BBAttachment>>;
+  downloadAttachment(guid: string): Promise<Response>;
+  /** Subscribe to the inbound event stream; returns an unsubscribe function. */
+  onEvent(cb: (event: BBEvent) => void): () => void;
+}
+
 function tempGuid(): string {
   return `temp-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export class BlueBubblesClient {
+export class BlueBubblesClient implements BlueBubbles {
   private privateApi = false;
+  private socket: Socket | null = null;
+  private listeners = new Set<(event: BBEvent) => void>();
 
   constructor(
     private baseUrl: string,
     private password: string,
   ) {}
+
+  onEvent(cb: (event: BBEvent) => void): () => void {
+    this.listeners.add(cb);
+    // The socket.io connection is established lazily on the first subscription
+    // and shared across all subscribers.
+    if (!this.socket) this.startEvents();
+    return () => {
+      this.listeners.delete(cb);
+    };
+  }
+
+  private emit(event: BBEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+
+  /** Opens the socket.io connection and translates raw events into BBEvent. */
+  private startEvents(): void {
+    const socket = io(this.baseUrl, {
+      query: { guid: this.password, password: this.password },
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionDelayMax: 30_000,
+    });
+    this.socket = socket;
+    socket.on("connect", () => console.log("socket.io connected to BlueBubbles"));
+    socket.on("connect_error", (err: Error) => console.error("socket.io error:", err.message));
+    socket.on("new-message", (payload: BBMessage) => this.emit({ kind: "new-message", message: payload }));
+    socket.on("updated-message", (payload: BBMessage) =>
+      this.emit({ kind: "updated-message", message: payload }),
+    );
+    socket.on("chat-read-status-changed", () => this.emit({ kind: "chat-read-status-changed" }));
+    socket.on("typing-indicator", (payload: { display: boolean; guid: string }) =>
+      this.emit({ kind: "typing", chatGuid: payload.guid, display: payload.display }),
+    );
+    for (const event of ["group-name-change", "participant-added", "participant-removed", "participant-left"]) {
+      socket.on(event, () => this.emit({ kind: "group-changed" }));
+    }
+  }
 
   /** Chat GUIDs contain ";" and must NOT be URL-encoded in paths (server 404s otherwise). */
   private url(path: string, params: Record<string, string> = {}): string {

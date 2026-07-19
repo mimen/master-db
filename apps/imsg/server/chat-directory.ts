@@ -1,5 +1,5 @@
 import type { BBMessage } from "./bb-types";
-import type { BlueBubblesClient } from "./bluebubbles";
+import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
@@ -26,7 +26,7 @@ export class ChatDirectory {
   private listeners = new Set<(event: DirectoryEvent) => void>();
 
   constructor(
-    private bb: BlueBubblesClient,
+    private bb: BlueBubbles,
     private db: OverlayDb,
     private contacts: ContactBook,
   ) {}

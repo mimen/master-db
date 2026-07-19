@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
-import { io } from "socket.io-client";
 import type { BBMessage } from "./bb-types";
 import { BlueBubblesClient } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
@@ -51,43 +50,36 @@ function broadcast(event: ServerEvent): void {
 // Any directory invalidation fans out as a chats-changed event.
 directory.onEvent(() => broadcast({ kind: "chats-changed" }));
 
-// ------------------------------------------------- BlueBubbles socket events
+// ------------------------------------------------- BlueBubbles event stream
 
 function chatGuidOf(message: BBMessage): string | null {
   return message.chats?.[0]?.guid ?? null;
 }
 
-const socket = io(config.bbUrl, {
-  query: { guid: config.bbPassword, password: config.bbPassword },
-  transports: ["websocket"],
-  reconnection: true,
-  reconnectionDelayMax: 30_000,
-});
-
-socket.on("connect", () => console.log("socket.io connected to BlueBubbles"));
-socket.on("connect_error", (err: Error) => console.error("socket.io error:", err.message));
-
-function onMessageEvent(kind: "new-message" | "updated-message") {
-  return (payload: BBMessage) => {
-    const chatGuid = chatGuidOf(payload);
-    const mapped = directory.applyMessage(chatGuid, payload);
-    if (!chatGuid || mapped === null) {
-      broadcast({ kind: "chats-changed" });
+bb.onEvent((event) => {
+  switch (event.kind) {
+    case "new-message":
+    case "updated-message": {
+      const chatGuid = chatGuidOf(event.message);
+      const mapped = directory.applyMessage(chatGuid, event.message);
+      if (!chatGuid || mapped === null) {
+        broadcast({ kind: "chats-changed" });
+        return;
+      }
+      broadcast({ kind: event.kind, chatGuid, message: mapped });
       return;
     }
-    broadcast({ kind, chatGuid, message: mapped });
-  };
-}
-
-socket.on("new-message", onMessageEvent("new-message"));
-socket.on("updated-message", onMessageEvent("updated-message"));
-socket.on("chat-read-status-changed", () => directory.invalidate(true));
-socket.on("typing-indicator", (payload: { display: boolean; guid: string }) => {
-  broadcast({ kind: "typing", chatGuid: payload.guid, display: payload.display });
+    case "chat-read-status-changed":
+      directory.invalidate(true);
+      return;
+    case "typing":
+      broadcast({ kind: "typing", chatGuid: event.chatGuid, display: event.display });
+      return;
+    case "group-changed":
+      directory.invalidate();
+      return;
+  }
 });
-for (const event of ["group-name-change", "participant-added", "participant-removed", "participant-left"]) {
-  socket.on(event, () => directory.invalidate());
-}
 
 // ------------------------------------------------------------------- routes
 

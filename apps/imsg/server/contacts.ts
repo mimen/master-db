@@ -1,5 +1,5 @@
 import type { BBContact } from "./bb-types";
-import type { BlueBubblesClient } from "./bluebubbles";
+import type { BlueBubbles } from "./bluebubbles";
 import type { Contact } from "../shared/types";
 
 const REFRESH_MS = 10 * 60 * 1000;
@@ -21,7 +21,7 @@ export class ContactBook {
   private all: Contact[] = [];
   private lastRefresh = 0;
 
-  constructor(private client: BlueBubblesClient) {}
+  constructor(private client: BlueBubbles) {}
 
   async refresh(force = false): Promise<void> {
     if (!force && Date.now() - this.lastRefresh < REFRESH_MS) return;

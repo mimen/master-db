@@ -1,4 +1,4 @@
-import type { BlueBubblesClient } from "./bluebubbles";
+import type { BlueBubbles } from "./bluebubbles";
 
 const PHOTO_TTL_MS = 10 * 60 * 1000;
 
@@ -6,7 +6,7 @@ const PHOTO_TTL_MS = 10 * 60 * 1000;
 export class GroupPhotos {
   private cache = new Map<string, { at: number; photoGuid: string | null }>();
 
-  constructor(private bb: BlueBubblesClient) {}
+  constructor(private bb: BlueBubbles) {}
 
   async photo(chatGuid: string): Promise<Response | null> {
     let cached = this.cache.get(chatGuid);
