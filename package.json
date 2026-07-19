@@ -6,16 +6,19 @@
   "scripts": {
     "build": "tsc --noEmit",
     "dev": "bunx convex dev",
+    "dev:imsg": "bun --cwd apps/imsg run dev:server",
+    "test:imsg": "bun --cwd apps/imsg test",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "sync:initial": "bunx convex run todoist/sync:runInitialSync",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
-    "typecheck": "bun run typecheck:app && bun run typecheck:convex && bun run typecheck:engine",
+    "typecheck": "bun run typecheck:app && bun run typecheck:convex && bun run typecheck:engine && bun run typecheck:imsg",
     "typecheck:app": "bun --cwd app tsc --noEmit",
     "typecheck:engine": "bun --cwd engine tsc --noEmit",
-    "typecheck:convex": "cd convex && npx tsc --noEmit"
+    "typecheck:convex": "cd convex && npx tsc --noEmit",
+    "typecheck:imsg": "cd apps/imsg && bunx tsc -b && cd client && bunx tsc --noEmit"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",

@@ -40,6 +40,11 @@ convex/[service]/
 ├── queries/     # Data queries  
 ├── sync/        # Sync logic
 └── types/       # Type definitions
+
+apps/imsg/       # iMessage client (Bun/Hono server + Expo RNW client, fronts BlueBubbles)
+                 # Self-contained package (own bun.lock, own CONTEXT.md); migrated from
+                 # github mimen/imsg with full history. Root scripts: dev:imsg, test:imsg,
+                 # typecheck:imsg.
 ```
 
 ## Schema Changes (Critical Process)
