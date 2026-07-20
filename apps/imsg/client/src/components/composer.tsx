@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -86,7 +85,6 @@ export function Composer({
   onSent,
 }: ComposerProps) {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(chatGuid));
@@ -390,9 +388,9 @@ export function Composer({
         styles.container,
         {
           borderTopColor: theme.divider,
-          // Reserve less bottom space so the keyboard-down resting state doesn't
-          // eat vertical area; drop to a hair when the keyboard is up.
-          paddingBottom: keyboardUp ? 6 : insets.bottom > 0 ? insets.bottom - 8 : 6,
+          // Never reserve a bottom margin — the composer hugs the bottom edge
+          // (content sits under the home indicator, iMessage-style).
+          paddingBottom: 6,
           // iMessage-style: wider side margins at rest, full width while typing.
           paddingHorizontal: keyboardUp ? 8 : 14,
         },
