@@ -149,13 +149,40 @@ app.get("/api/chats/:guid/messages", async (c) => {
     return c.json(buildThread([...merged.values()], chatGuid, contacts));
   }
 
-  const result = await bb.chatMessages(chatGuid, {
-    before: before ? Number(before) : undefined,
-    after: after ? Number(after) : undefined,
-    sort: after ? "ASC" : "DESC",
-  });
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(buildThread(result.value, chatGuid, contacts));
+  // buildThread drops tapbacks/reactions, so a raw page can filter down to very
+  // few real messages. Keep paging until we have a solid batch or truly run out,
+  // otherwise the client stops paginating and old history looks unreachable.
+  const sort: "ASC" | "DESC" = after ? "ASC" : "DESC";
+  const TARGET = 40;
+  const RAW_LIMIT = 100;
+  const raw: BBMessage[] = [];
+  let cursorBefore = before ? Number(before) : undefined;
+  let cursorAfter = after ? Number(after) : undefined;
+
+  for (let page = 0; page < 6; page++) {
+    const result = await bb.chatMessages(chatGuid, {
+      before: cursorBefore,
+      after: cursorAfter,
+      sort,
+      limit: RAW_LIMIT,
+    });
+    if (!result.ok) {
+      if (raw.length === 0) return c.json({ error: result.error }, 502);
+      break;
+    }
+    if (result.value.length === 0) break;
+    raw.push(...result.value);
+    // Count non-tapback, non-retracted messages gathered so far.
+    const real = raw.filter((m) => !m.associatedMessageGuid && !m.dateRetracted).length;
+    if (real >= TARGET || result.value.length < RAW_LIMIT) break;
+    // Advance the cursor past the oldest/newest date seen.
+    const dates = result.value.map((m) => m.dateCreated ?? 0).filter((d) => d > 0);
+    if (dates.length === 0) break;
+    if (sort === "DESC") cursorBefore = Math.min(...dates);
+    else cursorAfter = Math.max(...dates);
+  }
+
+  return c.json(buildThread(raw, chatGuid, contacts));
 });
 
 app.get("/api/avatars/:address", async (c) => {

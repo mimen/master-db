@@ -103,7 +103,7 @@ export default function ChatScreen() {
             />
           ),
           headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 16, paddingRight: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 20, paddingHorizontal: 6 }}>
               <Pressable onPress={() => openThreadSearch()} hitSlop={8}>
                 <Ionicons name="search" size={22} color="#0A84FF" />
               </Pressable>

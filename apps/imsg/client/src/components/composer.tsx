@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -30,6 +31,18 @@ interface ComposerProps {
   onSent: (message: Message) => void;
 }
 
+interface PendingAttachment {
+  uri: string;
+  name: string;
+  mime: string;
+  isImage: boolean;
+}
+
+/** SMS/RCS conversations have an "SMS;" guid prefix — green bubbles. */
+function chatIsSMS(chatGuid: string): boolean {
+  return chatGuid.startsWith("SMS");
+}
+
 function tempMessage(chatGuid: string, text: string, replyTo: Message | null): Message {
   return {
     guid: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -39,7 +52,7 @@ function tempMessage(chatGuid: string, text: string, replyTo: Message | null): M
     dateRead: null,
     dateDelivered: null,
     isFromMe: true,
-    service: "iMessage",
+    service: chatIsSMS(chatGuid) ? "SMS" : "iMessage",
     sender: null,
     attachments: [],
     special: null,
@@ -88,6 +101,7 @@ export function Composer({
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(chatGuid));
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
 
   // The home-indicator inset is only meaningful when the keyboard is down; when
   // it's up the keyboard covers that area, so drop the padding to avoid a gap.
@@ -111,6 +125,7 @@ export function Composer({
   // Swap drafts when the conversation changes.
   useEffect(() => {
     setText(getDraft(chatGuid));
+    setPending([]);
   }, [chatGuid]);
 
   useEffect(() => {
@@ -176,7 +191,7 @@ export function Composer({
   const sendRef = useRef<() => void>(() => undefined);
   const send = async () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && pending.length === 0) return;
 
     if (editing) {
       setBusy(true);
@@ -194,6 +209,29 @@ export function Composer({
     }
 
     setTyping(false);
+
+    // Send staged attachments first (text rides the first one as caption).
+    if (pending.length > 0) {
+      const attachments = pending;
+      const caption = trimmed || undefined;
+      setPending([]);
+      setText("");
+      setDraft(chatGuid, "");
+      setBusy(true);
+      try {
+        for (let i = 0; i < attachments.length; i++) {
+          const a = attachments[i];
+          if (a) await uploadAsset(a, i === 0 ? caption : undefined);
+        }
+        playSend();
+      } catch {
+        showToast("Attachment failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const temp = tempMessage(chatGuid, trimmed, replyTo);
     const reply = replyTo;
     setText("");
@@ -214,13 +252,13 @@ export function Composer({
 
   sendRef.current = () => void send();
 
-  const uploadAsset = async (uri: string, name: string, mimeType: string, caption?: string) => {
+  const uploadAsset = async (att: PendingAttachment, caption?: string) => {
     const form = new FormData();
     if (Platform.OS === "web") {
-      const blob = await (await fetch(uri)).blob();
-      form.append("attachment", new File([blob], name));
+      const blob = await (await fetch(att.uri)).blob();
+      form.append("attachment", new File([blob], att.name));
     } else {
-      form.append("attachment", { uri, name, type: mimeType } as unknown as Blob);
+      form.append("attachment", { uri: att.uri, name: att.name, type: att.mime } as unknown as Blob);
     }
     if (caption) form.append("caption", caption);
     const res = await fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/attachment`, {
@@ -231,32 +269,10 @@ export function Composer({
     onSent((await res.json()) as Message);
   };
 
-  // Any text in the box rides along as the caption on the first attachment.
-  const consumeCaption = (): string | undefined => {
-    const caption = text.trim();
-    if (caption) {
-      setText("");
-      setDraft(chatGuid, "");
-    }
-    return caption || undefined;
-  };
-
-  const runUploads = async (assets: Array<{ uri: string; name: string; mime: string }>) => {
-    if (assets.length === 0) return;
-    setBusy(true);
-    const caption = consumeCaption();
-    try {
-      for (let i = 0; i < assets.length; i++) {
-        const a = assets[i];
-        if (!a) continue;
-        await uploadAsset(a.uri, a.name, a.mime, i === 0 ? caption : undefined);
-      }
-      playSend();
-    } catch {
-      showToast("Attachment failed");
-    } finally {
-      setBusy(false);
-    }
+  // Attachments are staged as drafts above the composer; nothing sends until
+  // the user hits the send button.
+  const stage = (assets: PendingAttachment[]) => {
+    if (assets.length > 0) setPending((cur) => [...cur, ...assets].slice(0, 10));
   };
 
   const pickPhotos = async () => {
@@ -266,11 +282,12 @@ export function Composer({
       selectionLimit: 8,
       quality: 0.9,
     });
-    await runUploads(
+    stage(
       (result.assets ?? []).map((asset) => ({
         uri: asset.uri,
         name: asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
         mime: asset.mimeType ?? "image/jpeg",
+        isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
       })),
     );
   };
@@ -282,11 +299,12 @@ export function Composer({
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.9, mediaTypes: ["images", "videos"] });
-    await runUploads(
+    stage(
       (result.assets ?? []).map((asset) => ({
         uri: asset.uri,
         name: asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
         mime: asset.mimeType ?? "image/jpeg",
+        isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
       })),
     );
   };
@@ -294,11 +312,12 @@ export function Composer({
   const pickFiles = async () => {
     const result = await DocumentPicker.getDocumentAsync({ multiple: true });
     if (result.canceled) return;
-    await runUploads(
+    stage(
       (result.assets ?? []).map((asset) => ({
         uri: asset.uri,
         name: asset.name,
         mime: asset.mimeType ?? "application/octet-stream",
+        isImage: (asset.mimeType ?? "").startsWith("image/"),
       })),
     );
   };
@@ -380,7 +399,9 @@ export function Composer({
   };
 
   const recording = recorderState.isRecording;
-  const canSend = text.trim().length > 0;
+  const canSend = text.trim().length > 0 || pending.length > 0;
+  const isSMS = chatIsSMS(chatGuid);
+  const sendColor = isSMS ? "#34C759" : theme.bubbleMine;
 
   return (
     <View
@@ -388,11 +409,10 @@ export function Composer({
         styles.container,
         {
           borderTopColor: theme.divider,
-          // Never reserve a bottom margin — the composer hugs the bottom edge
-          // (content sits under the home indicator, iMessage-style).
-          paddingBottom: 6,
-          // iMessage-style: wider side margins at rest, full width while typing.
-          paddingHorizontal: keyboardUp ? 8 : 14,
+          // Minimal bottom margin — the composer hugs the bottom edge.
+          paddingBottom: keyboardUp ? 6 : 8,
+          // Wider side margins at rest, full width while typing (iMessage-style).
+          paddingHorizontal: keyboardUp ? 10 : 18,
         },
       ]}
     >
@@ -422,6 +442,28 @@ export function Composer({
           </Pressable>
         </View>
       )}
+      {pending.length > 0 && (
+        <View style={styles.pendingRow}>
+          {pending.map((att, i) => (
+            <View key={`${att.uri}-${i}`} style={styles.pendingItem}>
+              {att.isImage ? (
+                <Image source={{ uri: att.uri }} style={styles.pendingThumb} contentFit="cover" />
+              ) : (
+                <View style={[styles.pendingThumb, styles.pendingFile, { backgroundColor: theme.backgroundElement }]}>
+                  <Ionicons name="document-outline" size={22} color={theme.textSecondary} />
+                </View>
+              )}
+              <Pressable
+                onPress={() => setPending((cur) => cur.filter((_, j) => j !== i))}
+                style={styles.pendingRemove}
+                hitSlop={6}
+              >
+                <Ionicons name="close-circle" size={20} color="#fff" />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
       <View style={styles.inputRow}>
         <Pressable onPress={openAttachSheet} disabled={busy || recording} hitSlop={8} style={styles.attachButton}>
           <Ionicons name="add-circle-outline" size={26} color={theme.textSecondary} />
@@ -438,7 +480,7 @@ export function Composer({
             ref={inputRef}
             value={text}
             onChangeText={onChangeText}
-            placeholder={editing ? "Edit message" : "iMessage"}
+            placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
             placeholderTextColor={theme.textSecondary}
             multiline
             enterKeyHint="send"
@@ -455,7 +497,7 @@ export function Composer({
             onPress={() => void send()}
             onLongPress={editing ? undefined : openScheduleSheet}
             disabled={busy}
-            style={[styles.sendButton, { backgroundColor: theme.bubbleMine }]}
+            style={[styles.sendButton, { backgroundColor: sendColor }]}
           >
             <Ionicons name="arrow-up" size={20} color="#fff" />
           </Pressable>
@@ -521,6 +563,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     minHeight: 38,
+  },
+  pendingRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+  },
+  pendingItem: {
+    position: "relative",
+  },
+  pendingThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+  },
+  pendingFile: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pendingRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 10,
   },
   recDot: {
     width: 10,
