@@ -157,6 +157,9 @@ export default function ChatInfoScreen() {
         <Pressable
           key={p.address}
           style={styles.participant}
+          onPress={() =>
+            router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } })
+          }
           onLongPress={info.isGroup ? () => removeParticipant(p) : undefined}
         >
           <View style={[styles.pAvatar, { backgroundColor: theme.backgroundElement }]}>

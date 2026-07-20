@@ -7,6 +7,7 @@ import {
   handleUploadUrl as handleBeeperAttachmentsUploadUrl,
 } from "./beeper/sync/handleAttachments";
 import { handleIngest as handleBeeperIngest } from "./beeper/sync/handleIngest";
+import { handleIngestContacts } from "./identity/sync/handleIngestContacts";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
 /**
@@ -85,6 +86,21 @@ http.route({
   path: "/beeper/attachments/record",
   method: "POST",
   handler: handleBeeperAttachmentsRecord,
+});
+
+/**
+ * Apple Contacts ingest endpoint (identity graph).
+ * POST /identity/ingest-contacts
+ *
+ * Receives batched contact cards from imsg's server-side sync job. Each card
+ * is pre-grouped (all its phones/emails belong to one person) — see
+ * convex/identity/ingestContacts.ts for why. Auth: Bearer token matching
+ * APPLE_CONTACTS_INGEST_SECRET on this deployment.
+ */
+http.route({
+  path: "/identity/ingest-contacts",
+  method: "POST",
+  handler: handleIngestContacts,
 });
 
 export default http;

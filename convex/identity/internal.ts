@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
-import { internalMutation, internalQuery } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
+import { internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 
 /**
  * Internal building blocks for the identity resolver. The orchestration lives in
@@ -120,6 +121,47 @@ export const listIdentitiesPage = internalQuery({
 });
 
 /**
+ * Recompute a person's denormalized aggregates (display_name, phones, emails,
+ * counts) from the authoritative set: every identity currently pointing at
+ * them. Shared by assignCluster (resolver-inferred grouping) and the
+ * source-trusted ingest mutations (e.g. Apple Contacts) so both converge on
+ * re-runs using the exact same merge rules.
+ */
+export async function recomputePersonAggregates(
+  ctx: MutationCtx,
+  personId: Id<"people">,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const all = await ctx.db
+    .query("identities")
+    .withIndex("by_person", (q) => q.eq("person_id", personId))
+    .collect();
+  const phones = new Set<string>();
+  const emails = new Set<string>();
+  let messageCount = 0;
+  let isSelf = false;
+  let bestName: string | undefined;
+  for (const i of all) {
+    if (i.normalized.includes("@")) emails.add(i.normalized);
+    else if (i.normalized) phones.add(i.normalized);
+    messageCount += i.message_count;
+    isSelf = isSelf || i.is_self;
+    if (i.display_name && i.display_name.length > (bestName?.length ?? 0)) {
+      bestName = i.display_name;
+    }
+  }
+  await ctx.db.patch(personId, {
+    display_name: bestName,
+    normalized_phones: [...phones],
+    normalized_emails: [...emails],
+    identity_count: all.length,
+    message_count: messageCount,
+    is_self: isSelf,
+    updated_at: now,
+  });
+}
+
+/**
  * Attach every identity sharing one normalized key to a single person, creating
  * the person if none of them is attached yet. Recomputes the person's aggregates
  * from its full identity set so re-runs converge.
@@ -167,35 +209,7 @@ export const assignCluster = internalMutation({
       }
     }
 
-    // Recompute aggregates from the authoritative set: all identities now
-    // pointing at this person.
-    const all = await ctx.db
-      .query("identities")
-      .withIndex("by_person", (q) => q.eq("person_id", personId))
-      .collect();
-    const phones = new Set<string>();
-    const emails = new Set<string>();
-    let messageCount = 0;
-    let isSelf = false;
-    let bestName: string | undefined;
-    for (const i of all) {
-      if (i.normalized.includes("@")) emails.add(i.normalized);
-      else if (i.normalized) phones.add(i.normalized);
-      messageCount += i.message_count;
-      isSelf = isSelf || i.is_self;
-      if (i.display_name && i.display_name.length > (bestName?.length ?? 0)) {
-        bestName = i.display_name;
-      }
-    }
-    await ctx.db.patch(personId, {
-      display_name: bestName,
-      normalized_phones: [...phones],
-      normalized_emails: [...emails],
-      identity_count: all.length,
-      message_count: messageCount,
-      is_self: isSelf,
-      updated_at: now,
-    });
+    await recomputePersonAggregates(ctx, personId);
     return personId;
   },
 });

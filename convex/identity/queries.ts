@@ -33,6 +33,7 @@ export const whoIs = query({
       identities: identities.map((i) => ({
         kind: i.kind,
         network: i.network,
+        source: i.source,
         value: i.value,
         normalized: i.normalized,
         display_name: i.display_name,

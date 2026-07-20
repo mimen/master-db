@@ -8,6 +8,7 @@ import { loadConfig } from "./config";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { GroupPhotos } from "./group-photos";
+import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
@@ -22,6 +23,7 @@ const contacts = new ContactBook(bb);
 const directory = new ChatDirectory(bb, db, contacts);
 const search = new MessageSearch(bb, contacts);
 const photos = new GroupPhotos(bb);
+const identitySync = new IdentitySync(bb, config);
 
 const info = await bb.connect();
 if (!info.ok) {
@@ -32,6 +34,7 @@ if (!info.ok) {
   );
 }
 await contacts.refresh(true);
+identitySync.start();
 
 // Re-check server info periodically so a BlueBubbles restart or private-API
 // toggle is picked up without restarting this service.

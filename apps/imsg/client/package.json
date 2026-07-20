@@ -9,6 +9,7 @@
     "@react-navigation/elements": "^2.9.32",
     "@react-navigation/native": "^7.3.10",
     "@shopify/flash-list": "2.0.2",
+    "convex": "^1.39.1",
     "date-fns": "^4.4.0",
     "expo": "~54.0.0",
     "expo-audio": "~1.1.1",
