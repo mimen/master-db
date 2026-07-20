@@ -163,14 +163,24 @@ function FilterMenuOption({
   );
 }
 
+export interface FilterAnchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ConversationFiltersModalProps extends ConversationFiltersProps {
   visible: boolean;
   onClose: () => void;
+  /** Desktop: render as a popover anchored to the filter button instead of a sheet. */
+  anchor?: FilterAnchor | null;
 }
 
 /**
- * Mobile-friendly adapter for the same two-lens model. Selections stay open so
- * a person can combine state and type before tapping Done.
+ * Adapter for the same two-lens model. On mobile it's a bottom sheet; on desktop
+ * (when an anchor is supplied) it's a popover mounted at the filter button.
+ * Selections stay open so a person can combine state and type before dismissing.
  */
 export function ConversationFiltersModal({
   visible,
@@ -178,11 +188,77 @@ export function ConversationFiltersModal({
   filters,
   counts,
   onFiltersChange,
+  anchor = null,
 }: ConversationFiltersModalProps) {
   const theme = useTheme();
   const select = (selection: InboxFilterSelection): void => {
     onFiltersChange(selectInboxFilter(filters, selection));
   };
+
+  if (anchor) {
+    const POPOVER_WIDTH = 260;
+    const left = Math.max(8, anchor.x + anchor.width - POPOVER_WIDTH);
+    const top = anchor.y + anchor.height + 6;
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close conversation filters"
+          onPress={onClose}
+          style={styles.popoverBackdrop}
+        />
+        <View
+          accessibilityLabel="Conversation filters"
+          style={[
+            styles.popover,
+            { backgroundColor: theme.backgroundElement, borderColor: theme.divider, top, left, width: POPOVER_WIDTH },
+          ]}
+        >
+          <ScrollView
+            style={styles.popoverContent}
+            contentContainerStyle={styles.menuContentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
+              <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>State</Text>
+              {STATE_FILTERS.map((filter) => (
+                <FilterMenuOption
+                  key={filter.value}
+                  label={filter.label}
+                  count={counts?.[filter.value]}
+                  selected={filters.state === filter.value}
+                  selection={{ kind: "state", value: filter.value }}
+                  onSelect={select}
+                />
+              ))}
+            </View>
+            <View style={[styles.menuDivider, { backgroundColor: theme.divider }]} />
+            <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type">
+              <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>Type</Text>
+              {TYPE_FILTERS.map((filter) => (
+                <FilterMenuOption
+                  key={filter.value}
+                  label={filter.label}
+                  selected={filters.type === filter.value}
+                  selection={{ kind: "type", value: filter.value }}
+                  onSelect={select}
+                />
+              ))}
+            </View>
+          </ScrollView>
+          <View style={[styles.popoverFooter, { borderTopColor: theme.divider }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reset conversation filters"
+              onPress={() => onFiltersChange(resetInboxFilters())}
+            >
+              <Text style={[styles.resetButtonLabel, { color: theme.accent }]}>Reset</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -298,6 +374,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontVariant: ["tabular-nums"],
     fontWeight: "600",
+  },
+  popoverBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  popover: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxHeight: 460,
+    overflow: "hidden",
+    paddingTop: 10,
+    position: "absolute",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+  },
+  popoverContent: {
+    flexShrink: 1,
+  },
+  popoverFooter: {
+    alignItems: "flex-start",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   modalRoot: {
     backgroundColor: "rgba(0,0,0,0.35)",

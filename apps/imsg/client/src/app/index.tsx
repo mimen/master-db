@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
+import { ChatInfoContent } from "@/components/chat-info-content";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { NewChatContent } from "@/components/new-chat-content";
 import { SearchContent } from "@/components/search-content";
@@ -12,6 +13,7 @@ import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
+import { onOpenChatInfo } from "@/lib/chat-info";
 import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
@@ -27,6 +29,7 @@ export default function ChatListScreen() {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
+  const [infoGuid, setInfoGuid] = useState<string | null>(null);
   const { chats, counts, loading, refresh } = useChats(state, type);
 
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,6 +78,18 @@ export default function ChatListScreen() {
     });
   }, [wide, chats]);
 
+  // The thread-pane info button opens details as a right-hand pane here (a
+  // second press on the same chat toggles it closed).
+  useEffect(() => {
+    if (!wide) return;
+    return onOpenChatInfo((guid) => setInfoGuid((cur) => (cur === guid ? null : guid)));
+  }, [wide]);
+
+  // Details pane is per-thread; close it when the selected conversation changes.
+  useEffect(() => {
+    setInfoGuid(null);
+  }, [selected?.guid]);
+
   // Keep the selected chat's flags fresh as the directory reconciles.
   useEffect(() => {
     if (!selected) return;
@@ -119,6 +134,7 @@ export default function ChatListScreen() {
       } else if (e.key === "Escape") {
         setSearchOpen(false);
         setNewChatOpen(false);
+        setInfoGuid(null);
       } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !searchOpen && !newChatOpen) {
         const active = document.activeElement;
         const inField =
@@ -192,6 +208,21 @@ export default function ChatListScreen() {
           </View>
         )}
       </View>
+      {infoGuid && (
+        <View style={[styles.infoPane, { borderLeftColor: theme.divider }]}>
+          <ChatInfoContent
+            key={infoGuid}
+            guid={infoGuid}
+            showHeader
+            onClose={() => setInfoGuid(null)}
+            onDeleted={() => {
+              setInfoGuid(null);
+              setSelected(null);
+              refresh();
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -203,6 +234,10 @@ const styles = StyleSheet.create({
   },
   threadPane: {
     flex: 1,
+  },
+  infoPane: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    width: 340,
   },
   empty: {
     alignItems: "center",
