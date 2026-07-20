@@ -42,6 +42,41 @@ export const whoIs = query({
   },
 });
 
+/** Find people by (case-insensitive substring) display name, with their identities. */
+export const searchPeople = query({
+  args: { name: v.string() },
+  handler: async (ctx, { name }) => {
+    const needle = name.trim().toLowerCase();
+    const people = await ctx.db.query("people").collect();
+    const matches = people.filter(
+      (p) => !p.merged_into && (p.display_name ?? "").toLowerCase().includes(needle),
+    );
+    const out = [];
+    for (const p of matches) {
+      const identities = await ctx.db
+        .query("identities")
+        .withIndex("by_person", (q) => q.eq("person_id", p._id))
+        .collect();
+      out.push({
+        _id: p._id,
+        display_name: p.display_name,
+        identity_count: p.identity_count,
+        normalized_phones: p.normalized_phones,
+        normalized_emails: p.normalized_emails,
+        identities: identities.map((i) => ({
+          kind: i.kind,
+          network: i.network,
+          value: i.value,
+          normalized: i.normalized,
+          display_name: i.display_name,
+          chat_count: i.chat_count,
+        })),
+      });
+    }
+    return out;
+  },
+});
+
 /** The people with the most linked identities — the merge graph's payoff. */
 export const topLinkedPeople = query({
   args: { limit: v.optional(v.number()) },
