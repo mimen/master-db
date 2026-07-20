@@ -15,8 +15,10 @@ const tags = [
   '<meta name="mobile-web-app-capable" content="yes"/>',
   '<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)"/>',
   '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>',
-  // 16px inputs stop iOS Safari from zooming on focus; block gesture zoom.
+  // 16px inputs stop iOS Safari from zooming on focus; block gesture zoom;
+  // never show the browser focus ring/outline on text fields.
   "<style>input,textarea{font-size:16px!important}" +
+    "input:focus,textarea:focus,input:focus-visible,textarea:focus-visible{outline:none!important;box-shadow:none!important}" +
     "html{touch-action:manipulation;-webkit-text-size-adjust:100%}</style>",
 ].join("");
 

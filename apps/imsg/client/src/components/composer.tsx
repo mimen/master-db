@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -88,7 +88,20 @@ export function Composer({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
+  const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(chatGuid));
+
+  // The home-indicator inset is only meaningful when the keyboard is down; when
+  // it's up the keyboard covers that area, so drop the padding to avoid a gap.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const show = Keyboard.addListener("keyboardWillShow", () => setKeyboardUp(true));
+    const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardUp(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const typingActive = useRef(false);
@@ -375,7 +388,14 @@ export function Composer({
     <View
       style={[
         styles.container,
-        { borderTopColor: theme.divider, paddingBottom: Math.max(6, insets.bottom) },
+        {
+          borderTopColor: theme.divider,
+          // Reserve less bottom space so the keyboard-down resting state doesn't
+          // eat vertical area; drop to a hair when the keyboard is up.
+          paddingBottom: keyboardUp ? 6 : insets.bottom > 0 ? insets.bottom - 8 : 6,
+          // iMessage-style: wider side margins at rest, full width while typing.
+          paddingHorizontal: keyboardUp ? 8 : 14,
+        },
       ]}
     >
       {replyTo && !editing && (
