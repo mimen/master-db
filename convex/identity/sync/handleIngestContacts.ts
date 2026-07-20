@@ -31,12 +31,23 @@ export const handleIngestContacts = httpAction(async (ctx, req) => {
     return jsonResponse({ ok: false, error: "expected { source, contacts }" }, 400);
   }
 
-  const result = await ctx.runMutation(internal.identity.ingestContacts.ingestContactsBatch, {
-    source: body.source,
-    contacts: body.contacts,
-  });
+  // Convex caps total mutation args at 1 MiB — a full Apple Contacts export
+  // (1000+ cards) blows past that in one call. Sub-batch, same as Beeper's
+  // handleIngest.ts does for messages.
+  const totals = { peopleCreated: 0, peopleReused: 0, identitiesWritten: 0, skippedNoHandles: 0 };
+  for (let i = 0; i < body.contacts.length; i += 50) {
+    const slice = body.contacts.slice(i, i + 50);
+    const result = await ctx.runMutation(internal.identity.ingestContacts.ingestContactsBatch, {
+      source: body.source,
+      contacts: slice,
+    });
+    totals.peopleCreated += result.peopleCreated;
+    totals.peopleReused += result.peopleReused;
+    totals.identitiesWritten += result.identitiesWritten;
+    totals.skippedNoHandles += result.skippedNoHandles;
+  }
 
-  return jsonResponse({ ok: true, ...result });
+  return jsonResponse({ ok: true, ...totals });
 });
 
 type ContactCardIn = {

@@ -27,9 +27,12 @@ import { normalizeEmail, normalizePhone } from "./normalize";
  * phone number leaves the stale identity in place; cleanup is deferred.
  */
 
+// No img_url: raw contact-photo bytes can alone exceed Convex's 1MiB
+// per-document cap (hit in practice — see identity-sync.ts's toContactCard
+// docstring in the imsg repo for the full story). Photos stay out of the
+// identity graph; imsg already serves them via its own avatar route.
 const contactCard = v.object({
   display_name: v.optional(v.string()),
-  img_url: v.optional(v.string()),
   phones: v.array(v.string()),
   emails: v.array(v.string()),
 });
@@ -131,7 +134,6 @@ export const ingestContactsBatch = internalMutation({
               card.display_name && card.display_name.length > (existing.display_name?.length ?? 0)
                 ? card.display_name
                 : existing.display_name,
-            img_url: existing.img_url ?? card.img_url,
             updated_at: now,
           });
         } else {
@@ -142,7 +144,6 @@ export const ingestContactsBatch = internalMutation({
             normalized: h.normalized,
             network: undefined,
             display_name: card.display_name,
-            img_url: card.img_url,
             message_count: 0,
             chat_count: 0,
             is_self: false,

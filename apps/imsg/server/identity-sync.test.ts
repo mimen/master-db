@@ -40,13 +40,8 @@ describe("toContactCard", () => {
     expect(card.emails).toEqual([]);
   });
 
-  test("img_url comes from a non-empty avatar, trimmed", () => {
-    const c: BBContact = { avatar: "  base64data  " };
-    expect(toContactCard(c).img_url).toBe("base64data");
-  });
-
-  test("img_url is undefined when avatar is missing or blank", () => {
-    expect(toContactCard({ avatar: "" }).img_url).toBeUndefined();
-    expect(toContactCard({}).img_url).toBeUndefined();
+  test("never includes avatar bytes — a photo alone can exceed Convex's 1MiB doc cap", () => {
+    const c: BBContact = { displayName: "Has Photo", avatar: "  base64data  " };
+    expect(toContactCard(c)).not.toHaveProperty("img_url");
   });
 });

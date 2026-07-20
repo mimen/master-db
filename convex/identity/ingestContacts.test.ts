@@ -88,7 +88,7 @@ describe("multi-handle card grouping (the core fix)", () => {
   });
 });
 
-describe("display_name / img_url merge on re-ingest (mirrors upsertIdentitiesBatch rules)", () => {
+describe("display_name merge on re-ingest (mirrors upsertIdentitiesBatch rules)", () => {
   test("longer incoming display_name overwrites the existing one", () => {
     const existing = { display_name: "Chase" };
     const incoming = { display_name: "Chase Petersen" };
@@ -97,11 +97,5 @@ describe("display_name / img_url merge on re-ingest (mirrors upsertIdentitiesBat
         ? incoming.display_name
         : existing.display_name;
     expect(merged).toBe("Chase Petersen");
-  });
-
-  test("img_url is keep-if-existing", () => {
-    const existing = { img_url: "old.jpg" };
-    const incoming = { img_url: "new.jpg" };
-    expect(existing.img_url ?? incoming.img_url).toBe("old.jpg");
   });
 });

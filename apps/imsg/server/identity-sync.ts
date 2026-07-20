@@ -80,9 +80,17 @@ export class IdentitySync {
   }
 }
 
+/**
+ * Deliberately drops `avatar` — it's raw base64 image bytes, not a URL, and
+ * a single contact photo can alone exceed Convex's 1MiB per-document cap
+ * (hit in practice against a real 1518-contact export). The imsg client
+ * already renders photos via its own /api/avatars/:address route, which
+ * reads the same AddressBook export this app has always used — nothing
+ * downstream reads a photo out of the identity graph, so there's nothing to
+ * lose by not duplicating it there.
+ */
 export function toContactCard(c: BBContact): {
   display_name?: string;
-  img_url?: string;
   phones: string[];
   emails: string[];
 } {
@@ -90,7 +98,6 @@ export function toContactCard(c: BBContact): {
   const displayName = c.displayName?.trim() || c.nickname?.trim() || assembled || undefined;
   return {
     display_name: displayName,
-    img_url: c.avatar?.trim() || undefined,
     phones: (c.phoneNumbers ?? []).map((p) => p.address).filter(Boolean),
     emails: (c.emails ?? []).map((e) => e.address).filter(Boolean),
   };
