@@ -13,9 +13,19 @@ type SearchRow =
   | { kind: "message"; key: string; message: Message };
 
 /** Search UI shared by the mobile route and the desktop overlay panel. */
-export function SearchContent({ onClose }: { onClose: () => void }) {
+export function SearchContent({
+  initialQuery,
+  onClose,
+}: {
+  initialQuery?: string;
+  onClose: () => void;
+}) {
   const theme = useTheme();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery ?? "");
+
+  useEffect(() => {
+    if (initialQuery !== undefined) setQuery(initialQuery);
+  }, [initialQuery]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [searching, setSearching] = useState(false);

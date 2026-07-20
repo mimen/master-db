@@ -3,7 +3,7 @@ import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
-import { mapChat, mapMessage } from "./map";
+import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { ChatSummary, Message } from "../shared/types";
 
 /** Emitted whenever a mutation invalidates the directory; clients refetch. */
@@ -11,6 +11,7 @@ export type DirectoryEvent = { kind: "changed" };
 
 const SUMMARY_TTL_MS = 15_000;
 const UNREAD_TTL_MS = 30_000;
+const UNREAD_PAGE_SIZE = 1000;
 
 /**
  * The chat directory: the cached, Overlay-aware view of every conversation.
@@ -20,7 +21,12 @@ const UNREAD_TTL_MS = 30_000;
  */
 export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
-  private unreadScan: { at: number; counts: Map<string, number> } = { at: 0, counts: new Map() };
+  private unreadScan: { at: number; summaries: Map<string, UnreadSummary> } = {
+    at: 0,
+    summaries: new Map(),
+  };
+  private unreadScanInFlight: { version: number; promise: Promise<boolean> } | null = null;
+  private unreadScanVersion = 0;
   // Chats we've marked read, ahead of BlueBubbles' DB reflecting it.
   private localReadAt = new Map<string, number>();
   private listeners = new Set<(event: DirectoryEvent) => void>();
@@ -48,26 +54,93 @@ export class ChatDirectory {
   /** Drops the cache and notifies listeners; optionally forces an unread rescan. */
   invalidate(resetUnreadScan = false): void {
     this.clearCache();
-    if (resetUnreadScan) this.unreadScan.at = 0;
+    if (resetUnreadScan) this.resetUnreadScan();
     this.emitChanged();
   }
 
-  private async unreadCounts(): Promise<Map<string, number>> {
-    if (Date.now() - this.unreadScan.at < UNREAD_TTL_MS) return this.unreadScan.counts;
-    const counts = new Map<string, number>();
-    const batch = await this.bb.queryMessages({ limit: 1000, offset: 0 });
-    if (batch.ok) {
+  private resetUnreadScan(): void {
+    this.unreadScan.at = 0;
+    this.unreadScanVersion++;
+  }
+
+  private async unreadCounts(): Promise<Map<string, UnreadSummary>> {
+    let attempts = 0;
+    while (Date.now() - this.unreadScan.at >= UNREAD_TTL_MS && attempts < 2) {
+      attempts++;
+      const inFlight =
+        this.unreadScanInFlight ??
+        (() => {
+          const version = this.unreadScanVersion;
+          const pending = { version, promise: this.scanUnreadCounts(version) };
+          this.unreadScanInFlight = pending;
+          return pending;
+        })();
+      const complete = await inFlight.promise;
+      if (this.unreadScanInFlight === inFlight) this.unreadScanInFlight = null;
+      if (complete) break;
+      // An invalidation during the scan requires a fresh pass. A transport
+      // failure keeps the previous complete result rather than retry-looping.
+      if (inFlight.version === this.unreadScanVersion) break;
+    }
+    return this.unreadScan.summaries;
+  }
+
+  /** Scans every global-message page and atomically replaces a complete result. */
+  private async scanUnreadCounts(scanVersion: number): Promise<boolean> {
+    const summaries = new Map<string, UnreadSummary>();
+    for (let offset = 0; ; offset += UNREAD_PAGE_SIZE) {
+      const batch = await this.bb.queryMessages({
+        limit: UNREAD_PAGE_SIZE,
+        offset,
+        unreadInboundOnly: true,
+      });
+      if (!batch.ok) return false;
       for (const message of batch.value) {
-        if (message.isFromMe === true || message.dateRead) continue;
-        if (message.associatedMessageGuid && message.associatedMessageType) continue;
-        if ((message.itemType ?? 0) !== 0 || (message.groupActionType ?? 0) !== 0) continue;
+        const dateCreated = message.dateCreated ?? 0;
+        if (
+          message.isFromMe === true ||
+          message.dateRead ||
+          message.dateRetracted ||
+          dateCreated <= 0 ||
+          (message.associatedMessageGuid && message.associatedMessageType) ||
+          (message.itemType ?? 0) !== 0 ||
+          (message.groupActionType ?? 0) !== 0 ||
+          (this.localReadAt.get(message.chats?.[0]?.guid ?? "") ?? 0) >= dateCreated
+        ) {
+          continue;
+        }
         const chatGuid = message.chats?.[0]?.guid;
         if (!chatGuid) continue;
-        counts.set(chatGuid, (counts.get(chatGuid) ?? 0) + 1);
+        const current = summaries.get(chatGuid);
+        summaries.set(chatGuid, {
+          count: (current?.count ?? 0) + 1,
+          firstUnreadAt: Math.min(current?.firstUnreadAt ?? dateCreated, dateCreated),
+        });
       }
-      this.unreadScan = { at: Date.now(), counts };
+      if (batch.value.length < UNREAD_PAGE_SIZE) break;
     }
-    return counts;
+    if (scanVersion !== this.unreadScanVersion) return false;
+    this.unreadScan = { at: Date.now(), summaries };
+    return true;
+  }
+
+  /** Extends a complete unread scan with a qualifying realtime message. */
+  private patchUnreadSummary(chatGuid: string, message: Message): void {
+    if (
+      message.isFromMe ||
+      message.dateRead !== null ||
+      message.retracted ||
+      message.isGroupEvent ||
+      message.isAssociatedMessage === true ||
+      message.dateCreated <= (this.localReadAt.get(chatGuid) ?? 0)
+    ) {
+      return;
+    }
+    const current = this.unreadScan.summaries.get(chatGuid);
+    this.unreadScan.summaries.set(chatGuid, {
+      count: (current?.count ?? 0) + 1,
+      firstUnreadAt: Math.min(current?.firstUnreadAt ?? message.dateCreated, message.dateCreated),
+    });
   }
 
   /**
@@ -97,12 +170,14 @@ export class ChatDirectory {
     const overlay = this.db.getAll();
     const chats = result.value
       .map((chat) => {
-        const summary = mapChat(chat, overlay.get(chat.guid), this.contacts, unread.get(chat.guid));
+        const state = overlay.get(chat.guid);
+        const summary = mapChat(chat, state, this.contacts, unread.get(chat.guid));
         // Mark-read override: trust our own recent mark-read over BB's lagging DB.
         const readAt = this.localReadAt.get(chat.guid);
         if (readAt && (summary.lastMessage?.dateCreated ?? 0) <= readAt) {
           summary.unreadCount = 0;
-          summary.flags.unread = false;
+          summary.firstUnreadAt = null;
+          summary.flags.unread = state?.markedUnread === 1;
         }
         return summary;
       })
@@ -113,20 +188,27 @@ export class ChatDirectory {
   }
 
   /**
-   * Socket fast path: resets the unread scan, then patches the cache. A null
-   * chatGuid (or a chat missing from the cache) invalidates instead. Returns
+   * Socket fast path: patches both unread and summary caches. A null chatGuid
+   * (or a chat missing from the cache) invalidates instead. Returns
    * the mapped message so the caller can broadcast it, or null when it only
    * invalidated (no chat to attribute the message to).
    */
   applyMessage(chatGuid: string | null, message: BBMessage): Message | null {
-    this.unreadScan.at = 0;
     if (!chatGuid) {
       this.clearCache();
       return null;
     }
     const mapped = mapMessage(message, chatGuid, this.contacts);
+    this.patchUnreadSummary(chatGuid, mapped);
     this.patchSummaries(chatGuid, mapped);
     return mapped;
+  }
+
+  /** Updated messages can remove unread eligibility, so rebuild instead of guessing. */
+  applyUpdatedMessage(chatGuid: string | null, message: BBMessage): Message | null {
+    this.resetUnreadScan();
+    this.clearCache();
+    return chatGuid ? mapMessage(message, chatGuid, this.contacts) : null;
   }
 
   /** Applies an already-mapped message (send/attachment responses) to the cache. */
@@ -139,7 +221,8 @@ export class ChatDirectory {
     if (result.ok) {
       this.clearCache();
       this.localReadAt.set(guid, Date.now());
-      this.unreadScan.counts.set(guid, 0);
+      this.resetUnreadScan();
+      this.unreadScan.summaries.set(guid, { count: 0, firstUnreadAt: null });
       this.db.setMarkedUnread(guid, false);
       this.emitChanged();
     }
@@ -148,7 +231,9 @@ export class ChatDirectory {
 
   markUnread(guid: string): void {
     this.db.setMarkedUnread(guid, true);
-    this.localReadAt.delete(guid);
+    // Keep localReadAt: manual unread is an overlay flag, not evidence that
+    // BlueBubbles' lagging unread rows became genuinely unread again.
+    this.clearCache();
     this.emitChanged();
   }
 

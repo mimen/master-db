@@ -35,7 +35,11 @@ export interface BlueBubbles {
     chatGuid: string,
     options?: { limit?: number; before?: number; after?: number; sort?: "ASC" | "DESC" },
   ): Promise<Result<BBMessage[]>>;
-  queryMessages(options: { limit: number; offset: number }): Promise<Result<BBMessage[]>>;
+  queryMessages(options: {
+    limit: number;
+    offset: number;
+    unreadInboundOnly?: boolean;
+  }): Promise<Result<BBMessage[]>>;
   sendText(
     chatGuid: string,
     message: string,
@@ -187,12 +191,24 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.get<BBMessage[]>(`/api/v1/chat/${chatGuid}/message`, params);
   }
 
-  queryMessages(options: { limit: number; offset: number }): Promise<Result<BBMessage[]>> {
+  queryMessages(options: {
+    limit: number;
+    offset: number;
+    unreadInboundOnly?: boolean;
+  }): Promise<Result<BBMessage[]>> {
     return this.post<BBMessage[]>("/api/v1/message/query", {
       limit: options.limit,
       offset: options.offset,
       sort: "DESC",
       with: ["chat", "handle", "message.attributedBody"],
+      ...(options.unreadInboundOnly
+        ? {
+            where: [
+              { statement: "message.isFromMe = :isFromMe", args: { isFromMe: 0 } },
+              { statement: "message.dateRead IS NULL", args: {} },
+            ],
+          }
+        : {}),
     });
   }
 

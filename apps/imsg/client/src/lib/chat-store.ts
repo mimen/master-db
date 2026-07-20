@@ -54,6 +54,7 @@ export function patchChatFlags(
   next[index] = {
     ...chat,
     unreadCount: unreadCount ?? chat.unreadCount,
+    firstUnreadAt: flags.unread === false || unreadCount === 0 ? null : chat.firstUnreadAt,
     flags: { ...chat.flags, ...flags },
   };
   all = next;

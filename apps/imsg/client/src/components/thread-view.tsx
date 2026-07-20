@@ -258,18 +258,27 @@ export function ThreadView({
       keyboardVerticalOffset={headerOffset}
     >
       {headerChat && (
-        <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
-          <ChatAvatar chat={headerChat} size={32} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16, fontWeight: "600" }}>
-              {headerChat.displayName}
-            </Text>
-            {headerChat.isGroup && (
-              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                {headerChat.participants.length} people
+        <View
+          style={[
+            styles.paneHeader,
+            { backgroundColor: theme.background, borderBottomColor: theme.divider },
+          ]}
+        >
+          <View style={styles.paneHeaderSpace} />
+          <View style={styles.paneIdentity}>
+            <ChatAvatar chat={headerChat} size={32} />
+            <View style={styles.paneIdentityText}>
+              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+                {headerChat.displayName}
               </Text>
-            )}
+              {headerChat.isGroup && (
+                <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+                  {headerChat.participants.length} people
+                </Text>
+              )}
+            </View>
           </View>
+          <View style={styles.paneHeaderSpace} />
         </View>
       )}
       {loading && messages.length === 0 ? (
@@ -340,7 +349,10 @@ export function ThreadView({
         />
       )}
       {dayChip && (
-        <View pointerEvents="none" style={styles.dayChipWrap}>
+        <View
+          pointerEvents="none"
+          style={[styles.dayChipWrap, headerChat && styles.dayChipWrapWithHeader]}
+        >
           <View style={[styles.dayChip, { backgroundColor: theme.backgroundElement }]}>
             <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
               {dayChip}
@@ -398,12 +410,22 @@ function TypingDots({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   paneHeader: {
+    height: 58,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  paneHeaderSpace: {
+    flex: 1,
+  },
+  paneIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    maxWidth: "70%",
+  },
+  paneIdentityText: {
+    flexShrink: 1,
   },
   dayChipWrap: {
     position: "absolute",
@@ -411,6 +433,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
+  },
+  dayChipWrapWithHeader: {
+    top: 68,
   },
   dayChip: {
     borderRadius: 14,

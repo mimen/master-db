@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatState } from "./chat-state";
-import { applyMessage, computeCounts, computeFlags, isArchived, matchesFilters } from "./chat-state";
+import {
+  applyMessage,
+  computeCounts,
+  computeFlags,
+  isArchived,
+  matchesFilters,
+  partitionPriorityShelf,
+} from "./chat-state";
 import type { ChatFlags, ChatSummary, Message } from "./types";
 
 // ---------------------------------------------------------------- fixtures
@@ -57,6 +64,7 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
       hasAttachments: false,
     },
     unreadCount: 0,
+    firstUnreadAt: null,
     flags: makeFlags(),
     ...overrides,
   };
@@ -313,6 +321,59 @@ describe("computeCounts", () => {
   });
 });
 
+// ------------------------------------------------------- partitionPriorityShelf
+
+describe("partitionPriorityShelf", () => {
+  test("selects at most four oldest unread chats and leaves the rest recent", () => {
+    const chats = [
+      makeChat({ guid: "a", firstUnreadAt: 500 }),
+      makeChat({ guid: "b", firstUnreadAt: null }),
+      makeChat({ guid: "c", firstUnreadAt: 100 }),
+      makeChat({ guid: "d", firstUnreadAt: 400 }),
+      makeChat({ guid: "e", firstUnreadAt: 200 }),
+      makeChat({ guid: "f", firstUnreadAt: 300 }),
+      makeChat({ guid: "g", firstUnreadAt: null }),
+      makeChat({ guid: "h", firstUnreadAt: undefined }),
+    ];
+
+    const partition = partitionPriorityShelf(chats);
+
+    expect(partition.priority.map((chat) => chat.guid)).toEqual(["c", "e", "f", "d"]);
+    expect(partition.recent.map((chat) => chat.guid)).toEqual(["a", "b", "g", "h"]);
+  });
+
+  test("preserves input order for equal timestamps", () => {
+    const chats = [
+      makeChat({ guid: "a", firstUnreadAt: 100 }),
+      makeChat({ guid: "b", firstUnreadAt: 100 }),
+      makeChat({ guid: "c", firstUnreadAt: 50 }),
+    ];
+
+    expect(partitionPriorityShelf(chats).priority.map((chat) => chat.guid)).toEqual(["c", "a", "b"]);
+  });
+
+  test("ignores pinned state", () => {
+    const chats = [
+      makeChat({ guid: "pinned", firstUnreadAt: 300, flags: makeFlags({ pinned: true }) }),
+      makeChat({ guid: "normal", firstUnreadAt: 100 }),
+    ];
+
+    expect(partitionPriorityShelf(chats).priority.map((chat) => chat.guid)).toEqual(["normal", "pinned"]);
+  });
+
+  test("returns every chat in exactly one partition", () => {
+    const chats = [
+      makeChat({ guid: "a", firstUnreadAt: 100 }),
+      makeChat({ guid: "b", firstUnreadAt: null }),
+      makeChat({ guid: "c", firstUnreadAt: 200 }),
+    ];
+
+    const { priority, recent } = partitionPriorityShelf(chats);
+    expect([...priority, ...recent]).toHaveLength(chats.length);
+    expect(new Set([...priority, ...recent])).toEqual(new Set(chats));
+  });
+});
+
 // ---------------------------------------------------------------- applyMessage
 
 describe("applyMessage", () => {
@@ -329,6 +390,8 @@ describe("applyMessage", () => {
     expect(next[0]!.flags.waiting).toBe(false);
     expect(next[0]!.flags.unread).toBe(true);
     expect(next[0]!.flags.archived).toBe(false);
+    expect(next[0]!.firstUnreadAt).toBe(6000);
+    expect(next[0]!.unreadCount).toBe(1);
   });
 
   test("inbound message on a muted chat does not set unresponded", () => {
@@ -337,15 +400,42 @@ describe("applyMessage", () => {
     expect(next[0]!.flags.unresponded).toBe(false);
   });
 
+  test("qualifying inbound messages preserve the earliest unread timestamp", () => {
+    const chats = [makeChat({ guid: "chat-1", firstUnreadAt: 4000 })];
+    const next = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 6000 }))!;
+    expect(next[0]!.firstUnreadAt).toBe(4000);
+  });
+
+  test("non-qualifying messages do not create an unread timestamp", () => {
+    const messages = [
+      makeMessage({ isFromMe: true }),
+      makeMessage({ dateRead: 3000 }),
+      makeMessage({ retracted: true }),
+      makeMessage({ isGroupEvent: true }),
+      makeMessage({ isAssociatedMessage: true }),
+    ];
+
+    for (const message of messages) {
+      const next = applyMessage([makeChat({ guid: "chat-1" })], "chat-1", message)!;
+      expect(next[0]!.firstUnreadAt).toBeNull();
+      expect(next[0]!.unreadCount).toBe(0);
+    }
+  });
+
   test("outbound message sets waiting, clears unresponded, preserves unread and archived", () => {
     const chats = [
-      makeChat({ guid: "chat-1", flags: makeFlags({ unresponded: true, unread: true, archived: true }) }),
+      makeChat({
+        guid: "chat-1",
+        firstUnreadAt: 4000,
+        flags: makeFlags({ unresponded: true, unread: true, archived: true }),
+      }),
     ];
     const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
     expect(next[0]!.flags.waiting).toBe(true);
     expect(next[0]!.flags.unresponded).toBe(false);
     expect(next[0]!.flags.unread).toBe(true);
     expect(next[0]!.flags.archived).toBe(true);
+    expect(next[0]!.firstUnreadAt).toBe(4000);
   });
 
   test("stale message returns the same array reference", () => {

@@ -151,9 +151,16 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: true, value: windowed });
   }
 
-  queryMessages(options: { limit: number; offset: number }): Promise<Result<BBMessage[]>> {
+  queryMessages(options: {
+    limit: number;
+    offset: number;
+    unreadInboundOnly?: boolean;
+  }): Promise<Result<BBMessage[]>> {
     this.calls.queryMessages++;
-    const value = this.allMessages().slice(options.offset, options.offset + options.limit);
+    const messages = options.unreadInboundOnly
+      ? this.allMessages().filter((message) => message.isFromMe !== true && !message.dateRead)
+      : this.allMessages();
+    const value = messages.slice(options.offset, options.offset + options.limit);
     return Promise.resolve({ ok: true, value });
   }
 

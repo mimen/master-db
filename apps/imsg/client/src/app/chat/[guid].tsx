@@ -35,12 +35,12 @@ function HeaderTitle({
         )}
         <Image
           source={{ uri: isGroup ? groupPhotoUrl(guid) : avatarUrl(dmAddress ?? "") }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 14 }]}
+          style={[StyleSheet.absoluteFill, { borderRadius: 16 }]}
           contentFit="cover"
         />
       </View>
-      <View style={{ minWidth: 0 }}>
-        <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16, fontWeight: "600" }}>
+      <View style={headerStyles.identityText}>
+        <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
           {name}
         </Text>
         {isGroup && memberCount !== undefined && memberCount > 0 && (
@@ -55,16 +55,20 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
-    maxWidth: 260,
+    maxWidth: 220,
   },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  identityText: {
+    flexShrink: 1,
   },
 });
 
@@ -88,6 +92,7 @@ export default function ChatScreen() {
     <>
       <Stack.Screen
         options={{
+          headerTitleAlign: "center",
           headerTitle: () => (
             <HeaderTitle
               guid={params.guid}

@@ -1,16 +1,18 @@
+import { Ionicons } from "@expo/vector-icons";
+import type { ChatSummary } from "@shared/types";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+
+import { useChatActions } from "@/hooks/use-chat-actions";
+import { prefetchThread } from "@/hooks/use-messages";
+import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
-import type { ChatSummary } from "@shared/types";
-import { useActionSheet } from "@/lib/action-sheet";
-import { useTheme } from "@/hooks/use-theme";
 import { showToast } from "@/lib/toast";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
-import { prefetchThread } from "@/hooks/use-messages";
+
 import { ChatAvatar } from "./avatar";
 
 const ACTION_WIDTH = 84;
@@ -54,7 +56,7 @@ export function ChatRow({
   onChanged: () => void;
 }) {
   const theme = useTheme();
-  const showSheet = useActionSheet();
+  const { run, openMenu } = useChatActions(onChanged);
   const { width: winW } = useWindowDimensions();
   const compact = winW >= 768;
   const [hovered, setHovered] = useState(false);
@@ -65,14 +67,7 @@ export function ChatRow({
       }`
     : "";
 
-  const run = (action: Promise<unknown>) => {
-    void action.then(onChanged).catch(() => {
-      showToast("Action failed");
-      onChanged();
-    });
-  };
-
-  const contextRef = useWebContextMenu<typeof Pressable>(() => openMenu());
+  const contextRef = useWebContextMenu<typeof Pressable>(() => openMenu(chat));
 
   // Hover via DOM mouseenter/mouseleave: unlike RNW's hover events these do
   // not fire when the pointer moves onto a child (the archive button).
@@ -91,37 +86,7 @@ export function ChatRow({
       node.removeEventListener("mouseenter", enter);
       node.removeEventListener("mouseleave", leave);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.guid]);
-
-  const openMenu = () => {
-    const actions = [
-      chat.flags.unread
-        ? { label: "Mark as read", onPress: () => run(api.markRead(chat.guid)) }
-        : { label: "Mark as unread", onPress: () => run(api.markUnread(chat.guid)) },
-      ...(chat.flags.unresponded
-        ? [{ label: "No reply needed", onPress: () => run(api.dismiss(chat.guid, "unresponded")) }]
-        : []),
-      ...(chat.flags.waiting
-        ? [{ label: "Not waiting on this", onPress: () => run(api.dismiss(chat.guid, "waiting")) }]
-        : []),
-      chat.flags.pinned
-        ? { label: "Unpin", onPress: () => run(api.setPinned(chat.guid, false)) }
-        : { label: "Pin", onPress: () => run(api.setPinned(chat.guid, true)) },
-      chat.flags.archived
-        ? { label: "Unarchive", onPress: () => run(api.setArchived(chat.guid, false)) }
-        : { label: "Archive", destructive: true, onPress: () => run(api.setArchived(chat.guid, true)) },
-      ...(chat.isGroup
-        ? [
-            {
-              label: chat.flags.mutedUnresponded ? "Show in Unresponded" : "Hide from Unresponded",
-              onPress: () => run(api.setMuted(chat.guid, !chat.flags.mutedUnresponded)),
-            },
-          ]
-        : []),
-    ];
-    showSheet({ title: chat.displayName, actions });
-  };
 
   return (
     <ReanimatedSwipeable
@@ -152,23 +117,19 @@ export function ChatRow({
         ref={contextRef as never}
         onPress={onPress}
         onPressIn={() => prefetchThread(chat.guid)}
-        onLongPress={openMenu}
+        onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
-          compact && styles.rowCompact,
           { backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background },
         ]}
       >
         <View style={styles.dotColumn}>
-          {chat.flags.unread && <View style={styles.unreadDot} />}
+          {chat.flags.unread && <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />}
         </View>
-        <ChatAvatar chat={chat} size={compact ? 40 : 52} />
+        <ChatAvatar chat={chat} size={52} />
         <View style={styles.content}>
           <View style={styles.topLine}>
-            <Text
-              numberOfLines={1}
-              style={[styles.name, compact && styles.nameCompact, { color: theme.text, fontWeight: chat.flags.unread ? "700" : "600" }]}
-            >
+            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontWeight: chat.flags.unread ? "700" : "600" }]}>
               {chat.displayName}
             </Text>
             {last && (
@@ -177,9 +138,19 @@ export function ChatRow({
               </Text>
             )}
           </View>
-          <Text numberOfLines={compact ? 1 : 2} style={[styles.snippet, compact && styles.snippetCompact, { color: theme.textSecondary }]}>
-            {snippet}
-          </Text>
+          <View style={styles.previewLine}>
+            <Text
+              numberOfLines={2}
+              style={[styles.snippet, { color: theme.textSecondary, fontWeight: chat.flags.unread ? "500" : "400" }]}
+            >
+              {snippet}
+            </Text>
+            {chat.unreadCount > 0 && (
+              <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
+                <Text style={styles.unreadBadgeText}>{chat.unreadCount > 99 ? "99+" : chat.unreadCount}</Text>
+              </View>
+            )}
+          </View>
         </View>
         {compact && (
           <Pressable
@@ -209,53 +180,65 @@ export function ChatRow({
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 11,
+    flexDirection: "row",
+    minHeight: 75,
     paddingRight: 16,
-    gap: 10,
-  },
-  rowCompact: {
-    paddingVertical: 7,
-  },
-  nameCompact: {
-    fontSize: 14,
-  },
-  snippetCompact: {
-    fontSize: 12.5,
-    lineHeight: 16,
   },
   dotColumn: {
-    width: 16,
     alignItems: "center",
+    width: 17,
   },
   unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#0A84FF",
+    borderRadius: 4,
+    height: 8,
+    width: 8,
   },
   content: {
     flex: 1,
+    marginLeft: 11,
     minWidth: 0,
+    paddingVertical: 10,
   },
   topLine: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "baseline",
+    flexDirection: "row",
     gap: 8,
   },
   name: {
+    flex: 1,
     fontSize: 17,
-    flexShrink: 1,
+    letterSpacing: -0.2,
+    minWidth: 0,
   },
   time: {
-    fontSize: 15,
+    flexShrink: 0,
+    fontSize: 13,
+  },
+  previewLine: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
+    marginTop: 2,
   },
   snippet: {
-    fontSize: 15,
-    lineHeight: 19,
-    marginTop: 1,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 18,
+    minWidth: 0,
+  },
+  unreadBadge: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 19,
+    justifyContent: "center",
+    minWidth: 19,
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "700",
   },
   hoverArchive: {
     position: "absolute",

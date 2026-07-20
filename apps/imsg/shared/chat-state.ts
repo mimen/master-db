@@ -92,6 +92,29 @@ export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCoun
   ) as StateCounts;
 }
 
+export interface PriorityShelfPartition {
+  priority: ChatSummary[];
+  recent: ChatSummary[];
+}
+
+/**
+ * Selects the oldest unread conversations for the priority shelf. Everything
+ * else stays in its existing recent-list order.
+ */
+export function partitionPriorityShelf(chats: ChatSummary[]): PriorityShelfPartition {
+  const priority = chats
+    .map((chat, index) => ({ chat, index }))
+    .filter(({ chat }) => typeof chat.firstUnreadAt === "number")
+    .sort((a, b) => a.chat.firstUnreadAt! - b.chat.firstUnreadAt! || a.index - b.index)
+    .slice(0, 4)
+    .map(({ chat }) => chat);
+  const priorityChats = new Set(priority);
+  return {
+    priority,
+    recent: chats.filter((chat) => !priorityChats.has(chat)),
+  };
+}
+
 /**
  * The SSE fast path: applies a message we already know about directly to a
  * summary list, ahead of a full rebuild — new last message, flag flips
@@ -111,8 +134,19 @@ export function applyMessage(
   const chat = index >= 0 ? chats[index] : undefined;
   if (!chat) return null;
   if ((chat.lastMessage?.dateCreated ?? 0) > message.dateCreated) return chats;
+  const qualifiesForUnreadAge =
+    !message.isFromMe &&
+    message.dateRead === null &&
+    !message.retracted &&
+    !message.isGroupEvent &&
+    message.isAssociatedMessage !== true;
+  const firstUnreadAt = qualifiesForUnreadAge
+    ? Math.min(chat.firstUnreadAt ?? message.dateCreated, message.dateCreated)
+    : chat.firstUnreadAt;
   const updated: ChatSummary = {
     ...chat,
+    firstUnreadAt,
+    unreadCount: qualifiesForUnreadAge ? chat.unreadCount + 1 : chat.unreadCount,
     lastMessage: {
       guid: message.guid,
       text: message.text || (message.attachments.length > 0 ? "Attachment" : ""),

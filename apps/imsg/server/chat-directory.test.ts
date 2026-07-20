@@ -60,8 +60,10 @@ async function setup(chats: FakeChatSeed[] = twoChatSeed()): Promise<{
   const directory = new ChatDirectory(bb, db, contacts);
   // Bridge the event stream exactly like server/index.ts does.
   bb.onEvent((event) => {
-    if (event.kind === "new-message" || event.kind === "updated-message") {
+    if (event.kind === "new-message") {
       directory.applyMessage(event.message.chats?.[0]?.guid ?? null, event.message);
+    } else if (event.kind === "updated-message") {
+      directory.applyUpdatedMessage(event.message.chats?.[0]?.guid ?? null, event.message);
     }
   });
   return { bb, db, directory, contacts };
@@ -89,6 +91,130 @@ describe("ChatDirectory.summaries", () => {
     expect(a.flags.unresponded).toBe(true); // inbound last message
     expect(a.flags.unread).toBe(true);
   });
+
+  test("scans every page and records the earliest genuine unread message", async () => {
+    const messages: BBMessage[] = [];
+    for (let i = 0; i < 1001; i++) {
+      messages.push(inbound(`page-${i}`, 10_000 - i));
+    }
+    const { bb, directory } = await setup([{ guid: CHAT_A, messages }]);
+    const queryMessages = bb.queryMessages.bind(bb);
+    const queryOptions: Array<Parameters<typeof bb.queryMessages>[0]> = [];
+    bb.queryMessages = (options) => {
+      queryOptions.push(options);
+      return queryMessages(options);
+    };
+
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(bb.calls.queryMessages).toBe(2);
+    expect(queryOptions.every((options) => options.unreadInboundOnly === true)).toBe(true);
+    expect(chat.unreadCount).toBe(1001);
+    expect(chat.firstUnreadAt).toBe(9_000);
+  });
+
+  test("excludes read, associated, group-event, retracted, and invalid-date messages", async () => {
+    const associated = inbound("associated", 2000);
+    associated.associatedMessageGuid = "target";
+    associated.associatedMessageType = 2000;
+    const groupEvent = inbound("group-event", 3000);
+    groupEvent.itemType = 1;
+    const retracted = inbound("retracted", 4000);
+    retracted.dateRetracted = 5000;
+    const read = inbound("read", 5000);
+    read.dateRead = 6000;
+    const invalidDate = inbound("invalid-date", 0);
+    const { directory } = await setup([
+      {
+        guid: CHAT_A,
+        messages: [inbound("first", 1000), associated, groupEvent, retracted, read, invalidDate],
+      },
+    ]);
+
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.unreadCount).toBe(1);
+    expect(chat.firstUnreadAt).toBe(1000);
+  });
+
+  test("uses the genuine last message as a fallback only when the unread query fails", async () => {
+    const { bb, directory } = await setup([{ guid: CHAT_A, messages: [inbound("fallback", 1000)] }]);
+    bb.queryMessages = () => Promise.resolve({ ok: false, error: "offline" });
+
+    let result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(1);
+    expect(find(result.chats, CHAT_A).firstUnreadAt).toBe(1000);
+
+    const zeroDate = await setup([{ guid: CHAT_A, messages: [inbound("zero", 0)] }]);
+    zeroDate.bb.queryMessages = () => Promise.resolve({ ok: false, error: "offline" });
+    result = await zeroDate.directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(0);
+    expect(find(result.chats, CHAT_A).firstUnreadAt).toBeNull();
+  });
+
+  test("coalesces concurrent unread scans", async () => {
+    const { bb, directory } = await setup();
+    await directory.summaries();
+    const scansBefore = bb.calls.queryMessages;
+    directory.invalidate(true);
+
+    await Promise.all([directory.summaries(), directory.summaries()]);
+    expect(bb.calls.queryMessages).toBe(scansBefore + 1);
+  });
+
+  test("restarts an unread scan invalidated while it is in flight", async () => {
+    const { bb, directory } = await setup();
+    const queryMessages = bb.queryMessages.bind(bb);
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const scanStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let first = true;
+    bb.queryMessages = async (options) => {
+      if (first) {
+        first = false;
+        started();
+        await gate;
+      }
+      return queryMessages(options);
+    };
+
+    const pending = directory.summaries();
+    await scanStarted;
+    directory.invalidate(true);
+    release();
+    await pending;
+
+    expect(bb.calls.queryMessages).toBe(2);
+  });
+
+  test("keeps the previous unread result when a later paginated scan fails", async () => {
+    const messages: BBMessage[] = [];
+    for (let i = 0; i < 1001; i++) messages.push(inbound(`atomic-${i}`, 10_000 - i));
+    const { bb, directory } = await setup([{ guid: CHAT_A, messages }]);
+    await directory.summaries();
+
+    const queryMessages = bb.queryMessages.bind(bb);
+    bb.queryMessages = (options) =>
+      options.offset === 1000
+        ? Promise.resolve({ ok: false, error: "page failed" })
+        : queryMessages(options);
+    directory.invalidate(true);
+
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.unreadCount).toBe(1001);
+    expect(chat.firstUnreadAt).toBe(9_000);
+  });
 });
 
 // ------------------------------------------------- reactive SSE fast path
@@ -98,6 +224,7 @@ describe("ChatDirectory reactive fast path", () => {
     const { bb, directory } = await setup();
     await directory.summaries();
     const rebuilds = bb.calls.queryChats;
+    const scans = bb.calls.queryMessages;
 
     bb.receiveMessage(CHAT_A, "new inbound!");
 
@@ -106,11 +233,31 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     // No rebuild: the cache was patched in place.
     expect(bb.calls.queryChats).toBe(rebuilds);
+    expect(bb.calls.queryMessages).toBe(scans);
     expect(result.chats[0]?.guid).toBe(CHAT_A); // moved to top
     const a = find(result.chats, CHAT_A);
     expect(a.lastMessage?.text).toBe("new inbound!");
     expect(a.flags.unresponded).toBe(true);
     expect(a.flags.unread).toBe(true);
+    expect(a.unreadCount).toBe(2);
+    expect(a.firstUnreadAt).toBe(1000);
+  });
+
+  test("updated messages invalidate summaries for authoritative reconciliation", async () => {
+    const { bb, directory } = await setup();
+    await directory.summaries();
+    const rebuilds = bb.calls.queryChats;
+
+    directory.applyUpdatedMessage(CHAT_A, {
+      guid: "a1",
+      dateCreated: 1000,
+      dateRead: 2000,
+      isFromMe: false,
+      chats: [{ guid: CHAT_A }],
+    });
+    await directory.summaries();
+
+    expect(bb.calls.queryChats).toBe(rebuilds + 1);
   });
 
   test("outbound message sets waiting and clears unresponded", async () => {
@@ -138,6 +285,8 @@ describe("ChatDirectory reactive fast path", () => {
     let result = await directory.summaries();
     if (!result.ok) return;
     expect(find(result.chats, CHAT_A).flags.unread).toBe(true);
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(1);
+    expect(find(result.chats, CHAT_A).firstUnreadAt).toBe(1000);
 
     const ok = await directory.markRead(CHAT_A);
     expect(ok).toBe(true);
@@ -146,7 +295,58 @@ describe("ChatDirectory reactive fast path", () => {
     result = await directory.summaries(); // rebuild; fake's data still shows the message unread
     if (!result.ok) return;
     expect(find(result.chats, CHAT_A).flags.unread).toBe(false);
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(0);
+    expect(find(result.chats, CHAT_A).firstUnreadAt).toBeNull();
     expect(db.getAll().get(CHAT_A)?.markedUnread).toBe(0);
+  });
+
+  test("manual unread does not invent an unread timestamp", async () => {
+    const { directory } = await setup([
+      {
+        guid: CHAT_A,
+        messages: [{ guid: "outbound", text: "sent", dateCreated: 1000, isFromMe: true }],
+      },
+    ]);
+    directory.markUnread(CHAT_A);
+
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.flags.unread).toBe(true);
+    expect(chat.unreadCount).toBe(0);
+    expect(chat.firstUnreadAt).toBeNull();
+  });
+
+  test("manual unread updates an already-cached summary immediately", async () => {
+    const { directory } = await setup([
+      {
+        guid: CHAT_A,
+        messages: [{ guid: "outbound", text: "sent", dateCreated: 1000, isFromMe: true }],
+      },
+    ]);
+    let result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).flags.unread).toBe(false);
+
+    directory.markUnread(CHAT_A);
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).flags.unread).toBe(true);
+    expect(find(result.chats, CHAT_A).firstUnreadAt).toBeNull();
+  });
+
+  test("manual unread preserves suppression of BlueBubbles read lag", async () => {
+    const { directory } = await setup();
+    await directory.summaries();
+    expect(await directory.markRead(CHAT_A)).toBe(true);
+    directory.markUnread(CHAT_A);
+
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.flags.unread).toBe(true);
+    expect(chat.unreadCount).toBe(0);
+    expect(chat.firstUnreadAt).toBeNull();
   });
 
   test("archive excludes from the all lens; a new inbound auto-unarchives", async () => {

@@ -39,6 +39,8 @@ export interface Message {
   replyToGuid: string | null;
   /** Preview of the replied-to message, resolved server-side when available. */
   replyToPreview: string | null;
+  /** Whether this is an associated message (for example, a tapback). */
+  isAssociatedMessage?: boolean;
   /** Whether the replied-to message was sent by me (null when unresolved). */
   replyToFromMe: boolean | null;
   isGroupEvent: boolean;
@@ -85,6 +87,8 @@ export interface ChatSummary {
     hasAttachments: boolean;
   } | null;
   unreadCount: number;
+  /** Epoch ms of the oldest genuine unread inbound message, or null when unavailable. */
+  firstUnreadAt?: number | null;
   flags: ChatFlags;
 }
 

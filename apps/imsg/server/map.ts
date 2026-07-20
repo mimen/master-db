@@ -67,6 +67,7 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
     // replyToGuid on ordinary consecutive messages too.
     replyToGuid: m.threadOriginatorGuid ?? null,
     replyToPreview: null,
+    isAssociatedMessage: isTapback(m),
     replyToFromMe: null,
     isGroupEvent: isGroupEvent(m),
     error: m.error ?? 0,
@@ -133,11 +134,27 @@ function chatDisplayName(chat: BBChat, contacts: ContactBook): string {
   return `${firsts.slice(0, 3).join(", ")} +${firsts.length - 3}`;
 }
 
+export interface UnreadSummary {
+  count: number;
+  firstUnreadAt: number | null;
+}
+
+function isGenuineUnreadInbound(m: BBMessage): boolean {
+  return (
+    m.isFromMe !== true &&
+    !m.dateRead &&
+    !m.dateRetracted &&
+    (m.dateCreated ?? 0) > 0 &&
+    !isGroupEvent(m) &&
+    !isTapback(m)
+  );
+}
+
 export function mapChat(
   chat: BBChat,
   state: ChatState | undefined,
   contacts: ContactBook,
-  scannedUnread?: number,
+  scannedUnread?: UnreadSummary,
 ): ChatSummary {
   const last = chat.lastMessage ?? null;
   const isGroup = chat.guid.includes(";+;") || (chat.participants ?? []).length > 1;
@@ -156,13 +173,11 @@ export function mapChat(
         hasAttachments: (last.attachments ?? []).length > 0,
       }
     : null;
-  // The scanned count only covers the recent global window; the last-message
-  // heuristic catches unread chats that fell outside it.
-  const heuristic =
-    last && last.isFromMe !== true && !last.dateRead && !isGroupEvent(last) && !isTapback(last)
-      ? 1
-      : 0;
-  const unreadCount = Math.max(scannedUnread ?? 0, heuristic);
+  // The scan is authoritative when available. A genuine last unread message
+  // still provides a safe fallback if BlueBubbles' global query failed.
+  const fallbackUnreadAt = last && isGenuineUnreadInbound(last) ? last.dateCreated ?? 0 : null;
+  const unreadCount = Math.max(scannedUnread?.count ?? 0, fallbackUnreadAt === null ? 0 : 1);
+  const firstUnreadAt = scannedUnread?.count ? scannedUnread.firstUnreadAt : fallbackUnreadAt;
   const flagInput = last
     ? { guid: last.guid, dateCreated: last.dateCreated ?? 0, isFromMe: last.isFromMe === true }
     : null;
@@ -179,6 +194,7 @@ export function mapChat(
     participants,
     lastMessage: lastSummary,
     unreadCount,
+    firstUnreadAt,
     flags: computeFlags(state, flagInput, unreadCount),
   };
 }

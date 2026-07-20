@@ -61,7 +61,10 @@ bb.onEvent((event) => {
     case "new-message":
     case "updated-message": {
       const chatGuid = chatGuidOf(event.message);
-      const mapped = directory.applyMessage(chatGuid, event.message);
+      const mapped =
+        event.kind === "new-message"
+          ? directory.applyMessage(chatGuid, event.message)
+          : directory.applyUpdatedMessage(chatGuid, event.message);
       if (!chatGuid || mapped === null) {
         broadcast({ kind: "chats-changed" });
         return;
