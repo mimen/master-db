@@ -100,15 +100,6 @@ export default function ChatListScreen() {
     });
   };
 
-  const openGlobalSearch = (query: string): void => {
-    if (wide) {
-      setSearchQuery(query);
-      setSearchOpen(true);
-      return;
-    }
-    router.push({ pathname: "/search", params: query ? { query } : {} });
-  };
-
   const openNewMessage = (): void => {
     if (wide) setNewChatOpen(true);
     else router.push("/new-chat");
@@ -160,7 +151,6 @@ export default function ChatListScreen() {
       }}
       onOpenChat={openChat}
       onRefresh={refresh}
-      onGlobalSearch={openGlobalSearch}
       onNewMessage={openNewMessage}
     />
   );

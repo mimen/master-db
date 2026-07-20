@@ -1,7 +1,8 @@
 import { memo, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Path } from "react-native-svg";
 import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
 import type { Message, SpecialContent } from "@shared/types";
@@ -18,6 +19,24 @@ const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons
   poll: { icon: "bar-chart-outline", label: "Poll" },
   unknown: { icon: "cube-outline", label: "App Message" },
 };
+
+/** Clean iMessage-style bubble tail via SVG — hugs the bottom outer corner. */
+function BubbleTail({ color, mine }: { color: string; mine: boolean }) {
+  return (
+    <Svg
+      width={14}
+      height={16}
+      viewBox="0 0 14 16"
+      style={[styles.tailSvg, mine ? { right: -5 } : { left: -5, transform: [{ scaleX: -1 }] }]}
+      pointerEvents="none"
+    >
+      <Path
+        d="M0 0 C0 8 2 14 12 15 C6 15 1 12 1 6 Z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
 
 function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean }) {
   const theme = useTheme();
@@ -44,7 +63,8 @@ export const TAPBACK_EMOJI = new Map([
 function Attachments({ message, mine }: { message: Message; mine: boolean }) {
   const { width: winW } = useWindowDimensions();
   const openLightbox = useLightbox();
-  const mediaW = Math.min(340, Math.round(winW * 0.65));
+  // Cap thumbnails so desktop doesn't blow them up huge.
+  const mediaW = Math.min(260, Math.round(winW * 0.6));
   const images = message.attachments.filter((a) => a.mimeType?.startsWith("image/"));
   return (
     <View style={{ gap: 6 }}>
@@ -124,6 +144,8 @@ export const Bubble = memo(function Bubble({
   const mineColor = message.service === "SMS" ? "#34C759" : theme.bubbleMine;
   const senderName = message.sender?.name ?? message.sender?.address ?? "";
   const url = message.text ? firstUrl(message.text) : null;
+  // Tail only on the last text bubble of a group (not on media/pending/failed).
+  const hasTail = groupEnd && !message.pending && !message.failed && message.text !== "";
 
   return (
     <View style={{ paddingHorizontal: 14, marginBottom: groupEnd ? 8 : 2 }}>
@@ -184,59 +206,51 @@ export const Bubble = memo(function Bubble({
           </View>
         )}
 
-        <View style={{ maxWidth: "78%", alignItems: mine ? "flex-end" : "flex-start" }}>
+        <View style={{ maxWidth: "80%", alignItems: mine ? "flex-end" : "flex-start", gap: 4 }}>
           {!mine && isGroupChat && groupStart && senderName !== "" && (
             <Text style={[styles.senderName, { color: theme.textSecondary }]}>{senderName}</Text>
           )}
+
+          {/* Media and link cards render bare — no colored bubble around them. */}
+          {message.attachments.length > 0 && <Attachments message={message} mine={mine} />}
+          {url && <LinkPreviewCard url={url} mine={mine} />}
+
           <View>
-            <Pressable
-              ref={contextRef as never}
-              onPress={() => setShowTime((v) => !v)}
-              onLongPress={() => onLongPress(message)}
-              delayLongPress={280}
-              style={[
-                styles.bubble,
-                highlighted && styles.highlighted,
-                { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
-                message.pending && { opacity: 0.6 },
-                message.failed && { backgroundColor: "rgba(255,69,58,0.25)" },
-              ]}
-            >
-              {message.attachments.length > 0 && <Attachments message={message} mine={mine} />}
-              {message.special && <SpecialCard special={message.special} mine={mine} />}
-              {message.text !== "" && (
-                <Text
-                  selectable
-                  style={{
-                    fontSize: 17,
-                    lineHeight: 22,
-                    color: mine ? "#fff" : theme.bubbleTheirsText,
-                  }}
-                >
-                  {message.text}
-                </Text>
-              )}
-              {url && <LinkPreviewCard url={url} mine={mine} />}
-              {groupEnd && !message.pending && !message.failed && (
-                <>
-                  <View
-                    style={[
-                      styles.tail,
-                      mine
-                        ? { right: -5.5, backgroundColor: mineColor }
-                        : { left: -5.5, backgroundColor: theme.bubbleTheirs },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.tailCut,
-                      mine ? { right: -10 } : { left: -10 },
-                      { backgroundColor: theme.background },
-                    ]}
-                  />
-                </>
-              )}
-            </Pressable>
+            {(message.text !== "" || message.special) && (
+              <Pressable
+                ref={contextRef as never}
+                onPress={() => setShowTime((v) => !v)}
+                onLongPress={() => onLongPress(message)}
+                delayLongPress={280}
+                style={[
+                  styles.bubble,
+                  highlighted && styles.highlighted,
+                  { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
+                  hasTail && (mine ? styles.bubbleTailMine : styles.bubbleTailTheirs),
+                  message.pending && { opacity: 0.6 },
+                  message.failed && { backgroundColor: "rgba(255,69,58,0.25)" },
+                ]}
+              >
+                {message.special && <SpecialCard special={message.special} mine={mine} />}
+                {message.text !== "" && (
+                  <Text
+                    selectable
+                    style={{
+                      fontSize: 17,
+                      lineHeight: 22,
+                      color: mine ? "#fff" : theme.bubbleTheirsText,
+                      // Break long unbroken strings (URLs) so they never overflow.
+                      ...(Platform.OS === "web"
+                        ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
+                        : {}),
+                    }}
+                  >
+                    {message.text}
+                  </Text>
+                )}
+                {hasTail && <BubbleTail color={mine ? mineColor : theme.bubbleTheirs} mine={mine} />}
+              </Pressable>
+            )}
 
             {message.reactions.length > 0 && (
               <View style={[styles.reactionRow, mine ? { left: -10 } : { right: -10 }]}>
@@ -293,26 +307,20 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#0A84FF",
   },
-  tail: {
+  tailSvg: {
     position: "absolute",
     bottom: 0,
-    width: 18,
-    height: 16,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-    zIndex: -1,
-  },
-  tailCut: {
-    position: "absolute",
-    bottom: -1,
-    width: 12,
-    height: 20,
-    borderRadius: 10,
   },
   bubble: {
     borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 7,
+  },
+  bubbleTailMine: {
+    borderBottomRightRadius: 4,
+  },
+  bubbleTailTheirs: {
+    borderBottomLeftRadius: 4,
   },
   quote: {
     borderWidth: 1.5,

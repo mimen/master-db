@@ -88,6 +88,8 @@ export function deriveInboxModel(
   chats: ChatSummary[],
   filters: InboxFilters,
   searchQuery: string,
+  /** Chat GUIDs whose deeper message history matched the query (server search). */
+  deepMatchGuids?: Set<string>,
 ): InboxModel {
   const needle = searchQuery.trim().toLowerCase();
   const searchedChats = chats.filter((chat) => {
@@ -95,7 +97,8 @@ export function deriveInboxModel(
     if (needle.length === 0) return true;
     return (
       chat.displayName.toLowerCase().includes(needle) ||
-      (chat.lastMessage?.text ?? "").toLowerCase().includes(needle)
+      (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) ||
+      Boolean(deepMatchGuids?.has(chat.guid))
     );
   });
   const showPriorityShelf = filters.state === "all" && filters.type === "all" && needle.length === 0;

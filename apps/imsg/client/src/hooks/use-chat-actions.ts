@@ -1,50 +1,53 @@
 import type { ChatSummary } from "@shared/types";
 
 import { useActionSheet } from "@/lib/action-sheet";
-import { api } from "@/lib/api";
-import { showToast } from "@/lib/toast";
+import {
+  archiveChat,
+  dismissChat,
+  markChatRead,
+  markChatUnread,
+  muteChat,
+  pinChat,
+} from "@/lib/chat-actions";
 
 interface ChatActions {
-  run: (action: Promise<unknown>) => void;
   openMenu: (chat: ChatSummary) => void;
 }
 
-/** Shared row/shelf actions so Priority conversations retain their context menu. */
-export function useChatActions(onChanged: () => void): ChatActions {
+/**
+ * Shared conversation menu — used by rows, the priority shelf, and inside a
+ * chat. All mutations go through the optimistic chat-actions layer so every
+ * surface updates instantly.
+ */
+export function useChatActions(): ChatActions {
   const showSheet = useActionSheet();
-  const run = (action: Promise<unknown>): void => {
-    void action.then(onChanged).catch(() => {
-      showToast("Action failed");
-      onChanged();
-    });
-  };
   const openMenu = (chat: ChatSummary): void => {
     const actions = [
       chat.flags.unread
-        ? { label: "Mark as read", onPress: () => run(api.markRead(chat.guid)) }
-        : { label: "Mark as unread", onPress: () => run(api.markUnread(chat.guid)) },
+        ? { label: "Mark as read", onPress: () => markChatRead(chat) }
+        : { label: "Mark as unread", onPress: () => markChatUnread(chat) },
       ...(chat.flags.unresponded
-        ? [{ label: "No reply needed", onPress: () => run(api.dismiss(chat.guid, "unresponded")) }]
+        ? [{ label: "No reply needed", onPress: () => dismissChat(chat, "unresponded") }]
         : []),
       ...(chat.flags.waiting
-        ? [{ label: "Not waiting on this", onPress: () => run(api.dismiss(chat.guid, "waiting")) }]
+        ? [{ label: "Not waiting on this", onPress: () => dismissChat(chat, "waiting") }]
         : []),
       chat.flags.pinned
-        ? { label: "Unpin", onPress: () => run(api.setPinned(chat.guid, false)) }
-        : { label: "Pin", onPress: () => run(api.setPinned(chat.guid, true)) },
+        ? { label: "Unpin", onPress: () => pinChat(chat, false) }
+        : { label: "Pin", onPress: () => pinChat(chat, true) },
       chat.flags.archived
-        ? { label: "Unarchive", onPress: () => run(api.setArchived(chat.guid, false)) }
-        : { label: "Archive", destructive: true, onPress: () => run(api.setArchived(chat.guid, true)) },
+        ? { label: "Unarchive", onPress: () => archiveChat(chat, false) }
+        : { label: "Archive", destructive: true, onPress: () => archiveChat(chat, true) },
       ...(chat.isGroup
         ? [
             {
               label: chat.flags.mutedUnresponded ? "Show in Unresponded" : "Hide from Unresponded",
-              onPress: () => run(api.setMuted(chat.guid, !chat.flags.mutedUnresponded)),
+              onPress: () => muteChat(chat, !chat.flags.mutedUnresponded),
             },
           ]
         : []),
     ];
     showSheet({ title: chat.displayName, actions });
   };
-  return { run, openMenu };
+  return { openMenu };
 }
