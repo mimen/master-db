@@ -83,6 +83,19 @@ export default [
     },
   },
   {
+    // CLI scripts run under Bun — full Node globals + console output IS the UX.
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        Bun: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', '**/test_utils/**/*.ts'],
     languageOptions: {
       globals: {
