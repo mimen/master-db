@@ -15,9 +15,14 @@ type SearchRow =
 /** Search UI shared by the mobile route and the desktop overlay panel. */
 export function SearchContent({
   initialQuery,
+  scopeChatGuid,
+  scopeLabel,
   onClose,
 }: {
   initialQuery?: string;
+  /** When set, search only this conversation (in-thread search). */
+  scopeChatGuid?: string;
+  scopeLabel?: string;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -39,8 +44,8 @@ export function SearchContent({
     const handle = setTimeout(() => {
       setSearching(true);
       Promise.all([
-        api.search(query.trim()).catch(() => []),
-        api.contacts(query.trim()).catch(() => []),
+        api.search(query.trim(), scopeChatGuid ? { chat: scopeChatGuid } : {}).catch(() => []),
+        scopeChatGuid ? Promise.resolve([]) : api.contacts(query.trim()).catch(() => []),
       ])
         .then(([messageResults, contactResults]) => {
           setMessages(messageResults);
@@ -49,7 +54,7 @@ export function SearchContent({
         .finally(() => setSearching(false));
     }, 350);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [query, scopeChatGuid]);
 
   const openContact = (contact: Contact) => {
     api
@@ -101,7 +106,7 @@ export function SearchContent({
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Search contacts and messages…"
+        placeholder={scopeLabel ? `Search in ${scopeLabel}` : "Search contacts and messages…"}
         placeholderTextColor={theme.textSecondary}
         autoFocus
         style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}

@@ -229,6 +229,34 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: false, error: "not implemented in fake" });
   }
 
+  sendAudio(): Promise<Result<BBMessage>> {
+    return Promise.resolve({ ok: false, error: "not implemented in fake" });
+  }
+
+  sendAttachmentWithCaption(): Promise<Result<BBMessage>> {
+    return Promise.resolve({ ok: false, error: "not implemented in fake" });
+  }
+
+  renameGroup(): Promise<Result<unknown>> {
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
+  addParticipant(): Promise<Result<unknown>> {
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
+  removeParticipant(): Promise<Result<unknown>> {
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
+  leaveGroup(): Promise<Result<unknown>> {
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
+  deleteChat(): Promise<Result<unknown>> {
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
   attachmentMeta(): Promise<Result<BBAttachment>> {
     return Promise.resolve({ ok: false, error: "not implemented in fake" });
   }

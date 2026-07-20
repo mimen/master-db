@@ -60,6 +60,10 @@ export interface BBMessage {
   groupActionType?: number;
   isSpam?: boolean;
   groupTitle?: string | null;
+  /** Non-null for rich payloads: contact cards, Apple Pay, polls, apps. */
+  balloonBundleId?: string | null;
+  /** Apple expressive send style id (bubble/screen effects). */
+  expressiveSendStyleId?: string | null;
   error?: number;
   chats?: BBChat[];
 }

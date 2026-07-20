@@ -26,6 +26,38 @@ export class OverlayDb {
         // column already exists
       }
     }
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS scheduled_message (
+        id TEXT PRIMARY KEY,
+        chat_guid TEXT NOT NULL,
+        text TEXT NOT NULL,
+        send_at INTEGER NOT NULL
+      );
+    `);
+  }
+
+  // ------------------------------------------------------- scheduled messages
+
+  listScheduled(): Array<{ id: string; chatGuid: string; text: string; sendAt: number }> {
+    return (
+      this.db
+        .query("SELECT id, chat_guid, text, send_at FROM scheduled_message ORDER BY send_at ASC")
+        .all() as Array<{ id: string; chat_guid: string; text: string; send_at: number }>
+    ).map((r) => ({ id: r.id, chatGuid: r.chat_guid, text: r.text, sendAt: r.send_at }));
+  }
+
+  addScheduled(id: string, chatGuid: string, text: string, sendAt: number): void {
+    this.db
+      .query("INSERT INTO scheduled_message (id, chat_guid, text, send_at) VALUES (?, ?, ?, ?)")
+      .run(id, chatGuid, text, sendAt);
+  }
+
+  removeScheduled(id: string): void {
+    this.db.query("DELETE FROM scheduled_message WHERE id = ?").run(id);
+  }
+
+  dueScheduled(now: number): Array<{ id: string; chatGuid: string; text: string; sendAt: number }> {
+    return this.listScheduled().filter((s) => s.sendAt <= now);
   }
 
   getAll(): Map<string, ChatState> {

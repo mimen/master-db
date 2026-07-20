@@ -57,6 +57,18 @@ export interface BlueBubbles {
   unsend(messageGuid: string, partIndex?: number): Promise<Result<unknown>>;
   edit(messageGuid: string, editedMessage: string, partIndex?: number): Promise<Result<BBMessage>>;
   createChat(addresses: string[], message: string): Promise<Result<BBChat>>;
+  sendAudio(chatGuid: string, filename: string, bytes: Uint8Array): Promise<Result<BBMessage>>;
+  sendAttachmentWithCaption(
+    chatGuid: string,
+    filename: string,
+    bytes: Uint8Array,
+    caption?: string,
+  ): Promise<Result<BBMessage>>;
+  renameGroup(chatGuid: string, name: string): Promise<Result<unknown>>;
+  addParticipant(chatGuid: string, address: string): Promise<Result<unknown>>;
+  removeParticipant(chatGuid: string, address: string): Promise<Result<unknown>>;
+  leaveGroup(chatGuid: string): Promise<Result<unknown>>;
+  deleteChat(chatGuid: string): Promise<Result<unknown>>;
   contacts(): Promise<Result<BBContact[]>>;
   getChat(chatGuid: string): Promise<Result<BBChat>>;
   attachmentMeta(guid: string): Promise<Result<BBAttachment>>;
@@ -132,6 +144,15 @@ export class BlueBubblesClient implements BlueBubbles {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body === null ? undefined : JSON.stringify(body),
+    });
+    return this.unwrap<T>(res);
+  }
+
+  private async put<T>(path: string, body: unknown): Promise<Result<T>> {
+    const res = await fetch(this.url(path), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
     return this.unwrap<T>(res);
   }
@@ -290,6 +311,65 @@ export class BlueBubblesClient implements BlueBubbles {
       method: "apple-script",
       service: "iMessage",
     });
+  }
+
+  private async sendAttachmentForm(
+    chatGuid: string,
+    filename: string,
+    bytes: Uint8Array,
+    extra: Record<string, string> = {},
+  ): Promise<Result<BBMessage>> {
+    const form = new FormData();
+    form.append("chatGuid", chatGuid);
+    form.append("tempGuid", tempGuid());
+    form.append("name", filename);
+    form.append("method", this.sendMethod());
+    for (const [k, v] of Object.entries(extra)) form.append(k, v);
+    form.append("attachment", new Blob([bytes.slice().buffer]), filename);
+    const res = await fetch(this.url("/api/v1/message/attachment"), { method: "POST", body: form });
+    return this.unwrap<BBMessage>(res);
+  }
+
+  sendAudio(chatGuid: string, filename: string, bytes: Uint8Array): Promise<Result<BBMessage>> {
+    return this.sendAttachmentForm(chatGuid, filename, bytes, { isAudioMessage: "true" });
+  }
+
+  async sendAttachmentWithCaption(
+    chatGuid: string,
+    filename: string,
+    bytes: Uint8Array,
+    caption?: string,
+  ): Promise<Result<BBMessage>> {
+    // On the private API a caption rides as the subject; otherwise send it as a
+    // follow-up text so the recipient still gets it.
+    const extra: Record<string, string> = caption && this.hasPrivateApi ? { subject: caption } : {};
+    const result = await this.sendAttachmentForm(chatGuid, filename, bytes, extra);
+    if (result.ok && caption && !this.hasPrivateApi) {
+      await this.sendText(chatGuid, caption);
+    }
+    return result;
+  }
+
+  /** Group management — all private API only. */
+  renameGroup(chatGuid: string, name: string): Promise<Result<unknown>> {
+    return this.put(`/api/v1/chat/${chatGuid}`, { displayName: name });
+  }
+
+  addParticipant(chatGuid: string, address: string): Promise<Result<unknown>> {
+    return this.post(`/api/v1/chat/${chatGuid}/participant/add`, { address });
+  }
+
+  removeParticipant(chatGuid: string, address: string): Promise<Result<unknown>> {
+    return this.post(`/api/v1/chat/${chatGuid}/participant/remove`, { address });
+  }
+
+  leaveGroup(chatGuid: string): Promise<Result<unknown>> {
+    return this.post(`/api/v1/chat/${chatGuid}/leave`, null);
+  }
+
+  async deleteChat(chatGuid: string): Promise<Result<unknown>> {
+    const res = await fetch(this.url(`/api/v1/chat/${chatGuid}`), { method: "DELETE" });
+    return this.unwrap(res);
   }
 
   contacts(): Promise<Result<BBContact[]>> {

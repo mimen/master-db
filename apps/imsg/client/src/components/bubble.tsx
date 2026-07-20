@@ -1,13 +1,36 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
-import type { Message } from "@shared/types";
+import type { Message, SpecialContent } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 import { AudioBubble, VideoBubble } from "./media";
+import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
+
+const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
+  contact: { icon: "person-circle-outline", label: "Contact Card" },
+  location: { icon: "location-outline", label: "Shared Location" },
+  "apple-cash": { icon: "cash-outline", label: "Apple Cash" },
+  poll: { icon: "bar-chart-outline", label: "Poll" },
+  unknown: { icon: "cube-outline", label: "App Message" },
+};
+
+function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean }) {
+  const theme = useTheme();
+  const meta = SPECIAL_META[special.kind];
+  const title = special.kind === "contact" && special.name ? special.name : meta.label;
+  const color = mine ? "#fff" : theme.text;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2 }}>
+      <Ionicons name={meta.icon} size={22} color={color} />
+      <Text style={{ fontSize: 16, fontWeight: "500", color }}>{title}</Text>
+    </View>
+  );
+}
 
 export const TAPBACK_EMOJI = new Map([
   ["love", "❤️"],
@@ -20,7 +43,9 @@ export const TAPBACK_EMOJI = new Map([
 
 function Attachments({ message, mine }: { message: Message; mine: boolean }) {
   const { width: winW } = useWindowDimensions();
-  const mediaW = Math.min(340, Math.round(winW * 0.62));
+  const openLightbox = useLightbox();
+  const mediaW = Math.min(340, Math.round(winW * 0.65));
+  const images = message.attachments.filter((a) => a.mimeType?.startsWith("image/"));
   return (
     <View style={{ gap: 6 }}>
       {message.attachments.map((att) => {
@@ -40,13 +65,22 @@ function Attachments({ message, mine }: { message: Message; mine: boolean }) {
               ? att.width / att.height
               : 4 / 3;
           return (
-            <Image
+            <Pressable
               key={att.guid}
-              source={{ uri: url }}
-              style={{ width: mediaW, aspectRatio: ratio, borderRadius: 14 }}
-              contentFit="cover"
-              transition={100}
-            />
+              onPress={() =>
+                openLightbox(
+                  images.map((i) => ({ url: attachmentUrl(i.guid), isVideo: false })),
+                  images.findIndex((i) => i.guid === att.guid),
+                )
+              }
+            >
+              <Image
+                source={{ uri: url }}
+                style={{ width: mediaW, aspectRatio: ratio, borderRadius: 14 }}
+                contentFit="cover"
+                transition={100}
+              />
+            </Pressable>
           );
         }
         return (
@@ -84,7 +118,10 @@ export const Bubble = memo(function Bubble({
 }: BubbleProps) {
   const theme = useTheme();
   const contextRef = useWebContextMenu<View>(() => onLongPress(message));
+  const [showTime, setShowTime] = useState(false);
   const mine = message.isFromMe;
+  // SMS (green bubble) vs iMessage (blue).
+  const mineColor = message.service === "SMS" ? "#34C759" : theme.bubbleMine;
   const senderName = message.sender?.name ?? message.sender?.address ?? "";
   const url = message.text ? firstUrl(message.text) : null;
 
@@ -154,19 +191,19 @@ export const Bubble = memo(function Bubble({
           <View>
             <Pressable
               ref={contextRef as never}
+              onPress={() => setShowTime((v) => !v)}
               onLongPress={() => onLongPress(message)}
               delayLongPress={280}
               style={[
                 styles.bubble,
                 highlighted && styles.highlighted,
-                mine
-                  ? { backgroundColor: theme.bubbleMine }
-                  : { backgroundColor: theme.bubbleTheirs },
+                { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
                 message.pending && { opacity: 0.6 },
                 message.failed && { backgroundColor: "rgba(255,69,58,0.25)" },
               ]}
             >
               {message.attachments.length > 0 && <Attachments message={message} mine={mine} />}
+              {message.special && <SpecialCard special={message.special} mine={mine} />}
               {message.text !== "" && (
                 <Text
                   selectable
@@ -186,7 +223,7 @@ export const Bubble = memo(function Bubble({
                     style={[
                       styles.tail,
                       mine
-                        ? { right: -5.5, backgroundColor: theme.bubbleMine }
+                        ? { right: -5.5, backgroundColor: mineColor }
                         : { left: -5.5, backgroundColor: theme.bubbleTheirs },
                     ]}
                   />
@@ -231,10 +268,10 @@ export const Bubble = memo(function Bubble({
           ) : message.pending ? (
             <Text style={[styles.meta, { color: theme.textSecondary }]}>Sending…</Text>
           ) : (
-            (groupEnd || message.edited) && (
+            (groupEnd || message.edited || showTime) && (
               <Text style={[styles.meta, { color: theme.textSecondary }]}>
                 {message.edited ? "Edited · " : ""}
-                {groupEnd ? formatBubbleTime(message.dateCreated) : ""}
+                {groupEnd || showTime ? formatBubbleTime(message.dateCreated) : ""}
                 {mine && isLatestOutgoing
                   ? message.dateRead
                     ? ` · Read ${formatBubbleTime(message.dateRead)}`

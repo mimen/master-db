@@ -2,7 +2,9 @@ import { BASE_URL } from "./config";
 import type {
   ChatSummary,
   Contact,
+  GalleryItem,
   Message,
+  ScheduledMessage,
   StateCounts,
   StateFilter,
   TypeFilter,
@@ -108,8 +110,52 @@ export const api = {
   newChat(body: { addresses: string[]; text: string }): Promise<{ chatGuid: string }> {
     return request("/api/chats/new", { method: "POST", body: JSON.stringify(body) });
   },
-  search(q: string): Promise<Message[]> {
-    return request(`/api/search?q=${encodeURIComponent(q)}`);
+  search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
+    const params = new URLSearchParams({ q });
+    if (opts.chat) params.set("chat", opts.chat);
+    if (opts.from) params.set("from", opts.from);
+    return request(`/api/search?${params.toString()}`);
+  },
+  gallery(chatGuid: string): Promise<GalleryItem[]> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/gallery`);
+  },
+  chatInfo(chatGuid: string): Promise<{
+    guid: string;
+    displayName: string | null;
+    isGroup: boolean;
+    participants: Contact[];
+  }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/info`);
+  },
+  renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/rename`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+  participant(chatGuid: string, address: string, action: "add" | "remove"): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/participant`, {
+      method: "POST",
+      body: JSON.stringify({ address, action }),
+    });
+  },
+  leaveGroup(chatGuid: string): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/leave`, { method: "POST" });
+  },
+  deleteChat(chatGuid: string): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/delete`, { method: "POST" });
+  },
+  listScheduled(): Promise<ScheduledMessage[]> {
+    return request("/api/scheduled");
+  },
+  schedule(chatGuid: string, text: string, sendAt: number): Promise<{ id: string }> {
+    return request("/api/scheduled", {
+      method: "POST",
+      body: JSON.stringify({ chatGuid, text, sendAt }),
+    });
+  },
+  cancelScheduled(id: string): Promise<{ ok: boolean }> {
+    return request(`/api/scheduled/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
     return request("/api/health");

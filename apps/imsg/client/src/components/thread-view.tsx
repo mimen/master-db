@@ -10,10 +10,14 @@ import {
   View,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatDayDivider, sameDay } from "@/lib/format";
 import { useServerEvents } from "@/lib/sse";
 import { useActionSheet } from "@/lib/action-sheet";
+import { setForwardText } from "@/lib/forward";
+import { Pressable } from "react-native";
 import type { Message } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
@@ -168,6 +172,31 @@ export function ThreadView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpTarget, rows]);
 
+  // Open at the first unread message when there are several (iMessage behavior).
+  const unreadScrolled = useRef(false);
+  const firstUnreadAt = headerChat?.firstUnreadAt ?? null;
+  useEffect(() => {
+    if (jumpTarget || unreadScrolled.current || !firstUnreadAt || rows.length === 0) return;
+    const unreadCount = rows.filter((r) => !r.message.isFromMe && r.message.dateCreated >= firstUnreadAt).length;
+    if (unreadCount < 4) {
+      unreadScrolled.current = true;
+      return;
+    }
+    // rows are newest-first (inverted); the oldest unread is the highest index.
+    let target = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (r && r.message.dateCreated >= firstUnreadAt) target = i;
+    }
+    if (target >= 0) {
+      unreadScrolled.current = true;
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: target, viewPosition: 0.8, animated: false });
+      }, 150);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstUnreadAt, rows, jumpTarget]);
+
   const latestOutgoingGuid = useMemo(
     () => rows.find((r) => r.message.isFromMe && !r.message.pending && !r.message.failed)?.message.guid ?? null,
     [rows],
@@ -226,6 +255,13 @@ export function ThreadView({
                   void Clipboard.setStringAsync(message.text).then(() => showToast("Copied"));
                 },
               },
+              {
+                label: "Forward",
+                onPress: () => {
+                  setForwardText(message.text);
+                  router.push("/forward");
+                },
+              },
             ]
           : []),
         ...(mine && privateApi && message.text && age < EDIT_WINDOW_MS && !message.pending
@@ -278,7 +314,25 @@ export function ThreadView({
               )}
             </View>
           </View>
-          <View style={styles.paneHeaderSpace} />
+          <View style={[styles.paneHeaderSpace, styles.paneHeaderActions]}>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/search",
+                  params: { chat: chatGuid, name: headerChat.displayName },
+                })
+              }
+              hitSlop={8}
+            >
+              <Ionicons name="search" size={21} color={theme.textSecondary} />
+            </Pressable>
+            <Pressable
+              onPress={() => router.push({ pathname: "/chat-info", params: { guid: chatGuid } })}
+              hitSlop={8}
+            >
+              <Ionicons name="information-circle-outline" size={24} color={theme.textSecondary} />
+            </Pressable>
+          </View>
         </View>
       )}
       {loading && messages.length === 0 ? (
@@ -417,6 +471,12 @@ const styles = StyleSheet.create({
   },
   paneHeaderSpace: {
     flex: 1,
+  },
+  paneHeaderActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 14,
   },
   paneIdentity: {
     flexDirection: "row",

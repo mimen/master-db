@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { NewChatContent } from "@/components/new-chat-content";
@@ -113,6 +113,38 @@ export default function ChatListScreen() {
     if (wide) setNewChatOpen(true);
     else router.push("/new-chat");
   };
+
+  // Desktop keyboard shortcuts: ⌘K search, ⌘N new, ↑/↓ chat nav, Esc closes panes.
+  useEffect(() => {
+    if (Platform.OS !== "web" || !wide) return;
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (mod && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setNewChatOpen(true);
+      } else if (e.key === "Escape") {
+        setSearchOpen(false);
+        setNewChatOpen(false);
+      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !searchOpen && !newChatOpen) {
+        const active = document.activeElement;
+        const inField =
+          active instanceof HTMLElement &&
+          (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+        if (inField) return;
+        e.preventDefault();
+        const idx = chats.findIndex((ch) => ch.guid === selected?.guid);
+        const next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+        const target = chats[Math.max(0, Math.min(chats.length - 1, next))];
+        if (target) openChat(target);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide, chats, selected, searchOpen, newChatOpen]);
 
   const list = (
     <ConversationListPane

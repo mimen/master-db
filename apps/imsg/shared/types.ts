@@ -23,6 +23,14 @@ export interface Reaction {
   senderAddress: string | null;
 }
 
+/** Rich cards for non-plain message payloads (contact card, location, etc.). */
+export type SpecialContent =
+  | { kind: "contact"; name: string | null }
+  | { kind: "location" }
+  | { kind: "apple-cash" }
+  | { kind: "poll" }
+  | { kind: "unknown"; label: string };
+
 export interface Message {
   guid: string;
   chatGuid: string;
@@ -32,8 +40,14 @@ export interface Message {
   dateRead: number | null;
   dateDelivered: number | null;
   isFromMe: boolean;
+  /** "SMS" for green-bubble messages, "iMessage" otherwise. */
+  service: "iMessage" | "SMS";
   sender: Participant | null;
   attachments: AttachmentSummary[];
+  /** Non-plain payload rendered as a card (vCard, location, Apple Cash…). */
+  special: SpecialContent | null;
+  /** Apple expressive send style, e.g. "com.apple.MobileSMS.expressivesend.impact". */
+  sendEffect: string | null;
   reactions: Reaction[];
   /** GUID of the message this one replies to (threaded reply), if any. */
   replyToGuid: string | null;
@@ -103,6 +117,24 @@ export interface SendTextRequest {
   text: string;
   replyToGuid?: string;
   replyToPart?: number;
+}
+
+export interface GalleryItem {
+  guid: string;
+  mimeType: string | null;
+  filename: string | null;
+  isImage: boolean;
+  isVideo: boolean;
+  dateCreated: number;
+}
+
+export interface ScheduledMessage {
+  id: string;
+  chatGuid: string;
+  chatName: string;
+  text: string;
+  /** Epoch ms when it will send. */
+  sendAt: number;
 }
 
 export interface NewChatRequest {

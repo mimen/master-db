@@ -37,6 +37,22 @@ await contacts.refresh(true);
 // toggle is picked up without restarting this service.
 setInterval(() => void bb.connect(), 5 * 60_000);
 
+// Scheduled-message tick: fire anything due, then drop it from the queue.
+setInterval(() => {
+  for (const s of db.dueScheduled(Date.now())) {
+    void bb
+      .sendText(s.chatGuid, s.text)
+      .then((result) => {
+        db.removeScheduled(s.id);
+        if (result.ok) {
+          directory.applyKnownMessage(s.chatGuid, mapMessage(result.value, s.chatGuid, contacts));
+          broadcast({ kind: "chats-changed" });
+        }
+      })
+      .catch(() => undefined);
+  }
+}, 20_000);
+
 // ---------------------------------------------------------------- SSE fanout
 
 type SSEClient = { id: number; send: (event: ServerEvent) => void };
@@ -208,9 +224,16 @@ app.post("/api/chats/:guid/attachment", async (c) => {
   const file = form.get("attachment");
   if (!(file instanceof File)) return c.json({ error: "missing attachment" }, 400);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const result = await bb.sendAttachment(chatGuid, file.name || "attachment", bytes);
+  const caption = (form.get("caption") as string | null)?.trim() || undefined;
+  const isAudio = form.get("isAudioMessage") === "true";
+  const name = file.name || "attachment";
+  const result = isAudio
+    ? await bb.sendAudio(chatGuid, name, bytes)
+    : await bb.sendAttachmentWithCaption(chatGuid, name, bytes, caption);
   if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(mapMessage(result.value, chatGuid, contacts));
+  const mapped = mapMessage(result.value, chatGuid, contacts);
+  directory.applyKnownMessage(chatGuid, mapped);
+  return c.json(mapped);
 });
 
 app.post("/api/chats/:guid/read", async (c) => {
@@ -314,7 +337,131 @@ app.post("/api/chats/new", async (c) => {
 });
 
 app.get("/api/search", async (c) => {
-  return c.json(await search.search(c.req.query("q") ?? ""));
+  const chatGuid = c.req.query("chat") || undefined;
+  const fromQ = c.req.query("from");
+  const from = fromQ === "me" || fromQ === "them" ? fromQ : undefined;
+  return c.json(await search.search(c.req.query("q") ?? "", { chatGuid, from }));
+});
+
+// ------------------------------------------------------------- media gallery
+
+app.get("/api/chats/:guid/gallery", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const items: import("../shared/types").GalleryItem[] = [];
+  const seen = new Set<string>();
+  // Walk back through recent windows collecting attachments.
+  let before: number | undefined;
+  for (let page = 0; page < 8 && items.length < 120; page++) {
+    const batch = await bb.chatMessages(chatGuid, { limit: 200, before, sort: "DESC" });
+    if (!batch.ok || batch.value.length === 0) break;
+    for (const m of batch.value) {
+      for (const a of m.attachments ?? []) {
+        if (!a.guid || a.hideAttachment || seen.has(a.guid)) continue;
+        const mime = a.mimeType ?? "";
+        const isImage = mime.startsWith("image/");
+        const isVideo = mime.startsWith("video/");
+        if (!isImage && !isVideo) continue;
+        seen.add(a.guid);
+        items.push({
+          guid: a.guid,
+          mimeType: a.mimeType ?? null,
+          filename: a.transferName ?? null,
+          isImage,
+          isVideo,
+          dateCreated: m.dateCreated ?? 0,
+        });
+      }
+    }
+    before = batch.value[batch.value.length - 1]?.dateCreated;
+    if (!before) break;
+  }
+  return c.json(items);
+});
+
+// ----------------------------------------------------------- group / delete
+
+app.get("/api/chats/:guid/info", async (c) => {
+  const chat = await bb.getChat(c.req.param("guid"));
+  if (!chat.ok) return c.json({ error: chat.error }, 502);
+  await contacts.refresh();
+  const participants = (chat.value.participants ?? []).map((p) => ({
+    address: p.address,
+    name: contacts.lookup(p.address),
+  }));
+  return c.json({
+    guid: chat.value.guid,
+    displayName: chat.value.displayName ?? null,
+    isGroup: (chat.value.participants ?? []).length > 1 || chat.value.guid.includes(";+;"),
+    participants,
+  });
+});
+
+app.post("/api/chats/:guid/rename", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const body = (await c.req.json()) as { name: string };
+  const result = await bb.renameGroup(c.req.param("guid"), body.name ?? "");
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  directory.invalidate();
+  return c.json({ ok: true });
+});
+
+app.post("/api/chats/:guid/participant", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const body = (await c.req.json()) as { address: string; action: "add" | "remove" };
+  const result =
+    body.action === "remove"
+      ? await bb.removeParticipant(c.req.param("guid"), body.address)
+      : await bb.addParticipant(c.req.param("guid"), body.address);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  directory.invalidate();
+  return c.json({ ok: true });
+});
+
+app.post("/api/chats/:guid/leave", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const result = await bb.leaveGroup(c.req.param("guid"));
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  directory.invalidate();
+  return c.json({ ok: true });
+});
+
+app.post("/api/chats/:guid/delete", async (c) => {
+  const result = await bb.deleteChat(c.req.param("guid"));
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  directory.invalidate();
+  broadcast({ kind: "chats-changed" });
+  return c.json({ ok: true });
+});
+
+// -------------------------------------------------------- scheduled messages
+
+app.get("/api/scheduled", async (c) => {
+  const result = await directory.summaries();
+  const names = new Map(result.ok ? result.chats.map((ch) => [ch.guid, ch.displayName]) : []);
+  return c.json(
+    db.listScheduled().map((s) => ({
+      id: s.id,
+      chatGuid: s.chatGuid,
+      chatName: names.get(s.chatGuid) ?? s.chatGuid,
+      text: s.text,
+      sendAt: s.sendAt,
+    })),
+  );
+});
+
+app.post("/api/scheduled", async (c) => {
+  const body = (await c.req.json()) as { chatGuid: string; text: string; sendAt: number };
+  if (!body.chatGuid || !body.text?.trim() || !body.sendAt) {
+    return c.json({ error: "chatGuid, text, sendAt required" }, 400);
+  }
+  const id = `sch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  db.addScheduled(id, body.chatGuid, body.text.trim(), body.sendAt);
+  return c.json({ id });
+});
+
+app.delete("/api/scheduled/:id", async (c) => {
+  db.removeScheduled(c.req.param("id"));
+  return c.json({ ok: true });
 });
 
 app.get("/api/attachments/:guid", async (c) => {

@@ -1,8 +1,31 @@
 import type { BBChat, BBMessage } from "./bb-types";
-import type { ChatSummary, Message, Participant, Reaction } from "../shared/types";
+import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { ChatState } from "../shared/chat-state";
 import { computeFlags } from "../shared/chat-state";
 import type { ContactBook } from "./contacts";
+
+/** SMS (green bubble) messages come over a non-iMessage service. */
+function messageService(m: BBMessage): "iMessage" | "SMS" {
+  const svc = (m.handle?.service ?? "").toUpperCase();
+  return svc === "SMS" || svc === "RCS" ? "SMS" : "iMessage";
+}
+
+/** Detects rich (non-plain-text) payloads by their app balloon bundle id. */
+function specialContent(m: BBMessage): SpecialContent | null {
+  const bundle = m.balloonBundleId ?? null;
+  const hasVcard = (m.attachments ?? []).some(
+    (a) => a.uti === "public.vcard" || /\.vcf$/i.test(a.transferName ?? ""),
+  );
+  if (hasVcard) {
+    return { kind: "contact", name: (m.attachments?.[0]?.transferName ?? "").replace(/\.vcf$/i, "") || null };
+  }
+  if (!bundle) return null;
+  if (bundle.includes("PassbookUIService") || bundle.includes("ApplePay")) return { kind: "apple-cash" };
+  if (bundle.includes("MapsToday") || bundle.includes("Handles.Location")) return { kind: "location" };
+  if (bundle.includes("SharedPoll") || bundle.includes("messages.poll")) return { kind: "poll" };
+  const label = bundle.split(".").filter(Boolean).pop() ?? "App message";
+  return { kind: "unknown", label };
+}
 
 const TAPBACK_NAMES = ["love", "like", "dislike", "laugh", "emphasize", "question"] as const;
 
@@ -51,6 +74,7 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
     dateRead: m.dateRead ?? null,
     dateDelivered: m.dateDelivered ?? null,
     isFromMe: m.isFromMe === true,
+    service: messageService(m),
     sender: sender(m, contacts),
     attachments: (m.attachments ?? [])
       .filter((a) => a.guid && !a.hideAttachment)
@@ -62,6 +86,8 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
         height: a.height ?? null,
         totalBytes: a.totalBytes ?? null,
       })),
+    special: specialContent(m),
+    sendEffect: m.expressiveSendStyleId ?? null,
     reactions: [],
     // Only threadOriginatorGuid marks a real inline reply; Apple sets
     // replyToGuid on ordinary consecutive messages too.

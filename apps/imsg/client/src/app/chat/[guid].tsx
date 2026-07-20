@@ -1,7 +1,7 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 // SDK 54 pin: expo-router still rides react-navigation, so elements is importable.
 import { useHeaderHeight } from "@react-navigation/elements";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
@@ -100,6 +100,27 @@ export default function ChatScreen() {
               isGroup={isGroup}
               memberCount={params.count ? Number(params.count) : undefined}
             />
+          ),
+          headerRight: () => (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/search",
+                    params: { chat: params.guid, name: params.name ?? "" },
+                  })
+                }
+                hitSlop={8}
+              >
+                <Ionicons name="search" size={22} color="#0A84FF" />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push({ pathname: "/chat-info", params: { guid: params.guid } })}
+                hitSlop={8}
+              >
+                <Ionicons name="information-circle-outline" size={26} color="#0A84FF" />
+              </Pressable>
+            </View>
           ),
         }}
       />

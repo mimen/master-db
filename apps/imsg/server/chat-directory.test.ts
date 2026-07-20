@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import type { BBContact, BBMessage } from "./bb-types";
 import { FakeBlueBubbles, type FakeChatSeed } from "./bluebubbles-fake";
 import { ChatDirectory } from "./chat-directory";
@@ -409,6 +409,11 @@ describe("ChatDirectory reactive fast path", () => {
 // ---------------------------------------------------------------- search
 
 describe("MessageSearch", () => {
+  // Force the BlueBubbles fallback path: no local chat.db in the test env.
+  beforeAll(() => {
+    process.env.CHATDB_PATH = "/nonexistent/chat.db";
+  });
+
   test("finds messages by substring", async () => {
     const bb = new FakeBlueBubbles({
       chats: [
