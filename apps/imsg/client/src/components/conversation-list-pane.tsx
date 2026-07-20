@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { ChatRow } from "./chat-row";
-import { ConversationFilters, ConversationFiltersModal } from "./conversation-filters";
+import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
 import { PriorityShelf } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
@@ -54,7 +54,22 @@ export function ConversationListPane({
   const [query, setQuery] = useState("");
   const [deepMatches, setDeepMatches] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
+  const filterBtnRef = useRef<View>(null);
   const listRef = useRef<FlatList<ChatSummary>>(null);
+
+  // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
+  const openFilters = (): void => {
+    if (wide && filterBtnRef.current) {
+      filterBtnRef.current.measureInWindow((x, y, width, height) => {
+        setFilterAnchor({ x, y, width, height });
+        setFilterOpen(true);
+      });
+    } else {
+      setFilterAnchor(null);
+      setFilterOpen(true);
+    }
+  };
   const scrollOffset = useRef(0);
   const model = deriveInboxModel(chats, filters, query, deepMatches);
 
@@ -110,9 +125,10 @@ export function ConversationListPane({
         <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
         <View style={styles.titleActions}>
           <Pressable
+            ref={filterBtnRef}
             accessibilityRole="button"
             accessibilityLabel="Filter conversations"
-            onPress={() => setFilterOpen(true)}
+            onPress={openFilters}
             style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
           >
             <Ionicons name="options-outline" size={21} color={theme.accent} />
@@ -199,6 +215,7 @@ export function ConversationListPane({
       <ConversationFiltersModal
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
+        anchor={filterAnchor}
         filters={filters}
         counts={counts}
         onFiltersChange={onFiltersChange}

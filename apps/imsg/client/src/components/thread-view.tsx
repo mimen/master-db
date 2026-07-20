@@ -20,6 +20,7 @@ import { useServerEvents } from "@/lib/sse";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
+import { openChatInfo } from "@/lib/chat-info";
 import type { Message } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
@@ -352,7 +353,7 @@ export function ThreadView({
               <Ionicons name="search" size={21} color={theme.textSecondary} />
             </Pressable>
             <Pressable
-              onPress={() => router.push({ pathname: "/chat-info", params: { guid: chatGuid } })}
+              onPress={() => openChatInfo(chatGuid)}
               hitSlop={8}
             >
               <Ionicons name="information-circle-outline" size={24} color={theme.textSecondary} />
