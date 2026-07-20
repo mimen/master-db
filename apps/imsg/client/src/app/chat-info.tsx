@@ -14,6 +14,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { api, attachmentUrl, avatarUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
+import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
+import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { Contact, GalleryItem } from "@shared/types";
@@ -75,9 +77,51 @@ export default function ChatInfoScreen() {
   };
 
   const galleryMedia = gallery.map((g) => ({ url: attachmentUrl(g.guid), isVideo: g.isVideo }));
+  const summary = getChats()?.find((c) => c.guid === guid) ?? null;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ padding: 16 }}>
+      {summary && (
+        <View style={styles.quickRow}>
+          {([
+            {
+              icon: (summary.flags.pinned ? "pin" : "pin-outline") as keyof typeof Ionicons.glyphMap,
+              label: summary.flags.pinned ? "Unpin" : "Pin",
+              onPress: () => {
+                pinChat(summary, !summary.flags.pinned);
+                showToast(summary.flags.pinned ? "Unpinned" : "Pinned");
+              },
+            },
+            {
+              icon: "mail-unread-outline" as keyof typeof Ionicons.glyphMap,
+              label: "Unread",
+              onPress: () => {
+                markChatUnread(summary);
+                showToast("Marked unread");
+                router.back();
+              },
+            },
+            {
+              icon: (summary.flags.archived
+                ? "arrow-undo-outline"
+                : "archive-outline") as keyof typeof Ionicons.glyphMap,
+              label: summary.flags.archived ? "Unarchive" : "Archive",
+              onPress: () => {
+                archiveChat(summary, !summary.flags.archived);
+                showToast(summary.flags.archived ? "Unarchived" : "Archived");
+                router.back();
+              },
+            },
+          ] as const).map((a) => (
+            <Pressable key={a.label} style={styles.quickAction} onPress={a.onPress}>
+              <View style={[styles.quickIcon, { backgroundColor: theme.backgroundElement }]}>
+                <Ionicons name={a.icon} size={22} color={theme.text} />
+              </View>
+              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {info.isGroup ? (
         renaming ? (
           <View style={styles.renameRow}>
@@ -205,6 +249,9 @@ export default function ChatInfoScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  quickRow: { flexDirection: "row", justifyContent: "center", gap: 28, marginBottom: 8 },
+  quickAction: { alignItems: "center", gap: 6 },
+  quickIcon: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontSize: 24, fontWeight: "700" },
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },

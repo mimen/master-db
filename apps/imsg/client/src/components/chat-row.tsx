@@ -1,16 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import ReanimatedSwipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { api } from "@/lib/api";
+import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { formatListTimestamp } from "@/lib/format";
-import { showToast } from "@/lib/toast";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
@@ -48,18 +49,18 @@ export function ChatRow({
   chat,
   selected,
   onPress,
-  onChanged,
 }: {
   chat: ChatSummary;
   selected: boolean;
   onPress: () => void;
-  onChanged: () => void;
+  onChanged?: () => void;
 }) {
   const theme = useTheme();
-  const { run, openMenu } = useChatActions(onChanged);
+  const { openMenu } = useChatActions();
   const { width: winW } = useWindowDimensions();
   const compact = winW >= 768;
   const [hovered, setHovered] = useState(false);
+  const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
@@ -90,10 +91,11 @@ export function ChatRow({
 
   return (
     <ReanimatedSwipeable
+      ref={swipeRef}
       friction={1.6}
-      leftThreshold={ACTION_WIDTH * 0.75}
-      rightThreshold={ACTION_WIDTH * 0.75}
-      overshootFriction={4}
+      leftThreshold={ACTION_WIDTH * 0.6}
+      rightThreshold={ACTION_WIDTH * 0.6}
+      overshootFriction={8}
       renderLeftActions={(progress) => (
         <SwipeAction
           progress={progress}
@@ -105,12 +107,16 @@ export function ChatRow({
       renderRightActions={(progress) => (
         <SwipeAction progress={progress} label="Archive" color="#F0A500" side="right" />
       )}
-      onSwipeableWillOpen={(direction) => {
+      onSwipeableOpen={(direction) => {
+        // Fire the optimistic action, then snap the row shut — the store patch
+        // moves the chat out of the current filter immediately.
         if (direction === "left") {
-          run(chat.flags.unread ? api.markRead(chat.guid) : api.markUnread(chat.guid));
+          if (chat.flags.unread) markChatRead(chat);
+          else markChatUnread(chat);
         } else {
-          run(api.setArchived(chat.guid, !chat.flags.archived));
+          archiveChat(chat, !chat.flags.archived);
         }
+        swipeRef.current?.close();
       }}
     >
       <Pressable
@@ -156,8 +162,7 @@ export function ChatRow({
           <Pressable
             onPress={(e) => {
               e.stopPropagation();
-              run(api.setArchived(chat.guid, !chat.flags.archived));
-              showToast(chat.flags.archived ? "Unarchived" : "Archived");
+              archiveChat(chat, !chat.flags.archived);
             }}
             hitSlop={6}
             pointerEvents={hovered ? "auto" : "none"}

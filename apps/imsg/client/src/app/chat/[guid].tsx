@@ -8,6 +8,7 @@ import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
 import { useTheme } from "@/hooks/use-theme";
 import { ThreadView } from "@/components/thread-view";
+import { openThreadSearch } from "@/lib/thread-search";
 import type { JumpTarget } from "@/hooks/use-messages";
 
 function HeaderTitle({
@@ -102,16 +103,8 @@ export default function ChatScreen() {
             />
           ),
           headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/search",
-                    params: { chat: params.guid, name: params.name ?? "" },
-                  })
-                }
-                hitSlop={8}
-              >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 16, paddingRight: 8 }}>
+              <Pressable onPress={() => openThreadSearch()} hitSlop={8}>
                 <Ionicons name="search" size={22} color="#0A84FF" />
               </Pressable>
               <Pressable

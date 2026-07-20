@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -85,6 +86,7 @@ export function Composer({
   onSent,
 }: ComposerProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
   const [text, setText] = useState(() => getDraft(chatGuid));
   const [busy, setBusy] = useState(false);
@@ -370,7 +372,12 @@ export function Composer({
   const canSend = text.trim().length > 0;
 
   return (
-    <View style={[styles.container, { borderTopColor: theme.divider }]}>
+    <View
+      style={[
+        styles.container,
+        { borderTopColor: theme.divider, paddingBottom: Math.max(6, insets.bottom) },
+      ]}
+    >
       {replyTo && !editing && (
         <View style={[styles.banner, { backgroundColor: theme.backgroundElement }]}>
           <Text numberOfLines={1} style={[styles.bannerText, { color: theme.textSecondary }]}>

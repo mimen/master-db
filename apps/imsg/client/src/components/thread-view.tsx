@@ -5,8 +5,10 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -17,7 +19,7 @@ import { formatDayDivider, sameDay } from "@/lib/format";
 import { useServerEvents } from "@/lib/sse";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
-import { Pressable } from "react-native";
+import { onOpenThreadSearch } from "@/lib/thread-search";
 import type { Message } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
@@ -67,6 +69,9 @@ export function ThreadView({
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
   const [dayChip, setDayChip] = useState<string | null>(null);
   const dayChipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FlatList requires stable identities for viewability callbacks.
@@ -87,8 +92,13 @@ export function ThreadView({
   useEffect(() => {
     setReplyTo(null);
     setEditing(null);
+    setSearchOpen(false);
+    setSearchText("");
     void api.markRead(chatGuid);
   }, [chatGuid]);
+
+  // Header search buttons open the in-thread search shelf via a signal bus.
+  useEffect(() => onOpenThreadSearch(() => setSearchOpen(true)), []);
 
 
   // Web: RNW's inverted-list wheel handling is broken (reversed / inert), so
@@ -156,6 +166,29 @@ export function ThreadView({
     });
     return built.reverse(); // inverted list renders newest first
   }, [messages]);
+
+  // In-thread search matches within the loaded window (newest-first `rows`).
+  const searchMatches = useMemo(() => {
+    const needle = searchText.trim().toLowerCase();
+    if (needle.length < 2) return [] as number[];
+    return rows.reduce<number[]>((acc, r, i) => {
+      if (r.message.text.toLowerCase().includes(needle)) acc.push(i);
+      return acc;
+    }, []);
+  }, [rows, searchText]);
+
+  useEffect(() => setMatchIndex(0), [searchText]);
+
+  // Scroll to and highlight the current match as you step through them.
+  useEffect(() => {
+    if (!searchOpen || searchMatches.length === 0) return;
+    const idx = searchMatches[Math.min(matchIndex, searchMatches.length - 1)];
+    if (idx === undefined) return;
+    const guid = rows[idx]?.message.guid ?? null;
+    listRef.current?.scrollToIndex({ index: idx, viewPosition: 0.5, animated: true });
+    setHighlightGuid(guid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOpen, searchMatches, matchIndex]);
 
   // Jump-to-message: once the around-window loads, scroll the target into view.
   const jumped = useRef<string | null>(null);
@@ -315,15 +348,7 @@ export function ThreadView({
             </View>
           </View>
           <View style={[styles.paneHeaderSpace, styles.paneHeaderActions]}>
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/search",
-                  params: { chat: chatGuid, name: headerChat.displayName },
-                })
-              }
-              hitSlop={8}
-            >
+            <Pressable onPress={() => setSearchOpen(true)} hitSlop={8}>
               <Ionicons name="search" size={21} color={theme.textSecondary} />
             </Pressable>
             <Pressable
@@ -335,6 +360,52 @@ export function ThreadView({
           </View>
         </View>
       )}
+
+      {searchOpen && (
+        <View style={[styles.searchShelf, { backgroundColor: theme.backgroundElement, borderBottomColor: theme.divider }]}>
+          <View style={[styles.searchField, { backgroundColor: theme.background }]}>
+            <Ionicons name="search" size={16} color={theme.textSecondary} />
+            <TextInput
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Search this conversation"
+              placeholderTextColor={theme.textSecondary}
+              autoFocus
+              style={[styles.searchInput, { color: theme.text }]}
+            />
+            {searchText.trim().length >= 2 && (
+              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {searchMatches.length === 0 ? "0" : `${matchIndex + 1}/${searchMatches.length}`}
+              </Text>
+            )}
+          </View>
+          <Pressable
+            disabled={searchMatches.length === 0}
+            onPress={() => setMatchIndex((i) => (i + 1) % searchMatches.length)}
+            hitSlop={6}
+          >
+            <Ionicons name="chevron-up" size={22} color={searchMatches.length ? theme.accent : theme.textSecondary} />
+          </Pressable>
+          <Pressable
+            disabled={searchMatches.length === 0}
+            onPress={() => setMatchIndex((i) => (i - 1 + searchMatches.length) % searchMatches.length)}
+            hitSlop={6}
+          >
+            <Ionicons name="chevron-down" size={22} color={searchMatches.length ? theme.accent : theme.textSecondary} />
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              setSearchOpen(false);
+              setSearchText("");
+              setHighlightGuid(null);
+            }}
+            hitSlop={6}
+          >
+            <Text style={{ color: theme.accent, fontSize: 15 }}>Done</Text>
+          </Pressable>
+        </View>
+      )}
+
       {loading && messages.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator />
@@ -467,6 +538,7 @@ const styles = StyleSheet.create({
     height: 58,
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   paneHeaderSpace: {
@@ -477,6 +549,27 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     alignItems: "center",
     gap: 14,
+  },
+  searchShelf: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  searchField: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
   },
   paneIdentity: {
     flexDirection: "row",
