@@ -105,16 +105,22 @@ export function ChatRow({
         />
       )}
       renderRightActions={(progress) => (
-        <SwipeAction progress={progress} label="Archive" color="#F0A500" side="right" />
+        <SwipeAction
+          progress={progress}
+          label={chat.flags.archived ? "Unarchive" : "Archive"}
+          color="#F0A500"
+          side="right"
+        />
       )}
       onSwipeableOpen={(direction) => {
-        // Fire the optimistic action, then snap the row shut — the store patch
-        // moves the chat out of the current filter immediately.
+        // `direction` is the swipe direction, not the pane side: swiping LEFT
+        // reveals the right-hand (Archive) pane, swiping RIGHT reveals the
+        // left-hand (Read/Unread) pane. Fire the optimistic action then close.
         if (direction === "left") {
+          archiveChat(chat, !chat.flags.archived);
+        } else {
           if (chat.flags.unread) markChatRead(chat);
           else markChatUnread(chat);
-        } else {
-          archiveChat(chat, !chat.flags.archived);
         }
         swipeRef.current?.close();
       }}
