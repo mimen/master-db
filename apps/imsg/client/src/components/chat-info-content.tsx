@@ -22,6 +22,8 @@ import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { initials } from "@/lib/format";
 
+const GRID_GAP = 5;
+
 export interface ChatInfoContentProps {
   guid: string;
   /** Close the info surface (pane dismiss on desktop, router.back on native). */
@@ -42,6 +44,7 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
     participants: Contact[];
   } | null>(null);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [gridWidth, setGridWidth] = useState(0);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
 
@@ -249,11 +252,17 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
         {gallery.length > 0 && (
           <>
             <Text style={[styles.section, { color: theme.textSecondary }]}>Photos & Videos</Text>
-            {/* Plain flex-wrap grid — RN-web's FlatList numColumns renders ragged
-                tiles here, so lay the square tiles out directly. */}
-            <View style={styles.grid}>
-              {gallery.map((item, index) => (
-                <Pressable key={item.guid} style={styles.tile} onPress={() => openLightbox(galleryMedia, index)}>
+            {/* Fixed-pixel square tiles from the measured width — aspectRatio +
+                percentage widths stagger under RN-web, so size them explicitly. */}
+            <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+              {gallery.map((item, index) => {
+                const tileSize = gridWidth > 0 ? (gridWidth - 2 * GRID_GAP) / 3 : 0;
+                return (
+                <Pressable
+                  key={item.guid}
+                  style={{ width: tileSize, height: tileSize }}
+                  onPress={() => openLightbox(galleryMedia, index)}
+                >
                   <Image source={{ uri: attachmentUrl(item.guid) }} style={styles.tileImg} contentFit="cover" />
                   {item.isVideo && (
                     <View style={styles.playBadge}>
@@ -261,7 +270,8 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
                     </View>
                   )}
                 </Pressable>
-              ))}
+                );
+              })}
             </View>
           </>
         )}
@@ -294,8 +304,7 @@ const styles = StyleSheet.create({
   pAvatarImg: { ...StyleSheet.absoluteFillObject, borderRadius: 20 },
   action: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
   actionDanger: { color: "#FF3B30", fontSize: 16 },
-  grid: { flexDirection: "row", flexWrap: "wrap", columnGap: 5, rowGap: 5, marginTop: 2 },
-  tile: { width: "31.5%", aspectRatio: 1 },
+  grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
   tileImg: { width: "100%", height: "100%", borderRadius: 6 },
   playBadge: {
     position: "absolute",
