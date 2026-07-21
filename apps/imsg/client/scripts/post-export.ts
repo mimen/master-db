@@ -21,7 +21,14 @@ const tags = [
   "<style>input,textarea{font-size:16px!important}" +
     "input:focus,textarea:focus,input:focus-visible,textarea:focus-visible{outline:none!important;box-shadow:none!important}" +
     "html,body,#root{height:100dvh!important;min-height:100dvh!important}" +
-    "html{touch-action:manipulation;-webkit-text-size-adjust:100%}</style>",
+    "html{touch-action:manipulation;-webkit-text-size-adjust:100%}" +
+    // Svelte, track-less scrollbars everywhere — a thin thumb, no container.
+    "::-webkit-scrollbar{width:7px;height:7px}" +
+    "::-webkit-scrollbar-track{background:transparent;border:none}" +
+    "::-webkit-scrollbar-thumb{background:rgba(140,140,150,0.4);border-radius:10px;border:none}" +
+    "::-webkit-scrollbar-thumb:hover{background:rgba(140,140,150,0.6)}" +
+    "::-webkit-scrollbar-corner{background:transparent}" +
+    "*{scrollbar-width:thin;scrollbar-color:rgba(140,140,150,0.4) transparent}</style>",
 ].join("");
 
 if (!html.includes("manifest.webmanifest")) {
