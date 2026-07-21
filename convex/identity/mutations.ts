@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { mutation } from "../_generated/server";
 
+import { ingestOneCard } from "./ingestContacts";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
 /**
@@ -57,5 +58,42 @@ export const createPerson = mutation({
       updated_at: now,
     });
     return { created: true as const, personId };
+  },
+});
+
+/**
+ * Explicit "Add Contact from Airtable" — the Contacts screen's search shows
+ * Airtable matches below your existing contacts; tapping one calls this.
+ * Unlike airtableSync.ts's background cron (link_only, enrich-only), this
+ * is a deliberate per-person action, so it's allowed to create a new person
+ * when there's no existing match — Milad chose this specific human on
+ * purpose, this isn't the cron guessing everyone in a growing database
+ * belongs in his graph.
+ */
+export const addPersonFromAirtable = mutation({
+  args: {
+    record_id: v.string(),
+    display_name: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    email: v.optional(v.string()),
+  },
+  handler: async (ctx, { record_id, display_name, phone, email }) => {
+    const result = await ingestOneCard(
+      ctx,
+      "airtable_human",
+      {
+        display_name,
+        phones: phone ? [phone] : [],
+        emails: email ? [email] : [],
+        airtable_record_id: record_id,
+      },
+      false,
+    );
+    if (result.outcome === "skipped_no_handles" || result.outcome === "skipped_no_match") {
+      // skipped_no_match can't actually happen with link_only=false, but
+      // the discriminated union doesn't know that statically.
+      throw new Error("Can't add a contact with no phone or email");
+    }
+    return { personId: result.personId };
   },
 });

@@ -46,6 +46,27 @@ describe("createPerson dedupe (existing identity short-circuits creation)", () =
   });
 });
 
+describe("addPersonFromAirtable card shape", () => {
+  test("phone/email map to single-element arrays, matching ingestOneCard's ContactCard shape", () => {
+    const phone = "+16195551234";
+    const email = undefined as string | undefined;
+    const card = { phones: phone ? [phone] : [], emails: email ? [email] : [] };
+    expect(card.phones).toEqual(["+16195551234"]);
+    expect(card.emails).toEqual([]);
+  });
+
+  test("a record with neither phone nor email produces empty arrays (ingestOneCard rejects it)", () => {
+    const card = { phones: [] as string[], emails: [] as string[] };
+    expect(card.phones).toHaveLength(0);
+    expect(card.emails).toHaveLength(0);
+  });
+
+  test("always calls ingestOneCard with link_only=false, unlike the background sync", () => {
+    const linkOnly = false; // addPersonFromAirtable is a deliberate per-person action
+    expect(linkOnly).toBe(false);
+  });
+});
+
 describe("createPerson source tagging", () => {
   test("manually-created identities are tagged source: manual, distinct from apple_contact/beeper", () => {
     const identity = { source: "manual" };

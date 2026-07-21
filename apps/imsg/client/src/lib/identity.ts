@@ -1,4 +1,4 @@
-import { ConvexReactClient, useMutation, useQuery } from "convex/react";
+import { ConvexReactClient, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 
 /**
@@ -46,6 +46,14 @@ export type ContactListRow = {
   display_name: string;
   normalized_phones: string[];
   normalized_emails: string[];
+  airtable_human_id?: string;
+};
+
+export type AirtableHumanRow = {
+  record_id: string;
+  display_name: string;
+  phone?: string;
+  email?: string;
 };
 
 const whoIsRef = makeFunctionReference<"query", { handle: string }, WhoIsResult>(
@@ -62,6 +70,16 @@ const createPersonRef = makeFunctionReference<
   { created: boolean; personId: string }
 >("identity/mutations:createPerson");
 
+const searchAirtableHumansRef = makeFunctionReference<"action", { query: string }, AirtableHumanRow[]>(
+  "identity/airtableSearch:searchAirtableHumans",
+);
+
+const addPersonFromAirtableRef = makeFunctionReference<
+  "mutation",
+  { record_id: string; display_name?: string; phone?: string; email?: string },
+  { personId: string }
+>("identity/mutations:addPersonFromAirtable");
+
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
   return useQuery(whoIsRef, handle ? { handle } : "skip");
 }
@@ -72,6 +90,14 @@ export function useListPeople(): ContactListRow[] | undefined {
 
 export function useCreatePerson() {
   return useMutation(createPersonRef);
+}
+
+export function useSearchAirtableHumans() {
+  return useAction(searchAirtableHumansRef);
+}
+
+export function useAddPersonFromAirtable() {
+  return useMutation(addPersonFromAirtableRef);
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */

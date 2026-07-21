@@ -97,6 +97,7 @@ export const listPeople = query({
         display_name: p.display_name,
         normalized_phones: p.normalized_phones,
         normalized_emails: p.normalized_emails,
+        airtable_human_id: p.airtable_human_id,
       }));
   },
 });

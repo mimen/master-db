@@ -13,6 +13,13 @@ import { internalAction } from "../_generated/server";
  * signed and expire, so storing one would rot. imsg already sources photos
  * from Apple Contacts via its own avatar route — nothing reads a photo out
  * of the identity graph, same reasoning as dropping Apple's avatar bytes.
+ *
+ * link_only: this background sync only ENRICHES people already in the
+ * graph (exact phone/email match) — it never creates a new person from an
+ * unmatched Humans record. Airtable is a growing community database, most
+ * of which Milad has never actually talked to; this cron isn't the place to
+ * decide those people belong in his identity graph. Bringing a specific
+ * unmatched person in on purpose is airtableSearch.ts's job.
  */
 
 const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
@@ -89,20 +96,27 @@ export const syncAirtableHumans = internalAction({
       pages++;
     } while (offset && pages < 100); // safety cap, Humans is nowhere near 10k records
 
-    let peopleCreated = 0;
+    // link_only: Airtable should enrich people Milad already has (via
+    // exact phone/email match against existing Apple/Beeper identities),
+    // never seed the graph with everyone in a growing community database
+    // he's never actually talked to. Records with no existing match are
+    // skipped here — they're still reachable on demand via
+    // identity/airtableSearch.ts's live "Add Contact from Airtable" search.
     let peopleReused = 0;
     let identitiesWritten = 0;
+    let skippedNoMatch = 0;
     for (let i = 0; i < contacts.length; i += 50) {
       const slice = contacts.slice(i, i + 50);
       const result = await ctx.runMutation(internal.identity.ingestContacts.ingestContactsBatch, {
         source: "airtable_human",
         contacts: slice,
+        link_only: true,
       });
-      peopleCreated += result.peopleCreated;
       peopleReused += result.peopleReused;
       identitiesWritten += result.identitiesWritten;
+      skippedNoMatch += result.skippedNoMatch;
     }
 
-    return { recordsSeen: contacts.length, peopleCreated, peopleReused, identitiesWritten };
+    return { recordsSeen: contacts.length, peopleReused, identitiesWritten, skippedNoMatch };
   },
 });
