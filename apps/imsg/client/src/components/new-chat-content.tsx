@@ -18,31 +18,101 @@ import { showToast } from "@/lib/toast";
 import type { Contact } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 import { initials } from "@/lib/format";
+import {
+  type AirtableHumanRow,
+  useAddPersonFromAirtable,
+  useListPeople,
+  useSearchAirtableHumans,
+} from "@/lib/identity";
+
+type Row =
+  | { kind: "contact"; key: string; contact: Contact }
+  | { kind: "airtable-header"; key: string }
+  | { kind: "airtable"; key: string; human: AirtableHumanRow };
 
 /** New-message UI shared by the mobile route and the desktop overlay panel. */
 export function NewChatContent({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
+  const [airtableResults, setAirtableResults] = useState<AirtableHumanRow[]>([]);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Contact[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const people = useListPeople();
+  const searchAirtable = useSearchAirtableHumans();
+  const addFromAirtable = useAddPersonFromAirtable();
+
+  const needle = query.trim();
 
   useEffect(() => {
-    if (query.trim().length < 2) {
+    if (needle.length < 2) {
       setResults([]);
       return;
     }
     const handle = setTimeout(() => {
-      api.contacts(query.trim()).then(setResults).catch(() => setResults([]));
+      api.contacts(needle).then(setResults).catch(() => setResults([]));
     }, 200);
     return () => clearTimeout(handle);
-  }, [query]);
+  }, [needle]);
+
+  // Same pattern as the Contacts screen: existing contacts first, unlinked
+  // Airtable matches below.
+  useEffect(() => {
+    if (needle.length < 2) {
+      setAirtableResults([]);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      searchAirtable({ query: needle })
+        .then((found) => {
+          if (cancelled) return;
+          const alreadyLinked = new Set((people ?? []).map((p) => p.airtable_human_id).filter(Boolean));
+          setAirtableResults(found.filter((r) => !alreadyLinked.has(r.record_id)));
+        })
+        .catch(() => !cancelled && setAirtableResults([]));
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [needle, people, searchAirtable]);
 
   const addContact = (c: Contact) => {
     setSelected((current) => (current.some((x) => x.address === c.address) ? current : [...current, c]));
     setQuery("");
   };
+
+  const addAirtableContact = async (human: AirtableHumanRow) => {
+    setAddingId(human.record_id);
+    try {
+      await addFromAirtable({
+        record_id: human.record_id,
+        display_name: human.display_name,
+        phone: human.phone,
+        email: human.email,
+      });
+      const address = human.phone ?? human.email;
+      if (address) addContact({ address, name: human.display_name });
+      setAirtableResults((current) => current.filter((r) => r.record_id !== human.record_id));
+    } catch {
+      showToast("Couldn't add contact");
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  const rows: Row[] = [
+    ...results.map((c) => ({ kind: "contact" as const, key: `${c.address}-${c.name}`, contact: c })),
+    ...(airtableResults.length > 0
+      ? [
+          { kind: "airtable-header" as const, key: "airtable-header" },
+          ...airtableResults.map((h) => ({ kind: "airtable" as const, key: `at-${h.record_id}`, human: h })),
+        ]
+      : []),
+  ];
 
   const create = async () => {
     if (selected.length === 0 || !text.trim() || sending) return;
@@ -101,26 +171,57 @@ export function NewChatContent({ onClose }: { onClose: () => void }) {
 
       {/* Contact suggestions fill the middle; the keyboard just shrinks this. */}
       <FlatList
-        data={results}
-        keyExtractor={(contact) => `${contact.address}-${contact.name}`}
+        data={rows}
+        keyExtractor={(row) => row.key}
         keyboardShouldPersistTaps="handled"
         style={{ flex: 1 }}
-        renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}
-            onPress={() => addContact(item)}
-          >
-            <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-              <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                {initials(item.name)}
+        renderItem={({ item }) => {
+          if (item.kind === "airtable-header") {
+            return (
+              <Text style={[styles.sectionHeader, { color: theme.textSecondary, backgroundColor: theme.background }]}>
+                From Airtable
               </Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.rowTitle, { color: theme.text }]}>{item.name}</Text>
-              <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{item.address}</Text>
-            </View>
-          </Pressable>
-        )}
+            );
+          }
+          if (item.kind === "airtable") {
+            const adding = addingId === item.human.record_id;
+            return (
+              <Pressable
+                style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+                disabled={adding}
+                onPress={() => void addAirtableContact(item.human)}
+              >
+                <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
+                    {initials(item.human.display_name)}
+                  </Text>
+                </View>
+                <Text style={[styles.rowTitle, { color: theme.text, flex: 1 }]}>{item.human.display_name}</Text>
+                {adding ? (
+                  <ActivityIndicator size="small" />
+                ) : (
+                  <Ionicons name="add-circle-outline" size={22} color="#0A84FF" />
+                )}
+              </Pressable>
+            );
+          }
+          return (
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+              onPress={() => addContact(item.contact)}
+            >
+              <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
+                <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
+                  {initials(item.contact.name)}
+                </Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[styles.rowTitle, { color: theme.text }]}>{item.contact.name}</Text>
+                <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{item.contact.address}</Text>
+              </View>
+            </Pressable>
+          );
+        }}
       />
 
       {/* Message composer sits at the bottom, always visible. */}
@@ -200,6 +301,7 @@ const styles = StyleSheet.create({
   rowSub: {
     fontSize: 13,
   },
+  sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 16, paddingVertical: 4 },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
