@@ -32,3 +32,42 @@ export function formatAddress(raw: string): string {
   if (/^\+?[\d\s().-]+$/.test(cleaned)) return formatPhone(cleaned);
   return cleaned;
 }
+
+/**
+ * Matching (not formatting) — the canonical "is this the same handle" answer,
+ * shared by every place in imsg that needs it: the server's ContactBook
+ * (Apple Contacts via BlueBubbles) and the client's person-view (matching a
+ * Convex identity's phones/emails against a chat's participants). Both used
+ * to hand-roll their own last-10-digit-suffix logic; this is the one copy.
+ *
+ * Deliberately loose (last-10-digit suffix, not full E.164) — the two
+ * services being matched here format the same real phone number
+ * differently, and this is the level of strictness that actually bridges
+ * them. convex/identity/normalize.ts's normalizePhone is stricter (full
+ * E.164) because it's deriving a canonical join key from scratch, a
+ * different job than "do these two already-known handles match."
+ */
+
+/** Last-10-digit suffix, the phone join key. Empty string if too short to be a confident match. */
+export function phoneMatchKey(address: string): string {
+  const digits = address.replace(/\D/g, "");
+  return digits.length >= 7 ? digits.slice(-10) : "";
+}
+
+/** Lowercased email, the email join key. Empty string if the address isn't email-shaped. */
+export function emailMatchKey(address: string): string {
+  return address.includes("@") ? address.toLowerCase() : "";
+}
+
+/** True if two raw addresses are the same handle — same phone (by last-10-digit suffix) or same email (case-insensitive). */
+export function addressesMatch(a: string, b: string): boolean {
+  const emailA = emailMatchKey(a);
+  if (emailA && emailA === emailMatchKey(b)) return true;
+  const phoneA = phoneMatchKey(a);
+  return Boolean(phoneA) && phoneA === phoneMatchKey(b);
+}
+
+/** True if `candidate` matches any address in `known` (phone or email). */
+export function matchesAnyAddress(candidate: string, known: string[]): boolean {
+  return known.some((k) => addressesMatch(candidate, k));
+}

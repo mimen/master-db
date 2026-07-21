@@ -1,21 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { avatarUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
-import {
-  type AirtableHumanRow,
-  type ContactListRow,
-  primaryHandle,
-  useAddPersonFromAirtable,
-  useListPeople,
-  useSearchAirtableHumans,
-} from "@/lib/identity";
+import { type AirtableHumanRow, type ContactListRow, primaryHandle } from "@/lib/identity";
+import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { useTheme } from "@/hooks/use-theme";
 import { NavSwitcher } from "./nav-switcher";
-import { showToast } from "@/lib/toast";
 
 type Row =
   | { kind: "header"; key: string; letter: string }
@@ -51,44 +44,25 @@ export interface ContactsListPaneProps {
 /** Contacts list, shared by the mobile Contacts tab and the desktop left-column pane. */
 export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
-  const people = useListPeople();
   const [query, setQuery] = useState("");
-  const [airtableResults, setAirtableResults] = useState<AirtableHumanRow[]>([]);
-  const [addingId, setAddingId] = useState<string | null>(null);
-  const searchAirtable = useSearchAirtableHumans();
-  const addFromAirtable = useAddPersonFromAirtable();
-
   const needle = query.trim().toLowerCase();
+
+  const { results: airtableResults, people, add: addAirtableContact, addingId } = useAirtableSearch(
+    needle,
+    (personId, human) =>
+      onSelectPerson({
+        _id: personId,
+        display_name: human.display_name,
+        normalized_phones: human.phone ? [human.phone] : [],
+        normalized_emails: human.email ? [human.email] : [],
+      }),
+  );
 
   const filtered = useMemo(() => {
     if (!people) return undefined;
     if (!needle) return people;
     return people.filter((p) => p.display_name.toLowerCase().includes(needle));
   }, [people, needle]);
-
-  // Existing contacts always come first. Airtable is a live, debounced
-  // secondary search — matches you already have (by airtable_human_id)
-  // are filtered out so nobody appears twice.
-  useEffect(() => {
-    if (needle.length < 2) {
-      setAirtableResults([]);
-      return;
-    }
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      searchAirtable({ query: needle })
-        .then((results) => {
-          if (cancelled) return;
-          const alreadyLinked = new Set((people ?? []).map((p) => p.airtable_human_id).filter(Boolean));
-          setAirtableResults(results.filter((r) => !alreadyLinked.has(r.record_id)));
-        })
-        .catch(() => !cancelled && setAirtableResults([]));
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [needle, people, searchAirtable]);
 
   const rows = useMemo(() => {
     const base = filtered ? buildRows(filtered) : [];
@@ -99,29 +73,6 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
       ...airtableResults.map((h) => ({ kind: "airtable" as const, key: `at-${h.record_id}`, human: h })),
     ];
   }, [filtered, airtableResults]);
-
-  const addAirtableContact = async (human: AirtableHumanRow) => {
-    setAddingId(human.record_id);
-    try {
-      const result = await addFromAirtable({
-        record_id: human.record_id,
-        display_name: human.display_name,
-        phone: human.phone,
-        email: human.email,
-      });
-      setAirtableResults((current) => current.filter((r) => r.record_id !== human.record_id));
-      onSelectPerson({
-        _id: result.personId,
-        display_name: human.display_name,
-        normalized_phones: human.phone ? [human.phone] : [],
-        normalized_emails: human.email ? [human.email] : [],
-      });
-    } catch {
-      showToast("Couldn't add contact");
-    } finally {
-      setAddingId(null);
-    }
-  };
 
   return (
     <SafeAreaView

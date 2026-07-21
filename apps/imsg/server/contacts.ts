@@ -1,5 +1,6 @@
 import type { BBContact } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
+import { phoneMatchKey } from "../shared/address";
 import type { Contact } from "../shared/types";
 
 const REFRESH_MS = 10 * 60 * 1000;
@@ -7,10 +8,6 @@ const REFRESH_MS = 10 * 60 * 1000;
 function contactName(c: BBContact): string | null {
   const assembled = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
   return c.displayName?.trim() || c.nickname?.trim() || assembled || null;
-}
-
-function digits(address: string): string {
-  return address.replace(/\D/g, "");
 }
 
 export class ContactBook {
@@ -45,12 +42,12 @@ export class ContactBook {
       }
       for (const phone of contact.phoneNumbers ?? []) {
         if (!phone.address) continue;
-        const d = digits(phone.address);
-        if (d.length >= 7) this.byDigitSuffix.set(d.slice(-10), name);
+        const key = phoneMatchKey(phone.address);
+        if (key) this.byDigitSuffix.set(key, name);
         this.byExact.set(phone.address, name);
         if (avatar) {
           this.avatarByExact.set(phone.address, avatar);
-          if (d.length >= 7) this.avatarByDigitSuffix.set(d.slice(-10), avatar);
+          if (key) this.avatarByDigitSuffix.set(key, avatar);
         }
         flat.push({ address: phone.address, name });
       }
@@ -63,17 +60,16 @@ export class ContactBook {
     const exact =
       this.avatarByExact.get(address) ?? this.avatarByExact.get(address.toLowerCase());
     if (exact) return exact;
-    const d = digits(address);
-    if (d.length >= 7) return this.avatarByDigitSuffix.get(d.slice(-10)) ?? null;
-    return null;
+    const key = phoneMatchKey(address);
+    return key ? (this.avatarByDigitSuffix.get(key) ?? null) : null;
   }
 
   lookup(address: string): string | null {
     const exact = this.byExact.get(address) ?? this.byExact.get(address.toLowerCase());
     if (exact) return exact;
-    const d = digits(address);
-    if (d.length >= 7) {
-      const suffix = this.byDigitSuffix.get(d.slice(-10));
+    const key = phoneMatchKey(address);
+    if (key) {
+      const suffix = this.byDigitSuffix.get(key);
       if (suffix) return suffix;
     }
     return null;

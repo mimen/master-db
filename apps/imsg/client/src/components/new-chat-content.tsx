@@ -18,12 +18,8 @@ import { showToast } from "@/lib/toast";
 import type { Contact } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 import { initials } from "@/lib/format";
-import {
-  type AirtableHumanRow,
-  useAddPersonFromAirtable,
-  useListPeople,
-  useSearchAirtableHumans,
-} from "@/lib/identity";
+import { type AirtableHumanRow } from "@/lib/identity";
+import { useAirtableSearch } from "@/hooks/use-airtable-search";
 
 type Row =
   | { kind: "contact"; key: string; contact: Contact }
@@ -42,14 +38,9 @@ export function NewChatContent({
   const theme = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
-  const [airtableResults, setAirtableResults] = useState<AirtableHumanRow[]>([]);
-  const [addingId, setAddingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Contact[]>(initialContact ? [initialContact] : []);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const people = useListPeople();
-  const searchAirtable = useSearchAirtableHumans();
-  const addFromAirtable = useAddPersonFromAirtable();
 
   const needle = query.trim();
 
@@ -64,52 +55,17 @@ export function NewChatContent({
     return () => clearTimeout(handle);
   }, [needle]);
 
-  // Same pattern as the Contacts screen: existing contacts first, unlinked
-  // Airtable matches below.
-  useEffect(() => {
-    if (needle.length < 2) {
-      setAirtableResults([]);
-      return;
-    }
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      searchAirtable({ query: needle })
-        .then((found) => {
-          if (cancelled) return;
-          const alreadyLinked = new Set((people ?? []).map((p) => p.airtable_human_id).filter(Boolean));
-          setAirtableResults(found.filter((r) => !alreadyLinked.has(r.record_id)));
-        })
-        .catch(() => !cancelled && setAirtableResults([]));
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [needle, people, searchAirtable]);
-
   const addContact = (c: Contact) => {
     setSelected((current) => (current.some((x) => x.address === c.address) ? current : [...current, c]));
     setQuery("");
   };
 
-  const addAirtableContact = async (human: AirtableHumanRow) => {
-    setAddingId(human.record_id);
-    try {
-      await addFromAirtable({
-        record_id: human.record_id,
-        display_name: human.display_name,
-        phone: human.phone,
-        email: human.email,
-      });
-      const address = human.phone ?? human.email;
-      if (address) addContact({ address, name: human.display_name });
-      setAirtableResults((current) => current.filter((r) => r.record_id !== human.record_id));
-    } catch {
-      showToast("Couldn't add contact");
-    } finally {
-      setAddingId(null);
-    }
-  };
+  // Same pattern as the Contacts screen: existing contacts first, unlinked
+  // Airtable matches below — sharing the search/dedupe/add logic via the hook.
+  const { results: airtableResults, add: addAirtableContact, addingId } = useAirtableSearch(needle, (_personId, human) => {
+    const address = human.phone ?? human.email;
+    if (address) addContact({ address, name: human.display_name });
+  });
 
   const rows: Row[] = [
     ...results.map((c) => ({ kind: "contact" as const, key: `${c.address}-${c.name}`, contact: c })),
