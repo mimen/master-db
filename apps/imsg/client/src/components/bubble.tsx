@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
+import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 import { AudioBubble, VideoBubble } from "./media";
@@ -120,7 +121,7 @@ interface BubbleProps {
   isGroupChat: boolean;
   isLatestOutgoing: boolean;
   highlighted?: boolean;
-  onLongPress: (message: Message) => void;
+  onLongPress: (message: Message, anchor?: { x: number; y: number }) => void;
   onRetry: (message: Message) => void;
   onShowReactions: (message: Message) => void;
 }
@@ -137,12 +138,16 @@ export const Bubble = memo(function Bubble({
   onShowReactions,
 }: BubbleProps) {
   const theme = useTheme();
-  const contextRef = useWebContextMenu<View>(() => onLongPress(message));
+  const { width: winW } = useWindowDimensions();
+  const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
   const mine = message.isFromMe;
   // SMS (green bubble) vs iMessage (blue).
   const mineColor = message.service === "SMS" ? "#34C759" : theme.bubbleMine;
-  const senderName = message.sender?.name ?? message.sender?.address ?? "";
+  const senderName =
+    message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
+  // Cap bubble width so long messages don't stretch across a wide desktop pane.
+  const bubbleMaxWidth = winW >= 768 ? Math.min(winW * 0.5, 560) : "78%";
   const url = message.text ? firstUrl(message.text) : null;
   // Tail only on the last text bubble of a group (not on media/pending/failed).
   const hasTail = groupEnd && !message.pending && !message.failed && message.text !== "";
@@ -187,7 +192,8 @@ export const Bubble = memo(function Bubble({
           gap: 6,
         }}
       >
-        {!mine && (
+        {/* Avatar gutter only in group threads — Apple shows none in 1:1 DMs. */}
+        {!mine && isGroupChat && (
           <View style={{ width: 28 }}>
             {groupEnd && (
               <View style={[styles.smallAvatar, { backgroundColor: theme.backgroundElement }]}>
@@ -206,7 +212,7 @@ export const Bubble = memo(function Bubble({
           </View>
         )}
 
-        <View style={{ maxWidth: "80%", alignItems: mine ? "flex-end" : "flex-start", gap: 4 }}>
+        <View style={{ maxWidth: bubbleMaxWidth, alignItems: mine ? "flex-end" : "flex-start", gap: 4 }}>
           {!mine && isGroupChat && groupStart && senderName !== "" && (
             <Text style={[styles.senderName, { color: theme.textSecondary }]}>{senderName}</Text>
           )}

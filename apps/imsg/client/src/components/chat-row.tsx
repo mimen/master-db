@@ -68,7 +68,7 @@ export function ChatRow({
       }`
     : "";
 
-  const contextRef = useWebContextMenu<typeof Pressable>(() => openMenu(chat));
+  const contextRef = useWebContextMenu<typeof Pressable>((anchor) => openMenu(chat, anchor));
 
   // Hover via DOM mouseenter/mouseleave: unlike RNW's hover events these do
   // not fire when the pointer moves onto a child (the archive button).
