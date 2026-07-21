@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { LinearGradient } from "expo-linear-gradient";
 
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
@@ -56,7 +55,21 @@ export function ConversationListPane({
   const [deepMatches, setDeepMatches] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
+  const [topBarH, setTopBarH] = useState(48);
   const filterBtnRef = useRef<View>(null);
+
+  // Frosted-glass top bar: content scrolls behind it at ~10% with a blur,
+  // instead of a hard gradient fade. Web-only backdrop-filter; solid elsewhere.
+  const glassStyle =
+    Platform.OS === "web"
+      ? ({
+          backgroundColor: `${theme.background}E6`,
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderBottomColor: theme.divider,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+        } as object)
+      : { backgroundColor: theme.background };
   const listRef = useRef<FlatList<ChatSummary>>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
@@ -122,36 +135,8 @@ export function ConversationListPane({
       ]}
       edges={["top"]}
     >
-      {/* Fixed top bar — the only part that doesn't scroll. */}
-      <View style={styles.topBar}>
-        {wide ? (
-          <NavSwitcher active="messages" style={styles.navInline} />
-        ) : (
-          <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
-        )}
-        <View style={styles.titleActions}>
-          <Pressable
-            ref={filterBtnRef}
-            accessibilityRole="button"
-            accessibilityLabel="Filter conversations"
-            onPress={openFilters}
-            style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="options-outline" size={21} color={theme.accent} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="New message"
-            onPress={onNewMessage}
-            style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="create-outline" size={23} color={theme.accent} />
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Everything below scrolls together — search, filters, and priority shelf
-          ride along as the list's header. */}
+      {/* Everything scrolls together — search, filters, and priority shelf ride
+          along as the list's header, passing behind the glass top bar. */}
       <View style={styles.listWrap}>
         <FlatList
           ref={listRef}
@@ -159,6 +144,7 @@ export function ConversationListPane({
           keyExtractor={(chat) => chat.guid}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingTop: topBarH + 8 }}
           onScroll={(event) => {
             scrollOffset.current = event.nativeEvent.contentOffset.y;
           }}
@@ -214,11 +200,36 @@ export function ConversationListPane({
             />
           )}
         />
-        <LinearGradient
-          colors={[theme.background, `${theme.background}00`]}
-          style={styles.topFade}
-          pointerEvents="none"
-        />
+        {/* Frosted top bar — floats over the scroll, the only fixed chrome. */}
+        <View
+          style={[styles.topBar, glassStyle]}
+          onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}
+        >
+          {wide ? (
+            <NavSwitcher active="messages" style={styles.navInline} />
+          ) : (
+            <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
+          )}
+          <View style={styles.titleActions}>
+            <Pressable
+              ref={filterBtnRef}
+              accessibilityRole="button"
+              accessibilityLabel="Filter conversations"
+              onPress={openFilters}
+              style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
+            >
+              <Ionicons name="options-outline" size={21} color={theme.accent} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="New message"
+              onPress={onNewMessage}
+              style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
+            >
+              <Ionicons name="create-outline" size={23} color={theme.accent} />
+            </Pressable>
+          </View>
+        </View>
       </View>
 
       <ConversationFiltersModal
@@ -249,9 +260,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     justifyContent: "space-between",
-    paddingBottom: 6,
+    left: 0,
+    paddingBottom: 7,
     paddingHorizontal: 12,
-    paddingTop: 6,
+    paddingTop: 7,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 10,
   },
   navInline: {
     flex: 1,
@@ -293,13 +309,6 @@ const styles = StyleSheet.create({
   listWrap: {
     flex: 1,
     position: "relative",
-  },
-  topFade: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 14,
   },
   sectionHeading: {
     alignItems: "baseline",
