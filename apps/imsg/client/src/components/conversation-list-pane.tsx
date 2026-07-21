@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
 
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
@@ -36,6 +35,7 @@ interface ConversationListPaneProps {
   onOpenChat: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
+  onOpenContacts: () => void;
 }
 
 export function ConversationListPane({
@@ -49,6 +49,7 @@ export function ConversationListPane({
   onOpenChat,
   onRefresh,
   onNewMessage,
+  onOpenContacts,
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const { openMenu } = useChatActions();
@@ -137,7 +138,7 @@ export function ConversationListPane({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Contacts"
-            onPress={() => router.push("/contacts")}
+            onPress={onOpenContacts}
             style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
           >
             <Ionicons name="person-circle-outline" size={23} color={theme.accent} />

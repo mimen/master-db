@@ -1,0 +1,171 @@
+import { useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { avatarUrl } from "@/lib/api";
+import { initials } from "@/lib/format";
+import { type ContactListRow, primaryHandle, useListPeople } from "@/lib/identity";
+import { useTheme } from "@/hooks/use-theme";
+
+type Row = { kind: "header"; key: string; letter: string } | { kind: "contact"; key: string; person: ContactListRow };
+
+function sectionLetter(name: string): string {
+  const c = name.trim().charAt(0).toUpperCase();
+  return /[A-Z]/.test(c) ? c : "#";
+}
+
+function buildRows(people: ContactListRow[]): Row[] {
+  const rows: Row[] = [];
+  let lastLetter: string | null = null;
+  for (const p of people) {
+    const letter = sectionLetter(p.display_name);
+    if (letter !== lastLetter) {
+      rows.push({ kind: "header", key: `h-${letter}`, letter });
+      lastLetter = letter;
+    }
+    rows.push({ kind: "contact", key: p._id, person: p });
+  }
+  return rows;
+}
+
+export interface ContactsListPaneProps {
+  wide: boolean;
+  selectedId?: string;
+  onSelectPerson: (person: ContactListRow) => void;
+  /** Desktop-only: switch the left column back to the conversation list. */
+  onBackToMessages?: () => void;
+}
+
+/** Contacts list, shared by the mobile /contacts modal and the desktop left-column pane. */
+export function ContactsListPane({ wide, selectedId, onSelectPerson, onBackToMessages }: ContactsListPaneProps) {
+  const theme = useTheme();
+  const people = useListPeople();
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!people) return undefined;
+    const needle = query.trim().toLowerCase();
+    if (!needle) return people;
+    return people.filter((p) => p.display_name.toLowerCase().includes(needle));
+  }, [people, query]);
+
+  const rows = useMemo(() => (filtered ? buildRows(filtered) : []), [filtered]);
+
+  return (
+    <SafeAreaView
+      style={[styles.pane, wide && styles.paneWide, wide && { borderRightColor: theme.divider }, { backgroundColor: theme.background }]}
+      edges={["top"]}
+    >
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, { color: theme.text }]}>Contacts</Text>
+        {onBackToMessages && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to Messages"
+            onPress={onBackToMessages}
+            style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={21} color={theme.accent} />
+          </Pressable>
+        )}
+      </View>
+
+      <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
+        <Ionicons name="search" size={17} color={theme.textSecondary} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search contacts"
+          placeholderTextColor={theme.textSecondary}
+          style={[styles.searchInput, { color: theme.text }]}
+        />
+      </View>
+
+      {people === undefined ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      ) : rows.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={{ color: theme.textSecondary }}>No contacts found.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(r) => r.key}
+          renderItem={({ item }) =>
+            item.kind === "header" ? (
+              <Text style={[styles.sectionHeader, { color: theme.textSecondary, backgroundColor: theme.background }]}>
+                {item.letter}
+              </Text>
+            ) : (
+              <Pressable
+                style={[styles.row, selectedId === item.person._id && { backgroundColor: theme.backgroundElement }]}
+                onPress={() => onSelectPerson(item.person)}
+              >
+                <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
+                    {initials(item.person.display_name)}
+                  </Text>
+                  {primaryHandle(item.person) && (
+                    <Image
+                      source={{ uri: avatarUrl(primaryHandle(item.person) as string) }}
+                      style={styles.avatarImg}
+                      contentFit="cover"
+                    />
+                  )}
+                </View>
+                <Text style={{ color: theme.text, fontSize: 16 }}>{item.person.display_name}</Text>
+              </Pressable>
+            )
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  pane: { flex: 1 },
+  paneWide: {
+    borderRightWidth: StyleSheet.hairlineWidth,
+    flexBasis: 390,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 390,
+  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  title: { fontSize: 28, fontWeight: "700" },
+  titleButton: { padding: 4 },
+  searchField: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  searchInput: { flex: 1, fontSize: 16 },
+  sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 16, paddingVertical: 4 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImg: { position: "absolute", width: 36, height: 36, borderRadius: 18 },
+});

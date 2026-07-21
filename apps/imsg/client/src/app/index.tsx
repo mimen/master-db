@@ -5,8 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { ChatInfoContent } from "@/components/chat-info-content";
+import { ContactsListPane } from "@/components/contacts-list-pane";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { NewChatContent } from "@/components/new-chat-content";
+import { PersonContent } from "@/components/person-content";
 import { SearchContent } from "@/components/search-content";
 import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
@@ -14,20 +16,25 @@ import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import { onOpenChatInfo } from "@/lib/chat-info";
+import { primaryHandle, type ContactListRow } from "@/lib/identity";
 import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
+
+type Mode = "messages" | "contacts";
 
 export default function ChatListScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const wide = width >= 768;
+  const [mode, setMode] = useState<Mode>("messages");
   const [state, setState] = useState<StateFilter>("all");
   const [type, setType] = useState<TypeFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<ContactListRow | null>(null);
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [infoGuid, setInfoGuid] = useState<string | null>(null);
   const { chats, counts, loading, refresh } = useChats(state, type);
@@ -90,6 +97,13 @@ export default function ChatListScreen() {
     setInfoGuid(null);
   }, [selected?.guid]);
 
+  // Switching between Messages/Contacts mode closes whatever's open — the
+  // chat-info pane doesn't apply in contacts mode, and vice versa.
+  useEffect(() => {
+    setInfoGuid(null);
+    setSelectedPerson(null);
+  }, [mode]);
+
   // Keep the selected chat's flags fresh as the directory reconciles.
   useEffect(() => {
     if (!selected) return;
@@ -118,6 +132,11 @@ export default function ChatListScreen() {
   const openNewMessage = (): void => {
     if (wide) setNewChatOpen(true);
     else router.push("/new-chat");
+  };
+
+  const openContacts = (): void => {
+    if (wide) setMode("contacts");
+    else router.push("/contacts");
   };
 
   // Desktop keyboard shortcuts: ⌘K search, ⌘N new, ↑/↓ chat nav, Esc closes panes.
@@ -153,23 +172,35 @@ export default function ChatListScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wide, chats, selected, searchOpen, newChatOpen]);
 
-  const list = (
-    <ConversationListPane
-      chats={chats}
-      counts={counts}
-      filters={{ state, type }}
-      loading={loading}
-      wide={wide}
-      selectedGuid={wide ? selected?.guid : undefined}
-      onFiltersChange={(filters) => {
-        setState(filters.state);
-        setType(filters.type);
-      }}
-      onOpenChat={openChat}
-      onRefresh={refresh}
-      onNewMessage={openNewMessage}
-    />
-  );
+  const list =
+    wide && mode === "contacts" ? (
+      <ContactsListPane
+        wide={wide}
+        selectedId={selectedPerson?._id}
+        onSelectPerson={setSelectedPerson}
+        onBackToMessages={() => {
+          setMode("messages");
+          setSelectedPerson(null);
+        }}
+      />
+    ) : (
+      <ConversationListPane
+        chats={chats}
+        counts={counts}
+        filters={{ state, type }}
+        loading={loading}
+        wide={wide}
+        selectedGuid={wide ? selected?.guid : undefined}
+        onFiltersChange={(filters) => {
+          setState(filters.state);
+          setType(filters.type);
+        }}
+        onOpenChat={openChat}
+        onRefresh={refresh}
+        onNewMessage={openNewMessage}
+        onOpenContacts={openContacts}
+      />
+    );
 
   if (!wide) {
     return <View style={{ flex: 1, backgroundColor: theme.background }}>{list}</View>;
@@ -193,7 +224,20 @@ export default function ChatListScreen() {
         </Pressable>
       </Modal>
       <View style={styles.threadPane}>
-        {selected ? (
+        {mode === "contacts" ? (
+          selectedPerson ? (
+            <PersonContent
+              key={selectedPerson._id}
+              address={primaryHandle(selectedPerson) ?? ""}
+              name={selectedPerson.display_name}
+            />
+          ) : (
+            <View style={styles.empty}>
+              <Ionicons name="person-circle-outline" size={28} color={theme.textSecondary} />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Select a contact</Text>
+            </View>
+          )
+        ) : selected ? (
           <ThreadView
             key={selected.guid + (jumpTarget?.guid ?? "")}
             chatGuid={selected.guid}
