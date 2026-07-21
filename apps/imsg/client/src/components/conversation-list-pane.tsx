@@ -122,9 +122,13 @@ export function ConversationListPane({
       ]}
       edges={["top"]}
     >
-      {wide && <NavSwitcher active="messages" />}
-      <View style={styles.titleRow}>
-        <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
+      {/* Fixed top bar — the only part that doesn't scroll. */}
+      <View style={styles.topBar}>
+        {wide ? (
+          <NavSwitcher active="messages" style={styles.navInline} />
+        ) : (
+          <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
+        )}
         <View style={styles.titleActions}>
           <Pressable
             ref={filterBtnRef}
@@ -146,73 +150,76 @@ export function ConversationListPane({
         </View>
       </View>
 
-      <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
-        <Ionicons name="search" size={17} color={theme.textSecondary} />
-        <TextInput
-          accessibilityLabel="Search conversations and messages"
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search"
-          placeholderTextColor={theme.textSecondary}
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-          style={[styles.searchInput, { color: theme.text }]}
-        />
-      </View>
-
-      <ConversationFilters filters={filters} counts={counts} onFiltersChange={onFiltersChange} />
-
-      {loading && chats.length === 0 ? (
-        <SkeletonList />
-      ) : (
-        <View style={styles.results}>
-          {model.showPriorityShelf && (
-            <PriorityShelf
-              chats={model.priority}
-              selectedGuid={selectedGuid}
-              onPress={onOpenChat}
-              onLongPress={openMenu}
-            />
-          )}
-          <View style={styles.sectionHeading}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>{model.sectionLabel}</Text>
-            <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{model.sectionCount}</Text>
-          </View>
-          <View style={styles.listWrap}>
-            <FlatList
-              ref={listRef}
-              data={model.listChats}
-              keyExtractor={(chat) => chat.guid}
-              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-              onScroll={(event) => {
-                scrollOffset.current = event.nativeEvent.contentOffset.y;
-              }}
-              scrollEventThrottle={32}
-              ItemSeparatorComponent={() => (
-                <View style={[styles.separator, { backgroundColor: theme.divider }]} />
-              )}
-              ListEmptyComponent={
-                <View style={styles.empty}>
-                  <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No conversations</Text>
-                </View>
-              }
-              renderItem={({ item }) => (
-                <ChatRow
-                  chat={item}
-                  selected={wide && selectedGuid === item.guid}
-                  onPress={() => onOpenChat(item)}
-                  onChanged={onRefresh}
+      {/* Everything below scrolls together — search, filters, and priority shelf
+          ride along as the list's header. */}
+      <View style={styles.listWrap}>
+        <FlatList
+          ref={listRef}
+          data={model.listChats}
+          keyExtractor={(chat) => chat.guid}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          keyboardShouldPersistTaps="handled"
+          onScroll={(event) => {
+            scrollOffset.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={32}
+          ListHeaderComponent={
+            <View>
+              <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
+                <Ionicons name="search" size={17} color={theme.textSecondary} />
+                <TextInput
+                  accessibilityLabel="Search conversations and messages"
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search"
+                  placeholderTextColor={theme.textSecondary}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                  style={[styles.searchInput, { color: theme.text }]}
+                />
+              </View>
+              <ConversationFilters filters={filters} counts={counts} onFiltersChange={onFiltersChange} />
+              {model.showPriorityShelf && (
+                <PriorityShelf
+                  chats={model.priority}
+                  selectedGuid={selectedGuid}
+                  onPress={onOpenChat}
+                  onLongPress={openMenu}
                 />
               )}
+              <View style={styles.sectionHeading}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>{model.sectionLabel}</Text>
+                <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{model.sectionCount}</Text>
+              </View>
+            </View>
+          }
+          ItemSeparatorComponent={() => (
+            <View style={[styles.separator, { backgroundColor: theme.divider }]} />
+          )}
+          ListEmptyComponent={
+            loading && chats.length === 0 ? (
+              <SkeletonList />
+            ) : (
+              <View style={styles.empty}>
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No conversations</Text>
+              </View>
+            )
+          }
+          renderItem={({ item }) => (
+            <ChatRow
+              chat={item}
+              selected={wide && selectedGuid === item.guid}
+              onPress={() => onOpenChat(item)}
+              onChanged={onRefresh}
             />
-            <LinearGradient
-              colors={[theme.background, `${theme.background}00`]}
-              style={styles.topFade}
-              pointerEvents="none"
-            />
-          </View>
-        </View>
-      )}
+          )}
+        />
+        <LinearGradient
+          colors={[theme.background, `${theme.background}00`]}
+          style={styles.topFade}
+          pointerEvents="none"
+        />
+      </View>
 
       <ConversationFiltersModal
         visible={filterOpen}
@@ -237,18 +244,26 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     width: 390,
   },
-  titleRow: {
+  topBar: {
     alignItems: "center",
     flexDirection: "row",
+    gap: 6,
     justifyContent: "space-between",
-    paddingBottom: 9,
-    paddingHorizontal: 18,
+    paddingBottom: 6,
+    paddingHorizontal: 12,
     paddingTop: 6,
+  },
+  navInline: {
+    flex: 1,
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
   title: {
     fontSize: 34,
     fontWeight: "700",
     letterSpacing: -1.1,
+    paddingLeft: 6,
   },
   titleActions: {
     flexDirection: "row",
@@ -274,9 +289,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
-  },
-  results: {
-    flex: 1,
   },
   listWrap: {
     flex: 1,

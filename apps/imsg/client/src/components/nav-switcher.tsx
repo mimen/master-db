@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { router } from "expo-router";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -8,10 +8,17 @@ import { useTheme } from "@/hooks/use-theme";
  * this is the wide-layout equivalent, since a native tab bar reads oddly on
  * a desktop-width web page.
  */
-export function NavSwitcher({ active }: { active: "messages" | "contacts" }) {
+export function NavSwitcher({
+  active,
+  style,
+}: {
+  active: "messages" | "contacts";
+  /** Override the outer container — e.g. drop the margins to sit inline in a top bar. */
+  style?: StyleProp<ViewStyle>;
+}) {
   const theme = useTheme();
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundElement }]}>
+    <View style={[styles.container, { backgroundColor: theme.backgroundElement }, style]}>
       <Pressable
         style={[styles.segment, active === "messages" && { backgroundColor: theme.background }]}
         onPress={() => router.push("/")}
