@@ -31,10 +31,16 @@ import { normalizeEmail, normalizePhone } from "./normalize";
 // per-document cap (hit in practice — see identity-sync.ts's toContactCard
 // docstring in the imsg repo for the full story). Photos stay out of the
 // identity graph; imsg already serves them via its own avatar route.
+// (Airtable attachment URLs have the same "don't store this" problem for a
+// different reason — they're signed and expire, so a stored URL rots.)
 const contactCard = v.object({
   display_name: v.optional(v.string()),
   phones: v.array(v.string()),
   emails: v.array(v.string()),
+  // The source's own record id (e.g. an Airtable "rec..." id). When present,
+  // patched onto the person as airtable_human_id for the person-view deep
+  // link out. Source-specific by design — only Airtable has this today.
+  airtable_record_id: v.optional(v.string()),
 });
 
 export const ingestContactsBatch = internalMutation({
@@ -155,6 +161,13 @@ export const ingestContactsBatch = internalMutation({
           });
         }
         identitiesWritten++;
+      }
+
+      if (card.airtable_record_id) {
+        const p = await ctx.db.get(personId);
+        if (p && !p.airtable_human_id) {
+          await ctx.db.patch(personId, { airtable_human_id: card.airtable_record_id, updated_at: now });
+        }
       }
 
       await recomputePersonAggregates(ctx, personId);

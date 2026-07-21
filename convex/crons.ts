@@ -13,6 +13,14 @@ crons.interval(
   internal.todoist.sync.performIncrementalSync.performIncrementalSync
 );
 
+// Airtable Humans -> identity graph. Full refresh; the table's small enough
+// that incremental sync isn't worth the complexity.
+crons.interval(
+  "airtable-humans-sync",
+  { hours: 1 },
+  internal.identity.airtableSync.syncAirtableHumans
+);
+
 // Run daily routine task generation at midnight (00:00)
 // crons.daily(
 //   "daily-routine-generation",

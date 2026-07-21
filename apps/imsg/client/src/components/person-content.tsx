@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { avatarUrl } from "@/lib/api";
@@ -128,6 +128,20 @@ export function PersonContent({ address, name, showHeader = false, onClose }: Pe
             ))}
           </View>
         )}
+
+        {person.airtable_human_id && (
+          <Pressable
+            style={styles.linkOutRow}
+            onPress={() =>
+              Linking.openURL(
+                `https://airtable.com/app39VsA3z85GTMbT/tbl6LptFEMKLaN0I9/${person.airtable_human_id}`,
+              )
+            }
+          >
+            <Ionicons name="open-outline" size={16} color="#0A84FF" />
+            <Text style={{ color: "#0A84FF", fontSize: 15 }}>View in Airtable</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );
@@ -169,5 +183,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#3A3A3C",
+  },
+  linkOutRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 16,
   },
 });

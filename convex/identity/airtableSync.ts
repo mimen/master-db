@@ -1,0 +1,108 @@
+import { internal } from "../_generated/api";
+import { internalAction } from "../_generated/server";
+
+/**
+ * Pulls AUF's Airtable "Humans" table into the identity graph, Convex-native
+ * (no imsg involvement — unlike Apple Contacts, Airtable has a real cloud
+ * API, so this runs the same way convex/todoist/sync does: a scheduled
+ * action calling fetch() directly). Cron-driven, full refresh each run —
+ * the table is small enough that incremental sync isn't worth the
+ * complexity Todoist's sync token approach needs.
+ *
+ * Deliberately excludes Profile Picture: Airtable attachment URLs are
+ * signed and expire, so storing one would rot. imsg already sources photos
+ * from Apple Contacts via its own avatar route — nothing reads a photo out
+ * of the identity graph, same reasoning as dropping Apple's avatar bytes.
+ */
+
+const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
+const HUMANS_TABLE_ID = "tbl6LptFEMKLaN0I9";
+const FIELDS = ["Name", "Phone Number", "Email Address", "Email Address 2"];
+
+type AirtableRecord = {
+  id: string;
+  fields: {
+    Name?: string;
+    "Phone Number"?: string;
+    "Email Address"?: string;
+    "Email Address 2"?: string;
+  };
+};
+
+type AirtableListResponse = {
+  records: AirtableRecord[];
+  offset?: string;
+};
+
+type ContactCard = {
+  display_name?: string;
+  phones: string[];
+  emails: string[];
+  airtable_record_id: string;
+};
+
+/** Maps one Humans row to a pre-grouped contact card, or null if it has no handle at all. */
+export function toContactCard(r: AirtableRecord): ContactCard | null {
+  const phones = r.fields["Phone Number"] ? [r.fields["Phone Number"]] : [];
+  const emails = [r.fields["Email Address"], r.fields["Email Address 2"]].filter(
+    (e): e is string => Boolean(e),
+  );
+  if (phones.length === 0 && emails.length === 0) return null;
+  return {
+    display_name: r.fields.Name,
+    phones,
+    emails,
+    airtable_record_id: r.id,
+  };
+}
+
+export const syncAirtableHumans = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const apiKey = process.env.AIRTABLE_API_KEY;
+    if (!apiKey) {
+      throw new Error("AIRTABLE_API_KEY not configured on this Convex deployment");
+    }
+
+    const contacts: ContactCard[] = [];
+
+    let offset: string | undefined;
+    let pages = 0;
+    do {
+      const params = new URLSearchParams({ pageSize: "100" });
+      for (const f of FIELDS) params.append("fields[]", f);
+      if (offset) params.set("offset", offset);
+
+      const res = await fetch(
+        `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${HUMANS_TABLE_ID}?${params.toString()}`,
+        { headers: { Authorization: `Bearer ${apiKey}` } },
+      );
+      if (!res.ok) {
+        throw new Error(`Airtable Humans fetch failed: ${res.status} ${await res.text()}`);
+      }
+      const body = (await res.json()) as AirtableListResponse;
+      for (const r of body.records) {
+        const card = toContactCard(r);
+        if (card) contacts.push(card);
+      }
+      offset = body.offset;
+      pages++;
+    } while (offset && pages < 100); // safety cap, Humans is nowhere near 10k records
+
+    let peopleCreated = 0;
+    let peopleReused = 0;
+    let identitiesWritten = 0;
+    for (let i = 0; i < contacts.length; i += 50) {
+      const slice = contacts.slice(i, i + 50);
+      const result = await ctx.runMutation(internal.identity.ingestContacts.ingestContactsBatch, {
+        source: "airtable_human",
+        contacts: slice,
+      });
+      peopleCreated += result.peopleCreated;
+      peopleReused += result.peopleReused;
+      identitiesWritten += result.identitiesWritten;
+    }
+
+    return { recordsSeen: contacts.length, peopleCreated, peopleReused, identitiesWritten };
+  },
+});

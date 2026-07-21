@@ -88,6 +88,27 @@ describe("multi-handle card grouping (the core fix)", () => {
   });
 });
 
+describe("airtable_record_id patch (keep-if-existing, like other merge fields)", () => {
+  test("sets airtable_human_id when the person doesn't have one yet", () => {
+    const person = { airtable_human_id: undefined as string | undefined };
+    const card = { airtable_record_id: "recABC123" };
+    const shouldPatch = Boolean(card.airtable_record_id) && !person.airtable_human_id;
+    expect(shouldPatch).toBe(true);
+  });
+
+  test("never overwrites an existing airtable_human_id", () => {
+    const person = { airtable_human_id: "recEXISTING" as string | undefined };
+    const card = { airtable_record_id: "recABC123" };
+    const shouldPatch = Boolean(card.airtable_record_id) && !person.airtable_human_id;
+    expect(shouldPatch).toBe(false);
+  });
+
+  test("no-op when the card carries no record id at all (e.g. an Apple Contacts card)", () => {
+    const card = { airtable_record_id: undefined as string | undefined };
+    expect(Boolean(card.airtable_record_id)).toBe(false);
+  });
+});
+
 describe("display_name merge on re-ingest (mirrors upsertIdentitiesBatch rules)", () => {
   test("longer incoming display_name overwrites the existing one", () => {
     const existing = { display_name: "Chase" };
