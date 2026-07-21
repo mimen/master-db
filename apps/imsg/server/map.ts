@@ -2,6 +2,7 @@ import type { BBChat, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { ChatState } from "../shared/chat-state";
 import { computeFlags } from "../shared/chat-state";
+import { formatAddress } from "../shared/address";
 import type { ContactBook } from "./contacts";
 
 /** SMS (green bubble) messages come over a non-iMessage service. */
@@ -149,11 +150,12 @@ export function buildThread(
 function chatDisplayName(chat: BBChat, contacts: ContactBook): string {
   if (chat.displayName?.trim()) return chat.displayName.trim();
   const participants = chat.participants ?? [];
-  const names = participants.map((p) => contacts.lookup(p.address) ?? p.address);
-  if (names.length === 0) return chat.chatIdentifier ?? chat.guid;
+  const names = participants.map((p) => contacts.lookup(p.address) ?? formatAddress(p.address));
+  if (names.length === 0) return chat.chatIdentifier ? formatAddress(chat.chatIdentifier) : chat.guid;
   if (names.length === 1) return names[0] ?? chat.guid;
-  // Groups: Apple-style first names — "Marissa, Sarah & Mike".
-  const firsts = names.map((n) => (n.startsWith("+") || /@/.test(n) ? n : (n.split(/\s+/)[0] ?? n)));
+  // Groups: Apple-style first names — "Marissa, Sarah & Mike". Formatted phones
+  // and emails (anything with a digit, "@", or "(") stay whole, not split.
+  const firsts = names.map((n) => (/[\d@(+]/.test(n) ? n : (n.split(/\s+/)[0] ?? n)));
   if (firsts.length <= 4) {
     return `${firsts.slice(0, -1).join(", ")} & ${firsts[firsts.length - 1]}`;
   }
@@ -194,7 +196,7 @@ export function mapChat(
           last.isFromMe === true
             ? null
             : last.handle?.address
-              ? (contacts.lookup(last.handle.address) ?? last.handle.address)
+              ? (contacts.lookup(last.handle.address) ?? formatAddress(last.handle.address))
               : null,
         hasAttachments: (last.attachments ?? []).length > 0,
       }

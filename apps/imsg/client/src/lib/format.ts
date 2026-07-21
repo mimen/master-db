@@ -24,9 +24,11 @@ export function sameDay(a: number, b: number): boolean {
 }
 
 export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
+  // Only letter-bearing words make a monogram; phone-number / short-code names
+  // have none, so they fall back to "#" instead of garbage like "(4".
+  const parts = name.trim().split(/\s+/).filter((p) => /[a-z]/i.test(p));
+  if (parts.length === 0) return "#";
   const first = parts[0]?.[0] ?? "";
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
-  return (first + last).toUpperCase() || "?";
+  return (first + last).toUpperCase() || "#";
 }

@@ -11,7 +11,7 @@ import {
 } from "@/lib/chat-actions";
 
 interface ChatActions {
-  openMenu: (chat: ChatSummary) => void;
+  openMenu: (chat: ChatSummary, anchor?: { x: number; y: number }) => void;
 }
 
 /**
@@ -21,7 +21,7 @@ interface ChatActions {
  */
 export function useChatActions(): ChatActions {
   const showSheet = useActionSheet();
-  const openMenu = (chat: ChatSummary): void => {
+  const openMenu = (chat: ChatSummary, anchor?: { x: number; y: number }): void => {
     const actions = [
       chat.flags.unread
         ? { label: "Mark as read", onPress: () => markChatRead(chat) }
@@ -47,7 +47,7 @@ export function useChatActions(): ChatActions {
           ]
         : []),
     ];
-    showSheet({ title: chat.displayName, actions });
+    showSheet({ title: chat.displayName, actions, anchor });
   };
   return { openMenu };
 }

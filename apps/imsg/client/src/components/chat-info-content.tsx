@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,8 +18,11 @@ import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { Contact, GalleryItem } from "@shared/types";
+import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { initials } from "@/lib/format";
+
+const GRID_GAP = 5;
 
 export interface ChatInfoContentProps {
   guid: string;
@@ -42,6 +44,7 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
     participants: Contact[];
   } | null>(null);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [gridWidth, setGridWidth] = useState(0);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
 
@@ -170,7 +173,10 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
             </Pressable>
           )
         ) : (
-          <Text style={[styles.title, { color: theme.text }]}>{info.participants[0]?.name ?? "Details"}</Text>
+          <Text style={[styles.title, { color: theme.text }]}>
+            {info.participants[0]?.name ??
+              (info.participants[0]?.address ? formatAddress(info.participants[0].address) : "Details")}
+          </Text>
         )}
 
         <Text style={[styles.section, { color: theme.textSecondary }]}>
@@ -187,13 +193,13 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
           >
             <View style={[styles.pAvatar, { backgroundColor: theme.backgroundElement }]}>
               <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                {initials(p.name ?? p.address)}
+                {initials(p.name ?? formatAddress(p.address))}
               </Text>
               <Image source={{ uri: avatarUrl(p.address) }} style={styles.pAvatarImg} contentFit="cover" />
             </View>
             <View>
-              <Text style={{ color: theme.text, fontSize: 16 }}>{p.name ?? p.address}</Text>
-              {p.name && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{p.address}</Text>}
+              <Text style={{ color: theme.text, fontSize: 16 }}>{p.name ?? formatAddress(p.address)}</Text>
+              {p.name && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{formatAddress(p.address)}</Text>}
             </View>
           </Pressable>
         ))}
@@ -246,15 +252,17 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
         {gallery.length > 0 && (
           <>
             <Text style={[styles.section, { color: theme.textSecondary }]}>Photos & Videos</Text>
-            <FlatList
-              data={gallery}
-              keyExtractor={(g) => g.guid}
-              numColumns={3}
-              scrollEnabled={false}
-              columnWrapperStyle={{ gap: 3 }}
-              contentContainerStyle={{ gap: 3 }}
-              renderItem={({ item, index }) => (
-                <Pressable style={styles.tile} onPress={() => openLightbox(galleryMedia, index)}>
+            {/* Fixed-pixel square tiles from the measured width — aspectRatio +
+                percentage widths stagger under RN-web, so size them explicitly. */}
+            <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+              {gallery.map((item, index) => {
+                const tileSize = gridWidth > 0 ? (gridWidth - 2 * GRID_GAP) / 3 : 0;
+                return (
+                <Pressable
+                  key={item.guid}
+                  style={{ width: tileSize, height: tileSize }}
+                  onPress={() => openLightbox(galleryMedia, index)}
+                >
                   <Image source={{ uri: attachmentUrl(item.guid) }} style={styles.tileImg} contentFit="cover" />
                   {item.isVideo && (
                     <View style={styles.playBadge}>
@@ -262,8 +270,9 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
                     </View>
                   )}
                 </Pressable>
-              )}
-            />
+                );
+              })}
+            </View>
           </>
         )}
       </ScrollView>
@@ -295,8 +304,8 @@ const styles = StyleSheet.create({
   pAvatarImg: { ...StyleSheet.absoluteFillObject, borderRadius: 20 },
   action: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
   actionDanger: { color: "#FF3B30", fontSize: 16 },
-  tile: { flex: 1 / 3, aspectRatio: 1 },
-  tileImg: { width: "100%", height: "100%", borderRadius: 4 },
+  grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
+  tileImg: { width: "100%", height: "100%", borderRadius: 6 },
   playBadge: {
     position: "absolute",
     right: 4,

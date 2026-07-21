@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
@@ -27,6 +28,8 @@ interface SheetRequest {
   actions: SheetAction[];
   /** Optional horizontal reaction pill rendered above the actions. */
   tapbacks?: SheetTapback[];
+  /** Desktop right-click: viewport coords to anchor a compact popover at. */
+  anchor?: { x: number; y: number };
 }
 
 type ShowSheet = (request: SheetRequest) => void;
@@ -44,6 +47,7 @@ export function useActionSheet(): ShowSheet {
 export function ActionSheetProvider({ children }: { children: React.ReactNode }) {
   const [request, setRequest] = useState<SheetRequest | null>(null);
   const theme = useTheme();
+  const { width: winW, height: winH } = useWindowDimensions();
 
   const show = useCallback((req: SheetRequest) => {
     // The tapback pill needs the custom sheet on every platform.
@@ -74,9 +78,62 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
       <Modal
         visible={request !== null}
         transparent
-        animationType="fade"
+        animationType={request?.anchor ? "none" : "fade"}
         onRequestClose={() => setRequest(null)}
       >
+        {request?.anchor ? (
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setRequest(null)}>
+            {(() => {
+              const POP_W = 232;
+              const left = Math.max(8, Math.min(request.anchor.x, winW - POP_W - 8));
+              const top = Math.min(request.anchor.y, winH - 80);
+              return (
+                <View
+                  style={[
+                    styles.popover,
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.divider, top, left, width: POP_W },
+                  ]}
+                >
+                  {request.tapbacks && (
+                    <View style={styles.tapbackRow}>
+                      {request.tapbacks.map((t) => (
+                        <Pressable
+                          key={t.emoji}
+                          onPress={() => {
+                            setRequest(null);
+                            t.onPress();
+                          }}
+                          style={[styles.tapback, styles.tapbackSmall, t.active && styles.tapbackActive]}
+                        >
+                          <Text style={{ fontSize: 20 }}>{t.emoji}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                  {request.actions.map((action) => (
+                    <Pressable
+                      key={action.label}
+                      style={({ pressed }) => [
+                        styles.popoverAction,
+                        pressed && { backgroundColor: theme.backgroundSelected },
+                      ]}
+                      onPress={() => {
+                        setRequest(null);
+                        action.onPress();
+                      }}
+                    >
+                      <Text
+                        style={[styles.popoverLabel, { color: action.destructive ? "#FF453A" : theme.text }]}
+                      >
+                        {action.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              );
+            })()}
+          </Pressable>
+        ) : (
         <Pressable style={styles.backdrop} onPress={() => setRequest(null)}>
           <View style={[styles.sheet, { backgroundColor: theme.backgroundElement }]}>
             {request?.tapbacks && (
@@ -119,12 +176,35 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
             ))}
           </View>
         </Pressable>
+        )}
       </Modal>
     </SheetContext.Provider>
   );
 }
 
 const styles = StyleSheet.create({
+  popover: {
+    position: "absolute",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+  },
+  popoverAction: {
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  popoverLabel: {
+    fontSize: 14,
+  },
+  tapbackSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",

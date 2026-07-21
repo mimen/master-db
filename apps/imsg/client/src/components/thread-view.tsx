@@ -262,7 +262,7 @@ export function ThreadView({
   );
 
   const openMessageSheet = useCallback(
-    (message: Message) => {
+    (message: Message, anchor?: { x: number; y: number }) => {
       const mine = message.isFromMe;
       const age = Date.now() - message.dateCreated;
       const tapbacks = privateApi
@@ -316,7 +316,7 @@ export function ThreadView({
             ]
           : []),
       ];
-      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks });
+      if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
     },
     [chatGuid, privateApi, showSheet, upsert],
   );

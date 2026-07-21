@@ -244,7 +244,9 @@ export function Composer({
         replyToGuid: reply?.guid,
       });
       playSend();
-      onSettled(temp.guid, message);
+      // BlueBubbles can echo a freshly-sent SMS back as "iMessage" before it
+      // reclassifies — pin the service so the green bubble never flashes blue.
+      onSettled(temp.guid, chatIsSMS(chatGuid) ? { ...message, service: "SMS" } : message);
     } catch {
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
     }
@@ -483,9 +485,11 @@ export function Composer({
             placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
             placeholderTextColor={theme.textSecondary}
             multiline
-            enterKeyHint="send"
-            submitBehavior="submit"
-            onSubmitEditing={() => void send()}
+            // Desktop: Enter sends (handled by the keydown listener above).
+            // Mobile: Return inserts a newline; sending is the button only.
+            enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
+            submitBehavior={Platform.OS === "web" ? "submit" : "newline"}
+            onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
             style={[
               styles.input,
               { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background },

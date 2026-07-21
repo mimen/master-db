@@ -197,7 +197,8 @@ export function ConversationFiltersModal({
 
   if (anchor) {
     const POPOVER_WIDTH = 260;
-    const left = Math.max(8, anchor.x + anchor.width - POPOVER_WIDTH);
+    // Anchor the popover's top-left corner at the button.
+    const left = Math.max(8, anchor.x);
     const top = anchor.y + anchor.height + 6;
     return (
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
