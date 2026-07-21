@@ -78,6 +78,29 @@ export const searchPeople = query({
   },
 });
 
+/**
+ * Every named person, sorted for an alphabetically-sectioned contacts list
+ * (imsg's browse-all-contacts screen). Unnamed people (a raw handle with no
+ * resolvable name from any source) are excluded — nothing useful to show in
+ * a name-sorted list. is_self is excluded too; you don't need yourself in
+ * your own contacts.
+ */
+export const listPeople = query({
+  args: {},
+  handler: async (ctx) => {
+    const people = await ctx.db.query("people").collect();
+    return people
+      .filter((p) => !p.merged_into && !p.is_self && p.display_name)
+      .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""))
+      .map((p) => ({
+        _id: p._id,
+        display_name: p.display_name,
+        normalized_phones: p.normalized_phones,
+        normalized_emails: p.normalized_emails,
+      }));
+  },
+});
+
 /** The people with the most linked identities — the merge graph's payoff. */
 export const topLinkedPeople = query({
   args: { limit: v.optional(v.number()) },

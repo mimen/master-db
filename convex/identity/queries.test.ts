@@ -62,6 +62,27 @@ describe("searchPeople filter", () => {
   });
 });
 
+describe("listPeople filter + sort (the contacts browser feed)", () => {
+  const people = [
+    { display_name: "Chase", merged_into: undefined, is_self: false },
+    { display_name: undefined, merged_into: undefined, is_self: false }, // unnamed handle, excluded
+    { display_name: "Alex", merged_into: undefined, is_self: false },
+    { display_name: "Milad", merged_into: undefined, is_self: true }, // self, excluded
+    { display_name: "Ghost", merged_into: "someone_else", is_self: false }, // merged away, excluded
+  ];
+
+  test("excludes unnamed, self, and merged-away people", () => {
+    const filtered = people.filter((p) => !p.merged_into && !p.is_self && p.display_name);
+    expect(filtered.map((p) => p.display_name)).toEqual(["Chase", "Alex"]);
+  });
+
+  test("sorts alphabetically by display_name", () => {
+    const filtered = people.filter((p) => !p.merged_into && !p.is_self && p.display_name);
+    const sorted = [...filtered].sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
+    expect(sorted.map((p) => p.display_name)).toEqual(["Alex", "Chase"]);
+  });
+});
+
 describe("topLinkedPeople selection", () => {
   test("excludes merged-away people and singletons, sorts by identity_count desc, respects limit", () => {
     const people = [

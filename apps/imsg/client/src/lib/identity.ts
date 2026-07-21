@@ -41,8 +41,19 @@ export type WhoIsResult =
   | { found: true; normalized: string; person: Person; identities: IdentityRow[] }
   | { found: false; normalized: string };
 
+export type ContactListRow = {
+  _id: string;
+  display_name: string;
+  normalized_phones: string[];
+  normalized_emails: string[];
+};
+
 const whoIsRef = makeFunctionReference<"query", { handle: string }, WhoIsResult>(
   "identity/queries:whoIs",
+);
+
+const listPeopleRef = makeFunctionReference<"query", Record<string, never>, ContactListRow[]>(
+  "identity/queries:listPeople",
 );
 
 const createPersonRef = makeFunctionReference<
@@ -55,6 +66,15 @@ export function useWhoIs(handle: string | null): WhoIsResult | undefined {
   return useQuery(whoIsRef, handle ? { handle } : "skip");
 }
 
+export function useListPeople(): ContactListRow[] | undefined {
+  return useQuery(listPeopleRef, {});
+}
+
 export function useCreatePerson() {
   return useMutation(createPersonRef);
+}
+
+/** A person's first phone or email — enough to key the /person screen's whoIs lookup. */
+export function primaryHandle(p: ContactListRow): string | null {
+  return p.normalized_phones[0] ?? p.normalized_emails[0] ?? null;
 }

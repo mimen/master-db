@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
@@ -132,6 +133,14 @@ export function ConversationListPane({
             style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
           >
             <Ionicons name="options-outline" size={21} color={theme.accent} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Contacts"
+            onPress={() => router.push("/contacts")}
+            style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
+          >
+            <Ionicons name="person-circle-outline" size={23} color={theme.accent} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
