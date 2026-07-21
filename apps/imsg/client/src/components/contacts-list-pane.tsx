@@ -14,6 +14,7 @@ import {
   useSearchAirtableHumans,
 } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";
+import { NavSwitcher } from "./nav-switcher";
 import { showToast } from "@/lib/toast";
 
 type Row =
@@ -45,12 +46,10 @@ export interface ContactsListPaneProps {
   wide: boolean;
   selectedId?: string;
   onSelectPerson: (person: ContactListRow) => void;
-  /** Desktop-only: switch the left column back to the conversation list. */
-  onBackToMessages?: () => void;
 }
 
-/** Contacts list, shared by the mobile /contacts modal and the desktop left-column pane. */
-export function ContactsListPane({ wide, selectedId, onSelectPerson, onBackToMessages }: ContactsListPaneProps) {
+/** Contacts list, shared by the mobile Contacts tab and the desktop left-column pane. */
+export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
   const people = useListPeople();
   const [query, setQuery] = useState("");
@@ -129,18 +128,9 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson, onBackToMes
       style={[styles.pane, wide && styles.paneWide, wide && { borderRightColor: theme.divider }, { backgroundColor: theme.background }]}
       edges={["top"]}
     >
+      {wide && <NavSwitcher active="contacts" />}
       <View style={styles.titleRow}>
         <Text style={[styles.title, { color: theme.text }]}>Contacts</Text>
-        {onBackToMessages && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to Messages"
-            onPress={onBackToMessages}
-            style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="chatbubble-ellipses-outline" size={21} color={theme.accent} />
-          </Pressable>
-        )}
       </View>
 
       <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
@@ -244,7 +234,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   title: { fontSize: 28, fontWeight: "700" },
-  titleButton: { padding: 4 },
   searchField: {
     flexDirection: "row",
     alignItems: "center",

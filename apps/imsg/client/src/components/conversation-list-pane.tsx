@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
+import { NavSwitcher } from "./nav-switcher";
 import { PriorityShelf } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
@@ -35,7 +36,6 @@ interface ConversationListPaneProps {
   onOpenChat: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
-  onOpenContacts: () => void;
 }
 
 export function ConversationListPane({
@@ -49,7 +49,6 @@ export function ConversationListPane({
   onOpenChat,
   onRefresh,
   onNewMessage,
-  onOpenContacts,
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const { openMenu } = useChatActions();
@@ -123,6 +122,7 @@ export function ConversationListPane({
       ]}
       edges={["top"]}
     >
+      {wide && <NavSwitcher active="messages" />}
       <View style={styles.titleRow}>
         <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
         <View style={styles.titleActions}>
@@ -134,14 +134,6 @@ export function ConversationListPane({
             style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
           >
             <Ionicons name="options-outline" size={21} color={theme.accent} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Contacts"
-            onPress={onOpenContacts}
-            style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="person-circle-outline" size={23} color={theme.accent} />
           </Pressable>
           <Pressable
             accessibilityRole="button"

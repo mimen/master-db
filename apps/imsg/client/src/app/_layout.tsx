@@ -23,7 +23,7 @@ export default function RootLayout() {
           <ActionSheetProvider>
             <LightboxProvider>
               <Stack>
-                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="chat/[guid]" options={{ headerBackTitle: "Messages" }} />
                 <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
                 <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New Message" }} />
@@ -31,7 +31,6 @@ export default function RootLayout() {
                 <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
                 <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
                 <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
-                <Stack.Screen name="contacts" options={{ presentation: "modal", title: "Contacts" }} />
               </Stack>
               <ToastHost />
               <StatusBar style="auto" />

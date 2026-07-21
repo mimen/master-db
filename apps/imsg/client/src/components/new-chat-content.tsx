@@ -31,13 +31,20 @@ type Row =
   | { kind: "airtable"; key: string; human: AirtableHumanRow };
 
 /** New-message UI shared by the mobile route and the desktop overlay panel. */
-export function NewChatContent({ onClose }: { onClose: () => void }) {
+export function NewChatContent({
+  onClose,
+  initialContact,
+}: {
+  onClose: () => void;
+  /** Pre-fills the recipient — used by the person-view's "Message" action for someone with no existing thread. */
+  initialContact?: Contact;
+}) {
   const theme = useTheme();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
   const [airtableResults, setAirtableResults] = useState<AirtableHumanRow[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Contact[]>([]);
+  const [selected, setSelected] = useState<Contact[]>(initialContact ? [initialContact] : []);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const people = useListPeople();
