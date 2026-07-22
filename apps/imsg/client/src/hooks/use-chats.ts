@@ -81,7 +81,7 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
       clearAppBadge?: () => Promise<void>;
     };
     if (!nav.setAppBadge) return;
-    const unread = all.filter((c) => c.flags.unread && !c.flags.archived && !c.isSpam).length;
+    const unread = all.filter((c) => matchesFilters(c, "unread", "all")).length;
     if (unread > 0) void nav.setAppBadge(unread).catch(() => undefined);
     else void nav.clearAppBadge?.().catch(() => undefined);
   }, [all]);

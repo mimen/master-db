@@ -9,7 +9,8 @@ desktop, list→thread on mobile.
 - Read + reply (text and attachments), inline media, contact-name resolution
 - Reactions, threaded replies, mark-read, new-chat compose — require the BlueBubbles
   **Private API** (`private_api: false` degrades these gracefully)
-- Filters: Unread / Unresponded / Waiting-on-them / Archived × All / DMs / Groups
+- Filters: Unread / Unresponded / Waiting-on-them / Archived × All / DMs / Groups / Unknown
+- Unknown contacts and Apple-flagged junk stay out of the default inbox and remain available under Unknown
 - Unresponded = last message inbound; Waiting = last message yours; one-tap dismiss
   clears a chat from either until the next message flips its state
 - Archive is app-local (SQLite overlay), auto-unarchives on new inbound

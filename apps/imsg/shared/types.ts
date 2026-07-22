@@ -58,6 +58,8 @@ export interface Message {
   /** Whether the replied-to message was sent by me (null when unresolved). */
   replyToFromMe: boolean | null;
   isGroupEvent: boolean;
+  /** Apple's junk classification for this message, when supplied by BlueBubbles. */
+  isSpam?: boolean;
   error: number;
   edited: boolean;
   retracted: boolean;
@@ -89,6 +91,8 @@ export interface ChatSummary {
   isGroup: boolean;
   /** True when at least one participant matches a contact. */
   known: boolean;
+  /** False when contact classification is temporarily unavailable; absent means available. */
+  contactsAvailable?: boolean;
   /** Last message was flagged by Apple's junk detection. */
   isSpam: boolean;
   participants: Participant[];

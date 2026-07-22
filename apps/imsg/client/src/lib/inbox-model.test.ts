@@ -107,6 +107,19 @@ describe("deriveInboxModel", () => {
     expect(model.sectionCount).toBe(2);
   });
 
+  test("hides unknown and spam conversations by default but reveals them under Unknown", () => {
+    const known = makeChat({ guid: "known" });
+    const unknown = makeChat({ guid: "unknown", known: false });
+    const spam = makeChat({ guid: "spam", isSpam: true });
+
+    expect(deriveInboxModel([known, unknown, spam], DEFAULT_INBOX_FILTERS, "").searchedChats).toEqual([
+      known,
+    ]);
+    expect(
+      deriveInboxModel([known, unknown, spam], { state: "all", type: "unknown" }, "").searchedChats,
+    ).toEqual([unknown, spam]);
+  });
+
   test("applies state/type filters and search before disabling priority presentation", () => {
     const groupUnread = makeChat({
       guid: "group-unread",
