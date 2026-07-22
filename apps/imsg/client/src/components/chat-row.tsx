@@ -5,7 +5,12 @@ import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
-import Reanimated, { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import Reanimated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { prefetchThread } from "@/hooks/use-messages";
@@ -18,29 +23,48 @@ import { ChatAvatar } from "./avatar";
 
 const ACTION_WIDTH = 84;
 
+/**
+ * iMessage/Mail-style action pane: the colored panel tracks the finger (its
+ * width follows the drag), and the icon pops as you approach the commit
+ * threshold — so a decisive full swipe commits, a hesitant one springs back.
+ */
 function SwipeAction({
-  progress,
+  translation,
+  icon,
   label,
   color,
   side,
+  commit,
 }: {
-  progress: SharedValue<number>;
+  translation: SharedValue<number>;
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   color: string;
   side: "left" | "right";
+  commit: number;
 }) {
-  const style = useAnimatedStyle(() => ({
-    opacity: Math.min(1, progress.value * 1.5),
+  const containerStyle = useAnimatedStyle(() => ({
+    width: Math.max(ACTION_WIDTH, Math.abs(translation.value)),
   }));
+  const contentStyle = useAnimatedStyle(() => {
+    const dist = Math.abs(translation.value);
+    return {
+      opacity: interpolate(dist, [10, 42], [0, 1], Extrapolation.CLAMP),
+      transform: [{ scale: interpolate(dist, [commit - 26, commit], [1, 1.18], Extrapolation.CLAMP) }],
+    };
+  });
   return (
     <Reanimated.View
       style={[
         styles.swipeAction,
         { backgroundColor: color, alignItems: side === "left" ? "flex-start" : "flex-end" },
-        style,
+        containerStyle,
       ]}
     >
-      <Text style={styles.swipeActionLabel}>{label}</Text>
+      <Reanimated.View style={[styles.swipeActionInner, contentStyle]}>
+        <Ionicons name={icon} size={23} color="#fff" />
+        <Text style={styles.swipeActionLabel}>{label}</Text>
+      </Reanimated.View>
     </Reanimated.View>
   );
 }
@@ -89,27 +113,36 @@ export function ChatRow({
     };
   }, [chat.guid]);
 
+  // Commit distance scales with row width so it's a deliberate full swipe on a
+  // phone, not a hair-trigger. Capped so a tablet/desktop doesn't need a marathon.
+  const commit = Math.min(190, Math.max(120, winW * 0.42));
+
   return (
     <ReanimatedSwipeable
       ref={swipeRef}
-      friction={1.6}
-      leftThreshold={ACTION_WIDTH * 0.6}
-      rightThreshold={ACTION_WIDTH * 0.6}
-      overshootFriction={8}
-      renderLeftActions={(progress) => (
+      friction={1}
+      leftThreshold={commit}
+      rightThreshold={commit}
+      overshootLeft={false}
+      overshootRight={false}
+      renderLeftActions={(_progress, translation) => (
         <SwipeAction
-          progress={progress}
+          translation={translation}
+          icon={chat.flags.unread ? "mail-open-outline" : "mail-unread-outline"}
           label={chat.flags.unread ? "Read" : "Unread"}
           color="#0A84FF"
           side="left"
+          commit={commit}
         />
       )}
-      renderRightActions={(progress) => (
+      renderRightActions={(_progress, translation) => (
         <SwipeAction
-          progress={progress}
+          translation={translation}
+          icon={chat.flags.archived ? "arrow-undo-outline" : "archive-outline"}
           label={chat.flags.archived ? "Unarchive" : "Archive"}
           color="#F0A500"
           side="right"
+          commit={commit}
         />
       )}
       onSwipeableOpen={(direction) => {
@@ -270,11 +303,15 @@ const styles = StyleSheet.create({
   swipeAction: {
     width: ACTION_WIDTH,
     justifyContent: "center",
-    paddingHorizontal: 18,
+  },
+  swipeActionInner: {
+    alignItems: "center",
+    gap: 3,
+    width: ACTION_WIDTH,
   },
   swipeActionLabel: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "600",
   },
 });
