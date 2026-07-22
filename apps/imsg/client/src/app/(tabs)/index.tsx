@@ -15,6 +15,9 @@ import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
+import { setKeyboardRuntime } from "@/lib/keyboard/controller";
+import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
+import { helpEntries } from "@/lib/keyboard/registry";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { onOpenPersonPane, type PersonTarget } from "@/lib/person-pane";
 import { onSelectChat } from "@/lib/selection";
@@ -28,18 +31,8 @@ type RightPane =
   | { mode: "details"; guid: string }
   | { mode: "person"; target: PersonTarget };
 
-const SHORTCUTS: Array<[string[], string]> = [
-  [["⌘K"], "Search"],
-  [["⌘N"], "New message"],
-  [["⌘↓"], "Next conversation"],
-  [["⌘↑"], "Previous conversation"],
-  [["⌘F"], "Find in conversation"],
-  [["⌘⇧E"], "Archive / unarchive"],
-  [["⌘⇧U"], "Mark read / unread"],
-  [["⌘I"], "Toggle details"],
-  [["Esc"], "Close panel"],
-  [["⌘/"], "Shortcuts"],
-];
+/** Rendered from the keyboard registry — cannot drift from actual bindings. */
+const HELP_ENTRIES = helpEntries();
 
 export default function ChatListScreen() {
   const theme = useTheme();
@@ -155,11 +148,10 @@ export default function ChatListScreen() {
     else router.push("/new-chat");
   };
 
-  // Desktop keyboard shortcuts. ⌘-based (the composer is almost always focused),
-  // so single keys are left to typing and ⌘A/C/V/Z etc. are never overridden.
-  // Reads live state through refs so a shortcut always acts on the CURRENT chat
-  // (a fast ⌘↓ then ⌘E must archive the one you just landed on). Browser-reserved
-  // combos (⌘N/F) fall to the Tauri menu — see docs/tauri-handoff.md.
+  // Keyboard system (docs/keyboard-design.md, Slice 1): this screen registers a
+  // runtime of live capabilities (over refs, so dispatch always acts on current
+  // state) and installs the single capture-phase dispatcher. Bindings and the
+  // help view both come from the registry — one source of truth.
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const chatsRef = useRef(chats);
@@ -171,75 +163,59 @@ export default function ChatListScreen() {
       setJumpTarget(null);
       setSelected(chat);
     };
-    const moveSelection = (dir: 1 | -1) => {
-      const cs = chatsRef.current;
-      const idx = cs.findIndex((ch) => ch.guid === selectedRef.current?.guid);
-      const target = cs[Math.max(0, Math.min(cs.length - 1, idx + dir))];
-      if (target) selectChat(target);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+    setKeyboardRuntime({
+      openPalette: () => setSearchOpen(true),
+      openNewMessage: () => setNewChatOpen(true),
+      openHelp: () => setHelpOpen(true),
+      moveSelection: (delta) => {
+        const cs = chatsRef.current;
+        const idx = cs.findIndex((ch) => ch.guid === selectedRef.current?.guid);
+        const target = cs[Math.max(0, Math.min(cs.length - 1, idx + delta))];
+        if (target) selectChat(target);
+      },
+      findInConversation: () => {
+        if (selectedRef.current) openThreadSearch();
+      },
+      archiveSelected: () => {
+        const sel = selectedRef.current;
+        if (!sel) return;
+        const archived = !sel.flags.archived;
+        archiveChat(sel, archived);
+        showToast(archived ? "Archived" : "Unarchived");
+      },
+      toggleUnreadSelected: () => {
+        const sel = selectedRef.current;
+        if (!sel) return;
+        if (sel.flags.unread) {
+          markChatRead(sel);
+          showToast("Marked read");
+        } else {
+          markChatUnread(sel);
+          showToast("Marked unread");
+        }
+      },
+      toggleDetails: () => {
+        const sel = selectedRef.current;
+        if (!sel) return;
+        setRightPane((cur) =>
+          cur && cur.mode === "details" && cur.guid === sel.guid
+            ? null
+            : { mode: "details", guid: sel.guid },
+        );
+      },
+      // Slice 2 replaces this with the stepwise Esc precedence ladder.
+      escape: () => {
         setSearchOpen(false);
         setNewChatOpen(false);
         setRightPane(null);
         setHelpOpen(false);
-        return;
-      }
-      if (!(e.metaKey || e.ctrlKey)) return;
-      const sel = selectedRef.current;
-      switch (e.key.toLowerCase()) {
-        case "k":
-          return (e.preventDefault(), setSearchOpen(true));
-        case "n":
-          return (e.preventDefault(), setNewChatOpen(true));
-        case "/":
-          return (e.preventDefault(), setHelpOpen(true));
-        case "arrowdown":
-          return (e.preventDefault(), moveSelection(1));
-        case "arrowup":
-          return (e.preventDefault(), moveSelection(-1));
-        case "f":
-          if (sel) (e.preventDefault(), openThreadSearch());
-          return;
-        case "e":
-          // ⌘⇧E, not ⌘E — plain ⌘E is a macOS text binding ("Use Selection for
-          // Find") the OS eats before the page ever sees the keydown.
-          if (sel && e.shiftKey) {
-            e.preventDefault();
-            const archived = !sel.flags.archived;
-            archiveChat(sel, archived);
-            showToast(archived ? "Archived" : "Unarchived");
-          }
-          return;
-        case "u":
-          if (sel && e.shiftKey) {
-            e.preventDefault();
-            if (sel.flags.unread) {
-              markChatRead(sel);
-              showToast("Marked read");
-            } else {
-              markChatUnread(sel);
-              showToast("Marked unread");
-            }
-          }
-          return;
-        case "i":
-          if (sel) {
-            e.preventDefault();
-            setRightPane((cur) =>
-              cur && cur.mode === "details" && cur.guid === sel.guid
-                ? null
-                : { mode: "details", guid: sel.guid },
-            );
-          }
-          return;
-      }
+      },
+    });
+    const uninstall = installKeyboardDispatcher();
+    return () => {
+      uninstall();
+      setKeyboardRuntime(null);
     };
-    // Capture phase: react-native-web's TextInput stops keydown from bubbling
-    // while focused, so a bubble-phase listener never sees shortcuts typed in the
-    // composer. Capture fires top-down, before the input swallows the event.
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
   }, [wide]);
 
   const list = (
@@ -290,9 +266,9 @@ export default function ChatListScreen() {
             onPress={() => undefined}
           >
             <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
-            {SHORTCUTS.map(([keys, label]) => (
-              <View key={label} style={styles.helpRow}>
-                <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{label}</Text>
+            {HELP_ENTRIES.map(({ title, keys }) => (
+              <View key={title} style={styles.helpRow}>
+                <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{title}</Text>
                 <View style={styles.helpKeys}>
                   {keys.map((k) => (
                     <View
