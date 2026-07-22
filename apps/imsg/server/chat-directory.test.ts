@@ -47,7 +47,7 @@ function twoChatSeed(): FakeChatSeed[] {
   ];
 }
 
-async function setup(chats: FakeChatSeed[] = twoChatSeed()): Promise<{
+async function setup(chats: FakeChatSeed[] = twoChatSeed(), now: () => number = Date.now): Promise<{
   bb: FakeBlueBubbles;
   db: OverlayDb;
   directory: ChatDirectory;
@@ -57,7 +57,7 @@ async function setup(chats: FakeChatSeed[] = twoChatSeed()): Promise<{
   const db = new OverlayDb(":memory:");
   const contacts = new ContactBook(bb);
   await contacts.refresh(true);
-  const directory = new ChatDirectory(bb, db, contacts);
+  const directory = new ChatDirectory(bb, db, contacts, now);
   // Bridge the event stream exactly like server/index.ts does.
   bb.onEvent((event) => {
     if (event.kind === "new-message") {
@@ -75,6 +75,14 @@ function find(chats: ChatSummary[], guid: string): ChatSummary {
   return chat;
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 // ---------------------------------------------------------------- summaries
 
 describe("ChatDirectory.summaries", () => {
@@ -87,9 +95,53 @@ describe("ChatDirectory.summaries", () => {
     const a = find(result.chats, CHAT_A);
     expect(a.displayName).toBe("Alice");
     expect(a.known).toBe(true);
+    expect(a.contactsAvailable).toBe(true);
     expect(a.lastMessage?.text).toBe("hey from alice");
     expect(a.flags.unresponded).toBe(true); // inbound last message
     expect(a.flags.unread).toBe(true);
+  });
+
+  test("fails open when contact classification becomes unavailable", async () => {
+    const unknownGuid = "iMessage;-;+15550003333";
+    const bb = new FakeBlueBubbles({
+      chats: [
+        {
+          guid: unknownGuid,
+          participants: [{ address: "+15550003333" }],
+          messages: [inbound("unknown-1", 1000, "hello", "+15550003333")],
+        },
+      ],
+      contacts: [ALICE, BOB],
+    });
+    const contacts = new ContactBook(bb);
+    await contacts.refresh(true);
+    expect(contacts.available).toBe(true);
+
+    const db = new OverlayDb(":memory:");
+    const directory = new ChatDirectory(bb, db, contacts);
+    let changes = 0;
+    directory.onEvent(() => changes++);
+    let result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(matchesFilters(find(result.chats, unknownGuid), "all", "all")).toBe(false);
+
+    bb.contacts = () => Promise.resolve({ ok: false, error: "contacts unavailable" });
+    await contacts.refresh(true);
+    expect(contacts.available).toBe(false);
+    expect(changes).toBe(1);
+    bb.contacts = () => Promise.reject(new Error("contacts transport failed"));
+    await contacts.refresh(true);
+    expect(contacts.available).toBe(false);
+
+    result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const unknown = find(result.chats, unknownGuid);
+    expect(unknown.known).toBe(false);
+    expect(unknown.contactsAvailable).toBe(false);
+    expect(matchesFilters(unknown, "all", "all")).toBe(true);
+    expect(matchesFilters(unknown, "all", "unknown")).toBe(false);
   });
 
   test("scans every page and records the earliest genuine unread message", async () => {
@@ -241,6 +293,140 @@ describe("ChatDirectory reactive fast path", () => {
     expect(a.flags.unread).toBe(true);
     expect(a.unreadCount).toBe(2);
     expect(a.firstUnreadAt).toBe(1000);
+  });
+
+  test("realtime junk messages keep an aged cache screened through reconciliation", async () => {
+    let now = 1;
+    const { bb, directory } = await setup(twoChatSeed(), () => now);
+    await directory.summaries();
+    const rebuilds = bb.calls.queryChats;
+    now = 20_000;
+
+    const mapped = directory.applyMessage(CHAT_A, {
+      ...inbound("spam", 3000, "junk"),
+      isSpam: true,
+    });
+    expect(mapped?.isSpam).toBe(true);
+
+    const result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    expect(bb.calls.queryChats).toBe(rebuilds + 1);
+    if (!result.ok) return;
+    const a = find(result.chats, CHAT_A);
+    expect(a.isSpam).toBe(true);
+    expect(matchesFilters(a, "all", "all")).toBe(false);
+    expect(matchesFilters(a, "all", "unknown")).toBe(true);
+  });
+
+  test("realtime junk survives an invalidated-cache rebuild", async () => {
+    const { bb, directory } = await setup();
+    await directory.summaries();
+    directory.invalidate();
+    const rebuilds = bb.calls.queryChats;
+
+    directory.applyMessage(CHAT_A, {
+      ...inbound("spam-after-invalidate", 3000, "junk"),
+      isSpam: true,
+    });
+    const result = await directory.summaries();
+
+    expect(result.ok).toBe(true);
+    expect(bb.calls.queryChats).toBe(rebuilds + 1);
+    if (!result.ok) return;
+    const a = find(result.chats, CHAT_A);
+    expect(a.isSpam).toBe(true);
+    expect(a.unreadCount).toBe(2);
+    expect(matchesFilters(a, "all", "all")).toBe(false);
+    expect(matchesFilters(a, "all", "unknown")).toBe(true);
+  });
+
+  test("concurrent stale rebuilds cannot drop realtime junk screening", async () => {
+    const { bb, directory } = await setup();
+    await directory.summaries();
+    directory.applyMessage(CHAT_A, {
+      ...inbound("concurrent-spam", 3000, "junk"),
+      isSpam: true,
+    });
+    directory.invalidate();
+
+    const originalQuery = bb.queryChats.bind(bb);
+    const stale = await originalQuery();
+    expect(stale.ok).toBe(true);
+    if (!stale.ok) return;
+    type ChatQueryResult = Awaited<ReturnType<FakeBlueBubbles["queryChats"]>>;
+    const caughtUp: ChatQueryResult = {
+      ok: true,
+      value: stale.value.map((chat) =>
+        chat.guid === CHAT_A
+          ? {
+              ...chat,
+              lastMessage: {
+                ...chat.lastMessage!,
+                guid: "concurrent-spam",
+                dateCreated: 3000,
+                isSpam: true,
+              },
+            }
+          : chat,
+      ),
+    };
+    const firstQuery = deferred<ChatQueryResult>();
+    const secondQuery = deferred<ChatQueryResult>();
+    let queryCount = 0;
+    bb.queryChats = () => (++queryCount === 1 ? firstQuery.promise : secondQuery.promise);
+
+    const staleBuild = directory.summaries();
+    const caughtUpBuild = directory.summaries();
+    secondQuery.resolve(caughtUp);
+    await caughtUpBuild;
+    firstQuery.resolve(stale);
+    await staleBuild;
+
+    const result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const a = find(result.chats, CHAT_A);
+    expect(a.isSpam).toBe(true);
+    expect(matchesFilters(a, "all", "all")).toBe(false);
+  });
+
+  test("updated junk classification replaces the realtime override", async () => {
+    const { directory } = await setup();
+    await directory.summaries();
+    directory.applyMessage(CHAT_A, {
+      ...inbound("spam-update", 3000, "junk"),
+      isSpam: true,
+    });
+    directory.applyUpdatedMessage(CHAT_A, {
+      ...inbound("spam-update", 3000, "not junk"),
+      isSpam: false,
+    });
+
+    const result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const a = find(result.chats, CHAT_A);
+    expect(a.isSpam).toBe(false);
+    expect(matchesFilters(a, "all", "all")).toBe(true);
+  });
+
+  test("junk override preserves local read and archive state", async () => {
+    const { directory } = await setup();
+    await directory.summaries();
+    directory.applyMessage(CHAT_A, {
+      ...inbound("spam-state", 3000, "junk"),
+      isSpam: true,
+    });
+    expect(await directory.markRead(CHAT_A)).toBe(true);
+    directory.setArchived(CHAT_A, true);
+
+    const result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const a = find(result.chats, CHAT_A);
+    expect(a.isSpam).toBe(true);
+    expect(a.flags.unread).toBe(false);
+    expect(a.flags.archived).toBe(true);
   });
 
   test("updated messages invalidate summaries for authoritative reconciliation", async () => {

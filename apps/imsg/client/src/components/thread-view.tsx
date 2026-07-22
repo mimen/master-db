@@ -29,9 +29,11 @@ import { useTheme } from "@/hooks/use-theme";
 import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
+import { useAiStatus } from "@/hooks/use-ai";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
+import { SuggestionShelf } from "./suggestion-shelf";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
@@ -51,6 +53,9 @@ interface ThreadViewProps {
   headerOffset?: number;
   /** When set (wide split-pane), render an in-pane header for this chat. */
   headerChat?: ChatSummary | null;
+  /** When provided (desktop split-pane with AI shadow available), show the toggle. */
+  onToggleShadow?: () => void;
+  shadowOpen?: boolean;
 }
 
 export function ThreadView({
@@ -59,9 +64,12 @@ export function ThreadView({
   jumpTarget = null,
   headerOffset = 0,
   headerChat = null,
+  onToggleShadow,
+  shadowOpen = false,
 }: ThreadViewProps) {
   const theme = useTheme();
   const privateApi = usePrivateApi();
+  const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
   const { messages, loading, hasMore, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
     chatGuid,
@@ -367,6 +375,15 @@ export function ThreadView({
             <Pressable onPress={() => setSearchOpen(true)} hitSlop={8}>
               <Ionicons name="search" size={21} color={theme.textSecondary} />
             </Pressable>
+            {onToggleShadow && (
+              <Pressable onPress={onToggleShadow} hitSlop={8}>
+                <Ionicons
+                  name={shadowOpen ? "sparkles" : "sparkles-outline"}
+                  size={21}
+                  color={shadowOpen ? theme.accent : theme.textSecondary}
+                />
+              </Pressable>
+            )}
             <Pressable
               onPress={() => openChatInfo(chatGuid)}
               hitSlop={8}
@@ -501,6 +518,7 @@ export function ThreadView({
           </View>
         </View>
       )}
+      <SuggestionShelf chatGuid={chatGuid} enabled={aiStatus?.suggestions === true && !editing} />
       <Composer
         chatGuid={chatGuid}
         replyTo={replyTo}

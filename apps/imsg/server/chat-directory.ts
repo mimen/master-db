@@ -13,6 +13,12 @@ const SUMMARY_TTL_MS = 15_000;
 const UNREAD_TTL_MS = 30_000;
 const UNREAD_PAGE_SIZE = 1000;
 
+interface RealtimeSpamOverride {
+  messageGuid: string;
+  dateCreated: number;
+  isSpam: boolean;
+}
+
 /**
  * The chat directory: the cached, Overlay-aware view of every conversation.
  * Owns the summary cache (with the socket fast path), the recent-unread scan,
@@ -21,6 +27,7 @@ const UNREAD_PAGE_SIZE = 1000;
  */
 export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
+  private realtimeSpam = new Map<string, RealtimeSpamOverride>();
   private unreadScan: { at: number; summaries: Map<string, UnreadSummary> } = {
     at: 0,
     summaries: new Map(),
@@ -35,7 +42,10 @@ export class ChatDirectory {
     private bb: BlueBubbles,
     private db: OverlayDb,
     private contacts: ContactBook,
-  ) {}
+    private now: () => number = Date.now,
+  ) {
+    this.contacts.onAvailabilityChange(() => this.invalidate());
+  }
 
   onEvent(cb: (event: DirectoryEvent) => void): () => void {
     this.listeners.add(cb);
@@ -65,7 +75,7 @@ export class ChatDirectory {
 
   private async unreadCounts(): Promise<Map<string, UnreadSummary>> {
     let attempts = 0;
-    while (Date.now() - this.unreadScan.at >= UNREAD_TTL_MS && attempts < 2) {
+    while (this.now() - this.unreadScan.at >= UNREAD_TTL_MS && attempts < 2) {
       attempts++;
       const inFlight =
         this.unreadScanInFlight ??
@@ -120,7 +130,7 @@ export class ChatDirectory {
       if (batch.value.length < UNREAD_PAGE_SIZE) break;
     }
     if (scanVersion !== this.unreadScanVersion) return false;
-    this.unreadScan = { at: Date.now(), summaries };
+    this.unreadScan = { at: this.now(), summaries };
     return true;
   }
 
@@ -143,12 +153,35 @@ export class ChatDirectory {
     });
   }
 
+  private rememberRealtimeSpam(chatGuid: string, message: Message): void {
+    const current = this.realtimeSpam.get(chatGuid);
+    if (!current || current.dateCreated <= message.dateCreated) {
+      this.realtimeSpam.set(chatGuid, {
+        messageGuid: message.guid,
+        dateCreated: message.dateCreated,
+        isSpam: message.isSpam === true,
+      });
+    }
+  }
+
+  private applyRealtimeSpam(chats: ChatSummary[]): ChatSummary[] {
+    return chats.map((chat) => {
+      const override = this.realtimeSpam.get(chat.guid);
+      const last = chat.lastMessage;
+      if (!override || !last) return chat;
+      if (last.dateCreated > override.dateCreated) return chat;
+      if (last.guid === override.messageGuid && chat.isSpam === override.isSpam) return chat;
+      return { ...chat, isSpam: override.isSpam };
+    });
+  }
+
   /**
    * Applies a message we already know about directly to the cached summaries.
    * Correct data immediately, even if BlueBubbles' own DB lags behind the
    * socket event; the next TTL rebuild reconciles fully.
    */
   private patchSummaries(chatGuid: string, m: Message): void {
+    this.rememberRealtimeSpam(chatGuid, m);
     if (!this.summaryCache) return;
     const result = applyMessageToSummaries(this.summaryCache.chats, chatGuid, m);
     if (result === null) {
@@ -160,7 +193,7 @@ export class ChatDirectory {
   }
 
   async summaries(): Promise<{ ok: true; chats: ChatSummary[] } | { ok: false; error: string }> {
-    if (this.summaryCache && Date.now() - this.summaryCache.at < SUMMARY_TTL_MS) {
+    if (this.summaryCache && this.now() - this.summaryCache.at < SUMMARY_TTL_MS) {
       return { ok: true, chats: this.summaryCache.chats };
     }
     const result = await this.bb.queryChats();
@@ -168,7 +201,7 @@ export class ChatDirectory {
     await this.contacts.refresh();
     const unread = await this.unreadCounts();
     const overlay = this.db.getAll();
-    const chats = result.value
+    let chats = result.value
       .map((chat) => {
         const state = overlay.get(chat.guid);
         const summary = mapChat(chat, state, this.contacts, unread.get(chat.guid));
@@ -183,7 +216,8 @@ export class ChatDirectory {
       })
       .filter((chat) => chat.lastMessage !== null)
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
-    this.summaryCache = { at: Date.now(), chats };
+    chats = this.applyRealtimeSpam(chats);
+    this.summaryCache = { at: this.now(), chats };
     return { ok: true, chats };
   }
 
@@ -208,7 +242,10 @@ export class ChatDirectory {
   applyUpdatedMessage(chatGuid: string | null, message: BBMessage): Message | null {
     this.resetUnreadScan();
     this.clearCache();
-    return chatGuid ? mapMessage(message, chatGuid, this.contacts) : null;
+    if (!chatGuid) return null;
+    const mapped = mapMessage(message, chatGuid, this.contacts);
+    this.rememberRealtimeSpam(chatGuid, mapped);
+    return mapped;
   }
 
   /** Applies an already-mapped message (send/attachment responses) to the cache. */
@@ -220,7 +257,7 @@ export class ChatDirectory {
     const result = await this.bb.markRead(guid);
     if (result.ok) {
       this.clearCache();
-      this.localReadAt.set(guid, Date.now());
+      this.localReadAt.set(guid, this.now());
       this.resetUnreadScan();
       this.unreadScan.summaries.set(guid, { count: 0, firstUnreadAt: null });
       this.db.setMarkedUnread(guid, false);

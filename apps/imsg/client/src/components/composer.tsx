@@ -16,6 +16,7 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
+import { onFillComposer } from "@/lib/composer-fill";
 import type { Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -131,6 +132,17 @@ export function Composer({
   useEffect(() => {
     if (editing) setText(editing.text);
   }, [editing]);
+
+  // Suggestion shelf drops text in here for editing; never auto-sends.
+  useEffect(
+    () =>
+      onFillComposer((suggestion) => {
+        setText(suggestion);
+        setDraft(chatGuid, suggestion);
+        inputRef.current?.focus();
+      }),
+    [chatGuid],
+  );
 
   // Desktop web: autofocus on chat open, and typing anywhere focuses the composer.
   useEffect(() => {
