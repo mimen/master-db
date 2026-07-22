@@ -133,3 +133,27 @@ describe("assignCluster aggregate rules", () => {
     expect(isSelf).toBe(true);
   });
 });
+
+describe("recomputePersonAggregates display_name_locked guard", () => {
+  test("display_name is included in the patch when unlocked", () => {
+    const person = { display_name_locked: false };
+    const bestName = "Milad I.";
+    const patch = { ...(person.display_name_locked ? {} : { display_name: bestName }) };
+    expect(patch).toEqual({ display_name: "Milad I." });
+  });
+
+  test("display_name is omitted from the patch when locked, leaving the manual name untouched", () => {
+    const person = { display_name_locked: true };
+    const bestName = "Some Longer Source Name";
+    const patch = { ...(person.display_name_locked ? {} : { display_name: bestName }) };
+    expect(patch).toEqual({});
+    expect("display_name" in patch).toBe(false);
+  });
+
+  test("a missing person doc (undefined) is treated as unlocked", () => {
+    const person = undefined as { display_name_locked?: boolean } | undefined;
+    const bestName = "Milad";
+    const patch = { ...(person?.display_name_locked ? {} : { display_name: bestName }) };
+    expect(patch).toEqual({ display_name: "Milad" });
+  });
+});

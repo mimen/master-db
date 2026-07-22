@@ -126,12 +126,18 @@ export const listIdentitiesPage = internalQuery({
  * them. Shared by assignCluster (resolver-inferred grouping) and the
  * source-trusted ingest mutations (e.g. Apple Contacts) so both converge on
  * re-runs using the exact same merge rules.
+ *
+ * display_name is skipped when the person has display_name_locked set — a
+ * human explicitly named them (via "Add Contact" or an in-app rename), and
+ * the next sync re-deriving "longest name among identities" must not
+ * silently revert that. Every other aggregate still recomputes normally.
  */
 export async function recomputePersonAggregates(
   ctx: MutationCtx,
   personId: Id<"people">,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const person = await ctx.db.get(personId);
   const all = await ctx.db
     .query("identities")
     .withIndex("by_person", (q) => q.eq("person_id", personId))
@@ -151,7 +157,7 @@ export async function recomputePersonAggregates(
     }
   }
   await ctx.db.patch(personId, {
-    display_name: bestName,
+    ...(person?.display_name_locked ? {} : { display_name: bestName }),
     normalized_phones: [...phones],
     normalized_emails: [...emails],
     identity_count: all.length,

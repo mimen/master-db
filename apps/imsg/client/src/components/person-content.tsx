@@ -1,10 +1,19 @@
 import { useState } from "react";
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { avatarUrl } from "@/lib/api";
 import { formatListTimestamp, initials } from "@/lib/format";
-import { useCreatePerson } from "@/lib/identity";
+import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
 import { usePersonView } from "@/hooks/use-person-view";
 import { useTheme } from "@/hooks/use-theme";
@@ -43,7 +52,12 @@ export function PersonContent({
     name,
   );
   const createPerson = useCreatePerson();
+  const renamePerson = useRenamePerson();
   const [creating, setCreating] = useState(false);
+  const [nameInput, setNameInput] = useState(name ?? "");
+  const [editingName, setEditingName] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
@@ -89,13 +103,23 @@ export function PersonContent({
           <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: 16, marginBottom: 16 }}>
             No linked contact found.
           </Text>
+          <TextInput
+            value={nameInput}
+            onChangeText={setNameInput}
+            placeholder="Name"
+            placeholderTextColor={theme.textSecondary}
+            style={[
+              styles.nameInput,
+              { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.divider },
+            ]}
+          />
           <Pressable
             disabled={creating}
             style={[styles.addButton, { backgroundColor: theme.backgroundElement }]}
             onPress={async () => {
               setCreating(true);
               try {
-                await createPerson({ handle: address, display_name: name || undefined });
+                await createPerson({ handle: address, display_name: nameInput.trim() || undefined });
                 showToast("Contact added");
               } catch {
                 showToast("Failed to add contact");
@@ -128,7 +152,56 @@ export function PersonContent({
           </Text>
           <Image source={{ uri: avatarUrl(address) }} style={styles.avatarImg} contentFit="cover" />
         </View>
-        <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
+        {editingName ? (
+          <View style={styles.editNameRow}>
+            <TextInput
+              value={editValue}
+              onChangeText={setEditValue}
+              placeholder="Name"
+              placeholderTextColor={theme.textSecondary}
+              autoFocus
+              style={[
+                styles.nameInput,
+                styles.nameInputInline,
+                { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.divider },
+              ]}
+            />
+            <Pressable
+              disabled={saving}
+              hitSlop={8}
+              accessibilityLabel="Save name"
+              onPress={async () => {
+                const trimmed = editValue.trim();
+                if (!trimmed) return;
+                setSaving(true);
+                try {
+                  await renamePerson({ personId: person._id, display_name: trimmed });
+                  setEditingName(false);
+                } catch {
+                  showToast("Failed to save name");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? <ActivityIndicator /> : <Ionicons name="checkmark" size={22} color={theme.accent} />}
+            </Pressable>
+            <Pressable hitSlop={8} accessibilityLabel="Cancel" onPress={() => setEditingName(false)}>
+              <Ionicons name="close" size={22} color={theme.textSecondary} />
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={styles.titleRow}
+            onPress={() => {
+              setEditValue(person.display_name ?? "");
+              setEditingName(true);
+            }}
+          >
+            <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
+            <Ionicons name="pencil" size={14} color={theme.textSecondary} />
+          </Pressable>
+        )}
         <Text style={[styles.statusLine, { color: theme.textSecondary }]}>
           {lastContactedAt ? `Last contacted ${formatListTimestamp(lastContactedAt)}` : "No conversation yet"}
         </Text>
@@ -185,7 +258,25 @@ const styles = StyleSheet.create({
   },
   avatarImg: { position: "absolute", width: 96, height: 96, borderRadius: 48 },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, textAlign: "center" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   statusLine: { fontSize: 14, textAlign: "center", marginBottom: 4 },
+  nameInput: {
+    width: "100%",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  editNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    marginBottom: 4,
+  },
+  nameInputInline: { flex: 1, marginBottom: 0 },
   addButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,

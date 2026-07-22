@@ -17,6 +17,11 @@ import { v } from "convex/values";
  */
 export const people = defineTable({
   display_name: v.optional(v.string()),
+  // When true, a human explicitly set this name (via "Add Contact" or an
+  // in-app rename) — recomputePersonAggregates must not overwrite it with
+  // whatever the longest source-derived identity name happens to be on the
+  // next Apple/Airtable/Beeper sync.
+  display_name_locked: v.optional(v.boolean()),
 
   // Denormalised join keys, for fast "who owns this number" lookups without
   // walking the identities table.

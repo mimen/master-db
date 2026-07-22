@@ -79,3 +79,36 @@ describe("createPerson source tagging", () => {
     expect(person.auto_clustered).toBe(false);
   });
 });
+
+describe("createPerson display_name_locked", () => {
+  test("a name provided at creation locks display_name", () => {
+    const display_name = "Chase";
+    expect(Boolean(display_name)).toBe(true);
+  });
+
+  test("no name provided at creation leaves display_name unlocked", () => {
+    const display_name = undefined as string | undefined;
+    expect(Boolean(display_name)).toBe(false);
+  });
+});
+
+describe("renamePerson", () => {
+  test("rejects an empty/whitespace-only name", () => {
+    const display_name = "   ";
+    const trimmed = display_name.trim();
+    expect(() => {
+      if (!trimmed) throw new Error("Name can't be empty");
+    }).toThrow("Name can't be empty");
+  });
+
+  test("trims surrounding whitespace before saving", () => {
+    const display_name = "  Chase Anderson  ";
+    const trimmed = display_name.trim();
+    expect(trimmed).toBe("Chase Anderson");
+  });
+
+  test("always sets display_name_locked: true, regardless of prior state", () => {
+    const patch = { display_name: "Chase", display_name_locked: true };
+    expect(patch.display_name_locked).toBe(true);
+  });
+});

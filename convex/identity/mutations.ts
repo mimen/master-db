@@ -32,6 +32,7 @@ export const createPerson = mutation({
     const now = new Date().toISOString();
     const personId = await ctx.db.insert("people", {
       display_name,
+      display_name_locked: Boolean(display_name),
       normalized_phones: kind === "phone" ? [normalized] : [],
       normalized_emails: kind === "email" ? [normalized] : [],
       identity_count: 1,
@@ -95,5 +96,27 @@ export const addPersonFromAirtable = mutation({
       throw new Error("Can't add a contact with no phone or email");
     }
     return { personId: result.personId };
+  },
+});
+
+/**
+ * Rename any existing person — the general in-app "edit contact" affordance.
+ * Sets display_name_locked so the next Apple/Airtable/Beeper sync doesn't
+ * silently revert it back to the longest source-derived identity name (see
+ * recomputePersonAggregates in convex/identity/internal.ts).
+ */
+export const renamePerson = mutation({
+  args: { personId: v.id("people"), display_name: v.string() },
+  handler: async (ctx, { personId, display_name }) => {
+    const trimmed = display_name.trim();
+    if (!trimmed) throw new Error("Name can't be empty");
+    const person = await ctx.db.get(personId);
+    if (!person) throw new Error("Person not found");
+    const now = new Date().toISOString();
+    await ctx.db.patch(personId, {
+      display_name: trimmed,
+      display_name_locked: true,
+      updated_at: now,
+    });
   },
 });

@@ -80,6 +80,12 @@ const addPersonFromAirtableRef = makeFunctionReference<
   { personId: string }
 >("identity/mutations:addPersonFromAirtable");
 
+const renamePersonRef = makeFunctionReference<
+  "mutation",
+  { personId: string; display_name: string },
+  null
+>("identity/mutations:renamePerson");
+
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
   return useQuery(whoIsRef, handle ? { handle } : "skip");
 }
@@ -98,6 +104,10 @@ export function useSearchAirtableHumans() {
 
 export function useAddPersonFromAirtable() {
   return useMutation(addPersonFromAirtableRef);
+}
+
+export function useRenamePerson() {
+  return useMutation(renamePersonRef);
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */
