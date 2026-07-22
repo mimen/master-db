@@ -163,7 +163,7 @@ export const api = {
 };
 
 export function avatarUrl(address: string): string {
-  return `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=2`;
+  return `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=3`;
 }
 
 export function groupPhotoUrl(chatGuid: string): string {

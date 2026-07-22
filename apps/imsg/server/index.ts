@@ -221,7 +221,10 @@ app.get("/api/avatars/:address", async (c) => {
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==",
       "base64",
     );
-    return new Response(new Uint8Array(px), { headers: { ...headers, "Content-Type": "image/png" } });
+    // Short cache: if a contact later gains a photo, don't keep the blank pixel.
+    return new Response(new Uint8Array(px), {
+      headers: { "Cache-Control": "private, max-age=60", "Content-Type": "image/png" },
+    });
   }
   const bytes = Buffer.from(b64, "base64");
   const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
