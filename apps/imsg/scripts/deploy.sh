@@ -34,35 +34,36 @@ bun x expo export --platform web >"$BUILD_LOG" 2>&1 &
 BUILD_PID=$!
 
 # Known quirk: `expo export` can finish writing dist/ and then hang instead
-# of exiting. Poll for the post-export markers (added by post-export.ts) or
-# for the process exiting on its own; if neither happens within the window,
-# kill it and run post-export.ts by hand.
+# of exiting. "Exported: dist" is expo's own last line on success — wait for
+# that (or for the process to exit on its own), then always kill it and run
+# post-export.ts ourselves (it's what adds the PWA/manifest tags — never
+# already present before this, so it's not a valid completion signal itself).
 DONE=0
-for _ in $(seq 1 36); do # ~3 min
+for _ in $(seq 1 72); do # ~6 min
   if ! kill -0 "$BUILD_PID" 2>/dev/null; then
     DONE=1
     break
   fi
-  if grep -q "manifest.webmanifest" dist/index.html 2>/dev/null; then
-    echo "export finished writing dist/, killing the hung process"
-    kill "$BUILD_PID" 2>/dev/null || true
+  if grep -q "^Exported: dist" "$BUILD_LOG" 2>/dev/null; then
     DONE=1
     break
   fi
   sleep 5
 done
 
+if kill -0 "$BUILD_PID" 2>/dev/null; then
+  echo "killing the export process (finished or not, past the wait window)"
+  kill "$BUILD_PID" 2>/dev/null || true
+fi
+
 if [ "$DONE" -eq 0 ]; then
   echo "export did not finish in time"
   cat "$BUILD_LOG"
-  kill "$BUILD_PID" 2>/dev/null || true
   exit 1
 fi
 
-if ! grep -q "manifest.webmanifest" dist/index.html 2>/dev/null; then
-  echo "dist/ looks incomplete, running post-export manually"
-  bun scripts/post-export.ts
-fi
+echo "running post-export"
+bun scripts/post-export.ts
 
 cd "$REPO_DIR"
 
