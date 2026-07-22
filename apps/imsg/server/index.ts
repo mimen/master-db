@@ -214,10 +214,11 @@ app.get("/api/avatars/:address", async (c) => {
   await contacts.refresh();
   const b64 = contacts.avatar(address);
   if (!b64) {
-    // No photo → a transparent 1×1 PNG, so the client renders the initials /
-    // gradient underneath instead of a broken-image glyph.
+    // No photo → a transparent 1×1 RGBA PNG (color type 6, alpha 0), so the
+    // client renders the initials / gradient underneath instead of a
+    // broken-image glyph. (An RGB pixel here would show as a black circle.)
     const px = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==",
       "base64",
     );
     return new Response(new Uint8Array(px), { headers: { ...headers, "Content-Type": "image/png" } });
