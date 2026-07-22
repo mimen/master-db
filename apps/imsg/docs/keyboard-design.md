@@ -51,18 +51,23 @@ List-navigation mode (single keys — safe because focus is not in a text field)
 | c | New message |
 | / | Focus list search (scrolls the header into view first) |
 | Enter | Activate selection → composer |
+| z | Undo last archive/unread action (Gmail precedent; single-slot, no expiry) |
 | ? | Shortcut reference (optional) |
 
 Composer:
 | Key | Action |
 |---|---|
 | Enter / ⇧Enter | Send / newline (+ composition & repeat guards; in-flight send ref) |
-| ⌥↑ / ⌥↓ | Prev/next conversation without leaving composer (Slack precedent). Milad triages while typing — shipping in v1. |
 | ↑ (empty composer) | Later: edit last outgoing (Slack/Discord), only with full eligibility guards |
 
 Removed / never advertise: `⌘⇧E`, `⌘⇧U` (encoded implementation failures),
-`⌘↑/⌘↓` (macOS text-system commands — replaced by ⌥↑/⌥↓), bare `i` (use ⌘I),
-`p` pin (palette-only), `⌘/` (palette subsumes it once shipped).
+`⌘↑/⌘↓` (macOS text-system commands), `⌥↑/⌥↓` (deferred per Sol — Esc+glide
+covers it), bare `i` (use ⌘I), `p` pin (palette-only), `⌘/` (palette subsumes
+it once shipped).
+
+**Undo:** archive/unread actions record a single-slot last-action; the action
+toast gains an Undo button, and `z` in list mode reverts it. (Milad request,
+2026-07-22.)
 
 ## Architecture (build in-house; no cmdk/kbar/react-hotkeys-hook)
 
