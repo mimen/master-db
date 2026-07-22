@@ -30,10 +30,6 @@ export function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }: Pri
       accessibilityLabel={`Priority conversations, ${chats.length}`}
       style={[styles.section, { borderBottomColor: theme.divider }]}
     >
-      <View style={styles.heading}>
-        <Text style={[styles.title, { color: theme.text }]}>Priority</Text>
-        <Text style={[styles.count, { color: theme.textSecondary }]}>{chats.length}</Text>
-      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
         {chats.map((chat) => {
           const selected = chat.guid === selectedGuid;

@@ -32,9 +32,17 @@ export interface ChatInfoContentProps {
   onDeleted: () => void;
   /** Desktop pane wants its own header with a close button. */
   showHeader?: boolean;
+  /** Desktop: open a participant over this pane instead of the mobile route. */
+  onOpenPerson?: (address: string, name: string) => void;
 }
 
-export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }: ChatInfoContentProps) {
+export function ChatInfoContent({
+  guid,
+  onClose,
+  onDeleted,
+  showHeader = false,
+  onOpenPerson,
+}: ChatInfoContentProps) {
   const theme = useTheme();
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
@@ -188,9 +196,11 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
               {i > 0 && <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />}
               <Pressable
                 style={styles.participant}
-                onPress={() =>
-                  router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } })
-                }
+                onPress={() => {
+                  const nm = p.name ?? formatAddress(p.address);
+                  if (onOpenPerson) onOpenPerson(p.address, nm);
+                  else router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } });
+                }}
                 onLongPress={info.isGroup ? () => removeParticipant(p) : undefined}
               >
                 <View style={[styles.pAvatar, { backgroundColor: theme.background }]}>

@@ -18,6 +18,9 @@ export interface PersonContentProps {
   /** Desktop pane wants its own header with a close button. */
   showHeader?: boolean;
   onClose?: () => void;
+  /** When set, the header shows a back chevron with this label instead of a close X. */
+  onBack?: () => void;
+  backLabel?: string;
 }
 
 /**
@@ -26,7 +29,14 @@ export interface PersonContentProps {
  * usePersonView, the two list sections are their own components; this file
  * is just the header/avatar/actions chrome plus wiring.
  */
-export function PersonContent({ address, name, showHeader = false, onClose }: PersonContentProps) {
+export function PersonContent({
+  address,
+  name,
+  showHeader = false,
+  onClose,
+  onBack,
+  backLabel = "Back",
+}: PersonContentProps) {
   const theme = useTheme();
   const { result, sortedChats, lastContactedAt, canCall, handleMessage, handleCall, openChat } = usePersonView(
     address,
@@ -37,8 +47,15 @@ export function PersonContent({ address, name, showHeader = false, onClose }: Pe
 
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
-      <Text style={[styles.paneHeaderTitle, { color: theme.textSecondary }]}>Profile</Text>
-      {onClose && (
+      {onBack ? (
+        <Pressable onPress={onBack} hitSlop={8} accessibilityLabel={backLabel} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={20} color={theme.accent} />
+          <Text style={{ color: theme.accent, fontSize: 15 }}>{backLabel}</Text>
+        </Pressable>
+      ) : (
+        <Text style={[styles.paneHeaderTitle, { color: theme.textSecondary }]}>Profile</Text>
+      )}
+      {onClose && !onBack && (
         <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close contact">
           <Ionicons name="close" size={22} color={theme.textSecondary} />
         </Pressable>
@@ -154,6 +171,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   paneHeaderTitle: { fontSize: 13, fontWeight: "600", textTransform: "uppercase" },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 1, marginLeft: -4 },
   container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   avatar: {

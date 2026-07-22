@@ -223,10 +223,13 @@ export function ConversationListPane({
                   onLongPress={openMenu}
                 />
               )}
-              <View style={styles.sectionHeading}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>{model.sectionLabel}</Text>
-                <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{model.sectionCount}</Text>
-              </View>
+              {/* Default "Recent" needs no label; a filtered view keeps its name. */}
+              {model.sectionLabel !== "Recent" && (
+                <View style={styles.sectionHeading}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>{model.sectionLabel}</Text>
+                  <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{model.sectionCount}</Text>
+                </View>
+              )}
             </View>
           }
           ItemSeparatorComponent={() => (
@@ -305,11 +308,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paneWide: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    flexBasis: 390,
-    flexGrow: 0,
-    flexShrink: 0,
-    width: 390,
+    // Fills its floating card in the desktop split; the card owns width/edges.
+    flex: 1,
   },
   topBar: {
     alignItems: "center",

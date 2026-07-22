@@ -11,6 +11,8 @@ export const Colors = {
   light: {
     text: '#000000',
     background: '#ffffff',
+    desk: '#e6e7ee',
+    cardBorder: 'rgba(0,0,0,0.08)',
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
@@ -25,6 +27,8 @@ export const Colors = {
     // lighter incoming bubbles that pop off the ground.
     text: '#ffffff',
     background: '#1a1a1c',
+    desk: '#0b0b0d',
+    cardBorder: 'rgba(255,255,255,0.07)',
     backgroundElement: '#2c2c2e',
     backgroundSelected: '#3a3a3c',
     textSecondary: '#98989e',

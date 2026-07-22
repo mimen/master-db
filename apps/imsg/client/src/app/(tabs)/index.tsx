@@ -7,6 +7,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions
 import { ChatInfoContent } from "@/components/chat-info-content";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { NewChatContent } from "@/components/new-chat-content";
+import { PersonContent } from "@/components/person-content";
 import { SearchContent } from "@/components/search-content";
 import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
@@ -14,9 +15,15 @@ import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import { onOpenChatInfo } from "@/lib/chat-info";
+import { onOpenPersonPane, type PersonTarget } from "@/lib/person-pane";
 import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
+
+/** Desktop right pane: conversation details, or a contact opened over them. */
+type RightPane =
+  | { mode: "details"; guid: string }
+  | { mode: "person"; target: PersonTarget };
 
 export default function ChatListScreen() {
   const theme = useTheme();
@@ -29,7 +36,7 @@ export default function ChatListScreen() {
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
-  const [infoGuid, setInfoGuid] = useState<string | null>(null);
+  const [rightPane, setRightPane] = useState<RightPane | null>(null);
   const { chats, counts, loading, refresh } = useChats(state, type);
 
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,12 +90,22 @@ export default function ChatListScreen() {
   // second press on the same chat toggles it closed).
   useEffect(() => {
     if (!wide) return;
-    return onOpenChatInfo((guid) => setInfoGuid((cur) => (cur === guid ? null : guid)));
+    return onOpenChatInfo((guid) =>
+      setRightPane((cur) =>
+        cur && cur.mode === "details" && cur.guid === guid ? null : { mode: "details", guid },
+      ),
+    );
   }, [wide]);
 
-  // Details pane is per-thread; close it when the selected conversation changes.
+  // The thread header name / a detail participant opens a contact over the pane.
   useEffect(() => {
-    setInfoGuid(null);
+    if (!wide) return;
+    return onOpenPersonPane((target) => setRightPane({ mode: "person", target }));
+  }, [wide]);
+
+  // Right pane is per-thread; close it when the selected conversation changes.
+  useEffect(() => {
+    setRightPane(null);
   }, [selected?.guid]);
 
   // Keep the selected chat's flags fresh as the directory reconciles.
@@ -135,7 +152,7 @@ export default function ChatListScreen() {
       } else if (e.key === "Escape") {
         setSearchOpen(false);
         setNewChatOpen(false);
-        setInfoGuid(null);
+        setRightPane(null);
       } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !searchOpen && !newChatOpen) {
         const active = document.activeElement;
         const inField =
@@ -176,9 +193,11 @@ export default function ChatListScreen() {
     return <View style={{ flex: 1, backgroundColor: theme.background }}>{list}</View>;
   }
 
+  const cardStyle = [styles.card, { backgroundColor: theme.background, borderColor: theme.cardBorder }];
+
   return (
-    <View style={[styles.split, { backgroundColor: theme.background }]}>
-      {list}
+    <View style={[styles.split, { backgroundColor: theme.desk }]}>
+      <View style={[styles.listCard, ...cardStyle]}>{list}</View>
       <Modal visible={searchOpen} transparent animationType="fade" onRequestClose={() => setSearchOpen(false)}>
         <Pressable style={styles.overlayBackdrop} onPress={() => setSearchOpen(false)}>
           <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
@@ -193,7 +212,7 @@ export default function ChatListScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-      <View style={styles.threadPane}>
+      <View style={[styles.threadCard, ...cardStyle]}>
         {selected ? (
           <ThreadView
             key={selected.guid + (jumpTarget?.guid ?? "")}
@@ -209,19 +228,33 @@ export default function ChatListScreen() {
           </View>
         )}
       </View>
-      {infoGuid && (
-        <View style={[styles.infoPane, { borderLeftColor: theme.divider }]}>
-          <ChatInfoContent
-            key={infoGuid}
-            guid={infoGuid}
-            showHeader
-            onClose={() => setInfoGuid(null)}
-            onDeleted={() => {
-              setInfoGuid(null);
-              setSelected(null);
-              refresh();
-            }}
-          />
+      {rightPane && (
+        <View style={[styles.infoCard, ...cardStyle]}>
+          {rightPane.mode === "details" ? (
+            <ChatInfoContent
+              key={rightPane.guid}
+              guid={rightPane.guid}
+              showHeader
+              onClose={() => setRightPane(null)}
+              onOpenPerson={(address, name) =>
+                setRightPane({ mode: "person", target: { address, name, backGuid: rightPane.guid } })
+              }
+              onDeleted={() => {
+                setRightPane(null);
+                setSelected(null);
+                refresh();
+              }}
+            />
+          ) : (
+            <PersonContent
+              key={rightPane.target.address}
+              address={rightPane.target.address}
+              name={rightPane.target.name}
+              showHeader
+              backLabel="Details"
+              onBack={() => setRightPane({ mode: "details", guid: rightPane.target.backGuid })}
+            />
+          )}
         </View>
       )}
     </View>
@@ -232,13 +265,34 @@ const styles = StyleSheet.create({
   split: {
     flex: 1,
     flexDirection: "row",
+    gap: 10,
+    padding: 10,
   },
-  threadPane: {
+  // Floating "3D" panels: elevated ground, rounded, top-lit border + drop shadow.
+  card: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 22,
+  },
+  listCard: {
+    flexBasis: 380,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 380,
+  },
+  threadCard: {
     flex: 1,
   },
-  infoPane: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    width: 340,
+  infoCard: {
+    flexBasis: 330,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 330,
   },
   empty: {
     alignItems: "center",

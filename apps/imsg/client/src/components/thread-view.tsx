@@ -21,6 +21,7 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { openChatInfo } from "@/lib/chat-info";
+import { openPersonPane } from "@/lib/person-pane";
 import type { Message } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
@@ -337,7 +338,14 @@ export function ThreadView({
           <View style={styles.paneHeaderSpace} />
           <Pressable
             style={styles.paneIdentity}
-            onPress={headerChat.isGroup ? () => openChatInfo(chatGuid) : undefined}
+            onPress={() => {
+              if (headerChat.isGroup) {
+                openChatInfo(chatGuid);
+              } else {
+                const p = headerChat.participants[0];
+                if (p) openPersonPane({ address: p.address, name: headerChat.displayName, backGuid: chatGuid });
+              }
+            }}
           >
             {headerChat.isGroup ? (
               <GroupAvatarStack chat={headerChat} size={34} />
