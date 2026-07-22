@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
 
 export interface SheetAction {
@@ -47,6 +48,7 @@ export function useActionSheet(): ShowSheet {
 export function ActionSheetProvider({ children }: { children: React.ReactNode }) {
   const [request, setRequest] = useState<SheetRequest | null>(null);
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
 
   const show = useCallback((req: SheetRequest) => {
@@ -78,7 +80,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
       <Modal
         visible={request !== null}
         transparent
-        animationType={request?.anchor ? "none" : "fade"}
+        animationType={request?.anchor ? "none" : "slide"}
         onRequestClose={() => setRequest(null)}
       >
         {request?.anchor ? (
@@ -135,9 +137,12 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
           </Pressable>
         ) : (
         <Pressable style={styles.backdrop} onPress={() => setRequest(null)}>
-          <View style={[styles.sheet, { backgroundColor: theme.backgroundElement }]}>
+          <Pressable
+            style={[styles.sheetWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}
+            onPress={() => undefined}
+          >
             {request?.tapbacks && (
-              <View style={styles.tapbackRow}>
+              <View style={[styles.tapbackPill, { backgroundColor: theme.backgroundElement }]}>
                 {request.tapbacks.map((t) => (
                   <Pressable
                     key={t.emoji}
@@ -152,29 +157,47 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                 ))}
               </View>
             )}
-            {request?.title && (
-              <Text style={[styles.title, { color: theme.textSecondary }]}>{request.title}</Text>
-            )}
-            {request?.actions.map((action) => (
-              <Pressable
-                key={action.label}
-                style={({ pressed }) => [
-                  styles.action,
-                  pressed && { backgroundColor: theme.backgroundSelected },
-                ]}
-                onPress={() => {
-                  setRequest(null);
-                  action.onPress();
-                }}
-              >
-                <Text
-                  style={[styles.actionLabel, { color: action.destructive ? "#FF453A" : theme.text }]}
-                >
-                  {action.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+            <View style={[styles.sheetGroup, { backgroundColor: theme.backgroundElement }]}>
+              {request?.title && (
+                <View style={styles.sheetTitleWrap}>
+                  <Text style={[styles.title, { color: theme.textSecondary }]}>{request.title}</Text>
+                </View>
+              )}
+              {request?.actions.map((action, i) => (
+                <View key={action.label}>
+                  {(i > 0 || request?.title) && (
+                    <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />
+                  )}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.action,
+                      pressed && { backgroundColor: theme.backgroundSelected },
+                    ]}
+                    onPress={() => {
+                      setRequest(null);
+                      action.onPress();
+                    }}
+                  >
+                    <Text
+                      style={[styles.actionLabel, { color: action.destructive ? "#FF453A" : theme.text }]}
+                    >
+                      {action.label}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.cancelButton,
+                { backgroundColor: theme.backgroundElement },
+                pressed && { backgroundColor: theme.backgroundSelected },
+              ]}
+              onPress={() => setRequest(null)}
+            >
+              <Text style={[styles.cancelLabel, { color: theme.accent }]}>Cancel</Text>
+            </Pressable>
+          </Pressable>
         </Pressable>
         )}
       </Modal>
@@ -207,26 +230,64 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
-    padding: 12,
   },
-  sheet: {
-    borderRadius: 16,
-    paddingVertical: 6,
-    maxWidth: 480,
-    width: "100%",
+  sheetWrap: {
     alignSelf: "center",
-    marginBottom: 12,
+    gap: 8,
+    maxWidth: 500,
+    paddingHorizontal: 8,
+    width: "100%",
+  },
+  sheetGroup: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  sheetTitleWrap: {
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   title: {
     fontSize: 13,
     textAlign: "center",
-    paddingVertical: 8,
+  },
+  rowDivider: {
+    height: StyleSheet.hairlineWidth,
   },
   action: {
-    paddingVertical: 13,
-    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 56,
+    paddingHorizontal: 16,
+  },
+  actionLabel: {
+    fontSize: 20,
+    textAlign: "center",
+  },
+  cancelButton: {
+    alignItems: "center",
+    borderRadius: 14,
+    justifyContent: "center",
+    minHeight: 56,
+  },
+  cancelLabel: {
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  tapbackPill: {
+    alignSelf: "center",
+    borderRadius: 28,
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
   },
   tapbackRow: {
     flexDirection: "row",
@@ -244,9 +305,5 @@ const styles = StyleSheet.create({
   },
   tapbackActive: {
     backgroundColor: "#0A84FF",
-  },
-  actionLabel: {
-    fontSize: 17,
-    textAlign: "center",
   },
 });
