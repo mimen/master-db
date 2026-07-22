@@ -186,5 +186,6 @@ export interface ShadowMessage {
 export type ServerEvent =
   | { kind: "new-message"; chatGuid: string; message: Message }
   | { kind: "updated-message"; chatGuid: string; message: Message }
+  | { kind: "reaction"; chatGuid: string; targetGuid: string; reaction: Reaction; remove: boolean }
   | { kind: "chats-changed" }
   | { kind: "typing"; chatGuid: string; display: boolean };

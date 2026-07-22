@@ -66,10 +66,12 @@ export function ThreadView({
   const theme = useTheme();
   const privateApi = usePrivateApi();
   const showSheet = useActionSheet();
+  const messagesRef = useRef<Message[]>([]);
   const { messages, loading, hasMore, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
     chatGuid,
     jumpTarget,
   );
+  messagesRef.current = messages;
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
@@ -140,6 +142,23 @@ export function ThreadView({
           if (event.kind === "new-message" && !event.message.isFromMe) {
             if (!previewOnly) void api.markRead(chatGuid);
             setPeerTyping(false);
+          }
+        } else if (event.kind === "reaction" && event.chatGuid === chatGuid) {
+          // Fold the tapback into its target message live — same shape the
+          // server produces on reload — instead of rendering a "Loved …" row.
+          const target = messagesRef.current.find((m) => m.guid === event.targetGuid);
+          if (target) {
+            const sameSender = (r: (typeof target.reactions)[number]) =>
+              event.reaction.isFromMe
+                ? r.isFromMe
+                : !r.isFromMe && r.senderAddress === event.reaction.senderAddress;
+            const rest = target.reactions.filter(
+              (r) => !(sameSender(r) && r.type === event.reaction.type),
+            );
+            upsert({
+              ...target,
+              reactions: event.remove ? rest : [...rest, event.reaction],
+            });
           }
         } else if (event.kind === "typing" && event.chatGuid === chatGuid) {
           setPeerTyping(event.display);
@@ -280,9 +299,18 @@ export function ThreadView({
               emoji,
               active,
               onPress: () => {
-                void api
-                  .react(message.guid, { chatGuid, reaction: type, remove: active })
-                  .catch(() => showToast("Reaction failed"));
+                // Optimistic: show my reaction immediately; revert on failure.
+                const reactions = active
+                  ? message.reactions.filter((r) => !(r.isFromMe && r.type === type))
+                  : [
+                      ...message.reactions,
+                      { type, isFromMe: true, senderName: null, senderAddress: null },
+                    ];
+                upsert({ ...message, reactions });
+                void api.react(message.guid, { chatGuid, reaction: type, remove: active }).catch(() => {
+                  upsert(message);
+                  showToast("Reaction failed");
+                });
               },
             };
           })

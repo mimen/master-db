@@ -12,7 +12,7 @@ import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
-import { buildThread, mapMessage } from "./map";
+import { buildThread, mapMessage, tapbackReactionEvent } from "./map";
 import { transcodeAttachment } from "./transcode";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
@@ -104,6 +104,16 @@ bb.onEvent((event) => {
     case "new-message":
     case "updated-message": {
       const chatGuid = chatGuidOf(event.message);
+      // Tapbacks are reactions, not messages: patch the target message's
+      // reactions live instead of injecting a "Loved …" bubble (reload folds
+      // them via buildThread; this keeps realtime consistent with that).
+      const tapback = tapbackReactionEvent(event.message, contacts);
+      if (tapback && chatGuid) {
+        directory.applyMessage(chatGuid, event.message); // sidebar preview verb
+        broadcast({ kind: "reaction", chatGuid, ...tapback });
+        broadcast({ kind: "chats-changed" });
+        return;
+      }
       const mapped =
         event.kind === "new-message"
           ? directory.applyMessage(chatGuid, event.message)

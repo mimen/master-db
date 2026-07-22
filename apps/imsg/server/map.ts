@@ -50,6 +50,48 @@ function isTapback(m: BBMessage): boolean {
   return Boolean(m.associatedMessageGuid && m.associatedMessageType);
 }
 
+/**
+ * Live-event view of a tapback: which message it targets and the reaction to
+ * add or remove. The thread builder folds these on reload; this powers the
+ * same folding in realtime so the client never renders a "Loved …" bubble.
+ */
+export function tapbackReactionEvent(
+  m: BBMessage,
+  contacts: ContactBook,
+): { targetGuid: string; reaction: Reaction; remove: boolean } | null {
+  if (!isTapback(m) || !m.associatedMessageGuid) return null;
+  const value = m.associatedMessageType;
+  let type: string | null = null;
+  let remove = false;
+  if (typeof value === "number") {
+    if (value >= 2000 && value <= 2005) type = TAPBACK_NAMES[value - 2000] ?? null;
+    else if (value >= 3000 && value <= 3005) {
+      type = TAPBACK_NAMES[value - 3000] ?? null;
+      remove = true;
+    }
+  } else if (typeof value === "string") {
+    remove = value.startsWith("-");
+    const raw = remove ? value.slice(1) : value;
+    type = TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number]) ? raw : null;
+  }
+  if (!type) return null;
+  return {
+    targetGuid: stripPartPrefix(m.associatedMessageGuid),
+    remove,
+    reaction: {
+      type,
+      isFromMe: m.isFromMe === true,
+      senderName:
+        m.isFromMe === true
+          ? null
+          : m.handle?.address
+            ? contacts.lookup(m.handle.address)
+            : null,
+      senderAddress: m.handle?.address ?? null,
+    },
+  };
+}
+
 function isGroupEvent(m: BBMessage): boolean {
   return (m.itemType ?? 0) !== 0 || (m.groupActionType ?? 0) !== 0;
 }
