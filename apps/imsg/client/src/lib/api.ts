@@ -179,10 +179,10 @@ export const api = {
   aiIdentify(chatGuid: string): Promise<ContactSuggestion> {
     return request(`/api/ai/identify/${encodeURIComponent(chatGuid)}`);
   },
-  aiShadowHistory(chatGuid: string): Promise<ShadowMessage[]> {
+  aiShadowHistory(chatGuid: string): Promise<{ messages: ShadowMessage[]; pending: boolean }> {
     return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`);
   },
-  aiShadowSend(chatGuid: string, text: string): Promise<{ reply: string }> {
+  aiShadowSend(chatGuid: string, text: string): Promise<{ ok: boolean; pending: boolean }> {
     return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`, {
       method: "POST",
       body: JSON.stringify({ text }),

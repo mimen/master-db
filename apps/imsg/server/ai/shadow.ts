@@ -168,17 +168,32 @@ export class ShadowRunner {
   }
 }
 
-/** Real process execution, used outside tests. */
+/** A delegated turn may use tools, but must not hang the panel forever. */
+export const SHADOW_TIMEOUT_MS = 150_000;
+
+/** Real process execution, used outside tests. Kills the child on timeout. */
 export const spawnExec: Exec = async (spec) => {
   const proc = Bun.spawn([spec.command, ...spec.args], {
     env: { ...process.env, ...spec.env },
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, SHADOW_TIMEOUT_MS);
+  try {
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (timedOut) {
+      return { stdout: "", stderr: `timed out after ${SHADOW_TIMEOUT_MS / 1000}s`, exitCode: 124 };
+    }
+    return { stdout, stderr, exitCode };
+  } finally {
+    clearTimeout(timer);
+  }
 };

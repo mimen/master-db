@@ -17,9 +17,11 @@ import { useTheme } from "@/hooks/use-theme";
 interface SuggestionShelfProps {
   chatGuid: string;
   enabled: boolean;
+  /** Only suggest when the last message is theirs — i.e. Milad owes a reply. */
+  awaitingReply: boolean;
 }
 
-export function SuggestionShelf({ chatGuid, enabled }: SuggestionShelfProps) {
+export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: SuggestionShelfProps) {
   const theme = useTheme();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,13 +49,15 @@ export function SuggestionShelf({ chatGuid, enabled }: SuggestionShelfProps) {
     [chatGuid],
   );
 
-  // Auto-generate once when the chat opens (server serves cache on repeat).
+  // Generate only when Milad actually owes a reply. Opening a thread he has
+  // already answered shows nothing; when a new inbound message arrives (below),
+  // awaitingReply flips true and this regenerates for the new message.
   useEffect(() => {
-    if (!enabled) return;
     setSuggestions([]);
     setStale(false);
+    if (!enabled || !awaitingReply) return;
     void load(false);
-  }, [chatGuid, enabled, load]);
+  }, [chatGuid, enabled, awaitingReply, load]);
 
   // A new message for this chat marks the shelf stale — no automatic refetch.
   useServerEvents(
@@ -65,7 +69,7 @@ export function SuggestionShelf({ chatGuid, enabled }: SuggestionShelfProps) {
     ),
   );
 
-  if (!enabled) return null;
+  if (!enabled || !awaitingReply) return null;
   // Nothing to show yet and nothing wrong: stay out of the way until first load.
   if (!loading && !failed && suggestions.length === 0) return null;
 

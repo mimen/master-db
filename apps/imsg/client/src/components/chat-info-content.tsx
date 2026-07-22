@@ -59,6 +59,7 @@ export function ChatInfoContent({
   const aiStatus = useAiStatus();
   const [nameIdeas, setNameIdeas] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
+  const [namesDismissed, setNamesDismissed] = useState(false);
   const [identity, setIdentity] = useState<ContactSuggestion | null>(null);
   const [identifying, setIdentifying] = useState(false);
 
@@ -69,6 +70,11 @@ export function ChatInfoContent({
       .then((r) => setNameIdeas(r.names))
       .catch(() => showToast("Couldn't suggest names"))
       .finally(() => setSuggesting(false));
+  };
+
+  const applyName = (newName: string) => {
+    setNamesDismissed(true);
+    api.renameGroup(guid, newName).then(load).catch(() => showToast("Rename failed"));
   };
 
   const identify = () => {
@@ -90,6 +96,14 @@ export function ChatInfoContent({
   }, [guid]);
 
   useEffect(load, [load]);
+
+  // Proactively suggest names once when opening a group's details.
+  useEffect(() => {
+    if (aiStatus?.suggestions && info?.isGroup && nameIdeas.length === 0 && !namesDismissed) {
+      suggestNames();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiStatus?.suggestions, info?.isGroup]);
 
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
@@ -234,12 +248,48 @@ export function ChatInfoContent({
               )}
             </View>
           ) : (
-            <Pressable style={styles.titleRow} onPress={() => setRenaming(true)}>
-              <Text style={[styles.title, { color: theme.text }]}>
-                {info.displayName || `${info.participants.length} people`}
-              </Text>
-              <Ionicons name="pencil" size={16} color={theme.textSecondary} />
-            </Pressable>
+            <View>
+              <Pressable style={styles.titleRow} onPress={() => setRenaming(true)}>
+                <Text style={[styles.title, { color: theme.text }]}>
+                  {info.displayName || `${info.participants.length} people`}
+                </Text>
+                <Ionicons name="pencil" size={16} color={theme.textSecondary} />
+              </Pressable>
+              {aiStatus?.suggestions && !namesDismissed && (suggesting || nameIdeas.length > 0) && (
+                <View style={[styles.nameCard, { backgroundColor: theme.backgroundElement }]}>
+                  <View style={styles.nameCardHead}>
+                    <Ionicons name="sparkles-outline" size={13} color={theme.accent} />
+                    <Text style={[styles.nameCardLabel, { color: theme.textSecondary }]}>
+                      Suggested names
+                    </Text>
+                    <Pressable onPress={() => setNamesDismissed(true)} hitSlop={6}>
+                      <Ionicons name="close" size={16} color={theme.textSecondary} />
+                    </Pressable>
+                  </View>
+                  {suggesting && nameIdeas.length === 0 ? (
+                    <ActivityIndicator size="small" style={{ alignSelf: "flex-start", marginVertical: 4 }} />
+                  ) : (
+                    nameIdeas.map((idea, i) => (
+                      <View key={`${i}-${idea}`} style={styles.nameIdeaRow}>
+                        <Pressable style={{ flex: 1 }} onPress={() => { setName(idea); setRenaming(true); }}>
+                          <Text style={{ color: theme.text, fontSize: 15 }}>{idea}</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => applyName(idea)}
+                          style={[styles.saveChip, { backgroundColor: theme.accent }]}
+                          hitSlop={4}
+                        >
+                          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Save</Text>
+                        </Pressable>
+                      </View>
+                    ))
+                  )}
+                  <Text style={[styles.nameCardHint, { color: theme.textSecondary }]}>
+                    Tap a name to edit, or Save to apply.
+                  </Text>
+                </View>
+              )}
+            </View>
           )
         ) : (
           <View>
@@ -422,6 +472,12 @@ const styles = StyleSheet.create({
   suggestTrigger: { flexDirection: "row", alignItems: "center", gap: 6 },
   ideaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   ideaPill: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 7 },
+  nameCard: { marginTop: 10, borderRadius: 12, padding: 12, gap: 4 },
+  nameCardHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  nameCardLabel: { flex: 1, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4 },
+  nameIdeaRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  saveChip: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5 },
+  nameCardHint: { fontSize: 11, marginTop: 4 },
   identifyBlock: { marginTop: 8 },
   identityCard: { borderRadius: 12, padding: 12, gap: 5 },
   identityHead: { flexDirection: "row", alignItems: "center", gap: 7 },

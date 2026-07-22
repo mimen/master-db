@@ -38,6 +38,9 @@ function lastGuid(messages: Message[]): string | null {
 }
 
 export class AiService {
+  /** Per-chat serialization of shadow turns; also the "is a turn pending" set. */
+  private shadowQueues = new Map<string, Promise<void>>();
+
   constructor(private deps: AiDeps) {}
 
   get available(): boolean {
@@ -108,12 +111,34 @@ export class AiService {
   }
 
   /**
-   * One shadow turn: persist Milad's message, replay the whole shadow thread
-   * alongside the iMessage transcript, then persist the reply.
+   * Fire a shadow turn without making the caller wait for it. Milad's message
+   * is persisted now; the reply (or a visible error) is persisted when the
+   * delegate finishes — so the result survives closing the panel or moving to
+   * another conversation. Turns for one chat are serialized so a double-send
+   * cannot run two delegates against the same anchor at once.
+   *
+   * Returns the background completion promise, which the route ignores and
+   * tests can await.
    */
-  async shadowTurn(chatGuid: string, text: string, peerName: string | null): Promise<Result<string>> {
+  shadowEnqueue(chatGuid: string, text: string, peerName: string | null): Promise<void> {
     this.deps.db.addShadowMessage(newId(), chatGuid, "user", text);
+    const prior = this.shadowQueues.get(chatGuid) ?? Promise.resolve();
+    const next = prior
+      .catch(() => undefined)
+      .then(() => this.runShadowTurn(chatGuid, peerName));
+    this.shadowQueues.set(chatGuid, next);
+    void next.finally(() => {
+      if (this.shadowQueues.get(chatGuid) === next) this.shadowQueues.delete(chatGuid);
+    });
+    return next;
+  }
 
+  /** True while a turn for this chat is running or queued. */
+  shadowPending(chatGuid: string): boolean {
+    return this.shadowQueues.has(chatGuid);
+  }
+
+  private async runShadowTurn(chatGuid: string, peerName: string | null): Promise<void> {
     const [messages, profile] = await Promise.all([
       this.deps.fetchMessages(chatGuid),
       loadProfile(this.deps.config.vaultPath),
@@ -139,9 +164,10 @@ export class AiService {
       .join("\n");
 
     const reply = await this.deps.shadow.turn(prompt);
-    if (!reply.ok) return reply;
-    this.deps.db.addShadowMessage(newId(), chatGuid, "assistant", reply.value);
-    return reply;
+    // Persist something either way — a silent failure would strand the user's
+    // message with no reply, which is the one outcome we must never produce.
+    const text = reply.ok ? reply.value : `⚠️ ${reply.error}`;
+    this.deps.db.addShadowMessage(newId(), chatGuid, "assistant", text);
   }
 }
 
