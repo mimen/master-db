@@ -106,7 +106,7 @@ export function partitionPriorityShelf(chats: ChatSummary[]): PriorityShelfParti
     .map((chat, index) => ({ chat, index }))
     .filter(({ chat }) => typeof chat.firstUnreadAt === "number")
     .sort((a, b) => a.chat.firstUnreadAt! - b.chat.firstUnreadAt! || a.index - b.index)
-    .slice(0, 4)
+    .slice(0, 10)
     .map(({ chat }) => chat);
   const priorityChats = new Set(priority);
   return {

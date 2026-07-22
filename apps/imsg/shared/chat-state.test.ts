@@ -327,7 +327,7 @@ describe("computeCounts", () => {
 // ------------------------------------------------------- partitionPriorityShelf
 
 describe("partitionPriorityShelf", () => {
-  test("selects at most four oldest unread chats and leaves the rest recent", () => {
+  test("selects the oldest unread chats (up to 10) and leaves the rest recent", () => {
     const chats = [
       makeChat({ guid: "a", firstUnreadAt: 500 }),
       makeChat({ guid: "b", firstUnreadAt: null }),
@@ -341,8 +341,15 @@ describe("partitionPriorityShelf", () => {
 
     const partition = partitionPriorityShelf(chats);
 
-    expect(partition.priority.map((chat) => chat.guid)).toEqual(["c", "e", "f", "d"]);
-    expect(partition.recent.map((chat) => chat.guid)).toEqual(["a", "b", "g", "h"]);
+    expect(partition.priority.map((chat) => chat.guid)).toEqual(["c", "e", "f", "d", "a"]);
+    expect(partition.recent.map((chat) => chat.guid)).toEqual(["b", "g", "h"]);
+  });
+
+  test("caps the priority shelf at ten oldest unread", () => {
+    const chats = Array.from({ length: 14 }, (_, i) =>
+      makeChat({ guid: `u${i}`, firstUnreadAt: (i + 1) * 100 }),
+    );
+    expect(partitionPriorityShelf(chats).priority).toHaveLength(10);
   });
 
   test("preserves input order for equal timestamps", () => {

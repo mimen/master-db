@@ -232,9 +232,6 @@ export function ConversationListPane({
               )}
             </View>
           }
-          ItemSeparatorComponent={() => (
-            <View style={[styles.separator, { backgroundColor: theme.divider }]} />
-          )}
           ListEmptyComponent={
             loading && chats.length === 0 ? (
               <SkeletonList />

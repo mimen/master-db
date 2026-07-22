@@ -31,6 +31,9 @@ export function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }: Pri
       style={[styles.section, { borderBottomColor: theme.divider }]}
     >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <View style={styles.leadIcon}>
+          <Ionicons name="star" size={20} color="#FFCC00" />
+        </View>
         {chats.map((chat) => {
           const selected = chat.guid === selectedGuid;
           return (
@@ -75,27 +78,20 @@ export function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }: Pri
 const styles = StyleSheet.create({
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingBottom: 16,
-  },
-  heading: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    gap: 7,
-    marginBottom: 10,
-    paddingHorizontal: 18,
-  },
-  title: {
-    fontSize: 19,
-    fontWeight: "700",
-    letterSpacing: -0.2,
-  },
-  count: {
-    fontSize: 14,
-    fontWeight: "500",
+    paddingBottom: 20,
+    paddingTop: 12,
   },
   content: {
-    gap: 16,
+    alignItems: "flex-start",
+    gap: 18,
     paddingHorizontal: 18,
+  },
+  leadIcon: {
+    alignItems: "center",
+    height: 58,
+    justifyContent: "center",
+    marginRight: -4,
+    width: 22,
   },
   item: {
     alignItems: "center",
