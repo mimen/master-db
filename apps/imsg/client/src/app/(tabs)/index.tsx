@@ -13,17 +13,32 @@ import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { onOpenPersonPane, type PersonTarget } from "@/lib/person-pane";
 import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
+import { openThreadSearch } from "@/lib/thread-search";
 
 /** Desktop right pane: conversation details, or a contact opened over them. */
 type RightPane =
   | { mode: "details"; guid: string }
   | { mode: "person"; target: PersonTarget };
+
+const SHORTCUTS: Array<[string[], string]> = [
+  [["⌘K", "/"], "Search"],
+  [["C"], "New message"],
+  [["J", "↓"], "Next conversation"],
+  [["K", "↑"], "Previous conversation"],
+  [["E"], "Archive / unarchive"],
+  [["U"], "Mark read / unread"],
+  [["I"], "Toggle details"],
+  [["⌘F"], "Find in conversation"],
+  [["Esc"], "Close panel"],
+  [["?"], "Shortcuts"],
+];
 
 export default function ChatListScreen() {
   const theme = useTheme();
@@ -37,6 +52,7 @@ export default function ChatListScreen() {
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [rightPane, setRightPane] = useState<RightPane | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const { chats, counts, loading, refresh } = useChats(state, type);
 
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,32 +154,68 @@ export default function ChatListScreen() {
     else router.push("/new-chat");
   };
 
-  // Desktop keyboard shortcuts: ⌘K search, ⌘N new, ↑/↓ chat nav, Esc closes panes.
+  // Desktop keyboard shortcuts. Browser-reserved combos (⌘N/T/W/L) can't be
+  // captured by a web page; the Tauri shell will drive those through the native
+  // menu (see docs/tauri-handoff.md). Everything here works in the PWA today.
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
+    const moveSelection = (dir: 1 | -1) => {
+      const idx = chats.findIndex((ch) => ch.guid === selected?.guid);
+      const target = chats[Math.max(0, Math.min(chats.length - 1, idx + dir))];
+      if (target) openChat(target);
+    };
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setSearchOpen(true);
-      } else if (mod && e.key.toLowerCase() === "n") {
-        e.preventDefault();
-        setNewChatOpen(true);
-      } else if (e.key === "Escape") {
+      const active = document.activeElement;
+      const inField =
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+
+      // Combos that work even while typing.
+      if (mod && e.key.toLowerCase() === "k") return (e.preventDefault(), setSearchOpen(true));
+      if (mod && e.key.toLowerCase() === "n") return (e.preventDefault(), setNewChatOpen(true));
+      if (mod && e.key.toLowerCase() === "f") {
+        if (selected) (e.preventDefault(), openThreadSearch());
+        return;
+      }
+      if (e.key === "Escape") {
         setSearchOpen(false);
         setNewChatOpen(false);
         setRightPane(null);
-      } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !searchOpen && !newChatOpen) {
-        const active = document.activeElement;
-        const inField =
-          active instanceof HTMLElement &&
-          (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
-        if (inField) return;
-        e.preventDefault();
-        const idx = chats.findIndex((ch) => ch.guid === selected?.guid);
-        const next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
-        const target = chats[Math.max(0, Math.min(chats.length - 1, next))];
-        if (target) openChat(target);
+        setHelpOpen(false);
+        return;
+      }
+
+      // Single-key shortcuts — only when not typing and no overlay is up.
+      if (inField || mod || searchOpen || newChatOpen) return;
+      switch (e.key) {
+        case "ArrowDown":
+        case "j":
+          return (e.preventDefault(), moveSelection(1));
+        case "ArrowUp":
+        case "k":
+          return (e.preventDefault(), moveSelection(-1));
+        case "c":
+          return (e.preventDefault(), openNewMessage());
+        case "/":
+          return (e.preventDefault(), setSearchOpen(true));
+        case "e":
+          if (selected) (e.preventDefault(), archiveChat(selected, !selected.flags.archived));
+          return;
+        case "u":
+          if (selected)
+            (e.preventDefault(), selected.flags.unread ? markChatRead(selected) : markChatUnread(selected));
+          return;
+        case "i":
+          if (selected)
+            setRightPane((cur) =>
+              cur && cur.mode === "details" && cur.guid === selected.guid
+                ? null
+                : { mode: "details", guid: selected.guid },
+            );
+          return;
+        case "?":
+          return (e.preventDefault(), setHelpOpen(true));
       }
     };
     document.addEventListener("keydown", onKey);
@@ -209,6 +261,31 @@ export default function ChatListScreen() {
         <Pressable style={styles.overlayBackdrop} onPress={() => setNewChatOpen(false)}>
           <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
             <NewChatContent onClose={() => setNewChatOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+      <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}>
+        <Pressable style={styles.overlayBackdrop} onPress={() => setHelpOpen(false)}>
+          <Pressable
+            style={[styles.helpCard, { backgroundColor: theme.background, borderColor: theme.cardBorder }]}
+            onPress={() => undefined}
+          >
+            <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
+            {SHORTCUTS.map(([keys, label]) => (
+              <View key={label} style={styles.helpRow}>
+                <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{label}</Text>
+                <View style={styles.helpKeys}>
+                  {keys.map((k) => (
+                    <View
+                      key={k}
+                      style={[styles.kbd, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}
+                    >
+                      <Text style={[styles.kbdText, { color: theme.text }]}>{k}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
           </Pressable>
         </Pressable>
       </Modal>
@@ -308,6 +385,49 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
     flex: 1,
     paddingTop: 90,
+  },
+  helpCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: "90%",
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.35,
+    shadowRadius: 40,
+    width: 360,
+  },
+  helpTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 14,
+  },
+  helpRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 32,
+  },
+  helpLabel: {
+    fontSize: 14,
+  },
+  helpKeys: {
+    flexDirection: "row",
+    gap: 5,
+  },
+  kbd: {
+    alignItems: "center",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: "center",
+    minWidth: 24,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  kbdText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   overlayPanel: {
     borderRadius: 16,
