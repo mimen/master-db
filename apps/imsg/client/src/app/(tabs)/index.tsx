@@ -10,6 +10,8 @@ import { NewChatContent } from "@/components/new-chat-content";
 import { PersonContent } from "@/components/person-content";
 import { SearchContent } from "@/components/search-content";
 import { ThreadView } from "@/components/thread-view";
+import { ShadowPanel } from "@/components/shadow-panel";
+import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -44,6 +46,10 @@ export default function ChatListScreen() {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const wide = width >= 768;
+  const aiStatus = useAiStatus();
+  // The shadow panel needs room beyond the list+thread; keep it to wide desktops.
+  const canShadow = wide && width >= 1040 && aiStatus?.shadow === true;
+  const [shadowOpen, setShadowOpen] = useState(false);
   const [state, setState] = useState<StateFilter>("all");
   const [type, setType] = useState<TypeFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -316,6 +322,8 @@ export default function ChatListScreen() {
             jumpTarget={jumpTarget}
             headerChat={selected}
             previewOnly={selectionIntent === "preview"}
+            onToggleShadow={canShadow ? () => setShadowOpen((v) => !v) : undefined}
+            shadowOpen={shadowOpen}
           />
         ) : (
           <View style={styles.empty}>
@@ -351,6 +359,11 @@ export default function ChatListScreen() {
               onBack={() => setRightPane({ mode: "details", guid: rightPane.target.backGuid })}
             />
           )}
+        </View>
+      )}
+      {canShadow && shadowOpen && selected && (
+        <View style={[styles.infoCard, ...cardStyle]}>
+          <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
         </View>
       )}
     </View>

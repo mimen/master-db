@@ -17,6 +17,7 @@ import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
+import { onFillComposer } from "@/lib/composer-fill";
 import type { Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -133,6 +134,17 @@ export function Composer({
   useEffect(() => {
     if (editing) setText(editing.text);
   }, [editing]);
+
+  // Suggestion shelf drops text in here for editing; never auto-sends.
+  useEffect(
+    () =>
+      onFillComposer((suggestion) => {
+        setText(suggestion);
+        setDraft(chatGuid, suggestion);
+        inputRef.current?.focus();
+      }),
+    [chatGuid],
+  );
 
   // Desktop web: the composer is a keyboard focus target — reply-intent
   // selections request it (docs/keyboard-design.md). Type-anywhere is gone: it

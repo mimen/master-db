@@ -5,6 +5,7 @@ import {
   automationEnv,
   delegateCommand,
   parseAnchorId,
+  probeShadow,
   ShadowRunner,
   type AnchorStore,
   type ExecResult,
@@ -101,6 +102,46 @@ describe("parseAnchorId", () => {
 
   test("fails when no id is present", () => {
     expect(parseAnchorId("error: something went wrong").ok).toBe(false);
+  });
+});
+
+describe("probeShadow", () => {
+  const present = { which: () => "/path/to/ccs", seatExists: () => true };
+
+  test("available when key, ccs, and seat are all present", () => {
+    const result = probeShadow(makeConfig(), present);
+    expect(result.available).toBe(true);
+    expect(result.detail).toBeNull();
+  });
+
+  test("reports the missing key first", () => {
+    const result = probeShadow(makeConfig({ gatewayKey: "" }), present);
+    expect(result.available).toBe(false);
+    expect(result.detail).toContain("key");
+  });
+
+  test("reports ccs missing from PATH", () => {
+    const result = probeShadow(makeConfig(), { which: () => null, seatExists: () => true });
+    expect(result.available).toBe(false);
+    expect(result.detail).toContain("ccs not found");
+  });
+
+  test("reports an unsynced seat", () => {
+    const result = probeShadow(makeConfig(), { which: () => "/ccs", seatExists: () => false });
+    expect(result.available).toBe(false);
+    expect(result.detail).toContain("synced");
+  });
+
+  test("checks the seat under the configured vault path", () => {
+    let checkedDir = "";
+    probeShadow(makeConfig({ vaultPath: "/v", shadowSeat: "imsg-shadow" }), {
+      which: () => "/ccs",
+      seatExists: (dir) => {
+        checkedDir = dir;
+        return true;
+      },
+    });
+    expect(checkedDir).toBe("/v/ClaudeConfig/seats/imsg-shadow");
   });
 });
 

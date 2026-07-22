@@ -82,6 +82,32 @@ export function delegateCommand(config: AiConfig, anchorId: string, prompt: stri
   };
 }
 
+export interface ShadowAvailability {
+  available: boolean;
+  detail: string | null;
+}
+
+/**
+ * Whether the shadow lane can actually run, as opposed to whether the gateway
+ * key merely exists. Cheap and side-effect-free: resolve the ccs binary and
+ * confirm the seat directory is present. Meant to be called once at startup —
+ * spawning ccs on every status poll would be wasteful.
+ */
+export function probeShadow(
+  config: AiConfig,
+  deps: { which: (bin: string) => string | null; seatExists: (dir: string) => boolean },
+): ShadowAvailability {
+  if (!config.gatewayKey) return { available: false, detail: "AI gateway key not configured" };
+  if (!deps.which(config.ccsBin)) {
+    return { available: false, detail: `ccs not found on PATH (AI_CCS_BIN=${config.ccsBin})` };
+  }
+  const seatDir = `${config.vaultPath}/ClaudeConfig/seats/${config.shadowSeat}`;
+  if (!deps.seatExists(seatDir)) {
+    return { available: false, detail: `seat "${config.shadowSeat}" not found — has it synced?` };
+  }
+  return { available: true, detail: null };
+}
+
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
 /**

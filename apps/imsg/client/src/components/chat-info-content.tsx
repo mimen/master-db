@@ -17,9 +17,10 @@ import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
-import type { Contact, GalleryItem } from "@shared/types";
+import type { Contact, ContactSuggestion, GalleryItem } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
+import { useAiStatus } from "@/hooks/use-ai";
 import { initials } from "@/lib/format";
 
 const GRID_GAP = 5;
@@ -55,6 +56,29 @@ export function ChatInfoContent({
   const [gridWidth, setGridWidth] = useState(0);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
+  const aiStatus = useAiStatus();
+  const [nameIdeas, setNameIdeas] = useState<string[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
+  const [identity, setIdentity] = useState<ContactSuggestion | null>(null);
+  const [identifying, setIdentifying] = useState(false);
+
+  const suggestNames = () => {
+    setSuggesting(true);
+    api
+      .aiGroupNames(guid)
+      .then((r) => setNameIdeas(r.names))
+      .catch(() => showToast("Couldn't suggest names"))
+      .finally(() => setSuggesting(false));
+  };
+
+  const identify = () => {
+    setIdentifying(true);
+    api
+      .aiIdentify(guid)
+      .then(setIdentity)
+      .catch(() => showToast("Couldn't identify"))
+      .finally(() => setIdentifying(false));
+  };
 
   const load = useCallback(() => {
     if (!guid) return;
@@ -158,19 +182,56 @@ export function ChatInfoContent({
         )}
         {info.isGroup ? (
           renaming ? (
-            <View style={styles.renameRow}>
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                autoFocus
-                onSubmitEditing={saveName}
-                placeholder="Group name"
-                placeholderTextColor={theme.textSecondary}
-                style={[styles.renameInput, { color: theme.text, borderColor: theme.divider }]}
-              />
-              <Pressable onPress={saveName}>
-                <Text style={{ color: "#0A84FF", fontSize: 16, fontWeight: "600" }}>Save</Text>
-              </Pressable>
+            <View>
+              <View style={styles.renameRow}>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  autoFocus
+                  onSubmitEditing={saveName}
+                  placeholder="Group name"
+                  placeholderTextColor={theme.textSecondary}
+                  style={[styles.renameInput, { color: theme.text, borderColor: theme.divider }]}
+                />
+                <Pressable onPress={saveName}>
+                  <Text style={{ color: "#0A84FF", fontSize: 16, fontWeight: "600" }}>Save</Text>
+                </Pressable>
+              </View>
+              {aiStatus?.suggestions && (
+                <View style={styles.suggestBlock}>
+                  <Pressable
+                    onPress={suggestNames}
+                    disabled={suggesting}
+                    style={styles.suggestTrigger}
+                    hitSlop={6}
+                  >
+                    {suggesting ? (
+                      <ActivityIndicator size="small" />
+                    ) : (
+                      <Ionicons name="sparkles-outline" size={14} color={theme.accent} />
+                    )}
+                    <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>
+                      {suggesting ? "Thinking…" : "Suggest names"}
+                    </Text>
+                  </Pressable>
+                  {nameIdeas.length > 0 && (
+                    <View style={styles.ideaRow}>
+                      {nameIdeas.map((idea, i) => (
+                        <Pressable
+                          key={`${i}-${idea}`}
+                          onPress={() => setName(idea)}
+                          style={[
+                            styles.ideaPill,
+                            { backgroundColor: theme.backgroundElement, borderColor: theme.divider },
+                          ]}
+                        >
+                          <Text style={{ color: theme.text, fontSize: 13 }}>{idea}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           ) : (
             <Pressable style={styles.titleRow} onPress={() => setRenaming(true)}>
@@ -181,10 +242,48 @@ export function ChatInfoContent({
             </Pressable>
           )
         ) : (
-          <Text style={[styles.title, { color: theme.text }]}>
-            {info.participants[0]?.name ??
-              (info.participants[0]?.address ? formatAddress(info.participants[0].address) : "Details")}
-          </Text>
+          <View>
+            <Text style={[styles.title, { color: theme.text }]}>
+              {info.participants[0]?.name ??
+                (info.participants[0]?.address ? formatAddress(info.participants[0].address) : "Details")}
+            </Text>
+            {aiStatus?.suggestions && !info.participants[0]?.name && (
+              <View style={styles.identifyBlock}>
+                {identity ? (
+                  <View style={[styles.identityCard, { backgroundColor: theme.backgroundElement }]}>
+                    <View style={styles.identityHead}>
+                      <Ionicons name="sparkles" size={13} color={theme.accent} />
+                      <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600", flex: 1 }}>
+                        {identity.name ?? "Couldn't place them"}
+                      </Text>
+                      <Text style={[styles.confidence, { color: theme.textSecondary }]}>
+                        {identity.confidence}
+                      </Text>
+                    </View>
+                    <Text style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 18 }}>
+                      {identity.reasoning}
+                    </Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={identify}
+                    disabled={identifying}
+                    style={styles.suggestTrigger}
+                    hitSlop={6}
+                  >
+                    {identifying ? (
+                      <ActivityIndicator size="small" />
+                    ) : (
+                      <Ionicons name="help-circle-outline" size={15} color={theme.accent} />
+                    )}
+                    <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>
+                      {identifying ? "Looking…" : "Who is this?"}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </View>
         )}
 
         <Text style={[styles.section, { color: theme.textSecondary }]}>
@@ -319,6 +418,14 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: "700" },
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   renameInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 18 },
+  suggestBlock: { marginTop: 10, gap: 8 },
+  suggestTrigger: { flexDirection: "row", alignItems: "center", gap: 6 },
+  ideaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  ideaPill: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 7 },
+  identifyBlock: { marginTop: 8 },
+  identityCard: { borderRadius: 12, padding: 12, gap: 5 },
+  identityHead: { flexDirection: "row", alignItems: "center", gap: 7 },
+  confidence: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.3 },
   section: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", marginTop: 22, marginBottom: 8 },
   card: { borderRadius: 12, overflow: "hidden" },
   cardGap: { marginTop: 18 },

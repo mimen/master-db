@@ -16,7 +16,7 @@ import { buildThread, mapMessage, tapbackReactionEvent } from "./map";
 import { transcodeAttachment } from "./transcode";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
-import { ShadowRunner, spawnExec } from "./ai/shadow";
+import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
 import { makeVaultSearch } from "./ai/vault";
 import type { ServerEvent, StateFilter, TypeFilter } from "../shared/types";
 
@@ -569,11 +569,27 @@ app.get("/api/attachments/:guid", async (c) => {
 // Desktop-only surfaces. Every model call originates here so the gateway key
 // never reaches the client.
 
+// Probed once at startup: whether the shadow lane's dependencies (ccs binary,
+// synced seat) are actually present, not merely whether the key exists.
+const shadowStatus = probeShadow(config.ai, {
+  which: (bin) => Bun.which(bin),
+  seatExists: (dir) => {
+    try {
+      return require("node:fs").statSync(dir).isDirectory();
+    } catch {
+      return false;
+    }
+  },
+});
+console.log(
+  `AI: suggestions ${ai.available ? "on" : "off"}, shadow ${shadowStatus.available ? "on" : `off (${shadowStatus.detail})`}`,
+);
+
 app.get("/api/ai/status", async (c) => {
   return c.json({
     suggestions: ai.available,
-    shadow: ai.available,
-    shadowDetail: ai.available ? null : "AI gateway key not configured",
+    shadow: shadowStatus.available,
+    shadowDetail: shadowStatus.detail,
   });
 });
 

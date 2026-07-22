@@ -1,10 +1,14 @@
 import { BASE_URL } from "./config";
 import type {
+  AiStatus,
   ChatSummary,
   Contact,
+  ContactSuggestion,
   GalleryItem,
   Message,
+  ReplySuggestions,
   ScheduledMessage,
+  ShadowMessage,
   StateCounts,
   StateFilter,
   TypeFilter,
@@ -159,6 +163,33 @@ export const api = {
   },
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
     return request("/api/health");
+  },
+
+  // ------------------------------------------------------------------- ai
+  aiStatus(): Promise<AiStatus> {
+    return request("/api/ai/status");
+  },
+  aiGroupNames(chatGuid: string): Promise<{ names: string[] }> {
+    return request(`/api/ai/group-name/${encodeURIComponent(chatGuid)}`, { method: "POST" });
+  },
+  aiSuggestions(chatGuid: string, refresh = false): Promise<ReplySuggestions> {
+    const qs = refresh ? "?refresh=1" : "";
+    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}${qs}`);
+  },
+  aiIdentify(chatGuid: string): Promise<ContactSuggestion> {
+    return request(`/api/ai/identify/${encodeURIComponent(chatGuid)}`);
+  },
+  aiShadowHistory(chatGuid: string): Promise<ShadowMessage[]> {
+    return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`);
+  },
+  aiShadowSend(chatGuid: string, text: string): Promise<{ reply: string }> {
+    return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  },
+  aiShadowClear(chatGuid: string): Promise<{ ok: boolean }> {
+    return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`, { method: "DELETE" });
   },
 };
 
