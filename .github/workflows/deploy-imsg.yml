@@ -1,0 +1,27 @@
+name: Deploy imsg
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/imsg/**"
+# NOTE: this only redeploys the imsg app (server + web client) on the Mini.
+# It does NOT push Convex functions/schema — those live on Convex's managed
+# cloud (project master-db, deployment shiny-gerbil-853) and are pushed
+# separately via `bunx convex dev --once` (or `convex deploy`) from a machine
+# with Convex CLI auth. If you want Convex changes (convex/**) to auto-deploy
+# too, that needs its own workflow with a CONVEX_DEPLOY_KEY secret — ask
+# before wiring that up, since it's a credential + "which deployment does
+# this key target" decision worth confirming, not a call to make solo.
+
+jobs:
+  deploy:
+    # Runs on the self-hosted runner living on the same Mac Mini that serves
+    # imsg — no actions/checkout: the live app runs in place out of
+    # ~/Programming/Repos/master-db, so the job just invokes that checkout's
+    # own deploy script, which does the git pull itself.
+    runs-on: [self-hosted, imsg-mini]
+    timeout-minutes: 15
+    steps:
+      - name: Deploy
+        run: bash "$HOME/Programming/Repos/master-db/apps/imsg/scripts/deploy.sh"
