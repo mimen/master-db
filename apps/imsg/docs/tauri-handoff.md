@@ -40,11 +40,11 @@ scaffold the whole thing before the spike passes.
   - `http://milads-mac-mini:8377` (LAN HTTP)
 - The API + BlueBubbles run **on the Mini**, same origin as the served web app.
 - **Keyboard layer already built** in `client/src/app/(tabs)/index.tsx` (the
-  `onKey` handler). Working in the browser today:
-  `⌘K` / `/` search · `C` new message · `J`/`K`/arrows nav · `E` archive ·
-  `U` read/unread · `I` details · `⌘F` find-in-thread · `Esc` close · `?` help.
-  `⌘N` is wired too but the browser eats it — **the Tauri menu will drive ⌘N**
-  (and ⌘W etc.) instead.
+  `onKey` handler). It's **⌘-based** (the composer is almost always focused, so
+  single-key shortcuts are the wrong model). Working in the browser today:
+  `⌘K` search · `⌘↑`/`⌘↓` nav · `⌘E` archive · `⌘⇧U` read/unread · `⌘I` details ·
+  `⌘/` help · `Esc` close. `⌘N` (new) and `⌘F` (find) are wired but the browser
+  reserves/intercepts them — **the Tauri native menu drives ⌘N, ⌘F, ⌘W** etc.
 
 ## Recommended architecture: thin remote shell
 

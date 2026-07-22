@@ -28,16 +28,16 @@ type RightPane =
   | { mode: "person"; target: PersonTarget };
 
 const SHORTCUTS: Array<[string[], string]> = [
-  [["⌘K", "/"], "Search"],
-  [["C"], "New message"],
-  [["J", "↓"], "Next conversation"],
-  [["K", "↑"], "Previous conversation"],
-  [["E"], "Archive / unarchive"],
-  [["U"], "Mark read / unread"],
-  [["I"], "Toggle details"],
+  [["⌘K"], "Search"],
+  [["⌘N"], "New message"],
+  [["⌘↓"], "Next conversation"],
+  [["⌘↑"], "Previous conversation"],
   [["⌘F"], "Find in conversation"],
+  [["⌘E"], "Archive / unarchive"],
+  [["⌘⇧U"], "Mark read / unread"],
+  [["⌘I"], "Toggle details"],
   [["Esc"], "Close panel"],
-  [["?"], "Shortcuts"],
+  [["⌘/"], "Shortcuts"],
 ];
 
 export default function ChatListScreen() {
@@ -165,19 +165,9 @@ export default function ChatListScreen() {
       if (target) openChat(target);
     };
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      const active = document.activeElement;
-      const inField =
-        active instanceof HTMLElement &&
-        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
-
-      // Combos that work even while typing.
-      if (mod && e.key.toLowerCase() === "k") return (e.preventDefault(), setSearchOpen(true));
-      if (mod && e.key.toLowerCase() === "n") return (e.preventDefault(), setNewChatOpen(true));
-      if (mod && e.key.toLowerCase() === "f") {
-        if (selected) (e.preventDefault(), openThreadSearch());
-        return;
-      }
+      // The composer is almost always focused in a chat app, so everything is
+      // ⌘-based (Esc aside) — single keys are left to typing. ⌘A/C/V/Z etc. are
+      // never overridden, so text editing is untouched.
       if (e.key === "Escape") {
         setSearchOpen(false);
         setNewChatOpen(false);
@@ -185,37 +175,39 @@ export default function ChatListScreen() {
         setHelpOpen(false);
         return;
       }
-
-      // Single-key shortcuts — only when not typing and no overlay is up.
-      if (inField || mod || searchOpen || newChatOpen) return;
-      switch (e.key) {
-        case "ArrowDown":
-        case "j":
-          return (e.preventDefault(), moveSelection(1));
-        case "ArrowUp":
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      const toggleDetails = () => {
+        if (selected)
+          setRightPane((cur) =>
+            cur && cur.mode === "details" && cur.guid === selected.guid
+              ? null
+              : { mode: "details", guid: selected.guid },
+          );
+      };
+      switch (k) {
         case "k":
-          return (e.preventDefault(), moveSelection(-1));
-        case "c":
-          return (e.preventDefault(), openNewMessage());
-        case "/":
           return (e.preventDefault(), setSearchOpen(true));
+        case "n":
+          return (e.preventDefault(), setNewChatOpen(true));
+        case "/":
+          return (e.preventDefault(), setHelpOpen(true));
+        case "arrowdown":
+          return (e.preventDefault(), moveSelection(1));
+        case "arrowup":
+          return (e.preventDefault(), moveSelection(-1));
+        case "f":
+          if (selected) (e.preventDefault(), openThreadSearch());
+          return;
         case "e":
           if (selected) (e.preventDefault(), archiveChat(selected, !selected.flags.archived));
           return;
         case "u":
-          if (selected)
+          if (selected && e.shiftKey)
             (e.preventDefault(), selected.flags.unread ? markChatRead(selected) : markChatUnread(selected));
           return;
         case "i":
-          if (selected)
-            setRightPane((cur) =>
-              cur && cur.mode === "details" && cur.guid === selected.guid
-                ? null
-                : { mode: "details", guid: selected.guid },
-            );
-          return;
-        case "?":
-          return (e.preventDefault(), setHelpOpen(true));
+          return (e.preventDefault(), toggleDetails());
       }
     };
     document.addEventListener("keydown", onKey);
