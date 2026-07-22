@@ -1,16 +1,26 @@
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
 import type { ChatSummary } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
-/** Deterministic pastel per contact, iOS-style. */
-function avatarColor(key: string): { bg: string; fg: string } {
+// "Muted Editorial" palette, saturation nudged up: 20 evenly-spaced hues drawn
+// as a soft diagonal gradient — richer than a rainbow, still grown-up.
+const PALETTE = { s1: 54, l1: 58, shift: 30, s2: 58, l2: 47 } as const;
+
+/** Deterministic per-contact gradient. A 20-slot palette keyed off the address. */
+function avatarColor(key: string): { start: string; end: string; fg: string } {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  const hue = h % 360;
-  return { bg: `hsl(${hue}, 45%, 62%)`, fg: "#ffffff" };
+  const hue = (h % 20) * 18;
+  const hue2 = (hue + PALETTE.shift) % 360;
+  return {
+    start: `hsl(${hue}, ${PALETTE.s1}%, ${PALETTE.l1}%)`,
+    end: `hsl(${hue2}, ${PALETTE.s2}%, ${PALETTE.l2}%)`,
+    fg: PALETTE.l1 > 64 ? "rgba(0,0,0,0.72)" : "#ffffff",
+  };
 }
 
 function PersonAvatar({
@@ -31,10 +41,15 @@ function PersonAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: color.bg,
         },
       ]}
     >
+      <LinearGradient
+        colors={[color.start, color.end]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
       <Text style={{ fontSize: size * 0.34, fontWeight: "600", color: color.fg }}>
         {initials(name)}
       </Text>
