@@ -117,6 +117,9 @@ export function ThreadView({
       listRef.current as unknown as { getScrollableNode?: () => HTMLElement } | null
     )?.getScrollableNode?.();
     if (!node || typeof node.addEventListener !== "function") return;
+    // Reserve the scrollbar gutter HERE (not globally — see post-export.ts) so
+    // short and long conversations align identically.
+    node.style.scrollbarGutter = "stable";
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
       event.stopPropagation();

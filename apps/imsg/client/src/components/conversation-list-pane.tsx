@@ -143,6 +143,16 @@ export function ConversationListPane({
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
         setTimeout(() => searchRef.current?.focus(), 30);
       },
+      selectNeighborOf(guid) {
+        // Runs synchronously after the removal action, before re-render — so
+        // the current model still contains `guid` and its neighbors.
+        const { model: m, onOpenChat: open, onPreviewChat: preview } = navRef.current;
+        const navigable = m.showPriorityShelf ? [...m.priority, ...m.listChats] : m.listChats;
+        const idx = navigable.findIndex((ch) => ch.guid === guid);
+        if (idx === -1) return;
+        const neighbor = navigable[idx + 1] ?? navigable[idx - 1];
+        if (neighbor) (preview ?? open)(neighbor);
+      },
     });
   }, [wide]);
 

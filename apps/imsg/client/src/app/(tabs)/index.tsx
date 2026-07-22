@@ -194,6 +194,9 @@ export default function ChatListScreen() {
         const archived = !sel.flags.archived;
         archiveChat(sel, archived);
         showToast(archived ? "Archived — Z to undo" : "Unarchived — Z to undo");
+        // The row leaves the current view — glide onto its neighbor so the
+        // cursor never dangles on a vanished conversation.
+        getListAdapter()?.selectNeighborOf(sel.guid);
       },
       markUnreadSelected: () => {
         const sel = selectedRef.current;

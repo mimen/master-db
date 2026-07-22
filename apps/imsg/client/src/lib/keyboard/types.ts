@@ -74,4 +74,7 @@ export interface ListAdapter {
   move(delta: -1 | 1): void;
   activate(): void;
   focusSearch(): void;
+  /** After an action removes `guid` from the list (archive), glide onto its
+   * neighbor (next, else previous) instead of leaving the cursor dangling. */
+  selectNeighborOf(guid: string): void;
 }
