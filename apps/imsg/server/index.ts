@@ -213,7 +213,15 @@ app.get("/api/avatars/:address", async (c) => {
   // Fallback: whatever BlueBubbles returns (empty on current server version).
   await contacts.refresh();
   const b64 = contacts.avatar(address);
-  if (!b64) return c.body(null, 404);
+  if (!b64) {
+    // No photo → a transparent 1×1 PNG, so the client renders the initials /
+    // gradient underneath instead of a broken-image glyph.
+    const px = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    return new Response(new Uint8Array(px), { headers: { ...headers, "Content-Type": "image/png" } });
+  }
   const bytes = Buffer.from(b64, "base64");
   const isPng = bytes[0] === 0x89 && bytes[1] === 0x50;
   return new Response(new Uint8Array(bytes), {

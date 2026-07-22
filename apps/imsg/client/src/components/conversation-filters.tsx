@@ -343,29 +343,29 @@ export function ConversationFiltersModal({
 
 const styles = StyleSheet.create({
   rail: {
-    height: 44,
+    height: 50,
   },
   railContent: {
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 12,
+    gap: 12,
+    paddingHorizontal: 18,
   },
   filterGroup: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 6,
+    gap: 8,
   },
   divider: {
-    height: 20,
+    height: 22,
     width: StyleSheet.hairlineWidth,
   },
   pill: {
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: 17,
     flexDirection: "row",
-    gap: 5,
-    height: 32,
-    paddingHorizontal: 11,
+    gap: 6,
+    height: 34,
+    paddingHorizontal: 14,
   },
   pillLabel: {
     fontSize: 13,
