@@ -34,7 +34,7 @@ const SHORTCUTS: Array<[string[], string]> = [
   [["⌘↓"], "Next conversation"],
   [["⌘↑"], "Previous conversation"],
   [["⌘F"], "Find in conversation"],
-  [["⌘E"], "Archive / unarchive"],
+  [["⌘⇧E"], "Archive / unarchive"],
   [["⌘⇧U"], "Mark read / unread"],
   [["⌘I"], "Toggle details"],
   [["Esc"], "Close panel"],
@@ -202,7 +202,9 @@ export default function ChatListScreen() {
           if (sel) (e.preventDefault(), openThreadSearch());
           return;
         case "e":
-          if (sel) {
+          // ⌘⇧E, not ⌘E — plain ⌘E is a macOS text binding ("Use Selection for
+          // Find") the OS eats before the page ever sees the keydown.
+          if (sel && e.shiftKey) {
             e.preventDefault();
             const archived = !sel.flags.archived;
             archiveChat(sel, archived);

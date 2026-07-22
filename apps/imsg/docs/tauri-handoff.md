@@ -42,7 +42,7 @@ scaffold the whole thing before the spike passes.
 - **Keyboard layer already built** in `client/src/app/(tabs)/index.tsx` (the
   `onKey` handler). It's **⌘-based** (the composer is almost always focused, so
   single-key shortcuts are the wrong model). Working in the browser today:
-  `⌘K` search · `⌘↑`/`⌘↓` nav · `⌘E` archive · `⌘⇧U` read/unread · `⌘I` details ·
+  `⌘K` search · `⌘↑`/`⌘↓` nav · `⌘⇧E` archive · `⌘⇧U` read/unread · `⌘I` details ·
   `⌘/` help · `Esc` close. `⌘N` (new) and `⌘F` (find) are wired but the browser
   reserves/intercepts them — **the Tauri native menu drives ⌘N, ⌘F, ⌘W** etc.
 
