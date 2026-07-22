@@ -168,7 +168,6 @@ export function ChatRow({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
-          keyboardFocused && { borderLeftColor: theme.accent, borderLeftWidth: 3 },
           {
             backgroundColor: selected
               ? theme.backgroundSelected
@@ -178,9 +177,10 @@ export function ChatRow({
           },
         ]}
       >
-        <View style={styles.dotColumn}>
-          {chat.flags.unread && <View style={[styles.unreadDot, { backgroundColor: theme.accent }]} />}
-        </View>
+        {/* Glide cursor — absolutely positioned so it never shifts layout. */}
+        {keyboardFocused && (
+          <View style={[styles.glideCursor, { backgroundColor: theme.accent }]} />
+        )}
         <ChatAvatar chat={chat} size={52} />
         <View style={styles.content}>
           <View style={styles.topLine}>
@@ -237,16 +237,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     minHeight: 75,
+    paddingLeft: 16,
     paddingRight: 16,
   },
-  dotColumn: {
-    alignItems: "center",
-    width: 17,
-  },
-  unreadDot: {
-    borderRadius: 4,
-    height: 8,
-    width: 8,
+  glideCursor: {
+    borderRadius: 2,
+    bottom: 10,
+    left: 4,
+    position: "absolute",
+    top: 10,
+    width: 3,
   },
   content: {
     flex: 1,

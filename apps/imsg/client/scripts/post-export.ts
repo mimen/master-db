@@ -28,7 +28,10 @@ const tags = [
     "::-webkit-scrollbar-thumb{background:rgba(140,140,150,0.4);border-radius:10px;border:none}" +
     "::-webkit-scrollbar-thumb:hover{background:rgba(140,140,150,0.6)}" +
     "::-webkit-scrollbar-corner{background:transparent}" +
-    "*{scrollbar-width:thin;scrollbar-color:rgba(140,140,150,0.4) transparent}</style>",
+    // Reserve the gutter so a scrollbar appearing/disappearing never shifts
+    // content (short vs long conversations). Panes with hidden scrollbars
+    // (scrollbar-width:none) reserve nothing, so the sidebar is unaffected.
+    "*{scrollbar-width:thin;scrollbar-color:rgba(140,140,150,0.4) transparent;scrollbar-gutter:stable}</style>",
 ].join("");
 
 if (!html.includes("manifest.webmanifest")) {

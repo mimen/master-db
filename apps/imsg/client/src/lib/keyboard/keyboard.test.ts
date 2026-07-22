@@ -33,18 +33,25 @@ describe("global chords", () => {
 });
 
 describe("glide (list) mode", () => {
-  test("single keys are inert outside glide mode — composer-safe", () => {
-    for (const key of ["j", "k", "e", "u", "c", "z", "/", "Enter", "arrowdown"]) {
+  test("nav keys (j/k/arrows) glide from ANY mode — the editable check is the only gate", () => {
+    for (const key of ["j", "arrowdown"]) {
+      const b = matchBinding(stroke({ key }));
+      expect(b?.commandId).toBe("conversation.next");
+      expect(b?.allowInEditable).toBe(false);
+    }
+    for (const key of ["k", "arrowup"]) {
+      expect(matchBinding(stroke({ key }))?.commandId).toBe("conversation.previous");
+    }
+  });
+
+  test("action keys are inert outside glide mode — composer-safe", () => {
+    for (const key of ["e", "u", "c", "z", "/", "Enter"]) {
       expect(matchBinding(stroke({ key }))).toBeNull();
     }
   });
 
-  test("glide mode activates the single-key set", () => {
+  test("glide mode activates the single-key action set", () => {
     setListMode(true);
-    expect(matchBinding(stroke({ key: "j" }))?.commandId).toBe("conversation.next");
-    expect(matchBinding(stroke({ key: "arrowdown" }))?.commandId).toBe("conversation.next");
-    expect(matchBinding(stroke({ key: "k" }))?.commandId).toBe("conversation.previous");
-    expect(matchBinding(stroke({ key: "arrowup" }))?.commandId).toBe("conversation.previous");
     expect(matchBinding(stroke({ key: "e" }))?.commandId).toBe("conversation.archive");
     expect(matchBinding(stroke({ key: "u" }))?.commandId).toBe("conversation.markUnread");
     expect(matchBinding(stroke({ key: "z" }))?.commandId).toBe("action.undo");

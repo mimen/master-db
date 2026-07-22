@@ -33,11 +33,14 @@ export const BINDINGS: readonly KeyBinding[] = [
   // Browser-reserved; fires only under the future Tauri shell's native menu.
   { commandId: "conversation.new", combo: "mod+n", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
 
-  // Glide mode — single keys, list scope.
-  { commandId: "conversation.next", combo: "j", scope: "list", allowInEditable: false, allowRepeat: true, preventDefault: true },
-  { commandId: "conversation.next", combo: "arrowdown", scope: "list", allowInEditable: false, allowRepeat: true, preventDefault: true },
-  { commandId: "conversation.previous", combo: "k", scope: "list", allowInEditable: false, allowRepeat: true, preventDefault: true },
-  { commandId: "conversation.previous", combo: "arrowup", scope: "list", allowInEditable: false, allowRepeat: true, preventDefault: true },
+  // Navigation glides from anywhere (app load included) whenever focus is NOT
+  // in a text field — j/k and the arrows are identical. While typing, arrows
+  // move the caret and letters type (editable-unsafe). Pressing any of these
+  // outside a field enters glide mode (runtime.moveSelection does that).
+  { commandId: "conversation.next", combo: "j", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
+  { commandId: "conversation.next", combo: "arrowdown", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
+  { commandId: "conversation.previous", combo: "k", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
+  { commandId: "conversation.previous", combo: "arrowup", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.activate", combo: "enter", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.archive", combo: "e", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.markUnread", combo: "u", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },

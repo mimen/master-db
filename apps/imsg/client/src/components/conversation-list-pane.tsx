@@ -104,6 +104,7 @@ export function ConversationListPane({
   // (priority shelf first, then the filtered list) — not the raw chats array.
   const navRef = useRef({ model, selectedGuid, onOpenChat, onPreviewChat });
   navRef.current = { model, selectedGuid, onOpenChat, onPreviewChat };
+  const viewableRange = useRef<{ first: number; last: number }>({ first: 0, last: 0 });
   useEffect(() => {
     if (!wide) return;
     return registerListAdapter({
@@ -113,7 +114,24 @@ export function ConversationListPane({
         if (navigable.length === 0) return;
         const idx = navigable.findIndex((ch) => ch.guid === sel);
         const target = navigable[Math.max(0, Math.min(navigable.length - 1, idx === -1 ? 0 : idx + delta))];
-        if (target && target.guid !== sel) (preview ?? open)(target);
+        if (!target || target.guid === sel) return;
+        (preview ?? open)(target);
+        // Keep the glide cursor visible: if the user free-scrolled away, snap
+        // back to it; if it's already on screen, don't disturb the scroll.
+        const listIndex = m.listChats.findIndex((ch) => ch.guid === target.guid);
+        if (listIndex === -1) {
+          // Target lives in the priority shelf (list header) — scroll to top.
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          return;
+        }
+        const { first, last } = viewableRange.current;
+        if (listIndex < first || listIndex > last) {
+          try {
+            listRef.current?.scrollToIndex({ index: listIndex, viewPosition: 0.4, animated: false });
+          } catch {
+            /* index not measured yet — FlashList will settle on next frame */
+          }
+        }
       },
       activate() {
         const { model: m, selectedGuid: sel, onOpenChat: open } = navRef.current;
@@ -202,6 +220,14 @@ export function ConversationListPane({
           keyExtractor={(chat) => chat.guid}
           maintainVisibleContentPosition={{ disabled: false }}
           keyboardShouldPersistTaps="handled"
+          onViewableItemsChanged={({ viewableItems }) => {
+            const indices = viewableItems
+              .map((v) => v.index)
+              .filter((i): i is number => typeof i === "number");
+            if (indices.length > 0) {
+              viewableRange.current = { first: Math.min(...indices), last: Math.max(...indices) };
+            }
+          }}
           contentContainerStyle={{ paddingTop: topBarH + 8 }}
           showsVerticalScrollIndicator={false}
           onLayout={(e) => {
