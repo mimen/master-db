@@ -1,5 +1,5 @@
 import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
 import {
@@ -133,12 +133,14 @@ function FilterMenuOption({
   selected,
   selection,
   onSelect,
+  compact = false,
 }: {
   label: string;
   count?: number;
   selected: boolean;
   selection: InboxFilterSelection;
   onSelect: (selection: InboxFilterSelection) => void;
+  compact?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -149,15 +151,31 @@ function FilterMenuOption({
       onPress={() => onSelect(selection)}
       style={({ pressed }) => [
         styles.menuOption,
+        compact && styles.popoverOption,
         pressed && { backgroundColor: theme.backgroundSelected },
       ]}
     >
-      <Text accessibilityElementsHidden style={[styles.check, { color: theme.accent }]}>
+      <Text
+        accessibilityElementsHidden
+        style={[styles.check, compact && styles.popoverCheck, { color: theme.accent }]}
+      >
         {selected ? "✓" : ""}
       </Text>
-      <Text style={[styles.menuOptionLabel, { color: theme.text }]}>{label}</Text>
+      <Text
+        style={[styles.menuOptionLabel, compact && styles.popoverOptionLabel, { color: theme.text }]}
+      >
+        {label}
+      </Text>
       {count !== undefined && (
-        <Text style={[styles.menuOptionCount, { color: theme.textSecondary }]}>{formatCount(count)}</Text>
+        <Text
+          style={[
+            styles.menuOptionCount,
+            compact && styles.popoverOptionCount,
+            { color: theme.textSecondary },
+          ]}
+        >
+          {formatCount(count)}
+        </Text>
       )}
     </Pressable>
   );
@@ -191,14 +209,17 @@ export function ConversationFiltersModal({
   anchor = null,
 }: ConversationFiltersModalProps) {
   const theme = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const select = (selection: InboxFilterSelection): void => {
     onFiltersChange(selectInboxFilter(filters, selection));
   };
 
   if (anchor) {
-    const POPOVER_WIDTH = 260;
-    // Anchor the popover's top-left corner at the button.
-    const left = Math.max(8, anchor.x);
+    const popoverWidth = Math.min(376, windowWidth - 16);
+    const left = Math.min(
+      Math.max(8, anchor.x + anchor.width - popoverWidth),
+      windowWidth - popoverWidth - 8,
+    );
     const top = anchor.y + anchor.height + 6;
     return (
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -212,19 +233,26 @@ export function ConversationFiltersModal({
           accessibilityLabel="Conversation filters"
           style={[
             styles.popover,
-            { backgroundColor: theme.backgroundElement, borderColor: theme.divider, top, left, width: POPOVER_WIDTH },
+            {
+              backgroundColor: theme.backgroundElement,
+              borderColor: theme.divider,
+              top,
+              left,
+              width: popoverWidth,
+            },
           ]}
         >
-          <ScrollView
-            style={styles.popoverContent}
-            contentContainerStyle={styles.menuContentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
-              <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>State</Text>
+          <View style={styles.popoverBody}>
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Conversation state"
+              style={styles.popoverStateColumn}
+            >
+              <Text style={[styles.popoverGroupTitle, { color: theme.textSecondary }]}>State</Text>
               {STATE_FILTERS.map((filter) => (
                 <FilterMenuOption
                   key={filter.value}
+                  compact
                   label={filter.label}
                   count={counts?.[filter.value]}
                   selected={filters.state === filter.value}
@@ -233,12 +261,17 @@ export function ConversationFiltersModal({
                 />
               ))}
             </View>
-            <View style={[styles.menuDivider, { backgroundColor: theme.divider }]} />
-            <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type">
-              <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>Type</Text>
+            <View style={[styles.popoverColumnDivider, { backgroundColor: theme.divider }]} />
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Conversation type"
+              style={styles.popoverTypeColumn}
+            >
+              <Text style={[styles.popoverGroupTitle, { color: theme.textSecondary }]}>Type</Text>
               {TYPE_FILTERS.map((filter) => (
                 <FilterMenuOption
                   key={filter.value}
+                  compact
                   label={filter.label}
                   selected={filters.type === filter.value}
                   selection={{ kind: "type", value: filter.value }}
@@ -246,14 +279,14 @@ export function ConversationFiltersModal({
                 />
               ))}
             </View>
-          </ScrollView>
+          </View>
           <View style={[styles.popoverFooter, { borderTopColor: theme.divider }]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Reset conversation filters"
               onPress={() => onFiltersChange(resetInboxFilters())}
             >
-              <Text style={[styles.resetButtonLabel, { color: theme.accent }]}>Reset</Text>
+              <Text style={[styles.popoverResetLabel, { color: theme.accent }]}>Reset</Text>
             </Pressable>
           </View>
         </View>
@@ -382,23 +415,47 @@ const styles = StyleSheet.create({
   popover: {
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    maxHeight: 460,
     overflow: "hidden",
-    paddingTop: 10,
     position: "absolute",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 24,
   },
-  popoverContent: {
-    flexShrink: 1,
+  popoverBody: {
+    flexDirection: "row",
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  popoverStateColumn: {
+    flex: 1.3,
+  },
+  popoverTypeColumn: {
+    flex: 1,
+  },
+  popoverColumnDivider: {
+    alignSelf: "stretch",
+    marginHorizontal: 6,
+    marginVertical: 2,
+    width: StyleSheet.hairlineWidth,
+  },
+  popoverGroupTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    paddingBottom: 4,
+    paddingHorizontal: 12,
+    textTransform: "uppercase",
   },
   popoverFooter: {
-    alignItems: "flex-start",
+    alignItems: "flex-end",
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  popoverResetLabel: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   modalRoot: {
     backgroundColor: "rgba(0,0,0,0.35)",
@@ -448,18 +505,32 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 20,
   },
+  popoverOption: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+  },
   check: {
     fontSize: 16,
     fontWeight: "700",
     width: 24,
   },
+  popoverCheck: {
+    fontSize: 14,
+    width: 18,
+  },
   menuOptionLabel: {
     flex: 1,
     fontSize: 16,
   },
+  popoverOptionLabel: {
+    fontSize: 14,
+  },
   menuOptionCount: {
     fontSize: 14,
     fontVariant: ["tabular-nums"],
+  },
+  popoverOptionCount: {
+    fontSize: 12,
   },
   menuDivider: {
     height: StyleSheet.hairlineWidth,
