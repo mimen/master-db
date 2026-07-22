@@ -149,6 +149,40 @@ export interface ReactRequest {
   partIndex?: number;
 }
 
+// ------------------------------------------------------------------------ AI
+
+/** Reported by /api/ai/status so the client can hide surfaces it cannot use. */
+export interface AiStatus {
+  /** Fast lane reachable — gateway key present. */
+  suggestions: boolean;
+  /** Harness lane reachable — ccs present with automation provenance. */
+  shadow: boolean;
+  /** Human-readable reason when `shadow` is false. */
+  shadowDetail: string | null;
+}
+
+export interface ReplySuggestions {
+  suggestions: string[];
+  /** Guid of the last message when these were generated. */
+  basedOnMessageGuid: string | null;
+  /** True when newer messages have arrived since generation. */
+  stale: boolean;
+  generatedAt: number;
+}
+
+export interface ContactSuggestion {
+  name: string | null;
+  confidence: "high" | "medium" | "low";
+  reasoning: string;
+}
+
+export interface ShadowMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: number;
+}
+
 export type ServerEvent =
   | { kind: "new-message"; chatGuid: string; message: Message }
   | { kind: "updated-message"; chatGuid: string; message: Message }

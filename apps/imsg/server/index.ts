@@ -14,6 +14,10 @@ import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
 import { buildThread, mapMessage } from "./map";
 import { transcodeAttachment } from "./transcode";
+import { AiService } from "./ai/service";
+import { Gateway } from "./ai/gateway";
+import { ShadowRunner, spawnExec } from "./ai/shadow";
+import { makeVaultSearch } from "./ai/vault";
 import type { ServerEvent, StateFilter, TypeFilter } from "../shared/types";
 
 const config = loadConfig();
@@ -24,6 +28,26 @@ const directory = new ChatDirectory(bb, db, contacts);
 const search = new MessageSearch(bb, contacts);
 const photos = new GroupPhotos(bb);
 const identitySync = new IdentitySync(bb, config);
+
+const gateway = new Gateway(config.ai);
+const ai = new AiService({
+  config: config.ai,
+  db,
+  gateway,
+  shadow: new ShadowRunner(
+    config.ai,
+    { get: (key) => db.getAiMeta(key), set: (key, value) => db.setAiMeta(key, value) },
+    spawnExec,
+  ),
+  fetchMessages: async (chatGuid) => {
+    const result = await bb.chatMessages(chatGuid, { limit: 60, sort: "DESC" });
+    if (!result.ok) return [];
+    // buildThread sorts ascending, which is the oldest-first order the prompt
+    // builders expect — they take the newest N off the end.
+    return buildThread(result.value, chatGuid, contacts);
+  },
+  searchVault: makeVaultSearch(config.ai.vaultPath),
+});
 
 const info = await bb.connect();
 if (!info.ok) {
@@ -530,6 +554,94 @@ app.get("/api/attachments/:guid", async (c) => {
   if (mimeType) headers.set("Content-Type", mimeType);
   return new Response(download.body, { headers });
 });
+
+// ------------------------------------------------------------------- ai
+// Desktop-only surfaces. Every model call originates here so the gateway key
+// never reaches the client.
+
+app.get("/api/ai/status", async (c) => {
+  return c.json({
+    suggestions: ai.available,
+    shadow: ai.available,
+    shadowDetail: ai.available ? null : "AI gateway key not configured",
+  });
+});
+
+app.post("/api/ai/group-name/:guid", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const chat = await bb.getChat(chatGuid);
+  if (!chat.ok) return c.json({ error: chat.error }, 502);
+  await contacts.refresh();
+  const participants = (chat.value.participants ?? []).map(
+    (p) => contacts.lookup(p.address) ?? p.address,
+  );
+  const result = await ai.groupNames(chatGuid, participants);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json({ names: result.value.filter((n) => typeof n === "string").slice(0, 5) });
+});
+
+app.get("/api/ai/suggestions/:guid", async (c) => {
+  const result = await ai.replySuggestions(
+    c.req.param("guid"),
+    await peerNameOf(c.req.param("guid")),
+    c.req.query("refresh") === "1",
+  );
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.value);
+});
+
+app.post("/api/ai/suggestions/:guid", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const result = await ai.replySuggestions(chatGuid, await peerNameOf(chatGuid), true);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.value);
+});
+
+app.get("/api/ai/identify/:guid", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const chat = await bb.getChat(chatGuid);
+  if (!chat.ok) return c.json({ error: chat.error }, 502);
+  const address = chat.value.participants?.[0]?.address;
+  if (!address) return c.json({ error: "no participant address" }, 400);
+  await contacts.refresh();
+  const result = await ai.identify(chatGuid, address, contacts.lookup(address));
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.value);
+});
+
+app.get("/api/ai/shadow/:guid", async (c) => {
+  return c.json(
+    db.listShadowMessages(c.req.param("guid")).map((row) => ({
+      id: row.id,
+      role: row.role,
+      text: row.text,
+      createdAt: row.created_at,
+    })),
+  );
+});
+
+app.post("/api/ai/shadow/:guid", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const body = (await c.req.json()) as { text?: string };
+  if (!body.text?.trim()) return c.json({ error: "text required" }, 400);
+  const result = await ai.shadowTurn(chatGuid, body.text.trim(), await peerNameOf(chatGuid));
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json({ reply: result.value });
+});
+
+app.delete("/api/ai/shadow/:guid", async (c) => {
+  db.clearShadowMessages(c.req.param("guid"));
+  return c.json({ ok: true });
+});
+
+/** Display name for a DM's counterpart, used to address suggestions properly. */
+async function peerNameOf(chatGuid: string): Promise<string | null> {
+  const result = await directory.summaries();
+  if (!result.ok) return null;
+  const chat = result.chats.find((ch) => ch.guid === chatGuid);
+  if (!chat || chat.isGroup) return null;
+  return chat.displayName ?? null;
+}
 
 app.get("/events", (c) => {
   return streamSSE(c, async (stream) => {
