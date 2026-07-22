@@ -3,7 +3,6 @@ import type { ChatSummary, StateCounts } from "@shared/types";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
-  FlatList,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 
@@ -59,6 +59,8 @@ export function ConversationListPane({
   const [topBarH, setTopBarH] = useState(48);
   const [contentH, setContentH] = useState(0);
   const [viewportH, setViewportH] = useState(0);
+  const contentHRef = useRef(0);
+  const viewportHRef = useRef(0);
   const scrollYAnim = useRef(new Animated.Value(0)).current;
   const filterBtnRef = useRef<View>(null);
 
@@ -74,7 +76,7 @@ export function ConversationListPane({
           borderBottomWidth: StyleSheet.hairlineWidth,
         } as object)
       : { backgroundColor: theme.background };
-  const listRef = useRef<FlatList<ChatSummary>>(null);
+  const listRef = useRef<FlashListRef<ChatSummary>>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   const openFilters = (): void => {
@@ -132,11 +134,16 @@ export function ConversationListPane({
   // Synthetic scrollbar: the native one is hidden so it doesn't run behind the
   // glass top bar. This thumb starts just below the bar while content still
   // scrolls under it. Driven by an Animated value so scrolling doesn't re-render.
+  // FlashList virtualizes, so a full content height isn't known until it scrolls
+  // once; estimate from row count until the real value arrives so the thumb is
+  // sized correctly at rest.
+  const estContentH = model.listChats.length * 76 + topBarH + 240;
+  const effContentH = contentH > 0 ? contentH : estContentH;
   const trackH = Math.max(0, viewportH - topBarH - 6);
-  const showThumb = viewportH > 0 && contentH > viewportH + 4;
-  const thumbH = showThumb ? Math.max(36, (trackH * viewportH) / contentH) : 0;
+  const showThumb = viewportH > 0 && effContentH > viewportH + 4;
+  const thumbH = showThumb ? Math.max(36, (trackH * viewportH) / effContentH) : 0;
   const thumbTranslate = scrollYAnim.interpolate({
-    inputRange: [0, Math.max(1, contentH - viewportH)],
+    inputRange: [0, Math.max(1, effContentH - viewportH)],
     outputRange: [0, Math.max(0, trackH - thumbH)],
     extrapolate: "clamp",
   });
@@ -154,20 +161,41 @@ export function ConversationListPane({
       {/* Everything scrolls together — search, filters, and priority shelf ride
           along as the list's header, passing behind the glass top bar. */}
       <View style={styles.listWrap}>
-        <FlatList
+        <FlashList
           ref={listRef}
           data={model.listChats}
           keyExtractor={(chat) => chat.guid}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          maintainVisibleContentPosition={{ disabled: false }}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingTop: topBarH + 8 }}
           showsVerticalScrollIndicator={false}
-          onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
-          onContentSizeChange={(_w, h) => setContentH(h)}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            viewportHRef.current = h;
+            setViewportH(h);
+          }}
           onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollYAnim } } }], {
             useNativeDriver: false,
-            listener: (event: { nativeEvent: { contentOffset: { y: number } } }) => {
-              scrollOffset.current = event.nativeEvent.contentOffset.y;
+            // Source the scrollbar geometry from the scroll event (FlashList
+            // virtualizes, so onContentSizeChange isn't reliable). Guarded via
+            // refs so it only re-renders when a dimension actually changes.
+            listener: (event: {
+              nativeEvent: {
+                contentOffset: { y: number };
+                contentSize: { height: number };
+                layoutMeasurement: { height: number };
+              };
+            }) => {
+              const ne = event.nativeEvent;
+              scrollOffset.current = ne.contentOffset.y;
+              if (Math.abs(ne.contentSize.height - contentHRef.current) > 1) {
+                contentHRef.current = ne.contentSize.height;
+                setContentH(ne.contentSize.height);
+              }
+              if (Math.abs(ne.layoutMeasurement.height - viewportHRef.current) > 1) {
+                viewportHRef.current = ne.layoutMeasurement.height;
+                setViewportH(ne.layoutMeasurement.height);
+              }
             },
           })}
           scrollEventThrottle={16}
