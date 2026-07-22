@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/imsg/**"
+  workflow_dispatch: {}
 # NOTE: this only redeploys the imsg app (server + web client) on the Mini.
 # It does NOT push Convex functions/schema — those live on Convex's managed
 # cloud (project master-db, deployment shiny-gerbil-853) and are pushed
