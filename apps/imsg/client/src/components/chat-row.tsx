@@ -72,10 +72,13 @@ function SwipeAction({
 export function ChatRow({
   chat,
   selected,
+  keyboardFocused = false,
   onPress,
 }: {
   chat: ChatSummary;
   selected: boolean;
+  /** Glide-mode cursor: accent edge on the selected row while navigating. */
+  keyboardFocused?: boolean;
   onPress: () => void;
   onChanged?: () => void;
 }) {
@@ -165,6 +168,7 @@ export function ChatRow({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
+          keyboardFocused && { borderLeftColor: theme.accent, borderLeftWidth: 3 },
           {
             backgroundColor: selected
               ? theme.backgroundSelected

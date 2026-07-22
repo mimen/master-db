@@ -17,13 +17,28 @@ function run(chatGuid: string, patch: Parameters<typeof patchChatFlags>[1], call
   });
 }
 
+// Single-slot undo (Gmail's z): archive/unread record their inverse here, from
+// every surface (swipe, hover button, details pane, keyboard). Undoing runs the
+// inverse, which re-records — so z twice is a redo.
+let lastUndo: (() => void) | null = null;
+
+export function undoLastAction(): boolean {
+  const undo = lastUndo;
+  if (!undo) return false;
+  lastUndo = null;
+  undo();
+  return true;
+}
+
 export function archiveChat(chat: ChatSummary, archived: boolean): void {
+  const prev = chat.flags.archived;
+  lastUndo = () => archiveChat({ ...chat, flags: { ...chat.flags, archived } }, prev);
   run(
     chat.guid,
     { archived },
     api.setArchived(chat.guid, archived),
     archived ? "Archive failed" : "Unarchive failed",
-    { archived: chat.flags.archived },
+    { archived: prev },
   );
 }
 
@@ -44,6 +59,7 @@ export function markChatRead(chat: ChatSummary): void {
 }
 
 export function markChatUnread(chat: ChatSummary): void {
+  lastUndo = () => markChatRead({ ...chat, flags: { ...chat.flags, unread: true } });
   run(
     chat.guid,
     { unread: true, unreadCount: Math.max(1, chat.unreadCount) },

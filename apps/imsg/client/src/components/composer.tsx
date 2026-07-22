@@ -16,6 +16,7 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
+import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import type { Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -116,6 +117,7 @@ export function Composer({
   }, []);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const sendInFlight = useRef(false);
   const typingActive = useRef(false);
   const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -132,28 +134,17 @@ export function Composer({
     if (editing) setText(editing.text);
   }, [editing]);
 
-  // Desktop web: autofocus on chat open, and typing anywhere focuses the composer.
+  // Desktop web: the composer is a keyboard focus target — reply-intent
+  // selections request it (docs/keyboard-design.md). Type-anywhere is gone: it
+  // can't coexist with glide-mode single keys, and its char-append was wrong
+  // for IME/dead-key/emoji input anyway.
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined" || window.innerWidth < 768) return;
-    inputRef.current?.focus();
-    const onGlobalKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const active = document.activeElement;
-      const inField =
-        active instanceof HTMLElement &&
-        (active.tagName === "TEXTAREA" || active.tagName === "INPUT" || active.isContentEditable);
-      if (inField) return;
-      if (event.key.length === 1) {
-        inputRef.current?.focus();
-        setText((t) => t + event.key);
-        event.preventDefault();
-      }
-    };
-    document.addEventListener("keydown", onGlobalKeyDown);
-    return () => document.removeEventListener("keydown", onGlobalKeyDown);
+    return registerFocusTarget("composer", () => inputRef.current?.focus());
   }, [chatGuid]);
 
-  // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows submit on web).
+  // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows
+  // submit on web). Guards: IME composition, key repeat, in-flight send.
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const node = inputRef.current as unknown as HTMLTextAreaElement | null;
@@ -161,6 +152,7 @@ export function Composer({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
+        if (event.isComposing || event.repeat || sendInFlight.current) return;
         sendRef.current();
       }
     };
@@ -234,6 +226,7 @@ export function Composer({
 
     const temp = tempMessage(chatGuid, trimmed, replyTo);
     const reply = replyTo;
+    sendInFlight.current = true;
     setText("");
     setDraft(chatGuid, "");
     onClearReply();
@@ -249,6 +242,8 @@ export function Composer({
       onSettled(temp.guid, chatIsSMS(chatGuid) ? { ...message, service: "SMS" } : message);
     } catch {
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
+    } finally {
+      sendInFlight.current = false;
     }
   };
 
@@ -481,6 +476,7 @@ export function Composer({
           <TextInput
             ref={inputRef}
             value={text}
+            onFocus={() => setListMode(false)}
             onChangeText={onChangeText}
             placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
             placeholderTextColor={theme.textSecondary}

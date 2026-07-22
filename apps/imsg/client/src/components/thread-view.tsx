@@ -51,6 +51,8 @@ interface ThreadViewProps {
   headerOffset?: number;
   /** When set (wide split-pane), render an in-pane header for this chat. */
   headerChat?: ChatSummary | null;
+  /** Glide-mode preview: render without marking the conversation read. */
+  previewOnly?: boolean;
 }
 
 export function ThreadView({
@@ -59,6 +61,7 @@ export function ThreadView({
   jumpTarget = null,
   headerOffset = 0,
   headerChat = null,
+  previewOnly = false,
 }: ThreadViewProps) {
   const theme = useTheme();
   const privateApi = usePrivateApi();
@@ -96,8 +99,9 @@ export function ThreadView({
     setEditing(null);
     setSearchOpen(false);
     setSearchText("");
-    void api.markRead(chatGuid);
-  }, [chatGuid]);
+    // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
+    if (!previewOnly) void api.markRead(chatGuid);
+  }, [chatGuid, previewOnly]);
 
   // Header search buttons open the in-thread search shelf via a signal bus.
   useEffect(() => onOpenThreadSearch(() => setSearchOpen(true)), []);
@@ -131,7 +135,7 @@ export function ThreadView({
         ) {
           upsert(event.message);
           if (event.kind === "new-message" && !event.message.isFromMe) {
-            void api.markRead(chatGuid);
+            if (!previewOnly) void api.markRead(chatGuid);
             setPeerTyping(false);
           }
         } else if (event.kind === "typing" && event.chatGuid === chatGuid) {
@@ -142,7 +146,7 @@ export function ThreadView({
           }
         }
       },
-      [chatGuid, upsert],
+      [chatGuid, upsert, previewOnly],
     ),
   );
 

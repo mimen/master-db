@@ -24,6 +24,8 @@ import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import { isListMode, registerListAdapter, subscribeListMode } from "@/lib/keyboard/controller";
+import { useSyncExternalStore } from "react";
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -34,6 +36,8 @@ interface ConversationListPaneProps {
   selectedGuid?: string;
   onFiltersChange: (filters: InboxFilters) => void;
   onOpenChat: (chat: ChatSummary) => void;
+  /** Glide-mode j/k selection: show the thread without focusing or marking read. */
+  onPreviewChat?: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
 }
@@ -47,6 +51,7 @@ export function ConversationListPane({
   selectedGuid,
   onFiltersChange,
   onOpenChat,
+  onPreviewChat,
   onRefresh,
   onNewMessage,
 }: ConversationListPaneProps) {
@@ -92,6 +97,36 @@ export function ConversationListPane({
   };
   const scrollOffset = useRef(0);
   const model = deriveInboxModel(chats, filters, query, deepMatches);
+  const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
+  const searchRef = useRef<TextInput>(null);
+
+  // Keyboard adapter: glide-mode navigation follows the RENDERED order
+  // (priority shelf first, then the filtered list) — not the raw chats array.
+  const navRef = useRef({ model, selectedGuid, onOpenChat, onPreviewChat });
+  navRef.current = { model, selectedGuid, onOpenChat, onPreviewChat };
+  useEffect(() => {
+    if (!wide) return;
+    return registerListAdapter({
+      move(delta) {
+        const { model: m, selectedGuid: sel, onOpenChat: open, onPreviewChat: preview } = navRef.current;
+        const navigable = m.showPriorityShelf ? [...m.priority, ...m.listChats] : m.listChats;
+        if (navigable.length === 0) return;
+        const idx = navigable.findIndex((ch) => ch.guid === sel);
+        const target = navigable[Math.max(0, Math.min(navigable.length - 1, idx === -1 ? 0 : idx + delta))];
+        if (target && target.guid !== sel) (preview ?? open)(target);
+      },
+      activate() {
+        const { model: m, selectedGuid: sel, onOpenChat: open } = navRef.current;
+        const navigable = m.showPriorityShelf ? [...m.priority, ...m.listChats] : m.listChats;
+        const target = navigable.find((ch) => ch.guid === sel) ?? navigable[0];
+        if (target) open(target);
+      },
+      focusSearch() {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        setTimeout(() => searchRef.current?.focus(), 30);
+      },
+    });
+  }, [wide]);
 
   // Deep search: match conversations by message body, merged into the live
   // filter so typing surfaces chats even when the term is buried in history.
@@ -204,6 +239,7 @@ export function ConversationListPane({
               <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
                 <Ionicons name="search" size={17} color={theme.textSecondary} />
                 <TextInput
+                  ref={searchRef}
                   accessibilityLabel="Search conversations and messages"
                   value={query}
                   onChangeText={setQuery}
@@ -245,6 +281,7 @@ export function ConversationListPane({
             <ChatRow
               chat={item}
               selected={wide && selectedGuid === item.guid}
+              keyboardFocused={wide && glide && selectedGuid === item.guid}
               onPress={() => onOpenChat(item)}
               onChanged={onRefresh}
             />

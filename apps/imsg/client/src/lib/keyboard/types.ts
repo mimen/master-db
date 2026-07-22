@@ -10,10 +10,13 @@ export type CommandId =
   | "conversation.new"
   | "conversation.next"
   | "conversation.previous"
+  | "conversation.activate"
   | "conversation.find"
   | "conversation.archive"
-  | "conversation.toggleUnread"
+  | "conversation.markUnread"
   | "conversation.details"
+  | "list.focusSearch"
+  | "action.undo"
   | "navigation.escape"
   | "help.open";
 
@@ -52,9 +55,23 @@ export interface KeyboardRuntime {
   openNewMessage(): void;
   openHelp(): void;
   moveSelection(delta: -1 | 1): void;
+  activateSelection(): void;
   findInConversation(): void;
   archiveSelected(): void;
-  toggleUnreadSelected(): void;
+  markUnreadSelected(): void;
   toggleDetails(): void;
+  focusListSearch(): void;
+  undoLast(): void;
   escape(): void;
+}
+
+/**
+ * Registered by the conversation list pane so keyboard order follows the
+ * RENDERED order (priority shelf + filters + pins), which the raw chats array
+ * does not reflect. The pane that owns visual order owns keyboard order.
+ */
+export interface ListAdapter {
+  move(delta: -1 | 1): void;
+  activate(): void;
+  focusSearch(): void;
 }

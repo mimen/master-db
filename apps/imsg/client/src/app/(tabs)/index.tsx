@@ -13,9 +13,15 @@ import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
+import { archiveChat, markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
-import { setKeyboardRuntime } from "@/lib/keyboard/controller";
+import {
+  getListAdapter,
+  isListMode,
+  requestFocus,
+  setKeyboardRuntime,
+  setListMode,
+} from "@/lib/keyboard/controller";
 import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
 import { helpEntries } from "@/lib/keyboard/registry";
 import { onOpenChatInfo } from "@/lib/chat-info";
@@ -44,6 +50,8 @@ export default function ChatListScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
+  // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
+  const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [rightPane, setRightPane] = useState<RightPane | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -129,7 +137,10 @@ export default function ChatListScreen() {
     if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
     if (wide) {
       setJumpTarget(null);
+      setSelectionIntent("reply");
       setSelected(chat);
+      setListMode(false);
+      requestFocus("composer");
       return;
     }
     router.push({
@@ -143,36 +154,37 @@ export default function ChatListScreen() {
     });
   };
 
+  /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
+  const previewChat = (chat: ChatSummary): void => {
+    setJumpTarget(null);
+    setSelectionIntent("preview");
+    setSelected(chat);
+  };
+
   const openNewMessage = (): void => {
     if (wide) setNewChatOpen(true);
     else router.push("/new-chat");
   };
 
-  // Keyboard system (docs/keyboard-design.md, Slice 1): this screen registers a
-  // runtime of live capabilities (over refs, so dispatch always acts on current
-  // state) and installs the single capture-phase dispatcher. Bindings and the
-  // help view both come from the registry — one source of truth.
+  // Keyboard system (docs/keyboard-design.md, Slice 2): compose-first with an
+  // Esc-entered glide mode. This screen registers the runtime (over refs so
+  // dispatch acts on current state); list navigation delegates to the pane's
+  // adapter so keyboard order follows the rendered order.
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
-  const chatsRef = useRef(chats);
-  chatsRef.current = chats;
+  const overlaysRef = useRef({ helpOpen, searchOpen, newChatOpen, rightPane });
+  overlaysRef.current = { helpOpen, searchOpen, newChatOpen, rightPane };
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
-    const selectChat = (chat: ChatSummary) => {
-      if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
-      setJumpTarget(null);
-      setSelected(chat);
-    };
     setKeyboardRuntime({
       openPalette: () => setSearchOpen(true),
       openNewMessage: () => setNewChatOpen(true),
       openHelp: () => setHelpOpen(true),
       moveSelection: (delta) => {
-        const cs = chatsRef.current;
-        const idx = cs.findIndex((ch) => ch.guid === selectedRef.current?.guid);
-        const target = cs[Math.max(0, Math.min(cs.length - 1, idx + delta))];
-        if (target) selectChat(target);
+        setListMode(true);
+        getListAdapter()?.move(delta);
       },
+      activateSelection: () => getListAdapter()?.activate(),
       findInConversation: () => {
         if (selectedRef.current) openThreadSearch();
       },
@@ -181,18 +193,13 @@ export default function ChatListScreen() {
         if (!sel) return;
         const archived = !sel.flags.archived;
         archiveChat(sel, archived);
-        showToast(archived ? "Archived" : "Unarchived");
+        showToast(archived ? "Archived — Z to undo" : "Unarchived — Z to undo");
       },
-      toggleUnreadSelected: () => {
+      markUnreadSelected: () => {
         const sel = selectedRef.current;
         if (!sel) return;
-        if (sel.flags.unread) {
-          markChatRead(sel);
-          showToast("Marked read");
-        } else {
-          markChatUnread(sel);
-          showToast("Marked unread");
-        }
+        markChatUnread(sel);
+        showToast("Marked unread — Z to undo");
       },
       toggleDetails: () => {
         const sel = selectedRef.current;
@@ -203,18 +210,30 @@ export default function ChatListScreen() {
             : { mode: "details", guid: sel.guid },
         );
       },
-      // Slice 2 replaces this with the stepwise Esc precedence ladder.
+      focusListSearch: () => getListAdapter()?.focusSearch(),
+      undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
+      // Esc precedence ladder — first applicable step only.
       escape: () => {
-        setSearchOpen(false);
-        setNewChatOpen(false);
-        setRightPane(null);
-        setHelpOpen(false);
+        const o = overlaysRef.current;
+        if (o.helpOpen) return setHelpOpen(false);
+        if (o.searchOpen) return setSearchOpen(false);
+        if (o.newChatOpen) return setNewChatOpen(false);
+        if (!isListMode()) {
+          // From the composer (or anywhere non-glide): enter glide mode.
+          const active = document.activeElement;
+          if (active instanceof HTMLElement) active.blur();
+          setListMode(true);
+          return;
+        }
+        if (o.rightPane) return setRightPane(null);
+        // Already gliding with nothing to close — stay.
       },
     });
     const uninstall = installKeyboardDispatcher();
     return () => {
       uninstall();
       setKeyboardRuntime(null);
+      setListMode(false);
     };
   }, [wide]);
 
@@ -231,6 +250,7 @@ export default function ChatListScreen() {
         setType(filters.type);
       }}
       onOpenChat={openChat}
+      onPreviewChat={wide ? previewChat : undefined}
       onRefresh={refresh}
       onNewMessage={openNewMessage}
     />
@@ -292,6 +312,7 @@ export default function ChatListScreen() {
             isGroup={selected.isGroup}
             jumpTarget={jumpTarget}
             headerChat={selected}
+            previewOnly={selectionIntent === "preview"}
           />
         ) : (
           <View style={styles.empty}>
