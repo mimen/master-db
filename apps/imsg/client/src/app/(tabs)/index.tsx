@@ -210,8 +210,11 @@ export default function ChatListScreen() {
           return (e.preventDefault(), toggleDetails());
       }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    // Capture phase: react-native-web's TextInput stops keydown from bubbling
+    // while focused, so a bubble-phase document listener never sees shortcuts
+    // typed in the composer. Capture fires top-down, before the input swallows it.
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wide, chats, selected, searchOpen, newChatOpen]);
 
