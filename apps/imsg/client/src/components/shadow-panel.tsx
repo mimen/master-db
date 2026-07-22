@@ -30,68 +30,82 @@ interface ShadowPanelProps {
   onClose: () => void;
 }
 
-interface Row extends ShadowMessage {
-  pending?: boolean;
+type Row = ShadowMessage;
+
+// Assistant errors are persisted with a ⚠️ prefix so a failed turn is visible
+// rather than silently missing.
+function isError(text: string): boolean {
+  return text.startsWith("⚠️");
 }
 
 export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
   const theme = useTheme();
   const [rows, setRows] = useState<Row[]>([]);
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const listRef = useRef<FlatList<Row>>(null);
   const inputRef = useRef<TextInput>(null);
   const activeGuid = useRef(chatGuid);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = null;
+  }, []);
+
+  // History is the source of truth. Because the server persists the reply
+  // whether or not the panel is open, refetching always catches a turn that
+  // completed while we were away — polling just keeps an open panel live.
+  const refresh = useCallback(
+    (schedulePoll: boolean) => {
+      api
+        .aiShadowHistory(chatGuid)
+        .then(({ messages, pending: serverPending }) => {
+          if (activeGuid.current !== chatGuid) return;
+          setRows(messages);
+          setPending(serverPending);
+          stopPolling();
+          if (schedulePoll && serverPending) {
+            pollTimer.current = setTimeout(() => refresh(true), 1500);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (activeGuid.current === chatGuid) setLoading(false);
+        });
+    },
+    [chatGuid, stopPolling],
+  );
 
   useEffect(() => {
     activeGuid.current = chatGuid;
     setLoading(true);
     setRows([]);
-    api
-      .aiShadowHistory(chatGuid)
-      .then((history) => {
-        if (activeGuid.current === chatGuid) setRows(history);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (activeGuid.current === chatGuid) setLoading(false);
-      });
-  }, [chatGuid]);
+    setPending(false);
+    refresh(true); // resumes polling if a turn is still running from before
+    return stopPolling;
+  }, [chatGuid, refresh, stopPolling]);
 
   const send = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || pending) return;
     const now = Date.now();
-    const userRow: Row = { id: `local-${now}`, role: "user", text: trimmed, createdAt: now };
-    const thinkingRow: Row = {
-      id: `pending-${now}`,
-      role: "assistant",
-      text: "",
-      createdAt: now + 1,
-      pending: true,
-    };
-    setRows((prev) => [...prev, userRow, thinkingRow]);
+    // Optimistic user bubble; the server persists the canonical copy, which the
+    // next refresh reconciles against.
+    setRows((prev) => [...prev, { id: `local-${now}`, role: "user", text: trimmed, createdAt: now }]);
     setText("");
-    setSending(true);
+    setPending(true);
     try {
-      const { reply } = await api.aiShadowSend(chatGuid, trimmed);
-      if (activeGuid.current !== chatGuid) return;
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === thinkingRow.id ? { ...r, text: reply, pending: false } : r,
-        ),
-      );
+      await api.aiShadowSend(chatGuid, trimmed);
+      if (activeGuid.current === chatGuid) refresh(true);
     } catch {
       if (activeGuid.current !== chatGuid) return;
-      // Drop the thinking row and restore the user's text so it can be retried.
-      setRows((prev) => prev.filter((r) => r.id !== thinkingRow.id && r.id !== userRow.id));
       setText(trimmed);
-      showToast("Assistant unavailable");
-    } finally {
-      if (activeGuid.current === chatGuid) setSending(false);
+      setPending(false);
+      showToast("Couldn't reach the assistant");
     }
-  }, [chatGuid, text, sending]);
+  }, [chatGuid, text, pending, refresh]);
 
   // Desktop: Enter sends, Shift+Enter newlines (matches the main composer).
   useEffect(() => {
@@ -109,12 +123,14 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
   }, [send]);
 
   useEffect(() => {
-    if (rows.length > 0) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
-  }, [rows.length]);
+    if (rows.length > 0 || pending) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
+  }, [rows.length, pending]);
 
   const clear = () => {
+    stopPolling();
     api.aiShadowClear(chatGuid).catch(() => undefined);
     setRows([]);
+    setPending(false);
   };
 
   return (
@@ -136,7 +152,7 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
         <View style={styles.center}>
           <ActivityIndicator />
         </View>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && !pending ? (
         <View style={styles.center}>
           <Ionicons name="sparkles-outline" size={26} color={theme.textSecondary} />
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
@@ -150,6 +166,22 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => <ShadowRow row={item} />}
+          ListFooterComponent={
+            // Shown whenever a turn is running — including after reopening a chat
+            // whose turn is still in flight from before.
+            pending && rows[rows.length - 1]?.role !== "assistant" ? (
+              <View style={[styles.bubbleWrap, styles.bubbleLeft]}>
+                <View
+                  style={[
+                    styles.bubble,
+                    { backgroundColor: theme.bubbleTheirs, borderBottomLeftRadius: 4 },
+                  ]}
+                >
+                  <ActivityIndicator size="small" color={theme.textSecondary} />
+                </View>
+              </View>
+            ) : null
+          }
         />
       )}
 
@@ -158,20 +190,20 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
           ref={inputRef}
           value={text}
           onChangeText={setText}
-          placeholder="Ask the assistant…"
+          placeholder={pending ? "Working…" : "Ask the assistant…"}
           placeholderTextColor={theme.textSecondary}
           multiline
           style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
         />
         <Pressable
           onPress={() => void send()}
-          disabled={!text.trim() || sending}
+          disabled={!text.trim() || pending}
           style={[
             styles.sendButton,
-            { backgroundColor: text.trim() && !sending ? theme.accent : theme.backgroundElement },
+            { backgroundColor: text.trim() && !pending ? theme.accent : theme.backgroundElement },
           ]}
         >
-          <Ionicons name="arrow-up" size={18} color={text.trim() && !sending ? "#fff" : theme.textSecondary} />
+          <Ionicons name="arrow-up" size={18} color={text.trim() && !pending ? "#fff" : theme.textSecondary} />
         </Pressable>
       </View>
     </View>
@@ -181,27 +213,30 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
 function ShadowRow({ row }: { row: Row }) {
   const theme = useTheme();
   const mine = row.role === "user";
+  const errored = !mine && isError(row.text);
   return (
     <View style={[styles.bubbleWrap, mine ? styles.bubbleRight : styles.bubbleLeft]}>
       <View
         style={[
           styles.bubble,
           {
-            backgroundColor: mine ? theme.bubbleMine : theme.bubbleTheirs,
+            backgroundColor: errored ? theme.backgroundElement : mine ? theme.bubbleMine : theme.bubbleTheirs,
             borderBottomRightRadius: mine ? 4 : 16,
             borderBottomLeftRadius: mine ? 16 : 4,
           },
         ]}
       >
-        {row.pending ? (
-          <ActivityIndicator size="small" color={theme.textSecondary} />
-        ) : (
-          <Text style={{ color: mine ? "#fff" : theme.bubbleTheirsText, fontSize: 14, lineHeight: 19 }}>
-            {row.text}
-          </Text>
-        )}
+        <Text
+          style={{
+            color: errored ? theme.textSecondary : mine ? "#fff" : theme.bubbleTheirsText,
+            fontSize: 14,
+            lineHeight: 19,
+          }}
+        >
+          {row.text}
+        </Text>
       </View>
-      {!mine && !row.pending && row.text.length > 0 && (
+      {!mine && !errored && row.text.length > 0 && (
         // Push an assistant line into the iMessage composer for editing.
         <Pressable onPress={() => fillComposer(row.text)} hitSlop={6} style={styles.useButton}>
           <Ionicons name="arrow-redo-outline" size={13} color={theme.textSecondary} />

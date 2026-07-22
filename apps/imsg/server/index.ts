@@ -636,23 +636,30 @@ app.get("/api/ai/identify/:guid", async (c) => {
 });
 
 app.get("/api/ai/shadow/:guid", async (c) => {
-  return c.json(
-    db.listShadowMessages(c.req.param("guid")).map((row) => ({
+  const chatGuid = c.req.param("guid");
+  return c.json({
+    messages: db.listShadowMessages(chatGuid).map((row) => ({
       id: row.id,
       role: row.role,
       text: row.text,
       createdAt: row.created_at,
     })),
-  );
+    // The client polls this to know a fired turn is still running server-side,
+    // so the reply lands even if the panel was closed and reopened.
+    pending: ai.shadowPending(chatGuid),
+  });
 });
 
 app.post("/api/ai/shadow/:guid", async (c) => {
   const chatGuid = c.req.param("guid");
   const body = (await c.req.json()) as { text?: string };
   if (!body.text?.trim()) return c.json({ error: "text required" }, 400);
-  const result = await ai.shadowTurn(chatGuid, body.text.trim(), await peerNameOf(chatGuid));
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json({ reply: result.value });
+  // Persist the user turn and kick the delegate before returning, so the very
+  // next poll sees the message and pending=true. The delegate itself runs to
+  // completion server-side regardless of whether the client is still around.
+  const peer = await peerNameOf(chatGuid);
+  ai.shadowEnqueue(chatGuid, body.text.trim(), peer);
+  return c.json({ ok: true, pending: true }, 202);
 });
 
 app.delete("/api/ai/shadow/:guid", async (c) => {

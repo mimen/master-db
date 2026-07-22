@@ -154,19 +154,23 @@ describe("replySuggestions", () => {
   });
 });
 
-describe("shadowTurn", () => {
-  test("persists both sides of the exchange", async () => {
+describe("shadowEnqueue", () => {
+  test("persists the user turn synchronously and the reply when the delegate finishes", async () => {
     const { service, db } = makeService({ messages: [makeMessage()], shadowReply: "probably Sarah" });
-    const result = await service.shadowTurn("chat-1", "who is this?", "Sarah");
-    expect(result.ok).toBe(true);
+    const done = service.shadowEnqueue("chat-1", "who is this?", "Sarah");
 
+    // User message is persisted before the turn resolves.
+    expect(db.listShadowMessages("chat-1").map((r) => r.text)).toEqual(["who is this?"]);
+    expect(service.shadowPending("chat-1")).toBe(true);
+
+    await done;
     const rows = db.listShadowMessages("chat-1");
     expect(rows.map((r) => r.role)).toEqual(["user", "assistant"]);
-    expect(rows[0]?.text).toBe("who is this?");
     expect(rows[1]?.text).toBe("probably Sarah");
+    expect(service.shadowPending("chat-1")).toBe(false);
   });
 
-  test("keeps the user's turn when the delegate fails, so it can be retried by hand", async () => {
+  test("persists a visible error rather than stranding the user's message", async () => {
     const db = new OverlayDb(":memory:");
     const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => ({
       stdout: "",
@@ -182,11 +186,38 @@ describe("shadowTurn", () => {
       searchVault: async () => [],
     });
 
-    const result = await service.shadowTurn("chat-1", "hi", null);
-    expect(result.ok).toBe(false);
+    await service.shadowEnqueue("chat-1", "hi", null);
     const rows = db.listShadowMessages("chat-1");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.role).toBe("user");
+    expect(rows.map((r) => r.role)).toEqual(["user", "assistant"]);
+    expect(rows[1]?.text).toContain("⚠️");
+    expect(rows[1]?.text).toContain("seat missing");
+  });
+
+  test("serializes concurrent turns for one chat", async () => {
+    const db = new OverlayDb(":memory:");
+    let active = 0;
+    let maxActive = 0;
+    const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((r) => setTimeout(r, 10));
+      active--;
+      return { stdout: "ok", stderr: "", exitCode: 0 };
+    });
+    const service = new AiService({
+      config: makeConfig(),
+      db,
+      gateway: fakeGateway("[]"),
+      shadow,
+      fetchMessages: async () => [],
+      searchVault: async () => [],
+    });
+
+    const a = service.shadowEnqueue("chat-1", "first", null);
+    const b = service.shadowEnqueue("chat-1", "second", null);
+    await Promise.all([a, b]);
+    expect(maxActive).toBe(1); // never two delegates at once for the same chat
+    expect(db.listShadowMessages("chat-1")).toHaveLength(4); // 2 user + 2 assistant
   });
 });
 

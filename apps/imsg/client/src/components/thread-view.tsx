@@ -80,6 +80,16 @@ export function ThreadView({
     jumpTarget,
   );
   messagesRef.current = messages;
+  // Milad owes a reply when the newest real message is inbound. Drives whether
+  // the suggestion shelf appears at all.
+  const awaitingReply = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (!m || m.isGroupEvent) continue;
+      return !m.isFromMe;
+    }
+    return false;
+  }, [messages]);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
@@ -553,7 +563,11 @@ export function ThreadView({
           </View>
         </View>
       )}
-      <SuggestionShelf chatGuid={chatGuid} enabled={aiStatus?.suggestions === true && !editing} />
+      <SuggestionShelf
+        chatGuid={chatGuid}
+        enabled={aiStatus?.suggestions === true && !editing}
+        awaitingReply={awaitingReply}
+      />
       <Composer
         chatGuid={chatGuid}
         replyTo={replyTo}
