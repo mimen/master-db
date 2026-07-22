@@ -21,6 +21,7 @@ import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
 import { openThreadSearch } from "@/lib/thread-search";
+import { showToast } from "@/lib/toast";
 
 /** Desktop right pane: conversation details, or a contact opened over them. */
 type RightPane =
@@ -154,20 +155,29 @@ export default function ChatListScreen() {
     else router.push("/new-chat");
   };
 
-  // Desktop keyboard shortcuts. Browser-reserved combos (⌘N/T/W/L) can't be
-  // captured by a web page; the Tauri shell will drive those through the native
-  // menu (see docs/tauri-handoff.md). Everything here works in the PWA today.
+  // Desktop keyboard shortcuts. ⌘-based (the composer is almost always focused),
+  // so single keys are left to typing and ⌘A/C/V/Z etc. are never overridden.
+  // Reads live state through refs so a shortcut always acts on the CURRENT chat
+  // (a fast ⌘↓ then ⌘E must archive the one you just landed on). Browser-reserved
+  // combos (⌘N/F) fall to the Tauri menu — see docs/tauri-handoff.md.
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
+    const selectChat = (chat: ChatSummary) => {
+      if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
+      setJumpTarget(null);
+      setSelected(chat);
+    };
     const moveSelection = (dir: 1 | -1) => {
-      const idx = chats.findIndex((ch) => ch.guid === selected?.guid);
-      const target = chats[Math.max(0, Math.min(chats.length - 1, idx + dir))];
-      if (target) openChat(target);
+      const cs = chatsRef.current;
+      const idx = cs.findIndex((ch) => ch.guid === selectedRef.current?.guid);
+      const target = cs[Math.max(0, Math.min(cs.length - 1, idx + dir))];
+      if (target) selectChat(target);
     };
     const onKey = (e: KeyboardEvent) => {
-      // The composer is almost always focused in a chat app, so everything is
-      // ⌘-based (Esc aside) — single keys are left to typing. ⌘A/C/V/Z etc. are
-      // never overridden, so text editing is untouched.
       if (e.key === "Escape") {
         setSearchOpen(false);
         setNewChatOpen(false);
@@ -176,16 +186,8 @@ export default function ChatListScreen() {
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;
-      const k = e.key.toLowerCase();
-      const toggleDetails = () => {
-        if (selected)
-          setRightPane((cur) =>
-            cur && cur.mode === "details" && cur.guid === selected.guid
-              ? null
-              : { mode: "details", guid: selected.guid },
-          );
-      };
-      switch (k) {
+      const sel = selectedRef.current;
+      switch (e.key.toLowerCase()) {
         case "k":
           return (e.preventDefault(), setSearchOpen(true));
         case "n":
@@ -197,26 +199,46 @@ export default function ChatListScreen() {
         case "arrowup":
           return (e.preventDefault(), moveSelection(-1));
         case "f":
-          if (selected) (e.preventDefault(), openThreadSearch());
+          if (sel) (e.preventDefault(), openThreadSearch());
           return;
         case "e":
-          if (selected) (e.preventDefault(), archiveChat(selected, !selected.flags.archived));
+          if (sel) {
+            e.preventDefault();
+            const archived = !sel.flags.archived;
+            archiveChat(sel, archived);
+            showToast(archived ? "Archived" : "Unarchived");
+          }
           return;
         case "u":
-          if (selected && e.shiftKey)
-            (e.preventDefault(), selected.flags.unread ? markChatRead(selected) : markChatUnread(selected));
+          if (sel && e.shiftKey) {
+            e.preventDefault();
+            if (sel.flags.unread) {
+              markChatRead(sel);
+              showToast("Marked read");
+            } else {
+              markChatUnread(sel);
+              showToast("Marked unread");
+            }
+          }
           return;
         case "i":
-          return (e.preventDefault(), toggleDetails());
+          if (sel) {
+            e.preventDefault();
+            setRightPane((cur) =>
+              cur && cur.mode === "details" && cur.guid === sel.guid
+                ? null
+                : { mode: "details", guid: sel.guid },
+            );
+          }
+          return;
       }
     };
     // Capture phase: react-native-web's TextInput stops keydown from bubbling
-    // while focused, so a bubble-phase document listener never sees shortcuts
-    // typed in the composer. Capture fires top-down, before the input swallows it.
+    // while focused, so a bubble-phase listener never sees shortcuts typed in the
+    // composer. Capture fires top-down, before the input swallows the event.
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wide, chats, selected, searchOpen, newChatOpen]);
+  }, [wide]);
 
   const list = (
     <ConversationListPane
