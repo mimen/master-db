@@ -21,16 +21,18 @@ export const Colors = {
     divider: '#E5E5EA',
   },
   dark: {
+    // Apple Messages dark isn't pure black — panels sit on an elevated gray with
+    // lighter incoming bubbles that pop off the ground.
     text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    background: '#1a1a1c',
+    backgroundElement: '#2c2c2e',
+    backgroundSelected: '#3a3a3c',
+    textSecondary: '#98989e',
     accent: '#0A84FF',
     bubbleMine: '#0A84FF',
-    bubbleTheirs: '#26262A',
+    bubbleTheirs: '#363638',
     bubbleTheirsText: '#ffffff',
-    divider: '#2C2C2E',
+    divider: '#38383a',
   },
 } as const;
 

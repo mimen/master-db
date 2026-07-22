@@ -106,6 +106,36 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
   );
 }
 
+/** Overlapping member avatars for a group, Apple-style (up to 3). */
+export function GroupAvatarStack({ chat, size }: { chat: ChatSummary; size: number }) {
+  const theme = useTheme();
+  const members = [...chat.participants]
+    .sort((a, b) => Number(b.name !== null) - Number(a.name !== null))
+    .slice(0, 3);
+  if (members.length === 0) return <ChatAvatar chat={chat} size={size} />;
+  const av = Math.round(size * 0.66);
+  const overlap = Math.round(av * 0.42);
+  const width = av + (members.length - 1) * (av - overlap);
+  return (
+    <View style={{ width, height: size, flexDirection: "row", alignItems: "center" }}>
+      {members.map((m, i) => (
+        <View
+          key={m.address}
+          style={{
+            marginLeft: i === 0 ? 0 : -overlap,
+            zIndex: members.length - i,
+            borderRadius: (av + 4) / 2,
+            borderWidth: 2,
+            borderColor: theme.background,
+          }}
+        >
+          <PersonAvatar address={m.address} name={m.name ?? m.address ?? "?"} size={av} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   circle: {
     alignItems: "center",

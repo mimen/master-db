@@ -182,72 +182,83 @@ export function ChatInfoContent({ guid, onClose, onDeleted, showHeader = false }
         <Text style={[styles.section, { color: theme.textSecondary }]}>
           {info.participants.length} {info.participants.length === 1 ? "Person" : "People"}
         </Text>
-        {info.participants.map((p) => (
-          <Pressable
-            key={p.address}
-            style={styles.participant}
-            onPress={() =>
-              router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } })
-            }
-            onLongPress={info.isGroup ? () => removeParticipant(p) : undefined}
-          >
-            <View style={[styles.pAvatar, { backgroundColor: theme.backgroundElement }]}>
-              <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                {initials(p.name ?? formatAddress(p.address))}
-              </Text>
-              <Image source={{ uri: avatarUrl(p.address) }} style={styles.pAvatarImg} contentFit="cover" />
+        <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+          {info.participants.map((p, i) => (
+            <View key={p.address}>
+              {i > 0 && <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />}
+              <Pressable
+                style={styles.participant}
+                onPress={() =>
+                  router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } })
+                }
+                onLongPress={info.isGroup ? () => removeParticipant(p) : undefined}
+              >
+                <View style={[styles.pAvatar, { backgroundColor: theme.background }]}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
+                    {initials(p.name ?? formatAddress(p.address))}
+                  </Text>
+                  <Image source={{ uri: avatarUrl(p.address) }} style={styles.pAvatarImg} contentFit="cover" />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16 }}>
+                    {p.name ?? formatAddress(p.address)}
+                  </Text>
+                  {p.name && (
+                    <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{formatAddress(p.address)}</Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+              </Pressable>
             </View>
-            <View>
-              <Text style={{ color: theme.text, fontSize: 16 }}>{p.name ?? formatAddress(p.address)}</Text>
-              {p.name && <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{formatAddress(p.address)}</Text>}
-            </View>
-          </Pressable>
-        ))}
+          ))}
+        </View>
 
-        {info.isGroup && (
+        <View style={[styles.card, styles.cardGap, { backgroundColor: theme.backgroundElement }]}>
+          {info.isGroup && (
+            <>
+              <Pressable
+                style={styles.dangerRow}
+                onPress={() =>
+                  showSheet({
+                    title: "Leave this conversation?",
+                    actions: [
+                      {
+                        label: "Leave Conversation",
+                        destructive: true,
+                        onPress: () =>
+                          api.leaveGroup(guid).then(() => onClose()).catch(() => showToast("Failed")),
+                      },
+                    ],
+                  })
+                }
+              >
+                <Text style={styles.actionDanger}>Leave Conversation</Text>
+              </Pressable>
+              <View style={[styles.rowDivider, { backgroundColor: theme.divider, marginLeft: 0 }]} />
+            </>
+          )}
           <Pressable
-            style={styles.action}
+            style={styles.dangerRow}
             onPress={() =>
               showSheet({
-                title: "Leave this conversation?",
+                title: "Delete this conversation? This cannot be undone.",
                 actions: [
                   {
-                    label: "Leave Conversation",
+                    label: "Delete Conversation",
                     destructive: true,
                     onPress: () =>
-                      api.leaveGroup(guid).then(() => onClose()).catch(() => showToast("Failed")),
+                      api
+                        .deleteChat(guid)
+                        .then(() => onDeleted())
+                        .catch(() => showToast("Delete failed")),
                   },
                 ],
               })
             }
           >
-            <Ionicons name="exit-outline" size={20} color="#FF3B30" />
-            <Text style={styles.actionDanger}>Leave Conversation</Text>
+            <Text style={styles.actionDanger}>Delete Conversation</Text>
           </Pressable>
-        )}
-
-        <Pressable
-          style={styles.action}
-          onPress={() =>
-            showSheet({
-              title: "Delete this conversation? This cannot be undone.",
-              actions: [
-                {
-                  label: "Delete Conversation",
-                  destructive: true,
-                  onPress: () =>
-                    api
-                      .deleteChat(guid)
-                      .then(() => onDeleted())
-                      .catch(() => showToast("Delete failed")),
-                },
-              ],
-            })
-          }
-        >
-          <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-          <Text style={styles.actionDanger}>Delete Conversation</Text>
-        </Pressable>
+        </View>
 
         {gallery.length > 0 && (
           <>
@@ -299,10 +310,13 @@ const styles = StyleSheet.create({
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   renameInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 18 },
   section: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", marginTop: 22, marginBottom: 8 },
-  participant: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
+  card: { borderRadius: 12, overflow: "hidden" },
+  cardGap: { marginTop: 18 },
+  rowDivider: { height: StyleSheet.hairlineWidth, marginLeft: 66 },
+  participant: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 9, minHeight: 56 },
   pAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   pAvatarImg: { ...StyleSheet.absoluteFillObject, borderRadius: 20 },
-  action: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 14 },
+  dangerRow: { alignItems: "flex-start", justifyContent: "center", minHeight: 50, paddingHorizontal: 14 },
   actionDanger: { color: "#FF3B30", fontSize: 16 },
   grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
   tileImg: { width: "100%", height: "100%", borderRadius: 6 },

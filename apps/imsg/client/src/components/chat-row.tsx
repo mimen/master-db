@@ -165,7 +165,15 @@ export function ChatRow({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
-          { backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background },
+          // Desktop: rounded inset selection like modern macOS sidebars.
+          compact && styles.rowInset,
+          {
+            backgroundColor: selected
+              ? theme.backgroundSelected
+              : pressed || (compact && hovered)
+                ? theme.backgroundElement
+                : theme.background,
+          },
         ]}
       >
         <View style={styles.dotColumn}>
@@ -228,6 +236,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: 75,
     paddingRight: 16,
+  },
+  rowInset: {
+    borderRadius: 10,
+    marginHorizontal: 8,
+    paddingRight: 8,
   },
   dotColumn: {
     alignItems: "center",

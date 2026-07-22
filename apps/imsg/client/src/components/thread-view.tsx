@@ -29,7 +29,7 @@ import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
-import { ChatAvatar } from "./avatar";
+import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -335,19 +335,26 @@ export function ThreadView({
           ]}
         >
           <View style={styles.paneHeaderSpace} />
-          <View style={styles.paneIdentity}>
-            <ChatAvatar chat={headerChat} size={32} />
+          <Pressable
+            style={styles.paneIdentity}
+            onPress={headerChat.isGroup ? () => openChatInfo(chatGuid) : undefined}
+          >
+            {headerChat.isGroup ? (
+              <GroupAvatarStack chat={headerChat} size={34} />
+            ) : (
+              <ChatAvatar chat={headerChat} size={32} />
+            )}
             <View style={styles.paneIdentityText}>
               <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
                 {headerChat.displayName}
               </Text>
               {headerChat.isGroup && (
                 <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                  {headerChat.participants.length} people
+                  {headerChat.participants.length} people ›
                 </Text>
               )}
             </View>
-          </View>
+          </Pressable>
           <View style={[styles.paneHeaderSpace, styles.paneHeaderActions]}>
             <Pressable onPress={() => setSearchOpen(true)} hitSlop={8}>
               <Ionicons name="search" size={21} color={theme.textSecondary} />
