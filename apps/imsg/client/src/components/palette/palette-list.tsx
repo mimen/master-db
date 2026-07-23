@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
@@ -53,19 +53,17 @@ export function usePaletteCursor(keys: readonly string[]): PaletteCursor {
     if (key) revealPaletteRow(key);
   }, [selectedIndex]);
 
-  return {
-    selectedIndex,
-    setSelectedIndex,
-    move(delta) {
-      setSelectedIndex(
-        Math.max(0, Math.min(keysRef.current.length - 1, indexRef.current + delta)),
-      );
-    },
-    reset() {
-      setSelectedIndex(0);
-    },
-    indexRef,
-  };
+  // STABLE functions (ref-backed): consumers hang effects off `reset`, so a
+  // per-render identity would re-fire them every render and pin the cursor
+  // to row 0 (the bug that froze arrow navigation).
+  const move = useCallback((delta: -1 | 1) => {
+    setSelectedIndex(
+      Math.max(0, Math.min(keysRef.current.length - 1, indexRef.current + delta)),
+    );
+  }, []);
+  const reset = useCallback(() => setSelectedIndex(0), []);
+
+  return { selectedIndex, setSelectedIndex, move, reset, indexRef };
 }
 
 /** Row shell: hover tracking, selection highlight, and the DOM key the reveal
