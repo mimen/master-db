@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -16,9 +16,11 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
+import { initials } from "@/lib/format";
+import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer } from "@/lib/composer-fill";
-import type { Message } from "@shared/types";
+import type { Contact, Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
 interface ComposerProps {
@@ -38,6 +40,8 @@ interface PendingAttachment {
   name: string;
   mime: string;
   isImage: boolean;
+  /** Present when this pending item is a contact card, sent via the server. */
+  contact?: Contact;
 }
 
 const IOS_INPUT_LINE_HEIGHT = 22;
@@ -95,6 +99,88 @@ function scheduleOptions(): Array<{ label: string; at: number }> {
   return opts;
 }
 
+/** Searchable contact picker for attaching a contact card. */
+function ContactPicker({
+  visible,
+  onClose,
+  onPick,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onPick: (contact: Contact) => void;
+}) {
+  const theme = useTheme();
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<Contact[]>([]);
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      api
+        .contacts(q)
+        .then((r) => {
+          if (!cancelled) setResults(r);
+        })
+        .catch(() => undefined);
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [q, visible]);
+  useEffect(() => {
+    if (!visible) setQ("");
+  }, [visible]);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={pickerStyles.backdrop} onPress={onClose}>
+        <Pressable
+          style={[pickerStyles.card, { backgroundColor: theme.background, borderColor: theme.divider }]}
+          onPress={() => undefined}
+        >
+          <Text style={[pickerStyles.title, { color: theme.text }]}>Send Contact</Text>
+          <View style={[pickerStyles.field, { backgroundColor: theme.backgroundElement }]}>
+            <Ionicons name="search" size={16} color={theme.textSecondary} />
+            <TextInput
+              value={q}
+              onChangeText={setQ}
+              autoFocus
+              placeholder="Search contacts"
+              placeholderTextColor={theme.textSecondary}
+              style={[pickerStyles.input, { color: theme.text }]}
+            />
+          </View>
+          <FlatList
+            data={results}
+            keyExtractor={(c) => `${c.address}-${c.name}`}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <Pressable
+                style={({ pressed }) => [pickerStyles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+                onPress={() => onPick(item)}
+              >
+                <View style={[pickerStyles.avatar, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
+                    {initials(item.name || item.address)}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15 }}>
+                    {item.name || formatAddress(item.address)}
+                  </Text>
+                  <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 12 }}>
+                    {formatAddress(item.address)}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+          />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export function Composer({
   chatGuid,
   replyTo,
@@ -112,6 +198,7 @@ export function Composer({
   const [text, setText] = useState(() => getDraft(chatGuid));
   const [inputHeight, setInputHeight] = useState(IOS_INPUT_MIN_HEIGHT);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
 
   // Track native keyboard visibility for keyboard-specific composer edge spacing.
   useEffect(() => {
@@ -304,6 +391,10 @@ export function Composer({
   sendRef.current = () => void send();
 
   const uploadAsset = async (att: PendingAttachment, caption?: string) => {
+    if (att.contact) {
+      onSent(await api.sendContactCard(chatGuid, att.contact, caption));
+      return;
+    }
     const form = new FormData();
     if (Platform.OS === "web") {
       const blob = await (await fetch(att.uri)).blob();
@@ -373,11 +464,24 @@ export function Composer({
     );
   };
 
+  const stageContact = (contact: Contact) => {
+    stage([
+      {
+        uri: `contact:${contact.address}`,
+        name: `${contact.name}.vcf`,
+        mime: "text/vcard",
+        isImage: false,
+        contact,
+      },
+    ]);
+  };
+
   const openAttachSheet = () => {
     const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
     if (Platform.OS !== "web") {
       actions.unshift({ label: "Take Photo or Video", onPress: () => void takePhoto() });
     }
+    actions.push({ label: "Contact", onPress: () => void setContactPickerOpen(true) });
     actions.push({ label: "File", onPress: () => void pickFiles() });
     showSheet({ actions });
   };
@@ -466,6 +570,14 @@ export function Composer({
         },
       ]}
     >
+      <ContactPicker
+        visible={contactPickerOpen}
+        onClose={() => setContactPickerOpen(false)}
+        onPick={(contact) => {
+          stageContact(contact);
+          setContactPickerOpen(false);
+        }}
+      />
       {replyTo && !editing && (
         <View style={[styles.banner, { backgroundColor: theme.backgroundElement }]}>
           <Text numberOfLines={1} style={[styles.bannerText, { color: theme.textSecondary }]}>
@@ -500,7 +612,11 @@ export function Composer({
                 <Image source={{ uri: att.uri }} style={styles.pendingThumb} contentFit="cover" />
               ) : (
                 <View style={[styles.pendingThumb, styles.pendingFile, { backgroundColor: theme.backgroundElement }]}>
-                  <Ionicons name="document-outline" size={22} color={theme.textSecondary} />
+                  <Ionicons
+                    name={att.contact ? "person-circle-outline" : "document-outline"}
+                    size={22}
+                    color={theme.textSecondary}
+                  />
                 </View>
               )}
               <Pressable
@@ -595,6 +711,66 @@ export function Composer({
     </View>
   );
 }
+
+const pickerStyles = StyleSheet.create({
+  backdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    flex: 1,
+    justifyContent: "center",
+    padding: 16,
+  },
+  card: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 480,
+    maxHeight: "80%",
+    maxWidth: "94%",
+    paddingBottom: 8,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.35,
+    shadowRadius: 34,
+    width: 400,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  field: {
+    alignItems: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 7,
+    height: 36,
+    marginBottom: 8,
+    paddingHorizontal: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  row: {
+    alignItems: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  avatar: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {

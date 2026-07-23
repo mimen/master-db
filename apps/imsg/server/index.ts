@@ -332,6 +332,31 @@ app.post("/api/chats/:guid/attachment", async (c) => {
   return c.json(mapped);
 });
 
+// Sends a contact card: builds the vCard server-side so neither platform
+// needs file APIs, then rides the normal BB attachment path.
+app.post("/api/chats/:guid/contact", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const body = (await c.req.json()) as { name: string; address: string; caption?: string };
+  if (!body?.name || !body?.address) return c.json({ error: "name and address required" }, 400);
+  const field = body.address.includes("@")
+    ? `EMAIL;TYPE=INTERNET:${body.address}`
+    : `TEL;TYPE=CELL:${body.address}`;
+  const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${body.name}`, `N:${body.name};;;;`, field, "END:VCARD", ""].join(
+    "\r\n",
+  );
+  const filename = `${body.name.replace(/[^\w \-]/g, "").trim() || "Contact"}.vcf`;
+  const result = await bb.sendAttachmentWithCaption(
+    chatGuid,
+    filename,
+    new TextEncoder().encode(vcf),
+    body.caption?.trim() || undefined,
+  );
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const mapped = mapMessage(result.value, chatGuid, contacts);
+  directory.applyKnownMessage(chatGuid, mapped);
+  return c.json(mapped);
+});
+
 app.post("/api/chats/:guid/read", async (c) => {
   // Mark every service-sibling read so no stale badge lingers on a merged chat.
   const results = await Promise.all(

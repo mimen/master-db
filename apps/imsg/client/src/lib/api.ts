@@ -115,6 +115,13 @@ export const api = {
   contacts(q: string): Promise<Contact[]> {
     return request(`/api/contacts?q=${encodeURIComponent(q)}`);
   },
+  sendContactCard(chatGuid: string, contact: Contact, caption?: string): Promise<Message> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/contact`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: contact.name, address: contact.address, caption }),
+    });
+  },
   findChat(address: string): Promise<{ chatGuid: string }> {
     return request(`/api/chats/find?address=${encodeURIComponent(address)}`);
   },

@@ -573,7 +573,7 @@ export function ThreadView({
       {dayChip && (
         <View
           pointerEvents="none"
-          style={[styles.dayChipWrap, headerChat && styles.dayChipWrapWithHeader]}
+          style={[styles.dayChipWrap, headerChat && styles.dayChipWrapWithHeader, searchOpen && styles.dayChipWrapWithSearch]}
         >
           <View style={[styles.dayChip, { backgroundColor: theme.backgroundElement }]}>
             <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
@@ -691,6 +691,10 @@ const styles = StyleSheet.create({
   },
   dayChipWrapWithHeader: {
     top: 68,
+  },
+  // The in-thread search shelf sits above the scroll — push the chip below it.
+  dayChipWrapWithSearch: {
+    top: 120,
   },
   dayChip: {
     borderRadius: 14,
