@@ -137,6 +137,7 @@ export function Composer({
   useEffect(() => {
     setText(getDraft(chatGuid));
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
+    measuredForText.current = null;
     setPending([]);
   }, [chatGuid]);
 
@@ -201,14 +202,18 @@ export function Composer({
     }
   };
 
+  // One measurement per text value: setting height triggers a relayout, which
+  // re-fires onContentSizeChange — honoring those echoes oscillates the box.
+  const measuredForText = useRef<string | null>(null);
   const onInputContentSizeChange = (event: TextInputContentSizeChangeEvent) => {
-    const nextHeight = Math.min(
-      Math.max(
-        Math.ceil(event.nativeEvent.contentSize.height) + IOS_INPUT_PADDING_V,
-        IOS_INPUT_MIN_HEIGHT,
-      ),
-      IOS_INPUT_MAX_HEIGHT,
+    if (measuredForText.current === text) return;
+    measuredForText.current = text;
+    // Quantize to whole lines so sub-pixel re-measures can't wiggle the height.
+    const lines = Math.min(
+      7,
+      Math.max(1, Math.round(event.nativeEvent.contentSize.height / IOS_INPUT_LINE_HEIGHT)),
     );
+    const nextHeight = lines * IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
     setInputHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
   };
 
