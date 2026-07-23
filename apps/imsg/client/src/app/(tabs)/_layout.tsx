@@ -19,6 +19,10 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // Mount both tabs at startup — first switch to Contacts otherwise
+        // mounts the whole screen live (jarring full-screen flash).
+        lazy: false,
+        sceneStyle: { backgroundColor: wide ? theme.desk : theme.background },
         tabBarStyle: wide ? styles.hiddenTabBar : undefined,
         tabBarIconStyle: iosMobile ? styles.mobileTabIcon : undefined,
         tabBarActiveTintColor: theme.accent,

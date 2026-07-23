@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Platform,
   Pressable,
@@ -66,6 +67,9 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   const suggestionMode = useSuggestionMode();
   const [query, setQuery] = useState("");
   const [topBarH, setTopBarH] = useState(58);
+  const [contentH, setContentH] = useState(0);
+  const [viewportH, setViewportH] = useState(0);
+  const scrollYAnim = useRef(new Animated.Value(0)).current;
   const aiBtnRef = useRef<View>(null);
   const needle = query.trim().toLowerCase();
 
@@ -207,6 +211,17 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     );
   };
 
+  // Synthetic scrollbar identical to the Messages pane: starts below the glass
+  // bar, thin track-less thumb.
+  const trackH = Math.max(0, viewportH - topBarH - 6);
+  const showThumb = viewportH > 0 && contentH > viewportH + 4;
+  const thumbH = showThumb ? Math.max(36, (trackH * viewportH) / contentH) : 0;
+  const thumbTranslate = scrollYAnim.interpolate({
+    inputRange: [0, Math.max(1, contentH - viewportH)],
+    outputRange: [0, Math.max(0, trackH - thumbH)],
+    extrapolate: "clamp",
+  });
+
   if (wide) {
     return (
       <View style={[styles.pane, { backgroundColor: theme.background }]}>
@@ -221,7 +236,13 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
               keyExtractor={(r) => r.key}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 6 }}
+              contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 8 }}
+              onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+              onContentSizeChange={(_w, h) => setContentH(h)}
+              onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollYAnim } } }], {
+                useNativeDriver: false,
+              })}
+              scrollEventThrottle={16}
               ListHeaderComponent={<View style={{ paddingBottom: 6 }}>{searchField}</View>}
               ListEmptyComponent={
                 <View style={styles.center}>
@@ -229,6 +250,12 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
                 </View>
               }
               renderItem={renderRow}
+            />
+          )}
+          {showThumb && (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.scrollThumb, { top: topBarH, height: thumbH, transform: [{ translateY: thumbTranslate }] }]}
             />
           )}
           {/* Frosted top bar — identical chrome to the Messages pane. */}
@@ -289,6 +316,14 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
 const styles = StyleSheet.create({
   pane: { flex: 1 },
   listWrap: { flex: 1, position: "relative" },
+  scrollThumb: {
+    backgroundColor: "rgba(140,140,150,0.5)",
+    borderRadius: 3,
+    position: "absolute",
+    right: 2,
+    width: 6,
+    zIndex: 5,
+  },
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
   topBar: {
     alignItems: "center",
