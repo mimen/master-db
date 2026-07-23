@@ -1,6 +1,6 @@
 # Sidebar architecture review — draft inventory (Fable)
 
-Status: DRAFT for Sol's critique. Goal: refactor the sidebar into a sustainable,
+Status: SUPERSEDED — Sol's review (sidebar-architecture-sol-review.md) is the plan of record; his slices 0-6 + invariants govern. Slice 0 landed 2026-07-23. Goal: refactor the sidebar into a sustainable,
 well-understood factoring. Triggered by the on-drag/scroll-to-top focus-theft
 bug (root-caused 2026-07-23) and the pattern of interacting behaviors breaking
 each other.

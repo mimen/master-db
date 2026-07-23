@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateCounts } from "@shared/types";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Platform,
@@ -29,6 +29,8 @@ import { api } from "@/lib/api";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { isListMode, registerListAdapter, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
+
+export const SIDEBAR_CHROME_HEIGHT = 58;
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -71,7 +73,9 @@ export function ConversationListPane({
   const [deepMatches, setDeepMatches] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
-  const [topBarH, setTopBarH] = useState(48);
+  // Chrome is styled to a fixed height — runtime measurement fed the keyboard
+  // adapter a stale pre-measure value (up-pin landed under the bar).
+  const topBarH = SIDEBAR_CHROME_HEIGHT;
   const [contentH, setContentH] = useState(0);
   const [viewportH, setViewportH] = useState(0);
   const contentHRef = useRef(0);
@@ -134,11 +138,12 @@ export function ConversationListPane({
   // (archived included), superseding the badge filters; clearing the query
   // restores the badge view untouched (docs: Gmail/Superhuman convention).
   const searchActive = query.trim().length > 0;
-  // ONE stable data source: the model applies the lenses itself when there is
-  // no query and searches everything when there is. Swapping arrays on the
-  // first keystroke made FlashList remount its header — blurring the search
-  // input, after which glide keys acted on the page.
-  const model = deriveInboxModel(allChats, filters, query, deepMatches);
+  // Universe = allChats (search spans everything); blank-query browsing uses
+  // useChats' FROZEN membership so triage rows never vanish mid-pass. (The
+  // remount theory that motivated a single array was disproved by the
+  // Playwright trap — the blur was keyboardDismissMode.)
+  const browseGuids = useMemo(() => new Set(chats.map((c) => c.guid)), [chats]);
+  const model = deriveInboxModel(allChats, filters, query, deepMatches, browseGuids);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
   const searchRef = useRef<TextInput>(null);
 
@@ -219,8 +224,10 @@ export function ConversationListPane({
   // filter so typing surfaces chats even when the term is buried in history.
   useEffect(() => {
     const q = query.trim();
+    // Stale results must never survive a query change: matches for "pizza"
+    // otherwise keep contributing under "zebra" until the new request lands.
+    setDeepMatches(new Set());
     if (q.length < 2) {
-      setDeepMatches(new Set());
       return;
     }
     let cancelled = false;
@@ -440,10 +447,7 @@ export function ConversationListPane({
           />
         )}
         {/* Frosted top bar — floats over the scroll, the only fixed chrome. */}
-        <View
-          style={[styles.topBar, glassStyle]}
-          onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}
-        >
+        <View style={[styles.topBar, glassStyle]}>
           {wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
           <View style={styles.titleActions}>
             {aiStatus?.suggestions && (

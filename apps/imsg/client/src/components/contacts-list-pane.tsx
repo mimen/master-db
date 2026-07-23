@@ -22,6 +22,7 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useTheme } from "@/hooks/use-theme";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
+import { SIDEBAR_CHROME_HEIGHT } from "./conversation-list-pane";
 import { NavSwitcher } from "./nav-switcher";
 
 type Row =
@@ -66,7 +67,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   const showSheet = useActionSheet();
   const suggestionMode = useSuggestionMode();
   const [query, setQuery] = useState("");
-  const [topBarH, setTopBarH] = useState(58);
+  const topBarH = SIDEBAR_CHROME_HEIGHT;
   const [contentH, setContentH] = useState(0);
   const [viewportH, setViewportH] = useState(0);
   const scrollYAnim = useRef(new Animated.Value(0)).current;
@@ -265,7 +266,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
             />
           )}
           {/* Frosted top bar — identical chrome to the Messages pane. */}
-          <View style={[styles.topBar, glassStyle]} onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}>
+          <View style={[styles.topBar, glassStyle]}>
             {wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
             <View style={styles.titleActions}>
               {aiStatus?.suggestions && (

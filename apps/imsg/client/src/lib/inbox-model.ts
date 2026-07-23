@@ -90,6 +90,10 @@ export function deriveInboxModel(
   searchQuery: string,
   /** Chat GUIDs whose deeper message history matched the query (server search). */
   deepMatchGuids?: Set<string>,
+  /** Frozen browse membership (useChats' triage freeze). When provided, blank-
+   * query browsing selects EXACTLY these guids from the universe — reapplying
+   * live filters here would evict rows mid-triage, defeating the freeze. */
+  browseGuids?: Set<string>,
 ): InboxModel {
   const needle = searchQuery.trim().toLowerCase();
   const needleDigits = needle.replace(/\D/g, "");
@@ -108,7 +112,11 @@ export function deriveInboxModel(
   // Search is a MODE that supersedes the badge lenses entirely — a query
   // matches across every state and type (archived included).
   const searchedChats = chats.filter((chat) =>
-    needle.length === 0 ? matchesFilters(chat, filters.state, filters.type) : matchesNeedle(chat),
+    needle.length === 0
+      ? browseGuids
+        ? browseGuids.has(chat.guid)
+        : matchesFilters(chat, filters.state, filters.type)
+      : matchesNeedle(chat),
   );
   const showPriorityShelf = filters.state === "all" && filters.type === "all" && needle.length === 0;
   const { priority, recent } = partitionPriorityShelf(searchedChats);
