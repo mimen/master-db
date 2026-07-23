@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import {
   ActionSheetIOS,
   Modal,
@@ -47,6 +47,12 @@ export function useActionSheet(): ShowSheet {
  */
 export function ActionSheetProvider({ children }: { children: React.ReactNode }) {
   const [request, setRequest] = useState<SheetRequest | null>(null);
+  // Retain the last request through the close animation: if the branch flipped
+  // to the bottom-sheet the instant request went null, its dark backdrop would
+  // slide out over anchored context menus (the gray sweep-down bug).
+  const lastRequestRef = useRef<SheetRequest | null>(null);
+  if (request !== null) lastRequestRef.current = request;
+  const rendered = request ?? lastRequestRef.current;
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -80,15 +86,15 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
       <Modal
         visible={request !== null}
         transparent
-        animationType={request?.anchor ? "none" : "slide"}
+        animationType={rendered?.anchor ? "none" : "slide"}
         onRequestClose={() => setRequest(null)}
       >
-        {request?.anchor ? (
+        {rendered?.anchor ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setRequest(null)}>
             {(() => {
               const POP_W = 232;
-              const left = Math.max(8, Math.min(request.anchor.x, winW - POP_W - 8));
-              const top = Math.min(request.anchor.y, winH - 80);
+              const left = Math.max(8, Math.min(rendered.anchor.x, winW - POP_W - 8));
+              const top = Math.min(rendered.anchor.y, winH - 80);
               return (
                 <View
                   style={[
@@ -96,9 +102,9 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                     { backgroundColor: theme.backgroundElement, borderColor: theme.divider, top, left, width: POP_W },
                   ]}
                 >
-                  {request.tapbacks && (
+                  {rendered.tapbacks && (
                     <View style={styles.tapbackRow}>
-                      {request.tapbacks.map((t) => (
+                      {rendered.tapbacks.map((t) => (
                         <Pressable
                           key={t.emoji}
                           onPress={() => {
@@ -112,7 +118,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       ))}
                     </View>
                   )}
-                  {request.actions.map((action) => (
+                  {rendered.actions.map((action) => (
                     <Pressable
                       key={action.label}
                       style={({ pressed }) => [
@@ -141,9 +147,9 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
             style={[styles.sheetWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}
             onPress={() => undefined}
           >
-            {request?.tapbacks && (
+            {rendered?.tapbacks && (
               <View style={[styles.tapbackPill, { backgroundColor: theme.backgroundElement }]}>
-                {request.tapbacks.map((t) => (
+                {rendered.tapbacks.map((t) => (
                   <Pressable
                     key={t.emoji}
                     onPress={() => {
@@ -158,14 +164,14 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
               </View>
             )}
             <View style={[styles.sheetGroup, { backgroundColor: theme.backgroundElement }]}>
-              {request?.title && (
+              {rendered?.title && (
                 <View style={styles.sheetTitleWrap}>
-                  <Text style={[styles.title, { color: theme.textSecondary }]}>{request.title}</Text>
+                  <Text style={[styles.title, { color: theme.textSecondary }]}>{rendered?.title}</Text>
                 </View>
               )}
-              {request?.actions.map((action, i) => (
+              {rendered?.actions.map((action, i) => (
                 <View key={action.label}>
-                  {(i > 0 || request?.title) && (
+                  {(i > 0 || rendered?.title) && (
                     <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />
                   )}
                   <Pressable
