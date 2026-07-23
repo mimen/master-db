@@ -1,106 +1,161 @@
-import { describe, expect, test } from "vitest";
+import { convexTest, type TestConvex } from "convex-test";
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { normalizeEmail, normalizePhone } from "./normalize";
+import type { Id } from "../_generated/dataModel";
+import schema from "../schema";
+import { normalizeModules } from "../test-utils.vitest";
 
-describe("whoIs input normalization", () => {
-  test("normalizes a phone-shaped handle before lookup", () => {
-    const handle = "(619) 555-1234";
-    const normalized = normalizePhone(handle) || normalizeEmail(handle) || handle.trim();
-    expect(normalized).toBe("+16195551234");
+import {
+  listPeopleRef,
+  searchPeopleRef,
+  topLinkedPeopleRef,
+  TEST_KEY,
+  whoIsRef,
+} from "./testRefs.vitest";
+
+const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
+
+beforeEach(() => {
+  process.env.IMSG_IDENTITY_KEY = TEST_KEY;
+});
+
+async function seedPerson(
+  t: TestConvex<typeof schema>,
+  overrides: Partial<{
+    display_name: string;
+    is_self: boolean;
+    merged_into: Id<"people">;
+    identity_count: number;
+  }> = {},
+): Promise<Id<"people">> {
+  const now = new Date().toISOString();
+  return t.run((ctx) =>
+    ctx.db.insert("people", {
+      display_name: overrides.display_name,
+      normalized_phones: [],
+      normalized_emails: [],
+      identity_count: overrides.identity_count ?? 0,
+      message_count: 0,
+      is_self: overrides.is_self ?? false,
+      auto_clustered: true,
+      merged_into: overrides.merged_into,
+      created_at: now,
+      updated_at: now,
+    }),
+  );
+}
+
+async function seedIdentity(
+  t: TestConvex<typeof schema>,
+  personId: Id<"people"> | undefined,
+  overrides: Partial<{ value: string; normalized: string; source: string; display_name: string }> = {},
+): Promise<void> {
+  const now = new Date().toISOString();
+  await t.run((ctx) =>
+    ctx.db.insert("identities", {
+      person_id: personId,
+      kind: "phone",
+      value: overrides.value ?? "+16195551234",
+      normalized: overrides.normalized ?? "+16195551234",
+      network: undefined,
+      display_name: overrides.display_name,
+      message_count: 0,
+      chat_count: 0,
+      is_self: false,
+      source: overrides.source ?? "apple_contact",
+      first_seen_at: now,
+      last_seen_at: now,
+      created_at: now,
+      updated_at: now,
+    }),
+  );
+}
+
+describe("whoIs", () => {
+  test("not found when no identity row exists for the normalized handle", async () => {
+    const t = convexTest(schema, modules);
+    const result = (await t.query(whoIsRef, { key: TEST_KEY, handle: "6195551234" })) as {
+      found: boolean;
+    };
+    expect(result.found).toBe(false);
   });
 
-  test("normalizes an email-shaped handle before lookup", () => {
-    const handle = "  Milad@Example.com  ";
-    const normalized = normalizePhone(handle) || normalizeEmail(handle) || handle.trim();
-    expect(normalized).toBe("milad@example.com");
+  test("finds the person even when the first normalized row lacks a person_id and a later one has it", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name: "Chase" });
+    // Unresolved row inserted first (by_normalized index has no ordering
+    // guarantee tied to insertion order, but this reproduces the bug: a
+    // `.first()` call could easily land on this row).
+    await seedIdentity(t, undefined, { source: "participant" });
+    await seedIdentity(t, personId, { source: "apple_contact" });
+
+    const result = (await t.query(whoIsRef, { key: TEST_KEY, handle: "6195551234" })) as {
+      found: boolean;
+      person?: { _id: Id<"people"> };
+    };
+    expect(result.found).toBe(true);
+    expect(result.person?._id).toBe(personId);
   });
 
-  test("falls back to the trimmed raw handle when neither phone nor email normalization applies", () => {
-    const handle = "  @weird:matrix.org  ";
-    const normalized = normalizePhone(handle) || normalizeEmail(handle) || handle.trim();
-    expect(normalized).toBe("@weird:matrix.org");
-  });
-
-  test("no matching identity or unresolved person_id reports not found", () => {
-    const match = null as { person_id?: string } | null;
-    const found = Boolean(match?.person_id);
-    expect(found).toBe(false);
+  test("rejects a wrong key", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.query(whoIsRef, { key: "wrong", handle: "6195551234" })).rejects.toThrow();
   });
 });
 
-describe("searchPeople filter", () => {
-  const people = [
-    { display_name: "Milad Imen", merged_into: undefined },
-    { display_name: "Mila Kunis", merged_into: undefined },
-    { display_name: "Someone Merged", merged_into: "other_id" },
-    { display_name: undefined, merged_into: undefined },
-  ];
+describe("searchPeople", () => {
+  test("case-insensitive substring match, excludes merged-away people", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, { display_name: "Milad Imen" });
+    const merged = await seedPerson(t, { display_name: "Ghost" });
+    await seedPerson(t, { display_name: "Ghost Two", merged_into: merged });
 
-  test("case-insensitive substring match on display_name", () => {
-    const needle = "MILAD".trim().toLowerCase();
-    const matches = people.filter(
-      (p) => !p.merged_into && (p.display_name ?? "").toLowerCase().includes(needle),
-    );
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.display_name).toBe("Milad Imen");
-  });
-
-  test("excludes people that were merged away", () => {
-    const needle = "someone";
-    const matches = people.filter(
-      (p) => !p.merged_into && (p.display_name ?? "").toLowerCase().includes(needle),
-    );
-    expect(matches).toHaveLength(0);
-  });
-
-  test("people with no display_name never match a non-empty needle", () => {
-    const needle = "anything";
-    const matches = people.filter(
-      (p) => !p.merged_into && (p.display_name ?? "").toLowerCase().includes(needle),
-    );
-    expect(matches.some((p) => p.display_name === undefined)).toBe(false);
+    const results = (await t.query(searchPeopleRef, { key: TEST_KEY, name: "milad" })) as Array<{
+      display_name?: string;
+    }>;
+    expect(results.map((r) => r.display_name)).toEqual(["Milad Imen"]);
   });
 });
 
-describe("listPeople filter + sort (the contacts browser feed)", () => {
-  const people = [
-    { display_name: "Chase", merged_into: undefined, is_self: false },
-    { display_name: undefined, merged_into: undefined, is_self: false }, // unnamed handle, excluded
-    { display_name: "Alex", merged_into: undefined, is_self: false },
-    { display_name: "Milad", merged_into: undefined, is_self: true }, // self, excluded
-    { display_name: "Ghost", merged_into: "someone_else", is_self: false }, // merged away, excluded
-  ];
+describe("listPeople", () => {
+  test("excludes unnamed, self, and merged-away people; sorts alphabetically", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, { display_name: "Chase" });
+    await seedPerson(t, { display_name: undefined });
+    await seedPerson(t, { display_name: "Alex" });
+    await seedPerson(t, { display_name: "Milad", is_self: true });
+    const mergeTarget = await seedPerson(t, { display_name: undefined });
+    await seedPerson(t, { display_name: "Ghost", merged_into: mergeTarget });
 
-  test("excludes unnamed, self, and merged-away people", () => {
-    const filtered = people.filter((p) => !p.merged_into && !p.is_self && p.display_name);
-    expect(filtered.map((p) => p.display_name)).toEqual(["Chase", "Alex"]);
-  });
-
-  test("sorts alphabetically by display_name", () => {
-    const filtered = people.filter((p) => !p.merged_into && !p.is_self && p.display_name);
-    const sorted = [...filtered].sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
-    expect(sorted.map((p) => p.display_name)).toEqual(["Alex", "Chase"]);
+    const results = (await t.query(listPeopleRef, { key: TEST_KEY })) as Array<{
+      display_name?: string;
+    }>;
+    expect(results.map((r) => r.display_name)).toEqual(["Alex", "Chase"]);
   });
 });
 
-describe("topLinkedPeople selection", () => {
-  test("excludes merged-away people and singletons, sorts by identity_count desc, respects limit", () => {
-    const people = [
-      { display_name: "A", identity_count: 1, merged_into: undefined },
-      { display_name: "B", identity_count: 3, merged_into: undefined },
-      { display_name: "C", identity_count: 5, merged_into: "x" },
-      { display_name: "D", identity_count: 2, merged_into: undefined },
-    ];
-    const result = people
-      .filter((p) => !p.merged_into && p.identity_count > 1)
-      .sort((a, b) => b.identity_count - a.identity_count)
-      .slice(0, 1);
-    expect(result).toHaveLength(1);
-    expect(result[0]?.display_name).toBe("B");
+describe("topLinkedPeople", () => {
+  test("excludes merged-away and singletons, sorts desc, respects limit", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, { display_name: "A", identity_count: 1 });
+    await seedPerson(t, { display_name: "B", identity_count: 3 });
+    const mergedTarget = await seedPerson(t, { display_name: "target" });
+    await seedPerson(t, { display_name: "C", identity_count: 5, merged_into: mergedTarget });
+    await seedPerson(t, { display_name: "D", identity_count: 2 });
+
+    const results = (await t.query(topLinkedPeopleRef, { key: TEST_KEY, limit: 1 })) as Array<{
+      display_name?: string;
+    }>;
+    expect(results).toHaveLength(1);
+    expect(results[0]?.display_name).toBe("B");
   });
 
-  test("default limit is 25 when none is supplied", () => {
-    const limit = undefined as number | undefined;
-    expect(limit ?? 25).toBe(25);
+  test("default limit is 25", async () => {
+    const t = convexTest(schema, modules);
+    for (let i = 0; i < 30; i++) {
+      await seedPerson(t, { display_name: `P${i}`, identity_count: 2 });
+    }
+    const results = (await t.query(topLinkedPeopleRef, { key: TEST_KEY })) as unknown[];
+    expect(results).toHaveLength(25);
   });
 });

@@ -1,114 +1,287 @@
-import { describe, expect, test } from "vitest";
+import { convexTest, type TestConvex } from "convex-test";
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { normalizeEmail, normalizePhone } from "./normalize";
+import type { Id } from "../_generated/dataModel";
+import schema from "../schema";
+import { normalizeModules } from "../test-utils.vitest";
 
-describe("createPerson handle classification", () => {
-  test("a phone-shaped handle is classified as kindphone", () => {
-    const handle = "(619) 555-1234";
-    const trimmed = handle.trim();
-    const kind = normalizePhone(trimmed) ? "phone" : "email";
-    expect(kind).toBe("phone");
+import { addPersonFromAirtableRef, createPersonRef, renamePersonRef, TEST_KEY } from "./testRefs.vitest";
+
+const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
+
+beforeEach(() => {
+  process.env.IMSG_IDENTITY_KEY = TEST_KEY;
+});
+
+describe("createPerson", () => {
+  test("fresh handle with no name creates an unlocked person with one manual identity", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.mutation(createPersonRef, { key: TEST_KEY, handle: "(619) 555-1234" });
+    expect(result.created).toBe(true);
+
+    const person = await t.run((ctx) => ctx.db.get(result.personId));
+    expect(person?.display_name).toBeUndefined();
+    expect(person?.display_name_locked).toBeFalsy();
+    expect(person?.normalized_phones).toEqual(["+16195551234"]);
+    expect(person?.identity_count).toBe(1);
+
+    const identities = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_person", (q) => q.eq("person_id", result.personId))
+        .collect(),
+    );
+    expect(identities).toHaveLength(1);
+    expect(identities[0]?.source).toBe("manual");
+    expect(identities[0]?.kind).toBe("phone");
   });
 
-  test("an email-shaped handle is classified as kind email", () => {
-    const handle = "chase@example.com";
-    const trimmed = handle.trim();
-    const kind = normalizePhone(trimmed) ? "phone" : "email";
-    expect(kind).toBe("email");
+  test("fresh handle with a name locks display_name on the new person", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.mutation(createPersonRef, {
+      key: TEST_KEY,
+      handle: "chase@example.com",
+      display_name: "Chase",
+    });
+    const person = await t.run((ctx) => ctx.db.get(result.personId));
+    expect(person?.display_name).toBe("Chase");
+    expect(person?.display_name_locked).toBe(true);
+    expect(person?.normalized_emails).toEqual(["chase@example.com"]);
   });
 
-  test("normalized_phones vs normalized_emails on the new person reflects the classified kind", () => {
-    const normalized = normalizePhone("6195551234");
-    const kind = "phone" as const;
-    const person = {
-      normalized_phones: kind === "phone" ? [normalized] : [],
-      normalized_emails: (kind as string) === "email" ? [normalized] : [],
-    };
-    expect(person.normalized_phones).toEqual(["+16195551234"]);
-    expect(person.normalized_emails).toEqual([]);
+  test("dedupe path: an already-resolved identity short-circuits creation and applies the typed name", async () => {
+    const t = convexTest(schema, modules);
+    const now = new Date().toISOString();
+    const personId = await t.run((ctx) =>
+      ctx.db.insert("people", {
+        display_name: "Old Name",
+        normalized_phones: ["+16195551234"],
+        normalized_emails: [],
+        identity_count: 1,
+        message_count: 0,
+        is_self: false,
+        auto_clustered: true,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+    await t.run((ctx) =>
+      ctx.db.insert("identities", {
+        person_id: personId,
+        kind: "phone",
+        value: "+16195551234",
+        normalized: "+16195551234",
+        network: undefined,
+        display_name: "Old Name",
+        message_count: 0,
+        chat_count: 0,
+        is_self: false,
+        source: "apple_contact",
+        first_seen_at: now,
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+
+    const result = await t.mutation(createPersonRef, {
+      key: TEST_KEY,
+      handle: "6195551234",
+      display_name: "New Typed Name",
+    });
+    expect(result.created).toBe(false);
+    expect(result.personId).toBe(personId);
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("New Typed Name");
+    expect(person?.display_name_locked).toBe(true);
+
+    // Dedupe must not create a second person.
+    const allPeople = await t.run((ctx) => ctx.db.query("people").collect());
+    expect(allPeople).toHaveLength(1);
+  });
+
+  test("dedupe path: no name provided leaves the existing person's name untouched", async () => {
+    const t = convexTest(schema, modules);
+    const now = new Date().toISOString();
+    const personId = await t.run((ctx) =>
+      ctx.db.insert("people", {
+        display_name: "Existing Name",
+        normalized_phones: ["+16195551234"],
+        normalized_emails: [],
+        identity_count: 1,
+        message_count: 0,
+        is_self: false,
+        auto_clustered: true,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+    await t.run((ctx) =>
+      ctx.db.insert("identities", {
+        person_id: personId,
+        kind: "phone",
+        value: "+16195551234",
+        normalized: "+16195551234",
+        network: undefined,
+        message_count: 0,
+        chat_count: 0,
+        is_self: false,
+        source: "apple_contact",
+        first_seen_at: now,
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+
+    const result = await t.mutation(createPersonRef, { key: TEST_KEY, handle: "6195551234" });
+    expect(result.created).toBe(false);
+    expect(result.personId).toBe(personId);
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("Existing Name");
+  });
+
+  test("orphan-identity-rows path: unresolved rows sharing the normalized key are linked to the new person", async () => {
+    const t = convexTest(schema, modules);
+    const now = new Date().toISOString();
+    // An identity ingested by the Beeper resolver path but never clustered
+    // (person_id undefined) — e.g. a chat participant seen before any
+    // person existed for them.
+    await t.run((ctx) =>
+      ctx.db.insert("identities", {
+        person_id: undefined,
+        kind: "phone",
+        value: "+16195551234",
+        normalized: "+16195551234",
+        network: "imessage",
+        display_name: "From Chat",
+        message_count: 3,
+        chat_count: 1,
+        is_self: false,
+        source: "participant",
+        first_seen_at: now,
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+
+    const result = await t.mutation(createPersonRef, { key: TEST_KEY, handle: "6195551234" });
+    expect(result.created).toBe(true);
+
+    const orphan = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_normalized", (q) => q.eq("normalized", "+16195551234"))
+        .collect(),
+    );
+    // The orphan row is now linked, and a new manual-source row was added
+    // (no manual row existed for this value yet).
+    expect(orphan.every((r) => r.person_id === result.personId)).toBe(true);
+    expect(orphan.some((r) => r.source === "participant")) .toBe(true);
+    expect(orphan.some((r) => r.source === "manual")).toBe(true);
+
+    const person = await t.run((ctx) => ctx.db.get(result.personId));
+    // No name provided -> recompute derives the best name from linked identities.
+    expect(person?.display_name).toBe("From Chat");
+    expect(person?.identity_count).toBe(2);
+  });
+
+  test("orphan-identity-rows path: does not insert a duplicate manual row if one already exists", async () => {
+    const t = convexTest(schema, modules);
+    const now = new Date().toISOString();
+    await t.run((ctx) =>
+      ctx.db.insert("identities", {
+        person_id: undefined,
+        kind: "phone",
+        value: "6195551234",
+        normalized: "+16195551234",
+        network: undefined,
+        message_count: 0,
+        chat_count: 0,
+        is_self: false,
+        source: "manual",
+        first_seen_at: now,
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+
+    const result = await t.mutation(createPersonRef, { key: TEST_KEY, handle: "6195551234" });
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_normalized", (q) => q.eq("normalized", "+16195551234"))
+        .collect(),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.person_id).toBe(result.personId);
+  });
+
+  test("rejects a wrong key", async () => {
+    const t = convexTest(schema, modules);
+    await expect(
+      t.mutation(createPersonRef, { key: "wrong", handle: "6195551234" }),
+    ).rejects.toThrow();
   });
 });
 
-describe("createPerson dedupe (existing identity short-circuits creation)", () => {
-  test("if the normalized handle already has an identity+person, no new person is created", () => {
-    const existingIdentity = { normalized: "+16195551234", person_id: "person_existing" };
-    const created = !existingIdentity.person_id;
-    expect(created).toBe(false);
+describe("addPersonFromAirtable", () => {
+  test("creates a person from an Airtable record with a phone", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.mutation(addPersonFromAirtableRef, {
+      key: TEST_KEY,
+      record_id: "recABC123",
+      display_name: "Jamie",
+      phone: "6195559999",
+    });
+    const person = await t.run((ctx) => ctx.db.get(result.personId));
+    expect(person?.display_name).toBe("Jamie");
+    expect(person?.airtable_human_id).toBe("recABC123");
   });
 
-  test("an identity with no person_id yet does not short-circuit (still creates)", () => {
-    const existingIdentity: { normalized: string; person_id: string | undefined } = {
-      normalized: "+16195551234",
-      person_id: undefined,
-    };
-    const created = !existingIdentity.person_id;
-    expect(created).toBe(true);
-  });
-});
-
-describe("addPersonFromAirtable card shape", () => {
-  test("phone/email map to single-element arrays, matching ingestOneCard's ContactCard shape", () => {
-    const phone = "+16195551234";
-    const email = undefined as string | undefined;
-    const card = { phones: phone ? [phone] : [], emails: email ? [email] : [] };
-    expect(card.phones).toEqual(["+16195551234"]);
-    expect(card.emails).toEqual([]);
-  });
-
-  test("a record with neither phone nor email produces empty arrays (ingestOneCard rejects it)", () => {
-    const card = { phones: [] as string[], emails: [] as string[] };
-    expect(card.phones).toHaveLength(0);
-    expect(card.emails).toHaveLength(0);
-  });
-
-  test("always calls ingestOneCard with link_only=false, unlike the background sync", () => {
-    const linkOnly = false; // addPersonFromAirtable is a deliberate per-person action
-    expect(linkOnly).toBe(false);
-  });
-});
-
-describe("createPerson source tagging", () => {
-  test("manually-created identities are tagged source: manual, distinct from apple_contact/beeper", () => {
-    const identity = { source: "manual" };
-    expect(identity.source).not.toBe("apple_contact");
-    expect(identity.source).not.toBe("participant");
-  });
-
-  test("manually-created people are not auto_clustered", () => {
-    const person = { auto_clustered: false };
-    expect(person.auto_clustered).toBe(false);
-  });
-});
-
-describe("createPerson display_name_locked", () => {
-  test("a name provided at creation locks display_name", () => {
-    const display_name = "Chase";
-    expect(Boolean(display_name)).toBe(true);
-  });
-
-  test("no name provided at creation leaves display_name unlocked", () => {
-    const display_name = undefined as string | undefined;
-    expect(Boolean(display_name)).toBe(false);
+  test("throws when the record has neither phone nor email", async () => {
+    const t = convexTest(schema, modules);
+    await expect(
+      t.mutation(addPersonFromAirtableRef, { key: TEST_KEY, record_id: "recNoHandles", display_name: "Nobody" }),
+    ).rejects.toThrow("Can't add a contact with no phone or email");
   });
 });
 
 describe("renamePerson", () => {
-  test("rejects an empty/whitespace-only name", () => {
-    const display_name = "   ";
-    const trimmed = display_name.trim();
-    expect(() => {
-      if (!trimmed) throw new Error("Name can't be empty");
-    }).toThrow("Name can't be empty");
+  async function seedPerson(t: TestConvex<typeof schema>): Promise<Id<"people">> {
+    const now = new Date().toISOString();
+    return t.run((ctx) =>
+      ctx.db.insert("people", {
+        display_name: "Original",
+        normalized_phones: [],
+        normalized_emails: [],
+        identity_count: 0,
+        message_count: 0,
+        is_self: false,
+        auto_clustered: false,
+        created_at: now,
+        updated_at: now,
+      }),
+    );
+  }
+
+  test("rejects an empty/whitespace-only name", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t);
+    await expect(
+      t.mutation(renamePersonRef, { key: TEST_KEY, personId, display_name: "   " }),
+    ).rejects.toThrow("Name can't be empty");
   });
 
-  test("trims surrounding whitespace before saving", () => {
-    const display_name = "  Chase Anderson  ";
-    const trimmed = display_name.trim();
-    expect(trimmed).toBe("Chase Anderson");
-  });
-
-  test("always sets display_name_locked: true, regardless of prior state", () => {
-    const patch = { display_name: "Chase", display_name_locked: true };
-    expect(patch.display_name_locked).toBe(true);
+  test("trims surrounding whitespace and sets the lock", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t);
+    await t.mutation(renamePersonRef, { key: TEST_KEY, personId, display_name: "  Chase Anderson  " });
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("Chase Anderson");
+    expect(person?.display_name_locked).toBe(true);
   });
 });

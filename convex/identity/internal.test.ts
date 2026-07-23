@@ -1,159 +1,153 @@
+import { convexTest, type TestConvex } from "convex-test";
 import { describe, expect, test } from "vitest";
 
-/**
- * These replicate the merge rules inside upsertIdentitiesBatch and assignCluster
- * (convex/identity/internal.ts) as plain assertions, matching this repo's
- * convention of testing mutation business logic without a live Convex db.
- */
+import type { Id } from "../_generated/dataModel";
+import schema from "../schema";
+import { normalizeModules } from "../test-utils.vitest";
 
-describe("upsertIdentitiesBatch merge rules", () => {
-  test("dedupe key is (network, value), not value alone", () => {
-    const existing = [
-      { value: "+16195551234", network: "whatsapp" },
-      { value: "+16195551234", network: "imessage" },
-    ];
-    const incoming = { value: "+16195551234", network: "imessage" };
-    const match = existing.find((m) => m.network === incoming.network);
-    expect(match?.network).toBe("imessage");
+import { recomputePersonAggregates } from "./internal";
+
+const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
+
+async function seedPerson(
+  t: TestConvex<typeof schema>,
+  overrides: Partial<{
+    display_name: string;
+    display_name_locked: boolean;
+    normalized_phones: string[];
+    normalized_emails: string[];
+    identity_count: number;
+    message_count: number;
+    is_self: boolean;
+  }> = {},
+): Promise<Id<"people">> {
+  const now = new Date().toISOString();
+  return t.run((ctx) =>
+    ctx.db.insert("people", {
+      display_name: overrides.display_name,
+      display_name_locked: overrides.display_name_locked,
+      normalized_phones: overrides.normalized_phones ?? [],
+      normalized_emails: overrides.normalized_emails ?? [],
+      identity_count: overrides.identity_count ?? 0,
+      message_count: overrides.message_count ?? 0,
+      is_self: overrides.is_self ?? false,
+      auto_clustered: true,
+      created_at: now,
+      updated_at: now,
+    }),
+  );
+}
+
+async function seedIdentity(
+  t: TestConvex<typeof schema>,
+  personId: Id<"people">,
+  overrides: Partial<{
+    value: string;
+    normalized: string;
+    display_name: string;
+    message_count: number;
+    is_self: boolean;
+  }> = {},
+): Promise<void> {
+  const now = new Date().toISOString();
+  await t.run((ctx) =>
+    ctx.db.insert("identities", {
+      person_id: personId,
+      kind: "phone",
+      value: overrides.value ?? "+16195551234",
+      normalized: overrides.normalized ?? "+16195551234",
+      network: undefined,
+      display_name: overrides.display_name,
+      message_count: overrides.message_count ?? 0,
+      chat_count: 0,
+      is_self: overrides.is_self ?? false,
+      source: "apple_contact",
+      first_seen_at: now,
+      last_seen_at: now,
+      created_at: now,
+      updated_at: now,
+    }),
+  );
+}
+
+describe("recomputePersonAggregates", () => {
+  test("unlocked person: display_name becomes the longest identity name; phones/emails/counts recomputed", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name_locked: false });
+    await seedIdentity(t, personId, {
+      value: "+16195551234",
+      normalized: "+16195551234",
+      display_name: "Chase",
+      message_count: 3,
+    });
+    await seedIdentity(t, personId, {
+      value: "chase@example.com",
+      normalized: "chase@example.com",
+      display_name: "Chase Petersen",
+      message_count: 5,
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("Chase Petersen");
+    expect(person?.normalized_phones).toEqual(["+16195551234"]);
+    expect(person?.normalized_emails).toEqual(["chase@example.com"]);
+    expect(person?.identity_count).toBe(2);
+    expect(person?.message_count).toBe(8);
   });
 
-  test("longer display_name wins on update", () => {
-    const existing = { display_name: "Milad" };
-    const incoming = { display_name: "Milad Imen" };
-    const merged =
-      incoming.display_name && incoming.display_name.length > (existing.display_name?.length ?? 0)
-        ? incoming.display_name
-        : existing.display_name;
-    expect(merged).toBe("Milad Imen");
+  test("locked person: display_name is preserved while phones/emails/counts still update", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, {
+      display_name: "Manually Set Name",
+      display_name_locked: true,
+    });
+    await seedIdentity(t, personId, {
+      value: "+16195551234",
+      normalized: "+16195551234",
+      display_name: "Some Longer Source-Derived Name",
+      message_count: 4,
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("Manually Set Name");
+    expect(person?.normalized_phones).toEqual(["+16195551234"]);
+    expect(person?.message_count).toBe(4);
   });
 
-  test("shorter or missing incoming display_name does not overwrite existing", () => {
-    const existing = { display_name: "Milad Imen" };
-    const incoming = { display_name: undefined as string | undefined };
-    const merged =
-      incoming.display_name && incoming.display_name.length > (existing.display_name?.length ?? 0)
-        ? incoming.display_name
-        : existing.display_name;
-    expect(merged).toBe("Milad Imen");
+  test("no-op when aggregates are unchanged: updated_at is not bumped (churn regression)", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name_locked: false });
+    await seedIdentity(t, personId, { display_name: "Chase", message_count: 1 });
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const after1 = await t.run((ctx) => ctx.db.get(personId));
+    // Advance the clock so a real bump would be detectable.
+    await new Promise((r) => setTimeout(r, 5));
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+    const after2 = await t.run((ctx) => ctx.db.get(personId));
+
+    expect(after2?.updated_at).toBe(after1?.updated_at);
   });
 
-  test("img_url and phone_number are keep-if-existing (first write wins)", () => {
-    const existing = { img_url: "existing.jpg", phone_number: "+16195551234" };
-    const incoming = { img_url: "new.jpg", phone_number: "+19995551234" };
-    expect(existing.img_url ?? incoming.img_url).toBe("existing.jpg");
-    expect(existing.phone_number ?? incoming.phone_number).toBe("+16195551234");
-  });
+  test("phones/emails are compared as sets — reinserting in a different order doesn't churn", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, {
+      display_name_locked: false,
+      normalized_phones: ["+19995551234", "+16195551234"],
+      normalized_emails: [],
+      identity_count: 2,
+      display_name: "Chase",
+    });
+    await seedIdentity(t, personId, { value: "a", normalized: "+16195551234", display_name: "Chase" });
+    await seedIdentity(t, personId, { value: "b", normalized: "+19995551234" });
 
-  test("last_seen_at only advances forward in time", () => {
-    const existing = { last_seen_at: "2026-01-01T00:00:00.000Z" as string | undefined };
-    const older = "2025-06-01T00:00:00.000Z";
-    const newer = "2026-06-01T00:00:00.000Z";
-
-    const mergedWithOlder =
-      older && (!existing.last_seen_at || older > existing.last_seen_at) ? older : existing.last_seen_at;
-    expect(mergedWithOlder).toBe(existing.last_seen_at);
-
-    const mergedWithNewer =
-      newer && (!existing.last_seen_at || newer > existing.last_seen_at) ? newer : existing.last_seen_at;
-    expect(mergedWithNewer).toBe(newer);
-  });
-
-  test("is_self is sticky once true (logical OR, never flips back)", () => {
-    const orTrue = (a: boolean, b: boolean) => a || b;
-    expect(orTrue(true, false)).toBe(true);
-    expect(orTrue(false, true)).toBe(true);
-    expect(orTrue(false, false)).toBe(false);
-  });
-
-  test("chat_count increments by exactly one per upsert", () => {
-    let chatCount = 3;
-    chatCount = chatCount + 1;
-    expect(chatCount).toBe(4);
-  });
-});
-
-describe("assignCluster aggregate rules", () => {
-  test("prefers an existing non-merged person over creating a new one", () => {
-    const identities = [
-      { person_id: undefined },
-      { person_id: "person_a" },
-      { person_id: "person_b" },
-    ];
-    const people = { person_a: { merged_into: "person_c" }, person_b: { merged_into: undefined } };
-
-    let chosen: string | null = null;
-    for (const i of identities) {
-      if (i.person_id) {
-        const p = people[i.person_id as keyof typeof people];
-        if (p && !p.merged_into) {
-          chosen = i.person_id;
-          break;
-        }
-      }
-    }
-    expect(chosen).toBe("person_b");
-  });
-
-  test("normalized values split into phones vs emails by '@' presence", () => {
-    const normalizedValues = ["+16195551234", "milad@example.com", "+442079460958"];
-    const phones = new Set<string>();
-    const emails = new Set<string>();
-    for (const n of normalizedValues) {
-      if (n.includes("@")) emails.add(n);
-      else if (n) phones.add(n);
-    }
-    expect([...phones].sort()).toEqual(["+16195551234", "+442079460958"]);
-    expect([...emails]).toEqual(["milad@example.com"]);
-  });
-
-  test("best display name is the longest non-empty candidate across the cluster", () => {
-    const identities = [{ display_name: "Milad" }, { display_name: "Milad I." }, { display_name: undefined }];
-    let bestName: string | undefined;
-    for (const i of identities) {
-      if (i.display_name && i.display_name.length > (bestName?.length ?? 0)) {
-        bestName = i.display_name;
-      }
-    }
-    expect(bestName).toBe("Milad I.");
-  });
-
-  test("message_count and is_self aggregate across every identity in the cluster", () => {
-    const identities = [
-      { message_count: 10, is_self: false },
-      { message_count: 5, is_self: true },
-      { message_count: 2, is_self: false },
-    ];
-    let messageCount = 0;
-    let isSelf = false;
-    for (const i of identities) {
-      messageCount += i.message_count;
-      isSelf = isSelf || i.is_self;
-    }
-    expect(messageCount).toBe(17);
-    expect(isSelf).toBe(true);
-  });
-});
-
-describe("recomputePersonAggregates display_name_locked guard", () => {
-  test("display_name is included in the patch when unlocked", () => {
-    const person = { display_name_locked: false };
-    const bestName = "Milad I.";
-    const patch = { ...(person.display_name_locked ? {} : { display_name: bestName }) };
-    expect(patch).toEqual({ display_name: "Milad I." });
-  });
-
-  test("display_name is omitted from the patch when locked, leaving the manual name untouched", () => {
-    const person = { display_name_locked: true };
-    const bestName = "Some Longer Source Name";
-    const patch = { ...(person.display_name_locked ? {} : { display_name: bestName }) };
-    expect(patch).toEqual({});
-    expect("display_name" in patch).toBe(false);
-  });
-
-  test("a missing person doc (undefined) is treated as unlocked", () => {
-    const person = undefined as { display_name_locked?: boolean } | undefined;
-    const bestName = "Milad";
-    const patch = { ...(person?.display_name_locked ? {} : { display_name: bestName }) };
-    expect(patch).toEqual({ display_name: "Milad" });
+    const before = await t.run((ctx) => ctx.db.get(personId));
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+    const after = await t.run((ctx) => ctx.db.get(personId));
+    expect(after?.updated_at).toBe(before?.updated_at);
   });
 });
