@@ -224,6 +224,14 @@ export function ConversationListPane({
     };
   }, [query]);
 
+  // Changing a lens or the query is a NEW view — start it from the top.
+  // (Without this, maintainVisibleContentPosition anchors whatever row was
+  // visible, so releasing a filter "follows" that conversation down the list.)
+  useEffect(() => {
+    scrollOffset.current = 0;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [filters.state, filters.type, query]);
+
   // A realtime reorder must not yank an already-scrolled web list to the top.
   useEffect(() => {
     if (scrollOffset.current <= 60) return;
