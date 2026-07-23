@@ -231,8 +231,11 @@ export class ChatDirectory {
       .map((chat) => {
         const state = overlay.get(chat.guid);
         const summary = mapChat(chat, state, this.contacts, unread.get(chat.guid));
-        // Mark-read override: trust our own recent mark-read over BB's lagging DB.
-        const readAt = this.localReadAt.get(chat.guid);
+        // Mark-read override: trust our own mark-read over BB's lagging DB.
+        // Persisted (overlay) readAt survives restarts — Apple never back-fills
+        // dateRead on old group messages, so without it the scan resurrects
+        // long-read chats as unread after every deploy.
+        const readAt = Math.max(this.localReadAt.get(chat.guid) ?? 0, state?.readAt ?? 0);
         if (readAt && (summary.lastMessage?.dateCreated ?? 0) <= readAt) {
           summary.unreadCount = 0;
           summary.firstUnreadAt = null;
@@ -337,6 +340,7 @@ export class ChatDirectory {
     if (result.ok) {
       this.clearCache();
       this.localReadAt.set(guid, this.now());
+      this.db.setReadAt(guid, this.now());
       this.resetUnreadScan();
       this.unreadScan.summaries.set(guid, { count: 0, firstUnreadAt: null });
       this.db.setMarkedUnread(guid, false);

@@ -19,6 +19,10 @@ export interface ChatState {
   /** Chat never appears in the unresponded filter (group mute). */
   mutedUnresponded: number;
   pinned: number;
+  /** Epoch ms of our last mark-read — survives restarts. Apple never
+   * back-fills dateRead on old group messages, so the raw scan alone would
+   * resurrect them as unread forever. */
+  readAt?: number;
   /** Manually marked unread; cleared on next mark-read. */
   markedUnread: number;
 }

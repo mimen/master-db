@@ -36,6 +36,7 @@ export class OverlayDb {
     for (const ddl of [
       "ALTER TABLE chat_state ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE chat_state ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
+      "ALTER TABLE chat_state ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0;",
     ]) {
       try {
         this.db.exec(ddl);
@@ -179,7 +180,7 @@ export class OverlayDb {
     const rows = this.db
       .query(
         `SELECT chat_guid, archived_at, dismissed_unresponded_guid,
-                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned
+                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at
          FROM chat_state`,
       )
       .all() as Array<{
@@ -190,6 +191,7 @@ export class OverlayDb {
       muted_unresponded: number;
       marked_unread: number;
       pinned: number;
+      read_at: number;
     }>;
     const map = new Map<string, ChatState>();
     for (const row of rows) {
@@ -201,6 +203,7 @@ export class OverlayDb {
         mutedUnresponded: row.muted_unresponded,
         markedUnread: row.marked_unread,
         pinned: row.pinned,
+        readAt: row.read_at,
       });
     }
     return map;
@@ -237,5 +240,9 @@ export class OverlayDb {
 
   setPinned(chatGuid: string, pinned: boolean): void {
     this.upsert(chatGuid, "pinned", pinned ? 1 : 0);
+  }
+
+  setReadAt(chatGuid: string, at: number): void {
+    this.upsert(chatGuid, "read_at", at);
   }
 }
