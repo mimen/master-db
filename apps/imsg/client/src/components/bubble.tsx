@@ -8,6 +8,7 @@ import { formatBubbleTime, initials } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble } from "./media";
 import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
@@ -75,7 +76,7 @@ function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean
   const theme = useTheme();
   const meta = SPECIAL_META[special.kind];
   const title = special.kind === "contact" && special.name ? special.name : meta.label;
-  const color = mine ? "#fff" : theme.text;
+  const color = mine ? theme.onAccent : theme.text;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 2 }}>
       <Ionicons name={meta.icon} size={22} color={color} />
@@ -94,6 +95,7 @@ export const TAPBACK_EMOJI = new Map([
 ]);
 
 function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
+  const theme = useTheme();
   const { width: winW } = useWindowDimensions();
   const openLightbox = useLightbox();
   // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
@@ -130,7 +132,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
             >
               <Image
                 source={{ uri: url }}
-                style={{ width: mediaW, aspectRatio: ratio, borderRadius: 14 }}
+                style={{ width: mediaW, aspectRatio: ratio, borderRadius: Radii.card }}
                 contentFit="cover"
                 transition={100}
               />
@@ -139,7 +141,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
         }
         return (
           <Pressable key={att.guid} onPress={() => void Linking.openURL(url)}>
-            <Text style={styles.attachmentLink}>{att.filename ?? "Attachment"}</Text>
+            <Text style={[styles.attachmentLink, { color: theme.accent }]}>{att.filename ?? "Attachment"}</Text>
           </Pressable>
         );
       })}
@@ -179,7 +181,7 @@ export const Bubble = memo(function Bubble({
   const [showTime, setShowTime] = useState(false);
   const mine = message.isFromMe;
   // SMS (green bubble) vs iMessage (blue).
-  const mineColor = message.service === "SMS" ? "#34C759" : theme.bubbleMine;
+  const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
   const senderName =
     message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
   // Cap bubble width so long messages neither stretch across a wide pane nor
@@ -227,7 +229,7 @@ export const Bubble = memo(function Bubble({
             <Text
               numberOfLines={2}
               style={{
-                fontSize: 13,
+                fontSize: Type.secondary,
                 color: message.replyToFromMe ? theme.bubbleMine : theme.textSecondary,
               }}
             >
@@ -293,6 +295,7 @@ export const Bubble = memo(function Bubble({
                 style={[
                   styles.bubble,
                   highlighted && styles.highlighted,
+                  highlighted && { borderColor: theme.accent },
                   { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
                   hasTail && (mine ? styles.bubbleTailMine : styles.bubbleTailTheirs),
                   message.pending && { opacity: 0.6 },
@@ -306,14 +309,14 @@ export const Bubble = memo(function Bubble({
                     style={{
                       fontSize: 17,
                       lineHeight: 22,
-                      color: mine ? "#fff" : theme.bubbleTheirsText,
+                      color: mine ? theme.onAccent : theme.bubbleTheirsText,
                       // Break long unbroken strings (URLs) so they never overflow.
                       ...(Platform.OS === "web"
                         ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
                         : {}),
                     }}
                   >
-                    {linkifyText(message.text, mine ? "#fff" : theme.accent)}
+                    {linkifyText(message.text, mine ? theme.onAccent : theme.accent)}
                   </Text>
                 )}
                 {hasTail && <BubbleTail color={mine ? mineColor : theme.bubbleTheirs} mine={mine} />}
@@ -345,7 +348,7 @@ export const Bubble = memo(function Bubble({
 
           {notDelivered ? (
             <Pressable onPress={() => onRetry(message)}>
-              <Text style={styles.failed}>Not Delivered — tap to retry</Text>
+              <Text style={[styles.failed, { color: theme.destructive }]}>Not Delivered — tap to retry</Text>
             </Pressable>
           ) : message.pending ? (
             <Text style={[styles.meta, { color: theme.textSecondary }]}>Sending…</Text>
@@ -373,7 +376,8 @@ export const Bubble = memo(function Bubble({
 const styles = StyleSheet.create({
   highlighted: {
     borderWidth: 2,
-    borderColor: "#0A84FF",
+    // borderColor comes from theme.accent inline at the call site — this only
+    // fixes the width; the old hardcoded #0A84FF always rendered dark-mode blue.
   },
   tailSvg: {
     position: "absolute",
@@ -414,7 +418,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   senderName: {
-    fontSize: 11,
+    fontSize: Type.caption,
     marginBottom: 2,
     marginLeft: 4,
   },
@@ -425,28 +429,28 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   reactionChip: {
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     paddingHorizontal: 5,
     paddingVertical: 2,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOpacity: 0.15,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
   },
   meta: {
-    fontSize: 11,
+    fontSize: Type.caption,
     marginTop: 2,
     marginHorizontal: 4,
   },
   failed: {
+    // color comes from theme.destructive inline at the call site.
     fontSize: 12,
-    color: "#FF453A",
     fontWeight: "600",
     marginTop: 2,
   },
   attachmentLink: {
+    // color comes from theme.accent inline at the call site.
     fontSize: 14,
     textDecorationLine: "underline",
-    color: "#0A84FF",
   },
 });

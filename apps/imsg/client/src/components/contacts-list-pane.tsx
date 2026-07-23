@@ -142,7 +142,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           {adding ? (
             <ActivityIndicator size="small" />
           ) : (
-            <Ionicons name="add-circle-outline" size={22} color="#0A84FF" />
+            <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
           )}
         </Pressable>
       );

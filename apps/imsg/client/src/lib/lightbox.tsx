@@ -58,6 +58,8 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
             ) : (
               <Image source={{ uri: current.url }} style={styles.media} contentFit="contain" />
             ))}
+          {/* Full-screen media viewer over a fixed near-black backdrop — every
+              control below is theme-invariant by design, not app-theme-driven. */}
           <Pressable style={styles.close} onPress={close} hitSlop={10}>
             <Ionicons name="close" size={30} color="#fff" />
           </Pressable>

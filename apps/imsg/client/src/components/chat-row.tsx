@@ -15,6 +15,7 @@ import Reanimated, {
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { formatListTimestamp } from "@/lib/format";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
@@ -43,6 +44,7 @@ function SwipeAction({
   side: "left" | "right";
   commit: number;
 }) {
+  const theme = useTheme();
   const containerStyle = useAnimatedStyle(() => ({
     width: Math.max(ACTION_WIDTH, Math.abs(translation.value)),
   }));
@@ -62,7 +64,7 @@ function SwipeAction({
       ]}
     >
       <Reanimated.View style={[styles.swipeActionInner, contentStyle]}>
-        <Ionicons name={icon} size={23} color="#fff" />
+        <Ionicons name={icon} size={23} color={theme.onAccent} />
         <Text style={styles.swipeActionLabel}>{label}</Text>
       </Reanimated.View>
     </Reanimated.View>
@@ -133,7 +135,7 @@ export function ChatRow({
           translation={translation}
           icon={chat.flags.unread ? "mail-open-outline" : "mail-unread-outline"}
           label={chat.flags.unread ? "Read" : "Unread"}
-          color="#0A84FF"
+          color={theme.accent}
           side="left"
           commit={commit}
         />
@@ -293,7 +295,7 @@ const styles = StyleSheet.create({
   },
   unreadBadge: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     height: 19,
     justifyContent: "center",
     minWidth: 19,
@@ -301,15 +303,17 @@ const styles = StyleSheet.create({
   },
   stateChip: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     height: 19,
     justifyContent: "center",
     minWidth: 19,
     paddingHorizontal: 4,
   },
   unreadBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 11,
+    // Badge text sits on theme.accent, which is the same in both schemes here
+    // (the badge itself isn't theme-forked) — onAccent is identical light/dark.
+    color: Colors.light.onAccent,
+    fontSize: Type.caption,
     fontWeight: "700",
   },
   hoverArchive: {
@@ -319,11 +323,11 @@ const styles = StyleSheet.create({
     marginTop: -14,
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radii.card,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOpacity: 0.15,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
@@ -338,8 +342,8 @@ const styles = StyleSheet.create({
     width: ACTION_WIDTH,
   },
   swipeActionLabel: {
-    color: "#fff",
-    fontSize: 13,
+    color: Colors.light.onAccent,
+    fontSize: Type.secondary,
     fontWeight: "600",
   },
 });

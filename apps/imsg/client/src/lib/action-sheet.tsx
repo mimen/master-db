@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Radii, Type } from "@/constants/theme";
 
 export interface SheetAction {
   label: string;
@@ -124,7 +125,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                             setRequest(null);
                             t.onPress();
                           }}
-                          style={[styles.tapback, styles.tapbackSmall, t.active && styles.tapbackActive]}
+                          style={[styles.tapback, styles.tapbackSmall, t.active && { backgroundColor: theme.accent }]}
                         >
                           <Text style={{ fontSize: 20 }}>{t.emoji}</Text>
                         </Pressable>
@@ -144,7 +145,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       }}
                     >
                       <Text
-                        style={[styles.popoverLabel, { color: action.destructive ? "#FF453A" : theme.text }]}
+                        style={[styles.popoverLabel, { color: action.destructive ? theme.destructive : theme.text }]}
                       >
                         {action.label}
                       </Text>
@@ -172,7 +173,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                         setRequest(null);
                         t.onPress();
                       }}
-                      style={[styles.tapback, styles.tapbackSmall, t.active && styles.tapbackActive]}
+                      style={[styles.tapback, styles.tapbackSmall, t.active && { backgroundColor: theme.accent }]}
                     >
                       <Text style={{ fontSize: 20 }}>{t.emoji}</Text>
                     </Pressable>
@@ -191,7 +192,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                     action.onPress();
                   }}
                 >
-                  <Text style={[styles.dialogLabel, { color: action.destructive ? "#FF453A" : theme.text }]}>
+                  <Text style={[styles.dialogLabel, { color: action.destructive ? theme.destructive : theme.text }]}>
                     {action.label}
                   </Text>
                 </Pressable>
@@ -213,7 +214,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       setRequest(null);
                       t.onPress();
                     }}
-                    style={[styles.tapback, t.active && styles.tapbackActive]}
+                    style={[styles.tapback, t.active && { backgroundColor: theme.accent }]}
                   >
                     <Text style={{ fontSize: 24 }}>{t.emoji}</Text>
                   </Pressable>
@@ -242,7 +243,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                     }}
                   >
                     <Text
-                      style={[styles.actionLabel, { color: action.destructive ? "#FF453A" : theme.text }]}
+                      style={[styles.actionLabel, { color: action.destructive ? theme.destructive : theme.text }]}
                     >
                       {action.label}
                     </Text>
@@ -271,10 +272,10 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
 const styles = StyleSheet.create({
   popover: {
     position: "absolute",
-    borderRadius: 12,
+    borderRadius: Radii.input,
     borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 5,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 20,
@@ -293,6 +294,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
+    // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
   },
@@ -302,18 +304,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dialog: {
-    borderRadius: 14,
+    borderRadius: Radii.card,
     borderWidth: StyleSheet.hairlineWidth,
     maxWidth: "86%",
     paddingVertical: 6,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.35,
     shadowRadius: 30,
     width: 300,
   },
   dialogTitle: {
-    fontSize: 13,
+    fontSize: Type.secondary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     textAlign: "center",
@@ -334,7 +336,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   sheetGroup: {
-    borderRadius: 14,
+    borderRadius: Radii.card,
     overflow: "hidden",
   },
   sheetTitleWrap: {
@@ -343,7 +345,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   title: {
-    fontSize: 13,
+    fontSize: Type.secondary,
     textAlign: "center",
   },
   rowDivider: {
@@ -361,7 +363,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: Radii.card,
     justifyContent: "center",
     minHeight: 56,
   },
@@ -377,7 +379,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 8,
     paddingVertical: 6,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 12,
@@ -395,8 +397,5 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-  },
-  tapbackActive: {
-    backgroundColor: "#0A84FF",
   },
 });

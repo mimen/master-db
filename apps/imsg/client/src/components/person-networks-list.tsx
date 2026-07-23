@@ -8,6 +8,10 @@ type NetworkIcon =
   | { family: "ionicons"; name: keyof typeof Ionicons.glyphMap }
   | { family: "fa5"; name: string };
 
+// Deliberate brand-identity colors (iMessage blue, WhatsApp green, Slack
+// purple, ...) — these represent each network's own brand, not the app
+// theme, so they intentionally do NOT come from constants/theme.ts and stay
+// fixed across light/dark.
 const NETWORK_META: Record<string, { label: string; icon: NetworkIcon; color: string }> = {
   imessage: { label: "iMessage", icon: { family: "ionicons", name: "chatbubble-ellipses" }, color: "#0A84FF" },
   apple_contact: { label: "iMessage", icon: { family: "ionicons", name: "chatbubble-ellipses" }, color: "#0A84FF" },

@@ -203,7 +203,7 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
             { backgroundColor: text.trim() && !pending ? theme.accent : theme.backgroundElement },
           ]}
         >
-          <Ionicons name="arrow-up" size={18} color={text.trim() && !pending ? "#fff" : theme.textSecondary} />
+          <Ionicons name="arrow-up" size={18} color={text.trim() && !pending ? theme.onAccent : theme.textSecondary} />
         </Pressable>
       </View>
     </View>
@@ -228,7 +228,7 @@ function ShadowRow({ row }: { row: Row }) {
       >
         <Text
           style={{
-            color: errored ? theme.textSecondary : mine ? "#fff" : theme.bubbleTheirsText,
+            color: errored ? theme.textSecondary : mine ? theme.onAccent : theme.bubbleTheirsText,
             fontSize: 14,
             lineHeight: 19,
           }}

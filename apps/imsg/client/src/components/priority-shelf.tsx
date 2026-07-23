@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { Radii } from "@/constants/theme";
 
 import { ChatAvatar } from "./avatar";
 
@@ -108,7 +109,7 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
                     },
                   ]}
                 >
-                  <Ionicons name="ellipse" size={8} color={selected ? "#FFFFFF" : theme.accent} />
+                  <Ionicons name="ellipse" size={8} color={selected ? theme.onAccent : theme.accent} />
                 </View>
               </View>
               <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
@@ -153,7 +154,7 @@ const styles = StyleSheet.create({
   },
   status: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     borderWidth: 2,
     bottom: -2,
     height: 19,

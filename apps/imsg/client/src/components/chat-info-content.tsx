@@ -20,6 +20,7 @@ import { showToast } from "@/lib/toast";
 import type { Contact, ContactSuggestion, GalleryItem } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
+import { Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { initials } from "@/lib/format";
 
@@ -208,7 +209,7 @@ export function ChatInfoContent({
                   style={[styles.renameInput, { color: theme.text, borderColor: theme.divider }]}
                 />
                 <Pressable onPress={saveName}>
-                  <Text style={{ color: "#0A84FF", fontSize: 16, fontWeight: "600" }}>Save</Text>
+                  <Text style={{ color: theme.accent, fontSize: Type.body, fontWeight: "600" }}>Save</Text>
                 </Pressable>
               </View>
               {aiStatus?.suggestions && (
@@ -279,7 +280,7 @@ export function ChatInfoContent({
                           style={[styles.saveChip, { backgroundColor: theme.accent }]}
                           hitSlop={4}
                         >
-                          <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Save</Text>
+                          <Text style={{ color: theme.onAccent, fontSize: Type.secondary, fontWeight: "600" }}>Save</Text>
                         </Pressable>
                       </View>
                     ))
@@ -435,6 +436,8 @@ export function ChatInfoContent({
                 >
                   <Image source={{ uri: attachmentUrl(item.guid) }} style={styles.tileImg} contentFit="cover" />
                   {item.isVideo && (
+                    // Play badge sits on a fixed dark scrim over media thumbnails —
+                    // theme-invariant by design, not a theme.onAccent site.
                     <View style={styles.playBadge}>
                       <Ionicons name="play" size={14} color="#fff" />
                     </View>
@@ -490,6 +493,10 @@ const styles = StyleSheet.create({
   pAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   pAvatarImg: { ...StyleSheet.absoluteFillObject, borderRadius: 20 },
   dangerRow: { alignItems: "flex-start", justifyContent: "center", minHeight: 50, paddingHorizontal: 14 },
+  // Intentionally NOT theme.destructive: that literal is the iOS system-red
+  // LIGHT variant, and it's already correct in light mode. Swapping to the
+  // themed token would flip dark mode to #FF453A, which is outside this
+  // sweep's two authorized visual changes (accent + #FF453A→light-mode-red).
   actionDanger: { color: "#FF3B30", fontSize: 16 },
   grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
   tileImg: { width: "100%", height: "100%", borderRadius: 6 },

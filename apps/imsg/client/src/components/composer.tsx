@@ -22,6 +22,7 @@ import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer } from "@/lib/composer-fill";
 import type { Contact, Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Colors, Radii } from "@/constants/theme";
 
 interface ComposerProps {
   chatGuid: string;
@@ -562,7 +563,7 @@ export function Composer({
   const recording = recorderState.isRecording;
   const canSend = text.trim().length > 0 || pending.length > 0;
   const isSMS = chatIsSMS(chatGuid);
-  const sendColor = isSMS ? "#34C759" : theme.bubbleMine;
+  const sendColor = isSMS ? theme.sms : theme.bubbleMine;
 
   return (
     <View
@@ -630,6 +631,8 @@ export function Composer({
                 style={styles.pendingRemove}
                 hitSlop={6}
               >
+                {/* Remove badge sits on a fixed dark scrim over an attachment thumbnail —
+                    theme-invariant, not a theme.onAccent site. */}
                 <Ionicons name="close-circle" size={20} color="#fff" />
               </Pressable>
             </View>
@@ -698,7 +701,7 @@ export function Composer({
               disabled={busy}
               style={[styles.sendButton, { backgroundColor: sendColor }]}
             >
-              <Ionicons name="arrow-up" size={20} color="#fff" />
+              <Ionicons name="arrow-up" size={20} color={theme.onAccent} />
             </Pressable>
           ) : (
             <Pressable
@@ -707,10 +710,14 @@ export function Composer({
               disabled={busy || Boolean(editing)}
               style={[
                 styles.sendButton,
+                // Intentionally NOT theme.destructive: this literal is the
+                // iOS system-red LIGHT variant, already correct in light mode.
+                // Theming it would flip dark mode to #FF453A — an unauthorized
+                // visual change outside this sweep's two approved exceptions.
                 { backgroundColor: recording ? "#FF3B30" : theme.backgroundElement },
               ]}
             >
-              <Ionicons name={recording ? "stop" : "mic"} size={19} color={recording ? "#fff" : theme.textSecondary} />
+              <Ionicons name={recording ? "stop" : "mic"} size={19} color={recording ? theme.onAccent : theme.textSecondary} />
             </Pressable>
           )}
         </View>
@@ -722,7 +729,9 @@ export function Composer({
 const pickerStyles = StyleSheet.create({
   backdrop: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    // Same value both schemes — Colors.backdrop, referenced directly since
+    // this StyleSheet is static (outside any component/theme scope).
+    backgroundColor: Colors.light.backdrop,
     flex: 1,
     justifyContent: "center",
     padding: 16,
@@ -736,7 +745,7 @@ const pickerStyles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 12,
     paddingTop: 14,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.35,
     shadowRadius: 34,
@@ -853,12 +862,14 @@ const styles = StyleSheet.create({
     top: -6,
     right: -6,
     backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 10,
+    borderRadius: Radii.chip,
   },
   recDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
+    // Intentionally NOT theme.destructive — see the recording-button comment
+    // above; same #FF3B30-is-already-correct-in-light-mode reasoning.
     backgroundColor: "#FF3B30",
   },
   actionCol: {

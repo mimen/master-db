@@ -17,6 +17,7 @@ import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
 import { usePersonView } from "@/hooks/use-person-view";
 import { useTheme } from "@/hooks/use-theme";
+import { Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { PersonConversationsList } from "./person-conversations-list";
 import { PersonNetworksList } from "./person-networks-list";
@@ -134,7 +135,7 @@ export function PersonContent({
             {creating ? (
               <ActivityIndicator />
             ) : (
-              <Text style={{ color: "#0A84FF", fontSize: 16, fontWeight: "600" }}>+ Add Contact</Text>
+              <Text style={{ color: theme.accent, fontSize: Type.body, fontWeight: "600" }}>+ Add Contact</Text>
             )}
           </Pressable>
         </View>
@@ -230,7 +231,7 @@ export function PersonContent({
 
         {airtableId && (
           <Pressable style={styles.footerLink} onPress={() => Linking.openURL(airtableRecordUrl(airtableId))}>
-            <Text style={{ color: "#0A84FF", fontSize: 14, fontWeight: "600" }}>View in Airtable</Text>
+            <Text style={{ color: theme.accent, fontSize: 14, fontWeight: "600" }}>View in Airtable</Text>
           </Pressable>
         )}
       </ScrollView>

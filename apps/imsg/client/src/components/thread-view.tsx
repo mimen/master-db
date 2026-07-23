@@ -26,6 +26,7 @@ import type { Message } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Radii } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
@@ -668,7 +669,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
@@ -700,10 +701,10 @@ const styles = StyleSheet.create({
     top: 120,
   },
   dayChip: {
-    borderRadius: 14,
+    borderRadius: Radii.card,
     paddingHorizontal: 12,
     paddingVertical: 5,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },

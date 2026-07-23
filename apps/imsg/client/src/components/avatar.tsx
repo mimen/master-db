@@ -19,6 +19,8 @@ function avatarColor(key: string): { start: string; end: string; fg: string } {
   return {
     start: `hsl(${hue}, ${PALETTE.s1}%, ${PALETTE.l1}%)`,
     end: `hsl(${hue2}, ${PALETTE.s2}%, ${PALETTE.l2}%)`,
+    // Generated avatar initials always need to contrast the generated gradient,
+    // never the app theme — theme-invariant by design.
     fg: PALETTE.l1 > 64 ? "rgba(0,0,0,0.72)" : "#ffffff",
   };
 }

@@ -2,6 +2,7 @@ import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Radii, Type } from "@/constants/theme";
 import {
   activeInboxFilterCount,
   resetInboxFilters,
@@ -466,11 +467,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   popover: {
-    borderRadius: 14,
+    borderRadius: Radii.card,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
     position: "absolute",
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 24,
@@ -493,7 +494,7 @@ const styles = StyleSheet.create({
     width: StyleSheet.hairlineWidth,
   },
   popoverGroupTitle: {
-    fontSize: 11,
+    fontSize: Type.caption,
     fontWeight: "700",
     letterSpacing: 0.6,
     paddingBottom: 4,
@@ -507,10 +508,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   popoverResetLabel: {
-    fontSize: 13,
+    fontSize: Type.secondary,
     fontWeight: "600",
   },
   modalRoot: {
+    // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
     backgroundColor: "rgba(0,0,0,0.35)",
     flex: 1,
     justifyContent: "flex-end",
@@ -604,12 +606,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   resetButtonLabel: {
-    fontSize: 16,
+    fontSize: Type.body,
     fontWeight: "600",
   },
   doneButton: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     justifyContent: "center",
     minHeight: 44,
     minWidth: 84,

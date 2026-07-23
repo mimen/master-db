@@ -3,6 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { BASE_URL } from "@/lib/config";
 import { useTheme } from "@/hooks/use-theme";
+import { Radii, Type } from "@/constants/theme";
 
 interface LinkPreviewData {
   url: string;
@@ -45,7 +46,8 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 
   if (!preview) return null;
 
-  const textColor = mine ? "#fff" : theme.text;
+  const textColor = mine ? theme.onAccent : theme.text;
+  // Dimmed white, not a solid onAccent — no token for this specific alpha.
   const secondary = mine ? "rgba(255,255,255,0.7)" : theme.textSecondary;
 
   return (
@@ -81,7 +83,7 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 const styles = StyleSheet.create({
   card: {
     marginTop: 6,
-    borderRadius: 12,
+    borderRadius: Radii.input,
     overflow: "hidden",
     maxWidth: 280,
   },
@@ -94,7 +96,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   title: {
-    fontSize: 13,
+    fontSize: Type.secondary,
     fontWeight: "600",
   },
   description: {

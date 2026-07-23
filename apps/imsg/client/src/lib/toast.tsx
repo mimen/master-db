@@ -46,6 +46,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 60,
     alignSelf: "center",
+    // Fixed dark pill, deliberately theme-invariant (system-HUD style toast).
     backgroundColor: "rgba(30,30,32,0.92)",
     borderRadius: 20,
     paddingHorizontal: 16,

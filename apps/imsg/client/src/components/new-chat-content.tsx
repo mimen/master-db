@@ -117,8 +117,8 @@ export function NewChatContent({
               onPress={() => setSelected((cur) => cur.filter((c) => c.address !== contact.address))}
               style={[styles.chip, { backgroundColor: theme.accent }]}
             >
-              <Text style={{ color: "#fff", fontSize: 14 }}>{contact.name}</Text>
-              <Ionicons name="close" size={14} color="#fff" />
+              <Text style={{ color: theme.onAccent, fontSize: 14 }}>{contact.name}</Text>
+              <Ionicons name="close" size={14} color={theme.onAccent} />
             </Pressable>
           ))}
           <TextInput
@@ -167,7 +167,7 @@ export function NewChatContent({
                 {adding ? (
                   <ActivityIndicator size="small" />
                 ) : (
-                  <Ionicons name="add-circle-outline" size={22} color="#0A84FF" />
+                  <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
                 )}
               </Pressable>
             );
@@ -207,9 +207,9 @@ export function NewChatContent({
           style={[styles.sendButton, { backgroundColor: canSend ? theme.bubbleMine : theme.backgroundElement }]}
         >
           {sending ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color={theme.onAccent} size="small" />
           ) : (
-            <Ionicons name="arrow-up" size={20} color="#fff" />
+            <Ionicons name="arrow-up" size={20} color={theme.onAccent} />
           )}
         </Pressable>
       </View>

@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useTheme } from "@/hooks/use-theme";
+import { Radii, Type } from "@/constants/theme";
 
 function formatSeconds(total: number): string {
   const seconds = Math.max(0, Math.round(total));
@@ -35,7 +36,8 @@ export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
   const player = useAudioPlayer({ uri: url });
   const status = useAudioPlayerStatus(player);
   const playing = status.playing;
-  const tint = mine ? "#fff" : theme.text;
+  const tint = mine ? theme.onAccent : theme.text;
+  // Alpha-dimmed white with no matching token — left as a literal.
   const dimTint = mine ? "rgba(255,255,255,0.4)" : theme.divider;
   const waveform = useMemo(() => fakeWaveform(url), [url]);
   const [rateIndex, setRateIndex] = useState(0);
@@ -65,6 +67,8 @@ export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
   return (
     <View style={[styles.audio, { backgroundColor: mine ? "rgba(255,255,255,0.15)" : theme.backgroundElement }]}>
       <Pressable onPress={toggle} hitSlop={8} style={[styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.background }]}>
+        {/* mine's play button sits on a near-white translucent circle regardless
+            of theme — black icon is deliberate, not a theme.text substitute. */}
         <Ionicons name={playing ? "pause" : "play"} size={16} color={mine ? "#000" : theme.text} />
       </Pressable>
       <View style={styles.waveform}>
@@ -117,6 +121,8 @@ export function VideoBubble({ url }: { url: string }) {
         />
         {!activated && (
           <View style={styles.videoOverlay}>
+            {/* Play-circle overlay on top of the video frame — theme-invariant
+                media control, always white regardless of app theme. */}
             <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
           </View>
         )}
@@ -153,19 +159,20 @@ const styles = StyleSheet.create({
   },
   rateChip: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
+    borderRadius: Radii.chip,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   rateText: {
-    fontSize: 11,
+    fontSize: Type.caption,
     fontWeight: "600",
   },
   video: {
     width: 230,
     aspectRatio: 4 / 3,
-    borderRadius: 14,
+    borderRadius: Radii.card,
     overflow: "hidden",
+    // Letterbox background for the video frame — always black, theme-invariant.
     backgroundColor: "#000",
   },
   videoOverlay: {
