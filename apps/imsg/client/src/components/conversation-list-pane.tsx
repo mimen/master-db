@@ -274,6 +274,46 @@ export function ConversationListPane({
     extrapolate: "clamp",
   });
 
+  const searchField = (
+    <View
+      style={[
+        styles.searchField,
+        !wide && styles.searchFieldInline,
+        { backgroundColor: theme.backgroundElement },
+      ]}
+    >
+      <Ionicons name="search" size={17} color={theme.textSecondary} />
+      <TextInput
+        ref={searchRef}
+        accessibilityLabel="Search conversations and messages"
+        value={query}
+        onChangeText={(value) => {
+          setQuery(value);
+          // Searching wipes the lenses — results span everything, and
+          // the pills visibly reset to All to say so.
+          if (value.trim().length > 0 && (filters.state !== "all" || filters.type !== "all")) {
+            onFiltersChange({ state: "all", type: "all" });
+          }
+        }}
+        placeholder="Search"
+        placeholderTextColor={theme.textSecondary}
+        returnKeyType="search"
+        clearButtonMode="while-editing"
+        style={[styles.searchInput, { color: theme.text }]}
+      />
+      {searchActive && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+          onPress={() => setQuery("")}
+          hitSlop={8}
+        >
+          <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
+        </Pressable>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView
       style={[
@@ -340,37 +380,7 @@ export function ConversationListPane({
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View style={wide ? { paddingBottom: 6 } : null}>
-              <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
-                <Ionicons name="search" size={17} color={theme.textSecondary} />
-                <TextInput
-                  ref={searchRef}
-                  accessibilityLabel="Search conversations and messages"
-                  value={query}
-                  onChangeText={(value) => {
-                    setQuery(value);
-                    // Searching wipes the lenses — results span everything, and
-                    // the pills visibly reset to All to say so.
-                    if (value.trim().length > 0 && (filters.state !== "all" || filters.type !== "all")) {
-                      onFiltersChange({ state: "all", type: "all" });
-                    }
-                  }}
-                  placeholder="Search"
-                  placeholderTextColor={theme.textSecondary}
-                  returnKeyType="search"
-                  clearButtonMode="while-editing"
-                  style={[styles.searchInput, { color: theme.text }]}
-                />
-                {searchActive && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear search"
-                    onPress={() => setQuery("")}
-                    hitSlop={8}
-                  >
-                    <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
-                  </Pressable>
-                )}
-              </View>
+              {wide && searchField}
               <ConversationFilters
                 filters={filters}
                 counts={counts}
@@ -427,11 +437,7 @@ export function ConversationListPane({
           style={[styles.topBar, glassStyle]}
           onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}
         >
-          {wide ? (
-            <NavSwitcher active="messages" style={styles.navInline} />
-          ) : (
-            <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
-          )}
+          {wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
           <View style={styles.titleActions}>
             {aiStatus?.suggestions && (
               <Pressable
@@ -530,6 +536,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 4,
     paddingHorizontal: 12,
+  },
+  searchFieldInline: {
+    flex: 1,
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
   searchInput: {
     flex: 1,

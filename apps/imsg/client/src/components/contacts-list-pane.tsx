@@ -134,7 +134,13 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   }, [filtered, airtableResults]);
 
   const searchField = (
-    <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
+    <View
+      style={[
+        styles.searchField,
+        !wide && styles.searchFieldInline,
+        { backgroundColor: theme.backgroundElement },
+      ]}
+    >
       <Ionicons name="search" size={17} color={theme.textSecondary} />
       <TextInput
         value={query}
@@ -243,7 +249,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
                 useNativeDriver: false,
               })}
               scrollEventThrottle={16}
-              ListHeaderComponent={<View style={{ paddingBottom: 6 }}>{searchField}</View>}
+              ListHeaderComponent={wide ? <View style={{ paddingBottom: 6 }}>{searchField}</View> : null}
               ListEmptyComponent={
                 <View style={styles.center}>
                   <Text style={{ color: theme.textSecondary }}>No contacts found.</Text>
@@ -260,11 +266,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           )}
           {/* Frosted top bar — identical chrome to the Messages pane. */}
           <View style={[styles.topBar, glassStyle]} onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}>
-            {wide ? (
-              <NavSwitcher active="contacts" style={styles.navInline} />
-            ) : (
-              <Text style={[styles.title, { color: theme.text }]}>Contacts</Text>
-            )}
+            {wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
             <View style={styles.titleActions}>
               {aiStatus?.suggestions && (
                 <Pressable
@@ -353,6 +355,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 4,
     paddingHorizontal: 12,
+  },
+  searchFieldInline: {
+    flex: 1,
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
   searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
   sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 18, paddingVertical: 4 },
