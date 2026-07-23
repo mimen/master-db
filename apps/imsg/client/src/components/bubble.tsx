@@ -93,11 +93,12 @@ export const TAPBACK_EMOJI = new Map([
   ["question", "❓"],
 ]);
 
-function Attachments({ message, mine }: { message: Message; mine: boolean }) {
+function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
   const { width: winW } = useWindowDimensions();
   const openLightbox = useLightbox();
-  // Cap thumbnails so desktop doesn't blow them up huge.
-  const mediaW = Math.min(260, Math.round(winW * 0.6));
+  // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
+  const base = paneWidth > 0 ? paneWidth : winW;
+  const mediaW = Math.min(260, Math.round(base * 0.6));
   const images = message.attachments.filter((a) => a.mimeType?.startsWith("image/"));
   return (
     <View style={{ gap: 6 }}>
@@ -148,6 +149,8 @@ function Attachments({ message, mine }: { message: Message; mine: boolean }) {
 
 interface BubbleProps {
   message: Message;
+  /** Rendering pane's width — bubbles cap against THIS, not the window. */
+  paneWidth?: number;
   groupStart: boolean;
   groupEnd: boolean;
   isGroupChat: boolean;
@@ -160,6 +163,7 @@ interface BubbleProps {
 
 export const Bubble = memo(function Bubble({
   message,
+  paneWidth = 0,
   groupStart,
   groupEnd,
   isGroupChat,
@@ -178,8 +182,14 @@ export const Bubble = memo(function Bubble({
   const mineColor = message.service === "SMS" ? "#34C759" : theme.bubbleMine;
   const senderName =
     message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
-  // Cap bubble width so long messages don't stretch across a wide desktop pane.
-  const bubbleMaxWidth = winW >= 768 ? Math.min(winW * 0.5, 560) : "78%";
+  // Cap bubble width so long messages neither stretch across a wide pane nor
+  // overflow a narrow one (Details/Assistant open). Pane-relative when known.
+  const bubbleMaxWidth =
+    paneWidth > 0
+      ? Math.min(paneWidth * 0.72, 560)
+      : winW >= 768
+        ? Math.min(winW * 0.5, 560)
+        : "78%";
   const url = message.text ? firstUrl(message.text) : null;
   // A persisted non-zero error is Apple's delivery failure (e.g. the iMessage
   // half of a service-split send) — surface it like an optimistic failure.
@@ -253,7 +263,9 @@ export const Bubble = memo(function Bubble({
           )}
 
           {/* Media and link cards render bare — no colored bubble around them. */}
-          {message.attachments.length > 0 && <Attachments message={message} mine={mine} />}
+          {message.attachments.length > 0 && (
+            <Attachments message={message} mine={mine} paneWidth={paneWidth} />
+          )}
           {url && <LinkPreviewCard url={url} mine={mine} />}
 
           <View>

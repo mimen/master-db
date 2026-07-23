@@ -131,6 +131,7 @@ export function ThreadView({
   // drive the scroll ourselves. Inverted container ⇒ wheel-up must increase
   // scrollTop (toward older messages).
   const [listMounted, setListMounted] = useState(false);
+  const [paneW, setPaneW] = useState(0);
   useEffect(() => {
     if (Platform.OS !== "web" || !listMounted) return;
     const node = (
@@ -396,6 +397,7 @@ export function ThreadView({
 
   return (
     <KeyboardAvoidingView
+      onLayout={(e) => setPaneW(e.nativeEvent.layout.width)}
       style={{ flex: 1, backgroundColor: theme.background }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={headerOffset}
@@ -556,6 +558,7 @@ export function ThreadView({
               ) : (
                 <Bubble
                   message={item.message}
+                  paneWidth={paneW}
                   groupStart={item.groupStart}
                   groupEnd={item.groupEnd}
                   isGroupChat={isGroup}
