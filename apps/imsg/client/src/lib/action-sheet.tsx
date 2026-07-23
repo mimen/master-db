@@ -56,6 +56,14 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
+  // Desktop NEVER gets a bottom sheet: anchored requests are cursor popovers,
+  // everything else is a centered dialog. The dark backdrop is mobile-sheet-only.
+  const desktop = Platform.OS === "web" && winW >= 768;
+  const variant: "popover" | "dialog" | "sheet" = rendered?.anchor
+    ? "popover"
+    : desktop
+      ? "dialog"
+      : "sheet";
 
   const show = useCallback((req: SheetRequest) => {
     // The tapback pill needs the custom sheet on every platform.
@@ -86,10 +94,10 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
       <Modal
         visible={request !== null}
         transparent
-        animationType={rendered?.anchor ? "none" : "slide"}
+        animationType={variant === "sheet" ? "slide" : "none"}
         onRequestClose={() => setRequest(null)}
       >
-        {rendered?.anchor ? (
+        {variant === "popover" && rendered?.anchor ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setRequest(null)}>
             {(() => {
               const POP_W = 232;
@@ -140,6 +148,50 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                 </View>
               );
             })()}
+          </Pressable>
+        ) : variant === "dialog" ? (
+          <Pressable style={styles.dialogBackdrop} onPress={() => setRequest(null)}>
+            <Pressable
+              style={[styles.dialog, { backgroundColor: theme.backgroundElement, borderColor: theme.divider }]}
+              onPress={() => undefined}
+            >
+              {rendered?.title && (
+                <Text style={[styles.dialogTitle, { color: theme.textSecondary }]}>{rendered.title}</Text>
+              )}
+              {rendered?.tapbacks && (
+                <View style={styles.tapbackRow}>
+                  {rendered.tapbacks.map((t) => (
+                    <Pressable
+                      key={t.emoji}
+                      onPress={() => {
+                        setRequest(null);
+                        t.onPress();
+                      }}
+                      style={[styles.tapback, styles.tapbackSmall, t.active && styles.tapbackActive]}
+                    >
+                      <Text style={{ fontSize: 20 }}>{t.emoji}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              {rendered?.actions.map((action) => (
+                <Pressable
+                  key={action.label}
+                  style={({ pressed }) => [
+                    styles.dialogAction,
+                    pressed && { backgroundColor: theme.backgroundSelected },
+                  ]}
+                  onPress={() => {
+                    setRequest(null);
+                    action.onPress();
+                  }}
+                >
+                  <Text style={[styles.dialogLabel, { color: action.destructive ? "#FF453A" : theme.text }]}>
+                    {action.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </Pressable>
           </Pressable>
         ) : (
         <Pressable style={styles.backdrop} onPress={() => setRequest(null)}>
@@ -238,6 +290,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "flex-end",
+  },
+  dialogBackdrop: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+  },
+  dialog: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: "86%",
+    paddingVertical: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 30,
+    width: 300,
+  },
+  dialogTitle: {
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    textAlign: "center",
+  },
+  dialogAction: {
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 16,
+  },
+  dialogLabel: {
+    fontSize: 15,
   },
   sheetWrap: {
     alignSelf: "center",
