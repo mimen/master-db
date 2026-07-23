@@ -13,6 +13,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_DIR"
 
 echo "== Syncing main =="
+# bun install rewrites lockfiles in place; a stale dirty lockfile otherwise
+# aborts the pull whenever a push actually changes dependencies.
+git checkout -- '*/bun.lock' 2>/dev/null || true
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
