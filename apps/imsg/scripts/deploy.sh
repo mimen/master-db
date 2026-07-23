@@ -80,6 +80,9 @@ cd "$REPO_DIR"
 
 echo "== Restarting imsg server =="
 launchctl kickstart -k "gui/$(id -u)/com.milad.imsg"
+# Metro caches its file map — a new source DIRECTORY is invisible to a
+# long-running bundler, breaking Expo Go with "Unable to resolve module".
+launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-expo" 2>/dev/null || true
 sleep 3
 
 echo "== Health check =="
