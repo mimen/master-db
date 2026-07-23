@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
+import { forwardRef, useImperativeHandle, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { prefetchThread } from "@/hooks/use-messages";
@@ -14,13 +15,44 @@ interface PriorityShelfProps {
   onLongPress?: (chat: ChatSummary) => void;
 }
 
+/** Narrow imperative surface for keyboard glide: the shelf owns its own
+ * horizontal visibility, mirroring the vertical viewport's edge-pinning. */
+export interface PriorityShelfHandle {
+  reveal(index: number, direction: -1 | 1): void;
+}
+
 function unreadLabel(chat: ChatSummary): string {
   if (chat.unreadCount === 0) return "Unread";
   return chat.unreadCount === 1 ? "1 unread" : `${chat.unreadCount} unread`;
 }
 
-export function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }: PriorityShelfProps) {
+export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>(
+  function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }, ref) {
   const theme = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
+  // Measured per-item frames (x/width relative to the scroll content) — the
+  // shelf can hold ten conversations in a 380px sidebar, so a keyboard
+  // selection past the fold must be scrolled into view.
+  const itemFrames = useRef<Array<{ x: number; width: number }>>([]);
+  const viewW = useRef(0);
+  const scrollX = useRef(0);
+
+  useImperativeHandle(ref, () => ({
+    reveal(index, direction) {
+      const frame = itemFrames.current[index];
+      if (!frame || viewW.current <= 0) return;
+      const pad = 18;
+      const visibleStart = scrollX.current;
+      const visibleEnd = scrollX.current + viewW.current;
+      if (frame.x >= visibleStart + pad && frame.x + frame.width <= visibleEnd - pad) return;
+      // Edge-pin toward the direction of travel, like the vertical list.
+      const x =
+        direction > 0
+          ? frame.x + frame.width - viewW.current + pad
+          : frame.x - pad;
+      scrollRef.current?.scrollTo({ x: Math.max(0, x), animated: false });
+    },
+  }));
 
   if (chats.length === 0) return null;
 
@@ -30,15 +62,33 @@ export function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }: Pri
       accessibilityLabel={`Priority conversations, ${chats.length}`}
       style={[styles.section, { borderBottomColor: theme.divider }]}
     >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        onLayout={(e) => {
+          viewW.current = e.nativeEvent.layout.width;
+        }}
+        onScroll={(e) => {
+          scrollX.current = e.nativeEvent.contentOffset.x;
+        }}
+        scrollEventThrottle={16}
+      >
         <View style={styles.leadIcon}>
           <Ionicons name="star" size={20} color="#FFCC00" />
         </View>
-        {chats.map((chat) => {
+        {chats.map((chat, index) => {
           const selected = chat.guid === selectedGuid;
           return (
             <Pressable
               key={chat.guid}
+              onLayout={(e) => {
+                itemFrames.current[index] = {
+                  x: e.nativeEvent.layout.x,
+                  width: e.nativeEvent.layout.width,
+                };
+              }}
               accessibilityRole="button"
               accessibilityLabel={`Open ${chat.displayName}, ${unreadLabel(chat)}`}
               accessibilityState={{ selected }}
@@ -73,7 +123,7 @@ export function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }: Pri
       </ScrollView>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   section: {

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateCounts } from "@shared/types";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Animated,
   Platform,
@@ -16,11 +16,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
 import { NavSwitcher } from "./nav-switcher";
-import { PriorityShelf } from "./priority-shelf";
+import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
+import { useConversationListKeyboard } from "./conversations/use-conversation-list-keyboard";
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
 
@@ -29,19 +30,8 @@ import { useTheme } from "@/hooks/use-theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
-import {
-  deriveInboxModel,
-  neighborAfterRemoval,
-  nextNavigationTarget,
-  type InboxFilters,
-} from "@/lib/inbox-model";
-import {
-  isListMode,
-  registerFocusTarget,
-  registerListAdapter,
-  requestFocus,
-  subscribeListMode,
-} from "@/lib/keyboard/controller";
+import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
 interface ConversationListPaneProps {
@@ -55,8 +45,9 @@ interface ConversationListPaneProps {
   selectedGuid?: string;
   onFiltersChange: (filters: InboxFilters) => void;
   onOpenChat: (chat: ChatSummary) => void;
-  /** Glide-mode j/k selection: show the thread without focusing or marking read. */
-  onPreviewChat?: (chat: ChatSummary) => void;
+  /** Glide-mode j/k selection: show the thread without focusing or marking
+   * read. Required — keyboard moves must never fall back to opening. */
+  onPreviewChat: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
 }
@@ -156,56 +147,17 @@ export function ConversationListPane({
     chromeHeight: topBarH,
     viewKey: search.viewKey,
   });
-  const viewportRef = useRef(viewport);
-  viewportRef.current = viewport;
-
-  // Keyboard adapter: glide-mode navigation follows the RENDERED order
-  // (priority shelf first, then the filtered list) — not the raw chats array.
-  const navRef = useRef({ model, selectedGuid, onOpenChat, onPreviewChat });
-  navRef.current = { model, selectedGuid, onOpenChat, onPreviewChat };
-  const searchCtl = useRef(search);
-  searchCtl.current = search;
-
-  useEffect(
-    () => registerFocusTarget("list-search", () => searchCtl.current.inputRef.current?.focus()),
-    [],
-  );
-
-  useEffect(() => {
-    if (!wide) return;
-    return registerListAdapter({
-      move(delta) {
-        const { model: m, selectedGuid: sel, onOpenChat: open, onPreviewChat: preview } = navRef.current;
-        const target = nextNavigationTarget(m.navigationEntries, sel, delta);
-        if (!target || target.chat.guid === sel) return;
-        (preview ?? open)(target.chat);
-        viewportRef.current.revealEntry(target, delta);
-      },
-      activate() {
-        const { model: m, selectedGuid: sel, onOpenChat: open } = navRef.current;
-        const target =
-          m.navigationEntries.find((e) => e.chat.guid === sel) ?? m.navigationEntries[0];
-        if (target) open(target.chat);
-      },
-      focusSearch() {
-        // The field is the list header on desktop — reveal it, then focus via
-        // the registry (pending-focus handles a not-yet-mounted field; no
-        // timer-based sequencing).
-        viewportRef.current.scrollToTop();
-        requestFocus("list-search");
-      },
-      clearSearch() {
-        return searchCtl.current.clear();
-      },
-      selectNeighborOf(guid) {
-        // Runs synchronously after the removal action, before re-render — so
-        // the current model still contains `guid` and its neighbors.
-        const { model: m, onOpenChat: open, onPreviewChat: preview } = navRef.current;
-        const neighbor = neighborAfterRemoval(m.navigationEntries, guid);
-        if (neighbor) (preview ?? open)(neighbor.chat);
-      },
-    });
-  }, [wide]);
+  const shelfRef = useRef<PriorityShelfHandle>(null);
+  useConversationListKeyboard({
+    enabled: wide,
+    model,
+    selectedGuid,
+    viewport,
+    search,
+    shelf: shelfRef,
+    onOpenChat,
+    onPreviewChat,
+  });
 
   const searchField = (
     <SidebarSearchField
@@ -262,6 +214,7 @@ export function ConversationListPane({
               />
               {model.showPriorityShelf && (
                 <PriorityShelf
+                  ref={shelfRef}
                   chats={model.priority}
                   selectedGuid={selectedGuid}
                   onPress={onOpenChat}

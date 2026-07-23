@@ -262,7 +262,7 @@ export default function ChatListScreen() {
         setType(filters.type);
       }}
       onOpenChat={openChat}
-      onPreviewChat={wide ? previewChat : undefined}
+      onPreviewChat={previewChat}
       onRefresh={refresh}
       onNewMessage={openNewMessage}
     />
