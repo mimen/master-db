@@ -61,22 +61,56 @@ function sectionLabel(filters: InboxFilters, hasSearch: boolean): string {
   return `${STATE_LABELS[filters.state]} · ${TYPE_LABELS[filters.type]}`;
 }
 
+/** Where a navigable conversation is rendered: the horizontal priority shelf
+ * or the vertical list. Keyboard code dispatches reveal-behavior on this. */
+export type InboxNavigationLocation =
+  | { kind: "priority"; index: number }
+  | { kind: "list"; index: number };
+
+export interface InboxNavigationEntry {
+  chat: ChatSummary;
+  location: InboxNavigationLocation;
+}
+
 /** Derived presentation data for the conversation list and priority shelf. */
 export interface InboxModel {
-  /** Chats matching both active lenses and the normalized search query. */
-  searchedChats: ChatSummary[];
   /** Whether the priority shelf is meaningful for this unfiltered inbox view. */
   showPriorityShelf: boolean;
   /** Oldest unread conversations, sorted by their first unread timestamp. */
   priority: ChatSummary[];
-  /** Remaining chats in their incoming order after priority chats are removed. */
-  recent: ChatSummary[];
   /** The main list, with pinned recent chats placed before unpinned recent chats. */
   listChats: ChatSummary[];
+  /** Every navigable conversation in RENDERED order (shelf first, then list),
+   * with its rendered location — the single source of keyboard order. */
+  navigationEntries: InboxNavigationEntry[];
   /** Contextual heading above the main list. */
   sectionLabel: string;
   /** The count rendered beside the heading. */
   sectionCount: number;
+}
+
+/** The entry `delta` steps from the selected chat, clamped to the ends.
+ * Unknown/absent selection resolves to the first entry. */
+export function nextNavigationTarget(
+  entries: readonly InboxNavigationEntry[],
+  selectedGuid: string | undefined,
+  delta: -1 | 1,
+): InboxNavigationEntry | null {
+  if (entries.length === 0) return null;
+  const idx = entries.findIndex((e) => e.chat.guid === selectedGuid);
+  if (idx === -1) return entries[0] ?? null;
+  return entries[Math.max(0, Math.min(entries.length - 1, idx + delta))] ?? null;
+}
+
+/** After `guid` leaves the view (archive), the neighbor to glide onto:
+ * the next entry, else the previous, else nothing. */
+export function neighborAfterRemoval(
+  entries: readonly InboxNavigationEntry[],
+  guid: string,
+): InboxNavigationEntry | null {
+  const idx = entries.findIndex((e) => e.chat.guid === guid);
+  if (idx === -1) return null;
+  return entries[idx + 1] ?? entries[idx - 1] ?? null;
 }
 
 /**
@@ -120,17 +154,21 @@ export function deriveInboxModel(
   );
   const showPriorityShelf = filters.state === "all" && filters.type === "all" && needle.length === 0;
   const { priority, recent } = partitionPriorityShelf(searchedChats);
+  const shelf = showPriorityShelf ? priority : [];
   const listSource = showPriorityShelf ? recent : searchedChats;
   const listChats = [
     ...listSource.filter((chat) => chat.flags.pinned),
     ...listSource.filter((chat) => !chat.flags.pinned),
   ];
+  const navigationEntries: InboxNavigationEntry[] = [
+    ...shelf.map((chat, index) => ({ chat, location: { kind: "priority", index } as const })),
+    ...listChats.map((chat, index) => ({ chat, location: { kind: "list", index } as const })),
+  ];
   return {
-    searchedChats,
     showPriorityShelf,
-    priority,
-    recent,
+    priority: shelf,
     listChats,
+    navigationEntries,
     sectionLabel: sectionLabel(filters, needle.length > 0),
     sectionCount: listChats.length,
   };

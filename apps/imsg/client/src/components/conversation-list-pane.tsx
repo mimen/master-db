@@ -26,7 +26,13 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
 import { api } from "@/lib/api";
-import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import {
+  deriveInboxModel,
+  neighborAfterRemoval,
+  nextNavigationTarget,
+  type InboxFilters,
+  type InboxNavigationEntry,
+} from "@/lib/inbox-model";
 import { isListMode, registerListAdapter, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -154,49 +160,53 @@ export function ConversationListPane({
   const queryRef = useRef(query);
   queryRef.current = query;
   const viewableRange = useRef<{ first: number; last: number }>({ first: 0, last: 0 });
+
+  // Keep the glide cursor FULLY on screen with edge-pinning: scroll the
+  // minimum so the row sits flush at the edge being moved toward, where it
+  // stays step after step (no recentering jumps). The viewable range counts
+  // only fully-visible rows, so a partially clipped cursor pins.
+  const revealEntry = (entry: InboxNavigationEntry, delta: -1 | 1) => {
+    if (entry.location.kind === "priority") {
+      // Shelf rows live in the list header — scroll to top to reveal them.
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      return;
+    }
+    const listIndex = entry.location.index;
+    const { first, last } = viewableRange.current;
+    if (listIndex < first || listIndex > last) {
+      try {
+        // Top pin must clear the frosted bar, which overlays content.
+        // FlashList ignores viewOffset, so express the clearance as a
+        // fraction of the measured viewport instead.
+        const topFraction = Math.min(0.3, (topBarH + 8) / Math.max(1, viewportHRef.current));
+        listRef.current?.scrollToIndex(
+          delta > 0
+            ? { index: listIndex, viewPosition: 1, animated: false }
+            : { index: listIndex, viewPosition: topFraction, animated: false },
+        );
+      } catch {
+        /* index not measured yet — FlashList will settle on next frame */
+      }
+    }
+  };
+  const revealRef = useRef(revealEntry);
+  revealRef.current = revealEntry;
+
   useEffect(() => {
     if (!wide) return;
     return registerListAdapter({
       move(delta) {
         const { model: m, selectedGuid: sel, onOpenChat: open, onPreviewChat: preview } = navRef.current;
-        const navigable = m.showPriorityShelf ? [...m.priority, ...m.listChats] : m.listChats;
-        if (navigable.length === 0) return;
-        const idx = navigable.findIndex((ch) => ch.guid === sel);
-        const target = navigable[Math.max(0, Math.min(navigable.length - 1, idx === -1 ? 0 : idx + delta))];
-        if (!target || target.guid === sel) return;
-        (preview ?? open)(target);
-        // Keep the glide cursor FULLY on screen with edge-pinning: scroll the
-        // minimum so the row sits flush at the edge being moved toward, where
-        // it stays step after step (no recentering jumps). The viewable range
-        // counts only fully-visible rows, so a partially clipped cursor pins.
-        const listIndex = m.listChats.findIndex((ch) => ch.guid === target.guid);
-        if (listIndex === -1) {
-          // Target lives in the priority shelf (list header) — scroll to top.
-          listRef.current?.scrollToOffset({ offset: 0, animated: false });
-          return;
-        }
-        const { first, last } = viewableRange.current;
-        if (listIndex < first || listIndex > last) {
-          try {
-            // Top pin must clear the frosted bar, which overlays content.
-            // FlashList ignores viewOffset, so express the clearance as a
-            // fraction of the measured viewport instead.
-            const topFraction = Math.min(0.3, (topBarH + 8) / Math.max(1, viewportHRef.current));
-            listRef.current?.scrollToIndex(
-              delta > 0
-                ? { index: listIndex, viewPosition: 1, animated: false }
-                : { index: listIndex, viewPosition: topFraction, animated: false },
-            );
-          } catch {
-            /* index not measured yet — FlashList will settle on next frame */
-          }
-        }
+        const target = nextNavigationTarget(m.navigationEntries, sel, delta);
+        if (!target || target.chat.guid === sel) return;
+        (preview ?? open)(target.chat);
+        revealRef.current(target, delta);
       },
       activate() {
         const { model: m, selectedGuid: sel, onOpenChat: open } = navRef.current;
-        const navigable = m.showPriorityShelf ? [...m.priority, ...m.listChats] : m.listChats;
-        const target = navigable.find((ch) => ch.guid === sel) ?? navigable[0];
-        if (target) open(target);
+        const target =
+          m.navigationEntries.find((e) => e.chat.guid === sel) ?? m.navigationEntries[0];
+        if (target) open(target.chat);
       },
       focusSearch() {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -211,11 +221,8 @@ export function ConversationListPane({
         // Runs synchronously after the removal action, before re-render — so
         // the current model still contains `guid` and its neighbors.
         const { model: m, onOpenChat: open, onPreviewChat: preview } = navRef.current;
-        const navigable = m.showPriorityShelf ? [...m.priority, ...m.listChats] : m.listChats;
-        const idx = navigable.findIndex((ch) => ch.guid === guid);
-        if (idx === -1) return;
-        const neighbor = navigable[idx + 1] ?? navigable[idx - 1];
-        if (neighbor) (preview ?? open)(neighbor);
+        const neighbor = neighborAfterRemoval(m.navigationEntries, guid);
+        if (neighbor) (preview ?? open)(neighbor.chat);
       },
     });
   }, [wide]);
