@@ -342,7 +342,14 @@ export function ConversationListPane({
                   ref={searchRef}
                   accessibilityLabel="Search conversations and messages"
                   value={query}
-                  onChangeText={setQuery}
+                  onChangeText={(value) => {
+                    setQuery(value);
+                    // Searching wipes the lenses — results span everything, and
+                    // the pills visibly reset to All to say so.
+                    if (value.trim().length > 0 && (filters.state !== "all" || filters.type !== "all")) {
+                      onFiltersChange({ state: "all", type: "all" });
+                    }
+                  }}
                   placeholder="Search"
                   placeholderTextColor={theme.textSecondary}
                   returnKeyType="search"
@@ -360,17 +367,15 @@ export function ConversationListPane({
                   </Pressable>
                 )}
               </View>
-              <View style={searchActive ? { opacity: 0.45 } : null}>
-                <ConversationFilters
-                  filters={filters}
-                  counts={counts}
-                  onFiltersChange={(f) => {
-                    // Picking a badge exits search — the two never compose.
-                    setQuery("");
-                    onFiltersChange(f);
-                  }}
-                />
-              </View>
+              <ConversationFilters
+                filters={filters}
+                counts={counts}
+                onFiltersChange={(f) => {
+                  // Picking a badge exits search — the two never compose.
+                  setQuery("");
+                  onFiltersChange(f);
+                }}
+              />
               {model.showPriorityShelf && (
                 <PriorityShelf
                   chats={model.priority}
