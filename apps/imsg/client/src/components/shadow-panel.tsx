@@ -256,12 +256,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "600",
   },
   center: {

@@ -71,7 +71,7 @@ export function PersonContent({
       )}
       {onClose && !onBack && (
         <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close contact">
-          <Ionicons name="close" size={22} color={theme.textSecondary} />
+          <Ionicons name="close" size={20} color={theme.textSecondary} />
         </Pressable>
       )}
     </View>
@@ -238,12 +238,12 @@ const styles = StyleSheet.create({
   paneHeader: {
     flexDirection: "row",
     alignItems: "center",
+    height: 58,
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  paneHeaderTitle: { fontSize: 13, fontWeight: "600", textTransform: "uppercase" },
+  paneHeaderTitle: { fontSize: 16, fontWeight: "600" },
   backBtn: { flexDirection: "row", alignItems: "center", gap: 1, marginLeft: -4 },
   container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },

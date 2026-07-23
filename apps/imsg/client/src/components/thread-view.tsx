@@ -425,7 +425,7 @@ export function ThreadView({
               <ChatAvatar chat={headerChat} size={32} />
             )}
             <View style={styles.paneIdentityText}>
-              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16, fontWeight: "600" }}>
                 {headerChat.displayName}
               </Text>
               {headerChat.isGroup && (

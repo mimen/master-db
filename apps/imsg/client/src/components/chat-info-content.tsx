@@ -109,7 +109,7 @@ export function ChatInfoContent({
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
       <Text style={[styles.paneHeaderTitle, { color: theme.text }]}>Details</Text>
       <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close details">
-        <Ionicons name="close" size={22} color={theme.textSecondary} />
+        <Ionicons name="close" size={20} color={theme.textSecondary} />
       </Pressable>
     </View>
   ) : null;
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    height: 52,
+    height: 58,
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
