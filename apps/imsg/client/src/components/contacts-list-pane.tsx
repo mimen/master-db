@@ -235,6 +235,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
               data={rows}
               keyExtractor={(r) => r.key}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 8 }}
               onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
@@ -307,7 +308,13 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           <Text style={{ color: theme.textSecondary }}>No contacts found.</Text>
         </View>
       ) : (
-        <FlatList data={rows} keyExtractor={(r) => r.key} renderItem={renderRow} />
+        <FlatList
+          data={rows}
+          keyExtractor={(r) => r.key}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          renderItem={renderRow}
+        />
       )}
     </SafeAreaView>
   );

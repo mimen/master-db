@@ -293,6 +293,7 @@ export function ConversationListPane({
           keyExtractor={(chat) => chat.guid}
           maintainVisibleContentPosition={{ disabled: false }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           viewabilityConfig={{ itemVisiblePercentThreshold: 100 }}
           onViewableItemsChanged={({ viewableItems }) => {
             const indices = viewableItems
