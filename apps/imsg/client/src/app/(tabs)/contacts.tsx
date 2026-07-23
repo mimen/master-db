@@ -28,10 +28,16 @@ export default function ContactsScreen() {
     );
   }
 
+  // Same desk + floating-card layout as the Messages split — Contacts is just
+  // a toggled mode of the same shell, with the person view in the second pane.
+  const cardStyle = [styles.card, { backgroundColor: theme.background, borderColor: theme.cardBorder }];
+
   return (
-    <View style={[styles.split, { backgroundColor: theme.background }]}>
-      <ContactsListPane wide selectedId={selectedPerson?._id} onSelectPerson={setSelectedPerson} />
-      <View style={styles.detailPane}>
+    <View style={[styles.split, { backgroundColor: theme.desk }]}>
+      <View style={[styles.listCard, ...cardStyle]}>
+        <ContactsListPane wide selectedId={selectedPerson?._id} onSelectPerson={setSelectedPerson} />
+      </View>
+      <View style={[styles.detailCard, ...cardStyle]}>
         {selectedPerson ? (
           <PersonContent
             key={selectedPerson._id}
@@ -50,8 +56,31 @@ export default function ContactsScreen() {
 }
 
 const styles = StyleSheet.create({
-  split: { flex: 1, flexDirection: "row" },
-  detailPane: { flex: 1 },
+  split: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 10,
+  },
+  card: {
+    borderRadius: 14,
+    borderTopColor: "rgba(255,255,255,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.32,
+    shadowRadius: 22,
+  },
+  listCard: {
+    flexBasis: 380,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: 380,
+  },
+  detailCard: {
+    flex: 1,
+  },
   empty: { alignItems: "center", flex: 1, gap: 9, justifyContent: "center" },
   emptyText: { fontSize: 15 },
 });
