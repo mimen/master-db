@@ -181,8 +181,11 @@ export const Bubble = memo(function Bubble({
   // Cap bubble width so long messages don't stretch across a wide desktop pane.
   const bubbleMaxWidth = winW >= 768 ? Math.min(winW * 0.5, 560) : "78%";
   const url = message.text ? firstUrl(message.text) : null;
+  // A persisted non-zero error is Apple's delivery failure (e.g. the iMessage
+  // half of a service-split send) — surface it like an optimistic failure.
+  const notDelivered = message.failed || (mine && (message.error ?? 0) !== 0);
   // Tail only on the last text bubble of a group (not on media/pending/failed).
-  const hasTail = groupEnd && !message.pending && !message.failed && message.text !== "";
+  const hasTail = groupEnd && !message.pending && !notDelivered && message.text !== "";
 
   return (
     <View style={{ paddingHorizontal: 14, marginBottom: groupEnd ? 8 : 2 }}>
@@ -266,7 +269,7 @@ export const Bubble = memo(function Bubble({
                   { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
                   hasTail && (mine ? styles.bubbleTailMine : styles.bubbleTailTheirs),
                   message.pending && { opacity: 0.6 },
-                  message.failed && { backgroundColor: "rgba(255,69,58,0.25)" },
+                  notDelivered && { backgroundColor: "rgba(255,69,58,0.25)" },
                 ]}
               >
                 {message.special && <SpecialCard special={message.special} mine={mine} />}
@@ -313,9 +316,9 @@ export const Bubble = memo(function Bubble({
             )}
           </View>
 
-          {message.failed ? (
+          {notDelivered ? (
             <Pressable onPress={() => onRetry(message)}>
-              <Text style={styles.failed}>Failed — tap to retry</Text>
+              <Text style={styles.failed}>Not Delivered — tap to retry</Text>
             </Pressable>
           ) : message.pending ? (
             <Text style={[styles.meta, { color: theme.textSecondary }]}>Sending…</Text>

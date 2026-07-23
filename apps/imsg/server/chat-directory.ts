@@ -25,8 +25,19 @@ interface RealtimeSpamOverride {
  * and the local mark-read overrides, and emits a `changed` event whenever a
  * mutation invalidates that view.
  */
+/** One person, one thread: normalize a DM's participant for service-merging. */
+function dmKey(chat: ChatSummary): string | null {
+  if (chat.isGroup || chat.participants.length !== 1) return null;
+  const addr = chat.participants[0]?.address ?? "";
+  if (!addr) return null;
+  const digits = addr.replace(/\D/g, "");
+  return digits.length >= 7 ? digits.slice(-10) : addr.toLowerCase();
+}
+
 export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
+  /** Any sibling guid → its merged-conversation identity. */
+  private siblingMap = new Map<string, { primary: string; all: string[] }>();
   private realtimeSpam = new Map<string, RealtimeSpamOverride>();
   private unreadScan: { at: number; summaries: Map<string, UnreadSummary> } = {
     at: 0,
@@ -217,8 +228,59 @@ export class ChatDirectory {
       .filter((chat) => chat.lastMessage !== null)
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
     chats = this.applyRealtimeSpam(chats);
+    chats = this.mergeServiceSiblings(chats);
     this.summaryCache = { at: this.now(), chats };
     return { ok: true, chats };
+  }
+
+  /**
+   * Apple keeps a separate chat row per service (iMessage;-;X, SMS;-;X, RCS)
+   * for the SAME person; Messages.app merges them silently. Do the same: fold
+   * sibling DMs into one conversation keyed by the newest-activity row (the
+   * "primary" — also the guid sends target, so replies use the last-working
+   * service). Input is sorted newest-first, so first occurrence is primary.
+   */
+  private mergeServiceSiblings(chats: ChatSummary[]): ChatSummary[] {
+    this.siblingMap.clear();
+    const byKey = new Map<string, ChatSummary>();
+    const out: ChatSummary[] = [];
+    for (const c of chats) {
+      const key = dmKey(c);
+      if (!key) {
+        out.push(c);
+        continue;
+      }
+      const existing = byKey.get(key);
+      if (!existing) {
+        const merged = { ...c, flags: { ...c.flags } };
+        byKey.set(key, merged);
+        out.push(merged);
+        this.siblingMap.set(c.guid, { primary: c.guid, all: [c.guid] });
+      } else {
+        const entry = this.siblingMap.get(existing.guid);
+        if (entry) {
+          entry.all.push(c.guid);
+          this.siblingMap.set(c.guid, entry);
+        }
+        existing.unreadCount += c.unreadCount;
+        const a = existing.firstUnreadAt ?? null;
+        const b = c.firstUnreadAt ?? null;
+        existing.firstUnreadAt = a === null ? b : b === null ? a : Math.min(a, b);
+        existing.known = existing.known || c.known;
+        existing.flags.unread = existing.flags.unread || c.flags.unread;
+      }
+    }
+    return out;
+  }
+
+  /** All service-sibling guids for a conversation (self included). */
+  siblingGuids(guid: string): string[] {
+    return this.siblingMap.get(guid)?.all ?? [guid];
+  }
+
+  /** The merged conversation's identity for any sibling guid. */
+  canonicalGuid(guid: string): string {
+    return this.siblingMap.get(guid)?.primary ?? guid;
   }
 
   /**
@@ -232,9 +294,11 @@ export class ChatDirectory {
       this.clearCache();
       return null;
     }
-    const mapped = mapMessage(message, chatGuid, this.contacts);
-    this.patchUnreadSummary(chatGuid, mapped);
-    this.patchSummaries(chatGuid, mapped);
+    // Live events arrive on the raw per-service chat; patch the merged entry.
+    const canonical = this.canonicalGuid(chatGuid);
+    const mapped = mapMessage(message, canonical, this.contacts);
+    this.patchUnreadSummary(canonical, mapped);
+    this.patchSummaries(canonical, mapped);
     return mapped;
   }
 

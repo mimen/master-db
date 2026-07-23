@@ -103,7 +103,9 @@ bb.onEvent((event) => {
   switch (event.kind) {
     case "new-message":
     case "updated-message": {
-      const chatGuid = chatGuidOf(event.message);
+      // Live events arrive on the raw per-service chat; the client only knows
+      // the merged conversation, so broadcast under the canonical guid.
+      const chatGuid = directory.canonicalGuid(chatGuidOf(event.message) ?? "") || null;
       // Tapbacks are reactions, not messages: patch the target message's
       // reactions live instead of injecting a "Loved …" bubble (reload folds
       // them via buildThread; this keeps realtime consistent with that).
@@ -129,7 +131,11 @@ bb.onEvent((event) => {
       directory.invalidate(true);
       return;
     case "typing":
-      broadcast({ kind: "typing", chatGuid: event.chatGuid, display: event.display });
+      broadcast({
+        kind: "typing",
+        chatGuid: directory.canonicalGuid(event.chatGuid),
+        display: event.display,
+      });
       return;
     case "group-changed":
       directory.invalidate();
@@ -172,17 +178,24 @@ app.get("/api/chats/:guid/messages", async (c) => {
   const before = c.req.query("before");
   const after = c.req.query("after");
   const around = c.req.query("around");
+  // One person, one thread: pull from every service-sibling chat (iMessage/
+  // SMS/RCS rows for the same contact) and merge chronologically, like
+  // Messages.app does. Ensure the sibling map exists (first hit after boot).
+  await directory.summaries();
+  const guids = directory.siblingGuids(chatGuid);
 
   if (around) {
     // Jump-to-message: fetch a window on both sides of the target timestamp.
     const target = Number(around);
-    const [older, newer] = await Promise.all([
-      bb.chatMessages(chatGuid, { before: target + 1, limit: 40, sort: "DESC" }),
-      bb.chatMessages(chatGuid, { after: target, limit: 40, sort: "ASC" }),
-    ]);
-    if (!older.ok) return c.json({ error: older.error }, 502);
-    const merged = new Map((newer.ok ? newer.value : []).map((m) => [m.guid, m]));
-    for (const m of older.value) merged.set(m.guid, m);
+    const pages = await Promise.all(
+      guids.flatMap((g) => [
+        bb.chatMessages(g, { before: target + 1, limit: 40, sort: "DESC" }),
+        bb.chatMessages(g, { after: target, limit: 40, sort: "ASC" }),
+      ]),
+    );
+    if (pages.every((p) => !p.ok)) return c.json({ error: "fetch failed" }, 502);
+    const merged = new Map<string, BBMessage>();
+    for (const page of pages) if (page.ok) for (const m of page.value) merged.set(m.guid, m);
     return c.json(buildThread([...merged.values()], chatGuid, contacts));
   }
 
@@ -192,34 +205,36 @@ app.get("/api/chats/:guid/messages", async (c) => {
   const sort: "ASC" | "DESC" = after ? "ASC" : "DESC";
   const TARGET = 40;
   const RAW_LIMIT = 100;
-  const raw: BBMessage[] = [];
-  let cursorBefore = before ? Number(before) : undefined;
-  let cursorAfter = after ? Number(after) : undefined;
 
-  for (let page = 0; page < 6; page++) {
-    const result = await bb.chatMessages(chatGuid, {
-      before: cursorBefore,
-      after: cursorAfter,
-      sort,
-      limit: RAW_LIMIT,
-    });
-    if (!result.ok) {
-      if (raw.length === 0) return c.json({ error: result.error }, 502);
-      break;
+  const fetchPages = async (guid: string): Promise<BBMessage[] | null> => {
+    const raw: BBMessage[] = [];
+    let cursorBefore = before ? Number(before) : undefined;
+    let cursorAfter = after ? Number(after) : undefined;
+    for (let page = 0; page < 6; page++) {
+      const result = await bb.chatMessages(guid, {
+        before: cursorBefore,
+        after: cursorAfter,
+        sort,
+        limit: RAW_LIMIT,
+      });
+      if (!result.ok) return raw.length === 0 ? null : raw;
+      if (result.value.length === 0) break;
+      raw.push(...result.value);
+      const real = raw.filter((m) => !m.associatedMessageGuid && !m.dateRetracted).length;
+      if (real >= TARGET || result.value.length < RAW_LIMIT) break;
+      const dates = result.value.map((m) => m.dateCreated ?? 0).filter((d) => d > 0);
+      if (dates.length === 0) break;
+      if (sort === "DESC") cursorBefore = Math.min(...dates);
+      else cursorAfter = Math.max(...dates);
     }
-    if (result.value.length === 0) break;
-    raw.push(...result.value);
-    // Count non-tapback, non-retracted messages gathered so far.
-    const real = raw.filter((m) => !m.associatedMessageGuid && !m.dateRetracted).length;
-    if (real >= TARGET || result.value.length < RAW_LIMIT) break;
-    // Advance the cursor past the oldest/newest date seen.
-    const dates = result.value.map((m) => m.dateCreated ?? 0).filter((d) => d > 0);
-    if (dates.length === 0) break;
-    if (sort === "DESC") cursorBefore = Math.min(...dates);
-    else cursorAfter = Math.max(...dates);
-  }
+    return raw;
+  };
 
-  return c.json(buildThread(raw, chatGuid, contacts));
+  const results = await Promise.all(guids.map(fetchPages));
+  if (results.every((r) => r === null)) return c.json({ error: "fetch failed" }, 502);
+  const merged = new Map<string, BBMessage>();
+  for (const r of results) if (r) for (const m of r) merged.set(m.guid, m);
+  return c.json(buildThread([...merged.values()], chatGuid, contacts));
 });
 
 app.get("/api/avatars/:address", async (c) => {
@@ -313,8 +328,11 @@ app.post("/api/chats/:guid/attachment", async (c) => {
 });
 
 app.post("/api/chats/:guid/read", async (c) => {
-  const ok = await directory.markRead(c.req.param("guid"));
-  return c.json({ ok });
+  // Mark every service-sibling read so no stale badge lingers on a merged chat.
+  const results = await Promise.all(
+    directory.siblingGuids(c.req.param("guid")).map((g) => directory.markRead(g)),
+  );
+  return c.json({ ok: results.some(Boolean) });
 });
 
 app.post("/api/chats/:guid/typing", async (c) => {
