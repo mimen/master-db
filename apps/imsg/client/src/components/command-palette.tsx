@@ -17,8 +17,15 @@ import { openPersonPane } from "@/lib/person-pane";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
+import type { AirtableHumanRow } from "@/lib/identity";
 
 import { ChatAvatar } from "./avatar";
+import {
+  PaletteListRow,
+  PaletteSectionHeader,
+  paletteStyles,
+  usePaletteCursor,
+} from "./palette/palette-list";
 
 const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   state: "funnel-outline",
@@ -44,8 +51,10 @@ export interface CommandPaletteProps {
 /**
  * Desktop ⌘K palette (docs/keyboard-design.md Slice 3). The web skin over the
  * headless engine in lib/palette/model.ts — a future mobile sheet reuses the
- * engine, not this component. Roving ↑↓/Enter selection; Esc closes via the
- * global escape ladder (this component deliberately does not handle Esc).
+ * engine, not this component. Both views (search + compose) are built on the
+ * shared cursor/row primitives in palette/palette-list.tsx so they behave
+ * identically. Esc closes via the global escape ladder; neither view handles
+ * it locally.
  */
 export function CommandPalette({
   chats,
@@ -56,7 +65,6 @@ export function CommandPalette({
   onApplyType,
   onShowHelp,
 }: CommandPaletteProps) {
-  const theme = useTheme();
   const [mode, setMode] = useState<"root" | "compose">(initialMode);
   if (mode === "compose") {
     return <PaletteCompose onClose={onClose} />;
@@ -110,15 +118,14 @@ function PaletteRoot({
     setSearching(true);
     let cancelled = false;
     const handle = setTimeout(() => {
-      Promise.all([
-        api.search(q).catch(() => []),
-        api.contacts(q).catch(() => []),
-      ]).then(([messageHits, contactHits]) => {
-        if (cancelled) return;
-        setMessages(messageHits);
-        setContacts(contactHits);
-        setSearching(false);
-      });
+      Promise.all([api.search(q).catch(() => []), api.contacts(q).catch(() => [])]).then(
+        ([messageHits, contactHits]) => {
+          if (cancelled) return;
+          setMessages(messageHits);
+          setContacts(contactHits);
+          setSearching(false);
+        },
+      );
     }, 250);
     return () => {
       cancelled = true;
@@ -131,22 +138,35 @@ function PaletteRoot({
     [query, chats, messages, contacts],
   );
   const flat = useMemo(() => flattenSections(sections), [sections]);
+  const flatRef = useRef(flat);
+  flatRef.current = flat;
 
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-  // Live data churn (SSE chat refreshes) rebuilds sections constantly; keep
-  // the cursor where it is and only clamp if the list shrank under it.
-  useEffect(() => {
-    if (flat.length > 0 && selectedIndex > flat.length - 1) {
-      setSelectedIndex(flat.length - 1);
+  const cursor = usePaletteCursor(useMemo(() => flat.map((i) => i.key), [flat]));
+  const { reset } = cursor;
+  useEffect(() => reset(), [query, reset]);
+
+  const executeCommand = (command: PaletteCommand): void => {
+    const id = command.id;
+    switch (id.kind) {
+      case "state":
+        return onApplyState(id.value);
+      case "type":
+        return onApplyType(id.value);
+      case "tab":
+        router.navigate(id.value === "contacts" ? "/contacts" : "/");
+        return;
+      case "action":
+        return id.value === "new-message" ? onCompose() : onShowHelp();
     }
-  }, [flat.length, selectedIndex]);
+  };
 
   const execute = (item: PaletteItem): void => {
     // New Message transitions IN PLACE — every other action closes first.
-    if (item.kind === "command" && item.command.id.kind === "action" && item.command.id.value === "new-message") {
+    if (
+      item.kind === "command" &&
+      item.command.id.kind === "action" &&
+      item.command.id.value === "new-message"
+    ) {
       return onCompose();
     }
     onClose();
@@ -171,30 +191,13 @@ function PaletteRoot({
         return;
     }
   };
-
-  const executeCommand = (command: PaletteCommand): void => {
-    const id = command.id;
-    switch (id.kind) {
-      case "state":
-        return onApplyState(id.value);
-      case "type":
-        return onApplyType(id.value);
-      case "tab":
-        router.navigate(id.value === "contacts" ? "/contacts" : "/");
-        return;
-      case "action":
-        return id.value === "new-message" ? onCompose() : onShowHelp();
-    }
-  };
+  const executeRef = useRef(execute);
+  executeRef.current = execute;
 
   // Roving selection: document-level capture so arrows/Enter work while the
   // input keeps focus. Esc is left to the global dispatcher's escape ladder.
-  const flatRef = useRef(flat);
-  flatRef.current = flat;
-  const indexRef = useRef(selectedIndex);
-  indexRef.current = selectedIndex;
-  const executeRef = useRef(execute);
-  executeRef.current = execute;
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter") return;
@@ -203,40 +206,15 @@ function PaletteRoot({
       const items = flatRef.current;
       if (items.length === 0) return;
       if (e.key === "Enter") {
-        const item = items[indexRef.current];
+        const item = items[cursorRef.current.indexRef.current];
         if (item) executeRef.current(item);
         return;
       }
-      const delta = e.key === "ArrowDown" ? 1 : -1;
-      setSelectedIndex(Math.max(0, Math.min(items.length - 1, indexRef.current + delta)));
+      cursorRef.current.move(e.key === "ArrowDown" ? 1 : -1);
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
   }, []);
-
-  // Keep the selected row visible: track each row's frame, scroll minimally.
-  const scrollRef = useRef<ScrollView>(null);
-  const rowFrames = useRef(new Map<string, { y: number; height: number }>());
-  const scrollY = useRef(0);
-  const viewportH = useRef(0);
-  useEffect(() => {
-    const item = flatRef.current[selectedIndex];
-    if (!item) return;
-    const frame = rowFrames.current.get(item.key);
-    if (!frame || viewportH.current <= 0) return;
-    const top = scrollY.current;
-    const bottom = top + viewportH.current;
-    if (frame.y < top + 8) {
-      scrollRef.current?.scrollTo({ y: Math.max(0, frame.y - 34), animated: false });
-    } else if (frame.y + frame.height > bottom - 8) {
-      scrollRef.current?.scrollTo({
-        y: frame.y + frame.height - viewportH.current + 8,
-        animated: false,
-      });
-    }
-    // Cursor moves only — data churn must never trigger a programmatic scroll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIndex]);
 
   let flatIndex = -1;
 
@@ -258,48 +236,32 @@ function PaletteRoot({
           </Pressable>
         )}
       </View>
-      <ScrollView
-        ref={scrollRef}
-        keyboardShouldPersistTaps="handled"
-        onLayout={(e) => {
-          viewportH.current = e.nativeEvent.layout.height;
-        }}
-        onScroll={(e) => {
-          scrollY.current = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
-        contentContainerStyle={styles.listContent}
-      >
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent}>
         {sections.length === 0 && query.trim().length >= 2 && (
-          <Text style={[styles.empty, { color: theme.textSecondary }]}>
+          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
             {searching ? "Searching…" : "No results"}
           </Text>
         )}
         {sections.map((section) => (
           <Fragment key={section.title}>
-            <Text style={[styles.sectionHeader, { color: theme.textSecondary }]}>{section.title}</Text>
+            <PaletteSectionHeader title={section.title} />
             {section.items.map((item) => {
               flatIndex += 1;
               const index = flatIndex;
-              const selected = index === selectedIndex;
+              const selected = index === cursor.selectedIndex;
               return (
-                <Pressable
+                <PaletteListRow
                   key={item.key}
-                  onLayout={(e) => {
-                    rowFrames.current.set(item.key, {
-                      y: e.nativeEvent.layout.y,
-                      height: e.nativeEvent.layout.height,
-                    });
-                  }}
+                  paletteKey={item.key}
+                  selected={selected}
                   onPress={() => execute(item)}
-                  onHoverIn={() => setSelectedIndex(index)}
-                  style={[styles.row, selected && { backgroundColor: theme.backgroundSelected }]}
+                  onHover={() => cursor.setSelectedIndex(index)}
                 >
-                  <PaletteRow item={item} />
+                  <PaletteRowContent item={item} />
                   {selected && (
-                    <Text style={[styles.enterHint, { color: theme.textSecondary }]}>↵</Text>
+                    <Text style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>
                   )}
-                </Pressable>
+                </PaletteListRow>
               );
             })}
           </Fragment>
@@ -309,17 +271,17 @@ function PaletteRoot({
   );
 }
 
-function PaletteRow({ item }: { item: PaletteItem }) {
+function PaletteRowContent({ item }: { item: PaletteItem }) {
   const theme = useTheme();
   switch (item.kind) {
     case "command":
       return (
         <>
-          <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
             <Ionicons name={COMMAND_ICONS[item.command.id.kind]} size={16} color={theme.accent} />
           </View>
-          <Text style={[styles.title, { color: theme.text }]}>{item.command.title}</Text>
-          <Text style={[styles.hint, { color: theme.textSecondary }]}>{item.command.hint}</Text>
+          <Text style={[paletteStyles.title, { color: theme.text }]}>{item.command.title}</Text>
+          <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>{item.command.hint}</Text>
         </>
       );
     case "conversation":
@@ -334,12 +296,12 @@ function PaletteRow({ item }: { item: PaletteItem }) {
       return (
         <>
           <ChatAvatar chat={chat} size={30} />
-          <View style={styles.textCol}>
-            <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
+          <View style={paletteStyles.textCol}>
+            <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
               {chat.displayName}
             </Text>
             {subtitle !== "" && (
-              <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
+              <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
                 {subtitle}
               </Text>
             )}
@@ -354,19 +316,19 @@ function PaletteRow({ item }: { item: PaletteItem }) {
       const m = item.message;
       return (
         <>
-          <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
             <Ionicons name="chatbubble-outline" size={15} color={theme.textSecondary} />
           </View>
-          <View style={styles.textCol}>
+          <View style={paletteStyles.textCol}>
             <View style={styles.messageTop}>
-              <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
+              <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
                 {m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?")}
               </Text>
-              <Text style={[styles.hint, { color: theme.textSecondary }]}>
+              <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>
                 {formatListTimestamp(m.dateCreated)}
               </Text>
             </View>
-            <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
+            <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
               {m.text}
             </Text>
           </View>
@@ -376,28 +338,32 @@ function PaletteRow({ item }: { item: PaletteItem }) {
     case "contact":
       return (
         <>
-          <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
             <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
               {initials(item.contact.name)}
             </Text>
           </View>
-          <View style={styles.textCol}>
-            <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
+          <View style={paletteStyles.textCol}>
+            <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
               {item.contact.name}
             </Text>
-            <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
+            <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
               {item.contact.address}
             </Text>
           </View>
-          <Text style={[styles.hint, { color: theme.textSecondary }]}>Contact card</Text>
+          <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>Contact card</Text>
         </>
       );
   }
 }
 
+type ComposeRow =
+  | { kind: "contact"; key: string; contact: Contact }
+  | { kind: "airtable"; key: string; human: AirtableHumanRow };
 
 /** Palette-styled new-message flow: recipient search with chips, then the
- * first message — replaces the old desktop NewChatContent overlay. */
+ * first message — replaces the old desktop NewChatContent overlay. Built on
+ * the same cursor/row primitives as the root view. */
 function PaletteCompose({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
   const [recipients, setRecipients] = useState<Contact[]>([]);
@@ -405,14 +371,12 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<Contact[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const recipientInputRef = useRef<TextInput>(null);
   const messageInputRef = useRef<TextInput>(null);
 
   const needle = query.trim();
   useEffect(() => {
     setResults([]);
-    setSelectedIndex(0);
     if (needle.length < 2) return;
     const handle = setTimeout(() => {
       api.contacts(needle).then(setResults).catch(() => setResults([]));
@@ -436,7 +400,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     },
   );
 
-  const rows = useMemo(
+  const rows: ComposeRow[] = useMemo(
     () => [
       ...results
         .filter((c) => !recipients.some((r) => r.address === c.address))
@@ -445,6 +409,12 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     ],
     [results, airtableResults, recipients],
   );
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  const cursor = usePaletteCursor(useMemo(() => rows.map((r) => r.key), [rows]));
+  const { reset } = cursor;
+  useEffect(() => reset(), [needle, reset]);
 
   const send = (): void => {
     const body = text.trim();
@@ -467,8 +437,12 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   // Keyboard: arrows rove results; Enter adds the selected result (or a raw
   // address) from the To field, sends from the message field; Backspace on an
   // empty To field pops the last chip. Esc stays with the global ladder.
-  const stateRef = useRef({ rows, selectedIndex, query, recipients, send });
-  stateRef.current = { rows, selectedIndex, query, recipients, send };
+  const stateRef = useRef({ query, recipients, send });
+  stateRef.current = { query, recipients, send };
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
+  const addAirtableRef = useRef(addAirtableContact);
+  addAirtableRef.current = addAirtableContact;
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const st = stateRef.current;
@@ -476,23 +450,22 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
         typeof document !== "undefined" &&
         document.activeElement === (messageInputRef.current as unknown as Element | null);
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        if (inMessage || st.rows.length === 0) return;
+        if (inMessage || rowsRef.current.length === 0) return;
         e.preventDefault();
         e.stopPropagation();
-        const delta = e.key === "ArrowDown" ? 1 : -1;
-        setSelectedIndex(Math.max(0, Math.min(st.rows.length - 1, st.selectedIndex + delta)));
+        cursorRef.current.move(e.key === "ArrowDown" ? 1 : -1);
         return;
       }
       if (e.key === "Enter") {
         e.preventDefault();
         e.stopPropagation();
         if (inMessage) return st.send();
-        const row = st.rows[st.selectedIndex];
+        const row = rowsRef.current[cursorRef.current.indexRef.current];
         if (row?.kind === "contact") return addRecipient(row.contact);
-        if (row?.kind === "airtable") return void addAirtableContact(row.human);
+        if (row?.kind === "airtable") return void addAirtableRef.current(row.human);
         const raw = st.query.trim();
         // No matches — treat the raw text as an address (number/email).
-        if (raw !== "" && st.rows.length === 0) addRecipient({ address: raw, name: raw });
+        if (raw !== "" && rowsRef.current.length === 0) addRecipient({ address: raw, name: raw });
         else if (raw === "" && st.recipients.length > 0) messageInputRef.current?.focus();
         return;
       }
@@ -510,7 +483,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: theme.divider }]}>
-        <Text style={[styles.hint, { color: theme.textSecondary }]}>To:</Text>
+        <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>To:</Text>
         <View style={styles.chipWrap}>
           {recipients.map((contact) => (
             <Pressable
@@ -536,59 +509,61 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
         </View>
       </View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent} style={{ flex: 1 }}>
-        {rows.length > 0 && (
-          <Text style={[styles.sectionHeader, { color: theme.textSecondary }]}>Contacts</Text>
-        )}
+        {rows.length > 0 && <PaletteSectionHeader title="Contacts" />}
         {rows.map((row, index) => {
-          const selected = index === selectedIndex;
+          const selected = index === cursor.selectedIndex;
           if (row.kind === "airtable") {
             const adding = addingId === row.human.record_id;
             return (
-              <Pressable
+              <PaletteListRow
                 key={row.key}
+                paletteKey={row.key}
+                selected={selected}
                 disabled={adding}
                 onPress={() => void addAirtableContact(row.human)}
-                onHoverIn={() => setSelectedIndex(index)}
-                style={[styles.row, selected && { backgroundColor: theme.backgroundSelected }]}
+                onHover={() => cursor.setSelectedIndex(index)}
               >
-                <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+                <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
                   <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
                     {initials(row.human.display_name)}
                   </Text>
                 </View>
-                <Text style={[styles.title, { color: theme.text, flex: 1 }]}>{row.human.display_name}</Text>
-                <Text style={[styles.hint, { color: theme.textSecondary }]}>
+                <Text style={[paletteStyles.title, { color: theme.text, flex: 1 }]}>
+                  {row.human.display_name}
+                </Text>
+                <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>
                   {adding ? "Adding…" : "From Airtable"}
                 </Text>
-              </Pressable>
+              </PaletteListRow>
             );
           }
           return (
-            <Pressable
+            <PaletteListRow
               key={row.key}
+              paletteKey={row.key}
+              selected={selected}
               onPress={() => addRecipient(row.contact)}
-              onHoverIn={() => setSelectedIndex(index)}
-              style={[styles.row, selected && { backgroundColor: theme.backgroundSelected }]}
+              onHover={() => cursor.setSelectedIndex(index)}
             >
-              <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+              <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
                 <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
                   {initials(row.contact.name)}
                 </Text>
               </View>
-              <View style={styles.textCol}>
-                <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
+              <View style={paletteStyles.textCol}>
+                <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
                   {row.contact.name}
                 </Text>
-                <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
+                <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
                   {row.contact.address}
                 </Text>
               </View>
-              {selected && <Text style={[styles.enterHint, { color: theme.textSecondary }]}>↵</Text>}
-            </Pressable>
+              {selected && <Text style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>}
+            </PaletteListRow>
           );
         })}
         {rows.length === 0 && needle.length >= 2 && (
-          <Text style={[styles.empty, { color: theme.textSecondary }]}>
+          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
             No matches — press ↵ to use "{needle}" directly
           </Text>
         )}
@@ -600,20 +575,14 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           onChangeText={setText}
           placeholder="iMessage"
           placeholderTextColor={theme.textSecondary}
-          style={[
-            styles.composeMessageInput,
-            { borderColor: theme.divider, color: theme.text },
-          ]}
+          style={[styles.composeMessageInput, { borderColor: theme.divider, color: theme.text }]}
         />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Send"
           disabled={!canSend}
           onPress={send}
-          style={[
-            styles.sendButton,
-            { backgroundColor: canSend ? theme.accent : theme.backgroundElement },
-          ]}
+          style={[styles.sendButton, { backgroundColor: canSend ? theme.accent : theme.backgroundElement }]}
         >
           <Ionicons name="arrow-up" size={17} color={canSend ? theme.onAccent : theme.textSecondary} />
         </Pressable>
@@ -638,58 +607,11 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 10,
   },
-  sectionHeader: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    paddingBottom: 3,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    textTransform: "uppercase",
-  },
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    minHeight: 40,
-    paddingHorizontal: 16,
-    paddingVertical: 5,
-  },
-  iconBadge: {
-    alignItems: "center",
-    borderRadius: 15,
-    height: 30,
-    justifyContent: "center",
-    width: 30,
-  },
-  textCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 1,
-  },
   messageTop: {
     alignItems: "baseline",
     flexDirection: "row",
     gap: 8,
     justifyContent: "space-between",
-  },
-  hint: {
-    fontSize: 12,
-  },
-  enterHint: {
-    fontSize: 13,
-  },
-  empty: {
-    fontSize: 15,
-    marginTop: 40,
-    textAlign: "center",
   },
   composeToRow: {
     alignItems: "flex-start",
