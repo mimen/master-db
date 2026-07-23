@@ -369,6 +369,25 @@ export function ThreadView({
               },
             ]
           : []),
+        // "Remove for you" — deletes locally (Mac's Messages DB), any age,
+        // either side. The tool for clearing failed/Not Delivered sends.
+        ...(privateApi && !message.pending
+          ? [
+              {
+                label: "Delete for Me",
+                destructive: true,
+                onPress: () => {
+                  void api
+                    .deleteMessage(message.guid, chatGuid)
+                    .then(() => {
+                      upsert({ ...message, retracted: true });
+                      showToast("Deleted");
+                    })
+                    .catch(() => showToast("Delete failed"));
+                },
+              },
+            ]
+          : []),
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
     },

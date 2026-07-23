@@ -99,6 +99,13 @@ export const api = {
   unsend(messageGuid: string): Promise<{ ok: boolean }> {
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/unsend`, { method: "POST" });
   },
+  deleteMessage(messageGuid: string, chatGuid: string): Promise<{ ok: boolean }> {
+    return request(`/api/messages/${encodeURIComponent(messageGuid)}/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatGuid }),
+    });
+  },
   edit(messageGuid: string, text: string): Promise<{ ok: boolean }> {
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/edit`, {
       method: "POST",

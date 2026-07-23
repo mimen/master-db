@@ -69,6 +69,7 @@ export interface BlueBubbles {
   removeParticipant(chatGuid: string, address: string): Promise<Result<unknown>>;
   leaveGroup(chatGuid: string): Promise<Result<unknown>>;
   deleteChat(chatGuid: string): Promise<Result<unknown>>;
+  deleteMessage(chatGuid: string, messageGuid: string): Promise<Result<unknown>>;
   contacts(): Promise<Result<BBContact[]>>;
   getChat(chatGuid: string): Promise<Result<BBChat>>;
   attachmentMeta(guid: string): Promise<Result<BBAttachment>>;
@@ -369,6 +370,12 @@ export class BlueBubblesClient implements BlueBubbles {
 
   async deleteChat(chatGuid: string): Promise<Result<unknown>> {
     const res = await fetch(this.url(`/api/v1/chat/${chatGuid}`), { method: "DELETE" });
+    return this.unwrap(res);
+  }
+
+  /** Private API. Removes the message locally ("Remove for you"), not for others. */
+  async deleteMessage(chatGuid: string, messageGuid: string): Promise<Result<unknown>> {
+    const res = await fetch(this.url(`/api/v1/chat/${chatGuid}/${messageGuid}`), { method: "DELETE" });
     return this.unwrap(res);
   }
 

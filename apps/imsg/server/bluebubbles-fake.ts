@@ -253,6 +253,10 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: true, value: undefined });
   }
 
+  deleteMessage(): Promise<Result<unknown>> {
+    return Promise.resolve({ ok: true, value: {} });
+  }
+
   deleteChat(): Promise<Result<unknown>> {
     return Promise.resolve({ ok: true, value: undefined });
   }

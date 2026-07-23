@@ -405,6 +405,24 @@ app.post("/api/messages/:guid/unsend", async (c) => {
   return c.json({ ok: true });
 });
 
+// "Remove for you": deletes the message locally (Mac's Messages database),
+// not for the other side. The message lives in ONE of the merged
+// conversation's service-sibling chats — try each until one accepts.
+app.post("/api/messages/:guid/delete", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const body = (await c.req.json()) as { chatGuid: string };
+  let lastError = "delete failed";
+  for (const guid of directory.siblingGuids(body.chatGuid)) {
+    const result = await bb.deleteMessage(guid, c.req.param("guid"));
+    if (result.ok) {
+      directory.invalidate();
+      return c.json({ ok: true });
+    }
+    lastError = result.error;
+  }
+  return c.json({ error: lastError }, 502);
+});
+
 app.post("/api/messages/:guid/edit", async (c) => {
   if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
   const body = (await c.req.json()) as { text: string };
