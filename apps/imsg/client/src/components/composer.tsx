@@ -560,28 +560,30 @@ export function Composer({
             />
           </View>
         )}
-        {canSend && !recording ? (
-          <Pressable
-            onPress={() => void send()}
-            onLongPress={editing ? undefined : openScheduleSheet}
-            disabled={busy}
-            style={[styles.sendButton, { backgroundColor: sendColor }]}
-          >
-            <Ionicons name="arrow-up" size={20} color="#fff" />
-          </Pressable>
-        ) : (
-          <Pressable
-            onPressIn={editing ? undefined : startRecording}
-            onPressOut={recording ? () => void stopRecordingAndSend() : undefined}
-            disabled={busy || Boolean(editing)}
-            style={[
-              styles.sendButton,
-              { backgroundColor: recording ? "#FF3B30" : theme.backgroundElement },
-            ]}
-          >
-            <Ionicons name={recording ? "stop" : "mic"} size={19} color={recording ? "#fff" : theme.textSecondary} />
-          </Pressable>
-        )}
+        <View style={styles.actionCol}>
+          {canSend && !recording ? (
+            <Pressable
+              onPress={() => void send()}
+              onLongPress={editing ? undefined : openScheduleSheet}
+              disabled={busy}
+              style={[styles.sendButton, { backgroundColor: sendColor }]}
+            >
+              <Ionicons name="arrow-up" size={20} color="#fff" />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPressIn={editing ? undefined : startRecording}
+              onPressOut={recording ? () => void stopRecordingAndSend() : undefined}
+              disabled={busy || Boolean(editing)}
+              style={[
+                styles.sendButton,
+                { backgroundColor: recording ? "#FF3B30" : theme.backgroundElement },
+              ]}
+            >
+              <Ionicons name={recording ? "stop" : "mic"} size={19} color={recording ? "#fff" : theme.textSecondary} />
+            </Pressable>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -609,11 +611,12 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "flex-start",
     gap: 8,
   },
   attachButton: {
-    paddingBottom: 7,
+    height: IOS_INPUT_MIN_HEIGHT,
+    justifyContent: "center",
     paddingLeft: 2,
   },
   growthMirror: {
@@ -673,12 +676,15 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "#FF3B30",
   },
+  actionCol: {
+    height: IOS_INPUT_MIN_HEIGHT,
+    justifyContent: "center",
+  },
   sendButton: {
     width: 34,
     height: 34,
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 1,
   },
 });
