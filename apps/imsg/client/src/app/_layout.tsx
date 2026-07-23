@@ -1,4 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { ensureGlobalWebCss } from "@/lib/web-css";
+
+ensureGlobalWebCss();
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
