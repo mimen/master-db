@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useWindowDimensions } from "react-native";
+import { Platform, StyleSheet, useWindowDimensions } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 
 /**
@@ -12,13 +12,15 @@ import { useTheme } from "@/hooks/use-theme";
 export default function TabsLayout() {
   const { width } = useWindowDimensions();
   const wide = width >= 768;
+  const iosMobile = Platform.OS === "ios" && !wide;
   const theme = useTheme();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: wide ? { display: "none" } : undefined,
+        tabBarStyle: wide ? styles.hiddenTabBar : undefined,
+        tabBarIconStyle: iosMobile ? styles.mobileTabIcon : undefined,
         tabBarActiveTintColor: theme.accent,
         tabBarInactiveTintColor: theme.textSecondary,
       }}
@@ -40,3 +42,12 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  hiddenTabBar: {
+    display: "none",
+  },
+  mobileTabIcon: {
+    marginTop: -3,
+  },
+});

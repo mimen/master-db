@@ -63,6 +63,7 @@ export function ConversationListPane({
   const showSheet = useActionSheet();
   const aiStatus = useAiStatus();
   const suggestionMode = useSuggestionMode();
+  const iosMobile = Platform.OS === "ios" && !wide;
   const [query, setQuery] = useState("");
   const [deepMatches, setDeepMatches] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
@@ -260,6 +261,9 @@ export function ConversationListPane({
             }
           }}
           contentContainerStyle={{ paddingTop: topBarH + 8 }}
+          automaticallyAdjustContentInsets={iosMobile ? false : undefined}
+          automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}
+          contentInsetAdjustmentBehavior={iosMobile ? "never" : undefined}
           showsVerticalScrollIndicator={false}
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
