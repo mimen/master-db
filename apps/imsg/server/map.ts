@@ -1,4 +1,4 @@
-import type { BBChat, BBMessage } from "./bb-types";
+import type { BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { ChatState } from "../shared/chat-state";
 import { computeFlags } from "../shared/chat-state";
@@ -62,6 +62,7 @@ function isTapback(m: BBMessage): boolean {
 export function tapbackReactionEvent(
   m: BBMessage,
   contacts: ContactBook,
+  participants: readonly BBHandle[] = [],
 ): { targetGuid: string; reaction: Reaction; remove: boolean } | null {
   if (!isTapback(m) || !m.associatedMessageGuid) return null;
   const value = m.associatedMessageType;
@@ -79,19 +80,15 @@ export function tapbackReactionEvent(
     type = TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number]) ? raw : null;
   }
   if (!type) return null;
+  const reactionSender = sender(m, contacts, participants);
   return {
     targetGuid: stripPartPrefix(m.associatedMessageGuid),
     remove,
     reaction: {
       type,
       isFromMe: m.isFromMe === true,
-      senderName:
-        m.isFromMe === true
-          ? null
-          : m.handle?.address
-            ? contacts.lookup(m.handle.address)
-            : null,
-      senderAddress: m.handle?.address ?? null,
+      senderName: reactionSender?.name ?? null,
+      senderAddress: reactionSender?.address ?? null,
     },
   };
 }
@@ -107,12 +104,30 @@ function cleanText(m: BBMessage): string {
   return subject || text;
 }
 
-function sender(m: BBMessage, contacts: ContactBook): Participant | null {
-  if (m.isFromMe || !m.handle?.address) return null;
-  return { address: m.handle.address, name: contacts.lookup(m.handle.address) };
+function sender(
+  m: BBMessage,
+  contacts: ContactBook,
+  participants: readonly BBHandle[] = [],
+): Participant | null {
+  if (m.isFromMe) return null;
+  // BlueBubbles' chat-list query joins lastMessage without lastMessage.handle.
+  // handleId still points at a participant's originalROWID, so recover the
+  // sender from the chat participants instead of dropping group attribution.
+  const participantAddress =
+    typeof m.handleId === "number" && m.handleId > 0
+      ? participants.find((participant) => participant.originalROWID === m.handleId)?.address
+      : undefined;
+  const address = m.handle?.address ?? participantAddress;
+  if (!address) return null;
+  return { address, name: contacts.lookup(address) };
 }
 
-export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook): Message {
+export function mapMessage(
+  m: BBMessage,
+  chatGuid: string,
+  contacts: ContactBook,
+  participants: readonly BBHandle[] = [],
+): Message {
   return {
     guid: m.guid,
     chatGuid,
@@ -125,7 +140,7 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
     dateDelivered: m.dateDelivered ?? null,
     isFromMe: m.isFromMe === true,
     service: messageService(m),
-    sender: sender(m, contacts),
+    sender: sender(m, contacts, participants),
     attachments: (m.attachments ?? [])
       .filter((a) => a.guid && !a.hideAttachment)
       .map((a) => ({
@@ -235,19 +250,18 @@ export function mapChat(
   scannedUnread?: UnreadSummary,
 ): ChatSummary {
   const last = chat.lastMessage ?? null;
-  const isGroup = chat.guid.includes(";+;") || (chat.participants ?? []).length > 1;
+  const participants = chat.participants ?? [];
+  const isGroup = chat.guid.includes(";+;") || participants.length > 1;
+  const lastSender = last ? sender(last, contacts, participants) : null;
   const lastSummary = last
     ? {
         guid: last.guid,
         text: summarizeLast(last),
         dateCreated: last.dateCreated ?? 0,
         isFromMe: last.isFromMe === true,
-        senderName:
-          last.isFromMe === true
-            ? null
-            : last.handle?.address
-              ? (contacts.lookup(last.handle.address) ?? formatAddress(last.handle.address))
-              : null,
+        senderName: lastSender
+          ? (lastSender.name ?? formatAddress(lastSender.address))
+          : null,
         hasAttachments: (last.attachments ?? []).length > 0,
       }
     : null;
@@ -259,7 +273,7 @@ export function mapChat(
   const flagInput = last
     ? { guid: last.guid, dateCreated: last.dateCreated ?? 0, isFromMe: last.isFromMe === true }
     : null;
-  const participants = (chat.participants ?? []).map((p) => ({
+  const mappedParticipants = participants.map((p) => ({
     address: p.address,
     name: contacts.lookup(p.address),
   }));
@@ -267,10 +281,10 @@ export function mapChat(
     guid: chat.guid,
     displayName: chatDisplayName(chat, contacts),
     isGroup,
-    known: participants.some((p) => p.name !== null),
+    known: mappedParticipants.some((p) => p.name !== null),
     contactsAvailable: contacts.available,
     isSpam: last?.isSpam === true,
-    participants,
+    participants: mappedParticipants,
     lastMessage: lastSummary,
     unreadCount,
     firstUnreadAt,

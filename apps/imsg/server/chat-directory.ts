@@ -1,4 +1,4 @@
-import type { BBMessage } from "./bb-types";
+import type { BBHandle, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
@@ -53,6 +53,8 @@ export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
   /** Any sibling guid → its merged-conversation identity. */
   private siblingMap = new Map<string, { primary: string; all: string[] }>();
+  /** Raw chat participants retain handle ROWIDs for sender fallback. */
+  private participantHandles = new Map<string, BBHandle[]>();
   private realtimeSpam = new Map<string, RealtimeSpamOverride>();
   private unreadScan: { at: number; summaries: Map<string, UnreadSummary> } = {
     at: 0,
@@ -224,6 +226,9 @@ export class ChatDirectory {
     }
     const result = await this.bb.queryChats();
     if (!result.ok) return { ok: false, error: result.error };
+    this.participantHandles = new Map(
+      result.value.map((chat) => [chat.guid, chat.participants ?? []] as const),
+    );
     await this.contacts.refresh();
     const unread = await this.unreadCounts();
     const overlay = this.db.getAll();
@@ -301,6 +306,11 @@ export class ChatDirectory {
     return this.siblingMap.get(guid)?.primary ?? guid;
   }
 
+  /** Participant handles for resolving a message whose nested handle was omitted. */
+  participantHandlesFor(guid: string): readonly BBHandle[] {
+    return this.participantHandles.get(guid) ?? this.participantHandles.get(this.canonicalGuid(guid)) ?? [];
+  }
+
   /**
    * Socket fast path: patches both unread and summary caches. A null chatGuid
    * (or a chat missing from the cache) invalidates instead. Returns
@@ -314,7 +324,7 @@ export class ChatDirectory {
     }
     // Live events arrive on the raw per-service chat; patch the merged entry.
     const canonical = this.canonicalGuid(chatGuid);
-    const mapped = mapMessage(message, canonical, this.contacts);
+    const mapped = mapMessage(message, canonical, this.contacts, this.participantHandlesFor(chatGuid));
     this.patchUnreadSummary(canonical, mapped);
     this.patchSummaries(canonical, mapped);
     return mapped;
@@ -325,8 +335,14 @@ export class ChatDirectory {
     this.resetUnreadScan();
     this.clearCache();
     if (!chatGuid) return null;
-    const mapped = mapMessage(message, chatGuid, this.contacts);
-    this.rememberRealtimeSpam(chatGuid, mapped);
+    const canonical = this.canonicalGuid(chatGuid);
+    const mapped = mapMessage(
+      message,
+      canonical,
+      this.contacts,
+      this.participantHandlesFor(chatGuid),
+    );
+    this.rememberRealtimeSpam(canonical, mapped);
     return mapped;
   }
 

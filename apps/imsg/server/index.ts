@@ -103,23 +103,28 @@ bb.onEvent((event) => {
   switch (event.kind) {
     case "new-message":
     case "updated-message": {
-      // Live events arrive on the raw per-service chat; the client only knows
-      // the merged conversation, so broadcast under the canonical guid.
-      const chatGuid = directory.canonicalGuid(chatGuidOf(event.message) ?? "") || null;
+      // Resolve sender data against the raw per-service chat, then broadcast
+      // under the merged conversation's canonical guid.
+      const rawChatGuid = chatGuidOf(event.message);
+      const chatGuid = rawChatGuid ? directory.canonicalGuid(rawChatGuid) : null;
       // Tapbacks are reactions, not messages: patch the target message's
       // reactions live instead of injecting a "Loved …" bubble (reload folds
       // them via buildThread; this keeps realtime consistent with that).
-      const tapback = tapbackReactionEvent(event.message, contacts);
-      if (tapback && chatGuid) {
-        directory.applyMessage(chatGuid, event.message); // sidebar preview verb
+      const tapback = tapbackReactionEvent(
+        event.message,
+        contacts,
+        rawChatGuid ? directory.participantHandlesFor(rawChatGuid) : [],
+      );
+      if (tapback && rawChatGuid && chatGuid) {
+        directory.applyMessage(rawChatGuid, event.message); // sidebar preview verb
         broadcast({ kind: "reaction", chatGuid, ...tapback });
         broadcast({ kind: "chats-changed" });
         return;
       }
       const mapped =
         event.kind === "new-message"
-          ? directory.applyMessage(chatGuid, event.message)
-          : directory.applyUpdatedMessage(chatGuid, event.message);
+          ? directory.applyMessage(rawChatGuid, event.message)
+          : directory.applyUpdatedMessage(rawChatGuid, event.message);
       if (!chatGuid || mapped === null) {
         broadcast({ kind: "chats-changed" });
         return;

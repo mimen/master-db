@@ -5,7 +5,7 @@ import type { BBEvent, BlueBubbles, Result } from "./bluebubbles";
 export interface FakeChatSeed {
   guid: string;
   displayName?: string | null;
-  participants?: Array<{ address: string }>;
+  participants?: BBChat["participants"];
   messages: BBMessage[];
 }
 
@@ -23,7 +23,10 @@ export interface FakeSeed {
  */
 export class FakeBlueBubbles implements BlueBubbles {
   private readonly privateApi: boolean;
-  private readonly chatMeta = new Map<string, { displayName: string | null; participants: Array<{ address: string }> }>();
+  private readonly chatMeta = new Map<
+    string,
+    { displayName: string | null; participants: NonNullable<BBChat["participants"]> }
+  >();
   private readonly messages = new Map<string, BBMessage[]>();
   private readonly contactList: BBContact[];
   private readonly listeners = new Set<(event: BBEvent) => void>();

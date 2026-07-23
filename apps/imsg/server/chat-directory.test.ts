@@ -5,7 +5,7 @@ import { ChatDirectory } from "./chat-directory";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { MessageSearch } from "./message-search";
-import { mapMessage } from "./map";
+import { mapMessage, tapbackReactionEvent } from "./map";
 import { matchesFilters } from "../shared/chat-state";
 import type { ChatSummary } from "../shared/types";
 
@@ -13,6 +13,8 @@ import type { ChatSummary } from "../shared/types";
 
 const CHAT_A = "iMessage;-;+15550001111";
 const CHAT_B = "iMessage;-;+15550002222";
+const GROUP_CHAT = "RCS;+;group-1";
+const GROUP_CHAT_SMS = "SMS;+;group-1";
 
 function inbound(guid: string, dateCreated: number, text = "hi", handle = "+15550001111"): BBMessage {
   return { guid, text, dateCreated, isFromMe: false, handle: { address: handle } };
@@ -99,6 +101,33 @@ describe("ChatDirectory.summaries", () => {
     expect(a.lastMessage?.text).toBe("hey from alice");
     expect(a.flags.unresponded).toBe(true); // inbound last message
     expect(a.flags.unread).toBe(true);
+  });
+
+  test("attributes a group tapback when lastMessage omits its handle relation", async () => {
+    const tapback = inbound("reaction", 2000, 'Liked “hello”', "+15550002222");
+    tapback.handle = null;
+    tapback.handleId = 202;
+    tapback.associatedMessageGuid = "p:0/target";
+    tapback.associatedMessageType = "like";
+    const { directory } = await setup([
+      {
+        guid: GROUP_CHAT,
+        displayName: "Alice and Bob",
+        participants: [
+          { originalROWID: 101, address: "+15550001111" },
+          { originalROWID: 202, address: "+15550002222" },
+        ],
+        messages: [inbound("target", 1000), tapback],
+      },
+    ]);
+
+    const result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.chats[0]?.lastMessage).toMatchObject({
+      text: "Liked a message",
+      senderName: "Bob",
+    });
   });
 
   test("fails open when contact classification becomes unavailable", async () => {
@@ -293,6 +322,99 @@ describe("ChatDirectory reactive fast path", () => {
     expect(a.flags.unread).toBe(true);
     expect(a.unreadCount).toBe(2);
     expect(a.firstUnreadAt).toBe(1000);
+  });
+
+  test("live group tapback recovers its sender when the socket payload omits handle", async () => {
+    const { bb, directory, contacts } = await setup([
+      {
+        guid: GROUP_CHAT,
+        displayName: "Alice and Bob",
+        participants: [
+          { originalROWID: 101, address: "+15550001111" },
+          { originalROWID: 202, address: "+15550002222" },
+        ],
+        messages: [inbound("target", 1000)],
+      },
+    ]);
+    await directory.summaries();
+    const rebuilds = bb.calls.queryChats;
+    const tapback: BBMessage = {
+      guid: "reaction",
+      text: 'Liked “hello”',
+      dateCreated: 2000,
+      isFromMe: false,
+      handle: null,
+      handleId: 202,
+      associatedMessageGuid: "p:0/target",
+      associatedMessageType: "like",
+    };
+
+    const participants = directory.participantHandlesFor(GROUP_CHAT);
+    const mapped = directory.applyMessage(GROUP_CHAT, tapback);
+    const reactionEvent = tapbackReactionEvent(tapback, contacts, participants);
+
+    expect(mapped?.sender).toEqual({ address: "+15550002222", name: "Bob" });
+    expect(reactionEvent?.reaction).toMatchObject({
+      senderName: "Bob",
+      senderAddress: "+15550002222",
+    });
+    const result = await directory.summaries();
+    expect(result.ok).toBe(true);
+    expect(bb.calls.queryChats).toBe(rebuilds);
+    if (!result.ok) return;
+    expect(result.chats[0]?.lastMessage).toMatchObject({
+      text: "Liked a message",
+      senderName: "Bob",
+    });
+  });
+
+  test("live sibling tapback resolves sender before canonicalizing the chat guid", async () => {
+    const { directory, contacts } = await setup([
+      {
+        guid: GROUP_CHAT,
+        displayName: "Alice and Bob",
+        participants: [
+          { originalROWID: 101, address: "+15550001111" },
+          { originalROWID: 202, address: "+15550002222" },
+        ],
+        messages: [inbound("rcs-last", 1500)],
+      },
+      {
+        guid: GROUP_CHAT_SMS,
+        displayName: "Alice and Bob",
+        participants: [
+          { originalROWID: 301, address: "+15550001111" },
+          { originalROWID: 302, address: "+15550002222" },
+        ],
+        messages: [inbound("sms-last", 1000)],
+      },
+    ]);
+    await directory.summaries();
+    expect(directory.canonicalGuid(GROUP_CHAT_SMS)).toBe(GROUP_CHAT);
+    const tapback: BBMessage = {
+      guid: "sms-reaction",
+      text: 'Liked “hello”',
+      dateCreated: 2000,
+      isFromMe: false,
+      handle: null,
+      handleId: 302,
+      associatedMessageGuid: "p:0/sms-last",
+      associatedMessageType: "like",
+      chats: [{ guid: GROUP_CHAT_SMS }],
+    };
+
+    const rawParticipants = directory.participantHandlesFor(GROUP_CHAT_SMS);
+    const mapped = directory.applyMessage(GROUP_CHAT_SMS, tapback);
+    const reactionEvent = tapbackReactionEvent(tapback, contacts, rawParticipants);
+
+    expect(mapped).toMatchObject({
+      chatGuid: GROUP_CHAT,
+      sender: { address: "+15550002222", name: "Bob" },
+    });
+    expect(reactionEvent?.reaction.senderName).toBe("Bob");
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, GROUP_CHAT).lastMessage?.senderName).toBe("Bob");
   });
 
   test("realtime junk messages keep an aged cache screened through reconciliation", async () => {

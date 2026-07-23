@@ -9,6 +9,8 @@ export interface BBEnvelope<T> {
 }
 
 export interface BBHandle {
+  /** chat.db handle ROWID, used when nested message.handle was not joined. */
+  originalROWID?: number;
   address: string;
   country?: string;
   service?: string;
@@ -35,7 +37,7 @@ export interface BBChat {
   chatIdentifier?: string;
   groupId?: string;
   displayName?: string | null;
-  participants?: Array<{ address: string }>;
+  participants?: BBHandle[];
   lastMessage?: BBMessage | null;
   properties?: BBChatProperties[];
 }
@@ -51,6 +53,8 @@ export interface BBMessage {
   dateRetracted?: number | null;
   isFromMe?: boolean;
   handle?: BBHandle | null;
+  /** chat.db handle ROWID; remains populated when the handle relation is omitted. */
+  handleId?: number | null;
   attachments?: BBAttachment[];
   associatedMessageGuid?: string | null;
   associatedMessageType?: string | number | null;
