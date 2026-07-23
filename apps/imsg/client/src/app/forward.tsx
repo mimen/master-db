@@ -1,26 +1,21 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
-import { useChats } from "@/hooks/use-chats";
+import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { takeForwardText } from "@/lib/forward";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 import { ChatAvatar } from "@/components/avatar";
+import { CenteredSpinner, EmptyState } from "@/components/empty-state";
 import { ListRow } from "@/components/list-row";
 import { useTheme } from "@/hooks/use-theme";
 
 export default function ForwardScreen() {
   const theme = useTheme();
-  const { chats } = useChats("all", "all");
-  const [query, setQuery] = useState("");
+  const { results, loading, query, setQuery } = useForwardTargets();
   const [text] = useState(() => takeForwardText());
-
-  const filtered = useMemo(() => {
-    const n = query.trim().toLowerCase();
-    return (n ? chats.filter((c) => c.displayName.toLowerCase().includes(n)) : chats).slice(0, 40);
-  }, [chats, query]);
 
   const forwardTo = (chat: ChatSummary) => {
     if (!text) {
@@ -54,19 +49,24 @@ export default function ForwardScreen() {
         autoFocus
         style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
       />
-      <FlatList
-        data={filtered}
-        keyExtractor={(c) => c.guid}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => (
-          <ListRow
-            titleWeight="400"
-            onPress={() => forwardTo(item)}
-            leading={<ChatAvatar chat={item} size={40} />}
-            title={item.displayName}
-          />
-        )}
-      />
+      {loading ? (
+        <CenteredSpinner />
+      ) : (
+        <FlatList
+          data={results}
+          keyExtractor={(c) => c.guid}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={<EmptyState message="No matching chats" />}
+          renderItem={({ item }) => (
+            <ListRow
+              titleWeight="400"
+              onPress={() => forwardTo(item)}
+              leading={<ChatAvatar chat={item} size={40} />}
+              title={item.displayName}
+            />
+          )}
+        />
+      )}
     </View>
   );
 }
