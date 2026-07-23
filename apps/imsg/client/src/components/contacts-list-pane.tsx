@@ -1,29 +1,31 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
   FlatList,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { avatarUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
 import { type AirtableHumanRow, type ContactListRow, primaryHandle } from "@/lib/identity";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
-import { useAiStatus } from "@/hooks/use-ai";
 import { useTheme } from "@/hooks/use-theme";
-import { useActionSheet } from "@/lib/action-sheet";
-import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
-import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
 import { NavSwitcher } from "./nav-switcher";
+import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
+import { SidebarFrame } from "./sidebar/sidebar-frame";
+import { SidebarSearchField } from "./sidebar/sidebar-search-field";
+import { SuggestionSettingsButton } from "./sidebar/suggestion-settings-button";
+import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
+import {
+  SIDEBAR_CHROME_HEIGHT,
+  useSyntheticScrollMetrics,
+} from "./sidebar/use-synthetic-scroll-metrics";
 
 type Row =
   | { kind: "header"; key: string; letter: string }
@@ -57,55 +59,16 @@ export interface ContactsListPaneProps {
 }
 
 /**
- * Contacts list — desktop mirrors the Messages pane exactly: same frosted
- * fixed top bar (toggle + the same icon set), search riding the scroll in the
- * same spot, list below. Mobile keeps its simple title layout (bottom tabs).
+ * Contacts list — composed from the same SidebarFrame/Chrome/search-field as
+ * the Messages pane, so parity is structural instead of hand-maintained.
+ * Search state stays local and independent (name filter + Airtable lookup —
+ * no inbox lenses, no deep message search). Plain FlatList by design.
  */
 export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
-  const aiStatus = useAiStatus();
-  const showSheet = useActionSheet();
-  const suggestionMode = useSuggestionMode();
   const [query, setQuery] = useState("");
   const topBarH = SIDEBAR_CHROME_HEIGHT;
-  const [contentH, setContentH] = useState(0);
-  const [viewportH, setViewportH] = useState(0);
-  const scrollYAnim = useRef(new Animated.Value(0)).current;
-  const aiBtnRef = useRef<View>(null);
   const needle = query.trim().toLowerCase();
-
-  const glassStyle =
-    Platform.OS === "web"
-      ? ({
-          backgroundColor: `${theme.background}E6`,
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderBottomColor: theme.divider,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-        } as object)
-      : { backgroundColor: theme.background };
-
-  const openSuggestionSettings = (): void => {
-    const options: Array<{ label: string; mode: SuggestionMode }> = [
-      { label: "Off", mode: "off" },
-      { label: "On demand", mode: "on-demand" },
-      { label: "Automatic", mode: "auto" },
-    ];
-    const show = (anchor?: { x: number; y: number }) =>
-      showSheet({
-        title: "Reply suggestions",
-        actions: options.map((o) => ({
-          label: `${suggestionMode === o.mode ? "✓  " : "    "}${o.label}`,
-          onPress: () => setSuggestionMode(o.mode),
-        })),
-        anchor,
-      });
-    if (wide && aiBtnRef.current) {
-      aiBtnRef.current.measureInWindow((x, y, _w, h) => show({ x, y: y + h + 4 }));
-    } else {
-      show();
-    }
-  };
 
   const { results: airtableResults, people, add: addAirtableContact, addingId } = useAirtableSearch(
     needle,
@@ -134,33 +97,21 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     ];
   }, [filtered, airtableResults]);
 
+  // Same synthetic thumb as Messages; FlatList's onContentSizeChange is
+  // reliable, so it feeds content height directly.
+  const metrics = useSyntheticScrollMetrics({
+    chromeHeight: topBarH,
+    estimatedContentHeight: rows.length * 44 + topBarH + 64,
+  });
+
   const searchField = (
-    <View
-      style={[
-        styles.searchField,
-        !wide && styles.searchFieldInline,
-        { backgroundColor: theme.backgroundElement },
-      ]}
-    >
-      <Ionicons name="search" size={17} color={theme.textSecondary} />
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search"
-        placeholderTextColor={theme.textSecondary}
-        style={[styles.searchInput, { color: theme.text }]}
-      />
-      {needle.length > 0 && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Clear search"
-          onPress={() => setQuery("")}
-          hitSlop={8}
-        >
-          <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
-        </Pressable>
-      )}
-    </View>
+    <SidebarSearchField
+      value={query}
+      accessibilityLabel="Search contacts"
+      placement={wide ? "list-header" : "chrome"}
+      onChangeText={setQuery}
+      onClear={() => setQuery("")}
+    />
   );
 
   const renderRow = ({ item }: { item: Row }) => {
@@ -218,152 +169,70 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     );
   };
 
-  // Synthetic scrollbar identical to the Messages pane: starts below the glass
-  // bar, thin track-less thumb.
-  const trackH = Math.max(0, viewportH - topBarH - 6);
-  const showThumb = viewportH > 0 && contentH > viewportH + 4;
-  const thumbH = showThumb ? Math.max(36, (trackH * viewportH) / contentH) : 0;
-  const thumbTranslate = scrollYAnim.interpolate({
-    inputRange: [0, Math.max(1, contentH - viewportH)],
-    outputRange: [0, Math.max(0, trackH - thumbH)],
-    extrapolate: "clamp",
-  });
+  const chrome = (
+    <SidebarChrome
+      leading={wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
+      actions={
+        <>
+          <SuggestionSettingsButton wide={wide} />
+          {/* Filters are a Messages concept — present for bar parity, inert here. */}
+          <View style={[chromeStyles.actionButton, { opacity: 0.3 }]}>
+            <Ionicons name="options-outline" size={21} color={theme.accent} />
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New message"
+            onPress={() => router.push("/new-chat")}
+            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+          >
+            <Ionicons name="create-outline" size={23} color={theme.accent} />
+          </Pressable>
+        </>
+      }
+    />
+  );
 
   return (
-    <SafeAreaView style={[styles.pane, { backgroundColor: theme.background }]} edges={["top"]}>
-      <View style={styles.listWrap}>
-          {people === undefined ? (
+    <SidebarFrame chrome={chrome} thumb={<SyntheticScrollThumb state={metrics.thumb} />}>
+      {people === undefined ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(r) => r.key}
+          keyboardShouldPersistTaps="handled"
+          // Native-only: RNW treats ANY scroll event as a drag and blurs the
+          // focused input (the search focus-theft bug family).
+          keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 8 }}
+          onLayout={(e) => metrics.onViewportHeight(e.nativeEvent.layout.height)}
+          onContentSizeChange={(_w, h) => metrics.onContentHeight(h)}
+          onScroll={metrics.onScroll}
+          scrollEventThrottle={16}
+          ListHeaderComponent={wide ? <View style={{ paddingBottom: 6 }}>{searchField}</View> : null}
+          ListEmptyComponent={
             <View style={styles.center}>
-              <ActivityIndicator />
+              <Text style={{ color: theme.textSecondary }}>No contacts found.</Text>
             </View>
-          ) : (
-            <FlatList
-              data={rows}
-              keyExtractor={(r) => r.key}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 8 }}
-              onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
-              onContentSizeChange={(_w, h) => setContentH(h)}
-              onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollYAnim } } }], {
-                useNativeDriver: false,
-              })}
-              scrollEventThrottle={16}
-              ListHeaderComponent={wide ? <View style={{ paddingBottom: 6 }}>{searchField}</View> : null}
-              ListEmptyComponent={
-                <View style={styles.center}>
-                  <Text style={{ color: theme.textSecondary }}>No contacts found.</Text>
-                </View>
-              }
-              renderItem={renderRow}
-            />
-          )}
-          {showThumb && (
-            <Animated.View
-              pointerEvents="none"
-              style={[styles.scrollThumb, { top: topBarH, height: thumbH, transform: [{ translateY: thumbTranslate }] }]}
-            />
-          )}
-          {/* Frosted top bar — identical chrome to the Messages pane. */}
-          <View style={[styles.topBar, glassStyle]}>
-            {wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
-            <View style={styles.titleActions}>
-              {aiStatus?.suggestions && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Suggestion settings"
-                  ref={aiBtnRef}
-                  onPress={openSuggestionSettings}
-                  style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-                >
-                  <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
-                </Pressable>
-              )}
-              {/* Filters are a Messages concept — present for bar parity, inert here. */}
-              <View style={[styles.titleButton, { opacity: 0.3 }]}>
-                <Ionicons name="options-outline" size={21} color={theme.accent} />
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="New message"
-                onPress={() => router.push("/new-chat")}
-                style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-              >
-                <Ionicons name="create-outline" size={23} color={theme.accent} />
-              </Pressable>
-            </View>
-          </View>
-      </View>
-    </SafeAreaView>
+          }
+          renderItem={renderRow}
+        />
+      )}
+    </SidebarFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  pane: { flex: 1 },
-  listWrap: { flex: 1, position: "relative" },
-  scrollThumb: {
-    backgroundColor: "rgba(140,140,150,0.5)",
-    borderRadius: 3,
-    position: "absolute",
-    right: 2,
-    width: 6,
-    zIndex: 5,
-  },
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    height: 58,
-    justifyContent: "space-between",
-    left: 0,
-    paddingHorizontal: 16,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 10,
-  },
   navInline: {
     flex: 1,
     marginBottom: 0,
     marginHorizontal: 0,
     marginTop: 0,
   },
-  titleActions: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  titleButton: {
-    alignItems: "center",
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: -1.1,
-    paddingLeft: 6,
-  },
-  searchField: {
-    alignItems: "center",
-    borderRadius: 11,
-    flexDirection: "row",
-    gap: 8,
-    height: 38,
-    marginBottom: 12,
-    marginHorizontal: 18,
-    marginTop: 4,
-    paddingHorizontal: 12,
-  },
-  searchFieldInline: {
-    flex: 1,
-    marginBottom: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
-  },
-  searchInput: { flex: 1, fontSize: 15, paddingVertical: 0 },
   sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 18, paddingVertical: 4 },
   row: {
     alignItems: "center",

@@ -19,6 +19,9 @@ export interface SyntheticScrollMetrics {
   /** Latest viewport height (ref-backed; safe inside stable closures). */
   viewportHeight(): number;
   onViewportHeight(height: number): void;
+  /** For plain FlatLists whose onContentSizeChange IS reliable (FlashList's
+   * isn't — its dimensions arrive via scroll events instead). */
+  onContentHeight(height: number): void;
   onScroll(event: NativeSyntheticEvent<NativeScrollEvent>): void;
 }
 
@@ -80,6 +83,10 @@ export function useSyntheticScrollMetrics(args: {
     onViewportHeight(h) {
       viewportHRef.current = h;
       setViewportH(h);
+    },
+    onContentHeight(h) {
+      contentHRef.current = h;
+      setContentH(h);
     },
     onScroll: onScrollRef.current,
   };

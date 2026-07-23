@@ -228,7 +228,7 @@ export default function ChatListScreen() {
         if (o.searchOpen) return setSearchOpen(false);
         if (o.newChatOpen) return setNewChatOpen(false);
         // An active list search clears before anything else closes.
-        if (getListAdapter()?.clearSearch?.()) return;
+        if (getListAdapter()?.clearSearch()) return;
         if (!isListMode()) {
           // From the composer (or anywhere non-glide): enter glide mode.
           const active = document.activeElement;
