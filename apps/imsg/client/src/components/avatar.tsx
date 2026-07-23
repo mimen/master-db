@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
@@ -25,7 +26,13 @@ function avatarColor(key: string): { start: string; end: string; fg: string } {
   };
 }
 
-function PersonAvatar({
+/**
+ * The base primitive: a gradient-initials circle with the cached contact
+ * photo (if any) overlaid on top. Every 1:1 avatar in the app — inbox rows,
+ * headers, hero profile views, sender gutters — renders through this; do not
+ * hand-roll another initials-circle-plus-photo block, extend this one.
+ */
+export function PersonAvatar({
   address,
   name,
   size,
@@ -134,6 +141,40 @@ export function GroupAvatarStack({ chat, size }: { chat: ChatSummary; size: numb
           <PersonAvatar address={m.address} name={m.name ?? m.address ?? "?"} size={av} />
         </View>
       ))}
+    </View>
+  );
+}
+
+/**
+ * Group avatar for call sites that only know a chat guid — no participant
+ * list to build ChatAvatar's stacked-circle art from (e.g. the thread
+ * header, which is fed by route params). Falls back to a people glyph
+ * behind the cached group photo.
+ */
+export function GroupPhotoAvatar({
+  guid,
+  size,
+  iconSize,
+}: {
+  guid: string;
+  size: number;
+  iconSize?: number;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.circle,
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: theme.backgroundElement },
+      ]}
+    >
+      <Ionicons name="people" size={iconSize ?? size * 0.47} color={theme.textSecondary} />
+      <Image
+        source={{ uri: groupPhotoUrl(guid) }}
+        style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
+        contentFit="cover"
+        transition={80}
+      />
     </View>
   );
 }
