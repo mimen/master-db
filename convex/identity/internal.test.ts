@@ -5,7 +5,7 @@ import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
-import { recomputePersonAggregates } from "./internal";
+import { recomputePersonAggregates, upsertIdentityCandidate, type IdentityCandidate } from "./internal";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -149,5 +149,108 @@ describe("recomputePersonAggregates", () => {
     await t.run((ctx) => recomputePersonAggregates(ctx, personId));
     const after = await t.run((ctx) => ctx.db.get(personId));
     expect(after?.updated_at).toBe(before?.updated_at);
+  });
+});
+
+function candidate(overrides: Partial<IdentityCandidate> = {}): IdentityCandidate {
+  return {
+    network: "whatsapp",
+    value: "+16195551234@s.whatsapp.net",
+    kind: "whatsapp",
+    normalized: "+16195551234",
+    is_self: false,
+    source: "participant",
+    chat_count: 1,
+    ...overrides,
+  };
+}
+
+async function getIdentityByValue(t: TestConvex<typeof schema>, value: string) {
+  return t.run((ctx) =>
+    ctx.db
+      .query("identities")
+      .withIndex("by_value", (q) => q.eq("value", value))
+      .first(),
+  );
+}
+
+describe("upsertIdentityCandidate", () => {
+  test("re-run idempotency: identical input twice yields identical chat_count and no updated_at churn", async () => {
+    const t = convexTest(schema, modules);
+    const c = candidate({ chat_count: 3, display_name: "Chase", last_seen_at: "2026-01-01T00:00:00.000Z" });
+
+    const firstOutcome = await t.run((ctx) => upsertIdentityCandidate(ctx, c));
+    expect(firstOutcome).toBe("inserted");
+    const afterFirst = await getIdentityByValue(t, c.value);
+    expect(afterFirst?.chat_count).toBe(3);
+
+    await new Promise((r) => setTimeout(r, 5));
+    const secondOutcome = await t.run((ctx) => upsertIdentityCandidate(ctx, c));
+    expect(secondOutcome).toBe("unchanged");
+    const afterSecond = await getIdentityByValue(t, c.value);
+
+    expect(afterSecond?.chat_count).toBe(3);
+    expect(afterSecond?.updated_at).toBe(afterFirst?.updated_at);
+  });
+
+  test("a later run with fewer appearances sets chat_count DOWN, not up", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ chat_count: 5 })));
+    const afterFirst = await getIdentityByValue(t, "+16195551234@s.whatsapp.net");
+    expect(afterFirst?.chat_count).toBe(5);
+
+    const outcome = await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ chat_count: 2 })));
+    expect(outcome).toBe("updated");
+    const afterSecond = await getIdentityByValue(t, "+16195551234@s.whatsapp.net");
+    expect(afterSecond?.chat_count).toBe(2);
+  });
+
+  test("longer display_name wins on update", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ display_name: "Chase" })));
+    await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ display_name: "C" })));
+    const after = await getIdentityByValue(t, "+16195551234@s.whatsapp.net");
+    expect(after?.display_name).toBe("Chase");
+
+    await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ display_name: "Chase Petersen" })));
+    const after2 = await getIdentityByValue(t, "+16195551234@s.whatsapp.net");
+    expect(after2?.display_name).toBe("Chase Petersen");
+  });
+
+  test("last_seen_at only advances, never regresses", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) =>
+      upsertIdentityCandidate(ctx, candidate({ last_seen_at: "2026-01-10T00:00:00.000Z" })),
+    );
+    await t.run((ctx) =>
+      upsertIdentityCandidate(ctx, candidate({ last_seen_at: "2026-01-01T00:00:00.000Z" })),
+    );
+    const after = await getIdentityByValue(t, "+16195551234@s.whatsapp.net");
+    expect(after?.last_seen_at).toBe("2026-01-10T00:00:00.000Z");
+  });
+
+  test("is_self is sticky once true", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ is_self: true })));
+    await t.run((ctx) => upsertIdentityCandidate(ctx, candidate({ is_self: false })));
+    const after = await getIdentityByValue(t, "+16195551234@s.whatsapp.net");
+    expect(after?.is_self).toBe(true);
+  });
+
+  test("distinct (network, value) pairs are independent rows", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) =>
+      upsertIdentityCandidate(ctx, candidate({ network: "whatsapp", value: "shared-id", chat_count: 1 })),
+    );
+    await t.run((ctx) =>
+      upsertIdentityCandidate(ctx, candidate({ network: "imessage", value: "shared-id", chat_count: 1 })),
+    );
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_value", (q) => q.eq("value", "shared-id"))
+        .collect(),
+    );
+    expect(rows).toHaveLength(2);
   });
 });

@@ -20,7 +20,25 @@ const identityCandidate = v.object({
   is_self: v.boolean(),
   source: v.string(),
   last_seen_at: v.optional(v.string()),
+  // The candidate's final chat_count for THIS run (see resolve.ts's
+  // aggregateIdentityCandidates) — a count of distinct chats it appeared in
+  // this run, not a running total. upsertIdentityCandidate SETs this field.
+  chat_count: v.number(),
 });
+
+export type IdentityCandidate = {
+  network?: string;
+  value: string;
+  kind: string;
+  normalized: string;
+  display_name?: string;
+  phone_number?: string;
+  img_url?: string;
+  is_self: boolean;
+  source: string;
+  last_seen_at?: string;
+  chat_count: number;
+};
 
 /** Page through beeper_chats, returning just the fields the resolver needs. */
 export const listChatsPage = internalQuery({
@@ -41,63 +59,111 @@ export const listChatsPage = internalQuery({
   },
 });
 
+export type UpsertOutcome = "inserted" | "updated" | "unchanged";
+
 /**
- * Idempotent upsert of a batch of identity candidates. Dedupe key is
- * (network, value): the same raw handle seen in another chat just bumps
- * chat_count and refreshes last_seen / display_name.
+ * Upsert one identity candidate. Dedupe key is (network, value).
+ *
+ * chat_count is SET from the candidate's own (already run-aggregated)
+ * chat_count, not incremented — resolveIdentities re-derives it from scratch
+ * every run (see resolve.ts's aggregateIdentityCandidates), so a handle that
+ * appears in fewer chats than last run should see its chat_count go DOWN,
+ * and a re-run over unchanged data must reproduce the exact same value, not
+ * grow it. The other fields keep their existing merge-against-stored-row
+ * rules: longest display_name wins, last_seen_at only advances, is_self is
+ * sticky, phone_number/img_url are first-wins (kept once set).
+ *
+ * Building the patch from only the fields that actually differ — and
+ * skipping the patch (including updated_at) entirely when nothing changed —
+ * matters because this now runs on a daily cron over every identity the
+ * chats currently reference: an unconditional patch would rewrite every row
+ * (and bump updated_at, invalidating every subscribed query) on every run
+ * even when the underlying chats haven't changed at all.
+ *
+ * Exported as a plain function (ctx + one candidate in, outcome out) so it's
+ * testable directly via convex-test's `t.run`, same pattern as
+ * ingestContacts.ts's ingestOneCard.
  */
+export async function upsertIdentityCandidate(
+  ctx: MutationCtx,
+  it: IdentityCandidate,
+): Promise<UpsertOutcome> {
+  const now = new Date().toISOString();
+  const matches = await ctx.db
+    .query("identities")
+    .withIndex("by_value", (q) => q.eq("value", it.value))
+    .collect();
+  const existing = matches.find((m) => m.network === it.network);
+
+  if (!existing) {
+    await ctx.db.insert("identities", {
+      person_id: undefined,
+      kind: it.kind,
+      value: it.value,
+      normalized: it.normalized,
+      network: it.network,
+      display_name: it.display_name,
+      phone_number: it.phone_number,
+      img_url: it.img_url,
+      message_count: 0,
+      chat_count: it.chat_count,
+      is_self: it.is_self,
+      source: it.source,
+      first_seen_at: it.last_seen_at ?? now,
+      last_seen_at: it.last_seen_at ?? now,
+      created_at: now,
+      updated_at: now,
+    });
+    return "inserted";
+  }
+
+  const nextDisplayName =
+    it.display_name && it.display_name.length > (existing.display_name?.length ?? 0)
+      ? it.display_name
+      : existing.display_name;
+  const nextImgUrl = existing.img_url ?? it.img_url;
+  const nextPhoneNumber = existing.phone_number ?? it.phone_number;
+  const nextLastSeenAt =
+    it.last_seen_at && (!existing.last_seen_at || it.last_seen_at > existing.last_seen_at)
+      ? it.last_seen_at
+      : existing.last_seen_at;
+  const nextIsSelf = existing.is_self || it.is_self;
+
+  const unchanged =
+    existing.chat_count === it.chat_count &&
+    existing.display_name === nextDisplayName &&
+    existing.img_url === nextImgUrl &&
+    existing.phone_number === nextPhoneNumber &&
+    existing.last_seen_at === nextLastSeenAt &&
+    existing.is_self === nextIsSelf;
+  if (unchanged) return "unchanged";
+
+  await ctx.db.patch(existing._id, {
+    chat_count: it.chat_count,
+    display_name: nextDisplayName,
+    img_url: nextImgUrl,
+    phone_number: nextPhoneNumber,
+    last_seen_at: nextLastSeenAt,
+    is_self: nextIsSelf,
+    updated_at: now,
+  });
+  return "updated";
+}
+
+/** Upsert a batch of already run-aggregated identity candidates — see upsertIdentityCandidate. */
 export const upsertIdentitiesBatch = internalMutation({
   args: { items: v.array(identityCandidate) },
   handler: async (ctx, { items }) => {
-    const now = new Date().toISOString();
     let inserted = 0;
     let updated = 0;
+    let unchanged = 0;
     for (const it of items) {
-      const matches = await ctx.db
-        .query("identities")
-        .withIndex("by_value", (q) => q.eq("value", it.value))
-        .collect();
-      const existing = matches.find((m) => m.network === it.network);
-      if (existing) {
-        await ctx.db.patch(existing._id, {
-          chat_count: existing.chat_count + 1,
-          display_name:
-            it.display_name && it.display_name.length > (existing.display_name?.length ?? 0)
-              ? it.display_name
-              : existing.display_name,
-          img_url: existing.img_url ?? it.img_url,
-          phone_number: existing.phone_number ?? it.phone_number,
-          last_seen_at:
-            it.last_seen_at && (!existing.last_seen_at || it.last_seen_at > existing.last_seen_at)
-              ? it.last_seen_at
-              : existing.last_seen_at,
-          is_self: existing.is_self || it.is_self,
-          updated_at: now,
-        });
-        updated++;
-      } else {
-        await ctx.db.insert("identities", {
-          person_id: undefined,
-          kind: it.kind,
-          value: it.value,
-          normalized: it.normalized,
-          network: it.network,
-          display_name: it.display_name,
-          phone_number: it.phone_number,
-          img_url: it.img_url,
-          message_count: 0,
-          chat_count: 1,
-          is_self: it.is_self,
-          source: it.source,
-          first_seen_at: it.last_seen_at ?? now,
-          last_seen_at: it.last_seen_at ?? now,
-          created_at: now,
-          updated_at: now,
-        });
-        inserted++;
-      }
+      const outcome = await upsertIdentityCandidate(ctx, it);
+      if (outcome === "inserted") inserted++;
+      else if (outcome === "updated") updated++;
+      else unchanged++;
     }
-    return { inserted, updated };
+    return { inserted, updated, unchanged };
   },
 });
 
