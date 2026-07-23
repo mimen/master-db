@@ -310,7 +310,7 @@ export function ConversationListPane({
           })}
           scrollEventThrottle={16}
           ListHeaderComponent={
-            <View style={wide ? { paddingBottom: 8 } : null}>
+            <View style={wide ? { paddingBottom: 6 } : null}>
               <View style={[styles.searchField, { backgroundColor: theme.backgroundElement }]}>
                 <Ionicons name="search" size={17} color={theme.textSecondary} />
                 <TextInput
