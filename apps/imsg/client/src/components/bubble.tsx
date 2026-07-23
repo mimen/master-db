@@ -1,5 +1,5 @@
 import { memo, useState, type ReactNode } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
@@ -7,6 +7,7 @@ import { attachmentUrl, avatarUrl } from "@/lib/api";
 import { formatBubbleTime, initials } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble } from "./media";
@@ -96,7 +97,7 @@ export const TAPBACK_EMOJI = new Map([
 
 function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
   const theme = useTheme();
-  const { width: winW } = useWindowDimensions();
+  const { width: winW } = useLayoutMode();
   const openLightbox = useLightbox();
   // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
   const base = paneWidth > 0 ? paneWidth : winW;
@@ -176,7 +177,7 @@ export const Bubble = memo(function Bubble({
   onShowReactions,
 }: BubbleProps) {
   const theme = useTheme();
-  const { width: winW } = useWindowDimensions();
+  const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
   const mine = message.isFromMe;
@@ -189,7 +190,7 @@ export const Bubble = memo(function Bubble({
   const bubbleMaxWidth =
     paneWidth > 0
       ? Math.min(paneWidth * 0.72, 560)
-      : winW >= 768
+      : wide
         ? Math.min(winW * 0.5, 560)
         : "78%";
   const url = message.text ? firstUrl(message.text) : null;

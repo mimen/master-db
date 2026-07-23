@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -13,6 +13,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
@@ -86,8 +87,7 @@ export function ChatRow({
 }) {
   const theme = useTheme();
   const { openMenu } = useChatActions();
-  const { width: winW } = useWindowDimensions();
-  const compact = winW >= 768;
+  const { width: winW, wide: compact } = useLayoutMode();
   const [hovered, setHovered] = useState(false);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;

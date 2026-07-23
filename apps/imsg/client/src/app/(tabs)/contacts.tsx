@@ -1,17 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { ContactsListPane } from "@/components/contacts-list-pane";
 import { PersonContent } from "@/components/person-content";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Radii } from "@/constants/theme";
 import { primaryHandle, type ContactListRow } from "@/lib/identity";
 
 export default function ContactsScreen() {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const wide = width >= 768;
+  const { wide } = useLayoutMode();
   const [selectedPerson, setSelectedPerson] = useState<ContactListRow | null>(null);
 
   if (!wide) {

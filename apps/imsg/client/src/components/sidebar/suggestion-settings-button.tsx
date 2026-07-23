@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { Pressable, type View } from "react-native";
 
 import { useAiStatus } from "@/hooks/use-ai";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
@@ -14,8 +15,9 @@ import { chromeStyles } from "./sidebar-chrome";
  * Renders nothing when the server has no suggestion capability. Desktop
  * opens a popover mounted under the button; mobile keeps the sheet.
  */
-export function SuggestionSettingsButton({ wide }: { wide: boolean }): React.JSX.Element | null {
+export function SuggestionSettingsButton(): React.JSX.Element | null {
   const theme = useTheme();
+  const { wide } = useLayoutMode();
   const aiStatus = useAiStatus();
   const suggestionMode = useSuggestionMode();
   const showSheet = useActionSheet();

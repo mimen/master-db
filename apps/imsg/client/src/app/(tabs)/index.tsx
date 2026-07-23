@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ChatInfoContent } from "@/components/chat-info-content";
 import { ConversationListPane } from "@/components/conversation-list-pane";
@@ -13,6 +13,7 @@ import { ThreadView } from "@/components/thread-view";
 import { ShadowPanel } from "@/components/shadow-panel";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
@@ -45,11 +46,10 @@ const HELP_ENTRIES = helpEntries();
 
 export default function ChatListScreen() {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const wide = width >= 768;
+  const { wide, canShadow: canShadowLayout } = useLayoutMode();
   const aiStatus = useAiStatus();
   // The shadow panel needs room beyond the list+thread; keep it to wide desktops.
-  const canShadow = wide && width >= 1040 && aiStatus?.shadow === true;
+  const canShadow = canShadowLayout && aiStatus?.shadow === true;
   const [shadowOpen, setShadowOpen] = useState(false);
   // Unresponded is the working view — the inbox opens on what needs a reply.
   const [state, setState] = useState<StateFilter>("unresponded");

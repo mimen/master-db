@@ -123,8 +123,8 @@ export const Type = {
 } as const;
 
 // Layout breakpoints used to switch between compact/wide UI. Kept here so the
-// numbers have a canonical home; call sites still inline `768`/`1040` today —
-// wiring them up to these tokens (or a `useLayoutMode()` hook) is a follow-up.
+// numbers have a canonical home; `hooks/use-layout-mode.ts` is the only place
+// that reads them directly — everything else calls `useLayoutMode()`.
 export const Breakpoints = {
   wide: 768,
   shadow: 1040,
