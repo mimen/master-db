@@ -22,6 +22,9 @@ import { SkeletonList } from "./skeleton-list";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
+import { useAiStatus } from "@/hooks/use-ai";
+import { useActionSheet } from "@/lib/action-sheet";
+import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
 import { api } from "@/lib/api";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { isListMode, registerListAdapter, subscribeListMode } from "@/lib/keyboard/controller";
@@ -57,6 +60,9 @@ export function ConversationListPane({
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const { openMenu } = useChatActions();
+  const showSheet = useActionSheet();
+  const aiStatus = useAiStatus();
+  const suggestionMode = useSuggestionMode();
   const [query, setQuery] = useState("");
   const [deepMatches, setDeepMatches] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
@@ -94,6 +100,21 @@ export function ConversationListPane({
       setFilterAnchor(null);
       setFilterOpen(true);
     }
+  };
+  const openSuggestionSettings = (): void => {
+    const options: Array<{ label: string; mode: SuggestionMode }> = [
+      { label: "Off", mode: "off" },
+      { label: "On demand", mode: "on-demand" },
+      { label: "Automatic", mode: "auto" },
+    ];
+    showSheet({
+      title: "Reply suggestions",
+      actions: options.map((o) => ({
+        // A leading check marks the active mode; the sheet has no selected state.
+        label: `${suggestionMode === o.mode ? "✓  " : "    "}${o.label}`,
+        onPress: () => setSuggestionMode(o.mode),
+      })),
+    });
   };
   const scrollOffset = useRef(0);
   const model = deriveInboxModel(chats, filters, query, deepMatches);
@@ -340,6 +361,16 @@ export function ConversationListPane({
             <Text style={[styles.title, { color: theme.text }]}>Messages</Text>
           )}
           <View style={styles.titleActions}>
+            {aiStatus?.suggestions && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Suggestion settings"
+                onPress={openSuggestionSettings}
+                style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
+              >
+                <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
+              </Pressable>
+            )}
             <Pressable
               ref={filterBtnRef}
               accessibilityRole="button"

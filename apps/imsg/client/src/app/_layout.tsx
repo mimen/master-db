@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ConvexProvider } from "convex/react";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { hydrateDrafts } from "@/lib/drafts";
+import { hydrateSettings } from "@/lib/settings";
 import { convexClient } from "@/lib/identity";
 import { LightboxProvider } from "@/lib/lightbox";
 import { ToastHost } from "@/lib/toast";
@@ -15,6 +16,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   useEffect(() => {
     void hydrateDrafts();
+    void hydrateSettings();
   }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

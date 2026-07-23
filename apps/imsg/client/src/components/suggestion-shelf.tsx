@@ -5,13 +5,17 @@ import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
+import { useSuggestionMode } from "@/lib/settings";
 
 /**
  * Reply-suggestion shelf, above the composer on desktop.
  *
- * D5 trigger policy: generate once when the chat opens, then serve cache. A new
- * inbound message marks the shelf stale rather than regenerating, so a burst
- * costs nothing until Milad taps refresh. Tapping a suggestion fills the
+ * Trigger policy is a user setting (settings.ts):
+ *   - off:       never shown.
+ *   - on-demand: shows a "Suggest a reply" button; nothing is generated until tapped.
+ *   - auto:      generates once when the chat opens, then serves cache.
+ * A new inbound message marks the shelf stale rather than regenerating, so a
+ * burst costs nothing until Milad taps refresh. Tapping a suggestion fills the
  * composer for editing; it is never sent.
  */
 interface SuggestionShelfProps {
@@ -23,6 +27,7 @@ interface SuggestionShelfProps {
 
 export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: SuggestionShelfProps) {
   const theme = useTheme();
+  const mode = useSuggestionMode();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [stale, setStale] = useState(false);
@@ -49,15 +54,16 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
     [chatGuid],
   );
 
-  // Generate only when Milad actually owes a reply. Opening a thread he has
-  // already answered shows nothing; when a new inbound message arrives (below),
-  // awaitingReply flips true and this regenerates for the new message.
+  // Reset per chat. In auto mode, generate immediately when Milad owes a reply;
+  // in on-demand mode, wait for the button. Opening a thread he has already
+  // answered shows nothing either way.
   useEffect(() => {
     setSuggestions([]);
     setStale(false);
-    if (!enabled || !awaitingReply) return;
+    setFailed(false);
+    if (!enabled || !awaitingReply || mode !== "auto") return;
     void load(false);
-  }, [chatGuid, enabled, awaitingReply, load]);
+  }, [chatGuid, enabled, awaitingReply, mode, load]);
 
   // A new message for this chat marks the shelf stale — no automatic refetch.
   useServerEvents(
@@ -69,7 +75,20 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
     ),
   );
 
-  if (!enabled || !awaitingReply) return null;
+  if (!enabled || !awaitingReply || mode === "off") return null;
+
+  // On-demand, nothing generated yet: offer the button instead of the shelf.
+  if (mode === "on-demand" && suggestions.length === 0 && !loading && !failed) {
+    return (
+      <View style={[styles.container, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
+        <Pressable onPress={() => void load(true)} style={styles.demandButton} hitSlop={6}>
+          <Ionicons name="sparkles-outline" size={15} color={theme.accent} />
+          <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>Suggest a reply</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   // Nothing to show yet and nothing wrong: stay out of the way until first load.
   if (!loading && !failed && suggestions.length === 0) return null;
 
@@ -142,6 +161,13 @@ const styles = StyleSheet.create({
   },
   refresh: {
     padding: 2,
+  },
+  demandButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
   },
   loadingRow: {
     flexDirection: "row",
