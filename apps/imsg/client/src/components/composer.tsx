@@ -45,7 +45,7 @@ const IOS_INPUT_LINE_HEIGHT = 22;
  * iOS contentSize EXCLUDES padding — forgetting to add it back clips the text. */
 const IOS_INPUT_PADDING_V = 16;
 const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
-const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 7 + IOS_INPUT_PADDING_V;
+const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 10 + IOS_INPUT_PADDING_V;
 
 /** SMS/RCS conversations have an "SMS;" guid prefix — green bubbles. */
 function chatIsSMS(chatGuid: string): boolean {
