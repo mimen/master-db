@@ -198,7 +198,16 @@ export const Bubble = memo(function Bubble({
   const hasTail = groupEnd && !message.pending && !notDelivered && message.text !== "";
 
   return (
-    <View style={{ paddingHorizontal: 14, marginBottom: groupEnd ? 8 : 2 }}>
+    <View
+      style={{
+        paddingHorizontal: 14,
+        marginBottom: groupEnd ? 8 : 2,
+        // A tapback chip overhangs the bubble top by 12px; give reacted
+        // messages that much extra headroom so the chip never slides under
+        // the neighboring bubble (iMessage does the same).
+        marginTop: message.reactions.length > 0 ? 12 : 0,
+      }}
+    >
       {message.replyToPreview !== null && (
         // The quote block anchors to the REPLY's side (a cross-side connector
         // reads as an orphaned squiggle); who's being quoted is carried by the
