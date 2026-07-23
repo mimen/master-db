@@ -116,7 +116,10 @@ export function mapMessage(m: BBMessage, chatGuid: string, contacts: ContactBook
   return {
     guid: m.guid,
     chatGuid,
-    text: cleanText(m),
+    // Tapbacks carry Apple's raw `Loved "whole quoted text"` — summarize to the
+    // verb ("Loved a message") so the live sidebar preview matches a reload.
+    // Thread rows are unaffected: buildThread filters tapbacks before mapping.
+    text: isTapback(m) ? summarizeLast(m) : cleanText(m),
     dateCreated: m.dateCreated ?? 0,
     dateRead: m.dateRead ?? null,
     dateDelivered: m.dateDelivered ?? null,
