@@ -476,6 +476,7 @@ export function Composer({
     ]);
   };
 
+  const attachBtnRef = useRef<View>(null);
   const openAttachSheet = () => {
     const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
     if (Platform.OS !== "web") {
@@ -483,7 +484,12 @@ export function Composer({
     }
     actions.push({ label: "Contact", onPress: () => void setContactPickerOpen(true) });
     actions.push({ label: "File", onPress: () => void pickFiles() });
-    showSheet({ actions });
+    // Desktop: popover mounted at the + button (opens upward); mobile keeps the sheet.
+    if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && attachBtnRef.current) {
+      attachBtnRef.current.measureInWindow((x, y) => showSheet({ actions, anchor: { x, y } }));
+    } else {
+      showSheet({ actions });
+    }
   };
 
   // ---------------------------------------------------------- voice memo
@@ -633,6 +639,7 @@ export function Composer({
       <View style={styles.inputRow}>
         <View style={styles.actionCol}>
           <Pressable
+            ref={attachBtnRef}
             onPress={openAttachSheet}
             disabled={busy || recording}
             hitSlop={8}

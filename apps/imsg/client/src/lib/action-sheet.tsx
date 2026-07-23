@@ -102,12 +102,17 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
             {(() => {
               const POP_W = 232;
               const left = Math.max(8, Math.min(rendered.anchor.x, winW - POP_W - 8));
-              const top = Math.min(rendered.anchor.y, winH - 80);
+              // Anchors near the bottom (composer attach) open upward.
+              const openUp = rendered.anchor.y > winH - 300;
+              const place = openUp
+                ? { bottom: winH - rendered.anchor.y + 6 }
+                : { top: Math.min(rendered.anchor.y, winH - 80) };
               return (
                 <View
                   style={[
                     styles.popover,
-                    { backgroundColor: theme.backgroundElement, borderColor: theme.divider, top, left, width: POP_W },
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.divider, left, width: POP_W },
+                    place,
                   ]}
                 >
                   {rendered.tapbacks && (

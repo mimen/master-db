@@ -105,20 +105,29 @@ export function ConversationListPane({
       setFilterOpen(true);
     }
   };
+  const aiBtnRef = useRef<View>(null);
   const openSuggestionSettings = (): void => {
     const options: Array<{ label: string; mode: SuggestionMode }> = [
       { label: "Off", mode: "off" },
       { label: "On demand", mode: "on-demand" },
       { label: "Automatic", mode: "auto" },
     ];
-    showSheet({
-      title: "Reply suggestions",
-      actions: options.map((o) => ({
-        // A leading check marks the active mode; the sheet has no selected state.
-        label: `${suggestionMode === o.mode ? "✓  " : "    "}${o.label}`,
-        onPress: () => setSuggestionMode(o.mode),
-      })),
-    });
+    const show = (anchor?: { x: number; y: number }) =>
+      showSheet({
+        title: "Reply suggestions",
+        actions: options.map((o) => ({
+          // A leading check marks the active mode; the sheet has no selected state.
+          label: `${suggestionMode === o.mode ? "✓  " : "    "}${o.label}`,
+          onPress: () => setSuggestionMode(o.mode),
+        })),
+        anchor,
+      });
+    // Desktop: popover mounted under the button; mobile keeps the sheet.
+    if (wide && aiBtnRef.current) {
+      aiBtnRef.current.measureInWindow((x, y, _w, h) => show({ x, y: y + h + 4 }));
+    } else {
+      show();
+    }
   };
   const scrollOffset = useRef(0);
   // Search is a MODE, not a compound filter: typing searches the FULL universe
@@ -403,6 +412,7 @@ export function ConversationListPane({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Suggestion settings"
+                ref={aiBtnRef}
                 onPress={openSuggestionSettings}
                 style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
               >
