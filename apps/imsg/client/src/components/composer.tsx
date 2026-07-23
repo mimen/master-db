@@ -105,8 +105,7 @@ export function Composer({
   const [text, setText] = useState(() => getDraft(chatGuid));
   const [pending, setPending] = useState<PendingAttachment[]>([]);
 
-  // The home-indicator inset is only meaningful when the keyboard is down; when
-  // it's up the keyboard covers that area, so drop the padding to avoid a gap.
+  // Track native keyboard visibility for keyboard-specific composer edge spacing.
   useEffect(() => {
     if (Platform.OS === "web") return;
     const show = Keyboard.addListener("keyboardWillShow", () => setKeyboardUp(true));
@@ -418,10 +417,9 @@ export function Composer({
         styles.container,
         {
           borderTopColor: theme.divider,
-          // Minimal bottom margin — the composer hugs the bottom edge.
-          paddingBottom: keyboardUp ? 6 : 8,
-          // Wider side margins at rest, full width while typing (iMessage-style).
-          paddingHorizontal: keyboardUp ? 10 : 18,
+          // Keep native controls clear of the keyboard and rounded display edges.
+          paddingBottom: 8,
+          paddingHorizontal: Platform.OS === "web" ? 18 : keyboardUp ? 16 : 20,
         },
       ]}
     >
