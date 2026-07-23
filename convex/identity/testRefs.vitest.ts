@@ -38,6 +38,12 @@ export const topLinkedPeopleRef = makeFunctionReference<
   unknown
 >("identity/queries:topLinkedPeople");
 
+export const nameDirectoryRef = makeFunctionReference<
+  "query",
+  { key: string },
+  Array<{ normalized: string; display_name: string }>
+>("identity/queries:nameDirectory");
+
 export const createPersonRef = makeFunctionReference<
   "mutation",
   { key: string; handle: string; display_name?: string },

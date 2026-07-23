@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "@/lib/api";
 import {
   type AirtableHumanRow,
   type ContactListRow,
@@ -28,31 +29,38 @@ export interface UseAirtableSearchResult {
  */
 export function useAirtableSearch(needle: string, onAdded: (personId: string, human: AirtableHumanRow) => void): UseAirtableSearchResult {
   const people = useListPeople();
-  const [results, setResults] = useState<AirtableHumanRow[]>([]);
+  // Raw Airtable matches, unfiltered — the already-linked exclusion is
+  // computed at render time (below), not here. Keeping `people` out of this
+  // effect's deps means an unrelated people-table change (e.g. a rename
+  // elsewhere) never re-fires the remote Airtable search.
+  const [rawResults, setRawResults] = useState<AirtableHumanRow[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
   const searchAirtable = useSearchAirtableHumans();
   const addFromAirtable = useAddPersonFromAirtable();
 
   useEffect(() => {
     if (needle.length < 2) {
-      setResults([]);
+      setRawResults([]);
       return;
     }
     let cancelled = false;
     const handle = setTimeout(() => {
       searchAirtable({ query: needle })
         .then((found) => {
-          if (cancelled) return;
-          const alreadyLinked = new Set((people ?? []).map((p) => p.airtable_human_id).filter(Boolean));
-          setResults(found.filter((r) => !alreadyLinked.has(r.record_id)));
+          if (!cancelled) setRawResults(found);
         })
-        .catch(() => !cancelled && setResults([]));
+        .catch(() => !cancelled && setRawResults([]));
     }, 250);
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [needle, people, searchAirtable]);
+  }, [needle, searchAirtable]);
+
+  const results = useMemo(() => {
+    const alreadyLinked = new Set((people ?? []).map((p) => p.airtable_human_id).filter(Boolean));
+    return rawResults.filter((r) => !alreadyLinked.has(r.record_id));
+  }, [rawResults, people]);
 
   const add = async (human: AirtableHumanRow) => {
     setAddingId(human.record_id);
@@ -63,8 +71,10 @@ export function useAirtableSearch(needle: string, onAdded: (personId: string, hu
         phone: human.phone,
         email: human.email,
       });
-      setResults((current) => current.filter((r) => r.record_id !== human.record_id));
+      // Local eviction ahead of `people` catching up via Convex reactivity.
+      setRawResults((current) => current.filter((r) => r.record_id !== human.record_id));
       onAdded(result.personId, human);
+      void api.refreshIdentity().catch(() => undefined);
     } catch {
       showToast("Couldn't add contact");
     } finally {

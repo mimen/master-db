@@ -42,3 +42,20 @@ _Avoid_: BB client (when meaning the seam), API wrapper
 Applying a message we already know about directly to the Chat Directory and client
 store ahead of BlueBubbles' own DB catching up; the next full rebuild reconciles.
 _Avoid_: instant state sync, optimistic patch
+
+**Identity Mirror**:
+The server's in-memory read replica of the Convex identity graph's name directory
+(`nameDirectory`), refreshed on an interval so the chat-list hot path never blocks
+on the cloud. Convex is the canonical name source — it's a superset of Apple
+Contacts (Apple names flow in via Identity Sync, plus manual in-app adds/renames,
+which win over a stale Apple name). Looked up by raw address through the same
+phone/email match-key seam (`shared/address.ts`) ContactBook uses.
+_Avoid_: contact cache (when meaning this), name cache
+
+**Name Resolution**:
+How a participant's display name and `known` flag are decided: Identity Mirror
+first, ContactBook fallback. ContactBook only fills the freshness gap — a contact
+added to Apple Contacts within the last Identity Sync cycle, before it reached
+Convex. `contactsAvailable` (and its Unknown-lens fail-open behavior) depends only
+on ContactBook's own availability — the mirror being down/unconfigured degrades
+silently to today's ContactBook-only resolution, never to "everything unknown."

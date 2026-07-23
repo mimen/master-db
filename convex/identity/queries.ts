@@ -113,6 +113,32 @@ export const listPeople = query({
   },
 });
 
+/**
+ * Lean {normalized, display_name} projection for imsg's server-side identity
+ * mirror (apps/imsg/server/identity-mirror.ts) — a read replica the server
+ * refreshes on an interval so the hot chat-list path never blocks on Convex.
+ * One entry per normalized handle, flattened across a person's
+ * normalized_phones and normalized_emails, for every person that isn't
+ * merged away and has a display_name. `is_self` people are included too —
+ * harmless to carry Milad's own handles through the mirror, and excluding
+ * them isn't worth a special case here (unlike listPeople, which is a
+ * human-facing contacts list where it would be confusing).
+ */
+export const nameDirectory = query({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    requireIdentityKey(key);
+    const people = await ctx.db.query("people").collect();
+    const out: Array<{ normalized: string; display_name: string }> = [];
+    for (const p of people) {
+      if (p.merged_into || !p.display_name) continue;
+      for (const normalized of p.normalized_phones) out.push({ normalized, display_name: p.display_name });
+      for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name });
+    }
+    return out;
+  },
+});
+
 /** The people with the most linked identities — the merge graph's payoff. */
 export const topLinkedPeople = query({
   args: { key: v.string(), limit: v.optional(v.number()) },

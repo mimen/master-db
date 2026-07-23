@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "../shared/types";
-import type { ContactBook } from "./contacts";
+import type { NameSource } from "./name-resolver";
 
 /** Apple stores message dates as ns since 2001-01-01; convert to epoch ms. */
 const APPLE_EPOCH_MS = 978_307_200_000;
@@ -62,7 +62,7 @@ export class ChatDb {
    */
   search(
     query: string,
-    contacts: ContactBook,
+    contacts: NameSource,
     options: { chatGuid?: string; from?: "me" | "them"; limit?: number } = {},
   ): Message[] {
     const db = this.open();

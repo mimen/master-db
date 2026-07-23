@@ -3,7 +3,7 @@ import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from
 import type { ChatState } from "../shared/chat-state";
 import { computeFlags } from "../shared/chat-state";
 import { formatAddress } from "../shared/address";
-import type { ContactBook } from "./contacts";
+import type { NameSource } from "./name-resolver";
 
 /** SMS (green bubble) messages come over a non-iMessage service. */
 function messageService(m: BBMessage): "iMessage" | "SMS" {
@@ -61,7 +61,7 @@ function isTapback(m: BBMessage): boolean {
  */
 export function tapbackReactionEvent(
   m: BBMessage,
-  contacts: ContactBook,
+  contacts: NameSource,
   participants: readonly BBHandle[] = [],
 ): { targetGuid: string; reaction: Reaction; remove: boolean } | null {
   if (!isTapback(m) || !m.associatedMessageGuid) return null;
@@ -106,7 +106,7 @@ function cleanText(m: BBMessage): string {
 
 function sender(
   m: BBMessage,
-  contacts: ContactBook,
+  contacts: NameSource,
   participants: readonly BBHandle[] = [],
 ): Participant | null {
   if (m.isFromMe) return null;
@@ -125,7 +125,7 @@ function sender(
 export function mapMessage(
   m: BBMessage,
   chatGuid: string,
-  contacts: ContactBook,
+  contacts: NameSource,
   participants: readonly BBHandle[] = [],
 ): Message {
   return {
@@ -175,7 +175,7 @@ export function mapMessage(
 export function buildThread(
   raw: BBMessage[],
   chatGuid: string,
-  contacts: ContactBook,
+  contacts: NameSource,
 ): Message[] {
   const tapbacks = new Map<string, Reaction[]>();
   for (const m of raw) {
@@ -212,7 +212,7 @@ export function buildThread(
   return messages;
 }
 
-function chatDisplayName(chat: BBChat, contacts: ContactBook): string {
+function chatDisplayName(chat: BBChat, contacts: NameSource): string {
   if (chat.displayName?.trim()) return chat.displayName.trim();
   const participants = chat.participants ?? [];
   const names = participants.map((p) => contacts.lookup(p.address) ?? formatAddress(p.address));
@@ -246,7 +246,7 @@ function isGenuineUnreadInbound(m: BBMessage): boolean {
 export function mapChat(
   chat: BBChat,
   state: ChatState | undefined,
-  contacts: ContactBook,
+  contacts: NameSource,
   scannedUnread?: UnreadSummary,
 ): ChatSummary {
   const last = chat.lastMessage ?? null;

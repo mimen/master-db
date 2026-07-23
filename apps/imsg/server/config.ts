@@ -7,6 +7,15 @@ export interface Config {
   convexSiteUrl: string | null;
   /** Bearer secret for POST /identity/ingest-contacts. Optional — contact sync is skipped if unset. */
   appleContactsIngestSecret: string | null;
+  /**
+   * Convex .convex.cloud URL (the HTTP query API), used by the identity
+   * mirror to pull the name directory. Distinct from convexSiteUrl above —
+   * that's the .convex.site URL for the identity-sync ingest HTTP action.
+   * Optional — the mirror is skipped if unset.
+   */
+  convexCloudUrl: string | null;
+  /** Shared key for identity/queries.ts's requireIdentityKey gate. Optional — the mirror is skipped if unset. */
+  identityKey: string | null;
   ai: AiConfig;
 }
 
@@ -67,6 +76,8 @@ export function loadConfig(): Config {
     dbPath: Bun.env.DB_PATH ?? "imsg.db",
     convexSiteUrl: Bun.env.CONVEX_SITE_URL?.replace(/\/$/, "") ?? null,
     appleContactsIngestSecret: Bun.env.APPLE_CONTACTS_INGEST_SECRET ?? null,
+    convexCloudUrl: Bun.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ?? null,
+    identityKey: Bun.env.IMSG_IDENTITY_KEY ?? null,
     ai: {
       gatewayUrl: (Bun.env.AI_GATEWAY_URL ?? "http://127.0.0.1:8317").replace(/\/$/, ""),
       gatewayKey: loadGatewayKey(),

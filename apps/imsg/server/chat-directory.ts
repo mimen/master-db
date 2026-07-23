@@ -4,6 +4,7 @@ import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
+import type { NameSource } from "./name-resolver";
 import type { ChatSummary, Message } from "../shared/types";
 
 /** Emitted whenever a mutation invalidates the directory; clients refetch. */
@@ -66,12 +67,23 @@ export class ChatDirectory {
   private localReadAt = new Map<string, number>();
   private listeners = new Set<(event: DirectoryEvent) => void>();
 
+  /**
+   * The name source used for participant/display-name resolution. Defaults
+   * to `contacts` (today's ContactBook-only behavior) when no resolver is
+   * supplied, which is exactly what every existing caller/test gets. In
+   * production, server/index.ts passes a NameResolver (Identity Mirror
+   * first, ContactBook fallback) — see server/name-resolver.ts.
+   */
+  private names: NameSource;
+
   constructor(
     private bb: BlueBubbles,
     private db: OverlayDb,
     private contacts: ContactBook,
     private now: () => number = Date.now,
+    names?: NameSource,
   ) {
+    this.names = names ?? contacts;
     this.contacts.onAvailabilityChange(() => this.invalidate());
   }
 
@@ -235,7 +247,7 @@ export class ChatDirectory {
     let chats = result.value
       .map((chat) => {
         const state = overlay.get(chat.guid);
-        const summary = mapChat(chat, state, this.contacts, unread.get(chat.guid));
+        const summary = mapChat(chat, state, this.names, unread.get(chat.guid));
         // Mark-read override: trust our own mark-read over BB's lagging DB.
         // Persisted (overlay) readAt survives restarts — Apple never back-fills
         // dateRead on old group messages, so without it the scan resurrects
@@ -324,7 +336,7 @@ export class ChatDirectory {
     }
     // Live events arrive on the raw per-service chat; patch the merged entry.
     const canonical = this.canonicalGuid(chatGuid);
-    const mapped = mapMessage(message, canonical, this.contacts, this.participantHandlesFor(chatGuid));
+    const mapped = mapMessage(message, canonical, this.names, this.participantHandlesFor(chatGuid));
     this.patchUnreadSummary(canonical, mapped);
     this.patchSummaries(canonical, mapped);
     return mapped;
@@ -339,7 +351,7 @@ export class ChatDirectory {
     const mapped = mapMessage(
       message,
       canonical,
-      this.contacts,
+      this.names,
       this.participantHandlesFor(chatGuid),
     );
     this.rememberRealtimeSpam(canonical, mapped);

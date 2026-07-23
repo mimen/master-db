@@ -7,6 +7,7 @@ import { normalizeModules } from "../test-utils.vitest";
 
 import {
   listPeopleRef,
+  nameDirectoryRef,
   searchPeopleRef,
   topLinkedPeopleRef,
   TEST_KEY,
@@ -26,14 +27,16 @@ async function seedPerson(
     is_self: boolean;
     merged_into: Id<"people">;
     identity_count: number;
+    normalized_phones: string[];
+    normalized_emails: string[];
   }> = {},
 ): Promise<Id<"people">> {
   const now = new Date().toISOString();
   return t.run((ctx) =>
     ctx.db.insert("people", {
       display_name: overrides.display_name,
-      normalized_phones: [],
-      normalized_emails: [],
+      normalized_phones: overrides.normalized_phones ?? [],
+      normalized_emails: overrides.normalized_emails ?? [],
       identity_count: overrides.identity_count ?? 0,
       message_count: 0,
       is_self: overrides.is_self ?? false,
@@ -157,5 +160,54 @@ describe("topLinkedPeople", () => {
     }
     const results = (await t.query(topLinkedPeopleRef, { key: TEST_KEY })) as unknown[];
     expect(results).toHaveLength(25);
+  });
+});
+
+describe("nameDirectory", () => {
+  test("flattens normalized phones and emails, one entry per handle", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, {
+      display_name: "Alex",
+      normalized_phones: ["+16195551234", "+16195555678"],
+      normalized_emails: ["alex@example.com"],
+    });
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toHaveLength(3);
+    expect(new Set(results.map((r) => r.normalized))).toEqual(
+      new Set(["+16195551234", "+16195555678", "alex@example.com"]),
+    );
+    expect(results.every((r) => r.display_name === "Alex")).toBe(true);
+  });
+
+  test("excludes merged-away people and people without a display_name", async () => {
+    const t = convexTest(schema, modules);
+    const target = await seedPerson(t, { display_name: "Target" });
+    await seedPerson(t, {
+      display_name: "Ghost",
+      merged_into: target,
+      normalized_phones: ["+16195559999"],
+    });
+    await seedPerson(t, { normalized_phones: ["+16195550000"] }); // no display_name
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toEqual([]);
+  });
+
+  test("includes is_self people", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, {
+      display_name: "Milad",
+      is_self: true,
+      normalized_phones: ["+16195551111"],
+    });
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toEqual([{ normalized: "+16195551111", display_name: "Milad" }]);
+  });
+
+  test("rejects a wrong key", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.query(nameDirectoryRef, { key: "wrong" })).rejects.toThrow();
   });
 });

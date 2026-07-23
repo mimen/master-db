@@ -23,6 +23,9 @@ export class IdentitySync {
   constructor(
     private client: BlueBubbles,
     private config: Pick<Config, "convexSiteUrl" | "appleContactsIngestSecret">,
+    /** Fired after a successful push, so the Identity Mirror can shorten its
+     * lag on Apple-side changes instead of waiting for its own 5-minute tick. */
+    private onSynced?: () => void,
   ) {}
 
   start(): void {
@@ -69,6 +72,7 @@ export class IdentitySync {
       console.log(
         `identity-sync: synced ${contacts.length} contacts (${body.peopleCreated} new, ${body.peopleReused} reused)`,
       );
+      this.onSynced?.();
       return { ok: true, ...body };
     } catch (err) {
       if (!this.warned) {

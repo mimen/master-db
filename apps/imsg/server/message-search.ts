@@ -1,8 +1,8 @@
 import type { BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import { ChatDb } from "./chatdb";
-import type { ContactBook } from "./contacts";
 import { mapMessage } from "./map";
+import type { NameSource } from "./name-resolver";
 import type { Message } from "../shared/types";
 
 const CORPUS_TTL_MS = 30_000;
@@ -22,7 +22,7 @@ export class MessageSearch {
 
   constructor(
     private bb: BlueBubbles,
-    private contacts: ContactBook,
+    private contacts: NameSource,
   ) {}
 
   async search(q: string, options: SearchOptions = {}): Promise<Message[]> {

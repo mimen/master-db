@@ -178,6 +178,15 @@ export const api = {
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
     return request("/api/health");
   },
+  /**
+   * Fire-and-forget: tells the server to refresh its Identity Mirror (the
+   * Convex name directory) right away, so an in-app "Add Contact" / rename
+   * shows up in the inbox immediately instead of waiting for the mirror's
+   * own 5-minute tick. 204 response — bypasses `request()`'s JSON parse.
+   */
+  refreshIdentity(): Promise<void> {
+    return fetch(`${BASE_URL}/api/identity/refresh`, { method: "POST" }).then(() => undefined);
+  },
 
   // ------------------------------------------------------------------- ai
   aiStatus(): Promise<AiStatus> {

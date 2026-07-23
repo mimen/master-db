@@ -8,8 +8,10 @@ import { loadConfig } from "./config";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { GroupPhotos } from "./group-photos";
+import { IdentityMirror } from "./identity-mirror";
 import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
+import { NameResolver } from "./name-resolver";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
 import { buildThread, mapMessage, tapbackReactionEvent } from "./map";
@@ -24,10 +26,12 @@ const config = loadConfig();
 const bb = new BlueBubblesClient(config.bbUrl, config.bbPassword);
 const db = new OverlayDb(config.dbPath);
 const contacts = new ContactBook(bb);
-const directory = new ChatDirectory(bb, db, contacts);
-const search = new MessageSearch(bb, contacts);
+const identityMirror = new IdentityMirror(config);
+const names = new NameResolver(identityMirror, contacts);
+const directory = new ChatDirectory(bb, db, contacts, Date.now, names);
+const search = new MessageSearch(bb, names);
 const photos = new GroupPhotos(bb);
-const identitySync = new IdentitySync(bb, config);
+const identitySync = new IdentitySync(bb, config, () => void identityMirror.refresh());
 
 const gateway = new Gateway(config.ai);
 const ai = new AiService({
@@ -44,7 +48,7 @@ const ai = new AiService({
     if (!result.ok) return [];
     // buildThread sorts ascending, which is the oldest-first order the prompt
     // builders expect — they take the newest N off the end.
-    return buildThread(result.value, chatGuid, contacts);
+    return buildThread(result.value, chatGuid, names);
   },
   searchVault: makeVaultSearch(config.ai.vaultPath),
 });
@@ -58,6 +62,7 @@ if (!info.ok) {
   );
 }
 await contacts.refresh(true);
+identityMirror.start();
 identitySync.start();
 
 // Re-check server info periodically so a BlueBubbles restart or private-API
@@ -72,7 +77,7 @@ setInterval(() => {
       .then((result) => {
         db.removeScheduled(s.id);
         if (result.ok) {
-          directory.applyKnownMessage(s.chatGuid, mapMessage(result.value, s.chatGuid, contacts));
+          directory.applyKnownMessage(s.chatGuid, mapMessage(result.value, s.chatGuid, names));
           broadcast({ kind: "chats-changed" });
         }
       })
@@ -112,7 +117,7 @@ bb.onEvent((event) => {
       // them via buildThread; this keeps realtime consistent with that).
       const tapback = tapbackReactionEvent(
         event.message,
-        contacts,
+        names,
         rawChatGuid ? directory.participantHandlesFor(rawChatGuid) : [],
       );
       if (tapback && rawChatGuid && chatGuid) {
@@ -161,6 +166,15 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
 });
 
+// Lets the client force the Identity Mirror to catch up immediately after an
+// in-app "Add Contact" / rename, instead of waiting for its 5-minute tick.
+// Also invalidates the directory so the next /api/chats reflects the new names.
+app.post("/api/identity/refresh", async (c) => {
+  await identityMirror.refresh();
+  directory.invalidate();
+  return c.body(null, 204);
+});
+
 app.get("/api/chats", async (c) => {
   const stateQ = c.req.query("state") ?? "all";
   const type = (c.req.query("type") ?? "all") as TypeFilter;
@@ -201,7 +215,7 @@ app.get("/api/chats/:guid/messages", async (c) => {
     if (pages.every((p) => !p.ok)) return c.json({ error: "fetch failed" }, 502);
     const merged = new Map<string, BBMessage>();
     for (const page of pages) if (page.ok) for (const m of page.value) merged.set(m.guid, m);
-    return c.json(buildThread([...merged.values()], chatGuid, contacts));
+    return c.json(buildThread([...merged.values()], chatGuid, names));
   }
 
   // buildThread drops tapbacks/reactions, so a raw page can filter down to very
@@ -239,7 +253,7 @@ app.get("/api/chats/:guid/messages", async (c) => {
   if (results.every((r) => r === null)) return c.json({ error: "fetch failed" }, 502);
   const merged = new Map<string, BBMessage>();
   for (const r of results) if (r) for (const m of r) merged.set(m.guid, m);
-  return c.json(buildThread([...merged.values()], chatGuid, contacts));
+  return c.json(buildThread([...merged.values()], chatGuid, names));
 });
 
 app.get("/api/avatars/:address", async (c) => {
@@ -309,7 +323,7 @@ app.post("/api/chats/:guid/send", async (c) => {
     body.replyToGuid ? { guid: body.replyToGuid, part: body.replyToPart ?? 0 } : undefined,
   );
   if (!result.ok) return c.json({ error: result.error }, 502);
-  const mapped = mapMessage(result.value, chatGuid, contacts);
+  const mapped = mapMessage(result.value, chatGuid, names);
   directory.applyKnownMessage(chatGuid, mapped);
   return c.json(mapped);
 });
@@ -327,7 +341,7 @@ app.post("/api/chats/:guid/attachment", async (c) => {
     ? await bb.sendAudio(chatGuid, name, bytes)
     : await bb.sendAttachmentWithCaption(chatGuid, name, bytes, caption);
   if (!result.ok) return c.json({ error: result.error }, 502);
-  const mapped = mapMessage(result.value, chatGuid, contacts);
+  const mapped = mapMessage(result.value, chatGuid, names);
   directory.applyKnownMessage(chatGuid, mapped);
   return c.json(mapped);
 });
@@ -352,7 +366,7 @@ app.post("/api/chats/:guid/contact", async (c) => {
     body.caption?.trim() || undefined,
   );
   if (!result.ok) return c.json({ error: result.error }, 502);
-  const mapped = mapMessage(result.value, chatGuid, contacts);
+  const mapped = mapMessage(result.value, chatGuid, names);
   directory.applyKnownMessage(chatGuid, mapped);
   return c.json(mapped);
 });
@@ -528,7 +542,7 @@ app.get("/api/chats/:guid/info", async (c) => {
   await contacts.refresh();
   const participants = (chat.value.participants ?? []).map((p) => ({
     address: p.address,
-    name: contacts.lookup(p.address),
+    name: names.lookup(p.address),
   }));
   return c.json({
     guid: chat.value.guid,
@@ -579,12 +593,12 @@ app.post("/api/chats/:guid/delete", async (c) => {
 
 app.get("/api/scheduled", async (c) => {
   const result = await directory.summaries();
-  const names = new Map(result.ok ? result.chats.map((ch) => [ch.guid, ch.displayName]) : []);
+  const chatNames = new Map(result.ok ? result.chats.map((ch) => [ch.guid, ch.displayName]) : []);
   return c.json(
     db.listScheduled().map((s) => ({
       id: s.id,
       chatGuid: s.chatGuid,
-      chatName: names.get(s.chatGuid) ?? s.chatGuid,
+      chatName: chatNames.get(s.chatGuid) ?? s.chatGuid,
       text: s.text,
       sendAt: s.sendAt,
     })),
@@ -665,7 +679,7 @@ app.post("/api/ai/group-name/:guid", async (c) => {
   if (!chat.ok) return c.json({ error: chat.error }, 502);
   await contacts.refresh();
   const participants = (chat.value.participants ?? []).map(
-    (p) => contacts.lookup(p.address) ?? p.address,
+    (p) => names.lookup(p.address) ?? p.address,
   );
   const result = await ai.groupNames(chatGuid, participants);
   if (!result.ok) return c.json({ error: result.error }, 502);
@@ -696,7 +710,7 @@ app.get("/api/ai/identify/:guid", async (c) => {
   const address = chat.value.participants?.[0]?.address;
   if (!address) return c.json({ error: "no participant address" }, 400);
   await contacts.refresh();
-  const result = await ai.identify(chatGuid, address, contacts.lookup(address));
+  const result = await ai.identify(chatGuid, address, names.lookup(address));
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(result.value);
 });

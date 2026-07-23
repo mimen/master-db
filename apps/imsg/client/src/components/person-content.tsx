@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { avatarUrl } from "@/lib/api";
+import { api, avatarUrl } from "@/lib/api";
 import { formatListTimestamp, initials } from "@/lib/format";
 import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
@@ -121,6 +121,9 @@ export function PersonContent({
               try {
                 await createPerson({ handle: address, display_name: nameInput.trim() || undefined });
                 showToast("Contact added");
+                // So the inbox picks up the new name/known status right away
+                // instead of waiting for the server's next mirror tick.
+                void api.refreshIdentity().catch(() => undefined);
               } catch {
                 showToast("Failed to add contact");
               } finally {
@@ -177,6 +180,7 @@ export function PersonContent({
                 try {
                   await renamePerson({ personId: person._id, display_name: trimmed });
                   setEditingName(false);
+                  void api.refreshIdentity().catch(() => undefined);
                 } catch {
                   showToast("Failed to save name");
                 } finally {
