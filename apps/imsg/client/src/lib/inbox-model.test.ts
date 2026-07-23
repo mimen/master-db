@@ -120,7 +120,7 @@ describe("deriveInboxModel", () => {
     ).toEqual([unknown, spam]);
   });
 
-  test("applies state/type filters and search before disabling priority presentation", () => {
+  test("search supersedes the state/type lenses (matches across everything)", () => {
     const groupUnread = makeChat({
       guid: "group-unread",
       displayName: "Project group",
@@ -145,13 +145,14 @@ describe("deriveInboxModel", () => {
       "project",
     );
 
-    expect(model.searchedChats).toEqual([groupUnread]);
+    // Search is a mode: the unread/group lenses do NOT constrain results.
+    expect(model.searchedChats).toEqual([groupUnread, directUnread, groupWaiting]);
     expect(model.showPriorityShelf).toBe(false);
     expect(model.priority).toEqual([]);
-    expect(model.recent).toEqual([groupUnread]);
-    expect(model.listChats).toEqual([groupUnread]);
+    expect(model.recent).toEqual([groupUnread, directUnread, groupWaiting]);
+    expect(model.listChats).toEqual([groupUnread, directUnread, groupWaiting]);
     expect(model.sectionLabel).toBe("Search Results");
-    expect(model.sectionCount).toBe(1);
+    expect(model.sectionCount).toBe(3);
   });
 
   test("keeps pinned conversations first in filtered views", () => {

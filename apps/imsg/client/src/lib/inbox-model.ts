@@ -92,15 +92,24 @@ export function deriveInboxModel(
   deepMatchGuids?: Set<string>,
 ): InboxModel {
   const needle = searchQuery.trim().toLowerCase();
-  const searchedChats = chats.filter((chat) => {
-    if (!matchesFilters(chat, filters.state, filters.type)) return false;
-    if (needle.length === 0) return true;
-    return (
-      chat.displayName.toLowerCase().includes(needle) ||
-      (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) ||
-      Boolean(deepMatchGuids?.has(chat.guid))
-    );
-  });
+  const needleDigits = needle.replace(/\D/g, "");
+  const matchesNeedle = (chat: ChatSummary): boolean =>
+    chat.displayName.toLowerCase().includes(needle) ||
+    (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) ||
+    // Participants carry FULL names (group display names are first-names-only,
+    // so last names would otherwise never match a group) plus raw addresses.
+    chat.participants.some(
+      (p) =>
+        (p.name ?? "").toLowerCase().includes(needle) ||
+        p.address.toLowerCase().includes(needle) ||
+        (needleDigits.length >= 3 && p.address.replace(/\D/g, "").includes(needleDigits)),
+    ) ||
+    Boolean(deepMatchGuids?.has(chat.guid));
+  // Search is a MODE that supersedes the badge lenses entirely — a query
+  // matches across every state and type (archived included).
+  const searchedChats = chats.filter((chat) =>
+    needle.length === 0 ? matchesFilters(chat, filters.state, filters.type) : matchesNeedle(chat),
+  );
   const showPriorityShelf = filters.state === "all" && filters.type === "all" && needle.length === 0;
   const { priority, recent } = partitionPriorityShelf(searchedChats);
   const listSource = showPriorityShelf ? recent : searchedChats;
