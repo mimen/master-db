@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { FlashList } from "@shopify/flash-list";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 
@@ -20,6 +20,8 @@ import { PriorityShelf } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
+import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
+import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
@@ -32,7 +34,6 @@ import {
   neighborAfterRemoval,
   nextNavigationTarget,
   type InboxFilters,
-  type InboxNavigationEntry,
 } from "@/lib/inbox-model";
 import {
   isListMode,
@@ -42,8 +43,6 @@ import {
   subscribeListMode,
 } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
-
-export const SIDEBAR_CHROME_HEIGHT = 58;
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -85,14 +84,7 @@ export function ConversationListPane({
   const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
-  // Chrome is styled to a fixed height — runtime measurement fed the keyboard
-  // adapter a stale pre-measure value (up-pin landed under the bar).
   const topBarH = SIDEBAR_CHROME_HEIGHT;
-  const [contentH, setContentH] = useState(0);
-  const [viewportH, setViewportH] = useState(0);
-  const contentHRef = useRef(0);
-  const viewportHRef = useRef(0);
-  const scrollYAnim = useRef(new Animated.Value(0)).current;
   const filterBtnRef = useRef<View>(null);
 
   // Frosted-glass top bar: content scrolls behind it at ~10% with a blur,
@@ -107,7 +99,6 @@ export function ConversationListPane({
           borderBottomWidth: StyleSheet.hairlineWidth,
         } as object)
       : { backgroundColor: theme.background };
-  const listRef = useRef<FlashListRef<ChatSummary>>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   const openFilters = (): void => {
@@ -145,7 +136,6 @@ export function ConversationListPane({
       show();
     }
   };
-  const scrollOffset = useRef(0);
   // Search is a MODE, not a compound filter: typing searches the FULL universe
   // (archived included), superseding the badge filters; clearing the query
   // restores the badge view untouched (docs: Gmail/Superhuman convention).
@@ -159,44 +149,22 @@ export function ConversationListPane({
   const model = deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
+  // All imperative list scrolling (glide pinning, view resets, reorder
+  // recovery) and the synthetic thumb live in the viewport hook.
+  const viewport = useConversationListViewport({
+    renderedChats: model.listChats,
+    chromeHeight: topBarH,
+    viewKey: search.viewKey,
+  });
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
+
   // Keyboard adapter: glide-mode navigation follows the RENDERED order
   // (priority shelf first, then the filtered list) — not the raw chats array.
   const navRef = useRef({ model, selectedGuid, onOpenChat, onPreviewChat });
   navRef.current = { model, selectedGuid, onOpenChat, onPreviewChat };
   const searchCtl = useRef(search);
   searchCtl.current = search;
-  const viewableRange = useRef<{ first: number; last: number }>({ first: 0, last: 0 });
-
-  // Keep the glide cursor FULLY on screen with edge-pinning: scroll the
-  // minimum so the row sits flush at the edge being moved toward, where it
-  // stays step after step (no recentering jumps). The viewable range counts
-  // only fully-visible rows, so a partially clipped cursor pins.
-  const revealEntry = (entry: InboxNavigationEntry, delta: -1 | 1) => {
-    if (entry.location.kind === "priority") {
-      // Shelf rows live in the list header — scroll to top to reveal them.
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
-      return;
-    }
-    const listIndex = entry.location.index;
-    const { first, last } = viewableRange.current;
-    if (listIndex < first || listIndex > last) {
-      try {
-        // Top pin must clear the frosted bar, which overlays content.
-        // FlashList ignores viewOffset, so express the clearance as a
-        // fraction of the measured viewport instead.
-        const topFraction = Math.min(0.3, (topBarH + 8) / Math.max(1, viewportHRef.current));
-        listRef.current?.scrollToIndex(
-          delta > 0
-            ? { index: listIndex, viewPosition: 1, animated: false }
-            : { index: listIndex, viewPosition: topFraction, animated: false },
-        );
-      } catch {
-        /* index not measured yet — FlashList will settle on next frame */
-      }
-    }
-  };
-  const revealRef = useRef(revealEntry);
-  revealRef.current = revealEntry;
 
   useEffect(
     () => registerFocusTarget("list-search", () => searchCtl.current.inputRef.current?.focus()),
@@ -211,7 +179,7 @@ export function ConversationListPane({
         const target = nextNavigationTarget(m.navigationEntries, sel, delta);
         if (!target || target.chat.guid === sel) return;
         (preview ?? open)(target.chat);
-        revealRef.current(target, delta);
+        viewportRef.current.revealEntry(target, delta);
       },
       activate() {
         const { model: m, selectedGuid: sel, onOpenChat: open } = navRef.current;
@@ -223,7 +191,7 @@ export function ConversationListPane({
         // The field is the list header on desktop — reveal it, then focus via
         // the registry (pending-focus handles a not-yet-mounted field; no
         // timer-based sequencing).
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        viewportRef.current.scrollToTop();
         requestFocus("list-search");
       },
       clearSearch() {
@@ -238,46 +206,6 @@ export function ConversationListPane({
       },
     });
   }, [wide]);
-
-  // Changing a lens or the query is a NEW view — start it from the top.
-  // (Without this, maintainVisibleContentPosition anchors whatever row was
-  // visible, so releasing a filter "follows" that conversation down the list.)
-  useEffect(() => {
-    scrollOffset.current = 0;
-    listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [search.viewKey]);
-
-  // A realtime reorder must not yank an already-scrolled web list to the top.
-  useEffect(() => {
-    if (scrollOffset.current <= 60) return;
-    const frame = globalThis.requestAnimationFrame(() => {
-      const node = (
-        listRef.current as unknown as { getScrollableNode?: () => HTMLElement } | null
-      )?.getScrollableNode?.();
-      const current = Platform.OS === "web" && node ? node.scrollTop : null;
-      if (current !== null && current < 8) {
-        listRef.current?.scrollToOffset({ offset: scrollOffset.current, animated: false });
-      }
-    });
-    return () => globalThis.cancelAnimationFrame(frame);
-  }, [chats]);
-
-  // Synthetic scrollbar: the native one is hidden so it doesn't run behind the
-  // glass top bar. This thumb starts just below the bar while content still
-  // scrolls under it. Driven by an Animated value so scrolling doesn't re-render.
-  // FlashList virtualizes, so a full content height isn't known until it scrolls
-  // once; estimate from row count until the real value arrives so the thumb is
-  // sized correctly at rest.
-  const estContentH = model.listChats.length * 76 + topBarH + 240;
-  const effContentH = contentH > 0 ? contentH : estContentH;
-  const trackH = Math.max(0, viewportH - topBarH - 6);
-  const showThumb = viewportH > 0 && effContentH > viewportH + 4;
-  const thumbH = showThumb ? Math.max(36, (trackH * viewportH) / effContentH) : 0;
-  const thumbTranslate = scrollYAnim.interpolate({
-    inputRange: [0, Math.max(1, effContentH - viewportH)],
-    outputRange: [0, Math.max(0, trackH - thumbH)],
-    extrapolate: "clamp",
-  });
 
   const searchField = (
     <SidebarSearchField
@@ -304,7 +232,7 @@ export function ConversationListPane({
           along as the list's header, passing behind the glass top bar. */}
       <View style={styles.listWrap}>
         <FlashList
-          ref={listRef}
+          ref={viewport.listRef}
           data={model.listChats}
           keyExtractor={(chat) => chat.guid}
           maintainVisibleContentPosition={{ disabled: false }}
@@ -313,49 +241,15 @@ export function ConversationListPane({
           // BLURS the focused input — our scroll-to-top on keystroke was
           // killing search focus (the caught-in-the-act bug).
           keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 100 }}
-          onViewableItemsChanged={({ viewableItems }) => {
-            const indices = viewableItems
-              .map((v) => v.index)
-              .filter((i): i is number => typeof i === "number");
-            if (indices.length > 0) {
-              viewableRange.current = { first: Math.min(...indices), last: Math.max(...indices) };
-            }
-          }}
+          viewabilityConfig={viewport.viewabilityConfig}
+          onViewableItemsChanged={viewport.onViewableItemsChanged}
           contentContainerStyle={{ paddingTop: topBarH + 8 }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
           automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}
           contentInsetAdjustmentBehavior={iosMobile ? "never" : undefined}
           showsVerticalScrollIndicator={false}
-          onLayout={(e) => {
-            const h = e.nativeEvent.layout.height;
-            viewportHRef.current = h;
-            setViewportH(h);
-          }}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollYAnim } } }], {
-            useNativeDriver: false,
-            // Source the scrollbar geometry from the scroll event (FlashList
-            // virtualizes, so onContentSizeChange isn't reliable). Guarded via
-            // refs so it only re-renders when a dimension actually changes.
-            listener: (event: {
-              nativeEvent: {
-                contentOffset: { y: number };
-                contentSize: { height: number };
-                layoutMeasurement: { height: number };
-              };
-            }) => {
-              const ne = event.nativeEvent;
-              scrollOffset.current = ne.contentOffset.y;
-              if (Math.abs(ne.contentSize.height - contentHRef.current) > 1) {
-                contentHRef.current = ne.contentSize.height;
-                setContentH(ne.contentSize.height);
-              }
-              if (Math.abs(ne.layoutMeasurement.height - viewportHRef.current) > 1) {
-                viewportHRef.current = ne.layoutMeasurement.height;
-                setViewportH(ne.layoutMeasurement.height);
-              }
-            },
-          })}
+          onLayout={(e) => viewport.onLayout(e.nativeEvent.layout.height)}
+          onScroll={viewport.onScroll}
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View style={wide ? { paddingBottom: 6 } : null}>
@@ -402,10 +296,17 @@ export function ConversationListPane({
             />
           )}
         />
-        {showThumb && (
+        {viewport.thumb.visible && (
           <Animated.View
             pointerEvents="none"
-            style={[styles.scrollThumb, { top: topBarH, height: thumbH, transform: [{ translateY: thumbTranslate }] }]}
+            style={[
+              styles.scrollThumb,
+              {
+                top: viewport.thumb.top,
+                height: viewport.thumb.height,
+                transform: [{ translateY: viewport.thumb.translateY }],
+              },
+            ]}
           />
         )}
         {/* Frosted top bar — floats over the scroll, the only fixed chrome. */}

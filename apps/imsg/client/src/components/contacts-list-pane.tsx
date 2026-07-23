@@ -22,7 +22,7 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useTheme } from "@/hooks/use-theme";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
-import { SIDEBAR_CHROME_HEIGHT } from "./conversation-list-pane";
+import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
 import { NavSwitcher } from "./nav-switcher";
 
 type Row =
