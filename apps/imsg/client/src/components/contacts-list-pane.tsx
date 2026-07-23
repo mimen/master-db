@@ -222,10 +222,9 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     extrapolate: "clamp",
   });
 
-  if (wide) {
-    return (
-      <View style={[styles.pane, { backgroundColor: theme.background }]}>
-        <View style={styles.listWrap}>
+  return (
+    <SafeAreaView style={[styles.pane, { backgroundColor: theme.background }]} edges={["top"]}>
+      <View style={styles.listWrap}>
           {people === undefined ? (
             <View style={styles.center}>
               <ActivityIndicator />
@@ -261,7 +260,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           )}
           {/* Frosted top bar — identical chrome to the Messages pane. */}
           <View style={[styles.topBar, glassStyle]} onLayout={(e) => setTopBarH(e.nativeEvent.layout.height)}>
-            <NavSwitcher active="contacts" style={styles.navInline} />
+            {wide ? (
+              <NavSwitcher active="contacts" style={styles.navInline} />
+            ) : (
+              <Text style={[styles.title, { color: theme.text }]}>Contacts</Text>
+            )}
             <View style={styles.titleActions}>
               {aiStatus?.suggestions && (
                 <Pressable
@@ -288,34 +291,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
               </Pressable>
             </View>
           </View>
-        </View>
       </View>
-    );
-  }
-
-  return (
-    <SafeAreaView style={[styles.pane, { backgroundColor: theme.background }]} edges={["top"]}>
-      <View style={styles.titleRow}>
-        <Text style={[styles.title, { color: theme.text }]}>Contacts</Text>
-      </View>
-      {searchField}
-      {people === undefined ? (
-        <View style={styles.center}>
-          <ActivityIndicator />
-        </View>
-      ) : rows.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={{ color: theme.textSecondary }}>No contacts found.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={(r) => r.key}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          renderItem={renderRow}
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -361,14 +337,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 38,
   },
-  titleRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 8,
+  title: {
+    fontSize: 34,
+    fontWeight: "700",
+    letterSpacing: -1.1,
+    paddingLeft: 6,
   },
-  title: { fontSize: 28, fontWeight: "700" },
   searchField: {
     alignItems: "center",
     borderRadius: 11,
