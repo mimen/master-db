@@ -6,6 +6,7 @@
   "scripts": {
     "dev:server": "bun --watch server/index.ts",
     "build": "tsc -b && cd client && bun run build:web",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
     "lint": "oxlint",
     "start": "bun server/index.ts"
   },
@@ -14,6 +15,7 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/bun": "^1.3.14",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2"
