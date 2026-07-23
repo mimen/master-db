@@ -3,14 +3,15 @@ import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-nati
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
-import { attachmentUrl, avatarUrl } from "@/lib/api";
-import { formatBubbleTime, initials } from "@/lib/format";
+import { attachmentUrl } from "@/lib/api";
+import { formatBubbleTime } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble } from "./media";
+import { PersonAvatar } from "./avatar";
 import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
@@ -259,18 +260,7 @@ export const Bubble = memo(function Bubble({
         {!mine && isGroupChat && (
           <View style={{ width: 28 }}>
             {groupEnd && (
-              <View style={[styles.smallAvatar, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ fontSize: 9, fontWeight: "600", color: theme.textSecondary }}>
-                  {initials(senderName)}
-                </Text>
-                {message.sender?.address && (
-                  <Image
-                    source={{ uri: avatarUrl(message.sender.address) }}
-                    style={[StyleSheet.absoluteFill, { borderRadius: 14 }]}
-                    contentFit="cover"
-                  />
-                )}
-              </View>
+              <PersonAvatar address={message.sender?.address ?? null} name={senderName} size={28} />
             )}
           </View>
         )}
@@ -409,14 +399,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
     opacity: 0.55,
     width: 2,
-  },
-  smallAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
   },
   senderName: {
     fontSize: Type.caption,

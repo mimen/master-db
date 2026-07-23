@@ -10,15 +10,16 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { api, avatarUrl } from "@/lib/api";
-import { formatListTimestamp, initials } from "@/lib/format";
+import { api } from "@/lib/api";
+import { formatListTimestamp } from "@/lib/format";
 import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
 import { usePersonView } from "@/hooks/use-person-view";
 import { useTheme } from "@/hooks/use-theme";
 import { Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
+import { PersonAvatar } from "./avatar";
+import { CenteredSpinner } from "./empty-state";
 import { PersonConversationsList } from "./person-conversations-list";
 import { PersonNetworksList } from "./person-networks-list";
 
@@ -82,9 +83,7 @@ export function PersonContent({
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {header}
-        <View style={styles.center}>
-          <ActivityIndicator />
-        </View>
+        <CenteredSpinner />
       </View>
     );
   }
@@ -94,10 +93,8 @@ export function PersonContent({
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {header}
         <View style={styles.container}>
-          <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-            <Text style={{ color: theme.textSecondary, fontSize: 22, fontWeight: "600" }}>
-              {initials(name || address)}
-            </Text>
+          <View style={styles.avatarWrap}>
+            <PersonAvatar address={address} name={name || address} size={96} />
           </View>
           <Text style={[styles.title, { color: theme.text }]}>{name || address}</Text>
           <Text style={[styles.statusLine, { color: theme.textSecondary }]}>{address}</Text>
@@ -150,11 +147,8 @@ export function PersonContent({
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {header}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
-        <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-          <Text style={{ color: theme.textSecondary, fontSize: 22, fontWeight: "600" }}>
-            {initials(person.display_name ?? address)}
-          </Text>
-          <Image source={{ uri: avatarUrl(address) }} style={styles.avatarImg} contentFit="cover" />
+        <View style={styles.avatarWrap}>
+          <PersonAvatar address={address} name={person.display_name ?? address} size={96} />
         </View>
         {editingName ? (
           <View style={styles.editNameRow}>
@@ -251,17 +245,7 @@ const styles = StyleSheet.create({
   paneHeaderTitle: { fontSize: 16, fontWeight: "600" },
   backBtn: { flexDirection: "row", alignItems: "center", gap: 1, marginLeft: -4 },
   container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-    overflow: "hidden",
-  },
-  avatarImg: { position: "absolute", width: 96, height: 96, borderRadius: 48 },
+  avatarWrap: { marginBottom: 14 },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, textAlign: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
   statusLine: { fontSize: 14, textAlign: "center", marginBottom: 4 },

@@ -16,13 +16,13 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
-import { initials } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer } from "@/lib/composer-fill";
 import type { Contact, Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Colors, Radii } from "@/constants/theme";
+import { PersonAvatar } from "./avatar";
 
 interface ComposerProps {
   chatGuid: string;
@@ -160,11 +160,7 @@ function ContactPicker({
                 style={({ pressed }) => [pickerStyles.row, pressed && { backgroundColor: theme.backgroundElement }]}
                 onPress={() => onPick(item)}
               >
-                <View style={[pickerStyles.avatar, { backgroundColor: theme.backgroundElement }]}>
-                  <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
-                    {initials(item.name || item.address)}
-                  </Text>
-                </View>
+                <PersonAvatar address={item.address} name={item.name || item.address} size={32} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15 }}>
                     {item.name || formatAddress(item.address)}
@@ -778,13 +774,6 @@ const pickerStyles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 8,
     paddingVertical: 8,
-  },
-  avatar: {
-    alignItems: "center",
-    borderRadius: 16,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
   },
 });
 
