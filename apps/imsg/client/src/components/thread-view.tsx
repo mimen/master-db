@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Reanimated, { FadeInDown } from "react-native-reanimated";
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -34,6 +33,7 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
+import { CenteredSpinner } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -507,9 +507,7 @@ export function ThreadView({
       )}
 
       {loading && messages.length === 0 ? (
-        <View style={styles.loading}>
-          <ActivityIndicator />
-        </View>
+        <CenteredSpinner />
       ) : (
         <FlatList
           ref={(ref) => {
@@ -718,11 +716,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 4,
-  },
-  loading: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   dayDivider: {
     textAlign: "center",

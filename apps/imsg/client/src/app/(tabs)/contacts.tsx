@@ -1,8 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { ContactsListPane } from "@/components/contacts-list-pane";
+import { EmptyState } from "@/components/empty-state";
 import { PersonContent } from "@/components/person-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -46,10 +46,7 @@ export default function ContactsScreen() {
             name={selectedPerson.display_name}
           />
         ) : (
-          <View style={styles.empty}>
-            <Ionicons name="person-circle-outline" size={28} color={theme.textSecondary} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Select a contact</Text>
-          </View>
+          <EmptyState icon="person-circle-outline" message="Select a contact" />
         )}
       </View>
     </View>
@@ -83,6 +80,4 @@ const styles = StyleSheet.create({
   detailCard: {
     flex: 1,
   },
-  empty: { alignItems: "center", flex: 1, gap: 9, justifyContent: "center" },
-  emptyText: { fontSize: 15 },
 });

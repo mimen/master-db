@@ -6,6 +6,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native
 
 import { ChatInfoContent } from "@/components/chat-info-content";
 import { ConversationListPane } from "@/components/conversation-list-pane";
+import { EmptyState } from "@/components/empty-state";
 import { NewChatContent } from "@/components/new-chat-content";
 import { PersonContent } from "@/components/person-content";
 import { SearchContent } from "@/components/search-content";
@@ -331,10 +332,7 @@ export default function ChatListScreen() {
             shadowOpen={shadowOpen}
           />
         ) : (
-          <View style={styles.empty}>
-            <Ionicons name="chatbubble-ellipses-outline" size={28} color={theme.textSecondary} />
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Select a conversation</Text>
-          </View>
+          <EmptyState icon="chatbubble-ellipses-outline" message="Select a conversation" />
         )}
       </View>
       {rightPane && (
@@ -409,15 +407,6 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     flexShrink: 0,
     width: 330,
-  },
-  empty: {
-    alignItems: "center",
-    flex: 1,
-    gap: 9,
-    justifyContent: "center",
-  },
-  emptyText: {
-    fontSize: 15,
   },
   overlayBackdrop: {
     alignItems: "center",

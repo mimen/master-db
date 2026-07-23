@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
+import { CenteredSpinner, EmptyState } from "./empty-state";
 import type { ShadowMessage } from "@shared/types";
 
 /**
@@ -149,16 +150,18 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator />
-        </View>
+        <CenteredSpinner style={styles.center} />
       ) : rows.length === 0 && !pending ? (
-        <View style={styles.center}>
-          <Ionicons name="sparkles-outline" size={26} color={theme.textSecondary} />
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Think through this conversation, look someone up, or ask me to do something.
-          </Text>
-        </View>
+        <EmptyState
+          icon="sparkles-outline"
+          iconSize={26}
+          style={styles.center}
+          message={
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+              Think through this conversation, look someone up, or ask me to do something.
+            </Text>
+          }
+        />
       ) : (
         <FlatList
           ref={listRef}
