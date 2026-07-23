@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
 
 /**
@@ -14,6 +15,7 @@ export default function TabsLayout() {
   const wide = width >= 768;
   const iosMobile = Platform.OS === "ios" && !wide;
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -23,8 +25,13 @@ export default function TabsLayout() {
         // mounts the whole screen live (jarring full-screen flash).
         lazy: false,
         sceneStyle: { backgroundColor: wide ? theme.desk : theme.background },
-        tabBarStyle: wide ? styles.hiddenTabBar : undefined,
-        tabBarIconStyle: iosMobile ? styles.mobileTabIcon : undefined,
+        // Shorter bar with breathing room above the icons; the home-indicator
+        // inset stays below the content instead of reading as dead space.
+        tabBarStyle: wide
+          ? styles.hiddenTabBar
+          : iosMobile
+            ? { height: 54 + insets.bottom, paddingTop: 8 }
+            : undefined,
         tabBarActiveTintColor: theme.accent,
         tabBarInactiveTintColor: theme.textSecondary,
       }}
@@ -50,8 +57,5 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   hiddenTabBar: {
     display: "none",
-  },
-  mobileTabIcon: {
-    marginTop: -3,
   },
 });
