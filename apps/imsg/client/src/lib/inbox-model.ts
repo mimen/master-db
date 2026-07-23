@@ -123,7 +123,7 @@ export function deriveInboxModel(
   filters: InboxFilters,
   searchQuery: string,
   /** Chat GUIDs whose deeper message history matched the query (server search). */
-  deepMatchGuids?: Set<string>,
+  deepMatchGuids?: ReadonlySet<string>,
   /** Frozen browse membership (useChats' triage freeze). When provided, blank-
    * query browsing selects EXACTLY these guids from the universe — reapplying
    * live filters here would evict rows mid-triage, defeating the freeze. */

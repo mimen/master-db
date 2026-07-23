@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
@@ -20,12 +19,14 @@ import { NavSwitcher } from "./nav-switcher";
 import { PriorityShelf } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
+import { SidebarSearchField } from "./sidebar/sidebar-search-field";
+import { useConversationSearch } from "./conversations/use-conversation-search";
+
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
-import { api } from "@/lib/api";
 import {
   deriveInboxModel,
   neighborAfterRemoval,
@@ -33,7 +34,13 @@ import {
   type InboxFilters,
   type InboxNavigationEntry,
 } from "@/lib/inbox-model";
-import { isListMode, registerListAdapter, subscribeListMode } from "@/lib/keyboard/controller";
+import {
+  isListMode,
+  registerFocusTarget,
+  registerListAdapter,
+  requestFocus,
+  subscribeListMode,
+} from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
 export const SIDEBAR_CHROME_HEIGHT = 58;
@@ -75,8 +82,7 @@ export function ConversationListPane({
   const aiStatus = useAiStatus();
   const suggestionMode = useSuggestionMode();
   const iosMobile = Platform.OS === "ios" && !wide;
-  const [query, setQuery] = useState("");
-  const [deepMatches, setDeepMatches] = useState<Set<string>>(new Set());
+  const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
   // Chrome is styled to a fixed height — runtime measurement fed the keyboard
@@ -143,22 +149,22 @@ export function ConversationListPane({
   // Search is a MODE, not a compound filter: typing searches the FULL universe
   // (archived included), superseding the badge filters; clearing the query
   // restores the badge view untouched (docs: Gmail/Superhuman convention).
-  const searchActive = query.trim().length > 0;
+  // Policy (lens wipe, deep-search tagging, clear paths) lives in
+  // useConversationSearch; this pane only renders and scrolls.
   // Universe = allChats (search spans everything); blank-query browsing uses
   // useChats' FROZEN membership so triage rows never vanish mid-pass. (The
   // remount theory that motivated a single array was disproved by the
   // Playwright trap — the blur was keyboardDismissMode.)
   const browseGuids = useMemo(() => new Set(chats.map((c) => c.guid)), [chats]);
-  const model = deriveInboxModel(allChats, filters, query, deepMatches, browseGuids);
+  const model = deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
-  const searchRef = useRef<TextInput>(null);
 
   // Keyboard adapter: glide-mode navigation follows the RENDERED order
   // (priority shelf first, then the filtered list) — not the raw chats array.
   const navRef = useRef({ model, selectedGuid, onOpenChat, onPreviewChat });
   navRef.current = { model, selectedGuid, onOpenChat, onPreviewChat };
-  const queryRef = useRef(query);
-  queryRef.current = query;
+  const searchCtl = useRef(search);
+  searchCtl.current = search;
   const viewableRange = useRef<{ first: number; last: number }>({ first: 0, last: 0 });
 
   // Keep the glide cursor FULLY on screen with edge-pinning: scroll the
@@ -192,6 +198,11 @@ export function ConversationListPane({
   const revealRef = useRef(revealEntry);
   revealRef.current = revealEntry;
 
+  useEffect(
+    () => registerFocusTarget("list-search", () => searchCtl.current.inputRef.current?.focus()),
+    [],
+  );
+
   useEffect(() => {
     if (!wide) return;
     return registerListAdapter({
@@ -209,13 +220,14 @@ export function ConversationListPane({
         if (target) open(target.chat);
       },
       focusSearch() {
+        // The field is the list header on desktop — reveal it, then focus via
+        // the registry (pending-focus handles a not-yet-mounted field; no
+        // timer-based sequencing).
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
-        setTimeout(() => searchRef.current?.focus(), 30);
+        requestFocus("list-search");
       },
       clearSearch() {
-        if (queryRef.current.trim().length === 0) return false;
-        setQuery("");
-        return true;
+        return searchCtl.current.clear();
       },
       selectNeighborOf(guid) {
         // Runs synchronously after the removal action, before re-render — so
@@ -227,38 +239,13 @@ export function ConversationListPane({
     });
   }, [wide]);
 
-  // Deep search: match conversations by message body, merged into the live
-  // filter so typing surfaces chats even when the term is buried in history.
-  useEffect(() => {
-    const q = query.trim();
-    // Stale results must never survive a query change: matches for "pizza"
-    // otherwise keep contributing under "zebra" until the new request lands.
-    setDeepMatches(new Set());
-    if (q.length < 2) {
-      return;
-    }
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      api
-        .search(q)
-        .then((messages) => {
-          if (!cancelled) setDeepMatches(new Set(messages.map((m) => m.chatGuid)));
-        })
-        .catch(() => undefined);
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [query]);
-
   // Changing a lens or the query is a NEW view — start it from the top.
   // (Without this, maintainVisibleContentPosition anchors whatever row was
   // visible, so releasing a filter "follows" that conversation down the list.)
   useEffect(() => {
     scrollOffset.current = 0;
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [filters.state, filters.type, query]);
+  }, [search.viewKey]);
 
   // A realtime reorder must not yank an already-scrolled web list to the top.
   useEffect(() => {
@@ -293,43 +280,14 @@ export function ConversationListPane({
   });
 
   const searchField = (
-    <View
-      style={[
-        styles.searchField,
-        !wide && styles.searchFieldInline,
-        { backgroundColor: theme.backgroundElement },
-      ]}
-    >
-      <Ionicons name="search" size={17} color={theme.textSecondary} />
-      <TextInput
-        ref={searchRef}
-        accessibilityLabel="Search conversations and messages"
-        value={query}
-        onChangeText={(value) => {
-          setQuery(value);
-          // Searching wipes the lenses — results span everything, and
-          // the pills visibly reset to All to say so.
-          if (value.trim().length > 0 && (filters.state !== "all" || filters.type !== "all")) {
-            onFiltersChange({ state: "all", type: "all" });
-          }
-        }}
-        placeholder="Search"
-        placeholderTextColor={theme.textSecondary}
-        returnKeyType="search"
-        clearButtonMode="while-editing"
-        style={[styles.searchInput, { color: theme.text }]}
-      />
-      {searchActive && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Clear search"
-          onPress={() => setQuery("")}
-          hitSlop={8}
-        >
-          <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
-        </Pressable>
-      )}
-    </View>
+    <SidebarSearchField
+      value={search.query}
+      accessibilityLabel="Search conversations and messages"
+      placement={wide ? "list-header" : "chrome"}
+      inputRef={search.inputRef}
+      onChangeText={search.setQuery}
+      onClear={() => search.clear()}
+    />
   );
 
   return (
@@ -405,11 +363,8 @@ export function ConversationListPane({
               <ConversationFilters
                 filters={filters}
                 counts={counts}
-                onFiltersChange={(f) => {
-                  // Picking a badge exits search — the two never compose.
-                  setQuery("");
-                  onFiltersChange(f);
-                }}
+                // Picking a badge exits search — the two never compose.
+                onFiltersChange={(f) => search.applyFilters(f)}
               />
               {model.showPriorityShelf && (
                 <PriorityShelf
@@ -543,28 +498,6 @@ const styles = StyleSheet.create({
     height: 38,
     justifyContent: "center",
     width: 38,
-  },
-  searchField: {
-    alignItems: "center",
-    borderRadius: 11,
-    flexDirection: "row",
-    gap: 8,
-    height: 38,
-    marginBottom: 12,
-    marginHorizontal: 18,
-    marginTop: 4,
-    paddingHorizontal: 12,
-  },
-  searchFieldInline: {
-    flex: 1,
-    marginBottom: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    paddingVertical: 0,
   },
   listWrap: {
     flex: 1,
