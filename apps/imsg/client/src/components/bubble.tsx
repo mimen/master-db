@@ -200,7 +200,15 @@ export const Bubble = memo(function Bubble({
   return (
     <View style={{ paddingHorizontal: 14, marginBottom: groupEnd ? 8 : 2 }}>
       {message.replyToPreview !== null && (
-        <View style={{ alignItems: message.replyToFromMe ? "flex-end" : "flex-start" }}>
+        // The quote block anchors to the REPLY's side (a cross-side connector
+        // reads as an orphaned squiggle); who's being quoted is carried by the
+        // outline color — blue = quoting me, gray = quoting them.
+        <View
+          style={{
+            alignItems: mine ? "flex-end" : "flex-start",
+            marginLeft: !mine && isGroupChat ? 34 : 0,
+          }}
+        >
           <View
             style={[
               styles.quote,
@@ -219,11 +227,9 @@ export const Bubble = memo(function Bubble({
           </View>
           <View
             style={[
-              styles.connector,
-              { borderColor: theme.textSecondary },
-              mine
-                ? { alignSelf: "flex-end", marginRight: 22, borderBottomRightRadius: 12, borderLeftWidth: 0 }
-                : { alignSelf: "flex-start", marginLeft: 22, borderBottomLeftRadius: 12, borderRightWidth: 0 },
+              styles.replyStem,
+              { backgroundColor: theme.textSecondary },
+              mine ? { marginRight: 26 } : { marginLeft: 26 },
             ]}
           />
         </View>
@@ -382,11 +388,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     maxWidth: "70%",
   },
-  connector: {
-    width: 20,
-    height: 12,
-    borderWidth: 1.5,
-    borderTopWidth: 0,
+  replyStem: {
+    borderRadius: 1,
+    height: 8,
+    marginBottom: 1,
+    marginTop: 1,
+    opacity: 0.55,
+    width: 2,
   },
   smallAvatar: {
     width: 28,
