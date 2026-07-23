@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { TextInputContentSizeChangeEvent } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -136,18 +135,12 @@ export function Composer({
   // Swap drafts when the conversation changes.
   useEffect(() => {
     setText(getDraft(chatGuid));
-    liveText.current = getDraft(chatGuid);
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
-    measuredForText.current = null;
     setPending([]);
   }, [chatGuid]);
 
   useEffect(() => {
-    if (editing) {
-      setText(editing.text);
-      liveText.current = editing.text;
-      measuredForText.current = null;
-    }
+    if (editing) setText(editing.text);
   }, [editing]);
 
   // Suggestion shelf drops text in here for editing; never auto-sends.
@@ -198,7 +191,6 @@ export function Composer({
   };
 
   const onChangeText = (value: string) => {
-    liveText.current = value;
     setText(value);
     if (!editing) {
       setDraft(chatGuid, value);
@@ -208,29 +200,21 @@ export function Composer({
     }
   };
 
-  // One measurement per text value: setting height triggers a relayout, which
-  // re-fires onContentSizeChange — honoring those echoes oscillates the box.
-  // NOTE: the event fires BEFORE React re-renders, so comparing against the
-  // `text` prop is stale — track the live value in a ref set by onChangeText.
-  const liveText = useRef(text);
-  const measuredForText = useRef<string | null>(null);
-  const onInputContentSizeChange = (event: TextInputContentSizeChangeEvent) => {
-    if (measuredForText.current === liveText.current) return;
-    measuredForText.current = liveText.current;
-    // Quantize to whole lines so sub-pixel re-measures can't wiggle the height.
-    const lines = Math.min(
-      7,
-      Math.max(1, Math.round(event.nativeEvent.contentSize.height / IOS_INPUT_LINE_HEIGHT)),
+  // iOS growth via a hidden mirror <Text> with identical font metrics: its
+  // onLayout reports the TRUE text height, and since the mirror's height is
+  // never controlled by us, no feedback loop is possible. (onContentSizeChange
+  // is unusable on this Fabric build — it echoes the frame we set.)
+  const onMirrorLayout = (height: number) => {
+    const next = Math.min(
+      Math.max(Math.ceil(height) + IOS_INPUT_PADDING_V, IOS_INPUT_MIN_HEIGHT),
+      IOS_INPUT_MAX_HEIGHT,
     );
-    const nextHeight = lines * IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
-    setInputHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+    setInputHeight((current) => (current === next ? current : next));
   };
 
   /** Programmatic clear (send/schedule/edit-cancel): text + growth reset together. */
   const clearText = () => {
-    clearText();
-    liveText.current = "";
-    measuredForText.current = null;
+    setText("");
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   };
 
@@ -526,31 +510,39 @@ export function Composer({
             </Text>
           </View>
         ) : (
-          <TextInput
-            ref={inputRef}
-            value={text}
-            onFocus={() => setListMode(false)}
-            onChangeText={onChangeText}
-            placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
-            placeholderTextColor={theme.textSecondary}
-            multiline
-            onContentSizeChange={Platform.OS === "ios" ? onInputContentSizeChange : undefined}
-            scrollEnabled={Platform.OS === "ios" ? inputHeight >= IOS_INPUT_MAX_HEIGHT : undefined}
-            // Desktop: Enter sends (handled by the keydown listener above).
-            // Mobile: Return inserts a newline; sending is the button only.
-            enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
-            submitBehavior={Platform.OS === "web" ? "submit" : "newline"}
-            onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
-            style={[
-              styles.input,
-              Platform.OS === "ios" && {
-                height: inputHeight,
-                lineHeight: IOS_INPUT_LINE_HEIGHT,
-                maxHeight: IOS_INPUT_MAX_HEIGHT,
-              },
-              { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background },
-            ]}
-          />
+          <View style={{ flex: 1 }}>
+            {Platform.OS === "ios" && (
+              <Text
+                style={styles.growthMirror}
+                onLayout={(e) => onMirrorLayout(e.nativeEvent.layout.height)}
+              >
+                {text.length === 0 ? " " : text.endsWith("\n") ? `${text} ` : text}
+              </Text>
+            )}
+            <TextInput
+              ref={inputRef}
+              value={text}
+              onFocus={() => setListMode(false)}
+              onChangeText={onChangeText}
+              placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              scrollEnabled={Platform.OS === "ios" ? inputHeight >= IOS_INPUT_MAX_HEIGHT : undefined}
+              // Desktop: Enter sends (handled by the keydown listener above).
+              // Mobile: Return inserts a newline; sending is the button only.
+              enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
+              submitBehavior={Platform.OS === "web" ? "submit" : "newline"}
+              onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
+              style={[
+                styles.input,
+                Platform.OS === "ios" && {
+                  height: inputHeight,
+                  lineHeight: IOS_INPUT_LINE_HEIGHT,
+                },
+                { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background },
+              ]}
+            />
+          </View>
         )}
         {canSend && !recording ? (
           <Pressable
@@ -608,8 +600,18 @@ const styles = StyleSheet.create({
     paddingBottom: 7,
     paddingLeft: 2,
   },
+  growthMirror: {
+    // Same metrics as the input's text area; invisible; never intercepts touch.
+    fontSize: 17,
+    left: 14,
+    lineHeight: 22,
+    opacity: 0,
+    pointerEvents: "none",
+    position: "absolute",
+    right: 14,
+    top: 0,
+  },
   input: {
-    flex: 1,
     borderWidth: 1,
     borderRadius: 19,
     paddingHorizontal: 14,
