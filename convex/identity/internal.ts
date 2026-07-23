@@ -131,13 +131,20 @@ export const listIdentitiesPage = internalQuery({
  * human explicitly named them (via "Add Contact" or an in-app rename), and
  * the next sync re-deriving "longest name among identities" must not
  * silently revert that. Every other aggregate still recomputes normally.
+ *
+ * Skips the patch entirely when the computed aggregates match the current
+ * doc — this runs on every ingested card in the ~1,510-card / 10-minute
+ * Apple Contacts sync, and an unconditional patch would rewrite every
+ * person doc (and bump updated_at, invalidating every subscribed query) on
+ * every cycle even when nothing changed. Phones/emails are compared as sets
+ * so `Set` iteration order can't cause a false "changed" every run.
  */
 export async function recomputePersonAggregates(
   ctx: MutationCtx,
   personId: Id<"people">,
 ): Promise<void> {
-  const now = new Date().toISOString();
   const person = await ctx.db.get(personId);
+  if (!person) return;
   const all = await ctx.db
     .query("identities")
     .withIndex("by_person", (q) => q.eq("person_id", personId))
@@ -156,8 +163,22 @@ export async function recomputePersonAggregates(
       bestName = i.display_name;
     }
   }
+
+  const nextDisplayName = person.display_name_locked ? person.display_name : bestName;
+  const samePhones = setsEqual(new Set(person.normalized_phones), phones);
+  const sameEmails = setsEqual(new Set(person.normalized_emails), emails);
+  const unchanged =
+    person.display_name === nextDisplayName &&
+    samePhones &&
+    sameEmails &&
+    person.identity_count === all.length &&
+    person.message_count === messageCount &&
+    person.is_self === isSelf;
+  if (unchanged) return;
+
+  const now = new Date().toISOString();
   await ctx.db.patch(personId, {
-    ...(person?.display_name_locked ? {} : { display_name: bestName }),
+    ...(person.display_name_locked ? {} : { display_name: bestName }),
     normalized_phones: [...phones],
     normalized_emails: [...emails],
     identity_count: all.length,
@@ -165,6 +186,12 @@ export async function recomputePersonAggregates(
     is_self: isSelf,
     updated_at: now,
   });
+}
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
 }
 
 /**
