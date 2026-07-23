@@ -89,8 +89,12 @@ export function NewChatContent({
       if (!selectChat({ guid: chatGuid })) {
         router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid } });
       }
-    } catch {
-      showToast("Couldn't start the conversation");
+    } catch (e) {
+      // Surface the server's reason when it gives one — a bare toast made
+      // the group-creation failure (apple-script vs private-api) opaque.
+      const detail =
+        e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
+      showToast(detail ? `Couldn't start: ${detail.slice(0, 120)}` : "Couldn't start the conversation");
     } finally {
       setSending(false);
     }

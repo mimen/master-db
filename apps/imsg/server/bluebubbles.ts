@@ -309,7 +309,9 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.post<BBChat>("/api/v1/chat/new", {
       addresses,
       message,
-      method: "apple-script",
+      // AppleScript can only create 1:1 chats on modern macOS — group
+      // creation requires the private API. Use it whenever available.
+      method: this.sendMethod(),
       service: "iMessage",
     });
   }
