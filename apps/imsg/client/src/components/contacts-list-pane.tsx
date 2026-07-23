@@ -174,7 +174,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
       leading={wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
       actions={
         <>
-          <SuggestionSettingsButton wide={wide} />
+          <SuggestionSettingsButton />
           {/* Filters are a Messages concept — present for bar parity, inert here. */}
           <View style={[chromeStyles.actionButton, { opacity: 0.3 }]}>
             <Ionicons name="options-outline" size={21} color={theme.accent} />

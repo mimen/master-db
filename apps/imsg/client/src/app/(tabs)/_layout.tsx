@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Platform, StyleSheet, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 
 /**
@@ -11,8 +12,7 @@ import { useTheme } from "@/hooks/use-theme";
  * instead — a native-style tab bar reads oddly on a desktop-width web page.
  */
 export default function TabsLayout() {
-  const { width } = useWindowDimensions();
-  const wide = width >= 768;
+  const { wide } = useLayoutMode();
   const iosMobile = Platform.OS === "ios" && !wide;
   const theme = useTheme();
   const insets = useSafeAreaInsets();

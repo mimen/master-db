@@ -128,7 +128,7 @@ export function ConversationListPane({
       leading={wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
       actions={
         <>
-          <SuggestionSettingsButton wide={wide} />
+          <SuggestionSettingsButton />
           <Pressable
             ref={filterBtnRef}
             accessibilityRole="button"
