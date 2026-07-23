@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
