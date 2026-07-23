@@ -61,7 +61,7 @@ export default function ChatListScreen() {
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [rightPane, setRightPane] = useState<RightPane | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const { chats, counts, loading, refresh } = useChats(state, type);
+  const { chats, allChats, counts, loading, refresh } = useChats(state, type);
 
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
   useServerEvents(
@@ -227,6 +227,8 @@ export default function ChatListScreen() {
         if (o.helpOpen) return setHelpOpen(false);
         if (o.searchOpen) return setSearchOpen(false);
         if (o.newChatOpen) return setNewChatOpen(false);
+        // An active list search clears before anything else closes.
+        if (getListAdapter()?.clearSearch?.()) return;
         if (!isListMode()) {
           // From the composer (or anywhere non-glide): enter glide mode.
           const active = document.activeElement;
@@ -249,6 +251,7 @@ export default function ChatListScreen() {
   const list = (
     <ConversationListPane
       chats={chats}
+      allChats={allChats}
       counts={counts}
       filters={{ state, type }}
       loading={loading}

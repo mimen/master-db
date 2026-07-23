@@ -32,6 +32,8 @@ import { useSyncExternalStore } from "react";
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
+  /** Unfiltered universe (archived included) — what search mode searches. */
+  allChats: ChatSummary[];
   counts: StateCounts | null;
   filters: InboxFilters;
   loading: boolean;
@@ -47,6 +49,7 @@ interface ConversationListPaneProps {
 
 export function ConversationListPane({
   chats,
+  allChats,
   counts,
   filters,
   loading,
@@ -118,7 +121,11 @@ export function ConversationListPane({
     });
   };
   const scrollOffset = useRef(0);
-  const model = deriveInboxModel(chats, filters, query, deepMatches);
+  // Search is a MODE, not a compound filter: typing searches the FULL universe
+  // (archived included), superseding the badge filters; clearing the query
+  // restores the badge view untouched (docs: Gmail/Superhuman convention).
+  const searchActive = query.trim().length > 0;
+  const model = deriveInboxModel(searchActive ? allChats : chats, filters, query, deepMatches);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
   const searchRef = useRef<TextInput>(null);
 
@@ -126,6 +133,8 @@ export function ConversationListPane({
   // (priority shelf first, then the filtered list) — not the raw chats array.
   const navRef = useRef({ model, selectedGuid, onOpenChat, onPreviewChat });
   navRef.current = { model, selectedGuid, onOpenChat, onPreviewChat };
+  const queryRef = useRef(query);
+  queryRef.current = query;
   const viewableRange = useRef<{ first: number; last: number }>({ first: 0, last: 0 });
   useEffect(() => {
     if (!wide) return;
@@ -164,6 +173,11 @@ export function ConversationListPane({
       focusSearch() {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
         setTimeout(() => searchRef.current?.focus(), 30);
+      },
+      clearSearch() {
+        if (queryRef.current.trim().length === 0) return false;
+        setQuery("");
+        return true;
       },
       selectNeighborOf(guid) {
         // Runs synchronously after the removal action, before re-render — so
@@ -310,8 +324,28 @@ export function ConversationListPane({
                   clearButtonMode="while-editing"
                   style={[styles.searchInput, { color: theme.text }]}
                 />
+                {searchActive && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search"
+                    onPress={() => setQuery("")}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
+                  </Pressable>
+                )}
               </View>
-              <ConversationFilters filters={filters} counts={counts} onFiltersChange={onFiltersChange} />
+              <View style={searchActive ? { opacity: 0.45 } : null}>
+                <ConversationFilters
+                  filters={filters}
+                  counts={counts}
+                  onFiltersChange={(f) => {
+                    // Picking a badge exits search — the two never compose.
+                    setQuery("");
+                    onFiltersChange(f);
+                  }}
+                />
+              </View>
               {model.showPriorityShelf && (
                 <PriorityShelf
                   chats={model.priority}

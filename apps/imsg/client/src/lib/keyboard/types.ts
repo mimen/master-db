@@ -74,6 +74,10 @@ export interface ListAdapter {
   move(delta: -1 | 1): void;
   activate(): void;
   focusSearch(): void;
+  /** Clears an active list search. Returns true if there was one to clear —
+   * the Esc ladder consumes the keypress in that case. Optional so in-flight
+   * pane work isn't broken; wired by the search-mode redesign. */
+  clearSearch?(): boolean;
   /** After an action removes `guid` from the list (archive), glide onto its
    * neighbor (next, else previous) instead of leaving the cursor dangling. */
   selectNeighborOf(guid: string): void;

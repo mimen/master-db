@@ -7,6 +7,8 @@ import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/
 
 interface UseChatsResult {
   chats: ChatSummary[];
+  /** The unfiltered universe (archived included) — search-mode input. */
+  allChats: ChatSummary[];
   counts: StateCounts | null;
   loading: boolean;
   error: string | null;
@@ -86,5 +88,5 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
     else void nav.clearAppBadge?.().catch(() => undefined);
   }, [all]);
 
-  return { chats, counts, loading, error, refresh };
+  return { chats, allChats: all, counts, loading, error, refresh };
 }
