@@ -15,6 +15,15 @@ export const convexClient = new ConvexReactClient(
   { unsavedChangesWarning: false },
 );
 
+/**
+ * Shared-key auth for the identity module (convex/identity/key.ts):
+ * the Convex deployment URL ships in this JS bundle, so every public
+ * identity function requires this key on every call. Read once at module
+ * load; every hook below injects it so no call-site elsewhere in the client
+ * needs to know it exists.
+ */
+const IDENTITY_KEY = process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY ?? "";
+
 export type IdentityRow = {
   kind: string;
   network?: string;
@@ -56,58 +65,71 @@ export type AirtableHumanRow = {
   email?: string;
 };
 
-const whoIsRef = makeFunctionReference<"query", { handle: string }, WhoIsResult>(
+const whoIsRef = makeFunctionReference<"query", { key: string; handle: string }, WhoIsResult>(
   "identity/queries:whoIs",
 );
 
-const listPeopleRef = makeFunctionReference<"query", Record<string, never>, ContactListRow[]>(
+const listPeopleRef = makeFunctionReference<"query", { key: string }, ContactListRow[]>(
   "identity/queries:listPeople",
 );
 
 const createPersonRef = makeFunctionReference<
   "mutation",
-  { handle: string; display_name?: string },
+  { key: string; handle: string; display_name?: string },
   { created: boolean; personId: string }
 >("identity/mutations:createPerson");
 
-const searchAirtableHumansRef = makeFunctionReference<"action", { query: string }, AirtableHumanRow[]>(
-  "identity/airtableSearch:searchAirtableHumans",
-);
+const searchAirtableHumansRef = makeFunctionReference<
+  "action",
+  { key: string; query: string },
+  AirtableHumanRow[]
+>("identity/airtableSearch:searchAirtableHumans");
 
 const addPersonFromAirtableRef = makeFunctionReference<
   "mutation",
-  { record_id: string; display_name?: string; phone?: string; email?: string },
+  { key: string; record_id: string; display_name?: string; phone?: string; email?: string },
   { personId: string }
 >("identity/mutations:addPersonFromAirtable");
 
 const renamePersonRef = makeFunctionReference<
   "mutation",
-  { personId: string; display_name: string },
+  { key: string; personId: string; display_name: string },
   null
 >("identity/mutations:renamePerson");
 
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
-  return useQuery(whoIsRef, handle ? { handle } : "skip");
+  return useQuery(whoIsRef, handle ? { key: IDENTITY_KEY, handle } : "skip");
 }
 
 export function useListPeople(): ContactListRow[] | undefined {
-  return useQuery(listPeopleRef, {});
+  return useQuery(listPeopleRef, { key: IDENTITY_KEY });
 }
 
 export function useCreatePerson() {
-  return useMutation(createPersonRef);
+  const mutate = useMutation(createPersonRef);
+  return (args: { handle: string; display_name?: string }) =>
+    mutate({ key: IDENTITY_KEY, ...args });
 }
 
 export function useSearchAirtableHumans() {
-  return useAction(searchAirtableHumansRef);
+  const run = useAction(searchAirtableHumansRef);
+  return (args: { query: string }) => run({ key: IDENTITY_KEY, ...args });
 }
 
 export function useAddPersonFromAirtable() {
-  return useMutation(addPersonFromAirtableRef);
+  const mutate = useMutation(addPersonFromAirtableRef);
+  return (args: {
+    record_id: string;
+    display_name?: string;
+    phone?: string;
+    email?: string;
+  }) => mutate({ key: IDENTITY_KEY, ...args });
 }
 
 export function useRenamePerson() {
-  return useMutation(renamePersonRef);
+  const mutate = useMutation(renamePersonRef);
+  return (args: { personId: string; display_name: string }) =>
+    mutate({ key: IDENTITY_KEY, ...args });
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */

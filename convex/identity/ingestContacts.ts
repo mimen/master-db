@@ -145,14 +145,23 @@ export async function ingestOneCard(
       .collect();
     const existing = rows.find((r) => r.source === source);
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        person_id: personId,
-        display_name:
-          card.display_name && card.display_name.length > (existing.display_name?.length ?? 0)
-            ? card.display_name
-            : existing.display_name,
-        updated_at: now,
-      });
+      const nextDisplayName =
+        card.display_name && card.display_name.length > (existing.display_name?.length ?? 0)
+          ? card.display_name
+          : existing.display_name;
+      // Only write when something actually differs. This is the ~1,510-card
+      // sync loop that runs every 10 minutes — patching (and bumping
+      // updated_at) on every re-ingest of an unchanged card would rewrite
+      // every identity every cycle and invalidate every reactive query
+      // subscribed to it for no reason.
+      const changed = existing.person_id !== personId || existing.display_name !== nextDisplayName;
+      if (changed) {
+        await ctx.db.patch(existing._id, {
+          person_id: personId,
+          display_name: nextDisplayName,
+          updated_at: now,
+        });
+      }
     } else {
       await ctx.db.insert("identities", {
         person_id: personId,

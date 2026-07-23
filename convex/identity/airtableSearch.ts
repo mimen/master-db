@@ -2,6 +2,8 @@ import { v } from "convex/values";
 
 import { action } from "../_generated/server";
 
+import { requireIdentityKey } from "./key";
+
 /**
  * Live search against Airtable's Humans table, for imsg's Contacts screen:
  * "search our existing contacts first, Airtable matches below." Unlike
@@ -38,8 +40,9 @@ export function airtableNameSearchFormula(needle: string): string {
 }
 
 export const searchAirtableHumans = action({
-  args: { query: v.string() },
-  handler: async (_ctx, { query }) => {
+  args: { key: v.string(), query: v.string() },
+  handler: async (_ctx, { key, query }) => {
+    requireIdentityKey(key);
     const needle = query.trim();
     if (needle.length < 2) return [];
 
