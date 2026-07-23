@@ -156,8 +156,10 @@ export function ConversationListPane({
         const target = navigable[Math.max(0, Math.min(navigable.length - 1, idx === -1 ? 0 : idx + delta))];
         if (!target || target.guid === sel) return;
         (preview ?? open)(target);
-        // Keep the glide cursor visible: if the user free-scrolled away, snap
-        // back to it; if it's already on screen, don't disturb the scroll.
+        // Keep the glide cursor FULLY on screen with edge-pinning: scroll the
+        // minimum so the row sits flush at the edge being moved toward, where
+        // it stays step after step (no recentering jumps). The viewable range
+        // counts only fully-visible rows, so a partially clipped cursor pins.
         const listIndex = m.listChats.findIndex((ch) => ch.guid === target.guid);
         if (listIndex === -1) {
           // Target lives in the priority shelf (list header) — scroll to top.
@@ -167,7 +169,12 @@ export function ConversationListPane({
         const { first, last } = viewableRange.current;
         if (listIndex < first || listIndex > last) {
           try {
-            listRef.current?.scrollToIndex({ index: listIndex, viewPosition: 0.4, animated: false });
+            listRef.current?.scrollToIndex(
+              delta > 0
+                ? { index: listIndex, viewPosition: 1, animated: false }
+                : // Top pin sits below the frosted bar, which overlays content.
+                  { index: listIndex, viewPosition: 0, viewOffset: topBarH + 8, animated: false },
+            );
           } catch {
             /* index not measured yet — FlashList will settle on next frame */
           }
@@ -283,6 +290,7 @@ export function ConversationListPane({
           keyExtractor={(chat) => chat.guid}
           maintainVisibleContentPosition={{ disabled: false }}
           keyboardShouldPersistTaps="handled"
+          viewabilityConfig={{ itemVisiblePercentThreshold: 100 }}
           onViewableItemsChanged={({ viewableItems }) => {
             const indices = viewableItems
               .map((v) => v.index)
