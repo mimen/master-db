@@ -21,6 +21,21 @@ crons.interval(
   internal.identity.airtableSync.syncAirtableHumans
 );
 
+// Beeper chats -> identity graph (cluster NEW Beeper participants into the
+// identity/people tables). Daily, not hourly like Airtable: Beeper chats
+// accrue slowly (new participants show up over days, not minutes), and the
+// Apple Contacts and Airtable Humans paths already link cross-source
+// continuously on their own faster schedules — this cron only exists to pick
+// up Beeper-only participants those paths never see. Set semantics (see
+// resolve.ts / internal.ts) make daily re-runs safe: each run recomputes
+// chat_count from scratch rather than accumulating on top of the last run.
+// 3am UTC, offset from airtable-humans-sync's top-of-hour firing.
+crons.daily(
+  "beeper-identity-resolve",
+  { hourUTC: 3, minuteUTC: 15 },
+  internal.identity.resolve.resolveIdentities
+);
+
 // Run daily routine task generation at midnight (00:00)
 // crons.daily(
 //   "daily-routine-generation",
