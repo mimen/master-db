@@ -169,11 +169,14 @@ export function ConversationListPane({
         const { first, last } = viewableRange.current;
         if (listIndex < first || listIndex > last) {
           try {
+            // Top pin must clear the frosted bar, which overlays content.
+            // FlashList ignores viewOffset, so express the clearance as a
+            // fraction of the measured viewport instead.
+            const topFraction = Math.min(0.3, (topBarH + 8) / Math.max(1, viewportHRef.current));
             listRef.current?.scrollToIndex(
               delta > 0
                 ? { index: listIndex, viewPosition: 1, animated: false }
-                : // Top pin sits below the frosted bar, which overlays content.
-                  { index: listIndex, viewPosition: 0, viewOffset: topBarH + 8, animated: false },
+                : { index: listIndex, viewPosition: topFraction, animated: false },
             );
           } catch {
             /* index not measured yet — FlashList will settle on next frame */
