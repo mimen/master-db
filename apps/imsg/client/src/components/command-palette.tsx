@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { api } from "@/lib/api";
 import { formatListTimestamp, initials } from "@/lib/format";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/lib/palette/model";
 import { openPersonPane } from "@/lib/person-pane";
 import { selectChat } from "@/lib/selection";
+import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 
 import { ChatAvatar } from "./avatar";
@@ -28,13 +30,14 @@ const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 export interface CommandPaletteProps {
   /** Recency-ordered universe (archived included). */
   chats: ChatSummary[];
+  /** "compose" opens straight into the new-message flow (⌘N / compose button). */
+  initialMode?: "root" | "compose";
   onClose: () => void;
   /** Full open: mark read + focus composer — palette jump is reply intent. */
   onOpenChat: (chat: ChatSummary) => void;
   /** Lens application — caller also clears the sidebar search (badge semantics). */
   onApplyState: (state: StateFilter) => void;
   onApplyType: (type: TypeFilter) => void;
-  onNewMessage: () => void;
   onShowHelp: () => void;
 }
 
@@ -46,13 +49,48 @@ export interface CommandPaletteProps {
  */
 export function CommandPalette({
   chats,
+  initialMode = "root",
   onClose,
   onOpenChat,
   onApplyState,
   onApplyType,
-  onNewMessage,
   onShowHelp,
 }: CommandPaletteProps) {
+  const theme = useTheme();
+  const [mode, setMode] = useState<"root" | "compose">(initialMode);
+  if (mode === "compose") {
+    return <PaletteCompose onClose={onClose} />;
+  }
+  return (
+    <PaletteRoot
+      chats={chats}
+      onClose={onClose}
+      onOpenChat={onOpenChat}
+      onApplyState={onApplyState}
+      onApplyType={onApplyType}
+      onCompose={() => setMode("compose")}
+      onShowHelp={onShowHelp}
+    />
+  );
+}
+
+function PaletteRoot({
+  chats,
+  onClose,
+  onOpenChat,
+  onApplyState,
+  onApplyType,
+  onCompose,
+  onShowHelp,
+}: {
+  chats: ChatSummary[];
+  onClose: () => void;
+  onOpenChat: (chat: ChatSummary) => void;
+  onApplyState: (state: StateFilter) => void;
+  onApplyType: (type: TypeFilter) => void;
+  onCompose: () => void;
+  onShowHelp: () => void;
+}) {
   const theme = useTheme();
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -107,6 +145,10 @@ export function CommandPalette({
   }, [flat.length, selectedIndex]);
 
   const execute = (item: PaletteItem): void => {
+    // New Message transitions IN PLACE — every other action closes first.
+    if (item.kind === "command" && item.command.id.kind === "action" && item.command.id.value === "new-message") {
+      return onCompose();
+    }
     onClose();
     switch (item.kind) {
       case "command":
@@ -141,7 +183,7 @@ export function CommandPalette({
         router.navigate(id.value === "contacts" ? "/contacts" : "/");
         return;
       case "action":
-        return id.value === "new-message" ? onNewMessage() : onShowHelp();
+        return id.value === "new-message" ? onCompose() : onShowHelp();
     }
   };
 
@@ -353,6 +395,233 @@ function PaletteRow({ item }: { item: PaletteItem }) {
   }
 }
 
+
+/** Palette-styled new-message flow: recipient search with chips, then the
+ * first message — replaces the old desktop NewChatContent overlay. */
+function PaletteCompose({ onClose }: { onClose: () => void }) {
+  const theme = useTheme();
+  const [recipients, setRecipients] = useState<Contact[]>([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Contact[]>([]);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const recipientInputRef = useRef<TextInput>(null);
+  const messageInputRef = useRef<TextInput>(null);
+
+  const needle = query.trim();
+  useEffect(() => {
+    setResults([]);
+    setSelectedIndex(0);
+    if (needle.length < 2) return;
+    const handle = setTimeout(() => {
+      api.contacts(needle).then(setResults).catch(() => setResults([]));
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [needle]);
+
+  const addRecipient = (c: Contact): void => {
+    setRecipients((cur) => (cur.some((x) => x.address === c.address) ? cur : [...cur, c]));
+    setQuery("");
+    recipientInputRef.current?.focus();
+  };
+
+  // Same Airtable augmentation as the Contacts surfaces: unlinked humans can
+  // be added, then land as a recipient.
+  const { results: airtableResults, add: addAirtableContact, addingId } = useAirtableSearch(
+    needle,
+    (_personId, human) => {
+      const address = human.phone ?? human.email;
+      if (address) addRecipient({ address, name: human.display_name });
+    },
+  );
+
+  const rows = useMemo(
+    () => [
+      ...results
+        .filter((c) => !recipients.some((r) => r.address === c.address))
+        .map((c) => ({ kind: "contact" as const, key: `c-${c.address}`, contact: c })),
+      ...airtableResults.map((h) => ({ kind: "airtable" as const, key: `at-${h.record_id}`, human: h })),
+    ],
+    [results, airtableResults, recipients],
+  );
+
+  const send = (): void => {
+    const body = text.trim();
+    if (recipients.length === 0 || body === "" || sending) return;
+    setSending(true);
+    api
+      .newChat({ addresses: recipients.map((c) => c.address), text: body })
+      .then(({ chatGuid }) => {
+        onClose();
+        selectChat({ guid: chatGuid });
+      })
+      .catch((e: unknown) => {
+        const detail =
+          e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
+        showToast(detail ? `Couldn't start: ${detail.slice(0, 120)}` : "Couldn't start the conversation");
+      })
+      .finally(() => setSending(false));
+  };
+
+  // Keyboard: arrows rove results; Enter adds the selected result (or a raw
+  // address) from the To field, sends from the message field; Backspace on an
+  // empty To field pops the last chip. Esc stays with the global ladder.
+  const stateRef = useRef({ rows, selectedIndex, query, recipients, send });
+  stateRef.current = { rows, selectedIndex, query, recipients, send };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const st = stateRef.current;
+      const inMessage =
+        typeof document !== "undefined" &&
+        document.activeElement === (messageInputRef.current as unknown as Element | null);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (inMessage || st.rows.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.key === "ArrowDown" ? 1 : -1;
+        setSelectedIndex(Math.max(0, Math.min(st.rows.length - 1, st.selectedIndex + delta)));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (inMessage) return st.send();
+        const row = st.rows[st.selectedIndex];
+        if (row?.kind === "contact") return addRecipient(row.contact);
+        if (row?.kind === "airtable") return void addAirtableContact(row.human);
+        const raw = st.query.trim();
+        // No matches — treat the raw text as an address (number/email).
+        if (raw !== "" && st.rows.length === 0) addRecipient({ address: raw, name: raw });
+        else if (raw === "" && st.recipients.length > 0) messageInputRef.current?.focus();
+        return;
+      }
+      if (e.key === "Backspace" && !inMessage && st.query === "" && st.recipients.length > 0) {
+        setRecipients((cur) => cur.slice(0, -1));
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const canSend = recipients.length > 0 && text.trim().length > 0 && !sending;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: theme.divider }]}>
+        <Text style={[styles.hint, { color: theme.textSecondary }]}>To:</Text>
+        <View style={styles.chipWrap}>
+          {recipients.map((contact) => (
+            <Pressable
+              key={contact.address}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${contact.name}`}
+              onPress={() => setRecipients((cur) => cur.filter((c) => c.address !== contact.address))}
+              style={[styles.chip, { backgroundColor: theme.accent }]}
+            >
+              <Text style={{ color: theme.onAccent, fontSize: 13 }}>{contact.name}</Text>
+              <Ionicons name="close" size={13} color={theme.onAccent} />
+            </Pressable>
+          ))}
+          <TextInput
+            ref={recipientInputRef}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={recipients.length === 0 ? "Name, number, or email" : ""}
+            placeholderTextColor={theme.textSecondary}
+            autoFocus
+            style={[styles.input, styles.composeToInput, { color: theme.text }]}
+          />
+        </View>
+      </View>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent} style={{ flex: 1 }}>
+        {rows.length > 0 && (
+          <Text style={[styles.sectionHeader, { color: theme.textSecondary }]}>Contacts</Text>
+        )}
+        {rows.map((row, index) => {
+          const selected = index === selectedIndex;
+          if (row.kind === "airtable") {
+            const adding = addingId === row.human.record_id;
+            return (
+              <Pressable
+                key={row.key}
+                disabled={adding}
+                onPress={() => void addAirtableContact(row.human)}
+                onHoverIn={() => setSelectedIndex(index)}
+                style={[styles.row, selected && { backgroundColor: theme.backgroundSelected }]}
+              >
+                <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
+                    {initials(row.human.display_name)}
+                  </Text>
+                </View>
+                <Text style={[styles.title, { color: theme.text, flex: 1 }]}>{row.human.display_name}</Text>
+                <Text style={[styles.hint, { color: theme.textSecondary }]}>
+                  {adding ? "Adding…" : "From Airtable"}
+                </Text>
+              </Pressable>
+            );
+          }
+          return (
+            <Pressable
+              key={row.key}
+              onPress={() => addRecipient(row.contact)}
+              onHoverIn={() => setSelectedIndex(index)}
+              style={[styles.row, selected && { backgroundColor: theme.backgroundSelected }]}
+            >
+              <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+                <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
+                  {initials(row.contact.name)}
+                </Text>
+              </View>
+              <View style={styles.textCol}>
+                <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
+                  {row.contact.name}
+                </Text>
+                <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
+                  {row.contact.address}
+                </Text>
+              </View>
+              {selected && <Text style={[styles.enterHint, { color: theme.textSecondary }]}>↵</Text>}
+            </Pressable>
+          );
+        })}
+        {rows.length === 0 && needle.length >= 2 && (
+          <Text style={[styles.empty, { color: theme.textSecondary }]}>
+            No matches — press ↵ to use "{needle}" directly
+          </Text>
+        )}
+      </ScrollView>
+      <View style={[styles.composeBar, { borderTopColor: theme.divider }]}>
+        <TextInput
+          ref={messageInputRef}
+          value={text}
+          onChangeText={setText}
+          placeholder="iMessage"
+          placeholderTextColor={theme.textSecondary}
+          style={[
+            styles.composeMessageInput,
+            { borderColor: theme.divider, color: theme.text },
+          ]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send"
+          disabled={!canSend}
+          onPress={send}
+          style={[
+            styles.sendButton,
+            { backgroundColor: canSend ? theme.accent : theme.backgroundElement },
+          ]}
+        >
+          <Ionicons name="arrow-up" size={17} color={canSend ? theme.onAccent : theme.textSecondary} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   inputRow: {
     alignItems: "center",
@@ -421,5 +690,52 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: 40,
     textAlign: "center",
+  },
+  composeToRow: {
+    alignItems: "flex-start",
+    paddingVertical: 10,
+  },
+  chipWrap: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  chip: {
+    alignItems: "center",
+    borderRadius: 13,
+    flexDirection: "row",
+    gap: 4,
+    height: 26,
+    paddingHorizontal: 10,
+  },
+  composeToInput: {
+    minWidth: 140,
+    paddingVertical: 3,
+  },
+  composeBar: {
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  composeMessageInput: {
+    borderRadius: 17,
+    borderWidth: 1,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 34,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+  },
+  sendButton: {
+    alignItems: "center",
+    borderRadius: 16,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
   },
 });

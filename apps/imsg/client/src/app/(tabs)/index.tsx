@@ -6,7 +6,6 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import { ChatInfoContent } from "@/components/chat-info-content";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { EmptyState } from "@/components/empty-state";
-import { NewChatContent } from "@/components/new-chat-content";
 import { PersonContent } from "@/components/person-content";
 import { CommandPalette } from "@/components/command-palette";
 import { ThreadView } from "@/components/thread-view";
@@ -55,7 +54,8 @@ export default function ChatListScreen() {
   const [state, setState] = useState<StateFilter>("unresponded");
   const [type, setType] = useState<TypeFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [newChatOpen, setNewChatOpen] = useState(false);
+  // ⌘N / compose button open the palette straight into its compose mode.
+  const [paletteCompose, setPaletteCompose] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
@@ -169,8 +169,12 @@ export default function ChatListScreen() {
   };
 
   const openNewMessage = (): void => {
-    if (wide) setNewChatOpen(true);
-    else router.push("/new-chat");
+    if (wide) {
+      setPaletteCompose(true);
+      setSearchOpen(true);
+    } else {
+      router.push("/new-chat");
+    }
   };
 
   // Keyboard system (docs/keyboard-design.md, Slice 2): compose-first with an
@@ -179,13 +183,19 @@ export default function ChatListScreen() {
   // adapter so keyboard order follows the rendered order.
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
-  const overlaysRef = useRef({ helpOpen, searchOpen, newChatOpen, rightPane });
-  overlaysRef.current = { helpOpen, searchOpen, newChatOpen, rightPane };
+  const overlaysRef = useRef({ helpOpen, searchOpen, rightPane });
+  overlaysRef.current = { helpOpen, searchOpen, rightPane };
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
     setKeyboardRuntime({
-      openPalette: () => setSearchOpen(true),
-      openNewMessage: () => setNewChatOpen(true),
+      openPalette: () => {
+        setPaletteCompose(false);
+        setSearchOpen(true);
+      },
+      openNewMessage: () => {
+        setPaletteCompose(true);
+        setSearchOpen(true);
+      },
       openHelp: () => setHelpOpen(true),
       moveSelection: (delta) => {
         setListMode(true);
@@ -227,7 +237,6 @@ export default function ChatListScreen() {
         const o = overlaysRef.current;
         if (o.helpOpen) return setHelpOpen(false);
         if (o.searchOpen) return setSearchOpen(false);
-        if (o.newChatOpen) return setNewChatOpen(false);
         // An active list search clears before anything else closes.
         if (getListAdapter()?.clearSearch()) return;
         if (!isListMode()) {
@@ -282,7 +291,9 @@ export default function ChatListScreen() {
         <Pressable style={styles.overlayBackdrop} onPress={() => setSearchOpen(false)}>
           <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
             <CommandPalette
+              key={paletteCompose ? "compose" : "root"}
               chats={allChats}
+              initialMode={paletteCompose ? "compose" : "root"}
               onClose={() => setSearchOpen(false)}
               onOpenChat={openChat}
               // Lens application follows badge semantics: exit search first,
@@ -295,16 +306,8 @@ export default function ChatListScreen() {
                 getListAdapter()?.clearSearch();
                 setType(value);
               }}
-              onNewMessage={() => setNewChatOpen(true)}
               onShowHelp={() => setHelpOpen(true)}
             />
-          </Pressable>
-        </Pressable>
-      </Modal>
-      <Modal visible={newChatOpen} transparent animationType="fade" onRequestClose={() => setNewChatOpen(false)}>
-        <Pressable style={styles.overlayBackdrop} onPress={() => setNewChatOpen(false)}>
-          <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
-            <NewChatContent onClose={() => setNewChatOpen(false)} />
           </Pressable>
         </Pressable>
       </Modal>
