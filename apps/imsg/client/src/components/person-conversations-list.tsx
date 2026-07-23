@@ -20,7 +20,11 @@ export function PersonConversationsList({ chats, onOpenChat }: PersonConversatio
         {chats.length === 1 ? "Conversation" : `${chats.length} conversations`}
       </Text>
       {chats.map((c) => (
-        <Pressable key={c.guid} style={styles.chatRow} onPress={() => onOpenChat(c)}>
+        <Pressable
+          key={c.guid}
+          style={[styles.chatRow, { borderBottomColor: theme.divider }]}
+          onPress={() => onOpenChat(c)}
+        >
           <Ionicons
             name={c.isGroup ? "people-circle-outline" : "chatbubble-ellipses-outline"}
             size={20}
@@ -56,6 +60,5 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#3A3A3C",
   },
 });

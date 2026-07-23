@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
     marginTop: -14,
     width: 28,
     height: 28,
-    borderRadius: Radii.card,
+    borderRadius: 14, // geometric: half the 28px button, a circle — not Radii.card
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
