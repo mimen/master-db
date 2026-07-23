@@ -136,13 +136,18 @@ export function Composer({
   // Swap drafts when the conversation changes.
   useEffect(() => {
     setText(getDraft(chatGuid));
+    liveText.current = getDraft(chatGuid);
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
     measuredForText.current = null;
     setPending([]);
   }, [chatGuid]);
 
   useEffect(() => {
-    if (editing) setText(editing.text);
+    if (editing) {
+      setText(editing.text);
+      liveText.current = editing.text;
+      measuredForText.current = null;
+    }
   }, [editing]);
 
   // Suggestion shelf drops text in here for editing; never auto-sends.
@@ -193,6 +198,7 @@ export function Composer({
   };
 
   const onChangeText = (value: string) => {
+    liveText.current = value;
     setText(value);
     if (!editing) {
       setDraft(chatGuid, value);
@@ -204,10 +210,13 @@ export function Composer({
 
   // One measurement per text value: setting height triggers a relayout, which
   // re-fires onContentSizeChange — honoring those echoes oscillates the box.
+  // NOTE: the event fires BEFORE React re-renders, so comparing against the
+  // `text` prop is stale — track the live value in a ref set by onChangeText.
+  const liveText = useRef(text);
   const measuredForText = useRef<string | null>(null);
   const onInputContentSizeChange = (event: TextInputContentSizeChangeEvent) => {
-    if (measuredForText.current === text) return;
-    measuredForText.current = text;
+    if (measuredForText.current === liveText.current) return;
+    measuredForText.current = liveText.current;
     // Quantize to whole lines so sub-pixel re-measures can't wiggle the height.
     const lines = Math.min(
       7,
@@ -215,6 +224,14 @@ export function Composer({
     );
     const nextHeight = lines * IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
     setInputHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+  };
+
+  /** Programmatic clear (send/schedule/edit-cancel): text + growth reset together. */
+  const clearText = () => {
+    clearText();
+    liveText.current = "";
+    measuredForText.current = null;
+    setInputHeight(IOS_INPUT_MIN_HEIGHT);
   };
 
   const sendRef = useRef<() => void>(() => undefined);
@@ -227,7 +244,7 @@ export function Composer({
       try {
         await api.edit(editing.guid, trimmed);
         onEdited({ ...editing, text: trimmed, edited: true });
-        setText("");
+        clearText();
         onClearEditing();
       } catch {
         showToast("Edit failed — edits are only allowed for ~15 minutes");
@@ -244,7 +261,7 @@ export function Composer({
       const attachments = pending;
       const caption = trimmed || undefined;
       setPending([]);
-      setText("");
+      clearText();
       setDraft(chatGuid, "");
       setBusy(true);
       try {
@@ -264,7 +281,7 @@ export function Composer({
     const temp = tempMessage(chatGuid, trimmed, replyTo);
     const reply = replyTo;
     sendInFlight.current = true;
-    setText("");
+    clearText();
     setDraft(chatGuid, "");
     onClearReply();
     onOptimistic(temp);
@@ -422,7 +439,7 @@ export function Composer({
           void api
             .schedule(chatGuid, trimmed, o.at)
             .then(() => {
-              setText("");
+              clearText();
               setDraft(chatGuid, "");
               showToast(`Scheduled ${o.label.toLowerCase()}`);
             })
@@ -466,7 +483,7 @@ export function Composer({
           </Text>
           <Pressable
             onPress={() => {
-              setText("");
+              clearText();
               onClearEditing();
             }}
             hitSlop={8}
