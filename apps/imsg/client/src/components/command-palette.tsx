@@ -378,10 +378,21 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     setResults([]);
     if (needle.length < 2) return;
+    // Cancellation is load-bearing: an in-flight request must not land after
+    // a clear and repopulate the list with stale rows.
+    let cancelled = false;
     const handle = setTimeout(() => {
-      api.contacts(needle).then(setResults).catch(() => setResults([]));
+      api
+        .contacts(needle)
+        .then((found) => {
+          if (!cancelled) setResults(found);
+        })
+        .catch(() => undefined);
     }, 200);
-    return () => clearTimeout(handle);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [needle]);
 
   const addRecipient = (c: Contact): void => {
@@ -400,15 +411,26 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     },
   );
 
-  const rows: ComposeRow[] = useMemo(
-    () => [
-      ...results
-        .filter((c) => !recipients.some((r) => r.address === c.address))
-        .map((c) => ({ kind: "contact" as const, key: `c-${c.address}`, contact: c })),
-      ...airtableResults.map((h) => ({ kind: "airtable" as const, key: `at-${h.record_id}`, human: h })),
-    ],
-    [results, airtableResults, recipients],
-  );
+  // One row per underlying address: the directory can hold duplicate entries
+  // for the same number, and an Airtable human may duplicate a directory hit.
+  const rows: ComposeRow[] = useMemo(() => {
+    const normalize = (address: string): string =>
+      address.replace(/[^a-z0-9@+]/gi, "").toLowerCase();
+    const seen = new Set(recipients.map((r) => normalize(r.address)));
+    const out: ComposeRow[] = [];
+    for (const c of results) {
+      const norm = normalize(c.address);
+      if (seen.has(norm)) continue;
+      seen.add(norm);
+      out.push({ kind: "contact", key: `c-${norm}`, contact: c });
+    }
+    for (const h of airtableResults) {
+      const addr = h.phone ?? h.email;
+      if (addr && seen.has(normalize(addr))) continue;
+      out.push({ kind: "airtable", key: `at-${h.record_id}`, human: h });
+    }
+    return out;
+  }, [results, airtableResults, recipients]);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
