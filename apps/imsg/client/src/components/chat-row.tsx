@@ -211,8 +211,8 @@ export function ChatRow({
               </View>
             )}
             {chat.flags.unresponded && !chat.flags.unread && (
-              <View style={[styles.stateChip, { backgroundColor: theme.backgroundElement }]}>
-                <Ionicons name="arrow-undo-outline" size={11} color={theme.textSecondary} />
+              <View style={[styles.stateChip, { backgroundColor: "#F0A50026" }]}>
+                <Ionicons name="arrow-undo-outline" size={11} color="#F0A500" />
               </View>
             )}
           </View>
