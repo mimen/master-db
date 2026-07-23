@@ -515,9 +515,16 @@ export function Composer({
         </View>
       )}
       <View style={styles.inputRow}>
-        <Pressable onPress={openAttachSheet} disabled={busy || recording} hitSlop={8} style={styles.attachButton}>
-          <Ionicons name="add-circle-outline" size={26} color={theme.textSecondary} />
-        </Pressable>
+        <View style={styles.actionCol}>
+          <Pressable
+            onPress={openAttachSheet}
+            disabled={busy || recording}
+            hitSlop={8}
+            style={[styles.sendButton, { backgroundColor: theme.backgroundElement }]}
+          >
+            <Ionicons name="add" size={22} color={theme.textSecondary} />
+          </Pressable>
+        </View>
         {recording ? (
           <View style={[styles.input, styles.recordingBar, { borderColor: theme.divider }]}>
             <View style={styles.recDot} />
@@ -613,11 +620,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-  },
-  attachButton: {
-    height: IOS_INPUT_MIN_HEIGHT,
-    justifyContent: "center",
-    paddingLeft: 2,
   },
   growthMirror: {
     // Same metrics as the input's text area; invisible; never intercepts touch.
