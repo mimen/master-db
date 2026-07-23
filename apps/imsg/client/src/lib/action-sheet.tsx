@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 
 export interface SheetAction {
@@ -57,9 +58,10 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
+  const { wide } = useLayoutMode();
   // Desktop NEVER gets a bottom sheet: anchored requests are cursor popovers,
   // everything else is a centered dialog. The dark backdrop is mobile-sheet-only.
-  const desktop = Platform.OS === "web" && winW >= 768;
+  const desktop = Platform.OS === "web" && wide;
   const variant: "popover" | "dialog" | "sheet" = rendered?.anchor
     ? "popover"
     : desktop
