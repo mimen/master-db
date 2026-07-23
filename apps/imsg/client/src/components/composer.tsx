@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import type { TextInputContentSizeChangeEvent } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -39,6 +40,10 @@ interface PendingAttachment {
   mime: string;
   isImage: boolean;
 }
+
+const IOS_INPUT_LINE_HEIGHT = 22;
+const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + 16;
+const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 7 + 16;
 
 /** SMS/RCS conversations have an "SMS;" guid prefix — green bubbles. */
 function chatIsSMS(chatGuid: string): boolean {
@@ -103,6 +108,7 @@ export function Composer({
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(chatGuid));
+  const [inputHeight, setInputHeight] = useState(IOS_INPUT_MIN_HEIGHT);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
 
   // Track native keyboard visibility for keyboard-specific composer edge spacing.
@@ -127,6 +133,7 @@ export function Composer({
   // Swap drafts when the conversation changes.
   useEffect(() => {
     setText(getDraft(chatGuid));
+    setInputHeight(IOS_INPUT_MIN_HEIGHT);
     setPending([]);
   }, [chatGuid]);
 
@@ -189,6 +196,14 @@ export function Composer({
       if (typingIdle.current) clearTimeout(typingIdle.current);
       typingIdle.current = setTimeout(() => setTyping(false), 5000);
     }
+  };
+
+  const onInputContentSizeChange = (event: TextInputContentSizeChangeEvent) => {
+    const nextHeight = Math.min(
+      Math.max(Math.ceil(event.nativeEvent.contentSize.height), IOS_INPUT_MIN_HEIGHT),
+      IOS_INPUT_MAX_HEIGHT,
+    );
+    setInputHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
   };
 
   const sendRef = useRef<() => void>(() => undefined);
@@ -491,6 +506,8 @@ export function Composer({
             placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
             placeholderTextColor={theme.textSecondary}
             multiline
+            onContentSizeChange={Platform.OS === "ios" ? onInputContentSizeChange : undefined}
+            scrollEnabled={Platform.OS === "ios" ? inputHeight >= IOS_INPUT_MAX_HEIGHT : undefined}
             // Desktop: Enter sends (handled by the keydown listener above).
             // Mobile: Return inserts a newline; sending is the button only.
             enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
@@ -498,6 +515,11 @@ export function Composer({
             onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
             style={[
               styles.input,
+              Platform.OS === "ios" && {
+                height: inputHeight,
+                lineHeight: IOS_INPUT_LINE_HEIGHT,
+                maxHeight: IOS_INPUT_MAX_HEIGHT,
+              },
               { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background },
             ]}
           />
