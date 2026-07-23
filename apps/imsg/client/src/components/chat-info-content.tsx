@@ -11,7 +11,7 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { api, attachmentUrl, avatarUrl } from "@/lib/api";
+import { api, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
 import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
@@ -22,7 +22,9 @@ import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
-import { initials } from "@/lib/format";
+import { PersonAvatar } from "./avatar";
+import { CenteredSpinner } from "./empty-state";
+import { ListRow } from "./list-row";
 
 const GRID_GAP = 5;
 
@@ -119,9 +121,7 @@ export function ChatInfoContent({
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {header}
-        <View style={[styles.center, { backgroundColor: theme.background }]}>
-          <ActivityIndicator />
-        </View>
+        <CenteredSpinner style={{ backgroundColor: theme.background }} />
       </View>
     );
   }
@@ -344,31 +344,21 @@ export function ChatInfoContent({
           {info.participants.map((p, i) => (
             <View key={p.address}>
               {i > 0 && <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />}
-              <Pressable
-                style={styles.participant}
+              <ListRow
+                paddingHorizontal={14}
+                minHeight={56}
+                titleWeight="400"
                 onPress={() => {
                   const nm = p.name ?? formatAddress(p.address);
                   if (onOpenPerson) onOpenPerson(p.address, nm);
                   else router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } });
                 }}
                 onLongPress={info.isGroup ? () => removeParticipant(p) : undefined}
-              >
-                <View style={[styles.pAvatar, { backgroundColor: theme.background }]}>
-                  <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                    {initials(p.name ?? formatAddress(p.address))}
-                  </Text>
-                  <Image source={{ uri: avatarUrl(p.address) }} style={styles.pAvatarImg} contentFit="cover" />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16 }}>
-                    {p.name ?? formatAddress(p.address)}
-                  </Text>
-                  {p.name && (
-                    <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{formatAddress(p.address)}</Text>
-                  )}
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
-              </Pressable>
+                leading={<PersonAvatar address={p.address} name={p.name ?? formatAddress(p.address)} size={40} />}
+                title={p.name ?? formatAddress(p.address)}
+                subtitle={p.name ? formatAddress(p.address) : undefined}
+                trailing={<Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />}
+              />
             </View>
           ))}
         </View>
@@ -454,7 +444,6 @@ export function ChatInfoContent({
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   paneHeader: {
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -489,9 +478,6 @@ const styles = StyleSheet.create({
   card: { borderRadius: 12, overflow: "hidden" },
   cardGap: { marginTop: 18 },
   rowDivider: { height: StyleSheet.hairlineWidth, marginLeft: 66 },
-  participant: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 9, minHeight: 56 },
-  pAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  pAvatarImg: { ...StyleSheet.absoluteFillObject, borderRadius: 20 },
   dangerRow: { alignItems: "flex-start", justifyContent: "center", minHeight: 50, paddingHorizontal: 14 },
   // Intentionally NOT theme.destructive: that literal is the iOS system-red
   // LIGHT variant, and it's already correct in light mode. Swapping to the

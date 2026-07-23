@@ -25,6 +25,10 @@ export interface ListRowProps {
    * existing value explicitly. Defaults to the codebase's most common 16. */
   paddingHorizontal?: number;
   titleNumberOfLines?: number;
+  /** Title boldness is genuinely split across call sites (roughly half use
+   * "600", half plain text) — not one of the two authorized metrics to
+   * unify, so it stays a per-site choice instead of a silent default. */
+  titleWeight?: "400" | "600";
   /** Escape hatch for per-row extras a fixed prop set can't express — a
    * divider border, for instance. */
   style?: StyleProp<ViewStyle>;
@@ -49,6 +53,7 @@ export function ListRow({
   minHeight,
   paddingHorizontal = Spacing.three,
   titleNumberOfLines = 1,
+  titleWeight = "600",
   style,
 }: ListRowProps) {
   const theme = useTheme();
@@ -68,7 +73,10 @@ export function ListRow({
       {leading}
       <View style={styles.body}>
         {typeof title === "string" ? (
-          <Text numberOfLines={titleNumberOfLines} style={[styles.title, { color: theme.text }]}>
+          <Text
+            numberOfLines={titleNumberOfLines}
+            style={[styles.title, { color: theme.text, fontWeight: titleWeight }]}
+          >
             {title}
           </Text>
         ) : (
@@ -105,7 +113,6 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: Type.body,
-    fontWeight: "600",
   },
   subtitle: {
     fontSize: Type.secondary,

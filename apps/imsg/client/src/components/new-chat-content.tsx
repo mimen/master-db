@@ -17,9 +17,10 @@ import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { Contact } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
-import { initials } from "@/lib/format";
 import { type AirtableHumanRow } from "@/lib/identity";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
+import { PersonAvatar } from "./avatar";
+import { ListRow } from "./list-row";
 
 type Row =
   | { kind: "contact"; key: string; contact: Contact }
@@ -153,40 +154,28 @@ export function NewChatContent({
           if (item.kind === "airtable") {
             const adding = addingId === item.human.record_id;
             return (
-              <Pressable
-                style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+              <ListRow
                 disabled={adding}
                 onPress={() => void addAirtableContact(item.human)}
-              >
-                <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-                  <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                    {initials(item.human.display_name)}
-                  </Text>
-                </View>
-                <Text style={[styles.rowTitle, { color: theme.text, flex: 1 }]}>{item.human.display_name}</Text>
-                {adding ? (
-                  <ActivityIndicator size="small" />
-                ) : (
-                  <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
-                )}
-              </Pressable>
+                leading={<PersonAvatar address={null} name={item.human.display_name} size={36} />}
+                title={item.human.display_name}
+                trailing={
+                  adding ? (
+                    <ActivityIndicator size="small" />
+                  ) : (
+                    <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
+                  )
+                }
+              />
             );
           }
           return (
-            <Pressable
-              style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+            <ListRow
               onPress={() => addContact(item.contact)}
-            >
-              <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-                  {initials(item.contact.name)}
-                </Text>
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.rowTitle, { color: theme.text }]}>{item.contact.name}</Text>
-                <Text style={[styles.rowSub, { color: theme.textSecondary }]}>{item.contact.address}</Text>
-              </View>
-            </Pressable>
+              leading={<PersonAvatar address={item.contact.address} name={item.contact.name} size={36} />}
+              title={item.contact.name}
+              subtitle={item.contact.address}
+            />
           );
         }}
       />
@@ -246,27 +235,6 @@ const styles = StyleSheet.create({
     minWidth: 120,
     fontSize: 16,
     paddingVertical: 2,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  rowSub: {
-    fontSize: 13,
   },
   sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 16, paddingVertical: 4 },
   composer: {
