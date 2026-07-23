@@ -34,6 +34,8 @@ export interface ConversationFiltersProps {
   filters: InboxFilters;
   counts: StateCounts | null;
   onFiltersChange: (filters: InboxFilters) => void;
+  /** Desktop: tighter pills so the rail reads as chrome, not content. */
+  compact?: boolean;
 }
 
 function formatCount(count: number): string {
@@ -51,12 +53,14 @@ function FilterPill({
   selected,
   selection,
   onSelect,
+  compact = false,
 }: {
   label: string;
   count?: number;
   selected: boolean;
   selection: InboxFilterSelection;
   onSelect: (selection: InboxFilterSelection) => void;
+  compact?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -67,15 +71,28 @@ function FilterPill({
       onPress={() => onSelect(selection)}
       style={({ pressed }) => [
         styles.pill,
+        compact && styles.pillCompact,
         { backgroundColor: selected ? theme.text : theme.backgroundElement },
         pressed && !selected && { backgroundColor: theme.backgroundSelected },
       ]}
     >
-      <Text style={[styles.pillLabel, { color: selected ? theme.background : theme.textSecondary }]}>
+      <Text
+        style={[
+          styles.pillLabel,
+          compact && styles.pillLabelCompact,
+          { color: selected ? theme.background : theme.textSecondary },
+        ]}
+      >
         {label}
       </Text>
       {count !== undefined && (
-        <Text style={[styles.pillCount, { color: selected ? theme.background : theme.textSecondary }]}>
+        <Text
+          style={[
+            styles.pillCount,
+            compact && styles.pillCountCompact,
+            { color: selected ? theme.background : theme.textSecondary },
+          ]}
+        >
           {formatCount(count)}
         </Text>
       )}
@@ -84,24 +101,34 @@ function FilterPill({
 }
 
 /** A compact, touch-friendly filter rail that stays one horizontal row at every width. */
-export function ConversationFilters({ filters, counts, onFiltersChange }: ConversationFiltersProps) {
+export function ConversationFilters({
+  filters,
+  counts,
+  onFiltersChange,
+  compact = false,
+}: ConversationFiltersProps) {
   const theme = useTheme();
   const select = (selection: InboxFilterSelection): void => {
     onFiltersChange(selectInboxFilter(filters, selection));
   };
 
   return (
-    <View style={styles.rail}>
+    <View style={compact ? styles.railCompact : styles.rail}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.railContent}
+        contentContainerStyle={[styles.railContent, compact && styles.railContentCompact]}
         accessibilityLabel="Conversation filters"
       >
-        <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state" style={styles.filterGroup}>
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Conversation state"
+          style={[styles.filterGroup, compact && styles.filterGroupCompact]}
+        >
           {STATE_FILTERS.map((filter) => (
             <FilterPill
               key={filter.value}
+              compact={compact}
               label={filter.label}
               count={counts?.[filter.value]}
               selected={filters.state === filter.value}
@@ -111,10 +138,15 @@ export function ConversationFilters({ filters, counts, onFiltersChange }: Conver
           ))}
         </View>
         <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
-        <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type" style={styles.filterGroup}>
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Conversation type"
+          style={[styles.filterGroup, compact && styles.filterGroupCompact]}
+        >
           {TYPE_FILTERS.map((filter) => (
             <FilterPill
               key={filter.value}
+              compact={compact}
               label={filter.label}
               selected={filters.type === filter.value}
               selection={{ kind: "type", value: filter.value }}
@@ -378,15 +410,24 @@ const styles = StyleSheet.create({
   rail: {
     height: 50,
   },
+  railCompact: {
+    height: 38,
+  },
   railContent: {
     alignItems: "center",
     gap: 12,
     paddingHorizontal: 18,
   },
+  railContentCompact: {
+    gap: 9,
+  },
   filterGroup: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
+  },
+  filterGroupCompact: {
+    gap: 5,
   },
   divider: {
     height: 22,
@@ -400,14 +441,26 @@ const styles = StyleSheet.create({
     height: 34,
     paddingHorizontal: 14,
   },
+  pillCompact: {
+    borderRadius: 13,
+    gap: 4,
+    height: 26,
+    paddingHorizontal: 10,
+  },
   pillLabel: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  pillLabelCompact: {
+    fontSize: 12,
   },
   pillCount: {
     fontSize: 12,
     fontVariant: ["tabular-nums"],
     fontWeight: "600",
+  },
+  pillCountCompact: {
+    fontSize: 11,
   },
   popoverBackdrop: {
     ...StyleSheet.absoluteFillObject,

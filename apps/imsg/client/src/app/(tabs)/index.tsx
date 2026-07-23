@@ -50,7 +50,8 @@ export default function ChatListScreen() {
   // The shadow panel needs room beyond the list+thread; keep it to wide desktops.
   const canShadow = wide && width >= 1040 && aiStatus?.shadow === true;
   const [shadowOpen, setShadowOpen] = useState(false);
-  const [state, setState] = useState<StateFilter>("all");
+  // Unresponded is the working view — the inbox opens on what needs a reply.
+  const [state, setState] = useState<StateFilter>("unresponded");
   const [type, setType] = useState<TypeFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

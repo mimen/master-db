@@ -30,6 +30,8 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "conversation.details", combo: "mod+i", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
   { commandId: "navigation.escape", combo: "escape", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: false },
   { commandId: "help.open", combo: "mod+/", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
+  // Search the conversation LIST from anywhere (⌘F is find-in-conversation).
+  { commandId: "list.focusSearch", combo: "mod+shift+f", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
   // Browser-reserved; fires only under the future Tauri shell's native menu.
   { commandId: "conversation.new", combo: "mod+n", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
 

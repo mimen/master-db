@@ -179,6 +179,7 @@ export function ConversationListPane({
             <View style={wide ? { paddingBottom: 6 } : null}>
               {wide && searchField}
               <ConversationFilters
+                compact={wide}
                 filters={filters}
                 counts={counts}
                 // Picking a badge exits search — the two never compose.
