@@ -134,7 +134,11 @@ export function ConversationListPane({
   // (archived included), superseding the badge filters; clearing the query
   // restores the badge view untouched (docs: Gmail/Superhuman convention).
   const searchActive = query.trim().length > 0;
-  const model = deriveInboxModel(searchActive ? allChats : chats, filters, query, deepMatches);
+  // ONE stable data source: the model applies the lenses itself when there is
+  // no query and searches everything when there is. Swapping arrays on the
+  // first keystroke made FlashList remount its header — blurring the search
+  // input, after which glide keys acted on the page.
+  const model = deriveInboxModel(allChats, filters, query, deepMatches);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
   const searchRef = useRef<TextInput>(null);
 
@@ -293,6 +297,11 @@ export function ConversationListPane({
           // the pills visibly reset to All to say so.
           if (value.trim().length > 0 && (filters.state !== "all" || filters.type !== "all")) {
             onFiltersChange({ state: "all", type: "all" });
+          }
+          // Belt-and-braces: if a list re-render steals focus mid-typing,
+          // give it straight back (caret lands at the end, which is where it was).
+          if (Platform.OS === "web") {
+            requestAnimationFrame(() => searchRef.current?.focus());
           }
         }}
         placeholder="Search"
