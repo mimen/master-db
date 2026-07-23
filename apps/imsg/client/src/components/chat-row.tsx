@@ -205,6 +205,16 @@ export function ChatRow({
                 <Text style={styles.unreadBadgeText}>{chat.unreadCount > 99 ? "99+" : chat.unreadCount}</Text>
               </View>
             )}
+            {chat.flags.archived && (
+              <View style={[styles.stateChip, { backgroundColor: theme.backgroundElement }]}>
+                <Ionicons name="archive-outline" size={11} color={theme.textSecondary} />
+              </View>
+            )}
+            {chat.flags.unresponded && !chat.flags.unread && (
+              <View style={[styles.stateChip, { backgroundColor: theme.backgroundElement }]}>
+                <Ionicons name="arrow-undo-outline" size={11} color={theme.textSecondary} />
+              </View>
+            )}
           </View>
         </View>
         {compact && (
@@ -288,6 +298,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minWidth: 19,
     paddingHorizontal: 5,
+  },
+  stateChip: {
+    alignItems: "center",
+    borderRadius: 10,
+    height: 19,
+    justifyContent: "center",
+    minWidth: 19,
+    paddingHorizontal: 4,
   },
   unreadBadgeText: {
     color: "#FFFFFF",
