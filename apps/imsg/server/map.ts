@@ -24,6 +24,10 @@ function specialContent(m: BBMessage): SpecialContent | null {
   if (bundle.includes("PassbookUIService") || bundle.includes("ApplePay")) return { kind: "apple-cash" };
   if (bundle.includes("MapsToday") || bundle.includes("Handles.Location")) return { kind: "location" };
   if (bundle.includes("SharedPoll") || bundle.includes("messages.poll")) return { kind: "poll" };
+  // Rich-link balloons (URLBalloonProvider: Maps places, App Store, Music,
+  // shared web pages…) carry their URL in the text — let the normal
+  // link-preview path render them instead of a generic "App Message" card.
+  if (bundle.includes("URLBalloonProvider") && /https?:\/\//.test(m.text ?? "")) return null;
   const label = bundle.split(".").filter(Boolean).pop() ?? "App message";
   return { kind: "unknown", label };
 }
