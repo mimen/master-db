@@ -225,8 +225,10 @@ export function Composer({
     if (Platform.OS !== "web") return;
     const node = inputRef.current as unknown as HTMLTextAreaElement | null;
     if (!node || !node.style) return;
-    node.style.height = "auto";
-    // Single line by default: clamp to the same floor as iOS, grow to the cap.
+    // Reset to the one-line floor BEFORE measuring: scrollHeight never reports
+    // less than the current height, and RNW's empty textarea is ~2 rows tall —
+    // resetting to "auto" made that the permanent minimum.
+    node.style.height = `${IOS_INPUT_MIN_HEIGHT}px`;
     const next = Math.min(Math.max(node.scrollHeight, IOS_INPUT_MIN_HEIGHT), IOS_INPUT_MAX_HEIGHT);
     node.style.height = `${next}px`;
     node.style.overflowY = node.scrollHeight > IOS_INPUT_MAX_HEIGHT ? "auto" : "hidden";
