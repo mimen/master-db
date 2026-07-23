@@ -42,8 +42,11 @@ interface PendingAttachment {
 }
 
 const IOS_INPUT_LINE_HEIGHT = 22;
-const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + 16;
-const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 7 + 16;
+/** The input's vertical padding (paddingTop 8 + paddingBottom 8 in styles.input).
+ * iOS contentSize EXCLUDES padding — forgetting to add it back clips the text. */
+const IOS_INPUT_PADDING_V = 16;
+const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
+const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 7 + IOS_INPUT_PADDING_V;
 
 /** SMS/RCS conversations have an "SMS;" guid prefix — green bubbles. */
 function chatIsSMS(chatGuid: string): boolean {
@@ -200,7 +203,10 @@ export function Composer({
 
   const onInputContentSizeChange = (event: TextInputContentSizeChangeEvent) => {
     const nextHeight = Math.min(
-      Math.max(Math.ceil(event.nativeEvent.contentSize.height), IOS_INPUT_MIN_HEIGHT),
+      Math.max(
+        Math.ceil(event.nativeEvent.contentSize.height) + IOS_INPUT_PADDING_V,
+        IOS_INPUT_MIN_HEIGHT,
+      ),
       IOS_INPUT_MAX_HEIGHT,
     );
     setInputHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
