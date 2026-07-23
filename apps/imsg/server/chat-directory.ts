@@ -34,6 +34,21 @@ function dmKey(chat: ChatSummary): string | null {
   return digits.length >= 7 ? digits.slice(-10) : addr.toLowerCase();
 }
 
+/**
+ * One conversation per chat identifier: groups fork service-sibling rows too
+ * (e.g. a rename event riding RCS creates RCS;+;chatX beside SMS;+;chatX).
+ * The guid embeds the identifier — SERVICE;+;identifier — so key on that.
+ */
+function mergeKey(chat: ChatSummary): string | null {
+  const dm = dmKey(chat);
+  if (dm) return `dm:${dm}`;
+  if (chat.isGroup) {
+    const m = chat.guid.match(/^[^;]+;[+-];(.+)$/);
+    return m ? `g:${m[1]}` : null;
+  }
+  return null;
+}
+
 export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
   /** Any sibling guid → its merged-conversation identity. */
@@ -245,7 +260,7 @@ export class ChatDirectory {
     const byKey = new Map<string, ChatSummary>();
     const out: ChatSummary[] = [];
     for (const c of chats) {
-      const key = dmKey(c);
+      const key = mergeKey(c);
       if (!key) {
         out.push(c);
         continue;
