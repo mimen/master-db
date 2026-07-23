@@ -139,7 +139,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Search contacts"
+        placeholder="Search"
         placeholderTextColor={theme.textSecondary}
         style={[styles.searchInput, { color: theme.text }]}
       />
