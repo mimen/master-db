@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FlatList, Keyboard, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -21,8 +21,9 @@ import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer } from "@/lib/composer-fill";
 import type { Contact, Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
-import { CardShadow, Colors, Radii } from "@/constants/theme";
+import { Radii } from "@/constants/theme";
 import { PersonAvatar } from "./avatar";
+import { OverlayShell } from "./overlay-shell";
 
 interface ComposerProps {
   chatGuid: string;
@@ -133,48 +134,46 @@ function ContactPicker({
     if (!visible) setQ("");
   }, [visible]);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={pickerStyles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[pickerStyles.card, { backgroundColor: theme.background, borderColor: theme.divider }]}
-          onPress={() => undefined}
-        >
-          <Text style={[pickerStyles.title, { color: theme.text }]}>Send Contact</Text>
-          <View style={[pickerStyles.field, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons name="search" size={16} color={theme.textSecondary} />
-            <TextInput
-              value={q}
-              onChangeText={setQ}
-              autoFocus
-              placeholder="Search contacts"
-              placeholderTextColor={theme.textSecondary}
-              style={[pickerStyles.input, { color: theme.text }]}
-            />
-          </View>
-          <FlatList
-            data={results}
-            keyExtractor={(c) => `${c.address}-${c.name}`}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [pickerStyles.row, pressed && { backgroundColor: theme.backgroundElement }]}
-                onPress={() => onPick(item)}
-              >
-                <PersonAvatar address={item.address} name={item.name || item.address} size={32} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15 }}>
-                    {item.name || formatAddress(item.address)}
-                  </Text>
-                  <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 12 }}>
-                    {formatAddress(item.address)}
-                  </Text>
-                </View>
-              </Pressable>
-            )}
-          />
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <OverlayShell
+      visible={visible}
+      onClose={onClose}
+      backdropStyle={pickerStyles.backdrop}
+      cardStyle={[pickerStyles.card, { borderColor: theme.divider }]}
+    >
+      <Text style={[pickerStyles.title, { color: theme.text }]}>Send Contact</Text>
+      <View style={[pickerStyles.field, { backgroundColor: theme.backgroundElement }]}>
+        <Ionicons name="search" size={16} color={theme.textSecondary} />
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          autoFocus
+          placeholder="Search contacts"
+          placeholderTextColor={theme.textSecondary}
+          style={[pickerStyles.input, { color: theme.text }]}
+        />
+      </View>
+      <FlatList
+        data={results}
+        keyExtractor={(c) => `${c.address}-${c.name}`}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item }) => (
+          <Pressable
+            style={({ pressed }) => [pickerStyles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+            onPress={() => onPick(item)}
+          >
+            <PersonAvatar address={item.address} name={item.name || item.address} size={32} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15 }}>
+                {item.name || formatAddress(item.address)}
+              </Text>
+              <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {formatAddress(item.address)}
+              </Text>
+            </View>
+          </Pressable>
+        )}
+      />
+    </OverlayShell>
   );
 }
 
@@ -723,13 +722,10 @@ export function Composer({
 }
 
 const pickerStyles = StyleSheet.create({
+  // OverlayShell's backdrop already centers + scrims (its default color
+  // equals Colors.light.backdrop, the value this used to hardcode) — only
+  // the extra padding is site-specific.
   backdrop: {
-    alignItems: "center",
-    // Same value both schemes — Colors.backdrop, referenced directly since
-    // this StyleSheet is static (outside any component/theme scope).
-    backgroundColor: Colors.light.backdrop,
-    flex: 1,
-    justifyContent: "center",
     padding: 16,
   },
   card: {
@@ -741,7 +737,6 @@ const pickerStyles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 12,
     paddingTop: 14,
-    ...CardShadow,
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.35,
     shadowRadius: 34,

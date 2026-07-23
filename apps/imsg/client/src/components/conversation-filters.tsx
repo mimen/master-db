@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
+import { OverlayShell } from "./overlay-shell";
 import {
   activeInboxFilterCount,
   resetInboxFilters,
@@ -328,82 +329,84 @@ export function ConversationFiltersModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close conversation filters"
-          onPress={onClose}
-          style={styles.backdrop}
-        />
-        <View
-          accessibilityViewIsModal
-          accessibilityLabel="Conversation filters"
-          style={[styles.menu, { backgroundColor: theme.backgroundElement }]}
+    <OverlayShell
+      visible={visible}
+      onClose={onClose}
+      animationType="slide"
+      // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
+      backdropColor="rgba(0,0,0,0.35)"
+      backdropStyle={styles.modalRoot}
+      backdropAccessibilityRole="button"
+      backdropAccessibilityLabel="Close conversation filters"
+      card={false}
+    >
+      <View
+        accessibilityViewIsModal
+        accessibilityLabel="Conversation filters"
+        style={[styles.menu, { backgroundColor: theme.backgroundElement }]}
+      >
+        <View style={styles.menuHeader}>
+          <Text style={[styles.menuTitle, { color: theme.text }]}>Filters</Text>
+          <Text style={[styles.menuSummary, { color: theme.textSecondary }]}>
+            {activeInboxFilterCount(filters)} active
+          </Text>
+        </View>
+        <ScrollView
+          style={styles.menuContent}
+          contentContainerStyle={styles.menuContentContainer}
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.menuHeader}>
-            <Text style={[styles.menuTitle, { color: theme.text }]}>Filters</Text>
-            <Text style={[styles.menuSummary, { color: theme.textSecondary }]}>
-              {activeInboxFilterCount(filters)} active
-            </Text>
+          <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
+            <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>State</Text>
+            {STATE_FILTERS.map((filter) => (
+              <FilterMenuOption
+                key={filter.value}
+                label={filter.label}
+                count={counts?.[filter.value]}
+                selected={filters.state === filter.value}
+                selection={{ kind: "state", value: filter.value }}
+                onSelect={select}
+              />
+            ))}
           </View>
-          <ScrollView
-            style={styles.menuContent}
-            contentContainerStyle={styles.menuContentContainer}
-            showsVerticalScrollIndicator={false}
+          <View style={[styles.menuDivider, { backgroundColor: theme.divider }]} />
+          <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type">
+            <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>Type</Text>
+            {TYPE_FILTERS.map((filter) => (
+              <FilterMenuOption
+                key={filter.value}
+                label={filter.label}
+                selected={filters.type === filter.value}
+                selection={{ kind: "type", value: filter.value }}
+                onSelect={select}
+              />
+            ))}
+          </View>
+        </ScrollView>
+        <View style={styles.menuActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reset conversation filters"
+            onPress={() => onFiltersChange(resetInboxFilters())}
+            style={({ pressed }) => [styles.resetButton, pressed && { opacity: 0.65 }]}
           >
-            <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
-              <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>State</Text>
-              {STATE_FILTERS.map((filter) => (
-                <FilterMenuOption
-                  key={filter.value}
-                  label={filter.label}
-                  count={counts?.[filter.value]}
-                  selected={filters.state === filter.value}
-                  selection={{ kind: "state", value: filter.value }}
-                  onSelect={select}
-                />
-              ))}
-            </View>
-            <View style={[styles.menuDivider, { backgroundColor: theme.divider }]} />
-            <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type">
-              <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>Type</Text>
-              {TYPE_FILTERS.map((filter) => (
-                <FilterMenuOption
-                  key={filter.value}
-                  label={filter.label}
-                  selected={filters.type === filter.value}
-                  selection={{ kind: "type", value: filter.value }}
-                  onSelect={select}
-                />
-              ))}
-            </View>
-          </ScrollView>
-          <View style={styles.menuActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Reset conversation filters"
-              onPress={() => onFiltersChange(resetInboxFilters())}
-              style={({ pressed }) => [styles.resetButton, pressed && { opacity: 0.65 }]}
-            >
-              <Text style={[styles.resetButtonLabel, { color: theme.accent }]}>Reset</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Done filtering conversations"
-              onPress={onClose}
-              style={({ pressed }) => [
-                styles.doneButton,
-                { backgroundColor: theme.accent },
-                pressed && { opacity: 0.75 },
-              ]}
-            >
-              <Text style={[styles.doneButtonLabel, { color: theme.background }]}>Done</Text>
-            </Pressable>
-          </View>
+            <Text style={[styles.resetButtonLabel, { color: theme.accent }]}>Reset</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Done filtering conversations"
+            onPress={onClose}
+            style={({ pressed }) => [
+              styles.doneButton,
+              { backgroundColor: theme.accent },
+              pressed && { opacity: 0.75 },
+            ]}
+          >
+            <Text style={[styles.doneButtonLabel, { color: theme.background }]}>Done</Text>
+          </Pressable>
         </View>
       </View>
-    </Modal>
+    </OverlayShell>
   );
 }
 
@@ -511,14 +514,10 @@ const styles = StyleSheet.create({
     fontSize: Type.secondary,
     fontWeight: "600",
   },
+  // Color + press-dismiss now live on OverlayShell's own backdrop; this is
+  // just the flex-end anchoring so `menu` docks to the bottom.
   modalRoot: {
-    // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
-    backgroundColor: "rgba(0,0,0,0.35)",
-    flex: 1,
     justifyContent: "flex-end",
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
   },
   menu: {
     borderTopLeftRadius: 20,

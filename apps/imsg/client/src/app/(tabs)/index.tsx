@@ -1,11 +1,12 @@
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { ChatInfoContent } from "@/components/chat-info-content";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { EmptyState } from "@/components/empty-state";
+import { OverlayShell } from "@/components/overlay-shell";
 import { PersonContent } from "@/components/person-content";
 import { CommandPalette } from "@/components/command-palette";
 import { ThreadView } from "@/components/thread-view";
@@ -15,7 +16,7 @@ import { useChats } from "@/hooks/use-chats";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
+import { CardShadow, Radii, Type } from "@/constants/theme";
 import { archiveChat, markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import {
@@ -287,55 +288,54 @@ export default function ChatListScreen() {
   return (
     <View style={[styles.split, { backgroundColor: theme.desk }]}>
       <View style={[styles.listCard, ...cardStyle]}>{list}</View>
-      <Modal visible={searchOpen} transparent animationType="fade" onRequestClose={() => setSearchOpen(false)}>
-        <Pressable style={styles.overlayBackdrop} onPress={() => setSearchOpen(false)}>
-          <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
-            <CommandPalette
-              key={paletteCompose ? "compose" : "root"}
-              chats={allChats}
-              initialMode={paletteCompose ? "compose" : "root"}
-              onClose={() => setSearchOpen(false)}
-              onOpenChat={openChat}
-              // Lens application follows badge semantics: exit search first,
-              // then apply the picked dimension.
-              onApplyState={(value) => {
-                getListAdapter()?.clearSearch();
-                setState(value);
-              }}
-              onApplyType={(value) => {
-                getListAdapter()?.clearSearch();
-                setType(value);
-              }}
-              onShowHelp={() => setHelpOpen(true)}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
-      <Modal visible={helpOpen} transparent animationType="fade" onRequestClose={() => setHelpOpen(false)}>
-        <Pressable style={styles.overlayBackdrop} onPress={() => setHelpOpen(false)}>
-          <Pressable
-            style={[styles.helpCard, { backgroundColor: theme.background, borderColor: theme.cardBorder }]}
-            onPress={() => undefined}
-          >
-            <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
-            {HELP_ENTRIES.map(({ title, keys }) => (
-              <View key={title} style={styles.helpRow}>
-                <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{title}</Text>
-                <View style={styles.helpKeys}>
-                  {keys.map((k) => (
-                    <View
-                      key={k}
-                      style={[styles.kbd, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}
-                    >
-                      <Text style={[styles.kbdText, { color: theme.text }]}>{k}</Text>
-                    </View>
-                  ))}
+      <OverlayShell
+        visible={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        backdropStyle={styles.overlayBackdrop}
+        cardStyle={styles.overlayPanel}
+      >
+        <CommandPalette
+          key={paletteCompose ? "compose" : "root"}
+          chats={allChats}
+          initialMode={paletteCompose ? "compose" : "root"}
+          onClose={() => setSearchOpen(false)}
+          onOpenChat={openChat}
+          // Lens application follows badge semantics: exit search first,
+          // then apply the picked dimension.
+          onApplyState={(value) => {
+            getListAdapter()?.clearSearch();
+            setState(value);
+          }}
+          onApplyType={(value) => {
+            getListAdapter()?.clearSearch();
+            setType(value);
+          }}
+          onShowHelp={() => setHelpOpen(true)}
+        />
+      </OverlayShell>
+      <OverlayShell
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        backdropStyle={styles.overlayBackdrop}
+        cardStyle={[styles.helpCard, { borderColor: theme.cardBorder }]}
+      >
+        <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
+        {HELP_ENTRIES.map(({ title, keys }) => (
+          <View key={title} style={styles.helpRow}>
+            <Text style={[styles.helpLabel, { color: theme.textSecondary }]}>{title}</Text>
+            <View style={styles.helpKeys}>
+              {keys.map((k) => (
+                <View
+                  key={k}
+                  style={[styles.kbd, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}
+                >
+                  <Text style={[styles.kbdText, { color: theme.text }]}>{k}</Text>
                 </View>
-              </View>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
+              ))}
+            </View>
+          </View>
+        ))}
+      </OverlayShell>
       <View style={[styles.threadCard, ...cardStyle]}>
         {selected ? (
           <ThreadView
@@ -431,10 +431,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     width: 330,
   },
+  // Not fully centered — offset from the top, matching the original inline
+  // Modal backdrops this shell replaced.
   overlayBackdrop: {
-    alignItems: "center",
-    backgroundColor: Colors.light.backdrop,
-    flex: 1,
+    justifyContent: "flex-start",
     paddingTop: 90,
   },
   helpCard: {
@@ -443,7 +443,6 @@ const styles = StyleSheet.create({
     maxWidth: "90%",
     paddingHorizontal: 22,
     paddingVertical: 20,
-    ...CardShadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.35,
     shadowRadius: 40,
@@ -486,7 +485,6 @@ const styles = StyleSheet.create({
     maxHeight: "75%",
     maxWidth: "90%",
     overflow: "hidden",
-    ...CardShadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.35,
     shadowRadius: 40,
