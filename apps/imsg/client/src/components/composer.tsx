@@ -218,6 +218,20 @@ export function Composer({
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   };
 
+  // Desktop web growth: the DOM textarea reports scrollHeight reliably —
+  // classic autosize, same 10-line cap as iOS. Runs after every text commit
+  // (clears included), so it also shrinks back.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const node = inputRef.current as unknown as HTMLTextAreaElement | null;
+    if (!node || !node.style) return;
+    node.style.height = "auto";
+    // Single line by default: clamp to the same floor as iOS, grow to the cap.
+    const next = Math.min(Math.max(node.scrollHeight, IOS_INPUT_MIN_HEIGHT), IOS_INPUT_MAX_HEIGHT);
+    node.style.height = `${next}px`;
+    node.style.overflowY = node.scrollHeight > IOS_INPUT_MAX_HEIGHT ? "auto" : "hidden";
+  }, [text]);
+
   const sendRef = useRef<() => void>(() => undefined);
   const send = async () => {
     const trimmed = text.trim();
@@ -618,7 +632,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
     fontSize: 17,
-    maxHeight: 120,
   },
   recordingBar: {
     flexDirection: "row",
