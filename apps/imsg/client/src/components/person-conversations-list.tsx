@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
 import { formatListTimestamp } from "@/lib/format";
 import { useTheme } from "@/hooks/use-theme";
+import { ListRow } from "./list-row";
 
 export interface PersonConversationsListProps {
   chats: ChatSummary[];
@@ -20,32 +21,28 @@ export function PersonConversationsList({ chats, onOpenChat }: PersonConversatio
         {chats.length === 1 ? "Conversation" : `${chats.length} conversations`}
       </Text>
       {chats.map((c) => (
-        <Pressable
+        <ListRow
           key={c.guid}
+          paddingHorizontal={0}
           style={[styles.chatRow, { borderBottomColor: theme.divider }]}
           onPress={() => onOpenChat(c)}
-        >
-          <Ionicons
-            name={c.isGroup ? "people-circle-outline" : "chatbubble-ellipses-outline"}
-            size={20}
-            color={theme.textSecondary}
-          />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }} numberOfLines={1}>
-              {c.displayName}
-            </Text>
-            {c.lastMessage?.text ? (
-              <Text style={{ color: theme.textSecondary, fontSize: 13 }} numberOfLines={1}>
-                {c.lastMessage.text}
+          leading={
+            <Ionicons
+              name={c.isGroup ? "people-circle-outline" : "chatbubble-ellipses-outline"}
+              size={20}
+              color={theme.textSecondary}
+            />
+          }
+          title={c.displayName}
+          subtitle={c.lastMessage?.text || undefined}
+          trailing={
+            c.lastMessage?.dateCreated ? (
+              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                {formatListTimestamp(c.lastMessage.dateCreated)}
               </Text>
-            ) : null}
-          </View>
-          {c.lastMessage?.dateCreated && (
-            <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-              {formatListTimestamp(c.lastMessage.dateCreated)}
-            </Text>
-          )}
-        </Pressable>
+            ) : undefined
+          }
+        />
       ))}
     </View>
   );
@@ -55,10 +52,6 @@ const styles = StyleSheet.create({
   section: { width: "100%", marginTop: 20 },
   sectionLabel: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", marginBottom: 8 },
   chatRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });

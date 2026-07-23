@@ -6,6 +6,7 @@ import { formatListTimestamp } from "@/lib/format";
 import { selectChat } from "@/lib/selection";
 import type { Contact, Message } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
+import { ListRow } from "./list-row";
 
 type SearchRow =
   | { kind: "header"; key: string; label: string }
@@ -132,18 +133,11 @@ export function SearchContent({
           }
           if (item.kind === "contact") {
             return (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.row,
-                  pressed && { backgroundColor: theme.backgroundElement },
-                ]}
+              <ListRow
                 onPress={() => openContact(item.contact)}
-              >
-                <Text style={[styles.rowTitle, { color: theme.text }]}>{item.contact.name}</Text>
-                <Text style={[styles.rowSub, { color: theme.textSecondary }]}>
-                  {item.contact.address}
-                </Text>
-              </Pressable>
+                title={item.contact.name}
+                subtitle={item.contact.address}
+              />
             );
           }
           const m = item.message;

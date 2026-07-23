@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { useChats } from "@/hooks/use-chats";
@@ -8,6 +8,7 @@ import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 import { ChatAvatar } from "@/components/avatar";
+import { ListRow } from "@/components/list-row";
 import { useTheme } from "@/hooks/use-theme";
 
 export default function ForwardScreen() {
@@ -58,13 +59,12 @@ export default function ForwardScreen() {
         keyExtractor={(c) => c.guid}
         keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.backgroundElement }]}
+          <ListRow
+            titleWeight="400"
             onPress={() => forwardTo(item)}
-          >
-            <ChatAvatar chat={item} size={40} />
-            <Text style={{ color: theme.text, fontSize: 16 }}>{item.displayName}</Text>
-          </Pressable>
+            leading={<ChatAvatar chat={item} size={40} />}
+            title={item.displayName}
+          />
         )}
       />
     </View>
@@ -74,5 +74,4 @@ export default function ForwardScreen() {
 const styles = StyleSheet.create({
   preview: { margin: 12, marginBottom: 0, borderRadius: 12, padding: 12 },
   input: { margin: 12, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 17 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
 });
