@@ -240,7 +240,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
               data={rows}
               keyExtractor={(r) => r.key}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
+              keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 8 }}
               onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}

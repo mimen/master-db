@@ -298,11 +298,6 @@ export function ConversationListPane({
           if (value.trim().length > 0 && (filters.state !== "all" || filters.type !== "all")) {
             onFiltersChange({ state: "all", type: "all" });
           }
-          // Belt-and-braces: if a list re-render steals focus mid-typing,
-          // give it straight back (caret lands at the end, which is where it was).
-          if (Platform.OS === "web") {
-            requestAnimationFrame(() => searchRef.current?.focus());
-          }
         }}
         placeholder="Search"
         placeholderTextColor={theme.textSecondary}
@@ -342,7 +337,10 @@ export function ConversationListPane({
           keyExtractor={(chat) => chat.guid}
           maintainVisibleContentPosition={{ disabled: false }}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          // Native-only: RNW's on-drag treats ANY scroll event as a drag and
+          // BLURS the focused input — our scroll-to-top on keystroke was
+          // killing search focus (the caught-in-the-act bug).
+          keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           viewabilityConfig={{ itemVisiblePercentThreshold: 100 }}
           onViewableItemsChanged={({ viewableItems }) => {
             const indices = viewableItems
