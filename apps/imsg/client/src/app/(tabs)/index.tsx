@@ -8,7 +8,7 @@ import { ConversationListPane } from "@/components/conversation-list-pane";
 import { EmptyState } from "@/components/empty-state";
 import { NewChatContent } from "@/components/new-chat-content";
 import { PersonContent } from "@/components/person-content";
-import { SearchContent } from "@/components/search-content";
+import { CommandPalette } from "@/components/command-palette";
 import { ThreadView } from "@/components/thread-view";
 import { ShadowPanel } from "@/components/shadow-panel";
 import { useAiStatus } from "@/hooks/use-ai";
@@ -55,7 +55,6 @@ export default function ChatListScreen() {
   const [state, setState] = useState<StateFilter>("unresponded");
   const [type, setType] = useState<TypeFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
@@ -282,7 +281,23 @@ export default function ChatListScreen() {
       <Modal visible={searchOpen} transparent animationType="fade" onRequestClose={() => setSearchOpen(false)}>
         <Pressable style={styles.overlayBackdrop} onPress={() => setSearchOpen(false)}>
           <Pressable style={[styles.overlayPanel, { backgroundColor: theme.background }]} onPress={() => undefined}>
-            <SearchContent initialQuery={searchQuery} onClose={() => setSearchOpen(false)} />
+            <CommandPalette
+              chats={allChats}
+              onClose={() => setSearchOpen(false)}
+              onOpenChat={openChat}
+              // Lens application follows badge semantics: exit search first,
+              // then apply the picked dimension.
+              onApplyState={(value) => {
+                getListAdapter()?.clearSearch();
+                setState(value);
+              }}
+              onApplyType={(value) => {
+                getListAdapter()?.clearSearch();
+                setType(value);
+              }}
+              onNewMessage={() => setNewChatOpen(true)}
+              onShowHelp={() => setHelpOpen(true)}
+            />
           </Pressable>
         </Pressable>
       </Modal>
@@ -357,8 +372,14 @@ export default function ChatListScreen() {
               address={rightPane.target.address}
               name={rightPane.target.name}
               showHeader
-              backLabel="Details"
-              onBack={() => setRightPane({ mode: "details", guid: rightPane.target.backGuid })}
+              // Palette-opened cards have no originating conversation to go
+              // back to; the header just offers close in that case.
+              backLabel={rightPane.target.backGuid ? "Details" : undefined}
+              onBack={
+                rightPane.target.backGuid
+                  ? () => setRightPane({ mode: "details", guid: rightPane.target.backGuid })
+                  : undefined
+              }
             />
           )}
         </View>
