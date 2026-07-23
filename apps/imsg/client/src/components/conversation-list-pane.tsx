@@ -1,16 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateCounts } from "@shared/types";
 import { useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 
 import { ChatRow } from "./chat-row";
@@ -19,7 +11,11 @@ import { NavSwitcher } from "./nav-switcher";
 import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
+import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
+import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
+import { SuggestionSettingsButton } from "./sidebar/suggestion-settings-button";
+import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
 import { useConversationListKeyboard } from "./conversations/use-conversation-list-keyboard";
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
@@ -27,9 +23,6 @@ import { useConversationSearch } from "./conversations/use-conversation-search";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
-import { useAiStatus } from "@/hooks/use-ai";
-import { useActionSheet } from "@/lib/action-sheet";
-import { setSuggestionMode, useSuggestionMode, type SuggestionMode } from "@/lib/settings";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
@@ -68,28 +61,12 @@ export function ConversationListPane({
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const { openMenu } = useChatActions();
-  const showSheet = useActionSheet();
-  const aiStatus = useAiStatus();
-  const suggestionMode = useSuggestionMode();
   const iosMobile = Platform.OS === "ios" && !wide;
   const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
   const topBarH = SIDEBAR_CHROME_HEIGHT;
   const filterBtnRef = useRef<View>(null);
-
-  // Frosted-glass top bar: content scrolls behind it at ~10% with a blur,
-  // instead of a hard gradient fade. Web-only backdrop-filter; solid elsewhere.
-  const glassStyle =
-    Platform.OS === "web"
-      ? ({
-          backgroundColor: `${theme.background}E6`,
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderBottomColor: theme.divider,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-        } as object)
-      : { backgroundColor: theme.background };
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   const openFilters = (): void => {
@@ -101,30 +78,6 @@ export function ConversationListPane({
     } else {
       setFilterAnchor(null);
       setFilterOpen(true);
-    }
-  };
-  const aiBtnRef = useRef<View>(null);
-  const openSuggestionSettings = (): void => {
-    const options: Array<{ label: string; mode: SuggestionMode }> = [
-      { label: "Off", mode: "off" },
-      { label: "On demand", mode: "on-demand" },
-      { label: "Automatic", mode: "auto" },
-    ];
-    const show = (anchor?: { x: number; y: number }) =>
-      showSheet({
-        title: "Reply suggestions",
-        actions: options.map((o) => ({
-          // A leading check marks the active mode; the sheet has no selected state.
-          label: `${suggestionMode === o.mode ? "✓  " : "    "}${o.label}`,
-          onPress: () => setSuggestionMode(o.mode),
-        })),
-        anchor,
-      });
-    // Desktop: popover mounted under the button; mobile keeps the sheet.
-    if (wide && aiBtnRef.current) {
-      aiBtnRef.current.measureInWindow((x, y, _w, h) => show({ x, y: y + h + 4 }));
-    } else {
-      show();
     }
   };
   // Search is a MODE, not a compound filter: typing searches the FULL universe
@@ -170,20 +123,39 @@ export function ConversationListPane({
     />
   );
 
+  const chrome = (
+    <SidebarChrome
+      leading={wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
+      actions={
+        <>
+          <SuggestionSettingsButton wide={wide} />
+          <Pressable
+            ref={filterBtnRef}
+            accessibilityRole="button"
+            accessibilityLabel="Filter conversations"
+            onPress={openFilters}
+            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+          >
+            <Ionicons name="options-outline" size={21} color={theme.accent} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New message"
+            onPress={onNewMessage}
+            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+          >
+            <Ionicons name="create-outline" size={23} color={theme.accent} />
+          </Pressable>
+        </>
+      }
+    />
+  );
+
   return (
-    <SafeAreaView
-      style={[
-        styles.pane,
-        wide && styles.paneWide,
-        wide && { borderRightColor: theme.divider },
-        { backgroundColor: theme.background },
-      ]}
-      edges={["top"]}
-    >
+    <SidebarFrame chrome={chrome} thumb={<SyntheticScrollThumb state={viewport.thumb} />}>
       {/* Everything scrolls together — search, filters, and priority shelf ride
           along as the list's header, passing behind the glass top bar. */}
-      <View style={styles.listWrap}>
-        <FlashList
+      <FlashList
           ref={viewport.listRef}
           data={model.listChats}
           keyExtractor={(chat) => chat.guid}
@@ -249,55 +221,6 @@ export function ConversationListPane({
             />
           )}
         />
-        {viewport.thumb.visible && (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.scrollThumb,
-              {
-                top: viewport.thumb.top,
-                height: viewport.thumb.height,
-                transform: [{ translateY: viewport.thumb.translateY }],
-              },
-            ]}
-          />
-        )}
-        {/* Frosted top bar — floats over the scroll, the only fixed chrome. */}
-        <View style={[styles.topBar, glassStyle]}>
-          {wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
-          <View style={styles.titleActions}>
-            {aiStatus?.suggestions && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Suggestion settings"
-                ref={aiBtnRef}
-                onPress={openSuggestionSettings}
-                style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-              >
-                <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
-              </Pressable>
-            )}
-            <Pressable
-              ref={filterBtnRef}
-              accessibilityRole="button"
-              accessibilityLabel="Filter conversations"
-              onPress={openFilters}
-              style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-            >
-              <Ionicons name="options-outline" size={21} color={theme.accent} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="New message"
-              onPress={onNewMessage}
-              style={({ pressed }) => [styles.titleButton, pressed && { opacity: 0.55 }]}
-            >
-              <Ionicons name="create-outline" size={23} color={theme.accent} />
-            </Pressable>
-          </View>
-        </View>
-      </View>
-
       <ConversationFiltersModal
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
@@ -306,64 +229,16 @@ export function ConversationListPane({
         counts={counts}
         onFiltersChange={onFiltersChange}
       />
-    </SafeAreaView>
+    </SidebarFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  pane: {
-    flex: 1,
-  },
-  paneWide: {
-    // Fills its floating card in the desktop split; the card owns width/edges.
-    flex: 1,
-  },
-  topBar: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    height: 58,
-    justifyContent: "space-between",
-    left: 0,
-    paddingHorizontal: 16,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 10,
-  },
   navInline: {
     flex: 1,
     marginBottom: 0,
     marginHorizontal: 0,
     marginTop: 0,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: -1.1,
-    paddingLeft: 6,
-  },
-  titleActions: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  titleButton: {
-    alignItems: "center",
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  listWrap: {
-    flex: 1,
-    position: "relative",
-  },
-  scrollThumb: {
-    position: "absolute",
-    right: 2,
-    width: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(140,140,150,0.5)",
-    zIndex: 5,
   },
   sectionHeading: {
     alignItems: "baseline",
@@ -381,10 +256,6 @@ const styles = StyleSheet.create({
   sectionCount: {
     fontSize: 14,
     fontWeight: "500",
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 88,
   },
   empty: {
     alignItems: "center",
