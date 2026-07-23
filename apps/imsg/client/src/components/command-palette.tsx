@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { api } from "@/lib/api";
@@ -97,7 +97,14 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0);
   useEffect(() => {
     setSelectedIndex(0);
-  }, [sections]);
+  }, [query]);
+  // Live data churn (SSE chat refreshes) rebuilds sections constantly; keep
+  // the cursor where it is and only clamp if the list shrank under it.
+  useEffect(() => {
+    if (flat.length > 0 && selectedIndex > flat.length - 1) {
+      setSelectedIndex(flat.length - 1);
+    }
+  }, [flat.length, selectedIndex]);
 
   const execute = (item: PaletteItem): void => {
     onClose();
@@ -171,7 +178,7 @@ export function CommandPalette({
   const scrollY = useRef(0);
   const viewportH = useRef(0);
   useEffect(() => {
-    const item = flat[selectedIndex];
+    const item = flatRef.current[selectedIndex];
     if (!item) return;
     const frame = rowFrames.current.get(item.key);
     if (!frame || viewportH.current <= 0) return;
@@ -185,7 +192,9 @@ export function CommandPalette({
         animated: false,
       });
     }
-  }, [selectedIndex, flat]);
+    // Cursor moves only — data churn must never trigger a programmatic scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIndex]);
 
   let flatIndex = -1;
 
@@ -225,7 +234,7 @@ export function CommandPalette({
           </Text>
         )}
         {sections.map((section) => (
-          <View key={section.title}>
+          <Fragment key={section.title}>
             <Text style={[styles.sectionHeader, { color: theme.textSecondary }]}>{section.title}</Text>
             {section.items.map((item) => {
               flatIndex += 1;
@@ -251,7 +260,7 @@ export function CommandPalette({
                 </Pressable>
               );
             })}
-          </View>
+          </Fragment>
         ))}
       </ScrollView>
     </View>
