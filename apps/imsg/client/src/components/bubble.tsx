@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +20,38 @@ const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons
   poll: { icon: "bar-chart-outline", label: "Poll" },
   unknown: { icon: "cube-outline", label: "App Message" },
 };
+
+const URL_IN_TEXT = /\b(?:https?:\/\/|www\.)\S+/gi;
+
+/** Splits text so URLs render as tappable, underlined links (kept inline). */
+function linkifyText(text: string, color: string): ReactNode {
+  URL_IN_TEXT.lastIndex = 0;
+  if (!URL_IN_TEXT.test(text)) return text;
+  URL_IN_TEXT.lastIndex = 0;
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (let match = URL_IN_TEXT.exec(text); match; match = URL_IN_TEXT.exec(text)) {
+    // Trailing punctuation belongs to the sentence, not the URL.
+    const raw = match[0].replace(/[.,;:!?)\]>'"]+$/, "");
+    if (raw.length === 0) continue;
+    const start = match.index;
+    if (start > cursor) parts.push(text.slice(cursor, start));
+    const href = raw.startsWith("http") ? raw : `https://${raw}`;
+    parts.push(
+      <Text
+        key={`${start}-${raw}`}
+        style={{ color, textDecorationLine: "underline" }}
+        onPress={() => void Linking.openURL(href)}
+        suppressHighlighting
+      >
+        {raw}
+      </Text>,
+    );
+    cursor = start + raw.length;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
 
 /** Clean iMessage-style bubble tail via SVG — hugs the bottom outer corner. */
 function BubbleTail({ color, mine }: { color: string; mine: boolean }) {
@@ -251,7 +283,7 @@ export const Bubble = memo(function Bubble({
                         : {}),
                     }}
                   >
-                    {message.text}
+                    {linkifyText(message.text, mine ? "#fff" : theme.accent)}
                   </Text>
                 )}
                 {hasTail && <BubbleTail color={mine ? mineColor : theme.bubbleTheirs} mine={mine} />}
