@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import type { ScheduledMessage } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
+import { Radii, Type } from "@/constants/theme";
 
 function whenLabel(ms: number): string {
   const d = new Date(ms);
@@ -49,7 +50,7 @@ export default function ScheduledScreen() {
               <Text numberOfLines={2} style={{ color: theme.text, fontSize: 14, marginTop: 2 }}>
                 {item.text}
               </Text>
-              <Text style={{ color: "#0A84FF", fontSize: 13, marginTop: 4 }}>{whenLabel(item.sendAt)}</Text>
+              <Text style={{ color: theme.accent, fontSize: Type.secondary, marginTop: 4 }}>{whenLabel(item.sendAt)}</Text>
             </View>
             <Pressable onPress={() => cancel(item.id)} hitSlop={8}>
               <Ionicons name="close-circle" size={24} color={theme.textSecondary} />
@@ -66,7 +67,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderRadius: 12,
+    borderRadius: Radii.input,
     padding: 12,
   },
 });

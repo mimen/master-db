@@ -83,6 +83,7 @@ export default function ChatScreen() {
     targetDate?: string;
   }>();
   const headerHeight = useHeaderHeight();
+  const theme = useTheme();
   const isGroup = params.isGroup === "1" || params.guid.includes(";+;");
   const jumpTarget: JumpTarget | null =
     params.targetGuid && params.targetDate
@@ -105,13 +106,13 @@ export default function ChatScreen() {
           headerRight: () => (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 20, paddingHorizontal: 6 }}>
               <Pressable onPress={() => openThreadSearch()} hitSlop={8}>
-                <Ionicons name="search" size={22} color="#0A84FF" />
+                <Ionicons name="search" size={22} color={theme.accent} />
               </Pressable>
               <Pressable
                 onPress={() => router.push({ pathname: "/chat-info", params: { guid: params.guid } })}
                 hitSlop={8}
               >
-                <Ionicons name="information-circle-outline" size={26} color="#0A84FF" />
+                <Ionicons name="information-circle-outline" size={26} color={theme.accent} />
               </Pressable>
             </View>
           ),

@@ -5,6 +5,7 @@ import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { ContactsListPane } from "@/components/contacts-list-pane";
 import { PersonContent } from "@/components/person-content";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Radii } from "@/constants/theme";
 import { primaryHandle, type ContactListRow } from "@/lib/identity";
 
 export default function ContactsScreen() {
@@ -63,11 +64,12 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   card: {
-    borderRadius: 14,
+    borderRadius: Radii.card,
+    // Top-lit edge highlight, not a theme color — see app/(tabs)/index.tsx.
     borderTopColor: "rgba(255,255,255,0.14)",
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.32,
     shadowRadius: 22,

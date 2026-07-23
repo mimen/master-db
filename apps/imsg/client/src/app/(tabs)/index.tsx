@@ -15,6 +15,7 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
 import { archiveChat, markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import {
@@ -383,11 +384,13 @@ const styles = StyleSheet.create({
   },
   // Floating "3D" panels: elevated ground, rounded, top-lit border + drop shadow.
   card: {
-    borderRadius: 14,
+    borderRadius: Radii.card,
     borderWidth: StyleSheet.hairlineWidth,
+    // Top-lit edge highlight, not a theme color — same effect works on both
+    // schemes' dark "desk" backdrop.
     borderTopColor: "rgba(255,255,255,0.14)",
     overflow: "hidden",
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.32,
     shadowRadius: 22,
@@ -418,7 +421,7 @@ const styles = StyleSheet.create({
   },
   overlayBackdrop: {
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: Colors.light.backdrop,
     flex: 1,
     paddingTop: 90,
   },
@@ -428,14 +431,14 @@ const styles = StyleSheet.create({
     maxWidth: "90%",
     paddingHorizontal: 22,
     paddingVertical: 20,
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.35,
     shadowRadius: 40,
     width: 360,
   },
   helpTitle: {
-    fontSize: 17,
+    fontSize: Type.title,
     fontWeight: "700",
     marginBottom: 14,
   },
@@ -471,7 +474,7 @@ const styles = StyleSheet.create({
     maxHeight: "75%",
     maxWidth: "90%",
     overflow: "hidden",
-    shadowColor: "#000",
+    ...CardShadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.35,
     shadowRadius: 40,
