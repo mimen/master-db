@@ -34,6 +34,11 @@ export type IdentityRow = {
   chat_count: number;
 };
 
+/** The three priority levels a person can be marked with — see
+ * convex/schema/identity/people.ts's docstring. `undefined`/`null` means
+ * unset, deliberately distinct from "normal". */
+export type Priority = "high" | "normal" | "low";
+
 export type Person = {
   _id: string;
   display_name?: string;
@@ -46,6 +51,11 @@ export type Person = {
   // Convex-native — no source (Apple/Airtable) has an organization field;
   // only a manual edit here ever sets it.
   organization?: string;
+  // Private CRM layer (favorites/priority/tags) — app-native, exists only
+  // inside imsg, never written to Apple or Airtable. See
+  // convex/identity/crm.ts and convex/schema/identity/person_tags.ts.
+  is_favorite?: boolean;
+  priority?: Priority;
   normalized_phones: string[];
   normalized_emails: string[];
   identity_count: number;
@@ -56,7 +66,7 @@ export type Person = {
 };
 
 export type WhoIsResult =
-  | { found: true; normalized: string; person: Person; identities: IdentityRow[] }
+  | { found: true; normalized: string; person: Person; tags: string[]; identities: IdentityRow[] }
   | { found: false; normalized: string };
 
 export type ContactListRow = {
@@ -66,6 +76,9 @@ export type ContactListRow = {
   last_name?: string;
   nickname?: string;
   organization?: string;
+  is_favorite?: boolean;
+  priority?: Priority;
+  tags?: string[];
   normalized_phones: string[];
   normalized_emails: string[];
   airtable_human_id?: string;
@@ -136,6 +149,39 @@ const renamePersonRef = makeFunctionReference<
   null
 >("identity/mutations:renamePerson");
 
+// Private CRM layer (convex/identity/crm.ts) — favorites, priority, tags.
+// Convex-native, never synced to Apple/Airtable.
+
+const setFavoriteRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: string; is_favorite: boolean },
+  null
+>("identity/crm:setFavorite");
+
+const setPriorityRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: string; priority?: Priority | null },
+  null
+>("identity/crm:setPriority");
+
+const addTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: string; tag: string },
+  null
+>("identity/crm:addTag");
+
+const removeTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: string; tag: string },
+  null
+>("identity/crm:removeTag");
+
+const listTagsRef = makeFunctionReference<
+  "query",
+  { key: string },
+  Array<{ tag: string; count: number }>
+>("identity/queries:listTags");
+
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
   return useQuery(whoIsRef, handle ? { key: IDENTITY_KEY, handle } : "skip");
 }
@@ -183,6 +229,30 @@ export function useRenamePerson() {
     nickname?: string;
     organization?: string;
   }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useSetFavorite() {
+  const mutate = useMutation(setFavoriteRef);
+  return (args: { personId: string; is_favorite: boolean }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useSetPriority() {
+  const mutate = useMutation(setPriorityRef);
+  return (args: { personId: string; priority?: Priority | null }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useAddTag() {
+  const mutate = useMutation(addTagRef);
+  return (args: { personId: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useRemoveTag() {
+  const mutate = useMutation(removeTagRef);
+  return (args: { personId: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useListTags(): Array<{ tag: string; count: number }> | undefined {
+  return useQuery(listTagsRef, { key: IDENTITY_KEY });
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */

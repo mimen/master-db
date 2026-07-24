@@ -18,6 +18,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar } from "./avatar";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
+import { FAVORITE_GOLD } from "./person-crm-section";
 import { NavSwitcher } from "./nav-switcher";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
@@ -156,6 +157,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           <PersonAvatar address={primaryHandle(item.person) ?? null} name={item.person.display_name} size={36} />
         }
         title={item.title}
+        trailing={
+          item.person.is_favorite ? (
+            <Ionicons name="star" size={15} color={FAVORITE_GOLD} accessibilityLabel="Favorite" />
+          ) : undefined
+        }
       />
     );
   };

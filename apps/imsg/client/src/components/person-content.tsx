@@ -21,6 +21,7 @@ import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
 import { CenteredSpinner } from "./empty-state";
 import { PersonConversationsList } from "./person-conversations-list";
+import { PersonCrmSection } from "./person-crm-section";
 import { PersonNetworksList } from "./person-networks-list";
 
 export interface PersonContentProps {
@@ -163,7 +164,7 @@ export function PersonContent({
     );
   }
 
-  const { person, identities } = result;
+  const { person, identities, tags } = result;
   const airtableId = person.airtable_human_id;
   const autoFromParts = [person.first_name, person.last_name].filter(Boolean).join(" ");
   // Only pre-fill the override box when the current display_name isn't just
@@ -281,6 +282,13 @@ export function PersonContent({
             <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>Call</Text>
           </Pressable>
         </View>
+
+        <PersonCrmSection
+          personId={person._id}
+          isFavorite={person.is_favorite ?? false}
+          priority={person.priority}
+          tags={tags}
+        />
 
         <PersonNetworksList identities={identities} airtableId={airtableId} />
         <PersonConversationsList chats={sortedChats} onOpenChat={openChat} />
