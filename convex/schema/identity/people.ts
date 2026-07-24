@@ -17,10 +17,27 @@ import { v } from "convex/values";
  */
 export const people = defineTable({
   display_name: v.optional(v.string()),
-  // When true, a human explicitly set this name (via "Add Contact" or an
-  // in-app rename) — recomputePersonAggregates must not overwrite it with
-  // whatever the longest source-derived identity name happens to be on the
-  // next Apple/Airtable/Beeper sync.
+  // Aggregated structured name parts — copied from a single "primary name
+  // identity" chosen by source priority (apple_contact > airtable_human >
+  // manual > beeper/other; see recomputePersonAggregates), or set directly by
+  // a manual edit (createPerson/renamePerson). Kept internally consistent
+  // with display_name: both come from the same identity/edit, never mixed
+  // across sources.
+  first_name: v.optional(v.string()),
+  last_name: v.optional(v.string()),
+  nickname: v.optional(v.string()),
+  // Convex-native — no source has an organization field (Apple doesn't
+  // expose one via BlueBubbles; Airtable Humans has no equivalent column).
+  // Convex IS the system of record for this field: only manual edits
+  // (createPerson/renamePerson) ever write it, and recomputePersonAggregates
+  // must never touch it, syncs included.
+  organization: v.optional(v.string()),
+  // When true, a human explicitly set this person's name (via "Add Contact"
+  // or an in-app rename) — guards ALL name fields (display_name, first_name,
+  // last_name, nickname) together, not just display_name. Once set,
+  // recomputePersonAggregates must not overwrite any of the four with
+  // whatever the primary source-derived identity carries on the next
+  // Apple/Airtable/Beeper sync.
   display_name_locked: v.optional(v.boolean()),
 
   // Denormalised join keys, for fast "who owns this number" lookups without

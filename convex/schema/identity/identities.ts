@@ -23,8 +23,23 @@ export const identities = defineTable({
 
   network: v.optional(v.string()), // beeper network where first seen
   display_name: v.optional(v.string()),
+  // Structured name parts, as this SOURCE presents them (not aggregated —
+  // recomputePersonAggregates picks one identity's parts per person, see
+  // internal.ts). Only apple_contact and airtable_human populate these today;
+  // manual/beeper identities leave them unset. Apple's own displayName wins
+  // display_name (see imsg's toContactCard), so first_name/last_name here can
+  // legitimately disagree with display_name's wording — that's expected.
+  first_name: v.optional(v.string()),
+  last_name: v.optional(v.string()),
+  // Apple-only today (Airtable Humans has no nickname column).
+  nickname: v.optional(v.string()),
   phone_number: v.optional(v.string()), // if the network exposed one separately
   img_url: v.optional(v.string()),
+  // The source record's own id (e.g. Apple's "UUID:ABPerson" contact id).
+  // Retained so a future Apple write-back (Phase 3b) can target the right
+  // source record — Airtable's equivalent is already stored as
+  // people.airtable_human_id. Unset for sources with no addressable record id.
+  source_contact_id: v.optional(v.string()),
 
   message_count: v.number(),
   chat_count: v.number(),
