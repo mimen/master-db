@@ -156,7 +156,9 @@ function PaletteRoot({
         router.navigate(id.value === "contacts" ? "/contacts" : "/");
         return;
       case "action":
-        return id.value === "new-message" ? onCompose() : onShowHelp();
+        if (id.value === "new-message") return onCompose();
+        if (id.value === "scheduled") return void router.push("/scheduled");
+        return onShowHelp();
     }
   };
 

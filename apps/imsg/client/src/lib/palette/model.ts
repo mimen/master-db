@@ -11,7 +11,7 @@ export type PaletteCommandId =
   | { kind: "state"; value: "all" | "unread" | "unresponded" | "waiting" | "archived" }
   | { kind: "type"; value: "dm" | "group" | "unknown" }
   | { kind: "tab"; value: "messages" | "contacts" }
-  | { kind: "action"; value: "new-message" | "shortcuts" };
+  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" };
 
 export interface PaletteCommand {
   id: PaletteCommandId;
@@ -34,6 +34,7 @@ export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   { id: { kind: "tab", value: "messages" }, title: "Go to Messages", keywords: ["tab", "inbox"], hint: "Navigate" },
   { id: { kind: "tab", value: "contacts" }, title: "Go to Contacts", keywords: ["tab", "people"], hint: "Navigate" },
   { id: { kind: "action", value: "new-message" }, title: "New Message", keywords: ["compose", "start", "chat"], hint: "Action" },
+  { id: { kind: "action", value: "scheduled" }, title: "Scheduled Messages", keywords: ["schedule", "later", "send later", "queue", "pending"], hint: "Action" },
   { id: { kind: "action", value: "shortcuts" }, title: "Keyboard Shortcuts", keywords: ["help", "keys"], hint: "Action" },
 ] as const;
 
