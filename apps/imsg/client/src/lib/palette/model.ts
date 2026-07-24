@@ -137,7 +137,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
     input.chats
       .filter((chat) => !chat.isGroup)
       .map((chat) => ({
-        score: Math.max(matchScore(needle, chat.displayName), bestParticipantMatch(needle, chat).score),
+        score: Math.max(matchScore(needle, chat.displayName), bestParticipantMatch(needle, chat).score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t))),
         item: { kind: "conversation", key: `chat-${chat.guid}`, chat } satisfies PaletteItem,
       })),
     CAPS.conversations,
@@ -151,7 +151,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
         const member = bestParticipantMatch(needle, chat);
         return {
           // A group NAME hit outranks a member hit at equal match quality.
-          score: Math.max(nameScore * 2, member.score),
+          score: Math.max(nameScore * 2, member.score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t))),
           item: {
             kind: "group",
             key: `group-${chat.guid}`,

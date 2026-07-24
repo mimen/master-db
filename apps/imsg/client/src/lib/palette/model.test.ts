@@ -125,4 +125,51 @@ describe("buildPaletteSections", () => {
 
     expect(sections.find((s) => s.title === "Conversations")?.items.length).toBe(1);
   });
+
+  test("a renamed DM surfaces via searchNames when neither displayName nor participant.name match", () => {
+    // The Jimmy Sciandra scenario: renamed in-app to "Uncle Jimmy", but the
+    // Identity Mirror's full term list (populated onto the chat's
+    // searchNames by map.ts) still carries the old first/last name.
+    const renamed = chat({
+      guid: "jimmy",
+      displayName: "Uncle Jimmy",
+      participants: [{ address: "+16266522285", name: "Uncle Jimmy" }],
+      searchNames: ["uncle jimmy", "jimmy", "sciandra", "jimmy sciandra"],
+    });
+    const sections = buildPaletteSections({
+      query: "sciandra",
+      chats: [renamed],
+      messages: [],
+      contacts: [],
+    });
+
+    const conversations = sections.find((s) => s.title === "Conversations")?.items ?? [];
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0]).toMatchObject({ kind: "conversation", chat: { guid: "jimmy" } });
+  });
+
+  test("a renamed group surfaces via searchNames when the group name doesn't match", () => {
+    const renamedGroup = chat({
+      guid: "jimmy-grp",
+      displayName: "Family Chat",
+      isGroup: true,
+      participants: [{ address: "+16266522285", name: "Uncle Jimmy" }],
+      searchNames: ["uncle jimmy", "jimmy", "sciandra", "jimmy sciandra"],
+    });
+    const sections = buildPaletteSections({
+      query: "sciandra",
+      chats: [renamedGroup],
+      messages: [],
+      contacts: [],
+    });
+
+    const groups = sections.find((s) => s.title === "Groups")?.items ?? [];
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ kind: "group", chat: { guid: "jimmy-grp" } });
+  });
+
+  test("no searchNames on a chat doesn't throw and doesn't spuriously match", () => {
+    const sections = buildPaletteSections({ query: "sciandra", chats: [tysonDm], messages: [], contacts: [] });
+    expect(sections.find((s) => s.title === "Conversations")).toBeUndefined();
+  });
 });

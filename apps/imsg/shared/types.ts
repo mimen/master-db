@@ -108,6 +108,14 @@ export interface ChatSummary {
   /** Epoch ms of the oldest genuine unread inbound message, or null when unavailable. */
   firstUnreadAt?: number | null;
   flags: ChatFlags;
+  /**
+   * Deduped, lowercased name terms (display, first, last, nickname,
+   * organization…) drawn from every participant's Identity Mirror record —
+   * lets the ⌘K palette match this conversation by ANY name a participant
+   * has ever gone by, not just displayName/participant.name. [] when the
+   * mirror has nothing for these participants.
+   */
+  searchNames?: string[];
 }
 
 export type StateCounts = Record<StateFilter, number>;

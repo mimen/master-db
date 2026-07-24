@@ -277,6 +277,7 @@ export function mapChat(
     address: p.address,
     name: contacts.lookup(p.address),
   }));
+  const searchNames = [...new Set(participants.flatMap((p) => contacts.searchTerms(p.address)))];
   return {
     guid: chat.guid,
     displayName: chatDisplayName(chat, contacts),
@@ -289,6 +290,7 @@ export function mapChat(
     unreadCount,
     firstUnreadAt,
     flags: computeFlags(state, flagInput, unreadCount),
+    searchNames,
   };
 }
 
