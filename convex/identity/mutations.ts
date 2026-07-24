@@ -7,6 +7,22 @@ import { recomputePersonAggregates } from "./internal";
 import { requireIdentityKey } from "./key";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
+/** Trims a string arg; an all-whitespace or empty result becomes `undefined`
+ * so it reads (and patches) the same as "not provided". */
+function trimOrUndefined(s: string | undefined): string | undefined {
+  const trimmed = s?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** "First Last" from whichever parts are present, or `undefined` if neither
+ * is — the fallback display_name for a manual edit that sets first/last but
+ * no explicit override. Shared by createPerson and renamePerson so both
+ * derive the same way. */
+function deriveDisplayName(firstName: string | undefined, lastName: string | undefined): string | undefined {
+  const parts = [firstName, lastName].filter((p): p is string => Boolean(p));
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
 /**
  * The v1 "Add Contact" action for an unknown handle in imsg: creates a
  * Convex-only person for a raw phone/email with no existing identity match.
@@ -25,14 +41,37 @@ import { normalizeEmail, normalizePhone } from "./normalize";
  *    could miss one that already has a person_id (duplicate person) or treat
  *    unresolved orphan rows as "no match" when they should be linked to the
  *    person we're about to create.
+ *
+ * first_name/last_name/nickname/organization are additive, optional inputs
+ * from the person-content edit form (Phase 1 structured names). Providing
+ * any name part (or an explicit display_name override) is what triggers the
+ * lock — same "typed on purpose, wins" semantics as before, just widened
+ * from one field to four. `organization` is independent of the name lock
+ * (Convex-native, no source ever sets it) and is applied whenever the arg
+ * key is present, even alone.
  */
 export const createPerson = mutation({
-  args: { key: v.string(), handle: v.string(), display_name: v.optional(v.string()) },
-  handler: async (ctx, { key, handle, display_name }) => {
+  args: {
+    key: v.string(),
+    handle: v.string(),
+    display_name: v.optional(v.string()),
+    first_name: v.optional(v.string()),
+    last_name: v.optional(v.string()),
+    nickname: v.optional(v.string()),
+    organization: v.optional(v.string()),
+  },
+  handler: async (ctx, { key, handle, display_name, first_name, last_name, nickname, organization }) => {
     requireIdentityKey(key);
     const trimmed = handle.trim();
     const normalized = normalizePhone(trimmed) || normalizeEmail(trimmed) || trimmed;
     const kind: "phone" | "email" = normalizePhone(trimmed) ? "phone" : "email";
+
+    const trimmedFirst = trimOrUndefined(first_name);
+    const trimmedLast = trimOrUndefined(last_name);
+    const trimmedNickname = trimOrUndefined(nickname);
+    const trimmedOrg = trimOrUndefined(organization);
+    const effectiveDisplay = trimOrUndefined(display_name) ?? deriveDisplayName(trimmedFirst, trimmedLast);
+    const hasNameInput = Boolean(effectiveDisplay || trimmedFirst || trimmedLast || trimmedNickname);
 
     const rows = await ctx.db
       .query("identities")
@@ -50,12 +89,21 @@ export const createPerson = mutation({
     }
 
     if (dedupePersonId) {
-      if (display_name) {
-        // Deliberate rename semantics: the user typed this name on purpose,
-        // so it wins over whatever the person is currently named.
+      // Deliberate rename semantics: the user typed this on purpose, so it
+      // wins over whatever the person is currently named/organized as. Only
+      // fields the caller actually passed are touched — e.g. a dedupe call
+      // with just a typed display_name must not blank out first/last/
+      // nickname the person already had from a prior sync or edit.
+      const hasAnyEdit =
+        hasNameInput || first_name !== undefined || last_name !== undefined || nickname !== undefined ||
+        organization !== undefined;
+      if (hasAnyEdit) {
         await ctx.db.patch(dedupePersonId, {
-          display_name,
-          display_name_locked: true,
+          ...(hasNameInput ? { display_name: effectiveDisplay, display_name_locked: true } : {}),
+          ...(first_name !== undefined ? { first_name: trimmedFirst } : {}),
+          ...(last_name !== undefined ? { last_name: trimmedLast } : {}),
+          ...(nickname !== undefined ? { nickname: trimmedNickname } : {}),
+          ...(organization !== undefined ? { organization: trimmedOrg } : {}),
           updated_at: new Date().toISOString(),
         });
       }
@@ -69,8 +117,12 @@ export const createPerson = mutation({
     // sync's cross-source match.
     const now = new Date().toISOString();
     const personId = await ctx.db.insert("people", {
-      display_name,
-      display_name_locked: Boolean(display_name),
+      display_name: effectiveDisplay,
+      display_name_locked: hasNameInput,
+      first_name: trimmedFirst,
+      last_name: trimmedLast,
+      nickname: trimmedNickname,
+      organization: trimmedOrg,
       normalized_phones: [],
       normalized_emails: [],
       identity_count: 0,
@@ -93,7 +145,10 @@ export const createPerson = mutation({
         value: trimmed,
         normalized,
         network: undefined,
-        display_name,
+        display_name: effectiveDisplay,
+        first_name: trimmedFirst,
+        last_name: trimmedLast,
+        nickname: trimmedNickname,
         message_count: 0,
         chat_count: 0,
         is_self: false,
@@ -106,7 +161,7 @@ export const createPerson = mutation({
     }
 
     // Recompute rather than hand-set the aggregates: display_name_locked
-    // (set above when display_name was provided) protects a typed name from
+    // (set above when name input was provided) protects the typed name from
     // being overwritten; when no name was provided, this derives the best
     // name from whatever identities just got linked (including orphan rows).
     await recomputePersonAggregates(ctx, personId);
@@ -154,23 +209,61 @@ export const addPersonFromAirtable = mutation({
 });
 
 /**
- * Rename any existing person — the general in-app "edit contact" affordance.
- * Sets display_name_locked so the next Apple/Airtable/Beeper sync doesn't
- * silently revert it back to the longest source-derived identity name (see
- * recomputePersonAggregates in convex/identity/internal.ts).
+ * Rename/edit any existing person — the general in-app "edit contact"
+ * affordance (person-content.tsx's First/Last/Nickname/Organization/
+ * Display-override form). Sets display_name_locked so the next
+ * Apple/Airtable/Beeper sync doesn't silently revert the name back to
+ * whatever the primary source-derived identity carries (see
+ * recomputePersonAggregates in convex/identity/internal.ts) — the lock now
+ * guards all four name fields together, not just display_name.
+ *
+ * `display_name` stays the original required wire arg for backward
+ * compatibility with existing callers that only ever set a display name; an
+ * explicitly-passed value (even blank) is validated exactly as before ("Name
+ * can't be empty"). Passed AS `undefined` (the key omitted) instead, it's no
+ * longer an override — it derives from first_name + last_name, or if
+ * neither is provided either, keeps the person's current display_name.
+ * first_name/last_name/nickname/organization are otherwise independent,
+ * partial-update fields: omitting a key leaves that field untouched; passing
+ * one (even as an empty string) sets or clears it.
  */
 export const renamePerson = mutation({
-  args: { key: v.string(), personId: v.id("people"), display_name: v.string() },
-  handler: async (ctx, { key, personId, display_name }) => {
+  args: {
+    key: v.string(),
+    personId: v.id("people"),
+    display_name: v.optional(v.string()),
+    first_name: v.optional(v.string()),
+    last_name: v.optional(v.string()),
+    nickname: v.optional(v.string()),
+    organization: v.optional(v.string()),
+  },
+  handler: async (ctx, { key, personId, display_name, first_name, last_name, nickname, organization }) => {
     requireIdentityKey(key);
-    const trimmed = display_name.trim();
-    if (!trimmed) throw new Error("Name can't be empty");
     const person = await ctx.db.get(personId);
     if (!person) throw new Error("Person not found");
+
+    const trimmedFirst = trimOrUndefined(first_name);
+    const trimmedLast = trimOrUndefined(last_name);
+    const trimmedNickname = trimOrUndefined(nickname);
+    const trimmedOrg = trimOrUndefined(organization);
+
+    let nextDisplay: string | undefined;
+    if (display_name !== undefined) {
+      const trimmedDisplay = display_name.trim();
+      if (!trimmedDisplay) throw new Error("Name can't be empty");
+      nextDisplay = trimmedDisplay;
+    } else {
+      nextDisplay = deriveDisplayName(trimmedFirst, trimmedLast) ?? person.display_name;
+    }
+
     const now = new Date().toISOString();
     await ctx.db.patch(personId, {
-      display_name: trimmed,
+      display_name: nextDisplay,
       display_name_locked: true,
+      ...(first_name !== undefined ? { first_name: trimmedFirst } : {}),
+      ...(last_name !== undefined ? { last_name: trimmedLast } : {}),
+      ...(nickname !== undefined ? { nickname: trimmedNickname } : {}),
+      ...(organization !== undefined ? { organization: trimmedOrg } : {}),
       updated_at: now,
     });
   },
