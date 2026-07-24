@@ -44,4 +44,29 @@ describe("toContactCard", () => {
     const c: BBContact = { displayName: "Has Photo", avatar: "  base64data  " };
     expect(toContactCard(c)).not.toHaveProperty("img_url");
   });
+
+  test("passes through first_name/last_name/nickname/source_contact_id alongside the assembled display_name", () => {
+    const c: BBContact = {
+      id: "UUID-ABC:ABPerson",
+      displayName: "Chase P.",
+      firstName: "Chase",
+      lastName: "Petersen",
+      nickname: "Chasey",
+    };
+    const card = toContactCard(c);
+    expect(card.display_name).toBe("Chase P.");
+    expect(card.first_name).toBe("Chase");
+    expect(card.last_name).toBe("Petersen");
+    expect(card.nickname).toBe("Chasey");
+    expect(card.source_contact_id).toBe("UUID-ABC:ABPerson");
+  });
+
+  test("first_name/last_name/nickname/source_contact_id are undefined, not empty strings, when absent", () => {
+    const c: BBContact = { displayName: "No Structure" };
+    const card = toContactCard(c);
+    expect(card.first_name).toBeUndefined();
+    expect(card.last_name).toBeUndefined();
+    expect(card.nickname).toBeUndefined();
+    expect(card.source_contact_id).toBeUndefined();
+  });
 });

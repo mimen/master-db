@@ -95,6 +95,10 @@ export class IdentitySync {
  */
 export function toContactCard(c: BBContact): {
   display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  source_contact_id?: string;
   phones: string[];
   emails: string[];
 } {
@@ -102,6 +106,15 @@ export function toContactCard(c: BBContact): {
   const displayName = c.displayName?.trim() || c.nickname?.trim() || assembled || undefined;
   return {
     display_name: displayName,
+    // Structured parts, passed through losslessly alongside the assembled
+    // display_name above — see convex/identity/ingestContacts.ts's
+    // ContactCard. Unlike display_name (which prefers Apple's own
+    // displayName/nickname string), these are always the raw first/last
+    // fields, so the two can legitimately read differently.
+    first_name: c.firstName?.trim() || undefined,
+    last_name: c.lastName?.trim() || undefined,
+    nickname: c.nickname?.trim() || undefined,
+    source_contact_id: c.id || undefined,
     phones: (c.phoneNumbers ?? []).map((p) => p.address).filter(Boolean),
     emails: (c.emails ?? []).map((e) => e.address).filter(Boolean),
   };

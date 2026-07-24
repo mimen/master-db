@@ -73,6 +73,11 @@ export interface BBMessage {
 }
 
 export interface BBContact {
+  /** The contact's own record id, e.g. "UUID:ABPerson" for an Apple Contacts
+   * card. Retained (not just consumed) so the identity graph can target the
+   * right source record for a future Apple write-back — see
+   * convex/identity/ingestContacts.ts's source_contact_id. */
+  id?: string;
   phoneNumbers?: Array<{ address: string }>;
   emails?: Array<{ address: string }>;
   firstName?: string | null;
