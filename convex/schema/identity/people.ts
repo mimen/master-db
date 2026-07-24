@@ -56,6 +56,18 @@ export const people = defineTable({
   airtable_human_id: v.optional(v.string()),
   vault_entity: v.optional(v.string()),
 
+  // Private CRM layer — app-native, exists only inside imsg, syncs NOWHERE
+  // (never written to Apple or Airtable; see docs/plans/structured-names.html's
+  // field matrix, "favorite / priority" row). recomputePersonAggregates must
+  // never touch these — same guard as `organization` above.
+  is_favorite: v.optional(v.boolean()),
+  // Absent = unset, deliberately NOT "normal" — an unset priority means "no
+  // opinion recorded," distinct from a person explicitly marked normal
+  // priority (e.g. after being downgraded from "high"). Three levels only:
+  // finer gradations (P1-P4, numeric scores) aren't asked for by any surface
+  // yet and would need a real ranking UI to be worth the complexity.
+  priority: v.optional(v.union(v.literal("high"), v.literal("normal"), v.literal("low"))),
+
   auto_clustered: v.boolean(), // true = resolver-made, false = hand-curated
   merged_into: v.optional(v.id("people")), // tombstone if merged away
 
