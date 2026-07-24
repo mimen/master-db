@@ -25,6 +25,8 @@ type AirtableRecord = {
   id: string;
   fields: {
     Name?: string;
+    "First Name"?: string;
+    "Last Name"?: string;
     "Phone Number"?: string;
     "Email Address"?: string;
     "Email Address 2"?: string;
@@ -54,7 +56,7 @@ export const searchAirtableHumans = action({
       pageSize: "15",
       filterByFormula: formula,
     });
-    for (const f of ["Name", "Phone Number", "Email Address", "Email Address 2"]) {
+    for (const f of ["Name", "First Name", "Last Name", "Phone Number", "Email Address", "Email Address 2"]) {
       params.append("fields[]", f);
     }
 
@@ -69,6 +71,8 @@ export const searchAirtableHumans = action({
       .map((r) => ({
         record_id: r.id,
         display_name: r.fields.Name ?? "",
+        first_name: r.fields["First Name"],
+        last_name: r.fields["Last Name"],
         phone: r.fields["Phone Number"],
         email: r.fields["Email Address"] ?? r.fields["Email Address 2"],
       }))

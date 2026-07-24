@@ -68,6 +68,8 @@ export function useAirtableSearch(needle: string, onAdded: (personId: string, hu
       const result = await addFromAirtable({
         record_id: human.record_id,
         display_name: human.display_name,
+        first_name: human.first_name,
+        last_name: human.last_name,
         phone: human.phone,
         email: human.email,
       });

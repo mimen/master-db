@@ -60,7 +60,15 @@ export const createPersonRef = makeFunctionReference<
 
 export const addPersonFromAirtableRef = makeFunctionReference<
   "mutation",
-  { key: string; record_id: string; display_name?: string; phone?: string; email?: string },
+  {
+    key: string;
+    record_id: string;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    email?: string;
+  },
   { personId: Id<"people"> }
 >("identity/mutations:addPersonFromAirtable");
 

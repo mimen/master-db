@@ -183,16 +183,20 @@ export const addPersonFromAirtable = mutation({
     key: v.string(),
     record_id: v.string(),
     display_name: v.optional(v.string()),
+    first_name: v.optional(v.string()),
+    last_name: v.optional(v.string()),
     phone: v.optional(v.string()),
     email: v.optional(v.string()),
   },
-  handler: async (ctx, { key, record_id, display_name, phone, email }) => {
+  handler: async (ctx, { key, record_id, display_name, first_name, last_name, phone, email }) => {
     requireIdentityKey(key);
     const result = await ingestOneCard(
       ctx,
       "airtable_human",
       {
         display_name,
+        first_name,
+        last_name,
         phones: phone ? [phone] : [],
         emails: email ? [email] : [],
         airtable_record_id: record_id,

@@ -338,6 +338,22 @@ describe("addPersonFromAirtable", () => {
       t.mutation(addPersonFromAirtableRef, { key: TEST_KEY, record_id: "recNoHandles", display_name: "Nobody" }),
     ).rejects.toThrow("Can't add a contact with no phone or email");
   });
+
+  test("threads first_name/last_name onto the created person", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.mutation(addPersonFromAirtableRef, {
+      key: TEST_KEY,
+      record_id: "recStructured",
+      display_name: "Jamie Rivera",
+      first_name: "Jamie",
+      last_name: "Rivera",
+      phone: "6195551212",
+    });
+    const person = await t.run((ctx) => ctx.db.get(result.personId));
+    expect(person?.first_name).toBe("Jamie");
+    expect(person?.last_name).toBe("Rivera");
+    expect(person?.airtable_human_id).toBe("recStructured");
+  });
 });
 
 describe("renamePerson", () => {
