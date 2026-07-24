@@ -187,16 +187,82 @@ export const listIdentitiesPage = internalQuery({
 });
 
 /**
- * Recompute a person's denormalized aggregates (display_name, phones, emails,
- * counts) from the authoritative set: every identity currently pointing at
- * them. Shared by assignCluster (resolver-inferred grouping) and the
- * source-trusted ingest mutations (e.g. Apple Contacts) so both converge on
- * re-runs using the exact same merge rules.
+ * Source priority for picking a person's single "primary name identity" —
+ * lower ranks first. apple_contact wins because it's already the canonical
+ * name source elsewhere in the identity mirror hierarchy (see imsg's
+ * CONTEXT.md); airtable_human next; manual (an in-app "Add Contact" that
+ * created its own identity row) next; anything else (beeper's
+ * participant/sender sources, etc.) is last. Unlisted sources fall through
+ * to the default rank via the `?? 3` in sourceRank.
+ */
+const NAME_SOURCE_PRIORITY: Record<string, number> = {
+  apple_contact: 0,
+  airtable_human: 1,
+  manual: 2,
+};
+
+function sourceRank(source: string): number {
+  return NAME_SOURCE_PRIORITY[source] ?? 3;
+}
+
+/** The subset of an identity's fields the primary-name pick depends on —
+ * kept minimal (rather than the full Doc<"identities">) so the priority/
+ * tie-break rule is directly unit-testable with plain literal objects. */
+type NameIdentityFields = {
+  source: string;
+  display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+};
+
+function hasNameData(i: NameIdentityFields): boolean {
+  return Boolean(i.display_name || i.first_name || i.last_name || i.nickname);
+}
+
+/**
+ * Pick the one identity a person's display_name/first_name/last_name/nickname
+ * are all taken from, so those four fields never disagree by mixing sources
+ * (e.g. display_name from Apple, first_name from Airtable). Ranks by
+ * NAME_SOURCE_PRIORITY, but only among identities that actually carry some
+ * name data — a nameless identity (e.g. a fresh "manual" row from
+ * createPerson's orphan-linking path with no typed name) must not outrank a
+ * lower-priority identity that DOES have a name, or a person would go from
+ * named to unnamed just because a higher-priority-but-empty row got linked.
+ * Ties within the same rank fall back to the longest display_name, mirroring
+ * the old cross-identity "longest wins" heuristic.
  *
- * display_name is skipped when the person has display_name_locked set — a
- * human explicitly named them (via "Add Contact" or an in-app rename), and
- * the next sync re-deriving "longest name among identities" must not
- * silently revert that. Every other aggregate still recomputes normally.
+ * Generic over T (constrained to NameIdentityFields) so callers get back the
+ * SAME shape they passed in (a full Doc<"identities"> in production,
+ * unadorned test fixtures in unit tests) — exported for direct unit testing
+ * of the priority/tie-break rule in isolation, same rationale as
+ * resolve.ts's aggregateIdentityCandidates.
+ */
+export function pickPrimaryNameIdentity<T extends NameIdentityFields>(identities: readonly T[]): T | undefined {
+  const candidates = identities.filter(hasNameData);
+  if (candidates.length === 0) return undefined;
+  candidates.sort((a, b) => {
+    const rankDiff = sourceRank(a.source) - sourceRank(b.source);
+    if (rankDiff !== 0) return rankDiff;
+    return (b.display_name?.length ?? 0) - (a.display_name?.length ?? 0);
+  });
+  return candidates[0];
+}
+
+/**
+ * Recompute a person's denormalized aggregates (display_name, first_name,
+ * last_name, nickname, phones, emails, counts) from the authoritative set:
+ * every identity currently pointing at them. Shared by assignCluster
+ * (resolver-inferred grouping) and the source-trusted ingest mutations (e.g.
+ * Apple Contacts) so both converge on re-runs using the exact same merge
+ * rules.
+ *
+ * The four name fields are skipped (all together) when the person has
+ * display_name_locked set — a human explicitly named them (via "Add Contact"
+ * or an in-app rename), and the next sync re-deriving names from identities
+ * must not silently revert that. Every other aggregate still recomputes
+ * normally. `organization` is Convex-native (no source has one) and is never
+ * touched here — it simply isn't part of the patch.
  *
  * Skips the patch entirely when the computed aggregates match the current
  * doc — this runs on every ingested card in the ~1,510-card / 10-minute
@@ -219,22 +285,26 @@ export async function recomputePersonAggregates(
   const emails = new Set<string>();
   let messageCount = 0;
   let isSelf = false;
-  let bestName: string | undefined;
   for (const i of all) {
     if (i.normalized.includes("@")) emails.add(i.normalized);
     else if (i.normalized) phones.add(i.normalized);
     messageCount += i.message_count;
     isSelf = isSelf || i.is_self;
-    if (i.display_name && i.display_name.length > (bestName?.length ?? 0)) {
-      bestName = i.display_name;
-    }
   }
 
-  const nextDisplayName = person.display_name_locked ? person.display_name : bestName;
+  const primary = pickPrimaryNameIdentity(all);
+  const nextDisplayName = person.display_name_locked ? person.display_name : primary?.display_name;
+  const nextFirstName = person.display_name_locked ? person.first_name : primary?.first_name;
+  const nextLastName = person.display_name_locked ? person.last_name : primary?.last_name;
+  const nextNickname = person.display_name_locked ? person.nickname : primary?.nickname;
+
   const samePhones = setsEqual(new Set(person.normalized_phones), phones);
   const sameEmails = setsEqual(new Set(person.normalized_emails), emails);
   const unchanged =
     person.display_name === nextDisplayName &&
+    person.first_name === nextFirstName &&
+    person.last_name === nextLastName &&
+    person.nickname === nextNickname &&
     samePhones &&
     sameEmails &&
     person.identity_count === all.length &&
@@ -244,7 +314,14 @@ export async function recomputePersonAggregates(
 
   const now = new Date().toISOString();
   await ctx.db.patch(personId, {
-    ...(person.display_name_locked ? {} : { display_name: bestName }),
+    ...(person.display_name_locked
+      ? {}
+      : {
+          display_name: primary?.display_name,
+          first_name: primary?.first_name,
+          last_name: primary?.last_name,
+          nickname: primary?.nickname,
+        }),
     normalized_phones: [...phones],
     normalized_emails: [...emails],
     identity_count: all.length,

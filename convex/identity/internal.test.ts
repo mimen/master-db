@@ -5,7 +5,12 @@ import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
-import { recomputePersonAggregates, upsertIdentityCandidate, type IdentityCandidate } from "./internal";
+import {
+  pickPrimaryNameIdentity,
+  recomputePersonAggregates,
+  upsertIdentityCandidate,
+  type IdentityCandidate,
+} from "./internal";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 
@@ -14,6 +19,10 @@ async function seedPerson(
   overrides: Partial<{
     display_name: string;
     display_name_locked: boolean;
+    first_name: string;
+    last_name: string;
+    nickname: string;
+    organization: string;
     normalized_phones: string[];
     normalized_emails: string[];
     identity_count: number;
@@ -26,6 +35,10 @@ async function seedPerson(
     ctx.db.insert("people", {
       display_name: overrides.display_name,
       display_name_locked: overrides.display_name_locked,
+      first_name: overrides.first_name,
+      last_name: overrides.last_name,
+      nickname: overrides.nickname,
+      organization: overrides.organization,
       normalized_phones: overrides.normalized_phones ?? [],
       normalized_emails: overrides.normalized_emails ?? [],
       identity_count: overrides.identity_count ?? 0,
@@ -45,6 +58,10 @@ async function seedIdentity(
     value: string;
     normalized: string;
     display_name: string;
+    first_name: string;
+    last_name: string;
+    nickname: string;
+    source: string;
     message_count: number;
     is_self: boolean;
   }> = {},
@@ -58,10 +75,13 @@ async function seedIdentity(
       normalized: overrides.normalized ?? "+16195551234",
       network: undefined,
       display_name: overrides.display_name,
+      first_name: overrides.first_name,
+      last_name: overrides.last_name,
+      nickname: overrides.nickname,
       message_count: overrides.message_count ?? 0,
       chat_count: 0,
       is_self: overrides.is_self ?? false,
-      source: "apple_contact",
+      source: overrides.source ?? "apple_contact",
       first_seen_at: now,
       last_seen_at: now,
       created_at: now,
@@ -149,6 +169,165 @@ describe("recomputePersonAggregates", () => {
     await t.run((ctx) => recomputePersonAggregates(ctx, personId));
     const after = await t.run((ctx) => ctx.db.get(personId));
     expect(after?.updated_at).toBe(before?.updated_at);
+  });
+
+  test("primary-identity selection: apple_contact outranks airtable_human and manual, taking display/first/last/nickname together", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name_locked: false });
+    await seedIdentity(t, personId, {
+      value: "manual-1",
+      normalized: "manual-1",
+      source: "manual",
+      display_name: "M Manual",
+      first_name: "M",
+      last_name: "Manual",
+    });
+    await seedIdentity(t, personId, {
+      value: "airtable-1",
+      normalized: "airtable-1",
+      source: "airtable_human",
+      display_name: "A Airtable",
+      first_name: "A",
+      last_name: "Airtable",
+    });
+    await seedIdentity(t, personId, {
+      value: "apple-1",
+      normalized: "apple-1",
+      source: "apple_contact",
+      display_name: "Chase P.",
+      first_name: "Chase",
+      last_name: "Petersen",
+      nickname: "Chasey",
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("Chase P.");
+    expect(person?.first_name).toBe("Chase");
+    expect(person?.last_name).toBe("Petersen");
+    expect(person?.nickname).toBe("Chasey");
+  });
+
+  test("primary-identity selection: airtable_human outranks manual when no apple_contact identity exists", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name_locked: false });
+    await seedIdentity(t, personId, {
+      value: "manual-1",
+      normalized: "manual-1",
+      source: "manual",
+      display_name: "M Manual",
+      first_name: "M",
+      last_name: "Manual",
+    });
+    await seedIdentity(t, personId, {
+      value: "airtable-1",
+      normalized: "airtable-1",
+      source: "airtable_human",
+      display_name: "A Airtable",
+      first_name: "A",
+      last_name: "Airtable",
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("A Airtable");
+    expect(person?.first_name).toBe("A");
+    expect(person?.last_name).toBe("Airtable");
+  });
+
+  test("primary-identity selection: a higher-priority identity with NO name data doesn't outrank a lower-priority one that has a name", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name_locked: false });
+    // A manual identity ranks above "participant" (beeper/other), but this
+    // one carries no name data at all — e.g. createPerson's orphan-row
+    // linking path inserting a nameless placeholder. It must not blank out
+    // a lower-priority identity that DOES have a name.
+    await seedIdentity(t, personId, { value: "manual-1", normalized: "manual-1", source: "manual" });
+    await seedIdentity(t, personId, {
+      value: "beeper-1",
+      normalized: "beeper-1",
+      source: "participant",
+      display_name: "From Chat",
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("From Chat");
+  });
+
+  test("lock guards all four name fields (display, first, last, nickname) through a sync re-run", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, {
+      display_name: "Manually Set Name",
+      first_name: "Manually",
+      last_name: "Set",
+      nickname: "MSN",
+      display_name_locked: true,
+    });
+    await seedIdentity(t, personId, {
+      value: "apple-1",
+      normalized: "apple-1",
+      source: "apple_contact",
+      display_name: "Source Derived Name",
+      first_name: "Source",
+      last_name: "Derived",
+      nickname: "SD",
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.display_name).toBe("Manually Set Name");
+    expect(person?.first_name).toBe("Manually");
+    expect(person?.last_name).toBe("Set");
+    expect(person?.nickname).toBe("MSN");
+  });
+
+  test("organization survives a sync — recomputePersonAggregates never touches it, set or unset", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, {
+      display_name_locked: false,
+      organization: "Afternoon Umbrella Friends",
+    });
+    await seedIdentity(t, personId, {
+      value: "apple-1",
+      normalized: "apple-1",
+      source: "apple_contact",
+      display_name: "Chase",
+      first_name: "Chase",
+    });
+
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.organization).toBe("Afternoon Umbrella Friends");
+    expect(person?.display_name).toBe("Chase"); // sanity: the sync still ran
+  });
+});
+
+describe("pickPrimaryNameIdentity", () => {
+  test("returns undefined when no candidate has any name data", () => {
+    const identities = [{ source: "manual" }, { source: "participant" }];
+    expect(pickPrimaryNameIdentity(identities)).toBeUndefined();
+  });
+
+  test("ties within the same source rank break on longest display_name", () => {
+    const identities = [
+      { source: "apple_contact", display_name: "A" },
+      { source: "apple_contact", display_name: "A Longer Name" },
+    ];
+    expect(pickPrimaryNameIdentity(identities)?.display_name).toBe("A Longer Name");
+  });
+
+  test("unlisted sources (e.g. beeper's participant/sender) rank below apple/airtable/manual", () => {
+    const identities = [
+      { source: "participant", display_name: "Beeper Name" },
+      { source: "manual", display_name: "Manual Name" },
+    ];
+    expect(pickPrimaryNameIdentity(identities)?.display_name).toBe("Manual Name");
   });
 });
 
