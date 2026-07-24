@@ -35,6 +35,16 @@ import { normalizeEmail, normalizePhone } from "./normalize";
 // different reason — they're signed and expire, so a stored URL rots.)
 const contactCard = v.object({
   display_name: v.optional(v.string()),
+  // Structured name parts, as the source presents them — see
+  // convex/schema/identity/identities.ts's docstring for how these relate to
+  // display_name. Apple sends first_name/last_name/nickname/source_contact_id;
+  // Airtable sends first_name/last_name only (no nickname/org column).
+  first_name: v.optional(v.string()),
+  last_name: v.optional(v.string()),
+  nickname: v.optional(v.string()),
+  // The source's own contact-record id (e.g. Apple's "UUID:ABPerson"),
+  // retained for a future Apple write-back — see identities.source_contact_id.
+  source_contact_id: v.optional(v.string()),
   phones: v.array(v.string()),
   emails: v.array(v.string()),
   // The source's own record id (e.g. an Airtable "rec..." id). When present,
@@ -45,6 +55,10 @@ const contactCard = v.object({
 
 export type ContactCard = {
   display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  source_contact_id?: string;
   phones: string[];
   emails: string[];
   airtable_record_id?: string;
@@ -149,16 +163,37 @@ export async function ingestOneCard(
         card.display_name && card.display_name.length > (existing.display_name?.length ?? 0)
           ? card.display_name
           : existing.display_name;
+      // first_name/last_name/nickname/source_contact_id use "new non-blank
+      // value wins, blank never clears" — unlike display_name's growth-merge
+      // (which favors length as a proxy for completeness), these are single
+      // structured fields from one source record, so a fresh non-empty value
+      // is always the more current truth; a card that transiently omits one
+      // (e.g. a naive Airtable split) must not blow away a good existing
+      // value.
+      const nextFirstName = card.first_name || existing.first_name;
+      const nextLastName = card.last_name || existing.last_name;
+      const nextNickname = card.nickname || existing.nickname;
+      const nextSourceContactId = card.source_contact_id || existing.source_contact_id;
       // Only write when something actually differs. This is the ~1,510-card
       // sync loop that runs every 10 minutes — patching (and bumping
       // updated_at) on every re-ingest of an unchanged card would rewrite
       // every identity every cycle and invalidate every reactive query
       // subscribed to it for no reason.
-      const changed = existing.person_id !== personId || existing.display_name !== nextDisplayName;
+      const changed =
+        existing.person_id !== personId ||
+        existing.display_name !== nextDisplayName ||
+        existing.first_name !== nextFirstName ||
+        existing.last_name !== nextLastName ||
+        existing.nickname !== nextNickname ||
+        existing.source_contact_id !== nextSourceContactId;
       if (changed) {
         await ctx.db.patch(existing._id, {
           person_id: personId,
           display_name: nextDisplayName,
+          first_name: nextFirstName,
+          last_name: nextLastName,
+          nickname: nextNickname,
+          source_contact_id: nextSourceContactId,
           updated_at: now,
         });
       }
@@ -170,6 +205,10 @@ export async function ingestOneCard(
         normalized: h.normalized,
         network: undefined,
         display_name: card.display_name,
+        first_name: card.first_name,
+        last_name: card.last_name,
+        nickname: card.nickname,
+        source_contact_id: card.source_contact_id,
         message_count: 0,
         chat_count: 0,
         is_self: false,

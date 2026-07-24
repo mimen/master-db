@@ -24,12 +24,14 @@ import { internalAction } from "../_generated/server";
 
 const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
 const HUMANS_TABLE_ID = "tbl6LptFEMKLaN0I9";
-const FIELDS = ["Name", "Phone Number", "Email Address", "Email Address 2"];
+const FIELDS = ["Name", "First Name", "Last Name", "Phone Number", "Email Address", "Email Address 2"];
 
 type AirtableRecord = {
   id: string;
   fields: {
     Name?: string;
+    "First Name"?: string;
+    "Last Name"?: string;
     "Phone Number"?: string;
     "Email Address"?: string;
     "Email Address 2"?: string;
@@ -43,6 +45,15 @@ type AirtableListResponse = {
 
 type ContactCard = {
   display_name?: string;
+  // First/Last Name are separate singleLineText columns in Airtable Humans —
+  // see convex/schema/identity/identities.ts's docstring: these can be naive
+  // or empty even when Name is a good display value (freeform rows like "The
+  // Brooklyn Mirage" or "@nataliekowal_" have no real first/last). No
+  // nickname/organization column exists in Humans, so those stay unset from
+  // this source (Apple Contacts is the only source for nickname; Convex
+  // itself is the source for organization).
+  first_name?: string;
+  last_name?: string;
   phones: string[];
   emails: string[];
   airtable_record_id: string;
@@ -57,6 +68,8 @@ export function toContactCard(r: AirtableRecord): ContactCard | null {
   if (phones.length === 0 && emails.length === 0) return null;
   return {
     display_name: r.fields.Name,
+    first_name: r.fields["First Name"],
+    last_name: r.fields["Last Name"],
     phones,
     emails,
     airtable_record_id: r.id,

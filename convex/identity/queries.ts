@@ -106,6 +106,10 @@ export const listPeople = query({
       .map((p) => ({
         _id: p._id,
         display_name: p.display_name,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        nickname: p.nickname,
+        organization: p.organization,
         normalized_phones: p.normalized_phones,
         normalized_emails: p.normalized_emails,
         airtable_human_id: p.airtable_human_id,

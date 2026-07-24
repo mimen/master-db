@@ -46,7 +46,15 @@ export const nameDirectoryRef = makeFunctionReference<
 
 export const createPersonRef = makeFunctionReference<
   "mutation",
-  { key: string; handle: string; display_name?: string },
+  {
+    key: string;
+    handle: string;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    nickname?: string;
+    organization?: string;
+  },
   { created: boolean; personId: Id<"people"> }
 >("identity/mutations:createPerson");
 
@@ -58,7 +66,15 @@ export const addPersonFromAirtableRef = makeFunctionReference<
 
 export const renamePersonRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: Id<"people">; display_name: string },
+  {
+    key: string;
+    personId: Id<"people">;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    nickname?: string;
+    organization?: string;
+  },
   null
 >("identity/mutations:renamePerson");
 
@@ -74,6 +90,10 @@ export const ingestContactsBatchRef = makeFunctionReference<
     source: string;
     contacts: Array<{
       display_name?: string;
+      first_name?: string;
+      last_name?: string;
+      nickname?: string;
+      source_contact_id?: string;
       phones: string[];
       emails: string[];
       airtable_record_id?: string;

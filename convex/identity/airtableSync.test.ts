@@ -40,4 +40,29 @@ describe("toContactCard (Airtable Humans row -> pre-grouped card)", () => {
     const record = { id: "rec3", fields: { "Phone Number": "+16195551234" } };
     expect(toContactCard(record)?.display_name).toBeUndefined();
   });
+
+  test("maps First Name / Last Name into the card alongside Name", () => {
+    const record = {
+      id: "rec4",
+      fields: {
+        Name: "Chase Petersen",
+        "First Name": "Chase",
+        "Last Name": "Petersen",
+        "Phone Number": "+16195551234",
+      },
+    };
+    const card = toContactCard(record);
+    expect(card?.first_name).toBe("Chase");
+    expect(card?.last_name).toBe("Petersen");
+  });
+
+  test("first_name/last_name are undefined (not empty strings) for a freeform row like a venue name", () => {
+    // Airtable Humans has rows like "The Brooklyn Mirage" with no real
+    // First/Last Name columns filled in — see identities.ts's docstring.
+    const record = { id: "rec5", fields: { Name: "The Brooklyn Mirage", "Phone Number": "+16195551234" } };
+    const card = toContactCard(record);
+    expect(card?.first_name).toBeUndefined();
+    expect(card?.last_name).toBeUndefined();
+    expect(card?.display_name).toBe("The Brooklyn Mirage");
+  });
 });

@@ -12,7 +12,9 @@ import { checkContactsIngestAuth, jsonResponse } from "./auth";
  *
  * Each ContactCardIn is one Apple Contacts card (imsg's BBContact), with all
  * of its phones/emails grouped together — see ingestContacts.ts for why that
- * grouping matters and how it's used.
+ * grouping matters and how it's used. first_name/last_name/nickname/
+ * source_contact_id are the structured parts (Phase 1 structured names);
+ * optional so an older imsg build that hasn't shipped them yet still works.
  *
  * Response: { ok: true, peopleCreated, peopleReused, identitiesWritten, skippedNoHandles }
  */
@@ -52,6 +54,10 @@ export const handleIngestContacts = httpAction(async (ctx, req) => {
 
 type ContactCardIn = {
   display_name?: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  source_contact_id?: string;
   img_url?: string;
   phones: string[];
   emails: string[];

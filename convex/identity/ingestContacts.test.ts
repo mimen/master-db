@@ -166,3 +166,106 @@ describe("ingestOneCard: no handles", () => {
     expect(result.outcome).toBe("skipped_no_handles");
   });
 });
+
+describe("ingestOneCard: structured name parts", () => {
+  test("writes first_name/last_name/nickname/source_contact_id onto every handle's identity row", async () => {
+    const t = convexTest(schema, modules);
+    const card: ContactCard = {
+      display_name: "Chase P.",
+      first_name: "Chase",
+      last_name: "Petersen",
+      nickname: "Chasey",
+      source_contact_id: "UUID-123:ABPerson",
+      phones: ["6195551234"],
+      emails: ["chase@example.com"],
+    };
+    const result = await t.run((ctx) => ingestOneCard(ctx, "apple_contact", card, false));
+    expect(result.outcome).toBe("created");
+    if (result.outcome !== "created") throw new Error("unreachable");
+
+    const identities = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_person", (q) => q.eq("person_id", result.personId))
+        .collect(),
+    );
+    expect(identities).toHaveLength(2);
+    for (const i of identities) {
+      expect(i.first_name).toBe("Chase");
+      expect(i.last_name).toBe("Petersen");
+      expect(i.nickname).toBe("Chasey");
+      expect(i.source_contact_id).toBe("UUID-123:ABPerson");
+    }
+  });
+
+  test("re-ingesting the identical card is a no-op on structured fields too (updated_at unchanged)", async () => {
+    const t = convexTest(schema, modules);
+    const card: ContactCard = {
+      display_name: "Chase P.",
+      first_name: "Chase",
+      last_name: "Petersen",
+      nickname: "Chasey",
+      source_contact_id: "UUID-123:ABPerson",
+      phones: ["6195551234"],
+      emails: [],
+    };
+    const first = await t.run((ctx) => ingestOneCard(ctx, "apple_contact", card, false));
+    expect(first.outcome).toBe("created");
+    const before = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_value", (q) => q.eq("value", "6195551234"))
+        .first(),
+    );
+
+    await new Promise((r) => setTimeout(r, 5));
+    const second = await t.run((ctx) => ingestOneCard(ctx, "apple_contact", card, false));
+    expect(second.outcome).toBe("reused");
+    const after = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_value", (q) => q.eq("value", "6195551234"))
+        .first(),
+    );
+    expect(after?.updated_at).toBe(before?.updated_at);
+  });
+
+  test("a card that omits first_name on re-ingest doesn't clear a previously-set value (blank never regresses)", async () => {
+    const t = convexTest(schema, modules);
+    const withName: ContactCard = {
+      display_name: "Chase",
+      first_name: "Chase",
+      phones: ["6195551234"],
+      emails: [],
+    };
+    await t.run((ctx) => ingestOneCard(ctx, "apple_contact", withName, false));
+
+    const withoutName: ContactCard = { display_name: "Chase", phones: ["6195551234"], emails: [] };
+    await t.run((ctx) => ingestOneCard(ctx, "apple_contact", withoutName, false));
+
+    const identity = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_value", (q) => q.eq("value", "6195551234"))
+        .first(),
+    );
+    expect(identity?.first_name).toBe("Chase");
+  });
+
+  test("a corrected non-blank value on re-ingest DOES update (new non-blank wins)", async () => {
+    const t = convexTest(schema, modules);
+    const original: ContactCard = { first_name: "Chace", phones: ["6195551234"], emails: [] };
+    await t.run((ctx) => ingestOneCard(ctx, "apple_contact", original, false));
+
+    const corrected: ContactCard = { first_name: "Chase", phones: ["6195551234"], emails: [] };
+    await t.run((ctx) => ingestOneCard(ctx, "apple_contact", corrected, false));
+
+    const identity = await t.run((ctx) =>
+      ctx.db
+        .query("identities")
+        .withIndex("by_value", (q) => q.eq("value", "6195551234"))
+        .first(),
+    );
+    expect(identity?.first_name).toBe("Chase");
+  });
+});
