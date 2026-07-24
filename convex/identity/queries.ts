@@ -1,9 +1,34 @@
 import { v } from "convex/values";
 
+import type { Doc } from "../_generated/dataModel";
 import { query } from "../_generated/server";
 
 import { requireIdentityKey } from "./key";
 import { normalizeEmail, normalizePhone } from "./normalize";
+
+/**
+ * A person's full searchable name-term set: display name, structured parts,
+ * organization, and the combined "first last" — deduped and lowercased so
+ * name-search callers (the imsg Identity Mirror) can match a person by ANY
+ * name they've ever gone by, not just their current display_name. Blank
+ * fields are omitted; a person with only a display_name still gets one term.
+ */
+function nameTerms(p: Doc<"people">): string[] {
+  const candidates = [
+    p.display_name,
+    p.first_name,
+    p.last_name,
+    p.nickname,
+    p.organization,
+    p.first_name && p.last_name ? `${p.first_name} ${p.last_name}` : undefined,
+  ];
+  const terms = new Set<string>();
+  for (const candidate of candidates) {
+    const trimmed = candidate?.trim().toLowerCase();
+    if (trimmed) terms.add(trimmed);
+  }
+  return [...terms];
+}
 
 /**
  * Resolve a raw phone / email / handle to the person it belongs to, with all of
@@ -118,26 +143,31 @@ export const listPeople = query({
 });
 
 /**
- * Lean {normalized, display_name} projection for imsg's server-side identity
- * mirror (apps/imsg/server/identity-mirror.ts) — a read replica the server
- * refreshes on an interval so the hot chat-list path never blocks on Convex.
- * One entry per normalized handle, flattened across a person's
+ * Lean {normalized, display_name, terms} projection for imsg's server-side
+ * identity mirror (apps/imsg/server/identity-mirror.ts) — a read replica the
+ * server refreshes on an interval so the hot chat-list path never blocks on
+ * Convex. One entry per normalized handle, flattened across a person's
  * normalized_phones and normalized_emails, for every person that isn't
  * merged away and has a display_name. `is_self` people are included too —
  * harmless to carry Milad's own handles through the mirror, and excluding
  * them isn't worth a special case here (unlike listPeople, which is a
  * human-facing contacts list where it would be confusing).
+ *
+ * `terms` is the person's FULL searchable name set (see nameTerms) — it's
+ * what lets the mirror find someone by an old name after a rename, a
+ * nickname, or their organization, not just their current display_name.
  */
 export const nameDirectory = query({
   args: { key: v.string() },
   handler: async (ctx, { key }) => {
     requireIdentityKey(key);
     const people = await ctx.db.query("people").collect();
-    const out: Array<{ normalized: string; display_name: string }> = [];
+    const out: Array<{ normalized: string; display_name: string; terms: string[] }> = [];
     for (const p of people) {
       if (p.merged_into || !p.display_name) continue;
-      for (const normalized of p.normalized_phones) out.push({ normalized, display_name: p.display_name });
-      for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name });
+      const terms = nameTerms(p);
+      for (const normalized of p.normalized_phones) out.push({ normalized, display_name: p.display_name, terms });
+      for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name, terms });
     }
     return out;
   },

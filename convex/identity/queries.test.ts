@@ -29,12 +29,20 @@ async function seedPerson(
     identity_count: number;
     normalized_phones: string[];
     normalized_emails: string[];
+    first_name: string;
+    last_name: string;
+    nickname: string;
+    organization: string;
   }> = {},
 ): Promise<Id<"people">> {
   const now = new Date().toISOString();
   return t.run((ctx) =>
     ctx.db.insert("people", {
       display_name: overrides.display_name,
+      first_name: overrides.first_name,
+      last_name: overrides.last_name,
+      nickname: overrides.nickname,
+      organization: overrides.organization,
       normalized_phones: overrides.normalized_phones ?? [],
       normalized_emails: overrides.normalized_emails ?? [],
       identity_count: overrides.identity_count ?? 0,
@@ -203,7 +211,39 @@ describe("nameDirectory", () => {
     });
 
     const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
-    expect(results).toEqual([{ normalized: "+16195551111", display_name: "Milad" }]);
+    expect(results).toEqual([{ normalized: "+16195551111", display_name: "Milad", terms: ["milad"] }]);
+  });
+
+  test("terms include display name, first, last, nickname, organization, and the combined full name — deduped and lowercased", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, {
+      display_name: "Uncle Jimmy",
+      first_name: "Jimmy",
+      last_name: "Sciandra",
+      nickname: "Uncle Jimmy",
+      organization: "Pluto Sound",
+      normalized_phones: ["+16195551234"],
+    });
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toHaveLength(1);
+    const terms = results[0]?.terms ?? [];
+    expect(new Set(terms)).toEqual(
+      new Set(["uncle jimmy", "jimmy", "sciandra", "pluto sound", "jimmy sciandra"]),
+    );
+    // Deduped: nickname equals display_name, so "uncle jimmy" appears once.
+    expect(terms.filter((term) => term === "uncle jimmy")).toHaveLength(1);
+  });
+
+  test("omits blank fields from terms", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, {
+      display_name: "SoloName",
+      normalized_phones: ["+16195552222"],
+    });
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toEqual([{ normalized: "+16195552222", display_name: "SoloName", terms: ["soloname"] }]);
   });
 
   test("rejects a wrong key", async () => {

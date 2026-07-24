@@ -41,7 +41,7 @@ export const topLinkedPeopleRef = makeFunctionReference<
 export const nameDirectoryRef = makeFunctionReference<
   "query",
   { key: string },
-  Array<{ normalized: string; display_name: string }>
+  Array<{ normalized: string; display_name: string; terms: string[] }>
 >("identity/queries:nameDirectory");
 
 export const createPersonRef = makeFunctionReference<
