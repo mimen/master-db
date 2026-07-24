@@ -311,52 +311,46 @@ function NameFormFields({
   theme: Theme;
   autoFocusFirst?: boolean;
 }) {
-  const inputStyle = [
-    styles.nameInput,
-    { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.divider },
-  ];
   const autoDisplay = [value.first.trim(), value.last.trim()].filter(Boolean).join(" ");
+  const row = (
+    label: string,
+    key: keyof NameFormState,
+    opts?: { placeholder?: string; autoFocus?: boolean; last?: boolean },
+  ) => (
+    <View style={[styles.fieldRow, { borderBottomColor: theme.divider }, opts?.last && styles.fieldRowLast]}>
+      <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{label}</Text>
+      <TextInput
+        value={value[key]}
+        onChangeText={(t) => onChange({ [key]: t })}
+        placeholder={opts?.placeholder ?? label}
+        placeholderTextColor={theme.textSecondary}
+        autoFocus={opts?.autoFocus}
+        style={[styles.fieldInput, { color: theme.text }]}
+      />
+    </View>
+  );
 
+  // Two grouped cards, iOS-Contacts style: the name identity up top, the
+  // optional display override on its own so it reads as a distinct concept
+  // (not just a fourth name part), with a caption spelling out the default.
   return (
     <View style={styles.nameFormWrap}>
-      <View style={styles.nameFormRow}>
-        <TextInput
-          value={value.first}
-          onChangeText={(t) => onChange({ first: t })}
-          placeholder="First"
-          placeholderTextColor={theme.textSecondary}
-          autoFocus={autoFocusFirst}
-          style={[...inputStyle, styles.nameInputHalf]}
-        />
-        <TextInput
-          value={value.last}
-          onChangeText={(t) => onChange({ last: t })}
-          placeholder="Last"
-          placeholderTextColor={theme.textSecondary}
-          style={[...inputStyle, styles.nameInputHalf]}
-        />
+      <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+        {row("First", "first", { autoFocus: autoFocusFirst })}
+        {row("Last", "last")}
+        {row("Nickname", "nickname")}
+        {row("Company", "organization", { last: true })}
       </View>
-      <TextInput
-        value={value.nickname}
-        onChangeText={(t) => onChange({ nickname: t })}
-        placeholder="Nickname"
-        placeholderTextColor={theme.textSecondary}
-        style={inputStyle}
-      />
-      <TextInput
-        value={value.organization}
-        onChangeText={(t) => onChange({ organization: t })}
-        placeholder="Organization"
-        placeholderTextColor={theme.textSecondary}
-        style={inputStyle}
-      />
-      <TextInput
-        value={value.display}
-        onChangeText={(t) => onChange({ display: t })}
-        placeholder={autoDisplay ? `Auto: ${autoDisplay}` : "Display name"}
-        placeholderTextColor={theme.textSecondary}
-        style={inputStyle}
-      />
+      <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+        {row("Display", "display", { placeholder: autoDisplay || "Display name", last: true })}
+      </View>
+      <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
+        {value.display.trim()
+          ? "Shown everywhere instead of the name above."
+          : autoDisplay
+            ? `Leave blank to show “${autoDisplay}”.`
+            : "How this contact appears in chats and lists."}
+      </Text>
     </View>
   );
 }
@@ -388,8 +382,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   nameFormWrap: { width: "100%" },
-  nameFormRow: { flexDirection: "row", gap: Spacing.two },
-  nameInputHalf: { flex: 1 },
+  fieldGroup: {
+    width: "100%",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 10,
+  },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  fieldRowLast: { borderBottomWidth: 0 },
+  fieldLabel: { width: 82, fontSize: 15 },
+  fieldInput: { flex: 1, fontSize: 16, paddingVertical: 11 },
+  fieldCaption: { fontSize: 12, marginTop: -2, marginBottom: 8, paddingHorizontal: 6 },
   editNameBlock: { width: "100%", marginBottom: 4 },
   editNameActions: {
     flexDirection: "row",
