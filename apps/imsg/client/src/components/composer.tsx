@@ -473,6 +473,7 @@ export function Composer({
   };
 
   const attachBtnRef = useRef<View>(null);
+  const scheduleBtnRef = useRef<View>(null);
   const openAttachSheet = () => {
     const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
     if (Platform.OS !== "web") {
@@ -537,22 +538,26 @@ export function Composer({
   const openScheduleSheet = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    showSheet({
-      title: "Send later",
-      actions: scheduleOptions().map((o) => ({
-        label: o.label,
-        onPress: () => {
-          void api
-            .schedule(chatGuid, trimmed, o.at)
-            .then(() => {
-              clearText();
-              setDraft(chatGuid, "");
-              showToast(`Scheduled ${o.label.toLowerCase()}`);
-            })
-            .catch(() => showToast("Couldn't schedule"));
-        },
-      })),
-    });
+    const actions = scheduleOptions().map((o) => ({
+      label: o.label,
+      onPress: () => {
+        void api
+          .schedule(chatGuid, trimmed, o.at)
+          .then(() => {
+            clearText();
+            setDraft(chatGuid, "");
+            showToast(`Scheduled ${o.label.toLowerCase()}`);
+          })
+          .catch(() => showToast("Couldn't schedule"));
+      },
+    }));
+    // Desktop: anchor the popover to the schedule caret (opens upward); mobile
+    // keeps the centered sheet — same split the attachment menu above uses.
+    if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && scheduleBtnRef.current) {
+      scheduleBtnRef.current.measureInWindow((x, y) => showSheet({ title: "Send later", actions, anchor: { x, y } }));
+    } else {
+      showSheet({ title: "Send later", actions });
+    }
   };
 
   const recording = recorderState.isRecording;
@@ -689,6 +694,19 @@ export function Composer({
           </View>
         )}
         <View style={styles.actionCol}>
+          {canSend && !recording && !editing && (
+            <Pressable
+              ref={scheduleBtnRef}
+              accessibilityRole="button"
+              accessibilityLabel="Schedule message"
+              onPress={openScheduleSheet}
+              disabled={busy}
+              hitSlop={6}
+              style={({ pressed }) => [styles.scheduleCaret, pressed && { opacity: 0.5 }]}
+            >
+              <Ionicons name="chevron-up" size={18} color={theme.textSecondary} />
+            </Pressable>
+          )}
           {canSend && !recording ? (
             <Pressable
               onPress={() => void send()}
@@ -857,7 +875,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF3B30",
   },
   actionCol: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
     height: IOS_INPUT_MIN_HEIGHT,
+  },
+  scheduleCaret: {
+    width: 28,
+    height: 34,
+    alignItems: "center",
     justifyContent: "center",
   },
   sendButton: {
