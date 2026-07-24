@@ -29,6 +29,26 @@ bun install --frozen-lockfile
 bun install --frozen-lockfile --cwd apps/imsg
 bun install --frozen-lockfile --cwd apps/imsg/client
 
+# Expo generates typed-route definitions (client/.expo/types/router.d.ts,
+# gitignored) from the app/ directory — but only the DEV SERVER writes them,
+# and a long-running one won't notice a new route file because Metro caches
+# its file map. Restarting it here, BEFORE typecheck, is what keeps a newly
+# added route from deadlocking the pipeline: typecheck would fail on the
+# unknown route, so the build that might have refreshed the types never runs,
+# and every subsequent deploy fails the same way until someone SSHes in.
+# (Restarting it after the build, as we also do, is too late to help.)
+echo "== Refreshing Expo route types =="
+ROUTE_TYPES="apps/imsg/client/.expo/types/router.d.ts"
+types_mtime() { stat -f %m "$ROUTE_TYPES" 2>/dev/null || echo 0; }
+BEFORE=$(types_mtime)
+launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-expo" 2>/dev/null || true
+# Wait (bounded) for the dev server to rewrite them. Never fatal: if it
+# doesn't, typecheck below reports the real problem rather than hanging here.
+for _ in $(seq 1 10); do
+  sleep 3
+  [ "$(types_mtime)" != "$BEFORE" ] && break
+done
+
 echo "== Typecheck =="
 bun run typecheck:imsg
 
