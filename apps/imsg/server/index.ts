@@ -476,9 +476,27 @@ app.post("/api/messages/:guid/edit", async (c) => {
   return c.json({ ok: true });
 });
 
+const CONTACTS_LIMIT = 25;
+
 app.get("/api/contacts", async (c) => {
   await contacts.refresh();
-  return c.json(contacts.search(c.req.query("q") ?? "", 25));
+  const q = c.req.query("q") ?? "";
+  // Union of the Identity Mirror (Convex names — nickname, rename, org,
+  // first/last) and ContactBook (Apple contacts not yet synced into
+  // Convex), deduped by address, mirror hits preferred on a collision since
+  // Convex is the fresher/canonical name. This is what makes a renamed
+  // person ("Uncle Jimmy", searched as "Jimmy Sciandra") surface as a
+  // contact even though Apple Contacts still has the old name.
+  const seen = new Set<string>();
+  const results: Array<{ address: string; name: string }> = [];
+  for (const hit of [...identityMirror.search(q, CONTACTS_LIMIT), ...contacts.search(q, CONTACTS_LIMIT)]) {
+    const key = hit.address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(hit);
+    if (results.length >= CONTACTS_LIMIT) break;
+  }
+  return c.json(results);
 });
 
 app.post("/api/chats/new", async (c) => {

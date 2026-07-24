@@ -8,6 +8,13 @@ import type { IdentityMirror } from "./identity-mirror";
  */
 export interface NameSource {
   lookup(address: string): string | null;
+  /**
+   * The matched person's full searchable name-term set (display, first,
+   * last, nickname, organization…) — [] on a miss. Used by map.ts to
+   * populate ChatSummary.searchNames so a conversation is findable by ANY
+   * of a person's names, not just their current display name.
+   */
+  searchTerms(address: string): string[];
   readonly available: boolean;
 }
 
@@ -39,5 +46,17 @@ export class NameResolver implements NameSource {
 
   lookup(address: string): string | null {
     return this.mirror.lookup(address) ?? this.contactBook.lookup(address);
+  }
+
+  /**
+   * The mirror's full Convex term set (nickname, renamed, org, first/last)
+   * when it has the person; otherwise falls back to ContactBook's single
+   * resolved name, matching the same mirror-first/ContactBook-fallback
+   * precedence as lookup().
+   */
+  searchTerms(address: string): string[] {
+    const mirrorTerms = this.mirror.searchTerms(address);
+    if (mirrorTerms.length > 0) return mirrorTerms;
+    return this.contactBook.searchTerms(address);
   }
 }

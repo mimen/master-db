@@ -3,13 +3,20 @@ import type { ContactBook } from "./contacts";
 import type { IdentityMirror } from "./identity-mirror";
 import { NameResolver } from "./name-resolver";
 
-function fakeMirror(map: Record<string, string>): Pick<IdentityMirror, "lookup"> {
-  return { lookup: (address: string) => map[address] ?? null };
+function fakeMirror(
+  map: Record<string, string>,
+  terms: Record<string, string[]> = {},
+): Pick<IdentityMirror, "lookup" | "searchTerms"> {
+  return {
+    lookup: (address: string) => map[address] ?? null,
+    searchTerms: (address: string) => terms[address] ?? [],
+  };
 }
 
 function fakeContactBook(map: Record<string, string>, available = true): ContactBook {
   return {
     lookup: (address: string) => map[address] ?? null,
+    searchTerms: (address: string) => (map[address] ? [map[address]] : []),
     available,
   } as ContactBook;
 }
@@ -52,5 +59,36 @@ describe("NameResolver", () => {
     const contacts = fakeContactBook({}, true);
     const resolver = new NameResolver(mirror, contacts);
     expect(resolver.available).toBe(true);
+  });
+
+  describe("searchTerms", () => {
+    test("returns the mirror's full term list when it has a hit", () => {
+      const mirror = fakeMirror(
+        {},
+        { "+15550001111": ["uncle jimmy", "jimmy", "sciandra", "jimmy sciandra"] },
+      ) as IdentityMirror;
+      const contacts = fakeContactBook({ "+15550001111": "Stale Apple Name" });
+      const resolver = new NameResolver(mirror, contacts);
+      expect(resolver.searchTerms("+15550001111")).toEqual([
+        "uncle jimmy",
+        "jimmy",
+        "sciandra",
+        "jimmy sciandra",
+      ]);
+    });
+
+    test("falls back to ContactBook's single name when the mirror misses", () => {
+      const mirror = fakeMirror({}) as IdentityMirror;
+      const contacts = fakeContactBook({ "+15550001111": "Apple Only" });
+      const resolver = new NameResolver(mirror, contacts);
+      expect(resolver.searchTerms("+15550001111")).toEqual(["Apple Only"]);
+    });
+
+    test("both miss resolves to []", () => {
+      const mirror = fakeMirror({}) as IdentityMirror;
+      const contacts = fakeContactBook({});
+      const resolver = new NameResolver(mirror, contacts);
+      expect(resolver.searchTerms("+15550001111")).toEqual([]);
+    });
   });
 });

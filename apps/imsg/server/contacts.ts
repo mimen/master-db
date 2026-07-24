@@ -105,6 +105,17 @@ export class ContactBook {
     return null;
   }
 
+  /**
+   * ContactBook has no structured name parts (Apple's assembled `name` is
+   * all we keep) — this just satisfies the NameSource interface for callers
+   * that use ContactBook standalone (no NameResolver/Identity Mirror in
+   * front of it). A single-element list on a hit, [] on a miss.
+   */
+  searchTerms(address: string): string[] {
+    const name = this.lookup(address);
+    return name ? [name] : [];
+  }
+
   search(q: string, limit = 20): Contact[] {
     const needle = q.toLowerCase();
     const seen = new Set<string>();
