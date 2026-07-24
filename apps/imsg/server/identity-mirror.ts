@@ -6,6 +6,13 @@ const REFRESH_MS = 5 * 60 * 1000;
 interface NameDirectoryEntry {
   normalized: string;
   display_name: string;
+  terms: string[];
+}
+
+/** One person's mirror record, keyed by phoneMatchKey/emailMatchKey. */
+interface MirrorEntry {
+  name: string;
+  terms: string[];
 }
 
 /**
@@ -32,7 +39,7 @@ type ConvexQueryResponse =
 export class IdentityMirror {
   private timer: ReturnType<typeof setInterval> | null = null;
   private warned = false;
-  private byKey = new Map<string, string>();
+  private byKey = new Map<string, MirrorEntry>();
 
   constructor(private config: Pick<Config, "convexCloudUrl" | "identityKey">) {}
 
@@ -51,12 +58,12 @@ export class IdentityMirror {
   }
 
   /**
-   * Resolves a RAW participant address (whatever shape BlueBubbles hands
-   * back) to a display name, via the same phone/email match-key seam
+   * Resolves a RAW address (whatever shape BlueBubbles or the client hands
+   * back) to its mirror entry, via the same phone/email match-key seam
    * ContactBook and the client's person-view use — see shared/address.ts.
    * Returns null on a miss; never throws.
    */
-  lookup(address: string): string | null {
+  private entry(address: string): MirrorEntry | null {
     const emailKey = emailMatchKey(address);
     if (emailKey) {
       const hit = this.byKey.get(emailKey);
@@ -68,6 +75,45 @@ export class IdentityMirror {
       if (hit) return hit;
     }
     return null;
+  }
+
+  /** Resolves a RAW participant address to a display name. Null on a miss. */
+  lookup(address: string): string | null {
+    return this.entry(address)?.name ?? null;
+  }
+
+  /**
+   * The matched person's FULL searchable name-term set (display, first,
+   * last, nickname, organization, "first last") — [] on a miss. This is what
+   * lets a conversation surface by an old/nick/organization name, not just
+   * the current display_name (see map.ts's ChatSummary.searchNames).
+   */
+  searchTerms(address: string): string[] {
+    return this.entry(address)?.terms ?? [];
+  }
+
+  /**
+   * Every mirror person whose name-term set contains `query` (case-
+   * insensitive substring) — a Convex-backed contact result. One result per
+   * matched handle (address = the normalized match key), deduped by
+   * address. Used by GET /api/contacts alongside ContactBook.search so a
+   * rename/nickname/organization surfaces the person even when Apple
+   * Contacts still has the old name.
+   */
+  search(query: string, limit: number): Array<{ address: string; name: string }> {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    const seen = new Set<string>();
+    const results: Array<{ address: string; name: string }> = [];
+    for (const [address, entry] of this.byKey) {
+      if (results.length >= limit) break;
+      if (seen.has(address)) continue;
+      if (entry.terms.some((term) => term.includes(needle))) {
+        seen.add(address);
+        results.push({ address, name: entry.name });
+      }
+    }
+    return results;
   }
 
   /**
@@ -98,12 +144,13 @@ export class IdentityMirror {
         console.error(`identity-mirror: query error: ${body.errorMessage ?? "unknown"}`);
         return;
       }
-      const next = new Map<string, string>();
+      const next = new Map<string, MirrorEntry>();
       for (const entry of body.value) {
         const emailKey = emailMatchKey(entry.normalized);
         const phoneKey = phoneMatchKey(entry.normalized);
-        if (emailKey) next.set(emailKey, entry.display_name);
-        else if (phoneKey) next.set(phoneKey, entry.display_name);
+        const value: MirrorEntry = { name: entry.display_name, terms: entry.terms ?? [] };
+        if (emailKey) next.set(emailKey, value);
+        else if (phoneKey) next.set(phoneKey, value);
       }
       this.byKey = next;
     } catch (err) {
