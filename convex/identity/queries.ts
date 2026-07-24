@@ -1,10 +1,22 @@
 import { v } from "convex/values";
 
-import type { Doc } from "../_generated/dataModel";
-import { query } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import { query, type QueryCtx } from "../_generated/server";
 
 import { requireIdentityKey } from "./key";
 import { normalizeEmail, normalizePhone } from "./normalize";
+
+/** A person's personal tags, alphabetized — the private CRM layer
+ * (convex/identity/crm.ts) lives in its own table, so unlike is_favorite/
+ * priority (plain fields on the person doc) it needs its own lookup at every
+ * call site that projects a person for the client. */
+async function tagsFor(ctx: QueryCtx, personId: Id<"people">): Promise<string[]> {
+  const rows = await ctx.db
+    .query("person_tags")
+    .withIndex("by_person", (q) => q.eq("person_id", personId))
+    .collect();
+  return rows.map((r) => r.tag).sort();
+}
 
 /**
  * A person's full searchable name-term set: display name, structured parts,
@@ -60,10 +72,15 @@ export const whoIs = query({
       .query("identities")
       .withIndex("by_person", (q) => q.eq("person_id", person._id))
       .collect();
+    const tags = await tagsFor(ctx, person._id);
     return {
       found: true as const,
       normalized,
+      // `person` is the raw Doc<"people">, so is_favorite/priority already
+      // ride along automatically — only `tags` needs to be joined in
+      // separately (private CRM layer, see convex/identity/crm.ts).
       person,
+      tags,
       identities: identities.map((i) => ({
         kind: i.kind,
         network: i.network,
@@ -125,10 +142,13 @@ export const listPeople = query({
   handler: async (ctx, { key }) => {
     requireIdentityKey(key);
     const people = await ctx.db.query("people").collect();
-    return people
+    const named = people
       .filter((p) => !p.merged_into && !p.is_self && p.display_name)
-      .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""))
-      .map((p) => ({
+      .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
+    const out = [];
+    for (const p of named) {
+      const tags = await tagsFor(ctx, p._id);
+      out.push({
         _id: p._id,
         display_name: p.display_name,
         first_name: p.first_name,
@@ -138,7 +158,12 @@ export const listPeople = query({
         normalized_phones: p.normalized_phones,
         normalized_emails: p.normalized_emails,
         airtable_human_id: p.airtable_human_id,
-      }));
+        is_favorite: p.is_favorite,
+        priority: p.priority,
+        tags,
+      });
+    }
+    return out;
   },
 });
 
@@ -170,6 +195,26 @@ export const nameDirectory = query({
       for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name, terms });
     }
     return out;
+  },
+});
+
+/**
+ * Every distinct personal tag in use, with how many people carry it —
+ * for a future browse/filter-by-tag surface. Personal tags only (the private
+ * CRM layer, convex/identity/crm.ts); Airtable's organizational tags (UW
+ * Team, departments, event links) are a separate, deferred read-only
+ * pass-through that doesn't exist yet — see person_tags.ts's docstring.
+ */
+export const listTags = query({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    requireIdentityKey(key);
+    const rows = await ctx.db.query("person_tags").collect();
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(r.tag, (counts.get(r.tag) ?? 0) + 1);
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   },
 });
 

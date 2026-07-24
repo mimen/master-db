@@ -306,6 +306,46 @@ describe("recomputePersonAggregates", () => {
     expect(person?.organization).toBe("Afternoon Umbrella Friends");
     expect(person?.display_name).toBe("Chase"); // sanity: the sync still ran
   });
+
+  test("CRM fields survive a sync — recomputePersonAggregates never touches is_favorite, priority, or tags", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name_locked: false });
+    await t.run((ctx) =>
+      ctx.db.patch(personId, { is_favorite: true, priority: "high" as const }),
+    );
+    await t.run((ctx) =>
+      ctx.db.insert("person_tags", {
+        person_id: personId,
+        tag: "vip",
+        created_at: new Date().toISOString(),
+      }),
+    );
+    await seedIdentity(t, personId, {
+      value: "apple-1",
+      normalized: "apple-1",
+      source: "apple_contact",
+      display_name: "Chase",
+      first_name: "Chase",
+    });
+
+    // Simulate a full re-sync: recompute aggregates twice, same as a
+    // re-ingest of an unchanged card followed by another.
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+    await t.run((ctx) => recomputePersonAggregates(ctx, personId));
+
+    const person = await t.run((ctx) => ctx.db.get(personId));
+    expect(person?.is_favorite).toBe(true);
+    expect(person?.priority).toBe("high");
+    expect(person?.display_name).toBe("Chase"); // sanity: the sync still ran
+
+    const tags = await t.run((ctx) =>
+      ctx.db
+        .query("person_tags")
+        .withIndex("by_person", (q) => q.eq("person_id", personId))
+        .collect(),
+    );
+    expect(tags.map((t) => t.tag)).toEqual(["vip"]);
+  });
 });
 
 describe("pickPrimaryNameIdentity", () => {

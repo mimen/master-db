@@ -7,6 +7,7 @@ import { normalizeModules } from "../test-utils.vitest";
 
 import {
   listPeopleRef,
+  listTagsRef,
   nameDirectoryRef,
   searchPeopleRef,
   topLinkedPeopleRef,
@@ -33,6 +34,8 @@ async function seedPerson(
     last_name: string;
     nickname: string;
     organization: string;
+    is_favorite: boolean;
+    priority: "high" | "normal" | "low";
   }> = {},
 ): Promise<Id<"people">> {
   const now = new Date().toISOString();
@@ -43,6 +46,8 @@ async function seedPerson(
       last_name: overrides.last_name,
       nickname: overrides.nickname,
       organization: overrides.organization,
+      is_favorite: overrides.is_favorite,
+      priority: overrides.priority,
       normalized_phones: overrides.normalized_phones ?? [],
       normalized_emails: overrides.normalized_emails ?? [],
       identity_count: overrides.identity_count ?? 0,
@@ -53,6 +58,12 @@ async function seedPerson(
       created_at: now,
       updated_at: now,
     }),
+  );
+}
+
+async function seedTag(t: TestConvex<typeof schema>, personId: Id<"people">, tag: string): Promise<void> {
+  await t.run((ctx) =>
+    ctx.db.insert("person_tags", { person_id: personId, tag, created_at: new Date().toISOString() }),
   );
 }
 
@@ -112,6 +123,35 @@ describe("whoIs", () => {
     const t = convexTest(schema, modules);
     await expect(t.query(whoIsRef, { key: "wrong", handle: "6195551234" })).rejects.toThrow();
   });
+
+  test("includes is_favorite/priority (riding along on the raw person doc) and tags (joined separately)", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name: "Chase", is_favorite: true, priority: "high" });
+    await seedIdentity(t, personId, { source: "apple_contact" });
+    await seedTag(t, personId, "vip");
+    await seedTag(t, personId, "family");
+
+    const result = (await t.query(whoIsRef, { key: TEST_KEY, handle: "6195551234" })) as {
+      found: boolean;
+      person?: { is_favorite?: boolean; priority?: string };
+      tags?: string[];
+    };
+    expect(result.found).toBe(true);
+    expect(result.person?.is_favorite).toBe(true);
+    expect(result.person?.priority).toBe("high");
+    expect(result.tags).toEqual(["family", "vip"]);
+  });
+
+  test("tags is an empty array for a person with none", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name: "Chase" });
+    await seedIdentity(t, personId, { source: "apple_contact" });
+
+    const result = (await t.query(whoIsRef, { key: TEST_KEY, handle: "6195551234" })) as {
+      tags?: string[];
+    };
+    expect(result.tags).toEqual([]);
+  });
 });
 
 describe("searchPeople", () => {
@@ -142,6 +182,59 @@ describe("listPeople", () => {
       display_name?: string;
     }>;
     expect(results.map((r) => r.display_name)).toEqual(["Alex", "Chase"]);
+  });
+
+  test("projects is_favorite, priority, and tags per person", async () => {
+    const t = convexTest(schema, modules);
+    const alex = await seedPerson(t, { display_name: "Alex", is_favorite: true });
+    await seedPerson(t, { display_name: "Chase", priority: "low" });
+    await seedTag(t, alex, "vip");
+
+    const results = (await t.query(listPeopleRef, { key: TEST_KEY })) as Array<{
+      display_name?: string;
+      is_favorite?: boolean;
+      priority?: string;
+      tags: string[];
+    }>;
+    const alexRow = results.find((r) => r.display_name === "Alex");
+    const chaseRow = results.find((r) => r.display_name === "Chase");
+    expect(alexRow?.is_favorite).toBe(true);
+    expect(alexRow?.tags).toEqual(["vip"]);
+    expect(chaseRow?.priority).toBe("low");
+    expect(chaseRow?.tags).toEqual([]);
+  });
+});
+
+describe("listTags", () => {
+  test("returns distinct tags with counts, sorted by count desc then alphabetically", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedPerson(t, { display_name: "A" });
+    const b = await seedPerson(t, { display_name: "B" });
+    const c = await seedPerson(t, { display_name: "C" });
+    await seedTag(t, a, "vip");
+    await seedTag(t, b, "vip");
+    await seedTag(t, c, "vip");
+    await seedTag(t, a, "family");
+    await seedTag(t, b, "family");
+    await seedTag(t, a, "work");
+
+    const results = await t.query(listTagsRef, { key: TEST_KEY });
+    expect(results).toEqual([
+      { tag: "vip", count: 3 },
+      { tag: "family", count: 2 },
+      { tag: "work", count: 1 },
+    ]);
+  });
+
+  test("empty when no tags exist", async () => {
+    const t = convexTest(schema, modules);
+    const results = await t.query(listTagsRef, { key: TEST_KEY });
+    expect(results).toEqual([]);
+  });
+
+  test("rejects a wrong key", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.query(listTagsRef, { key: "wrong" })).rejects.toThrow();
   });
 });
 

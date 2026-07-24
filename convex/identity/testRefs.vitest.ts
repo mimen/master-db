@@ -92,6 +92,36 @@ export const searchAirtableHumansRef = makeFunctionReference<
   unknown
 >("identity/airtableSearch:searchAirtableHumans");
 
+export const listTagsRef = makeFunctionReference<
+  "query",
+  { key: string },
+  Array<{ tag: string; count: number }>
+>("identity/queries:listTags");
+
+export const setFavoriteRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; is_favorite: boolean },
+  null
+>("identity/crm:setFavorite");
+
+export const setPriorityRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; priority?: "high" | "normal" | "low" | null },
+  null
+>("identity/crm:setPriority");
+
+export const addTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; tag: string },
+  null
+>("identity/crm:addTag");
+
+export const removeTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; tag: string },
+  null
+>("identity/crm:removeTag");
+
 export const ingestContactsBatchRef = makeFunctionReference<
   "mutation",
   {

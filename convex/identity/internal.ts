@@ -262,7 +262,11 @@ export function pickPrimaryNameIdentity<T extends NameIdentityFields>(identities
  * or an in-app rename), and the next sync re-deriving names from identities
  * must not silently revert that. Every other aggregate still recomputes
  * normally. `organization` is Convex-native (no source has one) and is never
- * touched here — it simply isn't part of the patch.
+ * touched here — it simply isn't part of the patch. Same for the private CRM
+ * layer (`is_favorite`, `priority`, and the `person_tags` table): no source
+ * sync ever populates them, so they're absent from every patch built below
+ * and untouched by definition — see crm.ts's docstring and internal.test.ts's
+ * "CRM fields survive a sync" coverage.
  *
  * Skips the patch entirely when the computed aggregates match the current
  * doc — this runs on every ingested card in the ~1,510-card / 10-minute
