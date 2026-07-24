@@ -158,6 +158,7 @@ function PaletteRoot({
       case "action":
         if (id.value === "new-message") return onCompose();
         if (id.value === "scheduled") return void router.push("/scheduled");
+        if (id.value === "settings") return void router.push("/settings");
         return onShowHelp();
     }
   };

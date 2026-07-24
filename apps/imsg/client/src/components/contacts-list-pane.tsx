@@ -10,17 +10,19 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { orderContacts } from "@/lib/contact-order";
 import { type AirtableHumanRow, type ContactListRow, primaryHandle } from "@/lib/identity";
+import { useNameOrder } from "@/lib/settings";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar } from "./avatar";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
 import { NavSwitcher } from "./nav-switcher";
+import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
-import { SuggestionSettingsButton } from "./sidebar/suggestion-settings-button";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import {
   SIDEBAR_CHROME_HEIGHT,
@@ -29,25 +31,19 @@ import {
 
 type Row =
   | { kind: "header"; key: string; letter: string }
-  | { kind: "contact"; key: string; person: ContactListRow }
+  | { kind: "contact"; key: string; person: ContactListRow; title: string }
   | { kind: "airtable-header"; key: string }
   | { kind: "airtable"; key: string; human: AirtableHumanRow };
 
-function sectionLetter(name: string): string {
-  const c = name.trim().charAt(0).toUpperCase();
-  return /[A-Z]/.test(c) ? c : "#";
-}
-
-function buildRows(people: ContactListRow[]): Row[] {
+function buildRows(people: ContactListRow[], nameOrder: ReturnType<typeof useNameOrder>): Row[] {
   const rows: Row[] = [];
   let lastLetter: string | null = null;
-  for (const p of people) {
-    const letter = sectionLetter(p.display_name);
-    if (letter !== lastLetter) {
-      rows.push({ kind: "header", key: `h-${letter}`, letter });
-      lastLetter = letter;
+  for (const { person, title, sectionLetter } of orderContacts(people, nameOrder)) {
+    if (sectionLetter !== lastLetter) {
+      rows.push({ kind: "header", key: `h-${sectionLetter}`, letter: sectionLetter });
+      lastLetter = sectionLetter;
     }
-    rows.push({ kind: "contact", key: p._id, person: p });
+    rows.push({ kind: "contact", key: person._id, person, title });
   }
   return rows;
 }
@@ -66,6 +62,7 @@ export interface ContactsListPaneProps {
  */
 export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
+  const nameOrder = useNameOrder();
   const [query, setQuery] = useState("");
   const topBarH = SIDEBAR_CHROME_HEIGHT;
   const needle = query.trim().toLowerCase();
@@ -88,14 +85,14 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   }, [people, needle]);
 
   const rows = useMemo(() => {
-    const base = filtered ? buildRows(filtered) : [];
+    const base = filtered ? buildRows(filtered, nameOrder) : [];
     if (airtableResults.length === 0) return base;
     return [
       ...base,
       { kind: "airtable-header" as const, key: "airtable-header" },
       ...airtableResults.map((h) => ({ kind: "airtable" as const, key: `at-${h.record_id}`, human: h })),
     ];
-  }, [filtered, airtableResults]);
+  }, [filtered, airtableResults, nameOrder]);
 
   // Same synthetic thumb as Messages; FlatList's onContentSizeChange is
   // reliable, so it feeds content height directly.
@@ -158,7 +155,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
         leading={
           <PersonAvatar address={primaryHandle(item.person) ?? null} name={item.person.display_name} size={36} />
         }
-        title={item.person.display_name}
+        title={item.title}
       />
     );
   };
@@ -168,7 +165,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
       leading={wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
       actions={
         <>
-          <SuggestionSettingsButton />
+          <SettingsButton />
           {/* Filters are a Messages concept — present for bar parity, inert here. */}
           <View style={[chromeStyles.actionButton, { opacity: 0.3 }]}>
             <Ionicons name="options-outline" size={21} color={theme.accent} />

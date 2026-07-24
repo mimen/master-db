@@ -11,10 +11,10 @@ import { NavSwitcher } from "./nav-switcher";
 import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
+import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
-import { SuggestionSettingsButton } from "./sidebar/suggestion-settings-button";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
 import { useConversationListKeyboard } from "./conversations/use-conversation-list-keyboard";
@@ -128,7 +128,7 @@ export function ConversationListPane({
       leading={wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
       actions={
         <>
-          <SuggestionSettingsButton />
+          <SettingsButton />
           <Pressable
             ref={filterBtnRef}
             accessibilityRole="button"
