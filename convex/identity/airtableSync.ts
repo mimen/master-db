@@ -24,7 +24,25 @@ import { internalAction } from "../_generated/server";
 
 const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
 const HUMANS_TABLE_ID = "tbl6LptFEMKLaN0I9";
-const FIELDS = ["Name", "First Name", "Last Name", "Phone Number", "Email Address", "Email Address 2"];
+// Every phone/email column on Humans, not just the first of each — these are
+// JOIN KEYS (see toContactCard), not just enrichment data. A person whose
+// Apple contact only carries their 2nd/3rd phone or 3rd/4th email would never
+// link to their Airtable record if we only pulled the first of each.
+// Deliberately excludes "PayPal Email" and "Shotgun Email Address" — those are
+// payment/vendor addresses, not identity handles a human would recognize as
+// "their email."
+const FIELDS = [
+  "Name",
+  "First Name",
+  "Last Name",
+  "Phone Number",
+  "Phone Number 2",
+  "Phone Number 3",
+  "Email Address",
+  "Email Address 2",
+  "Email Address 3",
+  "Email Address 4",
+];
 
 type AirtableRecord = {
   id: string;
@@ -33,8 +51,12 @@ type AirtableRecord = {
     "First Name"?: string;
     "Last Name"?: string;
     "Phone Number"?: string;
+    "Phone Number 2"?: string;
+    "Phone Number 3"?: string;
     "Email Address"?: string;
     "Email Address 2"?: string;
+    "Email Address 3"?: string;
+    "Email Address 4"?: string;
   };
 };
 
@@ -61,10 +83,15 @@ type ContactCard = {
 
 /** Maps one Humans row to a pre-grouped contact card, or null if it has no handle at all. */
 export function toContactCard(r: AirtableRecord): ContactCard | null {
-  const phones = r.fields["Phone Number"] ? [r.fields["Phone Number"]] : [];
-  const emails = [r.fields["Email Address"], r.fields["Email Address 2"]].filter(
-    (e): e is string => Boolean(e),
+  const phones = [r.fields["Phone Number"], r.fields["Phone Number 2"], r.fields["Phone Number 3"]].filter(
+    (p): p is string => Boolean(p),
   );
+  const emails = [
+    r.fields["Email Address"],
+    r.fields["Email Address 2"],
+    r.fields["Email Address 3"],
+    r.fields["Email Address 4"],
+  ].filter((e): e is string => Boolean(e));
   if (phones.length === 0 && emails.length === 0) return null;
   return {
     display_name: r.fields.Name,

@@ -65,4 +65,31 @@ describe("toContactCard (Airtable Humans row -> pre-grouped card)", () => {
     expect(card?.last_name).toBeUndefined();
     expect(card?.display_name).toBe("The Brooklyn Mirage");
   });
+
+  test("collects all 3 phone columns and all 4 email columns — these are join keys, not just enrichment", () => {
+    const record = {
+      id: "rec6",
+      fields: {
+        Name: "Chase Petersen",
+        "Phone Number": "+16195551234",
+        "Phone Number 2": "+16195555678",
+        "Phone Number 3": "+16195559999",
+        "Email Address": "chase@example.com",
+        "Email Address 2": "chase@auf.co",
+        "Email Address 3": "chase@work.co",
+        "Email Address 4": "chase@old.com",
+      },
+    };
+    const card = toContactCard(record);
+    expect(card?.phones).toEqual(["+16195551234", "+16195555678", "+16195559999"]);
+    expect(card?.emails).toEqual(["chase@example.com", "chase@auf.co", "chase@work.co", "chase@old.com"]);
+  });
+
+  test("a hole in the middle (Phone Number 2 missing) doesn't leave a hole in the array", () => {
+    const record = {
+      id: "rec7",
+      fields: { "Phone Number": "+16195551234", "Phone Number 3": "+16195559999" },
+    };
+    expect(toContactCard(record)?.phones).toEqual(["+16195551234", "+16195559999"]);
+  });
 });
