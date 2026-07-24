@@ -36,6 +36,7 @@ export default function RootLayout() {
                 <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
                 <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
                 <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
+                <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
               </Stack>
               <ToastHost />
               <StatusBar style="auto" />
