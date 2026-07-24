@@ -37,6 +37,15 @@ export type IdentityRow = {
 export type Person = {
   _id: string;
   display_name?: string;
+  // Structured name parts (Phase 1 structured names) — aggregated from the
+  // person's single "primary name identity" by recomputePersonAggregates,
+  // or set directly by a manual edit. See convex/schema/identity/people.ts.
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  // Convex-native — no source (Apple/Airtable) has an organization field;
+  // only a manual edit here ever sets it.
+  organization?: string;
   normalized_phones: string[];
   normalized_emails: string[];
   identity_count: number;
@@ -53,6 +62,10 @@ export type WhoIsResult =
 export type ContactListRow = {
   _id: string;
   display_name: string;
+  first_name?: string;
+  last_name?: string;
+  nickname?: string;
+  organization?: string;
   normalized_phones: string[];
   normalized_emails: string[];
   airtable_human_id?: string;
@@ -75,7 +88,15 @@ const listPeopleRef = makeFunctionReference<"query", { key: string }, ContactLis
 
 const createPersonRef = makeFunctionReference<
   "mutation",
-  { key: string; handle: string; display_name?: string },
+  {
+    key: string;
+    handle: string;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    nickname?: string;
+    organization?: string;
+  },
   { created: boolean; personId: string }
 >("identity/mutations:createPerson");
 
@@ -93,7 +114,15 @@ const addPersonFromAirtableRef = makeFunctionReference<
 
 const renamePersonRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: string; display_name: string },
+  {
+    key: string;
+    personId: string;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    nickname?: string;
+    organization?: string;
+  },
   null
 >("identity/mutations:renamePerson");
 
@@ -107,8 +136,14 @@ export function useListPeople(): ContactListRow[] | undefined {
 
 export function useCreatePerson() {
   const mutate = useMutation(createPersonRef);
-  return (args: { handle: string; display_name?: string }) =>
-    mutate({ key: IDENTITY_KEY, ...args });
+  return (args: {
+    handle: string;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    nickname?: string;
+    organization?: string;
+  }) => mutate({ key: IDENTITY_KEY, ...args });
 }
 
 export function useSearchAirtableHumans() {
@@ -128,8 +163,14 @@ export function useAddPersonFromAirtable() {
 
 export function useRenamePerson() {
   const mutate = useMutation(renamePersonRef);
-  return (args: { personId: string; display_name: string }) =>
-    mutate({ key: IDENTITY_KEY, ...args });
+  return (args: {
+    personId: string;
+    display_name?: string;
+    first_name?: string;
+    last_name?: string;
+    nickname?: string;
+    organization?: string;
+  }) => mutate({ key: IDENTITY_KEY, ...args });
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */

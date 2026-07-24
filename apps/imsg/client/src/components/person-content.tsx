@@ -16,7 +16,7 @@ import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
 import { usePersonView } from "@/hooks/use-person-view";
 import { useTheme } from "@/hooks/use-theme";
-import { Type } from "@/constants/theme";
+import { Spacing, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
 import { CenteredSpinner } from "./empty-state";
@@ -33,6 +33,24 @@ export interface PersonContentProps {
   onBack?: () => void;
   backLabel?: string;
 }
+
+/** Editable state for the First/Last/Nickname/Organization/Display-override
+ * form, shared by the not-found "Add Contact" flow and the found-person
+ * rename affordance (person-content.tsx's two entry points into the same
+ * structured-name edit surface — see convex/identity/mutations.ts's
+ * createPerson/renamePerson, which both accept this same shape). `display`
+ * is the optional override — left blank, the server derives "First Last". */
+interface NameFormState {
+  first: string;
+  last: string;
+  nickname: string;
+  organization: string;
+  display: string;
+}
+
+const EMPTY_NAME_FORM: NameFormState = { first: "", last: "", nickname: "", organization: "", display: "" };
+
+type Theme = ReturnType<typeof useTheme>;
 
 /**
  * Person-detail view, shared by the mobile /person modal and the desktop
@@ -56,9 +74,9 @@ export function PersonContent({
   const createPerson = useCreatePerson();
   const renamePerson = useRenamePerson();
   const [creating, setCreating] = useState(false);
-  const [nameInput, setNameInput] = useState(name ?? "");
+  const [addForm, setAddForm] = useState<NameFormState>({ ...EMPTY_NAME_FORM, display: name ?? "" });
   const [editingName, setEditingName] = useState(false);
-  const [editValue, setEditValue] = useState("");
+  const [nameForm, setNameForm] = useState<NameFormState>(EMPTY_NAME_FORM);
   const [saving, setSaving] = useState(false);
 
   const header = showHeader ? (
@@ -101,15 +119,10 @@ export function PersonContent({
           <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: 16, marginBottom: 16 }}>
             No linked contact found.
           </Text>
-          <TextInput
-            value={nameInput}
-            onChangeText={setNameInput}
-            placeholder="Name"
-            placeholderTextColor={theme.textSecondary}
-            style={[
-              styles.nameInput,
-              { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.divider },
-            ]}
+          <NameFormFields
+            value={addForm}
+            onChange={(patch) => setAddForm((f) => ({ ...f, ...patch }))}
+            theme={theme}
           />
           <Pressable
             disabled={creating}
@@ -117,7 +130,17 @@ export function PersonContent({
             onPress={async () => {
               setCreating(true);
               try {
-                await createPerson({ handle: address, display_name: nameInput.trim() || undefined });
+                // Blank = "no info for this field" here (a fresh contact,
+                // not an edit of known data) — every field collapses to
+                // undefined rather than an explicit clear.
+                await createPerson({
+                  handle: address,
+                  display_name: addForm.display.trim() || undefined,
+                  first_name: addForm.first.trim() || undefined,
+                  last_name: addForm.last.trim() || undefined,
+                  nickname: addForm.nickname.trim() || undefined,
+                  organization: addForm.organization.trim() || undefined,
+                });
                 showToast("Contact added");
                 // So the inbox picks up the new name/known status right away
                 // instead of waiting for the server's next mirror tick.
@@ -142,6 +165,48 @@ export function PersonContent({
 
   const { person, identities } = result;
   const airtableId = person.airtable_human_id;
+  const autoFromParts = [person.first_name, person.last_name].filter(Boolean).join(" ");
+  // Only pre-fill the override box when the current display_name isn't just
+  // "First Last" — i.e. it really was a deliberate override, not the
+  // ordinary derived value. Otherwise it stays blank with the auto-name
+  // placeholder, same as a never-edited person.
+  const displayIsOverride = Boolean(person.display_name) && person.display_name !== autoFromParts;
+
+  const startEditingName = () => {
+    setNameForm({
+      first: person.first_name ?? "",
+      last: person.last_name ?? "",
+      nickname: person.nickname ?? "",
+      organization: person.organization ?? "",
+      display: displayIsOverride ? (person.display_name ?? "") : "",
+    });
+    setEditingName(true);
+  };
+
+  const handleSaveName = async () => {
+    setSaving(true);
+    try {
+      // This is a full-form save of a known person's current values, so
+      // first_name/last_name/nickname/organization are sent as-is (even
+      // when empty) — an explicitly blanked field really does clear it.
+      // display_name keeps the "blank = no override, derive automatically"
+      // convention from the Add Contact flow.
+      await renamePerson({
+        personId: person._id,
+        display_name: nameForm.display.trim() || undefined,
+        first_name: nameForm.first.trim(),
+        last_name: nameForm.last.trim(),
+        nickname: nameForm.nickname.trim(),
+        organization: nameForm.organization.trim(),
+      });
+      setEditingName(false);
+      void api.refreshIdentity().catch(() => undefined);
+    } catch {
+      showToast("Failed to save name");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -151,55 +216,52 @@ export function PersonContent({
           <PersonAvatar address={address} name={person.display_name ?? address} size={96} />
         </View>
         {editingName ? (
-          <View style={styles.editNameRow}>
-            <TextInput
-              value={editValue}
-              onChangeText={setEditValue}
-              placeholder="Name"
-              placeholderTextColor={theme.textSecondary}
-              autoFocus
-              style={[
-                styles.nameInput,
-                styles.nameInputInline,
-                { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.divider },
-              ]}
+          <View style={styles.editNameBlock}>
+            <NameFormFields
+              value={nameForm}
+              onChange={(patch) => setNameForm((f) => ({ ...f, ...patch }))}
+              theme={theme}
+              autoFocusFirst
             />
-            <Pressable
-              disabled={saving}
-              hitSlop={8}
-              accessibilityLabel="Save name"
-              onPress={async () => {
-                const trimmed = editValue.trim();
-                if (!trimmed) return;
-                setSaving(true);
-                try {
-                  await renamePerson({ personId: person._id, display_name: trimmed });
-                  setEditingName(false);
-                  void api.refreshIdentity().catch(() => undefined);
-                } catch {
-                  showToast("Failed to save name");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              {saving ? <ActivityIndicator /> : <Ionicons name="checkmark" size={22} color={theme.accent} />}
-            </Pressable>
-            <Pressable hitSlop={8} accessibilityLabel="Cancel" onPress={() => setEditingName(false)}>
-              <Ionicons name="close" size={22} color={theme.textSecondary} />
-            </Pressable>
+            <View style={styles.editNameActions}>
+              <Pressable
+                disabled={saving}
+                hitSlop={8}
+                accessibilityLabel="Cancel"
+                style={styles.editNameActionBtn}
+                onPress={() => setEditingName(false)}
+              >
+                <Ionicons name="close" size={18} color={theme.textSecondary} />
+                <Text style={{ color: theme.textSecondary, fontSize: 15 }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={saving}
+                hitSlop={8}
+                accessibilityLabel="Save name"
+                style={styles.editNameActionBtn}
+                onPress={handleSaveName}
+              >
+                {saving ? (
+                  <ActivityIndicator />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark" size={18} color={theme.accent} />
+                    <Text style={{ color: theme.accent, fontSize: 15, fontWeight: "600" }}>Save</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           </View>
         ) : (
-          <Pressable
-            style={styles.titleRow}
-            onPress={() => {
-              setEditValue(person.display_name ?? "");
-              setEditingName(true);
-            }}
-          >
-            <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
-            <Ionicons name="pencil" size={14} color={theme.textSecondary} />
-          </Pressable>
+          <>
+            <Pressable style={styles.titleRow} onPress={startEditingName}>
+              <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
+              <Ionicons name="pencil" size={14} color={theme.textSecondary} />
+            </Pressable>
+            {person.organization && (
+              <Text style={[styles.orgLine, { color: theme.textSecondary }]}>{person.organization}</Text>
+            )}
+          </>
         )}
         <Text style={[styles.statusLine, { color: theme.textSecondary }]}>
           {lastContactedAt ? `Last contacted ${formatListTimestamp(lastContactedAt)}` : "No conversation yet"}
@@ -233,6 +295,72 @@ export function PersonContent({
   );
 }
 
+/**
+ * The First/Last/Nickname/Organization/Display-override input stack, shared
+ * by the "Add Contact" and "edit person" flows above — same fields, same
+ * layout, different submit handler and initial values at each call site.
+ */
+function NameFormFields({
+  value,
+  onChange,
+  theme,
+  autoFocusFirst,
+}: {
+  value: NameFormState;
+  onChange: (patch: Partial<NameFormState>) => void;
+  theme: Theme;
+  autoFocusFirst?: boolean;
+}) {
+  const inputStyle = [
+    styles.nameInput,
+    { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.divider },
+  ];
+  const autoDisplay = [value.first.trim(), value.last.trim()].filter(Boolean).join(" ");
+
+  return (
+    <View style={styles.nameFormWrap}>
+      <View style={styles.nameFormRow}>
+        <TextInput
+          value={value.first}
+          onChangeText={(t) => onChange({ first: t })}
+          placeholder="First"
+          placeholderTextColor={theme.textSecondary}
+          autoFocus={autoFocusFirst}
+          style={[...inputStyle, styles.nameInputHalf]}
+        />
+        <TextInput
+          value={value.last}
+          onChangeText={(t) => onChange({ last: t })}
+          placeholder="Last"
+          placeholderTextColor={theme.textSecondary}
+          style={[...inputStyle, styles.nameInputHalf]}
+        />
+      </View>
+      <TextInput
+        value={value.nickname}
+        onChangeText={(t) => onChange({ nickname: t })}
+        placeholder="Nickname"
+        placeholderTextColor={theme.textSecondary}
+        style={inputStyle}
+      />
+      <TextInput
+        value={value.organization}
+        onChangeText={(t) => onChange({ organization: t })}
+        placeholder="Organization"
+        placeholderTextColor={theme.textSecondary}
+        style={inputStyle}
+      />
+      <TextInput
+        value={value.display}
+        onChangeText={(t) => onChange({ display: t })}
+        placeholder={autoDisplay ? `Auto: ${autoDisplay}` : "Display name"}
+        placeholderTextColor={theme.textSecondary}
+        style={inputStyle}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   paneHeader: {
     flexDirection: "row",
@@ -248,6 +376,7 @@ const styles = StyleSheet.create({
   avatarWrap: { marginBottom: 14 },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, textAlign: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+  orgLine: { fontSize: 14, textAlign: "center", marginBottom: 4 },
   statusLine: { fontSize: 14, textAlign: "center", marginBottom: 4 },
   nameInput: {
     width: "100%",
@@ -258,14 +387,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
-  editNameRow: {
+  nameFormWrap: { width: "100%" },
+  nameFormRow: { flexDirection: "row", gap: Spacing.two },
+  nameInputHalf: { flex: 1 },
+  editNameBlock: { width: "100%", marginBottom: 4 },
+  editNameActions: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    width: "100%",
-    marginBottom: 4,
+    justifyContent: "flex-end",
+    gap: Spacing.four,
+    marginTop: -2,
   },
-  nameInputInline: { flex: 1, marginBottom: 0 },
+  editNameActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6 },
   addButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
