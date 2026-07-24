@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateCounts } from "@shared/types";
+import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
@@ -129,6 +130,14 @@ export function ConversationListPane({
       actions={
         <>
           <SuggestionSettingsButton />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Scheduled messages"
+            onPress={() => router.push("/scheduled")}
+            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+          >
+            <Ionicons name="time-outline" size={21} color={theme.accent} />
+          </Pressable>
           <Pressable
             ref={filterBtnRef}
             accessibilityRole="button"
