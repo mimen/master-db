@@ -14,6 +14,7 @@ import { showToast } from "@/lib/toast";
 import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
+import { chatIsSMS } from "@/lib/chat-service";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
 import { formatAddress } from "@shared/address";
@@ -53,10 +54,6 @@ const IOS_INPUT_PADDING_V = 16;
 const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
 const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 10 + IOS_INPUT_PADDING_V;
 
-/** SMS/RCS conversations have an "SMS;" guid prefix — green bubbles. */
-function chatIsSMS(chatGuid: string): boolean {
-  return chatGuid.startsWith("SMS");
-}
 
 function tempMessage(chatGuid: string, text: string, replyTo: Message | null): Message {
   return {
@@ -208,7 +205,6 @@ export function Composer({
   }, []);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  const sendInFlight = useRef(false);
   const typingActive = useRef(false);
   const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -255,7 +251,13 @@ export function Composer({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        if (event.isComposing || event.repeat || sendInFlight.current) return;
+        // Deliberately NOT gated on an in-flight send: each send gets its own
+        // optimistic temp message and resolves independently, so waiting for
+        // the previous round-trip only made a fast typist's second message
+        // silently vanish. Double-fire on one message is already impossible —
+        // send() clears the input synchronously before awaiting, so a repeat
+        // Enter finds empty text and returns.
+        if (event.isComposing || event.repeat) return;
         sendRef.current();
       }
     };
@@ -363,7 +365,6 @@ export function Composer({
 
     const temp = tempMessage(chatGuid, trimmed, replyTo);
     const reply = replyTo;
-    sendInFlight.current = true;
     clearText();
     setDraft(chatGuid, "");
     onClearReply();
@@ -379,8 +380,6 @@ export function Composer({
       onSettled(temp.guid, chatIsSMS(chatGuid) ? { ...message, service: "SMS" } : message);
     } catch {
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
-    } finally {
-      sendInFlight.current = false;
     }
   };
 
