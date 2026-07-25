@@ -583,12 +583,17 @@ export function Composer({
         {
           borderTopColor: theme.divider,
           // Keep native controls clear of the keyboard and rounded display edges.
-          // With the keyboard down, the bar owns the home-indicator strip:
-          // its BACKGROUND runs to the screen edge while the controls sit
-          // above the indicator. Padding the thread instead (the first
-          // attempt) lifted the whole bar and left a dead gap beneath it.
-          // Keyboard up, the keyboard covers that strip, so 8 is enough.
-          paddingBottom: keyboardUp || Platform.OS === "web" ? 8 : 8 + insets.bottom,
+          // Keyboard down, the bar extends into the home-indicator strip and
+          // the indicator simply draws over it — the same thing Messages
+          // does. Reserving the WHOLE safe-area inset below the controls (an
+          // earlier attempt) just recreated the dead gap it was meant to fix:
+          // the bar and the thread share a background, so "extending the
+          // background" and "leaving a gap" look identical, and all that
+          // registers is how far the field sits from the bottom. Keep a
+          // modest clearance so the controls stay off the indicator without
+          // floating above it. Keyboard up, the keyboard covers the strip.
+          paddingBottom:
+            keyboardUp || Platform.OS === "web" ? 8 : 8 + Math.min(insets.bottom, 12),
           paddingHorizontal: Platform.OS === "web" ? 18 : keyboardUp ? 16 : 20,
         },
       ]}
