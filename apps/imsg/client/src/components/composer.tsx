@@ -15,6 +15,7 @@ import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { chatIsSMS } from "@/lib/chat-service";
+import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
 import { formatAddress } from "@shared/address";
@@ -815,20 +816,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   growthMirror: {
-    // Same metrics as the input's text area; invisible; never intercepts touch.
+    // Same metrics as the input's TEXT AREA — inset by padding + border, not
+    // padding alone, or it wraps at a different width than the input and
+    // under-reports the line count (see lib/composer-metrics.ts).
     fontSize: 17,
-    left: 14,
-    lineHeight: 22,
+    left: MIRROR_INSET_H,
+    lineHeight: IOS_INPUT_LINE_HEIGHT,
     opacity: 0,
     pointerEvents: "none",
     position: "absolute",
-    right: 14,
+    right: MIRROR_INSET_H,
     top: 0,
   },
   input: {
-    borderWidth: 1,
+    borderWidth: INPUT_BORDER_W,
     borderRadius: 19,
-    paddingHorizontal: 14,
+    paddingHorizontal: INPUT_PADDING_H,
     paddingTop: 8,
     paddingBottom: 8,
     fontSize: 17,
