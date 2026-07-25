@@ -1,5 +1,6 @@
 import { ConvexReactClient, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
+import { requireConvexUrl, requireIdentityKey } from "./public-env";
 
 /**
  * imsg is not part of the master-db Convex build (Metro can't safely cross
@@ -11,7 +12,7 @@ import { makeFunctionReference } from "convex/server";
  */
 
 export const convexClient = new ConvexReactClient(
-  process.env.EXPO_PUBLIC_CONVEX_URL ?? "",
+  requireConvexUrl(process.env.EXPO_PUBLIC_CONVEX_URL),
   { unsavedChangesWarning: false },
 );
 
@@ -22,7 +23,7 @@ export const convexClient = new ConvexReactClient(
  * load; every hook below injects it so no call-site elsewhere in the client
  * needs to know it exists.
  */
-const IDENTITY_KEY = process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY ?? "";
+const IDENTITY_KEY = requireIdentityKey(process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY);
 
 export type IdentityRow = {
   kind: string;

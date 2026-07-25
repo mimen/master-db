@@ -32,9 +32,10 @@ Expo/React-Native-Web app  ←SSE + JSON→  Bun/Hono server  ←REST + socket.i
 
 ```sh
 bun install
-cp .env.example .env   # set BB_PASSWORD
-bun run build          # exports the Expo web app to client/dist/
-bun start              # serves app + API on :8377
+cp .env.example .env                 # set server values, including BB_PASSWORD
+cp client/.env.example client/.env   # set both required Expo public values
+bun run build                        # exports the Expo web app to client/dist/
+bun start                            # serves app + API on :8377
 ```
 
 Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo dev server
@@ -48,6 +49,18 @@ Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo
 | `BB_PASSWORD` | — | required |
 | `PORT` | `8377` | |
 | `DB_PATH` | `imsg.db` | overlay SQLite |
+| `CONVEX_CLOUD_URL` | — | optional identity mirror and CRM deployment URL |
+| `IMSG_IDENTITY_KEY` | — | shared identity gate; must match Convex and `client/.env` |
 | `WHISPER_BINARY_PATH` | — | optional local `whisper-cli` binary |
 | `WHISPER_MODEL_PATH` | — | optional local multilingual ggml model |
 | `WHISPER_WORK_DIR` | `.cache/whisper` | ephemeral conversion files |
+
+The Expo client reads a separate `client/.env` when exporting web or starting Metro:
+
+| var | default | |
+|---|---|---|
+| `EXPO_PUBLIC_CONVEX_URL` | — | required absolute HTTP(S) Convex deployment URL |
+| `EXPO_PUBLIC_IMSG_IDENTITY_KEY` | — | required; must match the Convex deployment's `IMSG_IDENTITY_KEY` |
+
+Both client values are embedded in the bundle. The identity key is a coarse shared gate,
+not a confidential browser secret. Builds fail before export when either value is absent.
