@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -414,7 +413,6 @@ export function ThreadView({
   // display's rounded corners. One value covers both states: whichever is
   // taller. The keyboard's reported height already includes the safe-area
   // region, hence max() rather than a sum.
-  const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -427,7 +425,10 @@ export function ThreadView({
       hide.remove();
     };
   }, []);
-  const bottomInset = Platform.OS === "web" ? 0 : Math.max(insets.bottom, keyboardHeight);
+  // Keyboard height ONLY. The safe-area strip belongs to the composer, whose
+  // background fills it — lifting the whole thread by the inset instead left a
+  // dead gap under the bar.
+  const bottomInset = Platform.OS === "web" ? 0 : keyboardHeight;
 
   return (
     <View

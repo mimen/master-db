@@ -18,6 +18,7 @@ import { chatIsSMS } from "@/lib/chat-service";
 import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
 import { BASE_URL } from "@/lib/config";
 import { getDraft, setDraft } from "@/lib/drafts";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer } from "@/lib/composer-fill";
@@ -196,6 +197,7 @@ export function Composer({
   onSent,
 }: ComposerProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(chatGuid));
@@ -581,7 +583,12 @@ export function Composer({
         {
           borderTopColor: theme.divider,
           // Keep native controls clear of the keyboard and rounded display edges.
-          paddingBottom: 8,
+          // With the keyboard down, the bar owns the home-indicator strip:
+          // its BACKGROUND runs to the screen edge while the controls sit
+          // above the indicator. Padding the thread instead (the first
+          // attempt) lifted the whole bar and left a dead gap beneath it.
+          // Keyboard up, the keyboard covers that strip, so 8 is enough.
+          paddingBottom: keyboardUp || Platform.OS === "web" ? 8 : 8 + insets.bottom,
           paddingHorizontal: Platform.OS === "web" ? 18 : keyboardUp ? 16 : 20,
         },
       ]}
