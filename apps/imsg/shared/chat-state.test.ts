@@ -399,6 +399,82 @@ describe("partitionPriorityShelf", () => {
     expect([...priority, ...recent]).toHaveLength(chats.length);
     expect(new Set([...priority, ...recent])).toEqual(new Set(chats));
   });
+
+  // ---------------------------------------------------- CRM priority feed-in
+
+  test("CRM P1/P2 chats lead the shelf, best priority first, even with no unread", () => {
+    const chats = [
+      makeChat({ guid: "unread-only", firstUnreadAt: 100 }),
+      makeChat({ guid: "p2-no-unread", firstUnreadAt: null, crm: { priority: 2 } }),
+      makeChat({ guid: "p1-no-unread", firstUnreadAt: null, crm: { priority: 1 } }),
+    ];
+
+    const { priority, recent } = partitionPriorityShelf(chats);
+    expect(priority.map((c) => c.guid)).toEqual(["p1-no-unread", "p2-no-unread", "unread-only"]);
+    expect(recent).toHaveLength(0);
+  });
+
+  test("within a priority tier, oldest-unread breaks ties; no-unread sorts after any unread", () => {
+    const chats = [
+      makeChat({ guid: "p1-no-unread", firstUnreadAt: null, crm: { priority: 1 } }),
+      makeChat({ guid: "p1-older", firstUnreadAt: 100, crm: { priority: 1 } }),
+      makeChat({ guid: "p1-newer", firstUnreadAt: 200, crm: { priority: 1 } }),
+    ];
+
+    const { priority } = partitionPriorityShelf(chats);
+    expect(priority.map((c) => c.guid)).toEqual(["p1-older", "p1-newer", "p1-no-unread"]);
+  });
+
+  test("a priority chat that's also oldest-unread is placed once, not duplicated", () => {
+    const chats = [
+      makeChat({ guid: "p1-and-unread", firstUnreadAt: 50, crm: { priority: 1 } }),
+      makeChat({ guid: "unread-a", firstUnreadAt: 100 }),
+      makeChat({ guid: "unread-b", firstUnreadAt: 150 }),
+    ];
+
+    const { priority, recent } = partitionPriorityShelf(chats);
+    expect(priority.map((c) => c.guid)).toEqual(["p1-and-unread", "unread-a", "unread-b"]);
+    expect(recent).toHaveLength(0);
+  });
+
+  test("priority tier plus oldest-unread fill fills remaining slots up to the 10 cap", () => {
+    const priorityChats = Array.from({ length: 3 }, (_, i) =>
+      makeChat({ guid: `p1-${i}`, firstUnreadAt: null, crm: { priority: 1 } }),
+    );
+    const unreadChats = Array.from({ length: 9 }, (_, i) =>
+      makeChat({ guid: `u-${i}`, firstUnreadAt: (i + 1) * 100 }),
+    );
+    const { priority, recent } = partitionPriorityShelf([...priorityChats, ...unreadChats]);
+
+    expect(priority).toHaveLength(10);
+    expect(priority.slice(0, 3).map((c) => c.guid)).toEqual(["p1-0", "p1-1", "p1-2"]);
+    // Only the 7 oldest of the 9 unread chats fit in the remaining slots.
+    expect(priority.slice(3).map((c) => c.guid)).toEqual(["u-0", "u-1", "u-2", "u-3", "u-4", "u-5", "u-6"]);
+    expect(recent.map((c) => c.guid)).toEqual(["u-7", "u-8"]);
+  });
+
+  test("no unread and no priority stays out of the shelf entirely", () => {
+    const chats = [
+      makeChat({ guid: "quiet", firstUnreadAt: null }),
+      makeChat({ guid: "quiet-p3", firstUnreadAt: null, crm: { priority: 3 } }),
+      makeChat({ guid: "unread", firstUnreadAt: 100 }),
+    ];
+
+    const { priority, recent } = partitionPriorityShelf(chats);
+    expect(priority.map((c) => c.guid)).toEqual(["unread"]);
+    expect(recent.map((c) => c.guid).sort()).toEqual(["quiet", "quiet-p3"]);
+  });
+
+  test("no chat has CRM priority: behaves exactly like the old oldest-unread-only selection", () => {
+    const chats = [
+      makeChat({ guid: "a", firstUnreadAt: 500 }),
+      makeChat({ guid: "b", firstUnreadAt: null }),
+      makeChat({ guid: "c", firstUnreadAt: 100 }),
+    ];
+
+    expect(partitionPriorityShelf(chats).priority.map((c) => c.guid)).toEqual(["c", "a"]);
+    expect(partitionPriorityShelf(chats).recent.map((c) => c.guid)).toEqual(["b"]);
+  });
 });
 
 // ---------------------------------------------------------------- applyMessage

@@ -27,6 +27,18 @@ function unreadLabel(chat: ChatSummary): string {
   return chat.unreadCount === 1 ? "1 unread" : `${chat.unreadCount} unread`;
 }
 
+/** The shelf now admits P1/P2 chats with zero unread (see chat-state.ts's
+ * partitionPriorityShelf) — those entries have nothing truthful to say via
+ * unreadLabel, so show which priority earned them the slot instead. Falls
+ * back to unreadLabel for everything else (the common case: unread chats,
+ * with or without priority). */
+function shelfMeta(chat: ChatSummary): { text: string; isPriorityBadge: boolean } {
+  if (chat.unreadCount === 0 && (chat.crm?.priority === 1 || chat.crm?.priority === 2)) {
+    return { text: `P${chat.crm.priority}`, isPriorityBadge: true };
+  }
+  return { text: unreadLabel(chat), isPriorityBadge: false };
+}
+
 export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>(
   function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }, ref) {
   const theme = useTheme();
@@ -81,6 +93,7 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
         </View>
         {chats.map((chat, index) => {
           const selected = chat.guid === selectedGuid;
+          const meta = shelfMeta(chat);
           return (
             <Pressable
               key={chat.guid}
@@ -91,7 +104,9 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
                 };
               }}
               accessibilityRole="button"
-              accessibilityLabel={`Open ${chat.displayName}, ${unreadLabel(chat)}`}
+              accessibilityLabel={`Open ${chat.displayName}, ${
+                meta.isPriorityBadge ? `priority ${chat.crm!.priority}` : meta.text
+              }`}
               accessibilityState={{ selected }}
               onPress={() => onPress(chat)}
               onLongPress={() => onLongPress?.(chat)}
@@ -115,8 +130,11 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
               <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
                 {chat.displayName}
               </Text>
-              <Text numberOfLines={1} style={[styles.meta, { color: theme.textSecondary }]}>
-                {unreadLabel(chat)}
+              <Text
+                numberOfLines={1}
+                style={[styles.meta, { color: meta.isPriorityBadge ? theme.accent : theme.textSecondary }]}
+              >
+                {meta.text}
               </Text>
             </Pressable>
           );
