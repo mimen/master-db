@@ -116,6 +116,27 @@ export interface ChatSummary {
    * mirror has nothing for these participants.
    */
   searchNames?: string[];
+  /**
+   * The private CRM layer's view of this conversation — favorite/priority/
+   * tags/event links, sourced from Convex (never Apple/Airtable). Absent
+   * means "nothing set," not "explicitly cleared."
+   *
+   * INHERITANCE RULE (see server/map.ts's mapChat): a GROUP chat's `crm`
+   * comes from its OWN chat_crm/tags/event_links rows (chat_guid-keyed). A
+   * DM has no CRM of its own — its `crm` is INHERITED from the linked
+   * person's CRM (person_id-keyed), so favoriting/prioritizing/tagging a
+   * contact and seeing it on their DM are the same fact, not two copies that
+   * can drift. One source of truth per conversation either way.
+   */
+  crm?: {
+    is_favorite?: boolean;
+    /** P1–P5, one = highest — same convention as Convex's people.priority
+     * and chat_crm.priority (see those schemas' docstrings). NOT inverted,
+     * unlike Todoist's API. */
+    priority?: number;
+    tags?: string[];
+    events?: Array<{ id: string; name: string }>;
+  };
 }
 
 export type StateCounts = Record<StateFilter, number>;

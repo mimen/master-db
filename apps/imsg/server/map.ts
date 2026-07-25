@@ -3,7 +3,7 @@ import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from
 import type { ChatState } from "../shared/chat-state";
 import { computeFlags } from "../shared/chat-state";
 import { formatAddress } from "../shared/address";
-import type { NameSource } from "./name-resolver";
+import type { CrmData, NameSource } from "./name-resolver";
 
 /** SMS (green bubble) messages come over a non-iMessage service. */
 function messageService(m: BBMessage): "iMessage" | "SMS" {
@@ -243,6 +243,46 @@ function isGenuineUnreadInbound(m: BBMessage): boolean {
   );
 }
 
+/**
+ * Reduces a raw CRM projection (from the Identity Mirror — either a chat's
+ * own or an inherited person's) to ChatSummary's wire shape, or `undefined`
+ * when there's genuinely nothing to show. Two distinct "nothing" cases both
+ * collapse to the same `undefined`: the mirror never resolved this
+ * chat/person at all, AND the mirror resolved it but every field is unset —
+ * a caller building a UI (favorite star, priority badge, tag chips) only
+ * ever needs to ask "is there a `crm` object," never "which kind of empty."
+ */
+function normalizeCrm(raw: CrmData | undefined): ChatSummary["crm"] {
+  if (!raw) return undefined;
+  const tags = raw.tags && raw.tags.length > 0 ? raw.tags : undefined;
+  const events = raw.events && raw.events.length > 0 ? raw.events : undefined;
+  if (!raw.is_favorite && raw.priority === undefined && !tags && !events) return undefined;
+  return { is_favorite: raw.is_favorite, priority: raw.priority, tags, events };
+}
+
+/**
+ * The CRM inheritance rule (decided 2026-07-24, see
+ * docs/plans/structured-names.html's "MEMBERSHIP ≠ OWNERSHIP"): a GROUP
+ * chat's CRM is its OWN (chat_guid-keyed); a DM has none of its own — it
+ * INHERITS the linked person's CRM, so favoriting/prioritizing/tagging a
+ * contact shows up on their DM automatically, with one source of truth
+ * rather than two copies that can drift. A DM with more than one raw
+ * participant address (shouldn't happen — that would make it a group by the
+ * caller's own `isGroup` check) or with none at all has nothing to inherit
+ * from.
+ */
+function chatCrmField(
+  chatGuid: string,
+  isGroup: boolean,
+  participants: readonly BBHandle[],
+  contacts: NameSource,
+): ChatSummary["crm"] {
+  if (isGroup) return normalizeCrm(contacts.chatCrm(chatGuid));
+  const only = participants.length === 1 ? participants[0] : undefined;
+  if (!only?.address) return undefined;
+  return normalizeCrm(contacts.personCrm(only.address));
+}
+
 export function mapChat(
   chat: BBChat,
   state: ChatState | undefined,
@@ -291,6 +331,7 @@ export function mapChat(
     firstUnreadAt,
     flags: computeFlags(state, flagInput, unreadCount),
     searchNames,
+    crm: chatCrmField(chat.guid, isGroup, participants, contacts),
   };
 }
 

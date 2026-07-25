@@ -1,6 +1,15 @@
 import type { ContactBook } from "./contacts";
 import type { IdentityMirror } from "./identity-mirror";
 
+/** The private CRM layer's shape, as carried by the Identity Mirror — see
+ * shared/types.ts's ChatSummary.crm for the full field-by-field docs. */
+export interface CrmData {
+  is_favorite?: boolean;
+  priority?: number;
+  tags?: string[];
+  events?: Array<{ id: string; name: string }>;
+}
+
 /**
  * The minimal shape map.ts's name-resolution call sites need — satisfied by
  * both a raw ContactBook and a NameResolver, so callers that only resolve
@@ -16,6 +25,17 @@ export interface NameSource {
    */
   searchTerms(address: string): string[];
   readonly available: boolean;
+  /** A GROUP chat's own CRM (favorite/priority/tags/events), by chat guid —
+   * undefined when the mirror has no data for this guid. Apple Contacts has
+   * no concept of this, so ContactBook always returns undefined; only the
+   * Identity Mirror (via NameResolver) has real data. See map.ts's mapChat
+   * for the group/DM inheritance rule this feeds. */
+  chatCrm(chatGuid: string): CrmData | undefined;
+  /** The CRM of the person linked to this raw participant address —
+   * undefined on a miss. This is how a DM's effective CRM is INHERITED from
+   * its one participant's person (see map.ts's mapChat) rather than having a
+   * second, independently-editable copy. */
+  personCrm(address: string): CrmData | undefined;
 }
 
 /**
@@ -58,5 +78,16 @@ export class NameResolver implements NameSource {
     const mirrorTerms = this.mirror.searchTerms(address);
     if (mirrorTerms.length > 0) return mirrorTerms;
     return this.contactBook.searchTerms(address);
+  }
+
+  /** No ContactBook fallback — Apple Contacts has no CRM concept at all, so
+   * there's nothing to fall back TO (unlike lookup/searchTerms, where
+   * ContactBook fills a real freshness gap). */
+  chatCrm(chatGuid: string): CrmData | undefined {
+    return this.mirror.chatCrm(chatGuid);
+  }
+
+  personCrm(address: string): CrmData | undefined {
+    return this.mirror.personCrm(address);
   }
 }

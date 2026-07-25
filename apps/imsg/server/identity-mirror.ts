@@ -1,5 +1,6 @@
 import { emailMatchKey, phoneMatchKey } from "../shared/address";
 import type { Config } from "./config";
+import type { CrmData } from "./name-resolver";
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -7,12 +8,14 @@ interface NameDirectoryEntry {
   normalized: string;
   display_name: string;
   terms: string[];
+  crm: CrmData;
 }
 
 /** One person's mirror record, keyed by phoneMatchKey/emailMatchKey. */
 interface MirrorEntry {
   name: string;
   terms: string[];
+  crm: CrmData;
 }
 
 /**
@@ -20,26 +23,30 @@ interface MirrorEntry {
  * https://docs.convex.dev/http-api/ — `{ status: "success", value }` on
  * success, `{ status: "error", errorMessage, errorData }` on failure.
  */
-type ConvexQueryResponse =
-  | { status: "success"; value: NameDirectoryEntry[] }
+type ConvexQueryResponse<T> =
+  | { status: "success"; value: T }
   | { status: "error"; errorMessage?: string; errorData?: unknown };
 
 /**
- * Read replica of the Convex identity graph's `nameDirectory` — Convex is the
- * canonical name/identity source (manual in-app adds, renames, and
- * Airtable-linked people, in addition to whatever Apple Contacts fed it via
- * IdentitySync), but the chat-list hot path can't afford to block on a cloud
- * round-trip. This mirror keeps the whole directory in memory and refreshes
- * it on an interval; `lookup()` is a synchronous map read.
+ * Read replica of the Convex identity graph's `nameDirectory` (people) AND
+ * `chatCrm` (GROUP chats) — Convex is the canonical name/identity AND CRM
+ * source (manual in-app adds, renames, favorites/priority/tags/event links),
+ * but the chat-list hot path can't afford to block on a cloud round-trip.
+ * This mirror keeps both in memory and refreshes them on an interval;
+ * `lookup()`/`chatCrm()`/`personCrm()` are all synchronous map reads.
  *
- * No-ops (logs once, then stays silent) if CONVEX_CLOUD_URL or
+ * No-ops (logs once per source, then stays silent) if CONVEX_CLOUD_URL or
  * IMSG_IDENTITY_KEY aren't configured — the mirror is optional, imsg must
- * keep working (falling back to ContactBook alone) without it.
+ * keep working (falling back to ContactBook alone, and no CRM at all) without
+ * it. Same fail-open contract for chat CRM as for names: mirror down or
+ * unconfigured ⇒ no CRM shown, never an error.
  */
 export class IdentityMirror {
   private timer: ReturnType<typeof setInterval> | null = null;
-  private warned = false;
+  private warnedNames = false;
+  private warnedChatCrm = false;
   private byKey = new Map<string, MirrorEntry>();
+  private chatCrmByGuid = new Map<string, CrmData>();
 
   constructor(private config: Pick<Config, "convexCloudUrl" | "identityKey">) {}
 
@@ -92,6 +99,21 @@ export class IdentityMirror {
     return this.entry(address)?.terms ?? [];
   }
 
+  /** The CRM of the person linked to this raw participant address — how a
+   * DM's ChatSummary.crm is INHERITED (see map.ts's mapChat). undefined on a
+   * miss (address not resolved by the mirror at all — distinct from a
+   * resolved person who simply has no CRM data, which map.ts's normalization
+   * also collapses to undefined on the wire). */
+  personCrm(address: string): CrmData | undefined {
+    return this.entry(address)?.crm;
+  }
+
+  /** A GROUP chat's own CRM, by chat guid — undefined when the mirror has no
+   * data for this guid (never favorited/prioritized/tagged/linked). */
+  chatCrm(chatGuid: string): CrmData | undefined {
+    return this.chatCrmByGuid.get(chatGuid);
+  }
+
   /**
    * Every mirror person whose name-term set contains `query` (case-
    * insensitive substring) — a Convex-backed contact result. One result per
@@ -117,14 +139,26 @@ export class IdentityMirror {
   }
 
   /**
-   * Refreshes the in-memory map from Convex. Swallows and logs any failure,
-   * keeping the last good snapshot rather than going blank on a transient
-   * network error. No-op (returns immediately) when unconfigured.
+   * Refreshes both in-memory maps from Convex (names+person-CRM, and chat
+   * CRM) — independently, so a failure in one doesn't blank out the other.
+   * No-op (returns immediately) when unconfigured.
    */
   async refresh(): Promise<void> {
     const { convexCloudUrl, identityKey } = this.config;
     if (!convexCloudUrl || !identityKey) return;
 
+    await Promise.all([
+      this.refreshNameDirectory(convexCloudUrl, identityKey),
+      this.refreshChatCrm(convexCloudUrl, identityKey),
+    ]);
+  }
+
+  /**
+   * Fetches `identity/queries:nameDirectory`. Swallows and logs any failure
+   * (once), keeping the last good snapshot rather than going blank on a
+   * transient network error.
+   */
+  private async refreshNameDirectory(convexCloudUrl: string, identityKey: string): Promise<void> {
     try {
       const res = await fetch(`${convexCloudUrl}/api/query`, {
         method: "POST",
@@ -136,27 +170,64 @@ export class IdentityMirror {
         }),
       });
       if (!res.ok) {
-        console.error(`identity-mirror: query failed with status ${res.status}`);
+        console.error(`identity-mirror: nameDirectory query failed with status ${res.status}`);
         return;
       }
-      const body = (await res.json()) as ConvexQueryResponse;
+      const body = (await res.json()) as ConvexQueryResponse<NameDirectoryEntry[]>;
       if (body.status !== "success") {
-        console.error(`identity-mirror: query error: ${body.errorMessage ?? "unknown"}`);
+        console.error(`identity-mirror: nameDirectory query error: ${body.errorMessage ?? "unknown"}`);
         return;
       }
       const next = new Map<string, MirrorEntry>();
       for (const entry of body.value) {
         const emailKey = emailMatchKey(entry.normalized);
         const phoneKey = phoneMatchKey(entry.normalized);
-        const value: MirrorEntry = { name: entry.display_name, terms: entry.terms ?? [] };
+        const value: MirrorEntry = { name: entry.display_name, terms: entry.terms ?? [], crm: entry.crm ?? {} };
         if (emailKey) next.set(emailKey, value);
         else if (phoneKey) next.set(phoneKey, value);
       }
       this.byKey = next;
     } catch (err) {
-      if (!this.warned) {
+      if (!this.warnedNames) {
         console.error(`identity-mirror: ${err instanceof Error ? err.message : String(err)}`);
-        this.warned = true;
+        this.warnedNames = true;
+      }
+    }
+  }
+
+  /**
+   * Fetches `identity/queries:chatCrm` with NO chatGuids filter — the mirror
+   * has no independent way to know which chat guids currently exist (that's
+   * BlueBubbles/ChatDirectory's domain, not Convex's), so it asks for
+   * "everything with any CRM data," which is naturally small (only chats
+   * someone actually favorited/prioritized/tagged/linked get a row at all).
+   * Same swallow-log-once-keep-last-snapshot failure handling as names.
+   */
+  private async refreshChatCrm(convexCloudUrl: string, identityKey: string): Promise<void> {
+    try {
+      const res = await fetch(`${convexCloudUrl}/api/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "identity/queries:chatCrm",
+          args: { key: identityKey },
+          format: "json",
+        }),
+      });
+      if (!res.ok) {
+        console.error(`identity-mirror: chatCrm query failed with status ${res.status}`);
+        return;
+      }
+      const body = (await res.json()) as ConvexQueryResponse<Record<string, CrmData>>;
+      if (body.status !== "success") {
+        console.error(`identity-mirror: chatCrm query error: ${body.errorMessage ?? "unknown"}`);
+        return;
+      }
+      this.chatCrmByGuid = new Map(Object.entries(body.value));
+    } catch (err) {
+      if (!this.warnedChatCrm) {
+        console.error(`identity-mirror: ${err instanceof Error ? err.message : String(err)}`);
+        this.warnedChatCrm = true;
       }
     }
   }

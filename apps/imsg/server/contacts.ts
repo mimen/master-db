@@ -116,6 +116,18 @@ export class ContactBook {
     return name ? [name] : [];
   }
 
+  /** Apple Contacts has no CRM concept — always undefined. Satisfies
+   * NameSource (see name-resolver.ts) for callers that use ContactBook
+   * standalone (no NameResolver/Identity Mirror in front of it). */
+  chatCrm(): undefined {
+    return undefined;
+  }
+
+  /** See chatCrm — Apple Contacts has no CRM concept. */
+  personCrm(): undefined {
+    return undefined;
+  }
+
   search(q: string, limit = 20): Contact[] {
     const needle = q.toLowerCase();
     const seen = new Set<string>();
