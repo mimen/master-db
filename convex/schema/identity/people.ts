@@ -61,12 +61,27 @@ export const people = defineTable({
   // field matrix, "favorite / priority" row). recomputePersonAggregates must
   // never touch these — same guard as `organization` above.
   is_favorite: v.optional(v.boolean()),
-  // Absent = unset, deliberately NOT "normal" — an unset priority means "no
-  // opinion recorded," distinct from a person explicitly marked normal
-  // priority (e.g. after being downgraded from "high"). Three levels only:
-  // finer gradations (P1-P4, numeric scores) aren't asked for by any surface
-  // yet and would need a real ranking UI to be worth the complexity.
-  priority: v.optional(v.union(v.literal("high"), v.literal("normal"), v.literal("low"))),
+  // P1–P5, ONE = HIGHEST PRIORITY. Absent = unset, deliberately NOT "P3" — an
+  // unset priority means "no opinion recorded," distinct from a person
+  // explicitly marked mid priority.
+  //
+  // ⚠️ NOT INVERTED, unlike Todoist's API (see the root CLAUDE.md's Todoist
+  // Priority System gotcha, where API priority 4 == UI P1). Here the raw
+  // stored number IS the P-level: priority 1 in the database means P1/highest,
+  // priority 5 means P5/lowest. Never flip this when rendering or comparing.
+  //
+  // TRANSITIONAL TYPE — this is `v.union(v.number(), v.literal(...))` instead
+  // of a clean `v.optional(v.number())` ONLY because Convex validates every
+  // EXISTING row against the table schema at deploy time: rows written before
+  // this change still hold the old 3-level strings ("high"|"normal"|"low"),
+  // and a strict `v.number()` deploy would be rejected until every row is
+  // migrated. `convex/identity/admin.ts`'s `migratePriorityToNumeric` (internal
+  // mutation; high→2, normal→3, low→4, idempotent) converts them once this
+  // schema is live. Once that migration has run in every environment with
+  // data (confirmed via its own reported counts), narrow this back to
+  // `v.optional(v.number())` in a follow-up deploy — see the migration's
+  // docstring and this repo's PR description for the required deploy order.
+  priority: v.optional(v.union(v.number(), v.literal("high"), v.literal("normal"), v.literal("low"))),
 
   auto_clustered: v.boolean(), // true = resolver-made, false = hand-curated
   merged_into: v.optional(v.id("people")), // tombstone if merged away

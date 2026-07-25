@@ -2,22 +2,25 @@ import { defineTable } from "convex/server";
 import { v } from "convex/values";
 
 /**
- * A person ↔ freeform personal tag, many-to-many. Part of the private CRM
- * layer (see docs/plans/structured-names.html's "THE RULE: three owners" and
- * field matrix, "tags / groups (personal)" row) — Convex-native, app-only,
- * never synced to Apple or Airtable.
+ * ⚠️ SUPERSEDED by `tags.ts` (generalized to cover chats, not just people) —
+ * kept declared here ONLY so this table's still-live rows keep validating
+ * post-deploy while `migratePersonTags` (convex/identity/admin.ts) copies
+ * them over. Nothing reads or writes `person_tags` anymore: `crm.ts`'s
+ * addTag/removeTag and `queries.ts`'s tag lookups all target `tags` now. Once
+ * `migratePersonTags` has run in every environment with data (confirmed via
+ * its own reported counts) and that's verified, a follow-up deploy removes
+ * this table from the schema barrel — see this repo's PR description for the
+ * exact order. Do not add new code against this table.
  *
+ * Original docstring, for archaeology: a person ↔ freeform personal tag,
+ * many-to-many — Convex-native, app-only, never synced to Apple or Airtable.
  * A table rather than an array field on `people` because the tag-browse
- * surface needs "everyone tagged X" without scanning every person — an
- * array field would force a full table scan for that query; `by_tag` makes
- * it an index lookup.
- *
- * Tags are freeform lowercase strings, deduped per person (enforced by the
- * mutation layer in convex/identity/crm.ts, not the schema — Convex has no
- * unique-compound-index constraint). Deliberately distinct from Airtable's
- * ORGANIZATIONAL tags (UW Team, departments, event links) — those are a
- * separate, deferred pass (read-only pass-through, never written here); see
- * this table's docstring as the seam once that's designed.
+ * surface needs "everyone tagged X" without scanning every person; `by_tag`
+ * made it an index lookup. Tags were freeform lowercase strings, deduped per
+ * person by the mutation layer (Convex has no unique-compound-index
+ * constraint). Deliberately distinct from Airtable's ORGANIZATIONAL tags (UW
+ * Team, departments, event links) — those remain a separate, deferred,
+ * read-only pass-through.
  */
 export const person_tags = defineTable({
   person_id: v.id("people"),
