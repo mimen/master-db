@@ -6,16 +6,66 @@ import { query, type QueryCtx } from "../_generated/server";
 import { requireIdentityKey } from "./key";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
-/** A person's personal tags, alphabetized — the private CRM layer
- * (convex/identity/crm.ts) lives in its own table, so unlike is_favorite/
- * priority (plain fields on the person doc) it needs its own lookup at every
- * call site that projects a person for the client. */
-async function tagsFor(ctx: QueryCtx, personId: Id<"people">): Promise<string[]> {
+/** A single event association, projected for the client — see
+ * schema/identity/event_links.ts's docstring for the storage shape.
+ * `linkId` is the event_links row's own document id, NOT the Airtable
+ * record id (`id`) — it's what an editable CRM surface needs to call
+ * `events.ts`'s `unlinkEvent({ linkId })`. Convex-facing projections
+ * (whoIs/listPeople/chatCrm, consumed directly by the client's editable CRM
+ * sections) include it; imsg's server-side Identity Mirror and the
+ * READ-ONLY ChatSummary.crm it feeds deliberately do NOT carry it further —
+ * see apps/imsg/server/name-resolver.ts's CrmData and shared/types.ts's
+ * ChatSummary.crm, which only ever display, never edit. */
+type EventRef = { id: string; name: string; linkId: Id<"event_links"> };
+
+/** A person's personal tags, alphabetized — the unified `tags` table (see
+ * schema/identity/tags.ts) lives separately from the person doc, so unlike
+ * is_favorite/priority (plain fields on the person doc) it needs its own
+ * lookup at every call site that projects a person for the client. */
+async function personTagsFor(ctx: QueryCtx, personId: Id<"people">): Promise<string[]> {
   const rows = await ctx.db
-    .query("person_tags")
+    .query("tags")
     .withIndex("by_person", (q) => q.eq("person_id", personId))
     .collect();
   return rows.map((r) => r.tag).sort();
+}
+
+/** A GROUP chat's tags, alphabetized — the chat-side twin of personTagsFor. */
+async function chatTagsFor(ctx: QueryCtx, chatGuid: string): Promise<string[]> {
+  const rows = await ctx.db
+    .query("tags")
+    .withIndex("by_chat", (q) => q.eq("chat_guid", chatGuid))
+    .collect();
+  return rows.map((r) => r.tag).sort();
+}
+
+/** A person's linked events — see schema/identity/event_links.ts. */
+async function personEventsFor(ctx: QueryCtx, personId: Id<"people">): Promise<EventRef[]> {
+  const rows = await ctx.db
+    .query("event_links")
+    .withIndex("by_person", (q) => q.eq("person_id", personId))
+    .collect();
+  return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id }));
+}
+
+/** A GROUP chat's linked events — the chat-side twin of personEventsFor. */
+async function chatEventsFor(ctx: QueryCtx, chatGuid: string): Promise<EventRef[]> {
+  const rows = await ctx.db
+    .query("event_links")
+    .withIndex("by_chat", (q) => q.eq("chat_guid", chatGuid))
+    .collect();
+  return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id }));
+}
+
+/** Reads a (possibly still-transitional-string) priority as the numeric P1–P5
+ * form only — see schema/identity/people.ts's docstring on the transitional
+ * union type. A row that hasn't been through `migratePriorityToNumeric` yet
+ * still holds "high"/"normal"/"low"; every CLIENT-facing projection should
+ * see that as "no numeric priority yet" rather than leak the string through,
+ * so downstream (imsg's ChatSummary.crm.priority: number) never has to
+ * special-case a non-numeric value. */
+function numericPriority(p: Doc<"people">["priority"]): number | undefined {
+  return typeof p === "number" ? p : undefined;
 }
 
 /**
@@ -72,15 +122,17 @@ export const whoIs = query({
       .query("identities")
       .withIndex("by_person", (q) => q.eq("person_id", person._id))
       .collect();
-    const tags = await tagsFor(ctx, person._id);
+    const tags = await personTagsFor(ctx, person._id);
+    const events = await personEventsFor(ctx, person._id);
     return {
       found: true as const,
       normalized,
       // `person` is the raw Doc<"people">, so is_favorite/priority already
-      // ride along automatically — only `tags` needs to be joined in
+      // ride along automatically — only `tags`/`events` need to be joined in
       // separately (private CRM layer, see convex/identity/crm.ts).
       person,
       tags,
+      events,
       identities: identities.map((i) => ({
         kind: i.kind,
         network: i.network,
@@ -147,7 +199,8 @@ export const listPeople = query({
       .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
     const out = [];
     for (const p of named) {
-      const tags = await tagsFor(ctx, p._id);
+      const tags = await personTagsFor(ctx, p._id);
+      const events = await personEventsFor(ctx, p._id);
       out.push({
         _id: p._id,
         display_name: p.display_name,
@@ -159,8 +212,9 @@ export const listPeople = query({
         normalized_emails: p.normalized_emails,
         airtable_human_id: p.airtable_human_id,
         is_favorite: p.is_favorite,
-        priority: p.priority,
+        priority: numericPriority(p.priority),
         tags,
+        events,
       });
     }
     return out;
@@ -168,48 +222,68 @@ export const listPeople = query({
 });
 
 /**
- * Lean {normalized, display_name, terms} projection for imsg's server-side
- * identity mirror (apps/imsg/server/identity-mirror.ts) — a read replica the
- * server refreshes on an interval so the hot chat-list path never blocks on
- * Convex. One entry per normalized handle, flattened across a person's
- * normalized_phones and normalized_emails, for every person that isn't
- * merged away and has a display_name. `is_self` people are included too —
- * harmless to carry Milad's own handles through the mirror, and excluding
+ * Lean {normalized, display_name, terms, crm} projection for imsg's
+ * server-side identity mirror (apps/imsg/server/identity-mirror.ts) — a read
+ * replica the server refreshes on an interval so the hot chat-list path
+ * never blocks on Convex. One entry per normalized handle, flattened across
+ * a person's normalized_phones and normalized_emails, for every person that
+ * isn't merged away and has a display_name. `is_self` people are included too
+ * — harmless to carry Milad's own handles through the mirror, and excluding
  * them isn't worth a special case here (unlike listPeople, which is a
  * human-facing contacts list where it would be confusing).
  *
  * `terms` is the person's FULL searchable name set (see nameTerms) — it's
  * what lets the mirror find someone by an old name after a rename, a
  * nickname, or their organization, not just their current display_name.
+ *
+ * `crm` is the person's private CRM projection (favorite/priority/tags/
+ * events) — it's how a DM's ChatSummary.crm gets populated by INHERITANCE
+ * from its one participant's person (see apps/imsg/server/map.ts's mapChat):
+ * the mirror already resolves a participant address → this entry, so riding
+ * the person's CRM along here means map.ts doesn't need a second lookup.
  */
 export const nameDirectory = query({
   args: { key: v.string() },
   handler: async (ctx, { key }) => {
     requireIdentityKey(key);
     const people = await ctx.db.query("people").collect();
-    const out: Array<{ normalized: string; display_name: string; terms: string[] }> = [];
+    const out: Array<{
+      normalized: string;
+      display_name: string;
+      terms: string[];
+      crm: { is_favorite?: boolean; priority?: number; tags: string[]; events: EventRef[] };
+    }> = [];
     for (const p of people) {
       if (p.merged_into || !p.display_name) continue;
       const terms = nameTerms(p);
-      for (const normalized of p.normalized_phones) out.push({ normalized, display_name: p.display_name, terms });
-      for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name, terms });
+      const crm = {
+        is_favorite: p.is_favorite,
+        priority: numericPriority(p.priority),
+        tags: await personTagsFor(ctx, p._id),
+        events: await personEventsFor(ctx, p._id),
+      };
+      for (const normalized of p.normalized_phones) out.push({ normalized, display_name: p.display_name, terms, crm });
+      for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name, terms, crm });
     }
     return out;
   },
 });
 
 /**
- * Every distinct personal tag in use, with how many people carry it —
- * for a future browse/filter-by-tag surface. Personal tags only (the private
- * CRM layer, convex/identity/crm.ts); Airtable's organizational tags (UW
- * Team, departments, event links) are a separate, deferred read-only
- * pass-through that doesn't exist yet — see person_tags.ts's docstring.
+ * Every distinct tag in use, with how many (people + GROUP chats combined)
+ * carry it — for a unified browse/filter-by-tag surface across both entity
+ * kinds. The `tags` table (schema/identity/tags.ts) already unifies person
+ * and chat rows, so counting is a single pass with no kind-branching needed.
+ * Personal/chat tags only (the private CRM layer, convex/identity/crm.ts);
+ * Airtable's organizational tags (UW Team, departments) are a separate,
+ * deferred read-only pass-through that doesn't exist yet — see
+ * person_tags.ts's docstring.
  */
 export const listTags = query({
   args: { key: v.string() },
   handler: async (ctx, { key }) => {
     requireIdentityKey(key);
-    const rows = await ctx.db.query("person_tags").collect();
+    const rows = await ctx.db.query("tags").collect();
     const counts = new Map<string, number>();
     for (const r of rows) counts.set(r.tag, (counts.get(r.tag) ?? 0) + 1);
     return [...counts.entries()]
@@ -238,3 +312,64 @@ export const topLinkedPeople = query({
       }));
   },
 });
+
+/**
+ * Per-chat-guid CRM projection {is_favorite?, priority?, tags, events} for a
+ * batch of GROUP chats — imsg's server fetches this alongside `nameDirectory`
+ * to populate its Identity Mirror's chat-CRM accessor (see
+ * apps/imsg/server/identity-mirror.ts). `chatGuids` is optional: omitted, this
+ * returns every chat_guid that carries ANY CRM data (favorite, priority, tag,
+ * or event link) — the table is naturally small (only chats someone has
+ * actually annotated get a row/tag/link at all), so "give me everything" is
+ * cheap and is what the mirror's periodic refresh uses, since it has no
+ * independent way to know which chat guids currently exist (that's
+ * BlueBubbles/ChatDirectory's domain, not Convex's). Passing an explicit list
+ * scopes the result to just those guids, for a future targeted lookup (e.g.
+ * a single open chat's info screen).
+ */
+export const chatCrm = query({
+  args: { key: v.string(), chatGuids: v.optional(v.array(v.string())) },
+  handler: async (ctx, { key, chatGuids }) => {
+    requireIdentityKey(key);
+    const wanted = chatGuids ? new Set(chatGuids) : null;
+
+    type ChatCrmProjection = { is_favorite?: boolean; priority?: number; tags: string[]; events: EventRef[] };
+    const out: Record<string, ChatCrmProjection> = {};
+    const ensure = (guid: string): ChatCrmProjection => {
+      const existing = out[guid];
+      if (existing) return existing;
+      const fresh: ChatCrmProjection = { tags: [], events: [] };
+      out[guid] = fresh;
+      return fresh;
+    };
+
+    const crmRows = await ctx.db.query("chat_crm").collect();
+    for (const row of crmRows) {
+      if (wanted && !wanted.has(row.chat_guid)) continue;
+      const entry = ensure(row.chat_guid);
+      entry.is_favorite = row.is_favorite;
+      entry.priority = row.priority;
+    }
+
+    const tagRows = await ctx.db.query("tags").collect();
+    for (const row of tagRows) {
+      if (!row.chat_guid) continue;
+      if (wanted && !wanted.has(row.chat_guid)) continue;
+      ensure(row.chat_guid).tags.push(row.tag);
+    }
+
+    const eventRows = await ctx.db.query("event_links").collect();
+    for (const row of eventRows) {
+      if (!row.chat_guid) continue;
+      if (wanted && !wanted.has(row.chat_guid)) continue;
+      ensure(row.chat_guid).events.push({ id: row.airtable_event_id, name: row.event_name, linkId: row._id });
+    }
+
+    for (const entry of Object.values(out)) entry.tags.sort();
+    return out;
+  },
+});
+
+// Chat-side helpers exported for reuse elsewhere in the module if a future
+// per-chat query needs them individually rather than the batch above.
+export { chatEventsFor, chatTagsFor };

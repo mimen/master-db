@@ -6,10 +6,13 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import {
+  chatCrmRef,
+  linkEventRef,
   listPeopleRef,
   listTagsRef,
   nameDirectoryRef,
   searchPeopleRef,
+  setChatFavoriteRef,
   topLinkedPeopleRef,
   TEST_KEY,
   whoIsRef,
@@ -35,7 +38,7 @@ async function seedPerson(
     nickname: string;
     organization: string;
     is_favorite: boolean;
-    priority: "high" | "normal" | "low";
+    priority: number;
   }> = {},
 ): Promise<Id<"people">> {
   const now = new Date().toISOString();
@@ -63,7 +66,13 @@ async function seedPerson(
 
 async function seedTag(t: TestConvex<typeof schema>, personId: Id<"people">, tag: string): Promise<void> {
   await t.run((ctx) =>
-    ctx.db.insert("person_tags", { person_id: personId, tag, created_at: new Date().toISOString() }),
+    ctx.db.insert("tags", { person_id: personId, tag, created_at: new Date().toISOString() }),
+  );
+}
+
+async function seedChatTag(t: TestConvex<typeof schema>, chatGuid: string, tag: string): Promise<void> {
+  await t.run((ctx) =>
+    ctx.db.insert("tags", { chat_guid: chatGuid, tag, created_at: new Date().toISOString() }),
   );
 }
 
@@ -126,20 +135,22 @@ describe("whoIs", () => {
 
   test("includes is_favorite/priority (riding along on the raw person doc) and tags (joined separately)", async () => {
     const t = convexTest(schema, modules);
-    const personId = await seedPerson(t, { display_name: "Chase", is_favorite: true, priority: "high" });
+    const personId = await seedPerson(t, { display_name: "Chase", is_favorite: true, priority: 1 });
     await seedIdentity(t, personId, { source: "apple_contact" });
     await seedTag(t, personId, "vip");
     await seedTag(t, personId, "family");
 
     const result = (await t.query(whoIsRef, { key: TEST_KEY, handle: "6195551234" })) as {
       found: boolean;
-      person?: { is_favorite?: boolean; priority?: string };
+      person?: { is_favorite?: boolean; priority?: number };
       tags?: string[];
+      events?: unknown[];
     };
     expect(result.found).toBe(true);
     expect(result.person?.is_favorite).toBe(true);
-    expect(result.person?.priority).toBe("high");
+    expect(result.person?.priority).toBe(1);
     expect(result.tags).toEqual(["family", "vip"]);
+    expect(result.events).toEqual([]);
   });
 
   test("tags is an empty array for a person with none", async () => {
@@ -151,6 +162,23 @@ describe("whoIs", () => {
       tags?: string[];
     };
     expect(result.tags).toEqual([]);
+  });
+
+  test("includes linked events", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name: "Chase" });
+    await seedIdentity(t, personId, { source: "apple_contact" });
+    await t.mutation(linkEventRef, {
+      key: TEST_KEY,
+      personId,
+      airtable_event_id: "evt1",
+      event_name: "Summer Bash",
+    });
+
+    const result = (await t.query(whoIsRef, { key: TEST_KEY, handle: "6195551234" })) as {
+      events?: Array<{ id: string; name: string }>;
+    };
+    expect(result.events).toEqual([{ id: "evt1", name: "Summer Bash", linkId: expect.any(String) }]);
   });
 });
 
@@ -184,24 +212,33 @@ describe("listPeople", () => {
     expect(results.map((r) => r.display_name)).toEqual(["Alex", "Chase"]);
   });
 
-  test("projects is_favorite, priority, and tags per person", async () => {
+  test("projects is_favorite, priority, tags, and events per person", async () => {
     const t = convexTest(schema, modules);
     const alex = await seedPerson(t, { display_name: "Alex", is_favorite: true });
-    await seedPerson(t, { display_name: "Chase", priority: "low" });
+    const chase = await seedPerson(t, { display_name: "Chase", priority: 4 });
     await seedTag(t, alex, "vip");
+    await t.mutation(linkEventRef, {
+      key: TEST_KEY,
+      personId: chase,
+      airtable_event_id: "evt1",
+      event_name: "Fall Kickoff",
+    });
 
     const results = (await t.query(listPeopleRef, { key: TEST_KEY })) as Array<{
       display_name?: string;
       is_favorite?: boolean;
-      priority?: string;
+      priority?: number;
       tags: string[];
+      events: Array<{ id: string; name: string; linkId: string }>;
     }>;
     const alexRow = results.find((r) => r.display_name === "Alex");
     const chaseRow = results.find((r) => r.display_name === "Chase");
     expect(alexRow?.is_favorite).toBe(true);
     expect(alexRow?.tags).toEqual(["vip"]);
-    expect(chaseRow?.priority).toBe("low");
+    expect(alexRow?.events).toEqual([]);
+    expect(chaseRow?.priority).toBe(4);
     expect(chaseRow?.tags).toEqual([]);
+    expect(chaseRow?.events).toEqual([{ id: "evt1", name: "Fall Kickoff", linkId: expect.any(String) }]);
   });
 });
 
@@ -235,6 +272,17 @@ describe("listTags", () => {
   test("rejects a wrong key", async () => {
     const t = convexTest(schema, modules);
     await expect(t.query(listTagsRef, { key: "wrong" })).rejects.toThrow();
+  });
+
+  test("counts a tag across BOTH people and chats in one unified total", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedPerson(t, { display_name: "A" });
+    await seedTag(t, a, "vip");
+    await seedChatTag(t, "iMessage;+;chat1", "vip");
+    await seedChatTag(t, "iMessage;+;chat2", "vip");
+
+    const results = await t.query(listTagsRef, { key: TEST_KEY });
+    expect(results).toEqual([{ tag: "vip", count: 3 }]);
   });
 });
 
@@ -304,7 +352,9 @@ describe("nameDirectory", () => {
     });
 
     const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
-    expect(results).toEqual([{ normalized: "+16195551111", display_name: "Milad", terms: ["milad"] }]);
+    expect(results).toEqual([
+      { normalized: "+16195551111", display_name: "Milad", terms: ["milad"], crm: { tags: [], events: [] } },
+    ]);
   });
 
   test("terms include display name, first, last, nickname, organization, and the combined full name — deduped and lowercased", async () => {
@@ -336,11 +386,116 @@ describe("nameDirectory", () => {
     });
 
     const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
-    expect(results).toEqual([{ normalized: "+16195552222", display_name: "SoloName", terms: ["soloname"] }]);
+    expect(results).toEqual([
+      { normalized: "+16195552222", display_name: "SoloName", terms: ["soloname"], crm: { tags: [], events: [] } },
+    ]);
+  });
+
+  test("carries the person's CRM (favorite/priority/tags/events) alongside every handle entry", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, {
+      display_name: "Chase",
+      is_favorite: true,
+      priority: 2,
+      normalized_phones: ["+16195551234", "+16195555678"],
+    });
+    await seedTag(t, personId, "vip");
+    await t.mutation(linkEventRef, {
+      key: TEST_KEY,
+      personId,
+      airtable_event_id: "evt1",
+      event_name: "Launch Party",
+    });
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toHaveLength(2);
+    for (const entry of results) {
+      expect(entry.crm).toEqual({
+        is_favorite: true,
+        priority: 2,
+        tags: ["vip"],
+        events: [{ id: "evt1", name: "Launch Party", linkId: expect.any(String) }],
+      });
+    }
+  });
+
+  test("omits a still-string (un-migrated) priority from crm rather than leaking it", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) =>
+      ctx.db.insert("people", {
+        display_name: "Legacy",
+        priority: "high",
+        normalized_phones: ["+16195553333"],
+        normalized_emails: [],
+        identity_count: 0,
+        message_count: 0,
+        is_self: false,
+        auto_clustered: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    );
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.crm.priority).toBeUndefined();
   });
 
   test("rejects a wrong key", async () => {
     const t = convexTest(schema, modules);
     await expect(t.query(nameDirectoryRef, { key: "wrong" })).rejects.toThrow();
+  });
+});
+
+describe("chatCrm", () => {
+  test("projects favorite/priority/tags/events for a batch of chat guids", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: "g1", is_favorite: true });
+    await seedChatTag(t, "g1", "planning");
+    await t.mutation(linkEventRef, {
+      key: TEST_KEY,
+      chatGuid: "g1",
+      airtable_event_id: "evt1",
+      event_name: "Summer Bash",
+    });
+
+    const results = await t.query(chatCrmRef, { key: TEST_KEY, chatGuids: ["g1", "g2"] });
+    expect(results.g1).toEqual({
+      is_favorite: true,
+      tags: ["planning"],
+      events: [{ id: "evt1", name: "Summer Bash", linkId: expect.any(String) }],
+    });
+    expect(results.g2).toBeUndefined();
+  });
+
+  test("a chat with only a tag (no chat_crm row) still projects", async () => {
+    const t = convexTest(schema, modules);
+    await seedChatTag(t, "g1", "planning");
+
+    const results = await t.query(chatCrmRef, { key: TEST_KEY, chatGuids: ["g1"] });
+    expect(results.g1).toEqual({ tags: ["planning"], events: [] });
+  });
+
+  test("omitting chatGuids returns every chat with any CRM data", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(setChatFavoriteRef, { key: TEST_KEY, chatGuid: "g1", is_favorite: true });
+    await seedChatTag(t, "g2", "vip");
+
+    const results = await t.query(chatCrmRef, { key: TEST_KEY });
+    expect(Object.keys(results).sort()).toEqual(["g1", "g2"]);
+  });
+
+  test("never includes a person's tags/events under a chat guid", async () => {
+    const t = convexTest(schema, modules);
+    const personId = await seedPerson(t, { display_name: "Chase" });
+    await seedTag(t, personId, "vip");
+
+    const results = await t.query(chatCrmRef, { key: TEST_KEY });
+    expect(results).toEqual({});
+  });
+
+  test("rejects a wrong key", async () => {
+    const t = convexTest(schema, modules);
+    await expect(t.query(chatCrmRef, { key: "wrong" })).rejects.toThrow();
   });
 });

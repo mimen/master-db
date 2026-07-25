@@ -311,10 +311,10 @@ describe("recomputePersonAggregates", () => {
     const t = convexTest(schema, modules);
     const personId = await seedPerson(t, { display_name_locked: false });
     await t.run((ctx) =>
-      ctx.db.patch(personId, { is_favorite: true, priority: "high" as const }),
+      ctx.db.patch(personId, { is_favorite: true, priority: 1 }),
     );
     await t.run((ctx) =>
-      ctx.db.insert("person_tags", {
+      ctx.db.insert("tags", {
         person_id: personId,
         tag: "vip",
         created_at: new Date().toISOString(),
@@ -335,12 +335,12 @@ describe("recomputePersonAggregates", () => {
 
     const person = await t.run((ctx) => ctx.db.get(personId));
     expect(person?.is_favorite).toBe(true);
-    expect(person?.priority).toBe("high");
+    expect(person?.priority).toBe(1);
     expect(person?.display_name).toBe("Chase"); // sanity: the sync still ran
 
     const tags = await t.run((ctx) =>
       ctx.db
-        .query("person_tags")
+        .query("tags")
         .withIndex("by_person", (q) => q.eq("person_id", personId))
         .collect(),
     );

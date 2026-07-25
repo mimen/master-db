@@ -41,7 +41,17 @@ export const topLinkedPeopleRef = makeFunctionReference<
 export const nameDirectoryRef = makeFunctionReference<
   "query",
   { key: string },
-  Array<{ normalized: string; display_name: string; terms: string[] }>
+  Array<{
+    normalized: string;
+    display_name: string;
+    terms: string[];
+    crm: {
+      is_favorite?: boolean;
+      priority?: number;
+      tags: string[];
+      events: Array<{ id: string; name: string; linkId: Id<"event_links"> }>;
+    };
+  }>
 >("identity/queries:nameDirectory");
 
 export const createPersonRef = makeFunctionReference<
@@ -106,7 +116,7 @@ export const setFavoriteRef = makeFunctionReference<
 
 export const setPriorityRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: Id<"people">; priority?: "high" | "normal" | "low" | null },
+  { key: string; personId: Id<"people">; priority?: number | null },
   null
 >("identity/crm:setPriority");
 
@@ -121,6 +131,73 @@ export const removeTagRef = makeFunctionReference<
   { key: string; personId: Id<"people">; tag: string },
   null
 >("identity/crm:removeTag");
+
+export const setChatFavoriteRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; is_favorite: boolean },
+  null
+>("identity/crm:setChatFavorite");
+
+export const setChatPriorityRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; priority?: number | null },
+  null
+>("identity/crm:setChatPriority");
+
+export const addChatTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; tag: string },
+  null
+>("identity/crm:addChatTag");
+
+export const removeChatTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; tag: string },
+  null
+>("identity/crm:removeChatTag");
+
+export type ChatCrmProjection = {
+  is_favorite?: boolean;
+  priority?: number;
+  tags: string[];
+  events: Array<{ id: string; name: string; linkId: Id<"event_links"> }>;
+};
+
+export const chatCrmRef = makeFunctionReference<
+  "query",
+  { key: string; chatGuids?: string[] },
+  Record<string, ChatCrmProjection>
+>("identity/queries:chatCrm");
+
+export const searchEventsRef = makeFunctionReference<
+  "action",
+  { key: string; query: string },
+  Array<{ record_id: string; name: string; start_date?: string }>
+>("identity/events:searchEvents");
+
+export const linkEventRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId?: Id<"people">; chatGuid?: string; airtable_event_id: string; event_name: string },
+  { linkId: Id<"event_links"> }
+>("identity/events:linkEvent");
+
+export const unlinkEventRef = makeFunctionReference<
+  "mutation",
+  { key: string; linkId: Id<"event_links"> },
+  null
+>("identity/events:unlinkEvent");
+
+export const migratePriorityToNumericRef = makeFunctionReference<
+  "mutation",
+  Record<string, never>,
+  { scanned: number; migrated: number; alreadyNumeric: number; unset: number; unrecognized: number }
+>("identity/admin:migratePriorityToNumeric");
+
+export const migratePersonTagsRef = makeFunctionReference<
+  "mutation",
+  Record<string, never>,
+  { scanned: number; migrated: number; alreadyPresent: number }
+>("identity/admin:migratePersonTags");
 
 export const ingestContactsBatchRef = makeFunctionReference<
   "mutation",
