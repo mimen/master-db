@@ -17,14 +17,16 @@ import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
-import type { Contact, ContactSuggestion, GalleryItem } from "@shared/types";
+import type { ChatSummary, Contact, ContactSuggestion, GalleryItem } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { PersonAvatar } from "./avatar";
+import { ChatCrmSection } from "./chat-crm-section";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
+import { FAVORITE_GOLD } from "./person-crm-section";
 
 const GRID_GAP = 5;
 
@@ -363,6 +365,17 @@ export function ChatInfoContent({
           ))}
         </View>
 
+        {/* CRM: a GROUP gets its own editable favorite/priority/tags/event
+            section (ChatCrmSection — Convex-native, chat_guid-keyed). A DM
+            has no CRM of its own; it INHERITS the linked person's (see
+            server/map.ts's mapChat) — shown read-only here with a pointer to
+            the real edit surface, so there's never a second, driftable copy. */}
+        {info.isGroup ? (
+          <ChatCrmSection chatGuid={guid} />
+        ) : (
+          summary?.crm && <DmCrmNote crm={summary.crm} />
+        )}
+
         <View style={[styles.card, styles.cardGap, { backgroundColor: theme.backgroundElement }]}>
           {info.isGroup && (
             <>
@@ -442,6 +455,69 @@ export function ChatInfoContent({
     </View>
   );
 }
+
+/**
+ * A DM's read-only inherited CRM — favorite star, priority badge, tag/event
+ * chips, all sourced from `ChatSummary.crm` (already resolved server-side by
+ * mapChat's inheritance rule, see server/map.ts). No edit affordances here on
+ * purpose: the person's own contact screen is the one editable copy.
+ */
+function DmCrmNote({ crm }: { crm: NonNullable<ChatSummary["crm"]> }) {
+  const theme = useTheme();
+  const hasChips = (crm.tags?.length ?? 0) > 0 || (crm.events?.length ?? 0) > 0;
+  return (
+    <View style={dmCrmStyles.wrap}>
+      <View style={dmCrmStyles.row}>
+        {crm.is_favorite && (
+          <View style={dmCrmStyles.item}>
+            <Ionicons name="star" size={15} color={FAVORITE_GOLD} />
+            <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Favorite</Text>
+          </View>
+        )}
+        {crm.priority !== undefined && (
+          <View style={[dmCrmStyles.priorityPill, { backgroundColor: theme.backgroundElement }]}>
+            <Text style={{ color: theme.text, fontSize: 11, fontWeight: "600" }}>{`P${crm.priority}`}</Text>
+          </View>
+        )}
+      </View>
+      {hasChips && (
+        <View style={dmCrmStyles.chipRow}>
+          {crm.tags?.map((tag) => (
+            <View key={tag} style={[dmCrmStyles.chip, { backgroundColor: theme.backgroundElement }]}>
+              <Text style={{ color: theme.text, fontSize: 12 }}>{tag}</Text>
+            </View>
+          ))}
+          {crm.events?.map((e) => (
+            <View key={e.id} style={[dmCrmStyles.chip, { backgroundColor: theme.backgroundElement }]}>
+              <Ionicons name="calendar-outline" size={11} color={theme.textSecondary} />
+              <Text style={{ color: theme.text, fontSize: 12 }}>{e.name}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      <Text style={[dmCrmStyles.caption, { color: theme.textSecondary }]}>
+        Inherited from contact — edit on their contact card.
+      </Text>
+    </View>
+  );
+}
+
+const dmCrmStyles = StyleSheet.create({
+  wrap: { gap: 8, marginTop: 20 },
+  row: { alignItems: "center", flexDirection: "row", gap: 12 },
+  item: { alignItems: "center", flexDirection: "row", gap: 6 },
+  priorityPill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: {
+    alignItems: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  caption: { fontSize: 11 },
+});
 
 const styles = StyleSheet.create({
   paneHeader: {

@@ -164,7 +164,7 @@ export function PersonContent({
     );
   }
 
-  const { person, identities, tags } = result;
+  const { person, identities, tags, events } = result;
   const airtableId = person.airtable_human_id;
   const autoFromParts = [person.first_name, person.last_name].filter(Boolean).join(" ");
   // Only pre-fill the override box when the current display_name isn't just
@@ -288,6 +288,7 @@ export function PersonContent({
           isFavorite={person.is_favorite ?? false}
           priority={person.priority}
           tags={tags}
+          events={events}
         />
 
         <PersonNetworksList identities={identities} airtableId={airtableId} />

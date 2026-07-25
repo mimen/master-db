@@ -2,30 +2,26 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  type EventLink,
   type Priority,
-  useAddTag,
+  useAddChatTag,
+  useChatCrm,
   useLinkEvent,
-  useRemoveTag,
-  useSetFavorite,
-  useSetPriority,
+  useRemoveChatTag,
+  useSetChatFavorite,
+  useSetChatPriority,
   useUnlinkEvent,
 } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";
 import { Radii, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { CrmEventsEditor } from "./crm-events-editor";
+import { FAVORITE_GOLD } from "./person-crm-section";
 
-export interface PersonCrmSectionProps {
-  personId: string;
-  isFavorite: boolean;
-  priority: Priority | undefined;
-  tags: string[];
-  events: EventLink[];
+export interface ChatCrmSectionProps {
+  chatGuid: string;
 }
 
-// P1–P5, one = highest — see convex/schema/identity/people.ts's docstring.
-// NOT inverted, unlike Todoist's API.
+// Same P1–P5, one-is-highest convention as PersonCrmSection.
 const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: 1, label: "P1" },
   { value: 2, label: "P2" },
@@ -34,43 +30,39 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
   { value: 5, label: "P5" },
 ];
 
-// iOS Contacts' own favorite-star gold — a fixed brand-adjacent color, same
-// rationale as NETWORK_META's per-network brand colors and Colors.sms: a
-// favorite star needs to read as "gold" in both light and dark, not shift
-// with the app theme. Exported so the contacts list's trailing star
-// (contacts-list-pane.tsx) matches exactly.
-export const FAVORITE_GOLD = "#FFB800";
-
 /**
- * The private CRM row: favorite toggle, priority pills, and a tag editor.
- * App-native metadata (convex/identity/crm.ts) that never syncs to Apple or
- * Airtable — see docs/plans/structured-names.html's "THE RULE: three
- * owners" and field matrix. Deliberately compact: this sits alongside the
- * person screen's name/actions/networks/conversations sections and
- * shouldn't dominate it, so it's one row (favorite + priority) plus a wrap
- * of tag chips, not its own titled card.
+ * The private CRM row for a GROUP chat — the chat-side twin of
+ * PersonCrmSection, same layout/behavior, targeting `chatGuid` instead of a
+ * `personId`. GROUPS only: a DM has no CRM of its own (it inherits the
+ * linked person's — see server/map.ts's mapChat and chat-info-content.tsx,
+ * which renders a read-only inherited view for DMs instead of this
+ * component). Reads live via `useChatCrm` (direct Convex query, not the
+ * imsg server's REST chat list) so edits reflect immediately.
  */
-export function PersonCrmSection({ personId, isFavorite, priority, tags, events }: PersonCrmSectionProps) {
+export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
   const theme = useTheme();
-  const setFavorite = useSetFavorite();
-  const setPriority = useSetPriority();
-  const addTag = useAddTag();
-  const removeTag = useRemoveTag();
+  const crm = useChatCrm(chatGuid);
+  const setFavorite = useSetChatFavorite();
+  const setPriority = useSetChatPriority();
+  const addTag = useAddChatTag();
+  const removeTag = useRemoveChatTag();
   const linkEvent = useLinkEvent();
   const unlinkEvent = useUnlinkEvent();
   const [tagInput, setTagInput] = useState("");
   const [addingTag, setAddingTag] = useState(false);
 
+  if (!crm) return null;
+
+  const isFavorite = crm.is_favorite ?? false;
+  const priority = crm.priority;
+
   const toggleFavorite = () => {
-    setFavorite({ personId, is_favorite: !isFavorite }).catch(() => showToast("Failed to update favorite"));
+    setFavorite({ chatGuid, is_favorite: !isFavorite }).catch(() => showToast("Failed to update favorite"));
   };
 
-  // Tapping the already-selected priority pill clears it back to unset
-  // (setPriority({priority: null}) — see crm.ts) rather than cycling through
-  // values with no way back to "no opinion recorded."
   const choosePriority = (value: Priority) => {
     const next = priority === value ? null : value;
-    setPriority({ personId, priority: next }).catch(() => showToast("Failed to update priority"));
+    setPriority({ chatGuid, priority: next }).catch(() => showToast("Failed to update priority"));
   };
 
   const submitTag = async () => {
@@ -78,7 +70,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
     if (!tag) return;
     setAddingTag(true);
     try {
-      await addTag({ personId, tag });
+      await addTag({ chatGuid, tag });
       setTagInput("");
     } catch {
       showToast("Failed to add tag");
@@ -137,14 +129,14 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
       </View>
 
       <View style={styles.tagRow}>
-        {tags.map((tag) => (
+        {crm.tags.map((tag) => (
           <View key={tag} style={[styles.tagChip, { backgroundColor: theme.backgroundElement }]}>
             <Text style={[styles.tagLabel, { color: theme.text }]}>{tag}</Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Remove tag ${tag}`}
               hitSlop={6}
-              onPress={() => removeTag({ personId, tag }).catch(() => showToast("Failed to remove tag"))}
+              onPress={() => removeTag({ chatGuid, tag }).catch(() => showToast("Failed to remove tag"))}
             >
               <Ionicons name="close" size={12} color={theme.textSecondary} />
             </Pressable>
@@ -173,9 +165,9 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
       </View>
 
       <CrmEventsEditor
-        events={events}
+        events={crm.events}
         onLink={async (record) =>
-          void (await linkEvent({ personId, airtable_event_id: record.record_id, event_name: record.name }))
+          void (await linkEvent({ chatGuid, airtable_event_id: record.record_id, event_name: record.name }))
         }
         onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Failed to unlink event"))}
       />

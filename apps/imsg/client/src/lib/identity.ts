@@ -34,10 +34,18 @@ export type IdentityRow = {
   chat_count: number;
 };
 
-/** The three priority levels a person can be marked with — see
- * convex/schema/identity/people.ts's docstring. `undefined`/`null` means
- * unset, deliberately distinct from "normal". */
-export type Priority = "high" | "normal" | "low";
+/** P1–P5, ONE = HIGHEST PRIORITY — see convex/schema/identity/people.ts's
+ * docstring. `undefined`/`null` means unset, deliberately distinct from any
+ * numbered level. NOT inverted, unlike Todoist's API (see the root
+ * CLAUDE.md's Todoist Priority System gotcha) — the raw number IS the
+ * P-level everywhere in this app. */
+export type Priority = number;
+
+/** A person's or GROUP chat's linked Airtable event — see
+ * convex/schema/identity/event_links.ts. `linkId` is what unlinkEvent
+ * expects (NOT `id`, which is the Airtable record id used for display/
+ * dedupe). */
+export type EventLink = { id: string; name: string; linkId: string };
 
 export type Person = {
   _id: string;
@@ -51,9 +59,10 @@ export type Person = {
   // Convex-native — no source (Apple/Airtable) has an organization field;
   // only a manual edit here ever sets it.
   organization?: string;
-  // Private CRM layer (favorites/priority/tags) — app-native, exists only
-  // inside imsg, never written to Apple or Airtable. See
-  // convex/identity/crm.ts and convex/schema/identity/person_tags.ts.
+  // Private CRM layer (favorites/priority/tags/events) — app-native, exists
+  // only inside imsg, never written to Apple or Airtable. See
+  // convex/identity/crm.ts, convex/identity/events.ts, and
+  // convex/schema/identity/{tags,event_links}.ts.
   is_favorite?: boolean;
   priority?: Priority;
   normalized_phones: string[];
@@ -66,7 +75,14 @@ export type Person = {
 };
 
 export type WhoIsResult =
-  | { found: true; normalized: string; person: Person; tags: string[]; identities: IdentityRow[] }
+  | {
+      found: true;
+      normalized: string;
+      person: Person;
+      tags: string[];
+      events: EventLink[];
+      identities: IdentityRow[];
+    }
   | { found: false; normalized: string };
 
 export type ContactListRow = {
@@ -79,10 +95,25 @@ export type ContactListRow = {
   is_favorite?: boolean;
   priority?: Priority;
   tags?: string[];
+  events?: EventLink[];
   normalized_phones: string[];
   normalized_emails: string[];
   airtable_human_id?: string;
 };
+
+/** A GROUP chat's private CRM projection — the chat-side twin of the fields
+ * carried on `Person`. Fetched live from Convex (identity/queries:chatCrm),
+ * NOT through the imsg server's REST chat list — that's what makes editing
+ * (favorite/priority/tag/event-link) reactive without waiting on the
+ * server's cache TTL. See convex/schema/identity/chat_crm.ts. */
+export type ChatCrm = {
+  is_favorite?: boolean;
+  priority?: Priority;
+  tags: string[];
+  events: EventLink[];
+};
+
+export type AirtableEventRow = { record_id: string; name: string; start_date?: string };
 
 export type AirtableHumanRow = {
   record_id: string;
@@ -182,6 +213,59 @@ const listTagsRef = makeFunctionReference<
   Array<{ tag: string; count: number }>
 >("identity/queries:listTags");
 
+// Chat-side CRM (convex/identity/crm.ts) — the chat-targeted twins of the
+// person mutations above. GROUP chats only by convention (see
+// chat-crm-section.tsx); Convex itself doesn't enforce that.
+
+const setChatFavoriteRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; is_favorite: boolean },
+  null
+>("identity/crm:setChatFavorite");
+
+const setChatPriorityRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; priority?: Priority | null },
+  null
+>("identity/crm:setChatPriority");
+
+const addChatTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; tag: string },
+  null
+>("identity/crm:addChatTag");
+
+const removeChatTagRef = makeFunctionReference<
+  "mutation",
+  { key: string; chatGuid: string; tag: string },
+  null
+>("identity/crm:removeChatTag");
+
+const chatCrmRef = makeFunctionReference<
+  "query",
+  { key: string; chatGuids?: string[] },
+  Record<string, ChatCrm>
+>("identity/queries:chatCrm");
+
+// Event/project association (convex/identity/events.ts) — a typed link to an
+// Airtable Events record, available on both people and GROUP chats.
+
+const searchEventsRef = makeFunctionReference<
+  "action",
+  { key: string; query: string },
+  AirtableEventRow[]
+>("identity/events:searchEvents");
+
+const linkEventRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string },
+  { linkId: string }
+>("identity/events:linkEvent");
+
+const unlinkEventRef = makeFunctionReference<"mutation", { key: string; linkId: string }, null>(
+  "identity/events:unlinkEvent",
+);
+
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
   return useQuery(whoIsRef, handle ? { key: IDENTITY_KEY, handle } : "skip");
 }
@@ -253,6 +337,51 @@ export function useRemoveTag() {
 
 export function useListTags(): Array<{ tag: string; count: number }> | undefined {
   return useQuery(listTagsRef, { key: IDENTITY_KEY });
+}
+
+/** A GROUP chat's live CRM projection — undefined while loading, `{tags:[],
+ * events:[]}` (no is_favorite/priority) when the chat has never been
+ * annotated. `null`/omitted chatGuid skips the query (mirrors useWhoIs). */
+export function useChatCrm(chatGuid: string | null): ChatCrm | undefined {
+  const result = useQuery(chatCrmRef, chatGuid ? { key: IDENTITY_KEY, chatGuids: [chatGuid] } : "skip");
+  if (!chatGuid) return undefined;
+  return result?.[chatGuid] ?? (result ? { tags: [], events: [] } : undefined);
+}
+
+export function useSetChatFavorite() {
+  const mutate = useMutation(setChatFavoriteRef);
+  return (args: { chatGuid: string; is_favorite: boolean }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useSetChatPriority() {
+  const mutate = useMutation(setChatPriorityRef);
+  return (args: { chatGuid: string; priority?: Priority | null }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useAddChatTag() {
+  const mutate = useMutation(addChatTagRef);
+  return (args: { chatGuid: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useRemoveChatTag() {
+  const mutate = useMutation(removeChatTagRef);
+  return (args: { chatGuid: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useSearchEvents() {
+  const run = useAction(searchEventsRef);
+  return (args: { query: string }) => run({ key: IDENTITY_KEY, ...args });
+}
+
+export function useLinkEvent() {
+  const mutate = useMutation(linkEventRef);
+  return (args: { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string }) =>
+    mutate({ key: IDENTITY_KEY, ...args });
+}
+
+export function useUnlinkEvent() {
+  const mutate = useMutation(unlinkEventRef);
+  return (args: { linkId: string }) => mutate({ key: IDENTITY_KEY, ...args });
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */

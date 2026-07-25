@@ -22,6 +22,7 @@ import { formatListTimestamp } from "@/lib/format";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
+import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
 
@@ -189,6 +190,25 @@ export function ChatRow({
             <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontWeight: chat.flags.unread ? "700" : "600" }]}>
               {chat.displayName}
             </Text>
+            {/* Private CRM layer (favorite/priority) — mirrors the star shown
+                on favorited rows in contacts-list-pane.tsx. Priority is kept
+                subtle: only P1/P2 (the top two of five levels) get a dot, so
+                the row doesn't turn into a dashboard. */}
+            {chat.crm?.is_favorite && (
+              <Ionicons
+                name="star"
+                size={13}
+                color={FAVORITE_GOLD}
+                accessibilityLabel="Favorite"
+                style={styles.favoriteStar}
+              />
+            )}
+            {chat.crm?.priority !== undefined && chat.crm.priority <= 2 && (
+              <View
+                accessibilityLabel={`Priority ${chat.crm.priority}`}
+                style={[styles.priorityDot, { backgroundColor: theme.accent }]}
+              />
+            )}
             {last && (
               <Text style={[styles.time, { color: theme.textSecondary }]}>
                 {formatListTimestamp(last.dateCreated)}
@@ -280,6 +300,15 @@ const styles = StyleSheet.create({
   time: {
     flexShrink: 0,
     fontSize: 13,
+  },
+  favoriteStar: {
+    flexShrink: 0,
+  },
+  priorityDot: {
+    borderRadius: 3,
+    flexShrink: 0,
+    height: 6,
+    width: 6,
   },
   previewLine: {
     alignItems: "center",
