@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { matchBinding, setListMode, type KeyStroke } from "./controller";
+import {
+  matchBinding,
+  registerFocusTarget,
+  requestFocus,
+  setListMode,
+  type KeyStroke,
+} from "./controller";
 import { formatCombo, helpEntries } from "./registry";
 
 function stroke(partial: Partial<KeyStroke> & { key: string }): KeyStroke {
@@ -45,9 +51,22 @@ describe("glide (list) mode", () => {
   });
 
   test("action keys are inert outside glide mode — composer-safe", () => {
-    for (const key of ["e", "u", "c", "z", "/", "Enter"]) {
+    for (const key of ["e", "u", "c", "z", "/"]) {
       expect(matchBinding(stroke({ key }))).toBeNull();
     }
+  });
+
+  test("Enter outside glide focuses the composer, inside glide activates the row", () => {
+    // The list-scope Enter must stay AHEAD of the global one in BINDINGS:
+    // matchBinding returns the first match and only skips list-scope while
+    // glide is off, so this pair of assertions pins the ordering.
+    expect(matchBinding(stroke({ key: "Enter" }))?.commandId).toBe("composer.focus");
+    setListMode(true);
+    expect(matchBinding(stroke({ key: "Enter" }))?.commandId).toBe("conversation.activate");
+  });
+
+  test("composer.focus never fires while typing (fail-closed)", () => {
+    expect(matchBinding(stroke({ key: "Enter" }))?.allowInEditable).toBe(false);
   });
 
   test("glide mode activates the single-key action set", () => {
@@ -92,5 +111,30 @@ describe("registry", () => {
     expect(archive?.keys).toEqual(["E"]);
     const nw = entries.find((e) => e.title === "New message");
     expect(nw?.keys).toEqual(["C"]);
+  });
+});
+
+describe("requestFocus survives a target remount", () => {
+  test("focus lands on the composer that mounts AFTER the request", async () => {
+    // Reproduces the ⌘K bug: openChat requests focus while the OLD composer
+    // is still registered (ThreadView is keyed by guid, so it's about to
+    // unmount). The request must still land on the replacement.
+    let newFocused = 0;
+    const unregisterOld = registerFocusTarget("composer", () => undefined);
+
+    requestFocus("composer");
+    unregisterOld(); // old ThreadView tears down
+    registerFocusTarget("composer", () => newFocused++); // replacement mounts
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(newFocused).toBe(1);
+  });
+
+  test("focuses an already-mounted target when nothing remounts", async () => {
+    let focused = 0;
+    registerFocusTarget("composer", () => focused++);
+    requestFocus("composer");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(focused).toBe(1);
   });
 });

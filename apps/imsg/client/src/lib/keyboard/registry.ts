@@ -6,6 +6,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "conversation.next", title: "Next conversation", group: "Navigation" },
   { id: "conversation.previous", title: "Previous conversation", group: "Navigation" },
   { id: "conversation.activate", title: "Reply to selected", group: "Navigation" },
+  { id: "composer.focus", title: "Reply (focus composer)", group: "Navigation" },
   { id: "conversation.archive", title: "Archive / unarchive", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },
@@ -44,6 +45,12 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "conversation.previous", combo: "k", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.previous", combo: "arrowup", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.activate", combo: "enter", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
+  // Enter OUTSIDE glide mode = jump into the open conversation's composer.
+  // ORDER IS LOAD-BEARING: matchBinding returns the first match and skips
+  // list-scope bindings unless glide is active, so the list-scope Enter above
+  // must stay ahead of this one — in glide, Enter activates the selected row;
+  // everywhere else (e.g. straight after ⌘K opens a chat) it starts a reply.
+  { commandId: "composer.focus", combo: "enter", scope: "global", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.archive", combo: "e", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.markUnread", combo: "u", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "action.undo", combo: "z", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },

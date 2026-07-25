@@ -64,14 +64,37 @@ export function registerFocusTarget(id: string, focus: () => void): () => void {
   };
 }
 
-/** Focus a target now, or as soon as it mounts (pending-focus). */
+/**
+ * How long a pending focus stays armed. Long enough for React to unmount the
+ * old target and mount the replacement, short enough that a request which
+ * already landed can't hijack focus from something the user did afterwards.
+ */
+const PENDING_FOCUS_MS = 400;
+let pendingFocusTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Focus a target now, or as soon as it mounts (pending-focus).
+ *
+ * Arms BOTH paths deliberately. Callers request focus while reacting to a
+ * selection change (see index.tsx's openChat), at which point the currently
+ * registered target is often the one about to be torn down — ThreadView is
+ * keyed by chat guid, so switching conversations unmounts the old composer
+ * and mounts a new one. Focusing only the live target would hand focus to a
+ * dying element and lose it; arming only the pending path would miss the
+ * case where nothing remounts (re-opening the SAME chat). So: try the
+ * current target, and leave the request armed briefly so whichever composer
+ * mounts next claims it. Expires so a stale request can't steal focus later.
+ */
 export function requestFocus(id: string): void {
+  pendingFocus = id;
+  if (pendingFocusTimer) clearTimeout(pendingFocusTimer);
+  pendingFocusTimer = setTimeout(() => {
+    if (pendingFocus === id) pendingFocus = null;
+    pendingFocusTimer = null;
+  }, PENDING_FOCUS_MS);
+
   const focus = focusTargets.get(id);
-  if (focus) {
-    setTimeout(focus, 0);
-  } else {
-    pendingFocus = id;
-  }
+  if (focus) setTimeout(focus, 0);
 }
 
 // ---------------------------------------------------------------- matching
@@ -122,6 +145,11 @@ export function runCommand(id: CommandId, _source: CommandSource): void {
       return rt.moveSelection(-1);
     case "conversation.activate":
       return rt.activateSelection();
+    case "composer.focus":
+      // Deliberately not routed through the runtime: "put the cursor in the
+      // reply box of whatever conversation is open" needs no screen state,
+      // and requestFocus already handles the not-yet-mounted case.
+      return requestFocus("composer");
     case "conversation.find":
       return rt.findInConversation();
     case "conversation.archive":

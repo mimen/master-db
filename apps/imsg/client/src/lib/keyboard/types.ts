@@ -11,6 +11,7 @@ export type CommandId =
   | "conversation.next"
   | "conversation.previous"
   | "conversation.activate"
+  | "composer.focus"
   | "conversation.find"
   | "conversation.archive"
   | "conversation.markUnread"
