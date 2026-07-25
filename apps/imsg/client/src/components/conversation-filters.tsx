@@ -339,6 +339,7 @@ export function ConversationFiltersModal({
       backdropAccessibilityRole="button"
       backdropAccessibilityLabel="Close conversation filters"
       card={false}
+      cardStyle={styles.sheetWrapper}
     >
       <View
         accessibilityViewIsModal
@@ -514,15 +515,29 @@ const styles = StyleSheet.create({
     fontSize: Type.secondary,
     fontWeight: "600",
   },
-  // Color + press-dismiss now live on OverlayShell's own backdrop; this is
-  // just the flex-end anchoring so `menu` docks to the bottom.
+  // Color + press-dismiss live on OverlayShell's own backdrop; this anchors
+  // `menu` to the bottom. alignItems MUST be reset too: the shell centers its
+  // child by default (correct for a dialog), which made this sheet shrink to
+  // its content width and float as a narrow column instead of spanning the
+  // screen like a bottom sheet.
   modalRoot: {
+    alignItems: "stretch",
     justifyContent: "flex-end",
+  },
+  // OverlayShell's press-swallowing wrapper. It gets the sheet's SIZE because
+  // it's the direct child of the (flex:1) backdrop, so a percentage has a
+  // definite parent to resolve against. Putting maxHeight on `menu` instead
+  // asked Yoga to size a child by a percentage of a parent whose own height
+  // was being derived from that child — the circularity left the sheet
+  // stretched to the cap with dead space above the buttons.
+  sheetWrapper: {
+    maxHeight: "88%",
+    width: "100%",
   },
   menu: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "88%",
+    flexShrink: 1,
     paddingBottom: 20,
     paddingTop: 18,
   },
