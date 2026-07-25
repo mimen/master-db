@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Reanimated, { FadeInDown } from "react-native-reanimated";
 import {
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -51,6 +52,12 @@ interface ThreadViewProps {
   chatGuid: string;
   isGroup: boolean;
   jumpTarget?: JumpTarget | null;
+  /**
+   * No longer read. It existed only as KeyboardAvoidingView's
+   * keyboardVerticalOffset, and the keyboard lift is now driven directly from
+   * Keyboard events (see bottomInset below). Kept so existing callers keep
+   * compiling; safe to drop when they're next touched.
+   */
   headerOffset?: number;
   /** When set (wide split-pane), render an in-pane header for this chat. */
   headerChat?: ChatSummary | null;
@@ -65,7 +72,6 @@ export function ThreadView({
   chatGuid,
   isGroup,
   jumpTarget = null,
-  headerOffset = 0,
   headerChat = null,
   previewOnly = false,
   onToggleShadow,
@@ -396,12 +402,37 @@ export function ThreadView({
     [chatGuid, privateApi, showSheet, upsert],
   );
 
+  // The thread's bottom inset, driven by the keyboard rather than by
+  // KeyboardAvoidingView — which silently applies NO padding on this
+  // RN/Fabric build, leaving the composer rendered UNDERNEATH the keyboard
+  // (verified in the simulator: setting keyboardVerticalOffset to 0 changed
+  // nothing, so it was never the offset value). The keyboard events below do
+  // fire; the composer already relies on them for its own spacing.
+  //
+  // With the keyboard closed the inset is the safe area instead, so the
+  // composer stops running off the screen into the home indicator and the
+  // display's rounded corners. One value covers both states: whichever is
+  // taller. The keyboard's reported height already includes the safe-area
+  // region, hence max() rather than a sum.
+  const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const change = Keyboard.addListener("keyboardWillChangeFrame", (e) =>
+      setKeyboardHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardHeight(0));
+    return () => {
+      change.remove();
+      hide.remove();
+    };
+  }, []);
+  const bottomInset = Platform.OS === "web" ? 0 : Math.max(insets.bottom, keyboardHeight);
+
   return (
-    <KeyboardAvoidingView
+    <View
       onLayout={(e) => setPaneW(e.nativeEvent.layout.width)}
-      style={{ flex: 1, backgroundColor: theme.background }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={headerOffset}
+      style={{ flex: 1, backgroundColor: theme.background, paddingBottom: bottomInset }}
     >
       {headerChat && (
         <View
@@ -609,7 +640,7 @@ export function ThreadView({
           patchChatWithMessage(chatGuid, message);
         }}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
