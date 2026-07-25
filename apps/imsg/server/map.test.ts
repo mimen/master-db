@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BBChat } from "./bb-types";
-import { mapChat } from "./map";
+import { mapChat, mapMessage } from "./map";
 import type { CrmData, NameSource } from "./name-resolver";
 
 /**
@@ -98,5 +98,62 @@ describe("mapChat CRM inheritance", () => {
     const contacts = fakeNameSource({ chatCrm: { [guid]: { priority: 3, tags: [] } } });
     const summary = mapChat(groupChat(guid, ["+15550001111", "+15550002222"]), undefined, contacts);
     expect(summary.crm).toEqual({ priority: 3 });
+  });
+});
+
+
+describe("inbound mention metadata", () => {
+  test("maps BlueBubbles attributed-body mention runs onto message text", () => {
+    const source = fakeNameSource({});
+    const message = mapMessage(
+      {
+        guid: "m-mention",
+        text: "Hi Alex",
+        isFromMe: false,
+        handle: { address: "+15550002222", service: "iMessage" },
+        attributedBody: [
+          {
+            string: "Hi Alex",
+            runs: [
+              {
+                range: [3, 4],
+                attributes: {
+                  __kIMMessagePartAttributeName: 0,
+                  __kIMMentionConfirmedMention: "+15550001111",
+                },
+              },
+            ],
+          },
+        ],
+      },
+      "iMessage;+;group",
+      source,
+    );
+    expect(message.mentions).toEqual([{ start: 3, length: 4, address: "+15550001111" }]);
+  });
+
+  test("accepts the object-shaped attributed body returned by private-API sends", () => {
+    const message = mapMessage(
+      {
+        guid: "m-object-mention",
+        text: "Hi Alex",
+        isFromMe: true,
+        attributedBody: {
+          string: "Hi Alex",
+          runs: [
+            {
+              range: [3, 4],
+              attributes: {
+                __kIMMessagePartAttributeName: 0,
+                __kIMMentionConfirmedMention: "+15550001111",
+              },
+            },
+          ],
+        },
+      },
+      "iMessage;+;group",
+      fakeNameSource({}),
+    );
+    expect(message.mentions).toEqual([{ start: 3, length: 4, address: "+15550001111" }]);
   });
 });

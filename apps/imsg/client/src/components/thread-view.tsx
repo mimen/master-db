@@ -21,7 +21,7 @@ import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
-import type { Message } from "@shared/types";
+import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
@@ -35,6 +35,7 @@ import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
 import { CenteredSpinner } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
+import { FaceTimeButton } from "./facetime-button";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
@@ -104,6 +105,7 @@ export function ThreadView({
   const [searchText, setSearchText] = useState("");
   const [matchIndex, setMatchIndex] = useState(0);
   const [dayChip, setDayChip] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>(headerChat?.participants ?? []);
   const dayChipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FlatList requires stable identities for viewability callbacks.
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 10 }).current;
@@ -128,6 +130,25 @@ export function ThreadView({
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
     if (!previewOnly) void api.markRead(chatGuid);
   }, [chatGuid, previewOnly]);
+
+  useEffect(() => {
+    if (headerChat) {
+      setParticipants(headerChat.participants);
+      return;
+    }
+    let cancelled = false;
+    api
+      .chatInfo(chatGuid)
+      .then((info) => {
+        if (!cancelled) setParticipants(info.participants);
+      })
+      .catch(() => {
+        if (!cancelled) setParticipants([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatGuid, headerChat]);
 
   // Header search buttons open the in-thread search shelf via a signal bus.
   useEffect(() => onOpenThreadSearch(() => setSearchOpen(true)), []);
@@ -471,6 +492,16 @@ export function ThreadView({
             </View>
           </Pressable>
           <View style={[styles.paneHeaderSpace, styles.paneHeaderActions]}>
+            <FaceTimeButton
+              chatGuid={chatGuid}
+              isGroup={isGroup}
+              address={isGroup ? null : (participants[0]?.address ?? null)}
+              color={theme.textSecondary}
+              onSent={(message) => {
+                upsert(message);
+                patchChatWithMessage(chatGuid, message);
+              }}
+            />
             <Pressable onPress={() => setSearchOpen(true)} hitSlop={8}>
               <Ionicons name="search" size={21} color={theme.textSecondary} />
             </Pressable>
@@ -623,6 +654,9 @@ export function ThreadView({
       />
       <Composer
         chatGuid={chatGuid}
+        isGroup={isGroup}
+        participants={participants}
+        privateApi={privateApi}
         replyTo={replyTo}
         editing={editing}
         onClearReply={() => setReplyTo(null)}

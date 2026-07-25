@@ -1,12 +1,15 @@
 import { io, type Socket } from "socket.io-client";
 import type {
+  BBAttributedBody,
   BBAttachment,
   BBChat,
   BBContact,
   BBEnvelope,
   BBMessage,
+  BBScheduledMessage,
   BBServerInfo,
 } from "./bb-types";
+import { scheduledMessageRequest } from "./scheduled";
 
 export type Result<T, E = string> = { ok: true; value: T } | { ok: false; error: E };
 
@@ -44,6 +47,7 @@ export interface BlueBubbles {
     chatGuid: string,
     message: string,
     replyTo?: { guid: string; part: number },
+    attributedBody?: BBAttributedBody,
   ): Promise<Result<BBMessage>>;
   sendAttachment(chatGuid: string, filename: string, bytes: Uint8Array): Promise<Result<BBMessage>>;
   react(
@@ -74,6 +78,11 @@ export interface BlueBubbles {
   getChat(chatGuid: string): Promise<Result<BBChat>>;
   attachmentMeta(guid: string): Promise<Result<BBAttachment>>;
   downloadAttachment(guid: string): Promise<Response>;
+  listScheduledMessages(): Promise<Result<BBScheduledMessage[]>>;
+  createScheduledMessage(chatGuid: string, text: string, sendAt: number): Promise<Result<BBScheduledMessage>>;
+  updateScheduledMessage(id: number, chatGuid: string, text: string, sendAt: number): Promise<Result<BBScheduledMessage>>;
+  deleteScheduledMessage(id: number): Promise<Result<void>>;
+  createFaceTimeLink(): Promise<Result<string>>;
   /** Subscribe to the inbound event stream; returns an unsubscribe function. */
   onEvent(cb: (event: BBEvent) => void): () => void;
 }
@@ -158,6 +167,10 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.unwrap<T>(res);
   }
 
+  private async delete<T>(path: string): Promise<Result<T>> {
+    return this.unwrap<T>(await fetch(this.url(path), { method: "DELETE" }));
+  }
+
   private async unwrap<T>(res: Response): Promise<Result<T>> {
     let envelope: BBEnvelope<T>;
     try {
@@ -185,7 +198,7 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.privateApi;
   }
 
-  private sendMethod(): string {
+  private sendMethod(): "private-api" | "apple-script" {
     return this.privateApi ? "private-api" : "apple-script";
   }
 
@@ -238,34 +251,25 @@ export class BlueBubblesClient implements BlueBubbles {
     chatGuid: string,
     message: string,
     replyTo?: { guid: string; part: number },
+    attributedBody?: BBAttributedBody,
   ): Promise<Result<BBMessage>> {
     return this.post<BBMessage>("/api/v1/message/text", {
       chatGuid,
       tempGuid: tempGuid(),
-      method: this.sendMethod(),
+      method: attributedBody ? "private-api" : this.sendMethod(),
       message,
       selectedMessageGuid: replyTo?.guid,
       partIndex: replyTo?.part ?? 0,
+      ...(attributedBody ? { attributedBody } : {}),
     });
   }
 
-  async sendAttachment(
+  sendAttachment(
     chatGuid: string,
     filename: string,
     bytes: Uint8Array,
   ): Promise<Result<BBMessage>> {
-    const form = new FormData();
-    form.append("chatGuid", chatGuid);
-    form.append("tempGuid", tempGuid());
-    form.append("name", filename);
-    form.append("method", this.sendMethod());
-    form.append("isAudioMessage", "false");
-    form.append("attachment", new Blob([bytes.slice().buffer]), filename);
-    const res = await fetch(this.url("/api/v1/message/attachment"), {
-      method: "POST",
-      body: form,
-    });
-    return this.unwrap<BBMessage>(res);
+    return this.sendAttachmentForm(chatGuid, filename, bytes, { isAudioMessage: "false" });
   }
 
   /** reaction: love|like|dislike|laugh|emphasize|question, "-"-prefixed to remove. Private API only. */
@@ -396,4 +400,46 @@ export class BlueBubblesClient implements BlueBubbles {
   async downloadAttachment(guid: string): Promise<Response> {
     return fetch(this.url(`/api/v1/attachment/${guid}/download`));
   }
+
+  listScheduledMessages(): Promise<Result<BBScheduledMessage[]>> {
+    return this.get<BBScheduledMessage[]>("/api/v1/message/schedule");
+  }
+
+  createScheduledMessage(
+    chatGuid: string,
+    text: string,
+    sendAt: number,
+  ): Promise<Result<BBScheduledMessage>> {
+    return this.post<BBScheduledMessage>(
+      "/api/v1/message/schedule",
+      scheduledMessageRequest(chatGuid, text, sendAt, this.sendMethod()),
+    );
+  }
+
+  async updateScheduledMessage(
+    id: number,
+    chatGuid: string,
+    text: string,
+    sendAt: number,
+  ): Promise<Result<BBScheduledMessage>> {
+    const updated = await this.put<BBScheduledMessage>(
+      `/api/v1/message/schedule/${id}`,
+      scheduledMessageRequest(chatGuid, text, sendAt, this.sendMethod()),
+    );
+    if (!updated.ok) return updated;
+    // BlueBubbles 1.9.9's PUT response is a sparse update object without
+    // status/error/sentAt. Re-read the row so the normalized client contract
+    // always receives the persisted scheduler state.
+    return this.get<BBScheduledMessage>(`/api/v1/message/schedule/${id}`);
+  }
+
+  deleteScheduledMessage(id: number): Promise<Result<void>> {
+    return this.delete<void>(`/api/v1/message/schedule/${id}`);
+  }
+
+  async createFaceTimeLink(): Promise<Result<string>> {
+    const result = await this.post<{ link: string }>("/api/v1/facetime/session", null);
+    return result.ok ? { ok: true, value: result.value.link } : result;
+  }
+
 }

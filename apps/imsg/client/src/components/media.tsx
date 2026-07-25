@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useTheme } from "@/hooks/use-theme";
 import { Radii, Type } from "@/constants/theme";
+import { api } from "@/lib/api";
+import type { TranscriptState } from "@shared/types";
 
 function formatSeconds(total: number): string {
   const seconds = Math.max(0, Math.round(total));
@@ -31,7 +33,7 @@ function fakeWaveform(seed: string): number[] {
   return bars;
 }
 
-export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
+export function AudioBubble({ guid, url, mine }: { guid: string; url: string; mine: boolean }) {
   const theme = useTheme();
   const player = useAudioPlayer({ uri: url });
   const status = useAudioPlayerStatus(player);
@@ -41,6 +43,47 @@ export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
   const dimTint = mine ? "rgba(255,255,255,0.4)" : theme.divider;
   const waveform = useMemo(() => fakeWaveform(url), [url]);
   const [rateIndex, setRateIndex] = useState(0);
+  const [transcript, setTranscript] = useState<TranscriptState>({ state: "not-requested" });
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .transcriptState(guid)
+      .then((state) => {
+        if (!cancelled) setTranscript(state);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [guid]);
+
+  useEffect(() => {
+    if (transcript.state !== "working") return;
+    let cancelled = false;
+    const poll = (): void => {
+      api
+        .transcriptState(guid)
+        .then((state) => {
+          if (!cancelled) setTranscript(state);
+        })
+        .catch(() => undefined);
+    };
+    const timer = setInterval(poll, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [guid, transcript.state]);
+
+  const requestTranscript = async () => {
+    setTranscript({ state: "working" });
+    try {
+      setTranscript(await api.transcribe(guid));
+    } catch {
+      setTranscript({ state: "failed", error: "Transcript request failed" });
+    }
+  };
 
   const toggle = () => {
     if (playing) {
@@ -64,35 +107,62 @@ export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
   const playedBars = Math.round(progress * WAVEFORM_BARS);
   const active = playing || status.currentTime > 0;
 
+  const transcriptColor = mine ? "rgba(255,255,255,0.85)" : theme.textSecondary;
   return (
-    <View style={[styles.audio, { backgroundColor: mine ? "rgba(255,255,255,0.15)" : theme.backgroundElement }]}>
-      <Pressable onPress={toggle} hitSlop={8} style={[styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.background }]}>
-        {/* mine's play button sits on a near-white translucent circle regardless
-            of theme — black icon is deliberate, not a theme.text substitute. */}
-        <Ionicons name={playing ? "pause" : "play"} size={16} color={mine ? "#000" : theme.text} />
-      </Pressable>
-      <View style={styles.waveform}>
-        {waveform.map((h, i) => (
-          <View
-            key={i}
-            style={{
-              width: 2.5,
-              borderRadius: 1.5,
-              height: Math.max(3, h * 18),
-              backgroundColor: i < playedBars ? tint : dimTint,
-            }}
-          />
-        ))}
-      </View>
-      <Text style={[styles.audioTime, { color: mine ? "rgba(255,255,255,0.8)" : theme.textSecondary }]}>
-        {active
-          ? `${formatSeconds(status.currentTime)} / ${formatSeconds(status.duration)}`
-          : formatSeconds(status.duration)}
-      </Text>
-      {active && (
-        <Pressable onPress={cycleRate} style={[styles.rateChip, { borderColor: dimTint }]}>
-          <Text style={[styles.rateText, { color: tint }]}>{RATES[rateIndex]}x</Text>
+    <View style={styles.audioStack}>
+      <View style={[styles.audio, { backgroundColor: mine ? "rgba(255,255,255,0.15)" : theme.backgroundElement }]}>
+        <Pressable onPress={toggle} hitSlop={8} style={[styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.background }]}>
+          {/* mine's play button sits on a near-white translucent circle regardless
+              of theme — black icon is deliberate, not a theme.text substitute. */}
+          <Ionicons name={playing ? "pause" : "play"} size={16} color={mine ? "#000" : theme.text} />
         </Pressable>
+        <View style={styles.waveform}>
+          {waveform.map((h, i) => (
+            <View
+              key={i}
+              style={{
+                width: 2.5,
+                borderRadius: 1.5,
+                height: Math.max(3, h * 18),
+                backgroundColor: i < playedBars ? tint : dimTint,
+              }}
+            />
+          ))}
+        </View>
+        <Text style={[styles.audioTime, { color: transcriptColor }]}>
+          {active
+            ? `${formatSeconds(status.currentTime)} / ${formatSeconds(status.duration)}`
+            : formatSeconds(status.duration)}
+        </Text>
+        {active && (
+          <Pressable onPress={cycleRate} style={[styles.rateChip, { borderColor: dimTint }]}>
+            <Text style={[styles.rateText, { color: tint }]}>{RATES[rateIndex]}x</Text>
+          </Pressable>
+        )}
+      </View>
+      {transcript.state === "not-requested" && (
+        <Pressable onPress={() => void requestTranscript()} hitSlop={6}>
+          <Text style={[styles.transcriptAction, { color: mine ? theme.onAccent : theme.accent }]}>Transcribe</Text>
+        </Pressable>
+      )}
+      {transcript.state === "working" && (
+        <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>Transcribing on the Mini…</Text>
+      )}
+      {transcript.state === "ready" && (
+        <Text selectable style={[styles.transcriptText, { color: mine ? theme.onAccent : theme.text }]}>
+          {transcript.text}
+        </Text>
+      )}
+      {transcript.state === "unavailable" && (
+        <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>Transcription unavailable · {transcript.detail}</Text>
+      )}
+      {transcript.state === "failed" && (
+        <View style={{ gap: 3 }}>
+          <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>{transcript.error}</Text>
+          <Pressable onPress={() => void requestTranscript()} hitSlop={6}>
+            <Text style={[styles.transcriptAction, { color: mine ? theme.onAccent : theme.accent }]}>Retry transcription</Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -132,6 +202,10 @@ export function VideoBubble({ url }: { url: string }) {
 }
 
 const styles = StyleSheet.create({
+  audioStack: {
+    gap: 5,
+    minWidth: 220,
+  },
   audio: {
     flexDirection: "row",
     alignItems: "center",
@@ -166,6 +240,23 @@ const styles = StyleSheet.create({
   rateText: {
     fontSize: Type.caption,
     fontWeight: "600",
+  },
+  transcriptAction: {
+    fontSize: Type.secondary,
+    fontWeight: "600",
+    marginHorizontal: 8,
+  },
+  transcriptMeta: {
+    fontSize: Type.caption,
+    lineHeight: 16,
+    marginHorizontal: 8,
+    maxWidth: 260,
+  },
+  transcriptText: {
+    fontSize: Type.secondary,
+    lineHeight: 19,
+    marginHorizontal: 8,
+    maxWidth: 280,
   },
   video: {
     width: 230,

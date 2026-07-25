@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { formatScheduledWhen } from "./scheduled";
+import {
+  formatScheduledWhen,
+  parseScheduleInput,
+  scheduledStatusLabel,
+  scheduleInputParts,
+} from "./scheduled";
 
 describe("formatScheduledWhen", () => {
   const now = new Date(2026, 6, 18, 9, 0, 0); // Sat Jul 18 2026, 9:00 AM
@@ -25,5 +30,36 @@ describe("formatScheduledWhen", () => {
     const earlyTomorrow = new Date(2026, 6, 19, 1, 0, 0).getTime();
     expect(formatScheduledWhen(lateTonight, now)).toStartWith("Today, ");
     expect(formatScheduledWhen(earlyTomorrow, now)).toStartWith("Tomorrow, ");
+  });
+});
+
+
+test("formats normalized BlueBubbles schedule statuses", () => {
+  expect(scheduledStatusLabel("pending")).toBe("Scheduled");
+  expect(scheduledStatusLabel("interrupted")).toBe("Interrupted");
+  expect(scheduledStatusLabel("expired")).toBe("Expired");
+});
+
+
+describe("custom schedule date and time", () => {
+  test("round-trips local date/time fields", () => {
+    const value = new Date(2030, 4, 6, 14, 35, 0, 0).getTime();
+    expect(scheduleInputParts(value)).toEqual({ date: "2030-05-06", time: "14:35" });
+    expect(parseScheduleInput("2030-05-06", "14:35", value - 1)).toEqual({ ok: true, value });
+  });
+
+  test("rejects malformed and past values", () => {
+    expect(parseScheduleInput("May 6", "2pm", 0)).toEqual({
+      ok: false,
+      error: "Use YYYY-MM-DD and HH:MM",
+    });
+    expect(parseScheduleInput("2026-02-31", "10:00", 0)).toEqual({
+      ok: false,
+      error: "Choose a valid date and time",
+    });
+    expect(parseScheduleInput("2020-01-01", "10:00", Date.now())).toEqual({
+      ok: false,
+      error: "Choose a future date and time",
+    });
   });
 });

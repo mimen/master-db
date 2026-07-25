@@ -1,5 +1,6 @@
 import type { BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
+import type { MentionAnnotation } from "../shared/mentions";
 import type { ChatState } from "../shared/chat-state";
 import { computeFlags } from "../shared/chat-state";
 import { formatAddress } from "../shared/address";
@@ -104,6 +105,28 @@ function cleanText(m: BBMessage): string {
   return subject || text;
 }
 
+function messageMentions(m: BBMessage, text: string): MentionAnnotation[] {
+  const mentions: MentionAnnotation[] = [];
+  const bodies = Array.isArray(m.attributedBody)
+    ? m.attributedBody
+    : m.attributedBody
+      ? [m.attributedBody]
+      : [];
+  for (const body of bodies) {
+    const leadingTrim = body.string.length - body.string.trimStart().length;
+    if (body.string.trim() !== text) continue;
+    for (const run of body.runs ?? []) {
+      const address = run.attributes?.__kIMMentionConfirmedMention?.trim();
+      if (!address) continue;
+      const [rawStart, length] = run.range;
+      const start = rawStart - leadingTrim;
+      if (start < 0 || length <= 0 || start + length > text.length) continue;
+      mentions.push({ start, length, address });
+    }
+  }
+  return mentions.sort((a, b) => a.start - b.start);
+}
+
 function sender(
   m: BBMessage,
   contacts: NameSource,
@@ -128,13 +151,14 @@ export function mapMessage(
   contacts: NameSource,
   participants: readonly BBHandle[] = [],
 ): Message {
+  const text = isTapback(m) ? summarizeLast(m) : cleanText(m);
   return {
     guid: m.guid,
     chatGuid,
     // Tapbacks carry Apple's raw `Loved "whole quoted text"` — summarize to the
     // verb ("Loved a message") so the live sidebar preview matches a reload.
     // Thread rows are unaffected: buildThread filters tapbacks before mapping.
-    text: isTapback(m) ? summarizeLast(m) : cleanText(m),
+    text,
     dateCreated: m.dateCreated ?? 0,
     dateRead: m.dateRead ?? null,
     dateDelivered: m.dateDelivered ?? null,
@@ -151,6 +175,7 @@ export function mapMessage(
         height: a.height ?? null,
         totalBytes: a.totalBytes ?? null,
       })),
+    mentions: messageMentions(m, text),
     special: specialContent(m),
     sendEffect: m.expressiveSendStyleId ?? null,
     reactions: [],

@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar, GroupPhotoAvatar } from "@/components/avatar";
 import { ThreadView } from "@/components/thread-view";
+import { FaceTimeButton } from "@/components/facetime-button";
 import { openThreadSearch } from "@/lib/thread-search";
 import type { JumpTarget } from "@/hooks/use-messages";
 
@@ -85,7 +86,13 @@ export default function ChatScreen() {
             />
           ),
           headerRight: () => (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 20, paddingHorizontal: 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 18, paddingHorizontal: 6 }}>
+              <FaceTimeButton
+                chatGuid={params.guid}
+                isGroup={isGroup}
+                address={isGroup ? null : (params.guid.split(";").pop() ?? null)}
+                color={theme.accent}
+              />
               <Pressable onPress={() => openThreadSearch()} hitSlop={8}>
                 <Ionicons name="search" size={22} color={theme.accent} />
               </Pressable>

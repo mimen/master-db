@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { safeAttachmentGuid } from "./attachment-guid";
 
 const CACHE_DIR = ".cache/attachments";
 mkdirSync(CACHE_DIR, { recursive: true });
@@ -41,7 +42,7 @@ export async function transcodeAttachment(
   const audio = !image && needsAudioTranscode(mimeType, filename);
   if (!image && !audio) return null;
 
-  const safeGuid = guid.replace(/[^A-Za-z0-9-]/g, "_");
+  const safeGuid = safeAttachmentGuid(guid);
   const outPath = join(CACHE_DIR, `${safeGuid}.${image ? "jpg" : "m4a"}`);
   const contentType = image ? "image/jpeg" : "audio/mp4";
 

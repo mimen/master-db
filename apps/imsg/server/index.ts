@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
-import type { BBMessage } from "./bb-types";
+import type { BBAttributedBody, BBMessage } from "./bb-types";
 import { BlueBubblesClient } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import { loadConfig } from "./config";
@@ -15,7 +15,12 @@ import { NameResolver } from "./name-resolver";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
 import { buildThread, mapMessage, tapbackReactionEvent } from "./map";
+import type { MentionAnnotation } from "../shared/mentions";
+import { buildMentionAttributedBody } from "./mention-body";
 import { transcodeAttachment } from "./transcode";
+import { mapScheduledMessage } from "./scheduled";
+import { WhisperService } from "./whisper";
+import { createAndSendFaceTimeLink } from "./facetime";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
@@ -32,6 +37,7 @@ const directory = new ChatDirectory(bb, db, contacts, Date.now, names);
 const search = new MessageSearch(bb, names);
 const photos = new GroupPhotos(bb);
 const identitySync = new IdentitySync(bb, config, () => void identityMirror.refresh());
+const whisper = new WhisperService(config.whisper, bb, db);
 
 const gateway = new Gateway(config.ai);
 const ai = new AiService({
@@ -61,6 +67,12 @@ if (!info.ok) {
     `BlueBubbles ${info.value.server_version ?? "?"} connected, private API: ${bb.hasPrivateApi}`,
   );
 }
+const whisperStatus = whisper.availability();
+console.log(
+  whisperStatus.available
+    ? `Whisper transcription available (${config.whisper.modelPath})`
+    : `Whisper transcription unavailable: ${whisperStatus.detail}`,
+);
 await contacts.refresh(true);
 identityMirror.start();
 identitySync.start();
@@ -68,22 +80,6 @@ identitySync.start();
 // Re-check server info periodically so a BlueBubbles restart or private-API
 // toggle is picked up without restarting this service.
 setInterval(() => void bb.connect(), 5 * 60_000);
-
-// Scheduled-message tick: fire anything due, then drop it from the queue.
-setInterval(() => {
-  for (const s of db.dueScheduled(Date.now())) {
-    void bb
-      .sendText(s.chatGuid, s.text)
-      .then((result) => {
-        db.removeScheduled(s.id);
-        if (result.ok) {
-          directory.applyKnownMessage(s.chatGuid, mapMessage(result.value, s.chatGuid, names));
-          broadcast({ kind: "chats-changed" });
-        }
-      })
-      .catch(() => undefined);
-  }
-}, 20_000);
 
 // ---------------------------------------------------------------- SSE fanout
 
@@ -315,12 +311,25 @@ app.get("/api/link-preview", async (c) => {
 
 app.post("/api/chats/:guid/send", async (c) => {
   const chatGuid = c.req.param("guid");
-  const body = (await c.req.json()) as { text: string; replyToGuid?: string; replyToPart?: number };
+  const body = (await c.req.json()) as {
+    text: string;
+    replyToGuid?: string;
+    replyToPart?: number;
+    mentions?: MentionAnnotation[];
+  };
   if (!body.text?.trim()) return c.json({ error: "empty message" }, 400);
+
+  let attributedBody: BBAttributedBody | undefined;
+  if (body.mentions && body.mentions.length > 0 && bb.hasPrivateApi && /^iMessage;/i.test(chatGuid)) {
+    const built = buildMentionAttributedBody(body.text, body.mentions);
+    if (!built.ok) return c.json({ error: built.error }, 400);
+    attributedBody = built.value;
+  }
   const result = await bb.sendText(
     chatGuid,
     body.text,
     body.replyToGuid ? { guid: body.replyToGuid, part: body.replyToPart ?? 0 } : undefined,
+    attributedBody,
   );
   if (!result.ok) return c.json({ error: result.error }, 502);
   const mapped = mapMessage(result.value, chatGuid, names);
@@ -358,7 +367,7 @@ app.post("/api/chats/:guid/contact", async (c) => {
   const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${body.name}`, `N:${body.name};;;;`, field, "END:VCARD", ""].join(
     "\r\n",
   );
-  const filename = `${body.name.replace(/[^\w \-]/g, "").trim() || "Contact"}.vcf`;
+  const filename = `${body.name.replace(/[^\w -]/g, "").trim() || "Contact"}.vcf`;
   const result = await bb.sendAttachmentWithCaption(
     chatGuid,
     filename,
@@ -554,6 +563,19 @@ app.get("/api/chats/:guid/gallery", async (c) => {
   return c.json(items);
 });
 
+// -------------------------------------------------------------- FaceTime
+
+app.post("/api/chats/:guid/facetime-link", async (c) => {
+  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
+  const chatGuid = c.req.param("guid");
+  const result = await createAndSendFaceTimeLink(bb, chatGuid);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const message = mapMessage(result.value, chatGuid, names);
+  directory.applyKnownMessage(chatGuid, message);
+  broadcast({ kind: "new-message", chatGuid, message });
+  return c.json({ message });
+});
+
 // ----------------------------------------------------------- group / delete
 
 app.get("/api/chats/:guid/info", async (c) => {
@@ -611,33 +633,64 @@ app.post("/api/chats/:guid/delete", async (c) => {
 
 // -------------------------------------------------------- scheduled messages
 
-app.get("/api/scheduled", async (c) => {
+async function scheduledChatNames(): Promise<Map<string, string>> {
   const result = await directory.summaries();
-  const chatNames = new Map(result.ok ? result.chats.map((ch) => [ch.guid, ch.displayName]) : []);
+  return new Map(result.ok ? result.chats.map((chat) => [chat.guid, chat.displayName]) : []);
+}
+
+app.get("/api/scheduled", async (c) => {
+  const [result, namesByGuid] = await Promise.all([
+    bb.listScheduledMessages(),
+    scheduledChatNames(),
+  ]);
+  if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(
-    db.listScheduled().map((s) => ({
-      id: s.id,
-      chatGuid: s.chatGuid,
-      chatName: chatNames.get(s.chatGuid) ?? s.chatGuid,
-      text: s.text,
-      sendAt: s.sendAt,
-    })),
+    result.value
+      .map((item) => mapScheduledMessage(item, namesByGuid.get(item.payload.chatGuid) ?? item.payload.chatGuid))
+      .sort((a, b) => a.sendAt - b.sendAt),
   );
 });
 
 app.post("/api/scheduled", async (c) => {
   const body = (await c.req.json()) as { chatGuid: string; text: string; sendAt: number };
-  if (!body.chatGuid || !body.text?.trim() || !body.sendAt) {
-    return c.json({ error: "chatGuid, text, sendAt required" }, 400);
+  if (!body.chatGuid || !body.text?.trim() || !Number.isFinite(body.sendAt) || body.sendAt <= Date.now()) {
+    return c.json({ error: "chatGuid, text, and a future sendAt are required" }, 400);
   }
-  const id = `sch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  db.addScheduled(id, body.chatGuid, body.text.trim(), body.sendAt);
-  return c.json({ id });
+  const result = await bb.createScheduledMessage(body.chatGuid, body.text.trim(), body.sendAt);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const namesByGuid = await scheduledChatNames();
+  return c.json(mapScheduledMessage(result.value, namesByGuid.get(body.chatGuid) ?? body.chatGuid));
+});
+
+app.put("/api/scheduled/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = (await c.req.json()) as { chatGuid: string; text: string; sendAt: number };
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
+  if (!body.chatGuid || !body.text?.trim() || !Number.isFinite(body.sendAt) || body.sendAt <= Date.now()) {
+    return c.json({ error: "chatGuid, text, and a future sendAt are required" }, 400);
+  }
+  const result = await bb.updateScheduledMessage(id, body.chatGuid, body.text.trim(), body.sendAt);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const namesByGuid = await scheduledChatNames();
+  return c.json(mapScheduledMessage(result.value, namesByGuid.get(body.chatGuid) ?? body.chatGuid));
 });
 
 app.delete("/api/scheduled/:id", async (c) => {
-  db.removeScheduled(c.req.param("id"));
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
+  const result = await bb.deleteScheduledMessage(id);
+  if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json({ ok: true });
+});
+
+// ------------------------------------------------ transcription / attachments
+
+app.get("/api/attachments/:guid/transcript", (c) => {
+  return c.json(whisper.state(c.req.param("guid")), 200, { "Cache-Control": "no-store" });
+});
+
+app.post("/api/attachments/:guid/transcript", (c) => {
+  return c.json(whisper.request(c.req.param("guid")), 202, { "Cache-Control": "no-store" });
 });
 
 app.get("/api/attachments/:guid", async (c) => {

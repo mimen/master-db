@@ -48,3 +48,6 @@ Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo
 | `BB_PASSWORD` | — | required |
 | `PORT` | `8377` | |
 | `DB_PATH` | `imsg.db` | overlay SQLite |
+| `WHISPER_BINARY_PATH` | — | optional local `whisper-cli` binary |
+| `WHISPER_MODEL_PATH` | — | optional local multilingual ggml model |
+| `WHISPER_WORK_DIR` | `.cache/whisper` | ephemeral conversion files |

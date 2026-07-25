@@ -7,7 +7,8 @@ export { formatScheduledWhen } from "@/lib/scheduled";
 export interface UseScheduledResult {
   items: ScheduledMessage[];
   loading: boolean;
-  cancel: (id: string) => void;
+  cancel: (id: number) => void;
+  edit: (item: ScheduledMessage, text: string, sendAt: number) => Promise<void>;
 }
 
 /**
@@ -19,8 +20,11 @@ export function useScheduled(): UseScheduledResult {
   const [items, setItems] = useState<ScheduledMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const generation = useRef(0);
+  const requestInFlight = useRef(false);
 
   const load = useCallback(() => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     const gen = ++generation.current;
     api
       .listScheduled()
@@ -31,20 +35,33 @@ export function useScheduled(): UseScheduledResult {
       })
       .catch(() => {
         if (generation.current === gen) setLoading(false);
+      })
+      .finally(() => {
+        requestInFlight.current = false;
       });
   }, []);
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, 30_000);
+    return () => clearInterval(timer);
   }, [load]);
 
   const cancel = useCallback(
-    (id: string) => {
+    (id: number) => {
       setItems((current) => current.filter((i) => i.id !== id));
       api.cancelScheduled(id).catch(() => load());
     },
     [load],
   );
 
-  return { items, loading, cancel };
+  const edit = useCallback(
+    async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
+      const updated = await api.updateScheduled(item.id, item.chatGuid, text, sendAt);
+      setItems((current) => current.map((entry) => (entry.id === item.id ? updated : entry)));
+    },
+    [],
+  );
+
+  return { items, loading, cancel, edit };
 }
