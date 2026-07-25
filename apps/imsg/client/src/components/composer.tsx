@@ -576,24 +576,32 @@ export function Composer({
   const isSMS = chatIsSMS(chatGuid);
   const sendColor = isSMS ? theme.sms : theme.bubbleMine;
 
+  // Keyboard down, the bar extends into the home-indicator strip and the
+  // indicator simply draws over it — the same thing Messages does. Reserving
+  // the WHOLE safe-area inset below the controls (an earlier attempt) just
+  // recreated the dead gap it was meant to fix: the bar and the thread share a
+  // background, so "extending the background" and "leaving a gap" look
+  // identical, and all that registers is how far the field sits from the
+  // bottom. Keep a modest clearance so the controls stay off the indicator
+  // without floating above it. Keyboard up, the keyboard covers the strip.
+  //
+  // The SAME value pads the top, so the field is optically centered in its own
+  // bar: the gap from the field down to the screen edge matches the gap from
+  // the field up to the divider. An asymmetric bar reads as a layout bug even
+  // when each edge is individually defensible.
+  const barPadV =
+    keyboardUp || Platform.OS === "web" ? 8 : 8 + Math.min(insets.bottom, 12);
+
   return (
     <View
       style={[
         styles.container,
         {
           borderTopColor: theme.divider,
-          // Keep native controls clear of the keyboard and rounded display edges.
-          // Keyboard down, the bar extends into the home-indicator strip and
-          // the indicator simply draws over it — the same thing Messages
-          // does. Reserving the WHOLE safe-area inset below the controls (an
-          // earlier attempt) just recreated the dead gap it was meant to fix:
-          // the bar and the thread share a background, so "extending the
-          // background" and "leaving a gap" look identical, and all that
-          // registers is how far the field sits from the bottom. Keep a
-          // modest clearance so the controls stay off the indicator without
-          // floating above it. Keyboard up, the keyboard covers the strip.
-          paddingBottom:
-            keyboardUp || Platform.OS === "web" ? 8 : 8 + Math.min(insets.bottom, 12),
+          // Keep native controls clear of the keyboard and rounded display
+          // edges — see barPadV above for why both edges share one value.
+          paddingTop: barPadV,
+          paddingBottom: barPadV,
           paddingHorizontal: Platform.OS === "web" ? 18 : keyboardUp ? 16 : 20,
         },
       ]}
@@ -815,8 +823,9 @@ const styles = StyleSheet.create({
   container: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 10,
-    paddingTop: 6,
-    paddingBottom: 6,
+    // Vertical padding is set inline (barPadV) — it depends on keyboard state
+    // and the safe-area inset, so static values here would only ever be dead
+    // props that contradict what actually renders.
   },
   banner: {
     flexDirection: "row",
