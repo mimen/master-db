@@ -1,4 +1,12 @@
-import type { BBAttachment, BBChat, BBContact, BBMessage, BBServerInfo } from "./bb-types";
+import type {
+  BBAttributedBody,
+  BBAttachment,
+  BBChat,
+  BBContact,
+  BBMessage,
+  BBScheduledMessage,
+  BBServerInfo,
+} from "./bb-types";
 import type { BBEvent, BlueBubbles, Result } from "./bluebubbles";
 
 /** Chat metadata plus its message history, newest-derived lastMessage computed on read. */
@@ -14,6 +22,9 @@ export interface FakeSeed {
   contacts?: BBContact[];
   /** Whether the fake reports the private API as available (defaults to true). */
   privateApi?: boolean;
+  scheduledMessages?: BBScheduledMessage[];
+  faceTimeLink?: string;
+  attachments?: Record<string, { meta: BBAttachment; bytes: Uint8Array; status?: number }>;
 }
 
 /**
@@ -29,6 +40,9 @@ export class FakeBlueBubbles implements BlueBubbles {
   >();
   private readonly messages = new Map<string, BBMessage[]>();
   private readonly contactList: BBContact[];
+  private readonly scheduled = new Map<number, BBScheduledMessage>();
+  private readonly faceTimeLink: string;
+  private readonly attachmentFiles: Record<string, { meta: BBAttachment; bytes: Uint8Array; status?: number }>;
   private readonly listeners = new Set<(event: BBEvent) => void>();
   private seq = 0;
 
@@ -38,10 +52,18 @@ export class FakeBlueBubbles implements BlueBubbles {
   readonly markReadCalls: string[] = [];
   /** Texts passed to sendText, in order. */
   readonly sentTexts: Array<{ chatGuid: string; message: string }> = [];
+  readonly sentAttributedBodies: Array<{ chatGuid: string; attributedBody: BBAttributedBody }> = [];
+  readonly scheduledCreates: Array<{ chatGuid: string; text: string; sendAt: number }> = [];
+  readonly scheduledUpdates: Array<{ id: number; chatGuid: string; text: string; sendAt: number }> = [];
+  readonly scheduledDeletes: number[] = [];
+  faceTimeLinkCalls = 0;
 
   constructor(seed: FakeSeed) {
     this.privateApi = seed.privateApi ?? true;
     this.contactList = seed.contacts ?? [];
+    this.faceTimeLink = seed.faceTimeLink ?? "https://facetime.apple.com/join#fake";
+    this.attachmentFiles = seed.attachments ?? {};
+    for (const scheduled of seed.scheduledMessages ?? []) this.scheduled.set(scheduled.id, { ...scheduled });
     for (const chat of seed.chats) {
       this.chatMeta.set(chat.guid, {
         displayName: chat.displayName ?? null,
@@ -187,8 +209,16 @@ export class FakeBlueBubbles implements BlueBubbles {
 
   // ------------------------------------------------------------------ mutations
 
-  sendText(chatGuid: string, message: string): Promise<Result<BBMessage>> {
+  sendText(
+    chatGuid: string,
+    message: string,
+    _replyTo?: { guid: string; part: number },
+    attributedBody?: BBAttributedBody,
+  ): Promise<Result<BBMessage>> {
     this.sentTexts.push({ chatGuid, message });
+    if (attributedBody) {
+      this.sentAttributedBodies.push({ chatGuid, attributedBody });
+    }
     const sent: BBMessage = {
       guid: `out-${this.seq}-${Math.random().toString(36).slice(2, 8)}`,
       text: message,
@@ -196,6 +226,7 @@ export class FakeBlueBubbles implements BlueBubbles {
       isFromMe: true,
       handle: null,
       chats: [{ guid: chatGuid }],
+      attributedBody: attributedBody ?? null,
     };
     this.append(chatGuid, sent);
     return Promise.resolve({ ok: true, value: sent });
@@ -264,11 +295,77 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: true, value: undefined });
   }
 
-  attachmentMeta(): Promise<Result<BBAttachment>> {
-    return Promise.resolve({ ok: false, error: "not implemented in fake" });
+  attachmentMeta(guid: string): Promise<Result<BBAttachment>> {
+    const attachment = this.attachmentFiles[guid];
+    return Promise.resolve(
+      attachment ? { ok: true, value: attachment.meta } : { ok: false, error: "no such attachment" },
+    );
   }
 
-  downloadAttachment(): Promise<Response> {
-    return Promise.resolve(new Response(null, { status: 404 }));
+  downloadAttachment(guid: string): Promise<Response> {
+    const attachment = this.attachmentFiles[guid];
+    if (!attachment) return Promise.resolve(new Response(null, { status: 404 }));
+    return Promise.resolve(
+      new Response(attachment.bytes.slice(), { status: attachment.status ?? 200 }),
+    );
+  }
+
+  listScheduledMessages(): Promise<Result<BBScheduledMessage[]>> {
+    return Promise.resolve({
+      ok: true,
+      value: [...this.scheduled.values()].sort((a, b) => Number(a.id) - Number(b.id)),
+    });
+  }
+
+  createScheduledMessage(
+    chatGuid: string,
+    text: string,
+    sendAt: number,
+  ): Promise<Result<BBScheduledMessage>> {
+    this.scheduledCreates.push({ chatGuid, text, sendAt });
+    const id = Math.max(0, ...this.scheduled.keys()) + 1;
+    const value: BBScheduledMessage = {
+      id,
+      type: "send-message",
+      payload: { chatGuid, message: text, method: this.privateApi ? "private-api" : "apple-script" },
+      scheduledFor: sendAt,
+      schedule: { type: "once" },
+      status: "pending",
+      error: null,
+      sentAt: null,
+    };
+    this.scheduled.set(id, value);
+    return Promise.resolve({ ok: true, value });
+  }
+
+  updateScheduledMessage(
+    id: number,
+    chatGuid: string,
+    text: string,
+    sendAt: number,
+  ): Promise<Result<BBScheduledMessage>> {
+    this.scheduledUpdates.push({ id, chatGuid, text, sendAt });
+    const existing = this.scheduled.get(id);
+    if (!existing) return Promise.resolve({ ok: false, error: "no such schedule" });
+    const value: BBScheduledMessage = {
+      ...existing,
+      payload: { ...existing.payload, chatGuid, message: text },
+      scheduledFor: sendAt,
+      status: "pending",
+      error: null,
+    };
+    this.scheduled.set(id, value);
+    return Promise.resolve({ ok: true, value });
+  }
+
+  deleteScheduledMessage(id: number): Promise<Result<void>> {
+    this.scheduledDeletes.push(id);
+    if (!this.scheduled.delete(id)) return Promise.resolve({ ok: false, error: "no such schedule" });
+    return Promise.resolve({ ok: true, value: undefined });
+  }
+
+  createFaceTimeLink(): Promise<Result<string>> {
+    this.faceTimeLinkCalls++;
+    return Promise.resolve({ ok: true, value: this.faceTimeLink });
   }
 }

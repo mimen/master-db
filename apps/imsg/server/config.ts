@@ -16,7 +16,17 @@ export interface Config {
   convexCloudUrl: string | null;
   /** Shared key for identity/queries.ts's requireIdentityKey gate. Optional — the mirror is skipped if unset. */
   identityKey: string | null;
+  whisper: WhisperConfig;
   ai: AiConfig;
+}
+
+export interface WhisperConfig {
+  /** Absolute path to whisper.cpp's whisper-cli (or compatible main binary). */
+  binaryPath: string | null;
+  /** Absolute path to a local multilingual ggml model. */
+  modelPath: string | null;
+  /** Ephemeral conversion/output directory; successful text is cached in the Overlay. */
+  workDir: string;
 }
 
 export interface AiConfig {
@@ -78,6 +88,11 @@ export function loadConfig(): Config {
     appleContactsIngestSecret: Bun.env.APPLE_CONTACTS_INGEST_SECRET ?? null,
     convexCloudUrl: Bun.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ?? null,
     identityKey: Bun.env.IMSG_IDENTITY_KEY ?? null,
+    whisper: {
+      binaryPath: Bun.env.WHISPER_BINARY_PATH?.trim() || null,
+      modelPath: Bun.env.WHISPER_MODEL_PATH?.trim() || null,
+      workDir: Bun.env.WHISPER_WORK_DIR ?? ".cache/whisper",
+    },
     ai: {
       gatewayUrl: (Bun.env.AI_GATEWAY_URL ?? "http://127.0.0.1:8317").replace(/\/$/, ""),
       gatewayKey: loadGatewayKey(),

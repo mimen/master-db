@@ -7,6 +7,7 @@ import { attachmentUrl } from "@/lib/api";
 import { formatBubbleTime } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
+import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
@@ -27,7 +28,7 @@ const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons
 const URL_IN_TEXT = /\b(?:https?:\/\/|www\.)\S+/gi;
 
 /** Splits text so URLs render as tappable, underlined links (kept inline). */
-function linkifyText(text: string, color: string): ReactNode {
+function linkifyText(text: string, color: string, keyPrefix = "text"): ReactNode {
   URL_IN_TEXT.lastIndex = 0;
   if (!URL_IN_TEXT.test(text)) return text;
   URL_IN_TEXT.lastIndex = 0;
@@ -42,7 +43,7 @@ function linkifyText(text: string, color: string): ReactNode {
     const href = raw.startsWith("http") ? raw : `https://${raw}`;
     parts.push(
       <Text
-        key={`${start}-${raw}`}
+        key={`${keyPrefix}-${start}-${raw}`}
         style={{ color, textDecorationLine: "underline" }}
         onPress={() => void Linking.openURL(href)}
         suppressHighlighting
@@ -53,6 +54,31 @@ function linkifyText(text: string, color: string): ReactNode {
     cursor = start + raw.length;
   }
   if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
+
+function renderMessageText(
+  text: string,
+  mentions: readonly MentionAnnotation[],
+  textColor: string,
+  linkColor: string,
+): ReactNode {
+  if (mentions.length === 0) return linkifyText(text, linkColor);
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const mention of [...mentions].sort((a, b) => a.start - b.start)) {
+    if (mention.start < cursor || mention.start + mention.length > text.length) continue;
+    if (mention.start > cursor) {
+      parts.push(linkifyText(text.slice(cursor, mention.start), linkColor, `segment-${cursor}`));
+    }
+    parts.push(
+      <Text key={`mention-${mention.start}-${mention.address}`} style={{ color: textColor, fontWeight: "700" }}>
+        {text.slice(mention.start, mention.start + mention.length)}
+      </Text>,
+    );
+    cursor = mention.start + mention.length;
+  }
+  if (cursor < text.length) parts.push(linkifyText(text.slice(cursor), linkColor, `segment-${cursor}`));
   return parts;
 }
 
@@ -112,7 +138,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           att.mimeType?.startsWith("audio/") ||
           /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "")
         ) {
-          return <AudioBubble key={att.guid} url={url} mine={mine} />;
+          return <AudioBubble key={att.guid} guid={att.guid} url={url} mine={mine} />;
         }
         if (att.mimeType?.startsWith("video/") || /\.(mov|mp4|m4v)$/i.test(att.filename ?? "")) {
           return <VideoBubble key={att.guid} url={url} />;
@@ -307,7 +333,12 @@ export const Bubble = memo(function Bubble({
                         : {}),
                     }}
                   >
-                    {linkifyText(message.text, mine ? theme.onAccent : theme.accent)}
+                    {renderMessageText(
+                      message.text,
+                      message.mentions ?? [],
+                      mine ? theme.onAccent : theme.bubbleTheirsText,
+                      mine ? theme.onAccent : theme.accent,
+                    )}
                   </Text>
                 )}
                 {hasTail && <BubbleTail color={mine ? mineColor : theme.bubbleTheirs} mine={mine} />}

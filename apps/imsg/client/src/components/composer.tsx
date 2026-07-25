@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { cacheDirectory, deleteAsync, EncodingType, writeAsStringAsync } from "expo-file-system/legacy";
+import * as Location from "expo-location";
 import {
   AudioModule,
   RecordingPresets,
@@ -22,14 +25,28 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer } from "@/lib/composer-fill";
-import type { Contact, Message } from "@shared/types";
+import type { Contact, Message, Participant } from "@shared/types";
+import type { MentionAnnotation } from "@shared/mentions";
+import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
 import { useTheme } from "@/hooks/use-theme";
 import { Radii } from "@/constants/theme";
+import {
+  browserFilesToAttachments,
+  MAX_PENDING_ATTACHMENTS,
+  mergePendingAttachments,
+  releaseObjectUrl,
+  type PendingAttachmentAsset,
+} from "@/lib/attachments";
+import { appleMapsLocationUrl, webLocationBlockReason } from "@/lib/message-actions";
 import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
+import { ScheduleEditor } from "./schedule-editor";
 
 interface ComposerProps {
   chatGuid: string;
+  isGroup: boolean;
+  participants: Participant[];
+  privateApi: boolean;
   replyTo: Message | null;
   editing: Message | null;
   onClearReply: () => void;
@@ -40,11 +57,7 @@ interface ComposerProps {
   onSent: (message: Message) => void;
 }
 
-interface PendingAttachment {
-  uri: string;
-  name: string;
-  mime: string;
-  isImage: boolean;
+interface PendingAttachment extends PendingAttachmentAsset {
   /** Present when this pending item is a contact card, sent via the server. */
   contact?: Contact;
 }
@@ -66,7 +79,12 @@ const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_CHROME_V;
 const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 10 + IOS_INPUT_CHROME_V;
 
 
-function tempMessage(chatGuid: string, text: string, replyTo: Message | null): Message {
+function tempMessage(
+  chatGuid: string,
+  text: string,
+  replyTo: Message | null,
+  mentions: readonly MentionAnnotation[],
+): Message {
   return {
     guid: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     chatGuid,
@@ -78,6 +96,7 @@ function tempMessage(chatGuid: string, text: string, replyTo: Message | null): M
     service: chatIsSMS(chatGuid) ? "SMS" : "iMessage",
     sender: null,
     attachments: [],
+    mentions: [...mentions],
     special: null,
     sendEffect: null,
     reactions: [],
@@ -107,6 +126,18 @@ function scheduleOptions(): Array<{ label: string; at: number }> {
   if (tonight.getTime() > now.getTime()) opts.push({ label: "Tonight, 8 PM", at: tonight.getTime() });
   opts.push({ label: "Tomorrow, 9 AM", at: tomorrowAm.getTime() });
   return opts;
+}
+
+function cleanupPendingAttachment(attachment: PendingAttachment): void {
+  if (
+    typeof URL !== "undefined" &&
+    releaseObjectUrl(attachment, (uri) => URL.revokeObjectURL(uri))
+  ) {
+    return;
+  }
+  if (attachment.cleanup === "cache-file") {
+    void deleteAsync(attachment.uri, { idempotent: true }).catch(() => undefined);
+  }
 }
 
 /** Searchable contact picker for attaching a contact card. */
@@ -187,6 +218,9 @@ function ContactPicker({
 
 export function Composer({
   chatGuid,
+  isGroup,
+  participants,
+  privateApi,
   replyTo,
   editing,
   onClearReply,
@@ -202,8 +236,16 @@ export function Composer({
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [text, setText] = useState(() => getDraft(chatGuid));
   const [inputHeight, setInputHeight] = useState(IOS_INPUT_MIN_HEIGHT);
+  const [selection, setSelection] = useState({ start: text.length, end: text.length });
+  const [mentions, setMentions] = useState<MentionAnnotation[]>([]);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const pendingRef = useRef<PendingAttachment[]>([]);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [customScheduleOpen, setCustomScheduleOpen] = useState(false);
+  const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
+  const [dragActive, setDragActive] = useState(false);
+  const containerRef = useRef<View>(null);
+  const isSMS = chatIsSMS(chatGuid);
 
   // Track native keyboard visibility for keyboard-specific composer edge spacing.
   useEffect(() => {
@@ -217,21 +259,41 @@ export function Composer({
   }, []);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const acceptMentionRef = useRef<() => boolean>(() => false);
   const typingActive = useRef(false);
   const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
+  const replacePending = useCallback((next: PendingAttachment[]): void => {
+    pendingRef.current = next;
+    setPending(next);
+  }, []);
+
+  useEffect(
+    () => () => {
+      for (const attachment of pendingRef.current) cleanupPendingAttachment(attachment);
+    },
+    [],
+  );
 
   // Swap drafts when the conversation changes.
   useEffect(() => {
-    setText(getDraft(chatGuid));
+    const draft = getDraft(chatGuid);
+    setText(draft);
+    setSelection({ start: draft.length, end: draft.length });
+    setMentions([]);
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
-    setPending([]);
-  }, [chatGuid]);
+    for (const attachment of pendingRef.current) cleanupPendingAttachment(attachment);
+    replacePending([]);
+  }, [chatGuid, replacePending]);
 
   useEffect(() => {
-    if (editing) setText(editing.text);
+    if (editing) {
+      setText(editing.text);
+      setSelection({ start: editing.text.length, end: editing.text.length });
+      setMentions([]);
+    }
   }, [editing]);
 
   // Suggestion shelf drops text in here for editing; never auto-sends.
@@ -239,6 +301,8 @@ export function Composer({
     () =>
       onFillComposer((suggestion) => {
         setText(suggestion);
+        setSelection({ start: suggestion.length, end: suggestion.length });
+        setMentions([]);
         setDraft(chatGuid, suggestion);
         inputRef.current?.focus();
       }),
@@ -261,6 +325,10 @@ export function Composer({
     const node = inputRef.current as unknown as HTMLTextAreaElement | null;
     if (!node || typeof node.addEventListener !== "function") return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) && acceptMentionRef.current()) {
+        event.preventDefault();
+        return;
+      }
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         // Deliberately NOT gated on an in-flight send: each send gets its own
@@ -288,6 +356,7 @@ export function Composer({
   };
 
   const onChangeText = (value: string) => {
+    setMentions((current) => reconcileMentionAnnotations(text, value, current));
     setText(value);
     if (!editing) {
       setDraft(chatGuid, value);
@@ -312,6 +381,8 @@ export function Composer({
   /** Programmatic clear (send/schedule/edit-cancel): text + growth reset together. */
   const clearText = () => {
     setText("");
+    setSelection({ start: 0, end: 0 });
+    setMentions([]);
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   };
 
@@ -333,7 +404,9 @@ export function Composer({
 
   const sendRef = useRef<() => void>(() => undefined);
   const send = async () => {
-    const trimmed = text.trim();
+    const outgoing = trimMentionAnnotations(text, mentions);
+    const trimmed = outgoing.text;
+    const outgoingMentions = isGroup && privateApi && !isSMS ? outgoing.mentions : [];
     if (!trimmed && pending.length === 0) return;
 
     if (editing) {
@@ -353,29 +426,45 @@ export function Composer({
 
     setTyping(false);
 
-    // Send staged attachments first (text rides the first one as caption).
+    // Send staged attachments first (plain text rides the first one as a
+    // caption). A real mention stays a separate attributed text message because
+    // BlueBubbles' attachment subject field cannot carry mention runs.
     if (pending.length > 0) {
       const attachments = pending;
-      const caption = trimmed || undefined;
-      setPending([]);
+      const caption = outgoingMentions.length === 0 ? trimmed || undefined : undefined;
+      replacePending([]);
       clearText();
       setDraft(chatGuid, "");
       setBusy(true);
       try {
         for (let i = 0; i < attachments.length; i++) {
-          const a = attachments[i];
-          if (a) await uploadAsset(a, i === 0 ? caption : undefined);
+          const attachment = attachments[i];
+          if (attachment) await uploadAsset(attachment, i === 0 ? caption : undefined);
         }
+        if (trimmed && outgoingMentions.length > 0) {
+          const mentionMessage = await api.sendText(chatGuid, {
+            text: trimmed,
+            replyToGuid: replyTo?.guid,
+            mentions: outgoingMentions,
+          });
+          onSent(
+            (mentionMessage.mentions ?? []).length > 0
+              ? mentionMessage
+              : { ...mentionMessage, mentions: outgoingMentions },
+          );
+        }
+        onClearReply();
         playSend();
       } catch {
         showToast("Attachment failed");
       } finally {
+        for (const attachment of attachments) cleanupPendingAttachment(attachment);
         setBusy(false);
       }
       return;
     }
 
-    const temp = tempMessage(chatGuid, trimmed, replyTo);
+    const temp = tempMessage(chatGuid, trimmed, replyTo, outgoingMentions);
     const reply = replyTo;
     clearText();
     setDraft(chatGuid, "");
@@ -385,11 +474,16 @@ export function Composer({
       const message = await api.sendText(chatGuid, {
         text: trimmed,
         replyToGuid: reply?.guid,
+        mentions: outgoingMentions.length > 0 ? outgoingMentions : undefined,
       });
       playSend();
+      const withMentions =
+        outgoingMentions.length > 0 && (message.mentions ?? []).length === 0
+          ? { ...message, mentions: outgoingMentions }
+          : message;
       // BlueBubbles can echo a freshly-sent SMS back as "iMessage" before it
       // reclassifies — pin the service so the green bubble never flashes blue.
-      onSettled(temp.guid, chatIsSMS(chatGuid) ? { ...message, service: "SMS" } : message);
+      onSettled(temp.guid, isSMS ? { ...withMentions, service: "SMS" } : withMentions);
     } catch {
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
     }
@@ -420,8 +514,182 @@ export function Composer({
 
   // Attachments are staged as drafts above the composer; nothing sends until
   // the user hits the send button.
-  const stage = (assets: PendingAttachment[]) => {
-    if (assets.length > 0) setPending((cur) => [...cur, ...assets].slice(0, 10));
+  const stage = useCallback(
+    (assets: PendingAttachment[]): void => {
+      if (assets.length === 0) return;
+      const merged = mergePendingAttachments(pendingRef.current, assets);
+      for (const rejected of merged.rejected) cleanupPendingAttachment(rejected);
+      if (merged.rejected.length > 0) showToast(`You can attach up to ${MAX_PENDING_ATTACHMENTS} items`);
+      replacePending(merged.items);
+    },
+    [replacePending],
+  );
+
+  const removePending = (index: number): void => {
+    const removed = pendingRef.current[index];
+    if (removed) cleanupPendingAttachment(removed);
+    const next = pendingRef.current.filter((_, itemIndex) => itemIndex !== index);
+    replacePending(next);
+  };
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const node = containerRef.current as never as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== "function") return;
+    let dragDepth = 0;
+
+    const filesFromTransfer = (transfer: DataTransfer | null): File[] => {
+      if (!transfer) return [];
+      const direct = Array.from(transfer.files);
+      if (direct.length > 0) return direct;
+      return Array.from(transfer.items)
+        .filter((item) => item.kind === "file")
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+    };
+    const stageBrowserFiles = (files: File[]): void => {
+      if (files.length === 0) return;
+      stage(browserFilesToAttachments(files, (file) => URL.createObjectURL(file)));
+    };
+    const onPaste = (event: ClipboardEvent): void => {
+      const files = filesFromTransfer(event.clipboardData);
+      if (files.length === 0) return;
+      event.preventDefault();
+      stageBrowserFiles(files);
+    };
+    const onDragEnter = (event: DragEvent): void => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      dragDepth++;
+      setDragActive(true);
+    };
+    const onDragOver = (event: DragEvent): void => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    const onDragLeave = (): void => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) setDragActive(false);
+    };
+    const onDrop = (event: DragEvent): void => {
+      const files = filesFromTransfer(event.dataTransfer);
+      dragDepth = 0;
+      setDragActive(false);
+      if (files.length === 0) return;
+      event.preventDefault();
+      stageBrowserFiles(files);
+    };
+
+    node.addEventListener("paste", onPaste);
+    node.addEventListener("dragenter", onDragEnter);
+    node.addEventListener("dragover", onDragOver);
+    node.addEventListener("dragleave", onDragLeave);
+    node.addEventListener("drop", onDrop);
+    return () => {
+      node.removeEventListener("paste", onPaste);
+      node.removeEventListener("dragenter", onDragEnter);
+      node.removeEventListener("dragover", onDragOver);
+      node.removeEventListener("dragleave", onDragLeave);
+      node.removeEventListener("drop", onDrop);
+    };
+  }, [stage]);
+
+  const pasteNativeImage = async (): Promise<void> => {
+    try {
+      const image = await Clipboard.getImageAsync({ format: "png" });
+      if (!image) {
+        showToast("The clipboard doesn't contain an image");
+        return;
+      }
+      if (!cacheDirectory) throw new Error("Expo cache directory is unavailable");
+      const separator = image.data.indexOf(",");
+      if (separator < 0) throw new Error("Clipboard image data is malformed");
+      const filename = `clipboard-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.png`;
+      const uri = `${cacheDirectory}${filename}`;
+      await writeAsStringAsync(uri, image.data.slice(separator + 1), { encoding: EncodingType.Base64 });
+      stage([
+        {
+          uri,
+          name: filename,
+          mime: "image/png",
+          isImage: true,
+          cleanup: "cache-file",
+        },
+      ]);
+    } catch {
+      showToast("Couldn't paste the clipboard image");
+    }
+  };
+
+  const addCurrentLocation = async (): Promise<void> => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      const blocked = webLocationBlockReason(window.isSecureContext, window.location.hostname);
+      if (blocked) {
+        showToast(blocked);
+        return;
+      }
+    }
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        showToast("Location permission was denied. Enable foreground access in Settings and try again.");
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const url = appleMapsLocationUrl(location.coords.latitude, location.coords.longitude);
+      const next = text.trim().length > 0 ? `${text.trimEnd()}
+${url}` : url;
+      onChangeText(next);
+      setSelection({ start: next.length, end: next.length });
+      showToast("Current location added");
+    } catch {
+      showToast(
+        Platform.OS === "web"
+          ? "Couldn't get location. Use the HTTPS tailnet address and allow browser location access."
+          : "Couldn't get the current location. Check Location Services and foreground permission.",
+      );
+    }
+  };
+
+  const activeMentionQuery = useMemo(
+    () =>
+      isGroup && selection.start === selection.end ? mentionQueryAt(text, selection.start) : null,
+    [isGroup, selection, text],
+  );
+  const mentionSuggestions = useMemo(() => {
+    if (!activeMentionQuery) return [];
+    const query = activeMentionQuery.query.toLowerCase();
+    return participants
+      .filter((participant) => {
+        const label = participant.name ?? formatAddress(participant.address);
+        return !query || label.toLowerCase().includes(query) || participant.address.toLowerCase().includes(query);
+      })
+      .slice(0, 5);
+  }, [activeMentionQuery, participants]);
+
+  const selectMention = (participant: Participant): void => {
+    if (!activeMentionQuery) return;
+    const label = participant.name?.trim() || formatAddress(participant.address);
+    const trailing = text.slice(activeMentionQuery.end).startsWith(" ") ? "" : " ";
+    const replacement = `${label}${trailing}`;
+    const next = `${text.slice(0, activeMentionQuery.start)}${replacement}${text.slice(activeMentionQuery.end)}`;
+    const reconciled = reconcileMentionAnnotations(text, next, mentions);
+    const annotation: MentionAnnotation = {
+      start: activeMentionQuery.start,
+      length: label.length,
+      address: participant.address,
+    };
+    setText(next);
+    setMentions([...reconciled, annotation].sort((a, b) => a.start - b.start));
+    setDraft(chatGuid, next);
+    const cursor = activeMentionQuery.start + replacement.length;
+    setSelection({ start: cursor, end: cursor });
+    inputRef.current?.focus();
+  };
+  acceptMentionRef.current = (): boolean => {
+    const first = mentionSuggestions[0];
+    if (!first) return false;
+    selectMention(first);
+    return true;
   };
 
   const pickPhotos = async () => {
@@ -437,6 +705,7 @@ export function Composer({
         name: asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
         mime: asset.mimeType ?? "image/jpeg",
         isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
+        cleanup: null,
       })),
     );
   };
@@ -454,6 +723,7 @@ export function Composer({
         name: asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
         mime: asset.mimeType ?? "image/jpeg",
         isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
+        cleanup: null,
       })),
     );
   };
@@ -467,6 +737,7 @@ export function Composer({
         name: asset.name,
         mime: asset.mimeType ?? "application/octet-stream",
         isImage: (asset.mimeType ?? "").startsWith("image/"),
+        cleanup: null,
       })),
     );
   };
@@ -478,6 +749,7 @@ export function Composer({
         name: `${contact.name}.vcf`,
         mime: "text/vcard",
         isImage: false,
+        cleanup: null,
         contact,
       },
     ]);
@@ -489,7 +761,9 @@ export function Composer({
     const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
     if (Platform.OS !== "web") {
       actions.unshift({ label: "Take Photo or Video", onPress: () => void takePhoto() });
+      actions.push({ label: "Paste Image", onPress: () => void pasteNativeImage() });
     }
+    actions.push({ label: "Current Location", onPress: () => void addCurrentLocation() });
     actions.push({ label: "Contact", onPress: () => void setContactPickerOpen(true) });
     actions.push({ label: "File", onPress: () => void pickFiles() });
     // Desktop: popover mounted at the + button (opens upward); mobile keeps the sheet.
@@ -548,20 +822,29 @@ export function Composer({
   // ------------------------------------------------------- scheduled send
   const openScheduleSheet = () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    const actions = scheduleOptions().map((o) => ({
-      label: o.label,
-      onPress: () => {
-        void api
-          .schedule(chatGuid, trimmed, o.at)
-          .then(() => {
-            clearText();
-            setDraft(chatGuid, "");
-            showToast(`Scheduled ${o.label.toLowerCase()}`);
-          })
-          .catch(() => showToast("Couldn't schedule"));
+    if (!trimmed || pending.length > 0) return;
+    const actions = [
+      ...scheduleOptions().map((option) => ({
+        label: option.label,
+        onPress: () => {
+          void api
+            .schedule(chatGuid, trimmed, option.at)
+            .then(() => {
+              clearText();
+              setDraft(chatGuid, "");
+              showToast(`Scheduled ${option.label.toLowerCase()}`);
+            })
+            .catch(() => showToast("Couldn't schedule"));
+        },
+      })),
+      {
+        label: "Choose Date & Time…",
+        onPress: () => {
+          setCustomScheduleAt(Date.now() + 3_600_000);
+          setCustomScheduleOpen(true);
+        },
       },
-    }));
+    ];
     // Desktop: anchor the popover to the schedule caret (opens upward); mobile
     // keeps the centered sheet — same split the attachment menu above uses.
     if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && scheduleBtnRef.current) {
@@ -573,7 +856,7 @@ export function Composer({
 
   const recording = recorderState.isRecording;
   const canSend = text.trim().length > 0 || pending.length > 0;
-  const isSMS = chatIsSMS(chatGuid);
+  const canSchedule = text.trim().length > 0 && pending.length === 0 && !editing;
   const sendColor = isSMS ? theme.sms : theme.bubbleMine;
 
   // Keyboard down, the bar extends into the home-indicator strip and the
@@ -594,8 +877,11 @@ export function Composer({
 
   return (
     <View
+      ref={containerRef}
       style={[
         styles.container,
+        dragActive && styles.dropActive,
+        dragActive && { borderColor: theme.accent, backgroundColor: theme.backgroundElement },
         {
           borderTopColor: theme.divider,
           // Keep native controls clear of the keyboard and rounded display
@@ -606,6 +892,20 @@ export function Composer({
         },
       ]}
     >
+      <ScheduleEditor
+        visible={customScheduleOpen}
+        title="Choose Date & Time"
+        initialText={text.trim()}
+        initialSendAt={customScheduleAt}
+        textEditable={false}
+        onClose={() => setCustomScheduleOpen(false)}
+        onSubmit={async (scheduledText, sendAt) => {
+          await api.schedule(chatGuid, scheduledText, sendAt);
+          clearText();
+          setDraft(chatGuid, "");
+          showToast("Message scheduled");
+        }}
+      />
       <ContactPicker
         visible={contactPickerOpen}
         onClose={() => setContactPickerOpen(false)}
@@ -640,6 +940,31 @@ export function Composer({
           </Pressable>
         </View>
       )}
+      {activeMentionQuery && mentionSuggestions.length > 0 && (
+        <View style={[styles.mentionList, { backgroundColor: theme.background, borderColor: theme.divider }]}>
+          {mentionSuggestions.map((participant) => (
+            <Pressable
+              key={participant.address}
+              onPress={() => selectMention(participant)}
+              style={({ pressed }) => [styles.mentionRow, pressed && { backgroundColor: theme.backgroundElement }]}
+            >
+              <PersonAvatar
+                address={participant.address}
+                name={participant.name ?? participant.address}
+                size={28}
+              />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ color: theme.text, fontSize: 14, fontWeight: "600" }}>
+                  {participant.name ?? formatAddress(participant.address)}
+                </Text>
+                <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 11 }}>
+                  {formatAddress(participant.address)}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {pending.length > 0 && (
         <View style={styles.pendingRow}>
           {pending.map((att, i) => (
@@ -656,7 +981,7 @@ export function Composer({
                 </View>
               )}
               <Pressable
-                onPress={() => setPending((cur) => cur.filter((_, j) => j !== i))}
+                onPress={() => removePending(i)}
                 style={styles.pendingRemove}
                 hitSlop={6}
               >
@@ -700,6 +1025,8 @@ export function Composer({
             <TextInput
               ref={inputRef}
               value={text}
+              selection={selection}
+              onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
               onFocus={() => setListMode(false)}
               onChangeText={onChangeText}
               placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
@@ -723,7 +1050,7 @@ export function Composer({
           </View>
         )}
         <View style={styles.actionCol}>
-          {canSend && !recording && !editing && (
+          {canSchedule && !recording && (
             <Pressable
               ref={scheduleBtnRef}
               accessibilityRole="button"
@@ -739,7 +1066,7 @@ export function Composer({
           {canSend && !recording ? (
             <Pressable
               onPress={() => void send()}
-              onLongPress={editing ? undefined : openScheduleSheet}
+              onLongPress={canSchedule ? openScheduleSheet : undefined}
               disabled={busy}
               style={[styles.sendButton, { backgroundColor: sendColor }]}
             >
@@ -826,6 +1153,24 @@ const styles = StyleSheet.create({
     // Vertical padding is set inline (barPadV) — it depends on keyboard state
     // and the safe-area inset, so static values here would only ever be dead
     // props that contradict what actually renders.
+  },
+  dropActive: {
+    borderWidth: 2,
+    borderTopWidth: 2,
+  },
+  mentionList: {
+    borderRadius: Radii.input,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 6,
+    maxHeight: 220,
+    overflow: "hidden",
+  },
+  mentionRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   banner: {
     flexDirection: "row",

@@ -1,3 +1,5 @@
+import type { MentionAnnotation } from "./mentions";
+
 export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "archived";
 export type TypeFilter = "all" | "dm" | "group" | "unknown";
 
@@ -44,6 +46,8 @@ export interface Message {
   service: "iMessage" | "SMS";
   sender: Participant | null;
   attachments: AttachmentSummary[];
+  /** Real iMessage mention ranges decoded from attributedBody, when available. */
+  mentions?: MentionAnnotation[];
   /** Non-plain payload rendered as a card (vCard, location, Apple Cash…). */
   special: SpecialContent | null;
   /** Apple expressive send style, e.g. "com.apple.MobileSMS.expressivesend.impact". */
@@ -154,6 +158,7 @@ export interface SendTextRequest {
   text: string;
   replyToGuid?: string;
   replyToPart?: number;
+  mentions?: MentionAnnotation[];
 }
 
 export interface GalleryItem {
@@ -165,13 +170,24 @@ export interface GalleryItem {
   dateCreated: number;
 }
 
+export type ScheduledMessageStatus =
+  | "pending"
+  | "in-progress"
+  | "complete"
+  | "failed"
+  | "interrupted"
+  | "expired";
+
 export interface ScheduledMessage {
-  id: string;
+  id: number;
   chatGuid: string;
   chatName: string;
   text: string;
   /** Epoch ms when it will send. */
   sendAt: number;
+  status: ScheduledMessageStatus;
+  error: string | null;
+  sentAt: number | null;
 }
 
 export interface NewChatRequest {
@@ -185,6 +201,13 @@ export interface ReactRequest {
   remove?: boolean;
   partIndex?: number;
 }
+
+export type TranscriptState =
+  | { state: "not-requested" }
+  | { state: "working" }
+  | { state: "ready"; text: string }
+  | { state: "unavailable"; detail: string }
+  | { state: "failed"; error: string };
 
 // ------------------------------------------------------------------------ AI
 

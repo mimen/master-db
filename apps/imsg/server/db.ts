@@ -45,11 +45,9 @@ export class OverlayDb {
       }
     }
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS scheduled_message (
-        id TEXT PRIMARY KEY,
-        chat_guid TEXT NOT NULL,
-        text TEXT NOT NULL,
-        send_at INTEGER NOT NULL
+      CREATE TABLE IF NOT EXISTS attachment_transcript (
+        attachment_guid TEXT PRIMARY KEY,
+        text TEXT NOT NULL
       );
     `);
     // Shadow-conversation transcript. The server owns this rather than the
@@ -152,28 +150,23 @@ export class OverlayDb {
       .run(chatGuid, lastMessageGuid, payload, Date.now());
   }
 
-  // ------------------------------------------------------- scheduled messages
+  // --------------------------------------------------- attachment transcripts
 
-  listScheduled(): Array<{ id: string; chatGuid: string; text: string; sendAt: number }> {
-    return (
-      this.db
-        .query("SELECT id, chat_guid, text, send_at FROM scheduled_message ORDER BY send_at ASC")
-        .all() as Array<{ id: string; chat_guid: string; text: string; send_at: number }>
-    ).map((r) => ({ id: r.id, chatGuid: r.chat_guid, text: r.text, sendAt: r.send_at }));
+  getAttachmentTranscript(attachmentGuid: string): string | null {
+    const row = this.db
+      .query("SELECT text FROM attachment_transcript WHERE attachment_guid = ?")
+      .get(attachmentGuid) as { text: string } | undefined;
+    return row?.text ?? null;
   }
 
-  addScheduled(id: string, chatGuid: string, text: string, sendAt: number): void {
+  setAttachmentTranscript(attachmentGuid: string, text: string): void {
     this.db
-      .query("INSERT INTO scheduled_message (id, chat_guid, text, send_at) VALUES (?, ?, ?, ?)")
-      .run(id, chatGuid, text, sendAt);
-  }
-
-  removeScheduled(id: string): void {
-    this.db.query("DELETE FROM scheduled_message WHERE id = ?").run(id);
-  }
-
-  dueScheduled(now: number): Array<{ id: string; chatGuid: string; text: string; sendAt: number }> {
-    return this.listScheduled().filter((s) => s.sendAt <= now);
+      .query(
+        `INSERT INTO attachment_transcript (attachment_guid, text)
+         VALUES (?, ?)
+         ON CONFLICT(attachment_guid) DO UPDATE SET text = excluded.text`,
+      )
+      .run(attachmentGuid, text);
   }
 
   getAll(): Map<string, ChatState> {

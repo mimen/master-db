@@ -42,6 +42,47 @@ export interface BBChat {
   properties?: BBChatProperties[];
 }
 
+export interface BBAttributedBodyRun {
+  range: [number, number];
+  attributes?: {
+    __kIMMessagePartAttributeName?: number;
+    __kIMMentionConfirmedMention?: string;
+    IMAudioTranscription?: string;
+  } | null;
+}
+
+export interface BBAttributedBody {
+  string: string;
+  runs?: BBAttributedBodyRun[];
+}
+
+export type BBScheduledMessageStatus = "pending" | "in-progress" | "complete" | "error";
+
+export interface BBScheduledMessagePayload {
+  chatGuid: string;
+  message: string;
+  method: "private-api" | "apple-script";
+}
+
+export interface BBScheduledMessage {
+  id: number;
+  type: "send-message";
+  payload: BBScheduledMessagePayload;
+  scheduledFor: number | string;
+  schedule: { type: "once" };
+  status?: BBScheduledMessageStatus;
+  error?: string | null;
+  sentAt?: number | string | null;
+  created?: number | string;
+}
+
+export interface BBScheduledMessageRequest {
+  type: "send-message";
+  payload: BBScheduledMessagePayload;
+  scheduledFor: number;
+  schedule: { type: "once" };
+}
+
 export interface BBMessage {
   guid: string;
   text?: string | null;
@@ -56,6 +97,7 @@ export interface BBMessage {
   /** chat.db handle ROWID; remains populated when the handle relation is omitted. */
   handleId?: number | null;
   attachments?: BBAttachment[];
+  attributedBody?: BBAttributedBody | BBAttributedBody[] | null;
   associatedMessageGuid?: string | null;
   associatedMessageType?: string | number | null;
   threadOriginatorGuid?: string | null;

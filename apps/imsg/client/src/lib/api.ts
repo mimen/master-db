@@ -8,9 +8,11 @@ import type {
   Message,
   ReplySuggestions,
   ScheduledMessage,
+  SendTextRequest,
   ShadowMessage,
   StateCounts,
   StateFilter,
+  TranscriptState,
   TypeFilter,
 } from "@shared/types";
 
@@ -50,7 +52,7 @@ export const api = {
   },
   sendText(
     chatGuid: string,
-    body: { text: string; replyToGuid?: string },
+    body: SendTextRequest,
   ): Promise<Message> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/send`, {
       method: "POST",
@@ -166,14 +168,29 @@ export const api = {
   listScheduled(): Promise<ScheduledMessage[]> {
     return request("/api/scheduled");
   },
-  schedule(chatGuid: string, text: string, sendAt: number): Promise<{ id: string }> {
+  schedule(chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
     return request("/api/scheduled", {
       method: "POST",
       body: JSON.stringify({ chatGuid, text, sendAt }),
     });
   },
-  cancelScheduled(id: string): Promise<{ ok: boolean }> {
-    return request(`/api/scheduled/${encodeURIComponent(id)}`, { method: "DELETE" });
+  updateScheduled(id: number, chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
+    return request(`/api/scheduled/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ chatGuid, text, sendAt }),
+    });
+  },
+  cancelScheduled(id: number): Promise<{ ok: boolean }> {
+    return request(`/api/scheduled/${id}`, { method: "DELETE" });
+  },
+  transcriptState(attachmentGuid: string): Promise<TranscriptState> {
+    return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`);
+  },
+  transcribe(attachmentGuid: string): Promise<TranscriptState> {
+    return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`, { method: "POST" });
+  },
+  createFaceTimeLink(chatGuid: string): Promise<{ message: Message }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/facetime-link`, { method: "POST" });
   },
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
     return request("/api/health");

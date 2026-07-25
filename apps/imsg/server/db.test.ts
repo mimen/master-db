@@ -97,3 +97,20 @@ describe("suggestion_cache", () => {
     expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBeNull();
   });
 });
+
+
+describe("attachment_transcript", () => {
+  test("caches transcripts by attachment GUID", () => {
+    expect(db.getAttachmentTranscript("a1")).toBeNull();
+    db.setAttachmentTranscript("a1", "hello from the voice note");
+    db.setAttachmentTranscript("a2", "another note");
+    expect(db.getAttachmentTranscript("a1")).toBe("hello from the voice note");
+    expect(db.getAttachmentTranscript("a2")).toBe("another note");
+  });
+
+  test("updates an existing attachment cache entry", () => {
+    db.setAttachmentTranscript("a1", "first");
+    db.setAttachmentTranscript("a1", "corrected");
+    expect(db.getAttachmentTranscript("a1")).toBe("corrected");
+  });
+});
