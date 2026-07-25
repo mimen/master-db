@@ -47,7 +47,12 @@ export function SidebarSearchField({
         placeholder="Search"
         placeholderTextColor={theme.textSecondary}
         returnKeyType={returnKeyType}
-        clearButtonMode="while-editing"
+        // Explicitly OFF. iOS renders a native clear button for this, which
+        // web ignores — so on device you got two ✕ side by side. Worse, the
+        // native one only fires onChangeText(""), bypassing onClear() and the
+        // search-session reset that hangs off it, leaving state stale. The
+        // custom button below is the one control on every platform.
+        clearButtonMode="never"
         style={[styles.input, { color: theme.text }]}
       />
       {value.trim().length > 0 && (
