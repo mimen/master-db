@@ -77,10 +77,14 @@ export const people = defineTable({
   // and a strict `v.number()` deploy would be rejected until every row is
   // migrated. `convex/identity/admin.ts`'s `migratePriorityToNumeric` (internal
   // mutation; high→2, normal→3, low→4, idempotent) converts them once this
-  // schema is live. Once that migration has run in every environment with
-  // data (confirmed via its own reported counts), narrow this back to
-  // `v.optional(v.number())` in a follow-up deploy — see the migration's
-  // docstring and this repo's PR description for the required deploy order.
+  // schema is live.
+  //
+  // Status 2026-07-24: that migration ran against the live deployment and
+  // reported 1358 scanned / 0 migrated / 0 unrecognized — every row was unset,
+  // so nothing here actually needs the union any more. Narrowing it to
+  // `v.optional(v.number())` is safe whenever someone picks it up, but it also
+  // orphans migratePriorityToNumeric (which reads the string form), so it
+  // belongs in a follow-up PR that drops the migration + its tests together.
   priority: v.optional(v.union(v.number(), v.literal("high"), v.literal("normal"), v.literal("low"))),
 
   auto_clustered: v.boolean(), // true = resolver-made, false = hand-curated
