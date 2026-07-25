@@ -2,13 +2,24 @@ import { describe, expect, test } from "bun:test";
 import {
   contactSectionLetter,
   contactTitle,
+  groupContacts,
   lastFirstLabel,
   orderContacts,
+  type FavoritableContact,
   type NamedContact,
 } from "./contact-order";
 
 function person(display_name: string, first_name?: string, last_name?: string): NamedContact {
   return { display_name, first_name, last_name };
+}
+
+function favPerson(
+  display_name: string,
+  is_favorite?: boolean,
+  first_name?: string,
+  last_name?: string,
+): FavoritableContact {
+  return { display_name, first_name, last_name, is_favorite };
 }
 
 describe("lastFirstLabel", () => {
@@ -98,5 +109,46 @@ describe("orderContacts", () => {
     expect(rows.map((r) => r.person.display_name)).toEqual(["Amy Baker", "Zed Org"]);
     expect(rows.map((r) => r.title)).toEqual(["Baker, Amy", "Zed Org"]);
     expect(rows.map((r) => r.sectionLetter)).toEqual(["B", "Z"]);
+  });
+});
+
+describe("groupContacts", () => {
+  const people = [
+    favPerson("Bea Young", false, "Bea", "Young"),
+    favPerson("Alex Chen", true, "Alex", "Chen"),
+    favPerson("Sam Adams", true, "Sam", "Adams"),
+    favPerson("Zoe Park", false, "Zoe", "Park"),
+  ];
+
+  test("zero favorites: favorites is empty and alpha is byte-identical to orderContacts", () => {
+    const noFavs = people.map((p) => ({ ...p, is_favorite: false }));
+    const grouped = groupContacts(noFavs, "first-last");
+
+    expect(grouped.favorites).toEqual([]);
+    expect(grouped.alpha).toEqual(orderContacts(noFavs, "first-last"));
+  });
+
+  test("favorites lists only favorited people, in the current name order", () => {
+    const grouped = groupContacts(people, "first-last");
+
+    expect(grouped.favorites.map((r) => r.person.display_name)).toEqual(["Alex Chen", "Sam Adams"]);
+  });
+
+  test("favorites follow last-first order when that's the active NameOrder", () => {
+    const grouped = groupContacts(people, "last-first");
+
+    expect(grouped.favorites.map((r) => r.title)).toEqual(["Adams, Sam", "Chen, Alex"]);
+  });
+
+  test("a favorited person still appears in their own letter section in alpha — shortcut, not a move", () => {
+    const grouped = groupContacts(people, "first-last");
+
+    expect(grouped.alpha.map((r) => r.person.display_name)).toEqual([
+      "Bea Young",
+      "Alex Chen",
+      "Sam Adams",
+      "Zoe Park",
+    ]);
+    expect(grouped.alpha).toEqual(orderContacts(people, "first-last"));
   });
 });

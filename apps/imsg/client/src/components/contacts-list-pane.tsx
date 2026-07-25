@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { orderContacts } from "@/lib/contact-order";
+import { groupContacts } from "@/lib/contact-order";
 import { type AirtableHumanRow, type ContactListRow, primaryHandle } from "@/lib/identity";
 import { useNameOrder } from "@/lib/settings";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
@@ -32,14 +32,26 @@ import {
 
 type Row =
   | { kind: "header"; key: string; letter: string }
+  | { kind: "favorites-header"; key: string }
   | { kind: "contact"; key: string; person: ContactListRow; title: string }
   | { kind: "airtable-header"; key: string }
   | { kind: "airtable"; key: string; human: AirtableHumanRow };
 
+/** Pinned "★ Favorites" section above the normal A–Z sections (iOS Contacts
+ * behavior: a shortcut, not a move — every favorited person still appears in
+ * their letter section below, unchanged). No section at all when nobody is
+ * favorited. */
 function buildRows(people: ContactListRow[], nameOrder: ReturnType<typeof useNameOrder>): Row[] {
   const rows: Row[] = [];
+  const { favorites, alpha } = groupContacts(people, nameOrder);
+  if (favorites.length > 0) {
+    rows.push({ kind: "favorites-header", key: "favorites-header" });
+    for (const { person, title } of favorites) {
+      rows.push({ kind: "contact", key: `fav-${person._id}`, person, title });
+    }
+  }
   let lastLetter: string | null = null;
-  for (const { person, title, sectionLetter } of orderContacts(people, nameOrder)) {
+  for (const { person, title, sectionLetter } of alpha) {
     if (sectionLetter !== lastLetter) {
       rows.push({ kind: "header", key: `h-${sectionLetter}`, letter: sectionLetter });
       lastLetter = sectionLetter;
@@ -117,6 +129,13 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
       return (
         <Text style={[styles.sectionHeader, { color: theme.textSecondary, backgroundColor: theme.background }]}>
           {item.letter}
+        </Text>
+      );
+    }
+    if (item.kind === "favorites-header") {
+      return (
+        <Text style={[styles.sectionHeader, { color: theme.textSecondary, backgroundColor: theme.background }]}>
+          ★ Favorites
         </Text>
       );
     }

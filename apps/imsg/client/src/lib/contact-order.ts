@@ -84,3 +84,35 @@ function byLastFirst(a: NamedContact, b: NamedContact): number {
   if (lastCompare !== 0) return lastCompare;
   return (a.first_name?.trim() ?? "").localeCompare(b.first_name?.trim() ?? "");
 }
+
+/** The fields the favorites grouping needs — NamedContact plus the flag. */
+export type FavoritableContact = NamedContact & Pick<ContactListRow, "is_favorite">;
+
+export interface GroupedContacts<T extends FavoritableContact> {
+  /** Every favorited person, in `order`'s name order, no section letters —
+   * a pinned shortcut atop the list (iOS Contacts style), not a separate
+   * ownership bucket. [] when nobody is favorited, so callers render no
+   * section at all. */
+  favorites: ContactOrderRow<T>[];
+  /** The full A–Z list, byte-identical to plain `orderContacts(people,
+   * order)` — favorited people still appear here too, in their letter
+   * section, unchanged. */
+  alpha: ContactOrderRow<T>[];
+}
+
+/**
+ * Splits `people` into a pinned favorites list plus the unchanged A–Z list,
+ * for the "★ Favorites" section atop Contacts. Membership in `favorites`
+ * never removes a person from `alpha` — it's a shortcut, not a move — so
+ * `alpha` is always exactly `orderContacts(people, order)`.
+ */
+export function groupContacts<T extends FavoritableContact>(
+  people: readonly T[],
+  order: NameOrder,
+): GroupedContacts<T> {
+  const favorites = orderContacts(
+    people.filter((p) => p.is_favorite === true),
+    order,
+  );
+  return { favorites, alpha: orderContacts(people, order) };
+}
