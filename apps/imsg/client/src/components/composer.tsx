@@ -49,11 +49,20 @@ interface PendingAttachment {
 }
 
 const IOS_INPUT_LINE_HEIGHT = 22;
-/** The input's vertical padding (paddingTop 8 + paddingBottom 8 in styles.input).
- * iOS contentSize EXCLUDES padding — forgetting to add it back clips the text. */
-const IOS_INPUT_PADDING_V = 16;
-const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_PADDING_V;
-const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 10 + IOS_INPUT_PADDING_V;
+/**
+ * Everything the input's `height` has to cover BESIDES the text itself.
+ *
+ * React Native sizes with the border box, so the usable text area is
+ * `height − padding − border`. This constant previously counted only the
+ * padding (8 + 8), which left the text area 2px shorter than the measured
+ * text every time — the last line was always slightly clipped, and combined
+ * with the mirror's width being off it read as "the line I'm typing is
+ * invisible until I start the next one". Derived from the same metrics the
+ * input's own style uses so the two can't drift.
+ */
+const IOS_INPUT_CHROME_V = 8 + 8 + INPUT_BORDER_W * 2;
+const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_CHROME_V;
+const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 10 + IOS_INPUT_CHROME_V;
 
 
 function tempMessage(chatGuid: string, text: string, replyTo: Message | null): Message {
@@ -292,7 +301,7 @@ export function Composer({
   // is unusable on this Fabric build — it echoes the frame we set.)
   const onMirrorLayout = (height: number) => {
     const next = Math.min(
-      Math.max(Math.ceil(height) + IOS_INPUT_PADDING_V, IOS_INPUT_MIN_HEIGHT),
+      Math.max(Math.ceil(height) + IOS_INPUT_CHROME_V, IOS_INPUT_MIN_HEIGHT),
       IOS_INPUT_MAX_HEIGHT,
     );
     setInputHeight((current) => (current === next ? current : next));
