@@ -20,7 +20,7 @@ import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
 import { makeVaultSearch } from "./ai/vault";
-import type { ServerEvent, StateFilter, TypeFilter } from "../shared/types";
+import type { Contact, ServerEvent, StateFilter, TypeFilter } from "../shared/types";
 
 const config = loadConfig();
 const bb = new BlueBubblesClient(config.bbUrl, config.bbPassword);
@@ -486,9 +486,11 @@ app.get("/api/contacts", async (c) => {
   // Convex), deduped by address, mirror hits preferred on a collision since
   // Convex is the fresher/canonical name. This is what makes a renamed
   // person ("Uncle Jimmy", searched as "Jimmy Sciandra") surface as a
-  // contact even though Apple Contacts still has the old name.
+  // contact even though Apple Contacts still has the old name. `is_favorite`
+  // rides along from the mirror's per-person CRM; ContactBook-only hits
+  // (Apple contacts not yet synced into Convex) simply omit it.
   const seen = new Set<string>();
-  const results: Array<{ address: string; name: string }> = [];
+  const results: Contact[] = [];
   for (const hit of [...identityMirror.search(q, CONTACTS_LIMIT), ...contacts.search(q, CONTACTS_LIMIT)]) {
     const key = hit.address.toLowerCase();
     if (seen.has(key)) continue;

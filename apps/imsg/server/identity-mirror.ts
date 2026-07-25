@@ -120,19 +120,21 @@ export class IdentityMirror {
    * matched handle (address = the normalized match key), deduped by
    * address. Used by GET /api/contacts alongside ContactBook.search so a
    * rename/nickname/organization surfaces the person even when Apple
-   * Contacts still has the old name.
+   * Contacts still has the old name. `is_favorite` rides along from the
+   * same CRM data personCrm()/chatCrm() read — lets the ⌘K palette rank a
+   * favorited person's contact result first (see client/lib/palette/model.ts).
    */
-  search(query: string, limit: number): Array<{ address: string; name: string }> {
+  search(query: string, limit: number): Array<{ address: string; name: string; is_favorite?: boolean }> {
     const needle = query.trim().toLowerCase();
     if (!needle) return [];
     const seen = new Set<string>();
-    const results: Array<{ address: string; name: string }> = [];
+    const results: Array<{ address: string; name: string; is_favorite?: boolean }> = [];
     for (const [address, entry] of this.byKey) {
       if (results.length >= limit) break;
       if (seen.has(address)) continue;
       if (entry.terms.some((term) => term.includes(needle))) {
         seen.add(address);
-        results.push({ address, name: entry.name });
+        results.push({ address, name: entry.name, is_favorite: entry.crm.is_favorite });
       }
     }
     return results;

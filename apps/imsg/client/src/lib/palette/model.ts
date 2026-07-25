@@ -77,6 +77,14 @@ function bestParticipantMatch(needle: string, chat: ChatSummary): { score: numbe
 
 const CAPS = { commands: 6, conversations: 5, groups: 5, messages: 8, contacts: 6 } as const;
 
+/** Favorites win ties and near-ties without outranking a clearly better
+ * textual match: matchScore's tiers (0/1/2/3, or 0/2/4/6 for a group name
+ * hit) are always ≥1 apart, so a 0.5 bump can't cross into the next tier —
+ * an exact-prefix non-favorite still beats a fuzzy favorite. Only applied
+ * on top of an already-nonzero score, so a favorite with no match at all
+ * never gets conjured into the results. */
+const FAVORITE_BONUS = 0.5;
+
 function commandKey(id: PaletteCommandId): string {
   return `cmd-${id.kind}-${id.value}`;
 }
@@ -137,10 +145,13 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
   const conversations = scored(
     input.chats
       .filter((chat) => !chat.isGroup)
-      .map((chat) => ({
-        score: Math.max(matchScore(needle, chat.displayName), bestParticipantMatch(needle, chat).score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t))),
-        item: { kind: "conversation", key: `chat-${chat.guid}`, chat } satisfies PaletteItem,
-      })),
+      .map((chat) => {
+        const base = Math.max(matchScore(needle, chat.displayName), bestParticipantMatch(needle, chat).score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t)));
+        return {
+          score: base > 0 && chat.crm?.is_favorite ? base + FAVORITE_BONUS : base,
+          item: { kind: "conversation", key: `chat-${chat.guid}`, chat } satisfies PaletteItem,
+        };
+      }),
     CAPS.conversations,
   );
 
@@ -150,9 +161,10 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
       .map((chat) => {
         const nameScore = matchScore(needle, chat.displayName);
         const member = bestParticipantMatch(needle, chat);
+        // A group NAME hit outranks a member hit at equal match quality.
+        const base = Math.max(nameScore * 2, member.score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t)));
         return {
-          // A group NAME hit outranks a member hit at equal match quality.
-          score: Math.max(nameScore * 2, member.score, ...(chat.searchNames ?? []).map((t) => matchScore(needle, t))),
+          score: base > 0 && chat.crm?.is_favorite ? base + FAVORITE_BONUS : base,
           item: {
             kind: "group",
             key: `group-${chat.guid}`,
@@ -178,9 +190,19 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
     });
   }
   if (input.contacts.length > 0) {
+    // Contacts arrive server-filtered (identity-mirror + ContactBook search
+    // against the full term set, including names never sent to the client —
+    // see server/identity-mirror.ts), so there's no local text-match score
+    // to fold a bonus into without risking a false drop. Instead: a stable
+    // favorite-first partition, preserving the server's order within each
+    // group — favorites win ties the same way, without re-judging match
+    // quality client-side.
+    const favoriteFirst = [...input.contacts].sort(
+      (a, b) => Number(b.is_favorite === true) - Number(a.is_favorite === true),
+    );
     sections.push({
       title: "Contacts",
-      items: input.contacts.slice(0, CAPS.contacts).map((contact) => ({
+      items: favoriteFirst.slice(0, CAPS.contacts).map((contact) => ({
         kind: "contact",
         key: `contact-${contact.address}-${contact.name}`,
         contact,

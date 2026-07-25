@@ -144,6 +144,10 @@ export type StateCounts = Record<StateFilter, number>;
 export interface Contact {
   address: string;
   name: string;
+  /** From the Identity Mirror's per-person CRM (Convex-native, never Apple/
+   * Airtable) — absent for ContactBook-only hits (Apple contacts not yet
+   * synced into Convex), which simply have no favorite concept to report. */
+  is_favorite?: boolean;
 }
 
 export interface SendTextRequest {

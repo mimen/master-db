@@ -172,4 +172,94 @@ describe("buildPaletteSections", () => {
     const sections = buildPaletteSections({ query: "sciandra", chats: [tysonDm], messages: [], contacts: [] });
     expect(sections.find((s) => s.title === "Conversations")).toBeUndefined();
   });
+
+  // -------------------------------------------------------- favorite ranking
+
+  describe("favorite ranking", () => {
+    test("a favorited DM wins a same-tier tie over a non-favorite (substring match)", () => {
+      // "arissa" is a mid-string substring (score 1) for both — same tier.
+      const favorite = chat({ guid: "fav", displayName: "Marissa Carlene", crm: { is_favorite: true } });
+      const plain = chat({ guid: "plain", displayName: "Klarissa" });
+      const sections = buildPaletteSections({ query: "arissa", chats: [plain, favorite], messages: [], contacts: [] });
+
+      const conversations = sections.find((s) => s.title === "Conversations")!.items;
+      expect(conversations.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual(["fav", "plain"]);
+    });
+
+    test("a strong non-favorite match still beats a weak favorite match", () => {
+      // "ma" is an exact word-prefix (score 2) for "Marissa" but only a
+      // substring (score 1) for the favorited "Emma" — the favorite bonus
+      // (0.5) must not close a full match-tier gap.
+      const strongMatch = chat({ guid: "marissa", displayName: "Marissa" });
+      const weakFavorite = chat({ guid: "emma", displayName: "Emma", crm: { is_favorite: true } });
+      const sections = buildPaletteSections({
+        query: "ma",
+        chats: [weakFavorite, strongMatch],
+        messages: [],
+        contacts: [],
+      });
+
+      const conversations = sections.find((s) => s.title === "Conversations")!.items;
+      expect(conversations.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual(["marissa", "emma"]);
+    });
+
+    test("a favorite with zero match is never conjured into the results", () => {
+      const favoriteNoMatch = chat({ guid: "fav", displayName: "Nobody Related", crm: { is_favorite: true } });
+      const sections = buildPaletteSections({
+        query: "zzz-nomatch",
+        chats: [favoriteNoMatch],
+        messages: [],
+        contacts: [],
+      });
+
+      expect(sections.find((s) => s.title === "Conversations")).toBeUndefined();
+    });
+
+    test("a favorited group wins a same-tier tie over a non-favorite group", () => {
+      // Both hit an identical exact member-name match ("Tyson", score 3) and
+      // neither group name matches — a genuine tie except for favorite status.
+      const favGroup = chat({
+        guid: "fav-grp",
+        displayName: "Umbrella Weekend",
+        isGroup: true,
+        participants: [{ address: "+1555", name: "Tyson" }],
+        crm: { is_favorite: true },
+      });
+      const plainGroup = chat({
+        guid: "plain-grp",
+        displayName: "Other Group",
+        isGroup: true,
+        participants: [{ address: "+1666", name: "Tyson" }],
+      });
+      const sections = buildPaletteSections({
+        query: "tyson",
+        chats: [plainGroup, favGroup],
+        messages: [],
+        contacts: [],
+      });
+
+      const groups = sections.find((s) => s.title === "Groups")!.items;
+      expect(groups.map((i) => (i.kind === "group" ? i.chat.guid : "?"))).toEqual(["fav-grp", "plain-grp"]);
+    });
+
+    test("a favorited contact sorts before a non-favorite contact, preserving server order otherwise", () => {
+      const sections = buildPaletteSections({
+        query: "ma",
+        chats: [],
+        messages: [],
+        contacts: [
+          contact("Mateo", "+1111"),
+          { ...contact("Marissa", "+1222"), is_favorite: true },
+          contact("Maya", "+1333"),
+        ],
+      });
+
+      const contacts = sections.find((s) => s.title === "Contacts")!.items;
+      expect(contacts.map((i) => (i.kind === "contact" ? i.contact.name : "?"))).toEqual([
+        "Marissa",
+        "Mateo",
+        "Maya",
+      ]);
+    });
+  });
 });
