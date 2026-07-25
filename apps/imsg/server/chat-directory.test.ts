@@ -676,6 +676,37 @@ describe("ChatDirectory reactive fast path", () => {
     expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
   });
 
+  test("replying to an auto-unarchived chat does not re-archive it", async () => {
+    // Regression: auto-unarchive used to be derived-only (isArchived compared
+    // the last message against archivedAt) and never persisted. Replying made
+    // the last message outbound, the derivation flipped back to "archived",
+    // and the chat plus the reply vanished into Archived again.
+    const { bb, directory, contacts } = await setup();
+    directory.setArchived(CHAT_A, true);
+    await directory.summaries();
+
+    bb.receiveMessage(CHAT_A, "you around?");
+    let result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+
+    // Now reply, exactly as the send route does.
+    const reply: BBMessage = {
+      guid: "reply-1",
+      text: "yep",
+      dateCreated: Date.now() + 1000,
+      isFromMe: true,
+      handle: { address: "+15550001111" },
+    };
+    directory.applyKnownMessage(CHAT_A, mapMessage(reply, CHAT_A, contacts));
+
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+    const visible = result.chats.filter((c) => matchesFilters(c, "all", "all"));
+    expect(visible.find((c) => c.guid === CHAT_A)).toBeDefined();
+  });
+
   test("dismiss('unresponded') clears the flag until a newer inbound arrives", async () => {
     const { bb, directory } = await setup();
     let result = await directory.summaries();

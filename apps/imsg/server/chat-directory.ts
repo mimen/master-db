@@ -222,6 +222,15 @@ export class ChatDirectory {
    */
   private patchSummaries(chatGuid: string, m: Message): void {
     this.rememberRealtimeSpam(chatGuid, m);
+    // An INBOUND message is the event that auto-unarchives a chat, so persist
+    // the clear here rather than only when summaries rebuild. Waiting for the
+    // rebuild loses the race against a fast reply: once your outbound message
+    // is the last one, isArchived() derives "archived" again and the rebuild
+    // never sees the condition that would have cleared it.
+    if (!m.isFromMe) {
+      const archivedAt = this.db.getAll().get(chatGuid)?.archivedAt;
+      if (archivedAt && m.dateCreated > archivedAt) this.db.setArchived(chatGuid, false);
+    }
     if (!this.summaryCache) return;
     const result = applyMessageToSummaries(this.summaryCache.chats, chatGuid, m);
     if (result === null) {
@@ -248,6 +257,16 @@ export class ChatDirectory {
       .map((chat) => {
         const state = overlay.get(chat.guid);
         const summary = mapChat(chat, state, this.names, unread.get(chat.guid));
+        // Materialize a lazy auto-unarchive. isArchived() only *derives*
+        // "an inbound message arrived after you archived this" — it never
+        // cleared archived_at, so the moment you REPLIED the last message
+        // became yours, the derivation flipped back to true, and the chat
+        // (plus your reply) vanished into Archived again. Persisting the
+        // clear the first time we see it makes the transition one-way, which
+        // is what "lazily self-clearing" was always meant to be.
+        if (state?.archivedAt && !summary.flags.archived) {
+          this.db.setArchived(chat.guid, false);
+        }
         // Mark-read override: trust our own mark-read over BB's lagging DB.
         // Persisted (overlay) readAt survives restarts — Apple never back-fills
         // dateRead on old group messages, so without it the scan resurrects
