@@ -29,7 +29,17 @@ export default function RootLayout() {
             <LightboxProvider>
               <Stack>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="chat/[guid]" options={{ headerBackTitle: "Messages" }} />
+                {/* Chevron only. A headerBackTitle ("Messages") renders INSIDE
+                    the circular glass back button on iOS 26 and gets clipped
+                    to "lessag" — the native "shrink the label when it doesn't
+                    fit" behaviour assumes a capsule that can grow, which the
+                    circle can't. "minimal" is the supported way to ask for
+                    just the chevron (React Navigation 7 replaced
+                    headerBackTitleVisible with this). */}
+                <Stack.Screen
+                  name="chat/[guid]"
+                  options={{ headerBackButtonDisplayMode: "minimal" }}
+                />
                 <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
                 <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New Message" }} />
                 <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />
