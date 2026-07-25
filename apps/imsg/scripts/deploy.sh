@@ -54,6 +54,7 @@ bun run typecheck:imsg
 
 echo "== Building web client =="
 cd apps/imsg/client
+bun scripts/validate-public-env.ts
 rm -rf dist
 BUILD_LOG="$(mktemp)"
 bun x expo export --platform web >"$BUILD_LOG" 2>&1 &
