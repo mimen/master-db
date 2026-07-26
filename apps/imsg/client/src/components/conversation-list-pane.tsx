@@ -159,7 +159,9 @@ export function ConversationListPane({
           ref={viewport.listRef}
           data={model.listChats}
           keyExtractor={(chat) => chat.guid}
-          maintainVisibleContentPosition={{ disabled: false }}
+          // Default iOS draw distance is 250px — barely three rows here, so a fast
+          // flick outruns it and shows blanks.
+          drawDistance={1500}
           keyboardShouldPersistTaps="handled"
           // Native-only: RNW's on-drag treats ANY scroll event as a drag and
           // BLURS the focused input — our scroll-to-top on keystroke was
@@ -218,7 +220,6 @@ export function ConversationListPane({
               selected={wide && selectedGuid === item.guid}
               keyboardFocused={wide && glide && selectedGuid === item.guid}
               onPress={() => onOpenChat(item)}
-              onChanged={onRefresh}
             />
           )}
         />
