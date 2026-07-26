@@ -547,9 +547,13 @@ export function ThreadView({
             if (hasNewer && !loading) loadNewer();
           }}
           onStartReachedThreshold={0.2}
-          // persistTaps: without it the first tap on a bubble is eaten dismissing
-          // the keyboard. interactive: drag the thread to pull the keyboard down.
-          keyboardDismissMode={Platform.OS === "web" ? "none" : "interactive"}
+          // Without persistTaps the first tap on a bubble is eaten dismissing the
+          // keyboard. Dismissal stays "on-drag", NOT "interactive": interactive
+          // moves the keyboard continuously, and KeyboardAvoidingView below only
+          // animates off keyboardWillShow/Hide, so it desyncs mid-gesture and
+          // strands the composer above a gap. Interactive needs the composer on
+          // react-native-keyboard-controller first.
+          keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           keyboardShouldPersistTaps="handled"
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
