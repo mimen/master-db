@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEventListener } from "expo";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useTheme } from "@/hooks/use-theme";
@@ -98,36 +99,70 @@ export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
   );
 }
 
-export function VideoBubble({ url }: { url: string }) {
+function aspectRatio(width: number | null, height: number | null): number {
+  return width !== null && height !== null && width > 0 && height > 0 ? width / height : 1;
+}
+
+export function VideoBubble({
+  url,
+  width,
+  sourceWidth,
+  sourceHeight,
+}: {
+  url: string;
+  width: number;
+  sourceWidth: number | null;
+  sourceHeight: number | null;
+}) {
   const [activated, setActivated] = useState(false);
+  const [ratio, setRatio] = useState(() => aspectRatio(sourceWidth, sourceHeight));
+  const videoRef = useRef<VideoView>(null);
   const player = useVideoPlayer(url, (p) => {
     p.loop = false;
   });
 
+  useEventListener(player, "sourceLoad", ({ availableVideoTracks }) => {
+    const size = availableVideoTracks[0]?.size;
+    if (size) setRatio(aspectRatio(size.width, size.height));
+  });
+
+  const updateAspectRatio = () => {
+    const trackSize = player.videoTrack?.size;
+    if (trackSize) {
+      setRatio(aspectRatio(trackSize.width, trackSize.height));
+      return;
+    }
+    if (Platform.OS !== "web") return;
+    const video: HTMLVideoElement | null = videoRef.current?.nativeRef.current ?? null;
+    if (video) setRatio(aspectRatio(video.videoWidth, video.videoHeight));
+  };
+
   return (
-    <Pressable
-      onPress={() => {
-        if (!activated) setActivated(true);
-        else if (player.playing) player.pause();
-        else player.play();
-      }}
-    >
-      <View style={styles.video}>
-        <VideoView
-          player={player}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          nativeControls
-        />
-        {!activated && (
-          <View style={styles.videoOverlay}>
-            {/* Play-circle overlay on top of the video frame — theme-invariant
-                media control, always white regardless of app theme. */}
-            <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
-          </View>
-        )}
-      </View>
-    </Pressable>
+    <View style={[styles.video, { width, aspectRatio: ratio }]}>
+      <VideoView
+        ref={videoRef}
+        player={player}
+        style={styles.videoFrame}
+        contentFit="contain"
+        nativeControls
+        onFirstFrameRender={updateAspectRatio}
+      />
+      {!activated && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Play video"
+          onPress={() => {
+            setActivated(true);
+            player.play();
+          }}
+          style={styles.videoOverlay}
+        >
+          {/* Play-circle overlay on top of the video frame — theme-invariant
+              media control, always white regardless of app theme. */}
+          <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+        </Pressable>
+      )}
+    </View>
   );
 }
 
@@ -168,12 +203,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   video: {
-    width: 230,
-    aspectRatio: 4 / 3,
     borderRadius: Radii.card,
     overflow: "hidden",
     // Letterbox background for the video frame — always black, theme-invariant.
     backgroundColor: "#000",
+  },
+  videoFrame: {
+    width: "100%",
+    height: "100%",
   },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
