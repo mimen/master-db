@@ -5,7 +5,7 @@ import { ChatDirectory } from "./chat-directory";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { MessageSearch } from "./message-search";
-import { mapMessage, tapbackReactionEvent } from "./map";
+import { buildThread, mapMessage, tapbackReactionEvent } from "./map";
 import { matchesFilters } from "../shared/chat-state";
 import type { ChatSummary } from "../shared/types";
 
@@ -742,6 +742,122 @@ describe("ChatDirectory reactive fast path", () => {
     await directory.markRead(CHAT_A);
     await directory.dismiss(CHAT_A, "unresponded");
     expect(changed).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------- thread tapbacks
+
+describe("buildThread tapbacks", () => {
+  function target(): BBMessage {
+    return inbound("target", 1000, "hello");
+  }
+
+  function tapback(
+    guid: string,
+    dateCreated: number,
+    associatedMessageType: string | number,
+    text = "",
+    address = "+15550001111",
+  ): BBMessage {
+    return {
+      guid,
+      text,
+      dateCreated,
+      isFromMe: false,
+      handle: { address },
+      associatedMessageGuid: "p:0/target",
+      associatedMessageType,
+    };
+  }
+
+  test("folds an added reaction onto its target", async () => {
+    const { contacts } = await setup([]);
+    const messages = buildThread(
+      [target(), tapback("add-love", 2000, 2000)],
+      CHAT_A,
+      contacts,
+    );
+
+    expect(messages[0]?.reactions).toEqual([
+      {
+        type: "love",
+        isFromMe: false,
+        senderName: "Alice",
+        senderAddress: "+15550001111",
+      },
+    ]);
+  });
+
+  test("removes only the matching reaction from the same sender", async () => {
+    const { contacts } = await setup([]);
+    const messages = buildThread(
+      [
+        target(),
+        tapback("alice-love", 2000, "love"),
+        tapback("bob-love", 2100, "love", "", "+15550002222"),
+        tapback("remove-alice-love", 3000, "-love"),
+      ],
+      CHAT_A,
+      contacts,
+    );
+
+    expect(messages[0]?.reactions).toEqual([
+      {
+        type: "love",
+        isFromMe: false,
+        senderName: "Bob",
+        senderAddress: "+15550002222",
+      },
+    ]);
+  });
+
+  test("changes a reaction by removing the old type before adding the new one", async () => {
+    const { contacts } = await setup([]);
+    const messages = buildThread(
+      [
+        tapback("add-like", 4000, "like"),
+        tapback("remove-love", 3000, "-love"),
+        tapback("add-love", 2000, "love"),
+        target(),
+      ],
+      CHAT_A,
+      contacts,
+    );
+
+    expect(messages[0]?.reactions.map((reaction) => reaction.type)).toEqual(["like"]);
+  });
+
+  test("uses timestamps when a DESC removal arrives before its add", async () => {
+    const { contacts } = await setup([]);
+    const messages = buildThread(
+      [tapback("remove-love", 3000, 3000), tapback("add-love", 2000, 2000), target()],
+      CHAT_A,
+      contacts,
+    );
+
+    expect(messages[0]?.reactions).toEqual([]);
+  });
+
+  test("ignores a removal for a reaction that was never added", async () => {
+    const { contacts } = await setup([]);
+    const messages = buildThread(
+      [target(), tapback("remove-like", 2000, 3001)],
+      CHAT_A,
+      contacts,
+    );
+
+    expect(messages[0]?.reactions).toEqual([]);
+  });
+
+  test("decodes BlueBubbles custom emoji additions instead of calling them removals", async () => {
+    const { contacts } = await setup([]);
+    const custom = tapback("custom-heart", 2000, "2006", "​Reacted ❤️​ to “hello”");
+    const event = tapbackReactionEvent(custom, contacts);
+    const messages = buildThread([custom, target()], CHAT_A, contacts);
+
+    expect(event).toMatchObject({ remove: false, reaction: { type: "❤️" } });
+    expect(mapMessage(custom, CHAT_A, contacts).text).toBe("Reacted ❤️");
+    expect(messages[0]?.reactions.map((reaction) => reaction.type)).toEqual(["❤️"]);
   });
 });
 

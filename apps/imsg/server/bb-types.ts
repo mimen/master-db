@@ -58,6 +58,8 @@ export interface BBMessage {
   attachments?: BBAttachment[];
   associatedMessageGuid?: string | null;
   associatedMessageType?: string | number | null;
+  /** Present in chat.db for custom emoji tapbacks; omitted by BlueBubbles 1.9.x. */
+  associatedMessageEmoji?: string | null;
   threadOriginatorGuid?: string | null;
   replyToGuid?: string | null;
   itemType?: number;
