@@ -27,7 +27,10 @@ export default function RootLayout() {
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <ActionSheetProvider>
             <LightboxProvider>
-              <Stack>
+              {/* freezeOnBlur: without it the conversation list keeps
+                  re-rendering on every inbound event while it sits invisible
+                  behind an open thread. */}
+              <Stack screenOptions={{ freezeOnBlur: true }}>
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 {/* Chevron only. A headerBackTitle ("Messages") renders INSIDE
                     the circular glass back button on iOS 26 and gets clipped

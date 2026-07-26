@@ -75,6 +75,10 @@ export default function ChatListScreen() {
           // unread eligibility, so the delayed refresh reconciles those.
           patchChatWithMessage(event.chatGuid, event.message);
         }
+        // Typing is pure presence — it changes nothing the sidebar renders, and
+        // scheduling a full list refetch for it meant a chatty conversation kept
+        // the whole directory reloading (and starved the debounce during bursts).
+        if (event.kind === "typing") return;
         if (reconcile.current) clearTimeout(reconcile.current);
         reconcile.current = setTimeout(() => refresh(), 1200);
       },
@@ -142,13 +146,19 @@ export default function ChatListScreen() {
   }, [chats, selected]);
 
   const openChat = (chat: ChatSummary): void => {
-    if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
+    // Clearing unread emits to the store, which re-filters every conversation
+    // and re-renders the list. Do it AFTER the navigation commits, or an unread
+    // row pays that whole recompute as tap latency before anything moves.
+    const clearUnread = (): void => {
+      if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
+    };
     if (wide) {
       setJumpTarget(null);
       setSelectionIntent("reply");
       setSelected(chat);
       setListMode(false);
       requestFocus("composer");
+      clearUnread();
       return;
     }
     router.push({
@@ -160,6 +170,7 @@ export default function ChatListScreen() {
         count: String(chat.participants.length),
       },
     });
+    requestAnimationFrame(clearUnread);
   };
 
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
@@ -182,10 +193,15 @@ export default function ChatListScreen() {
   // Esc-entered glide mode. This screen registers the runtime (over refs so
   // dispatch acts on current state); list navigation delegates to the pane's
   // adapter so keyboard order follows the rendered order.
+  // Synced in an effect, not during render: a render-phase ref write makes the
+  // React Compiler bail on this entire screen, and the readers are all keyboard
+  // handlers that run well after commit.
   const selectedRef = useRef(selected);
-  selectedRef.current = selected;
   const overlaysRef = useRef({ helpOpen, searchOpen, rightPane });
-  overlaysRef.current = { helpOpen, searchOpen, rightPane };
+  useEffect(() => {
+    selectedRef.current = selected;
+    overlaysRef.current = { helpOpen, searchOpen, rightPane };
+  });
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
     setKeyboardRuntime({

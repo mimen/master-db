@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
@@ -84,7 +84,7 @@ function SwipeAction({
   );
 }
 
-export function ChatRow({
+function ChatRowInner({
   chat,
   selected,
   keyboardFocused = false,
@@ -274,6 +274,14 @@ export function ChatRow({
     </ReanimatedSwipeable>
   );
 }
+
+/**
+ * Plain shallow memo. This only pays off because chat-store reconciles object
+ * identity on refetch — without that every row would see a "new" chat each
+ * poll. Deliberately not a hand-listed field comparator: that silently rots
+ * the moment ChatSummary grows a field.
+ */
+export const ChatRow = memo(ChatRowInner);
 
 const styles = StyleSheet.create({
   row: {

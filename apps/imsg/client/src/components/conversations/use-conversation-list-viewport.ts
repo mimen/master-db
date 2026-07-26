@@ -113,21 +113,25 @@ export function useConversationListViewport(args: {
       const listIndex = entry.location.index;
       const range = viewableRange.current;
       if (range === null || listIndex < range.first || listIndex > range.last) {
-        try {
-          // Top pin must clear the frosted bar, which overlays content.
-          // FlashList ignores viewOffset, so express the clearance as a
-          // fraction of the measured viewport instead.
-          const topFraction = Math.min(
-            0.3,
-            (chromeHeight + 8) / Math.max(1, metrics.viewportHeight()),
-          );
-          listRef.current?.scrollToIndex(
-            delta > 0
-              ? { index: listIndex, viewPosition: 1, animated: false }
-              : { index: listIndex, viewPosition: topFraction, animated: false },
-          );
-        } catch {
-          /* index not measured yet — FlashList will settle on next frame */
+        // Top pin must clear the frosted bar, which overlays content.
+        // FlashList ignores viewOffset, so express the clearance as a
+        // fraction of the measured viewport instead.
+        const topFraction = Math.min(
+          0.3,
+          (chromeHeight + 8) / Math.max(1, metrics.viewportHeight()),
+        );
+        const list = listRef.current;
+        const target = delta > 0
+          ? { index: listIndex, viewPosition: 1, animated: false }
+          : { index: listIndex, viewPosition: topFraction, animated: false };
+        // Optional chaining inside a try block is a compiler bailout; hoisting
+        // the call out keeps the same "index not measured yet" tolerance.
+        if (list) {
+          try {
+            list.scrollToIndex(target);
+          } catch {
+            /* index not measured yet — FlashList will settle on next frame */
+          }
         }
       }
     },

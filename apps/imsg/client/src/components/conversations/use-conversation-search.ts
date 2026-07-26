@@ -47,8 +47,12 @@ export function useConversationSearch(args: {
   const inputRef = useRef<TextInput>(null);
 
   const normalizedQuery = normalizeSearchQuery(state.query);
+  // Synced in an effect: writing a ref during render bails the compiler out of
+  // this hook, and every reader below is an async continuation or a handler.
   const filtersRef = useRef(args);
-  filtersRef.current = args;
+  useEffect(() => {
+    filtersRef.current = args;
+  });
 
   // Deep search: match conversations by message body, merged into the live
   // filter so typing surfaces chats even when the term is buried in history.
