@@ -68,6 +68,10 @@ export function PersonAvatar({
           style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
           contentFit="cover"
           transition={80}
+          // Without a recycling key a reused list cell shows the previous
+          // contact's face until this one decodes.
+          recyclingKey={address}
+          cachePolicy="memory-disk"
         />
       )}
     </View>
@@ -110,6 +114,8 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
         style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
         contentFit="cover"
         transition={80}
+        recyclingKey={chat.guid}
+        cachePolicy="memory-disk"
       />
     </View>
   );
@@ -174,6 +180,8 @@ export function GroupPhotoAvatar({
         style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
         contentFit="cover"
         transition={80}
+        recyclingKey={guid}
+        cachePolicy="memory-disk"
       />
     </View>
   );
