@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateCounts } from "@shared/types";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
@@ -69,7 +69,9 @@ export function ConversationListPane({
   const filterBtnRef = useRef<View>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
-  const openFilters = (): void => {
+  // useCallback, not a bare arrow: the compiler can't prove a render-scope
+  // function that touches a ref is never called during render, and bails.
+  const openFilters = useCallback((): void => {
     if (wide && filterBtnRef.current) {
       filterBtnRef.current.measureInWindow((x, y, width, height) => {
         setFilterAnchor({ x, y, width, height });
@@ -79,7 +81,7 @@ export function ConversationListPane({
       setFilterAnchor(null);
       setFilterOpen(true);
     }
-  };
+  }, [wide]);
   // Search is a MODE, not a compound filter: typing searches the FULL universe
   // (archived included), superseding the badge filters; clearing the query
   // restores the badge view untouched (docs: Gmail/Superhuman convention).
@@ -90,7 +92,13 @@ export function ConversationListPane({
   // remount theory that motivated a single array was disproved by the
   // Playwright trap — the blur was keyboardDismissMode.)
   const browseGuids = useMemo(() => new Set(chats.map((c) => c.guid)), [chats]);
-  const model = deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids);
+  // Explicitly memoised rather than left to the compiler: this is four full
+  // passes over every conversation plus a per-chat participant scan while
+  // searching, and it used to re-run on every render of this pane.
+  const model = useMemo(
+    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids),
+    [allChats, filters, search.query, search.deepMatches, browseGuids],
+  );
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -100,6 +108,20 @@ export function ConversationListPane({
     chromeHeight: topBarH,
     viewKey: search.viewKey,
   });
+  // FlashList's cell memo compares renderItem by identity, so a fresh arrow here
+  // re-renders every mounted row on every render of this pane.
+  const renderRow = useCallback(
+    ({ item }: { item: ChatSummary }) => (
+      <ChatRow
+        chat={item}
+        selected={wide && selectedGuid === item.guid}
+        keyboardFocused={wide && glide && selectedGuid === item.guid}
+        onPress={() => onOpenChat(item)}
+      />
+    ),
+    [wide, glide, selectedGuid, onOpenChat],
+  );
+
   const shelfRef = useRef<PriorityShelfHandle>(null);
   useConversationListKeyboard({
     enabled: wide,
@@ -159,7 +181,9 @@ export function ConversationListPane({
           ref={viewport.listRef}
           data={model.listChats}
           keyExtractor={(chat) => chat.guid}
-          maintainVisibleContentPosition={{ disabled: false }}
+          // Default iOS draw distance is 250px — barely three rows here, so a fast
+          // flick outruns it and shows blanks.
+          drawDistance={1500}
           keyboardShouldPersistTaps="handled"
           // Native-only: RNW's on-drag treats ANY scroll event as a drag and
           // BLURS the focused input — our scroll-to-top on keystroke was
@@ -212,15 +236,7 @@ export function ConversationListPane({
               </View>
             )
           }
-          renderItem={({ item }) => (
-            <ChatRow
-              chat={item}
-              selected={wide && selectedGuid === item.guid}
-              keyboardFocused={wide && glide && selectedGuid === item.guid}
-              onPress={() => onOpenChat(item)}
-              onChanged={onRefresh}
-            />
-          )}
+          renderItem={renderRow}
         />
       <ConversationFiltersModal
         visible={filterOpen}

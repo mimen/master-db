@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
@@ -8,6 +8,8 @@ import ReanimatedSwipeable, {
 import Reanimated, {
   Extrapolation,
   interpolate,
+  runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   type SharedValue,
 } from "react-native-reanimated";
@@ -19,6 +21,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { formatListTimestamp } from "@/lib/format";
+import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
@@ -50,6 +53,14 @@ function SwipeAction({
   const containerStyle = useAnimatedStyle(() => ({
     width: Math.max(ACTION_WIDTH, Math.abs(translation.value)),
   }));
+  // Buzz once as the drag arms the action, not on release — this is the signal
+  // that tells you the swipe will commit if you let go now.
+  useAnimatedReaction(
+    () => Math.abs(translation.value) >= commit,
+    (armed, wasArmed) => {
+      if (armed && wasArmed === false) runOnJS(hapticCommit)();
+    },
+  );
   const contentStyle = useAnimatedStyle(() => {
     const dist = Math.abs(translation.value);
     return {
@@ -73,7 +84,7 @@ function SwipeAction({
   );
 }
 
-export function ChatRow({
+function ChatRowInner({
   chat,
   selected,
   keyboardFocused = false,
@@ -84,7 +95,6 @@ export function ChatRow({
   /** Glide-mode cursor: accent edge on the selected row while navigating. */
   keyboardFocused?: boolean;
   onPress: () => void;
-  onChanged?: () => void;
 }) {
   const theme = useTheme();
   const { openMenu } = useChatActions();
@@ -121,6 +131,9 @@ export function ChatRow({
 
   // Commit distance scales with row width so it's a deliberate full swipe on a
   // phone, not a hair-trigger. Capped so a tablet/desktop doesn't need a marathon.
+  // Overshoot stays ON: disabling it collapses the Swipeable's interpolation to a
+  // zero slope past the pane width, which clamped travel at ACTION_WIDTH while
+  // commit still measured the raw finger — a dead zone the icon pop never reached.
   const commit = Math.min(190, Math.max(120, winW * 0.42));
 
   return (
@@ -129,8 +142,6 @@ export function ChatRow({
       friction={1}
       leftThreshold={commit}
       rightThreshold={commit}
-      overshootLeft={false}
-      overshootRight={false}
       renderLeftActions={(_progress, translation) => (
         <SwipeAction
           translation={translation}
@@ -263,6 +274,14 @@ export function ChatRow({
     </ReanimatedSwipeable>
   );
 }
+
+/**
+ * Plain shallow memo. This only pays off because chat-store reconciles object
+ * identity on refetch — without that every row would see a "new" chat each
+ * poll. Deliberately not a hand-listed field comparator: that silently rots
+ * the moment ChatSummary grows a field.
+ */
+export const ChatRow = memo(ChatRowInner);
 
 const styles = StyleSheet.create({
   row: {

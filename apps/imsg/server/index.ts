@@ -285,9 +285,12 @@ app.get("/api/avatars/:address", async (c) => {
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg==",
       "base64",
     );
-    // Short cache: if a contact later gains a photo, don't keep the blank pixel.
+    // Cached as long as a real photo: most of a 500-row list is photo-less, and a
+    // short TTL meant those rows re-hit the network every minute forever. A contact
+    // that later gains a photo is picked up by bumping the ?v= on avatarUrl, which
+    // is already how the export-avatars run invalidates.
     return new Response(new Uint8Array(px), {
-      headers: { "Cache-Control": "private, max-age=60", "Content-Type": "image/png" },
+      headers: { "Cache-Control": "private, max-age=3600", "Content-Type": "image/png" },
     });
   }
   const bytes = Buffer.from(b64, "base64");

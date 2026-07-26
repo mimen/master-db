@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Reanimated, { FadeInDown } from "react-native-reanimated";
+import Reanimated, { FadeInUp } from "react-native-reanimated";
 import {
   FlatList,
   Keyboard,
@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatDayDivider, sameDay } from "@/lib/format";
+import { hapticSelect } from "@/lib/haptics";
 import { useServerEvents } from "@/lib/sse";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
@@ -82,7 +83,7 @@ export function ThreadView({
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, hasMore, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
+  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
     chatGuid,
     jumpTarget,
   );
@@ -121,12 +122,27 @@ export function ThreadView({
   ).current;
   const typingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
+  /** Guids whose entrance already played as a temp bubble; see onSettled. */
+  const settledGuids = useRef(new Set<string>());
+
+  /**
+   * Follow an outbound message down to the newest row. maintainVisibleContentPosition
+   * holds the current view when a row is inserted at index 0, which is right for
+   * inbound backfill and wrong for something you just sent — without this the
+   * thread stays parked where it was. Offset 0 is the newest end of an inverted list.
+   */
+  const scrollToLatest = useCallback(() => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+  }, []);
 
   useEffect(() => {
     setReplyTo(null);
     setEditing(null);
     setSearchOpen(false);
     setSearchText("");
+    settledGuids.current.clear();
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
     if (!previewOnly) void api.markRead(chatGuid);
   }, [chatGuid, previewOnly]);
@@ -315,7 +331,10 @@ export function ThreadView({
       replaceTemp(failed.guid, revived);
       api
         .sendText(chatGuid, { text: failed.text, replyToGuid: failed.replyToGuid ?? undefined })
-        .then((message) => replaceTemp(revived.guid, message))
+        .then((message) => {
+          settledGuids.current.add(message.guid); // same key swap as onSettled
+          replaceTemp(revived.guid, message);
+        })
         .catch(() => replaceTemp(revived.guid, { ...revived, pending: false, failed: true }));
     },
     [chatGuid, replaceTemp],
@@ -353,6 +372,7 @@ export function ThreadView({
                       { type, isFromMe: true, senderName: null, senderAddress: null },
                     ];
                 upsert({ ...message, reactions });
+                hapticSelect();
                 void api.react(message.guid, { chatGuid, reaction: type, remove: active }).catch(() => {
                   upsert(message);
                   showToast("Reaction failed");
@@ -584,8 +604,20 @@ export function ThreadView({
             if (hasMore && !loading) loadOlder();
           }}
           onEndReachedThreshold={0.4}
-          onStartReached={() => loadNewer()}
+          onStartReached={() => {
+            // Index 0 is where an inverted list rests, so an unguarded call here
+            // refetches on open, on every settle at the bottom, and after each send.
+            if (hasNewer && !loading) loadNewer();
+          }}
           onStartReachedThreshold={0.2}
+          // Without persistTaps the first tap on a bubble is eaten dismissing the
+          // keyboard. Dismissal stays "on-drag", NOT "interactive": interactive
+          // moves the keyboard continuously, while bottomInset above only updates
+          // on keyboardWillChangeFrame/WillHide, so it desyncs mid-gesture and
+          // strands the composer above a gap. Interactive needs the composer on
+          // react-native-keyboard-controller first.
+          keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
           }}
@@ -605,7 +637,12 @@ export function ThreadView({
           renderItem={({ item }) => (
             <Reanimated.View
               entering={
-                Date.now() - item.message.dateCreated < 4000 ? FadeInDown.springify().damping(18) : undefined
+                // FadeInUp, not Down: the list is inverted, so each cell carries
+                // scaleY:-1 and a downward animation renders as an upward one.
+                Date.now() - item.message.dateCreated < 4000 &&
+                !settledGuids.current.has(item.message.guid)
+                  ? FadeInUp.springify().damping(22)
+                  : undefined
               }
             >
               {item.newDay && (
@@ -665,14 +702,19 @@ export function ThreadView({
         onOptimistic={(message) => {
           upsert(message);
           patchChatWithMessage(chatGuid, message);
+          scrollToLatest();
         }}
         onSettled={(tempGuid, message) => {
+          // The settled message carries a new guid, so the row remounts under a
+          // new key — suppress its entrance so the bubble doesn't spring twice.
+          settledGuids.current.add(message.guid);
           replaceTemp(tempGuid, message);
           if (!message.failed) patchChatWithMessage(chatGuid, message);
         }}
         onSent={(message) => {
           upsert(message);
           patchChatWithMessage(chatGuid, message);
+          scrollToLatest();
         }}
       />
     </View>

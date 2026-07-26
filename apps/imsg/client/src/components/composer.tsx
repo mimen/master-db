@@ -14,6 +14,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { showToast } from "@/lib/toast";
+import { hapticFailure, hapticSend } from "@/lib/haptics";
 import { playSend } from "@/lib/sounds";
 import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
@@ -436,6 +437,10 @@ export function Composer({
       clearText();
       setDraft(chatGuid, "");
       setBusy(true);
+      // Confirm on touch-up, not on upload completion — Apple plays the whoosh
+      // when you commit, and a confirmation that waits on the network reads as lag.
+      playSend();
+      hapticSend();
       try {
         for (let i = 0; i < attachments.length; i++) {
           const attachment = attachments[i];
@@ -454,8 +459,9 @@ export function Composer({
           );
         }
         onClearReply();
-        playSend();
+        // No playSend() here — confirmation already fired on touch-up above.
       } catch {
+        hapticFailure();
         showToast("Attachment failed");
       } finally {
         for (const attachment of attachments) cleanupPendingAttachment(attachment);
@@ -470,13 +476,14 @@ export function Composer({
     setDraft(chatGuid, "");
     onClearReply();
     onOptimistic(temp);
+    playSend();
+    hapticSend();
     try {
       const message = await api.sendText(chatGuid, {
         text: trimmed,
         replyToGuid: reply?.guid,
         mentions: outgoingMentions.length > 0 ? outgoingMentions : undefined,
       });
-      playSend();
       const withMentions =
         outgoingMentions.length > 0 && (message.mentions ?? []).length === 0
           ? { ...message, mentions: outgoingMentions }
@@ -485,6 +492,7 @@ export function Composer({
       // reclassifies — pin the service so the green bubble never flashes blue.
       onSettled(temp.guid, isSMS ? { ...withMentions, service: "SMS" } : withMentions);
     } catch {
+      hapticFailure();
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
     }
   };
@@ -804,15 +812,20 @@ ${url}` : url;
         form.append("attachment", { uri, name, type: "audio/mp4" } as unknown as Blob);
       }
       form.append("isAudioMessage", "true");
+      playSend();
+      hapticSend();
       const res = await fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/attachment`, {
         method: "POST",
         body: form,
       });
       if (res.ok) {
         onSent((await res.json()) as Message);
-        playSend();
-      } else showToast("Voice message failed");
+      } else {
+        hapticFailure();
+        showToast("Voice message failed");
+      }
     } catch {
+      hapticFailure();
       showToast("Voice message failed");
     } finally {
       setBusy(false);
