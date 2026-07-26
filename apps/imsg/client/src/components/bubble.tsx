@@ -141,7 +141,15 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           return <AudioBubble key={att.guid} guid={att.guid} url={url} mine={mine} />;
         }
         if (att.mimeType?.startsWith("video/") || /\.(mov|mp4|m4v)$/i.test(att.filename ?? "")) {
-          return <VideoBubble key={att.guid} url={url} />;
+          return (
+            <VideoBubble
+              key={att.guid}
+              url={url}
+              width={Math.min(230, mediaW)}
+              sourceWidth={att.width}
+              sourceHeight={att.height}
+            />
+          );
         }
         if (att.mimeType?.startsWith("image/")) {
           const ratio =

@@ -25,8 +25,16 @@ export function useLightbox(): OpenLightbox {
 }
 
 function LightboxVideo({ url }: { url: string }) {
-  const player = useVideoPlayer(url, (p) => p.play());
-  return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls />;
+  const player = useVideoPlayer(url);
+  return (
+    <VideoView
+      player={player}
+      style={styles.media}
+      contentFit="contain"
+      nativeControls
+      onFirstFrameRender={() => player.play()}
+    />
+  );
 }
 
 /** Full-screen media viewer: swipe/arrow between items, tap to dismiss. */

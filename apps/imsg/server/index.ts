@@ -21,6 +21,7 @@ import { transcodeAttachment } from "./transcode";
 import { mapScheduledMessage } from "./scheduled";
 import { WhisperService } from "./whisper";
 import { createAndSendFaceTimeLink } from "./facetime";
+import { parseByteRange } from "./byte-range";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
@@ -696,8 +697,74 @@ app.post("/api/attachments/:guid/transcript", (c) => {
   return c.json(whisper.request(c.req.param("guid")), 202, { "Cache-Control": "no-store" });
 });
 
+type AttachmentFile = ReturnType<typeof Bun.file>;
+const rangeDownloads = new Map<string, Promise<AttachmentFile | null>>();
+
+function attachmentSourcePath(guid: string): string {
+  const safeGuid = guid.replace(/[^A-Za-z0-9-]/g, "_");
+  return `.cache/attachments/${safeGuid}.source`;
+}
+
+function attachmentHeaders(contentType: string | null): Headers {
+  const headers = new Headers({
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=86400",
+  });
+  if (contentType) headers.set("Content-Type", contentType);
+  return headers;
+}
+
+function attachmentFileResponse(
+  file: AttachmentFile,
+  contentType: string | null,
+  rangeHeader: string | null,
+): Response {
+  const headers = attachmentHeaders(contentType);
+  const range = parseByteRange(rangeHeader, file.size);
+
+  if (range.kind === "unsatisfiable") {
+    headers.set("Content-Range", `bytes */${file.size}`);
+    headers.set("Content-Length", "0");
+    return new Response(null, { status: 416, headers });
+  }
+
+  if (range.kind === "partial") {
+    const length = range.end - range.start + 1;
+    headers.set("Content-Range", `bytes ${range.start}-${range.end}/${file.size}`);
+    headers.set("Content-Length", String(length));
+    return new Response(file.slice(range.start, range.end + 1), { status: 206, headers });
+  }
+
+  headers.set("Content-Length", String(file.size));
+  return new Response(file, { headers });
+}
+
+async function cachedAttachmentFile(guid: string): Promise<AttachmentFile | null> {
+  const path = attachmentSourcePath(guid);
+  const cached = Bun.file(path);
+  if (await cached.exists()) return cached;
+
+  const active = rangeDownloads.get(guid);
+  if (active) return active;
+
+  // BlueBubbles ignores Range, so cache its one full download and slice locally.
+  const pending = (async () => {
+    const download = await bb.downloadAttachment(guid);
+    if (!download.ok || !download.body) return null;
+    await Bun.write(path, await download.arrayBuffer());
+    return Bun.file(path);
+  })();
+  rangeDownloads.set(guid, pending);
+  try {
+    return await pending;
+  } finally {
+    rangeDownloads.delete(guid);
+  }
+}
+
 app.get("/api/attachments/:guid", async (c) => {
   const guid = c.req.param("guid");
+  const rangeHeader = c.req.header("Range") ?? null;
   const meta = await bb.attachmentMeta(guid);
   const mimeType = meta.ok ? (meta.value.mimeType ?? null) : null;
   const filename = meta.ok ? (meta.value.transferName ?? null) : null;
@@ -706,19 +773,23 @@ app.get("/api/attachments/:guid", async (c) => {
     bb.downloadAttachment(guid),
   );
   if (transcoded) {
-    return new Response(Bun.file(transcoded.path), {
-      headers: {
-        "Content-Type": transcoded.contentType,
-        "Cache-Control": "private, max-age=86400",
-      },
-    });
+    return attachmentFileResponse(Bun.file(transcoded.path), transcoded.contentType, rangeHeader);
+  }
+
+  const cached = Bun.file(attachmentSourcePath(guid));
+  if (await cached.exists()) return attachmentFileResponse(cached, mimeType, rangeHeader);
+
+  if (rangeHeader) {
+    const file = await cachedAttachmentFile(guid);
+    if (!file) return c.json({ error: "download failed" }, 502);
+    return attachmentFileResponse(file, mimeType, rangeHeader);
   }
 
   const download = await bb.downloadAttachment(guid);
   if (!download.ok || !download.body) return c.json({ error: "download failed" }, 502);
-  const headers = new Headers({ "Cache-Control": "private, max-age=86400" });
-  if (mimeType) headers.set("Content-Type", mimeType);
-  return new Response(download.body, { headers });
+  return new Response(download.body, {
+    headers: attachmentHeaders(mimeType ?? download.headers.get("Content-Type")),
+  });
 });
 
 // ------------------------------------------------------------------- ai
