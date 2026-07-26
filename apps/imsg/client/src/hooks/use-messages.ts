@@ -57,6 +57,10 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const [hasMore, setHasMore] = useState(false);
   const [hasNewer, setHasNewer] = useState(false);
   const generation = useRef(0);
+  // A flick fires onEndReached/onStartReached repeatedly against the same cursor
+  // before the first response lands; these latch one request per direction.
+  const pagingOlder = useRef(false);
+  const pagingNewer = useRef(false);
 
   useEffect(() => {
     setHasMore(false);
@@ -66,6 +70,8 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
       return;
     }
     const gen = ++generation.current;
+    pagingOlder.current = false;
+    pagingNewer.current = false;
     const cached = !target ? threadCache.get(chatGuid) : undefined;
     if (cached && cached.length > 0) {
       // Instant render from cache; refresh silently underneath.
@@ -98,10 +104,11 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   }, [chatGuid, target, messages]);
 
   const loadOlder = useCallback(() => {
-    if (!chatGuid || messages.length === 0) return;
+    if (!chatGuid || messages.length === 0 || pagingOlder.current) return;
     const oldest = messages[0];
     if (!oldest) return;
     const gen = generation.current;
+    pagingOlder.current = true;
     api
       .messages(chatGuid, { before: oldest.dateCreated })
       .then((batch) => {
@@ -117,14 +124,18 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
         });
         setHasMore(batch.length >= 40);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        pagingOlder.current = false;
+      });
   }, [chatGuid, messages]);
 
   const loadNewer = useCallback(() => {
-    if (!chatGuid || messages.length === 0) return;
+    if (!chatGuid || messages.length === 0 || pagingNewer.current) return;
     const newest = messages[messages.length - 1];
     if (!newest) return;
     const gen = generation.current;
+    pagingNewer.current = true;
     api
       .messages(chatGuid, { after: newest.dateCreated })
       .then((batch) => {
@@ -137,7 +148,10 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
           return sortByDate([...current, ...newer]);
         });
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        pagingNewer.current = false;
+      });
   }, [chatGuid, messages]);
 
   const remove = useCallback((guid: string) => {

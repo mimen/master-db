@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Reanimated, { FadeInDown } from "react-native-reanimated";
+import Reanimated, { FadeInUp } from "react-native-reanimated";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatDayDivider, sameDay } from "@/lib/format";
+import { hapticSelect } from "@/lib/haptics";
 import { useServerEvents } from "@/lib/sse";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
@@ -76,7 +77,7 @@ export function ThreadView({
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, hasMore, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
+  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
     chatGuid,
     jumpTarget,
   );
@@ -327,6 +328,7 @@ export function ThreadView({
                       { type, isFromMe: true, senderName: null, senderAddress: null },
                     ];
                 upsert({ ...message, reactions });
+                hapticSelect();
                 void api.react(message.guid, { chatGuid, reaction: type, remove: active }).catch(() => {
                   upsert(message);
                   showToast("Reaction failed");
@@ -521,8 +523,16 @@ export function ThreadView({
             if (hasMore && !loading) loadOlder();
           }}
           onEndReachedThreshold={0.4}
-          onStartReached={() => loadNewer()}
+          onStartReached={() => {
+            // Index 0 is where an inverted list rests, so an unguarded call here
+            // refetches on open, on every settle at the bottom, and after each send.
+            if (hasNewer && !loading) loadNewer();
+          }}
           onStartReachedThreshold={0.2}
+          // persistTaps: without it the first tap on a bubble is eaten dismissing
+          // the keyboard. interactive: drag the thread to pull the keyboard down.
+          keyboardDismissMode={Platform.OS === "web" ? "none" : "interactive"}
+          keyboardShouldPersistTaps="handled"
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
           }}
@@ -542,7 +552,9 @@ export function ThreadView({
           renderItem={({ item }) => (
             <Reanimated.View
               entering={
-                Date.now() - item.message.dateCreated < 4000 ? FadeInDown.springify().damping(18) : undefined
+                // FadeInUp, not Down: the list is inverted, so each cell carries
+                // scaleY:-1 and a downward animation renders as an upward one.
+                Date.now() - item.message.dateCreated < 4000 ? FadeInUp.springify().damping(18) : undefined
               }
             >
               {item.newDay && (
