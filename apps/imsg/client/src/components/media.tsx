@@ -98,7 +98,7 @@ export function AudioBubble({ url, mine }: { url: string; mine: boolean }) {
   );
 }
 
-export function VideoBubble({ url }: { url: string }) {
+export function VideoBubble({ url, onLongPress }: { url: string; onLongPress?: () => void }) {
   const [activated, setActivated] = useState(false);
   const player = useVideoPlayer(url, (p) => {
     p.loop = false;
@@ -111,6 +111,8 @@ export function VideoBubble({ url }: { url: string }) {
         else if (player.playing) player.pause();
         else player.play();
       }}
+      onLongPress={onLongPress}
+      delayLongPress={320}
     >
       <View style={styles.video}>
         <VideoView

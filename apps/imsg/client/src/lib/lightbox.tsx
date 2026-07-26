@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -10,11 +12,10 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView, useVideoPlayer } from "expo-video";
+import { saveMediaToPhotos, shareMedia, type ShareableMedia } from "@/lib/media-actions";
+import { showToast } from "@/lib/toast";
 
-export interface LightboxMedia {
-  url: string;
-  isVideo: boolean;
-}
+export type LightboxMedia = ShareableMedia;
 
 type OpenLightbox = (items: LightboxMedia[], index: number) => void;
 
@@ -33,6 +34,7 @@ function LightboxVideo({ url }: { url: string }) {
 export function LightboxProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<LightboxMedia[]>([]);
   const [index, setIndex] = useState(0);
+  const [activeAction, setActiveAction] = useState<"save" | "share" | null>(null);
   const { width } = useWindowDimensions();
 
   const open = useCallback<OpenLightbox>((media, start) => {
@@ -45,6 +47,17 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
   const current = items[index];
   const go = (delta: number) =>
     setIndex((i) => Math.max(0, Math.min(items.length - 1, i + delta)));
+  const runAction = async (action: "save" | "share") => {
+    if (!current || activeAction) return;
+    setActiveAction(action);
+    const result = action === "save"
+      ? await saveMediaToPhotos(current)
+      : await shareMedia(current);
+    setActiveAction(null);
+    if (action === "save" || !result.ok) {
+      showToast(result.ok ? "Saved to Photos" : result.message);
+    }
+  };
 
   return (
     <LightboxContext.Provider value={open}>
@@ -60,6 +73,34 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
             ))}
           {/* Full-screen media viewer over a fixed near-black backdrop — every
               control below is theme-invariant by design, not app-theme-driven. */}
+          {current && Platform.OS !== "web" && (
+            <View style={styles.actionRow}>
+              <Pressable
+                style={styles.actionButton}
+                onPress={() => void runAction("share")}
+                disabled={activeAction !== null}
+                accessibilityLabel="Share attachment"
+              >
+                {activeAction === "share" ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Ionicons name="share-outline" size={22} color="#fff" />
+                )}
+              </Pressable>
+              <Pressable
+                style={styles.actionButton}
+                onPress={() => void runAction("save")}
+                disabled={activeAction !== null}
+                accessibilityLabel="Save to Photos"
+              >
+                {activeAction === "save" ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Ionicons name="download-outline" size={22} color="#fff" />
+                )}
+              </Pressable>
+            </View>
+          )}
           <Pressable style={styles.close} onPress={close} hitSlop={10}>
             <Ionicons name="close" size={30} color="#fff" />
           </Pressable>
@@ -102,6 +143,21 @@ const styles = StyleSheet.create({
   media: {
     width: "100%",
     height: "100%",
+  },
+  actionRow: {
+    position: "absolute",
+    top: 44,
+    left: 20,
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
   },
   close: {
     position: "absolute",
