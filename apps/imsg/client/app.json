@@ -35,7 +35,15 @@
       "expo-font",
       "expo-web-browser",
       "expo-audio",
-      "expo-video"
+      "expo-video",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Messages to access photos and videos you choose.",
+          "savePhotosPermission": "Allow Messages to save photos and videos to your library.",
+          "granularPermissions": ["photo", "video"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

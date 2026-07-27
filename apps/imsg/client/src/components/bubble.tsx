@@ -13,6 +13,7 @@ import { CardShadow, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble } from "./media";
 import { PersonAvatar } from "./avatar";
 import { useLightbox } from "@/lib/lightbox";
+import { useMediaActionSheet } from "@/lib/media-actions";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 
@@ -100,6 +101,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
   const theme = useTheme();
   const { width: winW } = useLayoutMode();
   const openLightbox = useLightbox();
+  const showMediaActions = useMediaActionSheet();
   // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
   const base = paneWidth > 0 ? paneWidth : winW;
   const mediaW = Math.min(260, Math.round(base * 0.6));
@@ -122,6 +124,12 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               width={Math.min(230, mediaW)}
               sourceWidth={att.width}
               sourceHeight={att.height}
+              onLongPress={Platform.OS === "web" ? undefined : () => showMediaActions({
+                url,
+                isVideo: true,
+                filename: att.filename,
+                mimeType: att.mimeType,
+              })}
             />
           );
         }
@@ -135,10 +143,22 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               key={att.guid}
               onPress={() =>
                 openLightbox(
-                  images.map((i) => ({ url: attachmentUrl(i.guid), isVideo: false })),
+                  images.map((i) => ({
+                    url: attachmentUrl(i.guid),
+                    isVideo: false,
+                    filename: i.filename,
+                    mimeType: i.mimeType,
+                  })),
                   images.findIndex((i) => i.guid === att.guid),
                 )
               }
+              onLongPress={Platform.OS === "web" ? undefined : () => showMediaActions({
+                url,
+                isVideo: false,
+                filename: att.filename,
+                mimeType: att.mimeType,
+              })}
+              delayLongPress={320}
             >
               <Image
                 source={{ uri: url }}

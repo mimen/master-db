@@ -15,7 +15,7 @@ import { api, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
 import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
-import { useLightbox } from "@/lib/lightbox";
+import { LightboxProvider, useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion, GalleryItem } from "@shared/types";
 import { formatAddress } from "@shared/address";
@@ -42,7 +42,16 @@ export interface ChatInfoContentProps {
   onOpenPerson?: (address: string, name: string) => void;
 }
 
-export function ChatInfoContent({
+export function ChatInfoContent(props: ChatInfoContentProps) {
+  // Details is a native modal on iOS, so its viewer must present from that hierarchy.
+  return (
+    <LightboxProvider>
+      <ChatInfoContentInner {...props} />
+    </LightboxProvider>
+  );
+}
+
+function ChatInfoContentInner({
   guid,
   onClose,
   onDeleted,
@@ -149,7 +158,12 @@ export function ChatInfoContent({
     });
   };
 
-  const galleryMedia = gallery.map((g) => ({ url: attachmentUrl(g.guid), isVideo: g.isVideo }));
+  const galleryMedia = gallery.map((g) => ({
+    url: attachmentUrl(g.guid),
+    isVideo: g.isVideo,
+    filename: g.filename,
+    mimeType: g.mimeType,
+  }));
   const summary = getChats()?.find((c) => c.guid === guid) ?? null;
 
   return (
@@ -436,6 +450,8 @@ export function ChatInfoContent({
                   key={item.guid}
                   style={{ width: tileSize, height: tileSize }}
                   onPress={() => openLightbox(galleryMedia, index)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${item.isVideo ? "video" : "photo"} ${index + 1} of ${gallery.length}`}
                 >
                   <Image source={{ uri: attachmentUrl(item.guid) }} style={styles.tileImg} contentFit="cover" />
                   {item.isVideo && (

@@ -108,11 +108,13 @@ export function VideoBubble({
   width,
   sourceWidth,
   sourceHeight,
+  onLongPress,
 }: {
   url: string;
   width: number;
   sourceWidth: number | null;
   sourceHeight: number | null;
+  onLongPress?: () => void;
 }) {
   const [activated, setActivated] = useState(false);
   const [ratio, setRatio] = useState(() => aspectRatio(sourceWidth, sourceHeight));
@@ -138,31 +140,36 @@ export function VideoBubble({
   };
 
   return (
-    <View style={[styles.video, { width, aspectRatio: ratio }]}>
-      <VideoView
-        ref={videoRef}
-        player={player}
-        style={styles.videoFrame}
-        contentFit="contain"
-        nativeControls
-        onFirstFrameRender={updateAspectRatio}
-      />
-      {!activated && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Play video"
-          onPress={() => {
-            setActivated(true);
-            player.play();
-          }}
-          style={styles.videoOverlay}
-        >
-          {/* Play-circle overlay on top of the video frame — theme-invariant
-              media control, always white regardless of app theme. */}
-          <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
-        </Pressable>
-      )}
-    </View>
+    // Long-press only, no onPress: taps must still reach the play overlay and,
+    // once activated, the video's own native controls.
+    <Pressable onLongPress={onLongPress} delayLongPress={320}>
+      <View style={[styles.video, { width, aspectRatio: ratio }]}>
+        <VideoView
+          ref={videoRef}
+          player={player}
+          style={styles.videoFrame}
+          contentFit="contain"
+          nativeControls
+          onFirstFrameRender={updateAspectRatio}
+        />
+        {!activated && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Play video"
+            onPress={() => {
+              setActivated(true);
+              player.play();
+            }}
+            onLongPress={onLongPress}
+            style={styles.videoOverlay}
+          >
+            {/* Play-circle overlay on top of the video frame — theme-invariant
+                media control, always white regardless of app theme. */}
+            <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+          </Pressable>
+        )}
+      </View>
+    </Pressable>
   );
 }
 
