@@ -33,16 +33,54 @@ function specialContent(m: BBMessage): SpecialContent | null {
 }
 
 const TAPBACK_NAMES = ["love", "like", "dislike", "laugh", "emphasize", "question"] as const;
+const CUSTOM_TAPBACK_ADD = 2006;
+const CUSTOM_TAPBACK_REMOVE = 3006;
 
-/** Returns the tapback name for add-type reactions, null for non-tapbacks or removals. */
-function tapbackType(value: string | number | null | undefined): string | null {
+interface DecodedTapback {
+  type: string;
+  remove: boolean;
+}
+
+/** BlueBubbles omits associated_message_emoji, so recover it from its rendered text. */
+function customTapbackType(m: BBMessage): string | null {
+  const explicit = m.associatedMessageEmoji?.trim();
+  if (explicit) return explicit;
+  const text = [0x200a, 0x200b, 0x2060, 0xfeff]
+    .reduce((current, codePoint) => current.replaceAll(String.fromCodePoint(codePoint), ""), m.text ?? "")
+    .trim();
+  const match =
+    text.match(/^(?:Reacted\s+)?(.+?)\s+to(?:\s|$)/u) ??
+    text.match(/^Removed\s+(.+?)\s+from(?:\s|$)/u);
+  return match?.[1]?.trim() || null;
+}
+
+/** Decodes both persisted numeric types and BlueBubbles' normalized strings. */
+function decodeTapback(m: BBMessage): DecodedTapback | null {
+  const value = m.associatedMessageType;
   if (value === null || value === undefined) return null;
-  if (typeof value === "number") {
-    if (value >= 2000 && value <= 2005) return TAPBACK_NAMES[value - 2000] ?? null;
-    return null; // 3000s = removal
+  const numeric =
+    typeof value === "number" ? value : /^\d+$/.test(value) ? Number(value) : null;
+  if (numeric !== null) {
+    if (numeric >= 2000 && numeric <= 2005) {
+      const type = TAPBACK_NAMES[numeric - 2000];
+      return type ? { type, remove: false } : null;
+    }
+    if (numeric >= 3000 && numeric <= 3005) {
+      const type = TAPBACK_NAMES[numeric - 3000];
+      return type ? { type, remove: true } : null;
+    }
+    if (numeric === CUSTOM_TAPBACK_ADD || numeric === CUSTOM_TAPBACK_REMOVE) {
+      const type = customTapbackType(m);
+      return type ? { type, remove: numeric === CUSTOM_TAPBACK_REMOVE } : null;
+    }
+    return null;
   }
-  if (value.startsWith("-")) return null;
-  return TAPBACK_NAMES.includes(value as (typeof TAPBACK_NAMES)[number]) ? value : null;
+  if (typeof value !== "string") return null;
+  const remove = value.startsWith("-");
+  const raw = remove ? value.slice(1) : value;
+  return TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number])
+    ? { type: raw, remove }
+    : null;
 }
 
 /** Strips the "p:0/" / "bp:0/" part prefix from an associated message GUID. */
@@ -65,27 +103,14 @@ export function tapbackReactionEvent(
   participants: readonly BBHandle[] = [],
 ): { targetGuid: string; reaction: Reaction; remove: boolean } | null {
   if (!isTapback(m) || !m.associatedMessageGuid) return null;
-  const value = m.associatedMessageType;
-  let type: string | null = null;
-  let remove = false;
-  if (typeof value === "number") {
-    if (value >= 2000 && value <= 2005) type = TAPBACK_NAMES[value - 2000] ?? null;
-    else if (value >= 3000 && value <= 3005) {
-      type = TAPBACK_NAMES[value - 3000] ?? null;
-      remove = true;
-    }
-  } else if (typeof value === "string") {
-    remove = value.startsWith("-");
-    const raw = remove ? value.slice(1) : value;
-    type = TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number]) ? raw : null;
-  }
-  if (!type) return null;
+  const decoded = decodeTapback(m);
+  if (!decoded) return null;
   const reactionSender = sender(m, contacts, participants);
   return {
     targetGuid: stripPartPrefix(m.associatedMessageGuid),
-    remove,
+    remove: decoded.remove,
     reaction: {
-      type,
+      type: decoded.type,
       isFromMe: m.isFromMe === true,
       senderName: reactionSender?.name ?? null,
       senderAddress: reactionSender?.address ?? null,
@@ -178,19 +203,22 @@ export function buildThread(
   contacts: NameSource,
 ): Message[] {
   const tapbacks = new Map<string, Reaction[]>();
-  for (const m of raw) {
-    if (!isTapback(m)) continue;
-    const type = tapbackType(m.associatedMessageType);
-    if (!type || !m.associatedMessageGuid) continue;
-    const target = stripPartPrefix(m.associatedMessageGuid);
-    const list = tapbacks.get(target) ?? [];
-    list.push({
-      type,
-      isFromMe: m.isFromMe === true,
-      senderName: m.handle?.address ? contacts.lookup(m.handle.address) : null,
-      senderAddress: m.handle?.address ?? null,
-    });
-    tapbacks.set(target, list);
+  const chronological = [...raw].sort(
+    (a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0),
+  );
+  for (const m of chronological) {
+    const event = tapbackReactionEvent(m, contacts);
+    if (!event) continue;
+    const current = tapbacks.get(event.targetGuid) ?? [];
+    const sameSender = (reaction: Reaction): boolean =>
+      event.reaction.isFromMe
+        ? reaction.isFromMe
+        : !reaction.isFromMe && reaction.senderAddress === event.reaction.senderAddress;
+    const next = current.filter(
+      (reaction) => !(sameSender(reaction) && reaction.type === event.reaction.type),
+    );
+    if (!event.remove) next.push(event.reaction);
+    tapbacks.set(event.targetGuid, next);
   }
 
   const messages = raw
@@ -346,8 +374,11 @@ const TAPBACK_VERBS: Record<string, string> = {
 
 function summarizeLast(m: BBMessage): string {
   if (isTapback(m)) {
-    const type = tapbackType(m.associatedMessageType);
-    return type ? (TAPBACK_VERBS[type] ?? `Reacted ${type}`) : "Removed a reaction";
+    const tapback = decodeTapback(m);
+    if (!tapback) return "Reaction";
+    return tapback.remove
+      ? "Removed a reaction"
+      : (TAPBACK_VERBS[tapback.type] ?? `Reacted ${tapback.type}`);
   }
   const text = cleanText(m);
   if (text) return text;
