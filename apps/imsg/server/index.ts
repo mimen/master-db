@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import type { BBAttributedBody, BBMessage } from "./bb-types";
-import { BlueBubblesClient } from "./bluebubbles";
+import { BlueBubblesClient, type BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import { loadConfig } from "./config";
 import { ContactBook } from "./contacts";
@@ -29,7 +29,19 @@ import { makeVaultSearch } from "./ai/vault";
 import type { Contact, ServerEvent, StateFilter, TypeFilter } from "../shared/types";
 
 const config = loadConfig();
-const bb = new BlueBubblesClient(config.bbUrl, config.bbPassword);
+/**
+ * The BlueBubbles seam has always had two adapters; IMSG_FIXTURE=1 is what lets
+ * the second one out of the test process. It swaps the HTTP/socket.io client
+ * for the in-memory fake loaded with the render fixture — an invented directory
+ * with no real conversation data in it — so `bun run render` can drive the whole
+ * app locally without touching (or being able to reach) a BlueBubbles instance.
+ * Absent the flag this is exactly the production path it always was.
+ */
+const bb: BlueBubbles = Bun.env.IMSG_FIXTURE === "1"
+  ? new (await import("./bluebubbles-fake")).FakeBlueBubbles(
+      (await import("./render-fixture")).buildFixtureSeed(),
+    )
+  : new BlueBubblesClient(config.bbUrl, config.bbPassword);
 const db = new OverlayDb(config.dbPath);
 const contacts = new ContactBook(bb);
 const identityMirror = new IdentityMirror(config);

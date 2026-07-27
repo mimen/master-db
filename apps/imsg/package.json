@@ -8,6 +8,7 @@
     "build": "tsc -b && cd client && bun run build:web",
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "lint": "oxlint",
+    "render": "bun render/render.ts",
     "start": "bun server/index.ts"
   },
   "dependencies": {

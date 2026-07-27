@@ -41,6 +41,29 @@ bun start                            # serves app + API on :8377
 Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo dev server
 (native builds reach the Mini over the tailnet; the web app is re-exported with `bun run build`).
 
+## Render (visual QA)
+
+```sh
+bun run render          # PNGs + a self-contained contact sheet in render/out/
+bun run render --build  # force a client re-export first
+```
+
+Boots a throwaway server on an **invented** Chat Directory, drives it through both
+layouts headlessly, and writes one PNG per capture plus `render/out/index.html`.
+
+- Two fixed viewports, because this is one app with two layouts: **1440×900** (split
+  pane) and **390×844** (list, then thread). Not a responsive sweep.
+- Every capture walks the four state lenses — Unread, Unresponded, Waiting, Archived —
+  plus the filter surface (desktop popover, mobile sheet) and an open thread in each layout.
+- **No real conversation data, ever.** `IMSG_FIXTURE=1` swaps the BlueBubbles seam for
+  the in-memory fake loaded from `server/render-fixture.ts`; every name, number, and
+  message there is fabricated. The render server runs on its own port with its own
+  temp Overlay DB and a scratch `HOME`, cannot reach a BlueBubbles instance, and never
+  touches the service running on the Mini.
+
+`render/out/` is gitignored — the captures are evidence for a review, not a committed
+baseline.
+
 ## Env
 
 | var | default | |

@@ -30,3 +30,6 @@ dist-ssr
 client/dist
 client/node_modules
 client/.expo
+
+# Render output: regenerate with `bun run render`, never commit the captures.
+render/out
