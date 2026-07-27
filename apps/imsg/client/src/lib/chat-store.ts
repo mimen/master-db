@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { applyMessage } from "@shared/chat-state";
 import type { ChatSummary, Message } from "@shared/types";
 
@@ -9,13 +10,64 @@ import type { ChatSummary, Message } from "@shared/types";
 let all: ChatSummary[] | null = null;
 const listeners = new Set<(chats: ChatSummary[]) => void>();
 
+// ------------------------------------------------------------- persistence
+// Cold start used to be skeleton -> full round trip to the Mini -> paint, every
+// single launch. Mirroring the list to disk lets the app open on real content.
+// Only the head of the list: it is what fits on screen, and writing all ~500
+// on every change costs more than it saves.
+const CACHE_KEY = "imsg.chats.v1";
+const CACHE_LIMIT = 60;
+let hydrated = false;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleFlush(): void {
+  if (flushTimer) clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    const snapshot = all?.slice(0, CACHE_LIMIT);
+    if (!snapshot) return;
+    void AsyncStorage.setItem(CACHE_KEY, JSON.stringify(snapshot)).catch(() => undefined);
+  }, 1000);
+}
+
+/**
+ * Seed from disk. Returns without doing anything once a real fetch has landed,
+ * so a slow read can never overwrite fresher server data.
+ */
+export async function hydrateChats(): Promise<void> {
+  if (hydrated) return;
+  hydrated = true;
+  try {
+    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    if (!raw || all !== null) return;
+    const cached = JSON.parse(raw) as ChatSummary[];
+    if (!Array.isArray(cached) || cached.length === 0) return;
+    all = cached;
+    emit();
+  } catch {
+    // unreadable cache — fall back to the network path
+  }
+}
+
 function emit(): void {
   if (!all) return;
   for (const listener of listeners) listener(all);
+  // Flush here rather than at each call site so no mutation path can forget it.
+  scheduleFlush();
 }
 
 export function getChats(): ChatSummary[] | null {
   return all;
+}
+
+/** Test-only: this module is deliberately module-scoped singleton state. */
+export function resetStoreForTest(): void {
+  all = null;
+  hydrated = false;
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
 }
 
 export function subscribeChats(listener: (chats: ChatSummary[]) => void): () => void {

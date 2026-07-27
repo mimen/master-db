@@ -6,6 +6,7 @@ import { FlashList } from "@shopify/flash-list";
 
 
 import { ChatRow } from "./chat-row";
+import { ConnectionBanner } from "./connection-banner";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
 import { NavSwitcher } from "./nav-switcher";
 import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
@@ -201,6 +202,7 @@ export function ConversationListPane({
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View style={wide ? { paddingBottom: 6 } : null}>
+              <ConnectionBanner />
               {wide && searchField}
               <ConversationFilters
                 compact={wide}

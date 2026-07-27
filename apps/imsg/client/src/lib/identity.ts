@@ -10,8 +10,20 @@ import { makeFunctionReference } from "convex/server";
  * sync with convex/identity/queries.ts and mutations.ts in the repo root.
  */
 
+/**
+ * The identity mirror is optional everywhere else — the server skips it when
+ * its Convex config is absent — but this used to construct with `?? ""`, and
+ * ConvexReactClient rejects an empty address by throwing at module scope. That
+ * turned a missing env var into a hard crash before first paint, reported as
+ * "provided address was not an absolute url", naming neither the variable nor
+ * this file. A fresh checkout without client/.env cannot start. Degrade instead.
+ */
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL?.trim();
+if (!convexUrl) {
+  console.warn("EXPO_PUBLIC_CONVEX_URL is unset — contact identity features are disabled.");
+}
 export const convexClient = new ConvexReactClient(
-  process.env.EXPO_PUBLIC_CONVEX_URL ?? "",
+  convexUrl || "https://placeholder.convex.cloud",
   { unsavedChangesWarning: false },
 );
 

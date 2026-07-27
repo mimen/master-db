@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
-import { getChats, setChats, subscribeChats } from "@/lib/chat-store";
+import { getChats, hydrateChats, setChats, subscribeChats } from "@/lib/chat-store";
+import { useAppResume } from "@/lib/sse";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
@@ -44,9 +45,19 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
 
   useEffect(() => {
     const unsubscribe = subscribeChats(setAll);
+    // Paint the last known list first, then reconcile against the server. The
+    // cache read loses to any fetch that has already landed, so this can only
+    // ever fill an empty screen, never replace fresher data.
+    void hydrateChats().then(() => {
+      if (getChats() !== null) setLoading(false);
+    });
     refresh();
     return unsubscribe;
   }, [refresh]);
+
+  // Events that landed while backgrounded were never delivered, so the list on
+  // screen after a resume is whatever it was when the app went away.
+  useAppResume(refresh);
 
   // Filter views are FROZEN for triage consistency: once a chat appears in an
   // active state filter (Unread, Unresponded…), acting on it (reading,

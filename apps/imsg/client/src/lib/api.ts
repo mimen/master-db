@@ -14,11 +14,52 @@ import type {
   TypeFilter,
 } from "@shared/types";
 
+/**
+ * Reachability, published so the UI can say "can't reach the Mini" instead of
+ * spinning. Flipped by every request, so it reflects the real last outcome
+ * rather than a separate poll that can disagree with what you are looking at.
+ */
+let reachable = true;
+const reachListeners = new Set<() => void>();
+
+export function isServerReachable(): boolean {
+  return reachable;
+}
+
+export function subscribeReachable(onChange: () => void): () => void {
+  reachListeners.add(onChange);
+  return () => {
+    reachListeners.delete(onChange);
+  };
+}
+
+function setReachable(next: boolean): void {
+  if (reachable === next) return;
+  reachable = next;
+  for (const l of reachListeners) l();
+}
+
+/**
+ * Without a timeout an unreachable Mini hangs on the platform default —
+ * about a minute on iOS — with the UI showing a spinner the whole time.
+ * Long enough for a cold BlueBubbles query, short enough to surface a problem.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "Content-Type": "application/json", ...init?.headers },
+    });
+  } catch (error) {
+    // Transport failure or timeout — the server itself never answered.
+    setReachable(false);
+    throw error;
+  }
+  setReachable(true);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`${res.status}: ${body.slice(0, 200)}`);
