@@ -14,7 +14,7 @@
  *   --build       force a client re-export even if client/dist exists
  *   --keep-open   leave the fixture server running after the captures
  */
-import { chromium } from "@playwright/test";
+import { chromium, type Browser } from "@playwright/test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { findChromiumExecutable } from "./chromium";
@@ -52,12 +52,16 @@ async function main(): Promise<void> {
   const server = await startFixtureServer(options.port);
   console.log(`Fixture server up on ${server.baseUrl} (log: ${server.logPath})`);
 
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath: findChromiumExecutable(),
-  });
-
+  // Acquiring the browser sits INSIDE the try: it is the most likely step to
+  // fail on a fresh machine (no cached Chromium), and failing it outside would
+  // leak the fixture server onto its port. A leaked server is worse than a
+  // failed run, because the next run captures against the stale one.
+  let browser: Browser | null = null;
   try {
+    browser = await chromium.launch({
+      headless: true,
+      executablePath: findChromiumExecutable(),
+    });
     const shots = await captureAll({ browser, baseUrl: server.baseUrl });
     if (shots.length === 0) throw new Error("capture produced no shots");
 
@@ -75,7 +79,7 @@ async function main(): Promise<void> {
     }
     console.log(`\nContact sheet: ${sheetPath}`);
   } finally {
-    await browser.close();
+    await browser?.close();
     if (options.keepOpen) {
       console.log(`Fixture server still running on ${server.baseUrl} — Ctrl-C to stop.`);
       await new Promise(() => undefined);

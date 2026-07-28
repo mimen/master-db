@@ -7,7 +7,7 @@
  * rather than as a connection to the real BlueBubbles. It never touches the
  * long-running service on the Mini — different port, different database.
  */
-import { mkdtempSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,13 +28,32 @@ export interface FixtureServer {
 }
 
 /**
- * Exports the web client if it isn't built yet. The export is the slow part of
- * a render (a minute or so of Metro), so an existing bundle is reused unless
- * the caller forces a rebuild.
+ * True when client/dist was exported with the fixture's public env baked in.
+ *
+ * The client has a real-data lane the BlueBubbles seam does not cover: the
+ * Convex URL and identity key are compiled into the bundle at export time, so
+ * reusing a normally-built dist would put a capture browser on a bundle holding
+ * the real deployment. Nothing captured subscribes to it today, but that is one
+ * `useQuery` away from real names in a fixture render, and it would fail
+ * silently. So a reused bundle has to prove it is the fixture one.
+ */
+function isFixtureBuild(distDir: string): boolean {
+  const entry = readdirSync(join(distDir, "_expo", "static", "js", "web"), { withFileTypes: true })
+    .find((file) => file.isFile() && file.name.endsWith(".js"));
+  if (!entry) return false;
+  return readFileSync(join(distDir, "_expo", "static", "js", "web", entry.name), "utf8")
+    .includes(FIXTURE_PUBLIC_ENV.EXPO_PUBLIC_CONVEX_URL);
+}
+
+/**
+ * Exports the web client unless a fixture-built bundle is already there. The
+ * export is the slow part of a render (a minute or so of Metro), so a bundle
+ * that proves itself is reused.
  */
 export async function ensureClientBuild(force: boolean): Promise<boolean> {
-  const indexHtml = join(APP_ROOT, "client", "dist", "index.html");
-  if (!force && existsSync(indexHtml)) return false;
+  const distDir = join(APP_ROOT, "client", "dist");
+  const reusable = !force && existsSync(join(distDir, "index.html")) && isFixtureBuild(distDir);
+  if (reusable) return false;
 
   const build = Bun.spawn(["bun", "run", "build:web"], {
     cwd: join(APP_ROOT, "client"),
@@ -44,14 +63,36 @@ export async function ensureClientBuild(force: boolean): Promise<boolean> {
   });
   const code = await build.exited;
   if (code !== 0) throw new Error(`client build failed (exit ${code})`);
-  if (!existsSync(indexHtml)) throw new Error(`client build produced no ${indexHtml}`);
+  if (!existsSync(join(distDir, "index.html"))) throw new Error(`client build produced no index.html in ${distDir}`);
   return true;
 }
 
-async function waitForHealth(baseUrl: string, timeoutMs: number): Promise<void> {
+/**
+ * Polls until the server we just spawned answers.
+ *
+ * `exited` is checked every pass because health alone cannot tell our child
+ * from someone else's: a leaked server still holding the port answers /health
+ * perfectly, and a run that captured against a stale orphan would look like a
+ * pass while showing pre-edit code. If our child is gone, the port is lying.
+ */
+async function waitForHealth(
+  baseUrl: string,
+  timeoutMs: number,
+  exited: Promise<number>,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let dead: number | null = null;
+  void exited.then((code) => {
+    dead = code;
+  });
   let lastError = "no attempt made";
   while (Date.now() < deadline) {
+    if (dead !== null) {
+      throw new Error(
+        `fixture server exited (code ${dead}) before becoming healthy — ` +
+          `is port ${new URL(baseUrl).port} already taken by a leaked run?`,
+      );
+    }
     try {
       const response = await fetch(`${baseUrl}/api/health`);
       if (response.ok) {
@@ -97,10 +138,20 @@ export async function startFixtureServer(port: number): Promise<FixtureServer> {
       // Port 1 is never listening: the fixture must not reach a real server.
       BB_URL: "http://127.0.0.1:1",
       BB_PASSWORD: "fixture",
-      // A scratch HOME keeps the AI gateway key (~/.cli-proxy-api-key) out of
-      // reach, so the render never bills a model or spawns a shadow session.
+      // A scratch HOME covers the gateway key's DOTFILE path
+      // (~/.cli-proxy-api-key); the env vars are the other half of
+      // loadGatewayKey() and have to be cleared explicitly, or a machine
+      // provisioned with the key in its environment renders with the AI
+      // surfaces live. Empty string is deliberate: loadGatewayKey tests
+      // truthiness, so "" falls through to the (now sealed) dotfile.
       HOME: join(scratch, "home"),
+      AI_GATEWAY_KEY: "",
+      CLAUDE_GPT_GATEWAY_API_KEY: "",
       AI_GATEWAY_URL: "http://127.0.0.1:1",
+      // Full-history search reads Apple's chat.db directly, outside the
+      // BlueBubbles seam entirely. homedir() is already redirected, but an
+      // inherited CHATDB_PATH would point the fixture server at real history.
+      CHATDB_PATH: join(scratch, "no-chatdb"),
       AI_VAULT_PATH: join(scratch, "vault"),
       AI_CCS_BIN: join(scratch, "no-ccs"),
       WHISPER_WORK_DIR: join(scratch, "whisper"),
@@ -132,7 +183,7 @@ export async function startFixtureServer(port: number): Promise<FixtureServer> {
   };
 
   try {
-    await waitForHealth(baseUrl, 30_000);
+    await waitForHealth(baseUrl, 30_000, server.exited);
     await applyOverlay(baseUrl);
   } catch (error) {
     await log.flush();

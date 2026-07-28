@@ -13,7 +13,6 @@
  * Unresponded but already read, so nothing on screen changes because of it.
  */
 import type { Browser, BrowserContext, Page } from "@playwright/test";
-import { FIXTURE_DM_THREAD_GUID, FIXTURE_GROUP_THREAD_GUID } from "../server/render-fixture";
 
 export const DESKTOP_VIEWPORT = { width: 1440, height: 900 } as const;
 export const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;
@@ -22,6 +21,20 @@ export const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;
 const GROUP_THREAD_NAME = "Cabin weekend 🏔";
 const DM_THREAD_NAME = "Priya Raghunathan";
 const READ_UNRESPONDED_NAME = "Dmitri Volkov";
+
+/**
+ * A message from the MIDDLE of each thread a capture opens.
+ *
+ * Deliberately not the last message: that one also renders in the sidebar row's
+ * preview, so waiting on it would resolve against the list and prove nothing
+ * about the thread pane. An older message exists only once the thread has
+ * loaded its history, which is exactly the claim each thread capture makes.
+ */
+const HISTORY_BUBBLE = {
+  group: "shellfish, but I'll just eat around it",
+  dm: "any thoughts? they want it back by friday",
+  readUnresponded: "arrived this morning, wrong size",
+} as const;
 
 type Lens = "All" | "Unread" | "Unresponded" | "Waiting" | "Archived";
 
@@ -74,10 +87,23 @@ async function selectLens(page: Page, lens: Lens): Promise<void> {
   await settle(page);
 }
 
-/** Opens a conversation by its fixture display name and waits for the composer. */
-async function openThread(page: Page, name: string): Promise<void> {
+/**
+ * Opens a conversation by its fixture display name and waits for it to have
+ * actually rendered.
+ *
+ * The composer mounts independently of the message fetch, so waiting on it
+ * alone would let a shutter fire over an empty thread pane — the exact "a
+ * picture got taken, so it must be right" failure. Each caller therefore names
+ * a message it expects to see, and the bubble is the readiness signal.
+ */
+async function openThread(page: Page, name: string, expectedBubble: string): Promise<void> {
   await page.getByText(name, { exact: false }).first().click();
   await page.getByPlaceholder(/^(iMessage|Text Message)$/).first().waitFor({ timeout: 20_000 });
+  await page
+    .getByText(expectedBubble, { exact: false })
+    .filter({ visible: true })
+    .first()
+    .waitFor({ timeout: 20_000 });
   await settle(page);
 }
 
@@ -129,7 +155,7 @@ export async function captureAll(context: ShotContext): Promise<Shot[]> {
 
   // Open a read-but-unanswered conversation so the right pane is never the
   // "Select a conversation" placeholder, without spending anyone's unread badge.
-  await openThread(desktopPage, READ_UNRESPONDED_NAME);
+  await openThread(desktopPage, READ_UNRESPONDED_NAME, HISTORY_BUBBLE.readUnresponded);
 
   await shoot(desktopPage, "desktop-01-unresponded", "Split pane, default Unresponded lens — the conversations that owe a reply, with unread badges intact", DESKTOP_VIEWPORT, "light");
 
@@ -159,7 +185,7 @@ export async function captureAll(context: ShotContext): Promise<Shot[]> {
   const darkPage = await desktopDark.newPage();
   await darkPage.goto("/", { waitUntil: "domcontentloaded" });
   await waitForDirectory(darkPage);
-  await openThread(darkPage, READ_UNRESPONDED_NAME);
+  await openThread(darkPage, READ_UNRESPONDED_NAME, HISTORY_BUBBLE.readUnresponded);
   await shoot(darkPage, "desktop-07-dark", "Same split pane in dark mode — the app follows the system scheme", DESKTOP_VIEWPORT, "dark");
   await desktopDark.close();
 
@@ -189,7 +215,7 @@ export async function captureAll(context: ShotContext): Promise<Shot[]> {
 
   // ------------------------------------------------------------ open threads
   // Last, because opening these spends their unread badges.
-  await openThread(mobilePage, GROUP_THREAD_NAME);
+  await openThread(mobilePage, GROUP_THREAD_NAME, HISTORY_BUBBLE.group);
   await shoot(mobilePage, "mobile-06-thread-group", `Thread pushed over the list: the ${GROUP_THREAD_NAME} group, multiple senders, tapbacks folded onto their targets`, MOBILE_VIEWPORT, "light");
   await mobile.close();
 
@@ -197,12 +223,9 @@ export async function captureAll(context: ShotContext): Promise<Shot[]> {
   const threadPage = await desktopThread.newPage();
   await threadPage.goto("/", { waitUntil: "domcontentloaded" });
   await waitForDirectory(threadPage);
-  await openThread(threadPage, DM_THREAD_NAME);
+  await openThread(threadPage, DM_THREAD_NAME, HISTORY_BUBBLE.dm);
   await shoot(threadPage, "desktop-08-thread-dm", `Desktop split pane with the ${DM_THREAD_NAME} DM open — list and thread side by side`, DESKTOP_VIEWPORT, "light");
   await desktopThread.close();
 
   return shots;
 }
-
-/** Guids the shot list depends on; exported so the entry point can assert them. */
-export const REQUIRED_THREADS = [FIXTURE_GROUP_THREAD_GUID, FIXTURE_DM_THREAD_GUID] as const;

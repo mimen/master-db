@@ -37,9 +37,8 @@ function isExecutable(filePath: string): boolean {
 }
 
 /**
- * Newest cached Chromium executable. Prefers full Chromium over the headless
- * shell at the same revision — the shell cannot take full-page screenshots of
- * some composited layers, and the render lane leans on screenshots entirely.
+ * Newest cached Chromium executable, full Chromium preferred over the headless
+ * shell when both are present at the same revision.
  */
 export function findChromiumExecutable(): string {
   if (!existsSync(CACHE_ROOT)) {

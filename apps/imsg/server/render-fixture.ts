@@ -51,6 +51,13 @@ export const FIXTURE_ARCHIVED_GUIDS = [
 export const FIXTURE_GROUP_THREAD_GUID = "iMessage;+;fixture-trip";
 /** The DM the mobile capture pushes to, proving the list-then-thread stack. */
 export const FIXTURE_DM_THREAD_GUID = "iMessage;-;+15555550142";
+/**
+ * The DM the list captures open so the desktop right pane is never the "Select
+ * a conversation" placeholder. Load-bearing that it carries NOTHING unread:
+ * opening a chat marks it read, so anything else here would silently cost a
+ * badge in every list capture that follows.
+ */
+export const FIXTURE_READ_UNRESPONDED_GUID = "iMessage;-;+15555550118";
 
 function contactOf(person: Person): BBContact {
   return {
