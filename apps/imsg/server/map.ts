@@ -7,9 +7,17 @@ import { formatAddress } from "../shared/address";
 import type { CrmData, NameSource } from "./name-resolver";
 
 /** SMS (green bubble) messages come over a non-iMessage service. */
-function messageService(m: BBMessage): "iMessage" | "SMS" {
-  const svc = (m.handle?.service ?? "").toUpperCase();
-  return svc === "SMS" || svc === "RCS" ? "SMS" : "iMessage";
+function messageService(
+  m: BBMessage,
+  chatGuid?: string,
+  sourceChatGuid?: string,
+): "iMessage" | "SMS" {
+  const rawChatGuid = sourceChatGuid ?? m.chats?.[0]?.guid ?? chatGuid;
+  const chatService = rawChatGuid?.split(";", 1)[0]?.toUpperCase();
+  if (chatService === "SMS" || chatService === "RCS") return "SMS";
+  if (chatService === "IMESSAGE") return "iMessage";
+  const handleService = (m.handle?.service ?? "").toUpperCase();
+  return handleService === "SMS" || handleService === "RCS" ? "SMS" : "iMessage";
 }
 
 /** Detects rich (non-plain-text) payloads by their app balloon bundle id. */
@@ -150,6 +158,7 @@ export function mapMessage(
   chatGuid: string,
   contacts: NameSource,
   participants: readonly BBHandle[] = [],
+  sourceChatGuid?: string,
 ): Message {
   const text = isTapback(m) ? summarizeLast(m) : cleanText(m);
   return {
@@ -163,7 +172,7 @@ export function mapMessage(
     dateRead: m.dateRead ?? null,
     dateDelivered: m.dateDelivered ?? null,
     isFromMe: m.isFromMe === true,
-    service: messageService(m),
+    service: messageService(m, chatGuid, sourceChatGuid),
     sender: sender(m, contacts, participants),
     attachments: (m.attachments ?? [])
       .filter((a) => a.guid && !a.hideAttachment)

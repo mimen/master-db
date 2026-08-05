@@ -15,8 +15,8 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
 
 ## The Mini serves TWO things — and they read from DIFFERENT sources
 
-1. **Web / dock app** (`com.milad.imsg`, port 8377): serves the built `client/dist/`.
-   Updated by shipping a fresh `dist/`.
+1. **Web / dock app** (`com.milad.imsg`, loopback port 8377): serves the built `client/dist/`.
+   Tailscale Serve exposes it at HTTPS port 8447. Updated by shipping a fresh `dist/`.
 2. **Native / Expo Go** (`com.milad.imsg-expo`, port 8081): the Expo dev server bundles
    from the **`client/src` source tree on the Mini**. Updated only by **`git pull` on the
    Mini** — an rsync of `dist/` does NOT touch it.
@@ -43,6 +43,7 @@ ssh macmini 'export PATH="$HOME/.bun/bin:$PATH" && cd ~/Programming/Repos/master
   && git checkout -- apps/imsg/client/bun.lock apps/imsg/bun.lock 2>/dev/null; git pull \
   && cd apps/imsg/client && bun install \
   && cd ~/Programming/Repos/master-db \
+  && /Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg --yes --https=8447 http://127.0.0.1:8377 \
   && launchctl kickstart -k gui/$(id -u)/com.milad.imsg \
   && launchctl kickstart -k gui/$(id -u)/com.milad.imsg-expo'
 ```
@@ -51,15 +52,16 @@ Then **shake → Reload in Expo Go** (native) / hard-refresh or re-add the PWA (
 
 ## Verify after deploy
 
-- API: `curl -s http://Milads-Mac-mini:8377/api/health` → `{"ok":true,"privateApi":true}`
+- Local API: `ssh macmini 'curl -s http://127.0.0.1:8377/api/health'` → `{"ok":true,"privateApi":true}`
+- Tailnet API: `curl -s https://milads-mac-mini.taild31e9a.ts.net:8447/api/health` → the same response
+- Listener: `ssh macmini 'lsof -nP -iTCP:8377 -sTCP:LISTEN'` → `127.0.0.1:8377`, never `*:8377`
 - Expo bundle: `curl -s -H "expo-platform: ios" http://Milads-Mac-mini:8081` → JSON with `runtimeVersion: exposdk:54.0.0`
-- URLs: `http://milads-mac-mini:8377` (web), `https://milads-mac-mini.taild31e9a.ts.net:8445`
-  (tailnet HTTPS — needed for PWA install + dock badge), `exp://milads-mac-mini:8081` (Expo Go).
+- URLs: `https://milads-mac-mini.taild31e9a.ts.net:8447` (web/PWA/API), `exp://milads-mac-mini:8081` (Expo Go).
 
 ## Gotchas
 
 - **`.env` is NOT in the checkout** (gitignored). Local server runs need
-  `BB_URL/BB_PASSWORD/PORT/DB_PATH`; full-history search also needs
+  `BB_URL/BB_PASSWORD/HOST/PORT/DB_PATH`; keep `HOST=127.0.0.1`. Full-history search also needs
   `CHATDB_PATH=$HOME/Library/Messages/chat.db`. The Mini's `apps/imsg/.env` has them.
 - **Overlay DB (`imsg.db`) and `.cache/avatars/`** hold pins/archives/dismissals and
   contact photos — carry them on any checkout move; never commit them.

@@ -102,6 +102,31 @@ describe("mapChat CRM inheritance", () => {
 });
 
 
+describe("message service mapping", () => {
+  const source = fakeNameSource({});
+
+  test("keeps an SMS sibling message green under an iMessage canonical chat", () => {
+    const message = mapMessage({
+      guid: "sms-1",
+      text: "green",
+      isFromMe: true,
+      chats: [{ guid: "SMS;-;+15550001111" }],
+    }, "iMessage;-;+15550001111", source);
+    expect(message.chatGuid).toBe("iMessage;-;+15550001111");
+    expect(message.service).toBe("SMS");
+  });
+
+  test("keeps an iMessage sibling blue under an SMS canonical chat", () => {
+    const message = mapMessage({
+      guid: "imessage-1",
+      text: "blue",
+      isFromMe: true,
+    }, "SMS;-;+15550001111", source, [], "iMessage;-;+15550001111");
+    expect(message.chatGuid).toBe("SMS;-;+15550001111");
+    expect(message.service).toBe("iMessage");
+  });
+});
+
 describe("inbound mention metadata", () => {
   test("maps BlueBubbles attributed-body mention runs onto message text", () => {
     const source = fakeNameSource({});

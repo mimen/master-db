@@ -21,6 +21,45 @@ describe("FakeBlueBubbles parity behavior", () => {
     expect(bb.sentAttributedBodies).toEqual([{ chatGuid: "group", attributedBody: body }]);
   });
 
+  test("returns one exact message with its reactions", async () => {
+    const target = {
+      guid: "message-1",
+      text: "Hello",
+      dateCreated: 100,
+      isFromMe: true,
+    };
+    const reaction = {
+      guid: "reaction-1",
+      associatedMessageGuid: "p:0/message-1",
+      associatedMessageType: 2000,
+      dateCreated: 101,
+      isFromMe: false,
+    };
+    const bb = new FakeBlueBubbles({
+      chats: [{ guid: "chat-1", messages: [target, reaction] }],
+    });
+
+    const result = await bb.messageWithReactions("message-1");
+
+    expect(result.ok && result.value.map((message) => message.guid)).toEqual([
+      "message-1",
+      "reaction-1",
+    ]);
+    expect(bb.calls.messageWithReactions).toBe(1);
+  });
+
+  test("creates a chat with the exact sent message", async () => {
+    const bb = new FakeBlueBubbles({ chats: [] });
+
+    const result = await bb.createChat(["+15550001111"], "New thread");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.guid).toBe("iMessage;-;+15550001111");
+    expect(result.value.lastMessage?.text).toBe("New thread");
+    expect(result.value.lastMessage?.isFromMe).toBe(true);
+  });
+
   test("supports schedule create, update, list, and delete", async () => {
     const bb = new FakeBlueBubbles({ chats: [] });
     const created = await bb.createScheduledMessage("group", "first", 10_000);

@@ -6,6 +6,14 @@ import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
 import type { ChatSummary, Message } from "../shared/types";
+import { sameSendAddress } from "./message-verification";
+
+export interface ChatLookup {
+  chatGuid: string;
+  service: "iMessage" | "SMS";
+  isGroup: false;
+  participants: [string];
+}
 
 /** Emitted whenever a mutation invalidates the directory; clients refetch. */
 export type DirectoryEvent = { kind: "changed" };
@@ -355,7 +363,13 @@ export class ChatDirectory {
     }
     // Live events arrive on the raw per-service chat; patch the merged entry.
     const canonical = this.canonicalGuid(chatGuid);
-    const mapped = mapMessage(message, canonical, this.names, this.participantHandlesFor(chatGuid));
+    const mapped = mapMessage(
+      message,
+      canonical,
+      this.names,
+      this.participantHandlesFor(chatGuid),
+      chatGuid,
+    );
     this.patchUnreadSummary(canonical, mapped);
     this.patchSummaries(canonical, mapped);
     return mapped;
@@ -372,6 +386,7 @@ export class ChatDirectory {
       canonical,
       this.names,
       this.participantHandlesFor(chatGuid),
+      chatGuid,
     );
     this.rememberRealtimeSpam(canonical, mapped);
     return mapped;
@@ -434,20 +449,35 @@ export class ChatDirectory {
     return { ok: true };
   }
 
-  async findByAddress(address: string): Promise<string | null> {
+  async findByAddress(
+    address: string,
+    preferredService?: "iMessage",
+  ): Promise<ChatLookup | null> {
     const result = await this.summaries();
     if (!result.ok) return null;
-    const digits = address.replace(/\D/g, "");
-    const matches = (candidate: string) => {
-      if (candidate === address || candidate.toLowerCase() === address.toLowerCase()) return true;
-      const candidateDigits = candidate.replace(/\D/g, "");
-      return (
-        digits.length >= 7 && candidateDigits.length >= 7 && candidateDigits.slice(-10) === digits.slice(-10)
-      );
-    };
     const chat = result.chats.find(
-      (x) => !x.isGroup && x.participants.some((p) => matches(p.address)),
+      (candidate) =>
+        !candidate.isGroup &&
+        candidate.participants.length === 1 &&
+        sameSendAddress(candidate.participants[0]?.address ?? "", address),
     );
-    return chat ? chat.guid : null;
+    const participant = chat?.participants[0]?.address;
+    if (!chat || !participant) return null;
+    const chatGuid = preferredService
+      ? this.siblingGuids(chat.guid).find((guid) => {
+          const handles = this.participantHandlesFor(guid);
+          return /^iMessage;-;/i.test(guid) &&
+            handles.length === 1 &&
+            sameSendAddress(handles[0]?.address ?? "", address);
+        })
+      : chat.guid;
+    if (!chatGuid) return null;
+    const selectedParticipant = this.participantHandlesFor(chatGuid)[0]?.address ?? participant;
+    return {
+      chatGuid,
+      service: /^iMessage;/i.test(chatGuid) ? "iMessage" : "SMS",
+      isGroup: false,
+      participants: [selectedParticipant],
+    };
   }
 }
