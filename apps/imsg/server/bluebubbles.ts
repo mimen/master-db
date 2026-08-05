@@ -9,6 +9,11 @@ import type {
   BBScheduledMessage,
   BBServerInfo,
 } from "./bb-types";
+import {
+  createdChatError,
+  outboundAddressesError,
+  selectCreatedChatMessage,
+} from "./message-verification";
 import { scheduledMessageRequest } from "./scheduled";
 
 export type Result<T, E = string> = { ok: true; value: T } | { ok: false; error: E };
@@ -43,6 +48,7 @@ export interface BlueBubbles {
     offset: number;
     unreadInboundOnly?: boolean;
   }): Promise<Result<BBMessage[]>>;
+  messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>>;
   sendText(
     chatGuid: string,
     message: string,
@@ -247,6 +253,30 @@ export class BlueBubblesClient implements BlueBubbles {
     });
   }
 
+  async messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>> {
+    const [message, reactions] = await Promise.all([
+      this.get<BBMessage>(`/api/v1/message/${messageGuid}`, {
+        with: "attachment,handle,chat,message.attributedBody",
+      }),
+      this.post<BBMessage[]>("/api/v1/message/query", {
+        limit: 100,
+        offset: 0,
+        sort: "DESC",
+        with: ["handle"],
+        where: [
+          {
+            statement:
+              "message.associatedMessageGuid = :guid OR message.associatedMessageGuid LIKE :partGuid",
+            args: { guid: messageGuid, partGuid: `%/${messageGuid}` },
+          },
+        ],
+      }),
+    ]);
+    if (!message.ok) return message;
+    if (!reactions.ok) return reactions;
+    return { ok: true, value: [message.value, ...reactions.value] };
+  }
+
   sendText(
     chatGuid: string,
     message: string,
@@ -309,15 +339,25 @@ export class BlueBubblesClient implements BlueBubbles {
     });
   }
 
-  createChat(addresses: string[], message: string): Promise<Result<BBChat>> {
-    return this.post<BBChat>("/api/v1/chat/new", {
+  async createChat(addresses: string[], message: string): Promise<Result<BBChat>> {
+    const addressesError = outboundAddressesError(addresses);
+    if (addressesError) return { ok: false, error: addressesError };
+    const clientGuid = tempGuid();
+    const result = await this.post<BBChat>("/api/v1/chat/new", {
       addresses,
       message,
+      tempGuid: clientGuid,
       // AppleScript can only create 1:1 chats on modern macOS — group
       // creation requires the private API. Use it whenever available.
       method: this.sendMethod(),
       service: "iMessage",
     });
+    if (!result.ok) return result;
+    const sent = selectCreatedChatMessage(result.value, clientGuid, message);
+    if (!sent) return { ok: false, error: "create-chat response did not include the exact sent message" };
+    const validationError = createdChatError(result.value, addresses, sent);
+    if (validationError) return { ok: false, error: validationError };
+    return { ok: true, value: { ...result.value, lastMessage: sent } };
   }
 
   private async sendAttachmentForm(

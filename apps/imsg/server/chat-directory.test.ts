@@ -793,3 +793,85 @@ describe("MessageSearch", () => {
     expect(results.length).toBe(50);
   });
 });
+
+describe("ChatDirectory.findByAddress", () => {
+  test("selects an iMessage sibling even when SMS is the merged primary", async () => {
+    const address = "+15550001111";
+    const smsGuid = `SMS;-;${address}`;
+    const { directory } = await setup([
+      {
+        guid: CHAT_A,
+        participants: [{ address, service: "iMessage" }],
+        messages: [inbound("imessage-1", 1000, "blue", address)],
+      },
+      {
+        guid: smsGuid,
+        participants: [{ address, service: "SMS" }],
+        messages: [inbound("sms-1", 2000, "green", address)],
+      },
+    ]);
+
+    expect(await directory.findByAddress(address)).toEqual({
+      chatGuid: smsGuid,
+      service: "SMS",
+      isGroup: false,
+      participants: [address],
+    });
+    expect(await directory.findByAddress(address, "iMessage")).toEqual({
+      chatGuid: CHAT_A,
+      service: "iMessage",
+      isGroup: false,
+      participants: [address],
+    });
+  });
+
+  test("returns null when no iMessage sibling exists", async () => {
+    const address = "+15550001111";
+    const smsGuid = `SMS;-;${address}`;
+    const { directory } = await setup([
+      {
+        guid: smsGuid,
+        participants: [{ address, service: "SMS" }],
+        messages: [inbound("sms-1", 2000, "green", address)],
+      },
+    ]);
+
+    expect(await directory.findByAddress(address, "iMessage")).toBeNull();
+  });
+
+  test("does not suffix-match a different international recipient", async () => {
+    const requested = "+15550001111";
+    const collision = "+445550001111";
+    const collisionGuid = `iMessage;-;${collision}`;
+    const { directory } = await setup([
+      {
+        guid: collisionGuid,
+        participants: [{ address: collision, service: "iMessage" }],
+        messages: [inbound("collision-1", 2000, "wrong person", collision)],
+      },
+    ]);
+
+    expect(await directory.findByAddress(requested, "iMessage")).toBeNull();
+  });
+
+  test("does not select an international iMessage collision merged under the requested SMS chat", async () => {
+    const requested = "+15550001111";
+    const collision = "+445550001111";
+    const smsGuid = `SMS;-;${requested}`;
+    const collisionGuid = `iMessage;-;${collision}`;
+    const { directory } = await setup([
+      {
+        guid: smsGuid,
+        participants: [{ address: requested, service: "SMS" }],
+        messages: [inbound("sms-primary", 2000, "right person", requested)],
+      },
+      {
+        guid: collisionGuid,
+        participants: [{ address: collision, service: "iMessage" }],
+        messages: [inbound("imessage-collision", 1000, "wrong person", collision)],
+      },
+    ]);
+
+    expect(await directory.findByAddress(requested, "iMessage")).toBeNull();
+  });
+});

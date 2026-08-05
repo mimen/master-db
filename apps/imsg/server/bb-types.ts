@@ -39,6 +39,7 @@ export interface BBChat {
   displayName?: string | null;
   participants?: BBHandle[];
   lastMessage?: BBMessage | null;
+  messages?: BBMessage[];
   properties?: BBChatProperties[];
 }
 
@@ -85,6 +86,7 @@ export interface BBScheduledMessageRequest {
 
 export interface BBMessage {
   guid: string;
+  tempGuid?: string | null;
   text?: string | null;
   subject?: string | null;
   dateCreated?: number;

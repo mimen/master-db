@@ -1,8 +1,7 @@
 # imsg
 
 Self-hosted iMessage web client backed by a [BlueBubbles](https://bluebubbles.app) server.
-Runs on the Mac Mini, reachable on the tailnet only. Responsive PWA: split-pane on
-desktop, list→thread on mobile.
+Runs on the Mac Mini. The Bun server binds to loopback, and Tailscale Serve exposes it to the tailnet at `https://milads-mac-mini.taild31e9a.ts.net:8447`. Responsive PWA: split-pane on desktop, list→thread on mobile.
 
 ## Features
 
@@ -35,7 +34,7 @@ bun install
 cp .env.example .env                 # set server values, including BB_PASSWORD
 cp client/.env.example client/.env   # set both required Expo public values
 bun run build                        # exports the Expo web app to client/dist/
-bun start                            # serves app + API on :8377
+bun start                            # serves app + API on 127.0.0.1:8377
 ```
 
 Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo dev server
@@ -47,6 +46,7 @@ Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo
 |---|---|---|
 | `BB_URL` | `http://localhost:1234` | BlueBubbles server |
 | `BB_PASSWORD` | — | required |
+| `HOST` | `127.0.0.1` | Keep loopback-only; remote access goes through Tailscale Serve |
 | `PORT` | `8377` | |
 | `DB_PATH` | `imsg.db` | overlay SQLite |
 | `CONVEX_CLOUD_URL` | — | optional identity mirror and CRM deployment URL |
@@ -64,3 +64,13 @@ The Expo client reads a separate `client/.env` when exporting web or starting Me
 
 Both client values are embedded in the bundle. The identity key is a coarse shared gate,
 not a confidential browser secret. Builds fail before export when either value is absent.
+
+## Network boundary
+
+The API has no application-level authentication. Keep `HOST=127.0.0.1` and expose it only through Tailscale Serve:
+
+```sh
+/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg --yes --https=8447 http://127.0.0.1:8377
+```
+
+Clients use `https://milads-mac-mini.taild31e9a.ts.net:8447`. Port 8377 must not listen on LAN or tailnet interfaces.

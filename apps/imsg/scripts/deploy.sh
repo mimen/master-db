@@ -99,6 +99,11 @@ bun scripts/post-export.ts
 
 cd "$REPO_DIR"
 
+echo "== Configuring tailnet HTTPS =="
+TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+IMSG_TAILNET_URL="${IMSG_TAILNET_URL:-https://milads-mac-mini.taild31e9a.ts.net:8447}"
+"$TAILSCALE_BIN" serve --bg --yes --https=8447 http://127.0.0.1:8377
+
 echo "== Restarting imsg server =="
 launchctl kickstart -k "gui/$(id -u)/com.milad.imsg"
 # Metro caches its file map — a new source DIRECTORY is invisible to a
@@ -109,10 +114,16 @@ sleep 3
 echo "== Health check =="
 launchctl print "gui/$(id -u)/com.milad.imsg" | grep -E "state|pid"
 PORT="${IMSG_PORT:-8377}"
-STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:${PORT}/")
-echo "imsg http status: ${STATUS}"
+STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "http://127.0.0.1:${PORT}/api/health")
+echo "imsg local health status: ${STATUS}"
 if [ "$STATUS" != "200" ]; then
-  echo "health check failed"
+  echo "local health check failed"
+  exit 1
+fi
+TAILNET_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${IMSG_TAILNET_URL}/api/health")
+echo "imsg tailnet health status: ${TAILNET_STATUS}"
+if [ "$TAILNET_STATUS" != "200" ]; then
+  echo "tailnet health check failed"
   exit 1
 fi
 echo "Deploy OK: $(git rev-parse --short HEAD)"

@@ -1,6 +1,7 @@
 export interface Config {
   bbUrl: string;
   bbPassword: string;
+  hostname: string;
   port: number;
   dbPath: string;
   /** Convex .convex.site URL for the identity-graph ingest route. Optional — contact sync is skipped if unset. */
@@ -52,6 +53,14 @@ export interface AiConfig {
   shadowCwd: string;
 }
 
+function loopbackHostname(): string {
+  const hostname = Bun.env.HOST || "127.0.0.1";
+  if (!["127.0.0.1", "::1", "localhost"].includes(hostname)) {
+    throw new Error("HOST must be a loopback hostname because the imsg API has no application authentication");
+  }
+  return hostname;
+}
+
 function required(name: string): string {
   const value = Bun.env[name];
   if (!value) {
@@ -82,6 +91,7 @@ export function loadConfig(): Config {
   return {
     bbUrl: (Bun.env.BB_URL ?? "http://localhost:1234").replace(/\/$/, ""),
     bbPassword: required("BB_PASSWORD"),
+    hostname: loopbackHostname(),
     port: Number(Bun.env.PORT ?? 8377),
     dbPath: Bun.env.DB_PATH ?? "imsg.db",
     convexSiteUrl: Bun.env.CONVEX_SITE_URL?.replace(/\/$/, "") ?? null,

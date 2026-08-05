@@ -11,6 +11,12 @@ import { GroupPhotos } from "./group-photos";
 import { IdentityMirror } from "./identity-mirror";
 import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
+import {
+  createdChatError,
+  messageBelongsToAnyChat,
+  outboundAddressesError,
+  outboundTextError,
+} from "./message-verification";
 import { NameResolver } from "./name-resolver";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
@@ -253,6 +259,25 @@ app.get("/api/chats/:guid/messages", async (c) => {
   return c.json(buildThread([...merged.values()], chatGuid, names));
 });
 
+app.get("/api/chats/:guid/messages/:messageGuid", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const messageGuid = c.req.param("messageGuid");
+  if (messageGuid.includes("/") || messageGuid.includes("..")) {
+    return c.json({ error: "invalid message GUID" }, 400);
+  }
+  const result = await bb.messageWithReactions(messageGuid);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  await directory.summaries();
+  const rawMessage = result.value.find((candidate) => candidate.guid === messageGuid);
+  if (!rawMessage || !messageBelongsToAnyChat(rawMessage, [chatGuid])) {
+    return c.json({ error: "message not found in chat" }, 404);
+  }
+  const message = buildThread(result.value, chatGuid, names).find(
+    (candidate) => candidate.guid === messageGuid,
+  );
+  return message ? c.json(message) : c.json({ error: "message not found" }, 404);
+});
+
 app.get("/api/avatars/:address", async (c) => {
   const address = c.req.param("address");
   const headers = { "Cache-Control": "private, max-age=3600" };
@@ -321,7 +346,8 @@ app.post("/api/chats/:guid/send", async (c) => {
     replyToPart?: number;
     mentions?: MentionAnnotation[];
   };
-  if (!body.text?.trim()) return c.json({ error: "empty message" }, 400);
+  const textError = outboundTextError(body.text);
+  if (textError) return c.json({ error: textError }, 400);
 
   let attributedBody: BBAttributedBody | undefined;
   if (body.mentions && body.mentions.length > 0 && bb.hasPrivateApi && /^iMessage;/i.test(chatGuid)) {
@@ -447,12 +473,15 @@ app.post("/api/messages/:guid/react", async (c) => {
 
 app.get("/api/chats/find", async (c) => {
   const address = c.req.query("address") ?? "";
+  const service = c.req.query("service");
   if (!address) return c.json({ error: "address required" }, 400);
-  const result = await directory.summaries();
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  const chatGuid = await directory.findByAddress(address);
-  if (!chatGuid) return c.json({ error: "no conversation" }, 404);
-  return c.json({ chatGuid });
+  if (service && service !== "iMessage") return c.json({ error: "unsupported service" }, 400);
+  const preferredService = service === "iMessage" ? "iMessage" : undefined;
+  const summaries = await directory.summaries();
+  if (!summaries.ok) return c.json({ error: summaries.error }, 502);
+  const chat = await directory.findByAddress(address, preferredService);
+  if (!chat) return c.json({ error: "no conversation" }, 404);
+  return c.json(chat);
 });
 
 app.post("/api/messages/:guid/unsend", async (c) => {
@@ -516,13 +545,31 @@ app.get("/api/contacts", async (c) => {
 
 app.post("/api/chats/new", async (c) => {
   const body = (await c.req.json()) as { addresses: string[]; text: string };
-  if (!body.addresses?.length || !body.text?.trim()) {
-    return c.json({ error: "addresses and text required" }, 400);
+  const textError = outboundTextError(body.text);
+  const addressesError = outboundAddressesError(body.addresses ?? []);
+  if (addressesError || textError) {
+    return c.json({ error: textError ?? addressesError }, 400);
   }
   const result = await bb.createChat(body.addresses, body.text);
   if (!result.ok) return c.json({ error: result.error }, 502);
+  const sent = result.value.lastMessage;
+  if (!sent) return c.json({ error: "created chat has no sent message" }, 502);
+  const chatError = createdChatError(result.value, body.addresses, sent);
+  if (chatError) return c.json({ error: chatError }, 502);
+  const participants = result.value.participants ?? [];
+  const message = mapMessage(sent, result.value.guid, names, participants);
+  if (!message.isFromMe || message.text !== body.text || message.service !== "iMessage" || message.error !== 0) {
+    return c.json({ error: "created chat returned an invalid sent message" }, 502);
+  }
+  directory.applyKnownMessage(result.value.guid, message);
   broadcast({ kind: "chats-changed" });
-  return c.json({ chatGuid: result.value.guid });
+  return c.json({
+    chatGuid: result.value.guid,
+    service: "iMessage",
+    isGroup: body.addresses.length > 1,
+    participants: participants.map((participant) => participant.address),
+    message,
+  });
 });
 
 app.get("/api/search", async (c) => {
@@ -932,9 +979,10 @@ app.use("/*", serveStatic({ root: "./client/dist" }));
 app.get("*", serveStatic({ path: "./client/dist/index.html" }));
 
 export default {
+  hostname: config.hostname,
   port: config.port,
   idleTimeout: 120,
   fetch: app.fetch,
 };
 
-console.log(`imsg server on :${config.port}`);
+console.log(`imsg server on ${config.hostname}:${config.port}`);

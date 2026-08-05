@@ -36,8 +36,8 @@ scaffold the whole thing before the spike passes.
 ## Current state you're building on
 
 - Web app is deployed and served from the Mac Mini:
-  - `https://milads-mac-mini.taild31e9a.ts.net:8445` (tailnet HTTPS — use this)
-  - `http://milads-mac-mini:8377` (LAN HTTP)
+  - `https://milads-mac-mini.taild31e9a.ts.net:8447` (tailnet HTTPS — use this)
+  - The underlying `127.0.0.1:8377` listener is local-only and not a client URL.
 - The API + BlueBubbles run **on the Mini**, same origin as the served web app.
 - **Keyboard layer already built** in `client/src/app/(tabs)/index.tsx` (the
   `onKey` handler). It's **⌘-based** (the composer is almost always focused, so
@@ -54,7 +54,7 @@ the web app changes — it just loads the latest. The API is same-origin, so no
 CORS work.
 
 ```
-Tauri window → loads https://milads-mac-mini.taild31e9a.ts.net:8445
+Tauri window → loads https://milads-mac-mini.taild31e9a.ts.net:8447
 Native menu (Rust) → on ⌘N/⌘F/⌘W → window.emit("imsg-shortcut", "<name>")
 Web app → listens for "imsg-shortcut" → runs the same action as the keydown
 ```

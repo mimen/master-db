@@ -47,7 +47,7 @@ export class FakeBlueBubbles implements BlueBubbles {
   private seq = 0;
 
   /** Per-method call counters so tests can assert the reactive path avoids rebuilds. */
-  readonly calls = { queryChats: 0, queryMessages: 0, chatMessages: 0 };
+  readonly calls = { queryChats: 0, queryMessages: 0, chatMessages: 0, messageWithReactions: 0 };
   /** Chat GUIDs passed to markRead, in order. */
   readonly markReadCalls: string[] = [];
   /** Texts passed to sendText, in order. */
@@ -189,6 +189,18 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: true, value });
   }
 
+  messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>> {
+    this.calls.messageWithReactions++;
+    const messages = this.allMessages();
+    const target = messages.find((message) => message.guid === messageGuid);
+    if (!target) return Promise.resolve({ ok: false, error: "no such message" });
+    const reactions = messages.filter((message) => {
+      const associated = message.associatedMessageGuid?.replace(/^b?p:\d+\//, "");
+      return associated === messageGuid && Boolean(message.associatedMessageType);
+    });
+    return Promise.resolve({ ok: true, value: [target, ...reactions] });
+  }
+
   contacts(): Promise<Result<BBContact[]>> {
     return Promise.resolve({ ok: true, value: this.contactList });
   }
@@ -259,8 +271,20 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: false, error: "not implemented in fake" });
   }
 
-  createChat(): Promise<Result<BBChat>> {
-    return Promise.resolve({ ok: false, error: "not implemented in fake" });
+  async createChat(addresses: string[], message: string): Promise<Result<BBChat>> {
+    if (addresses.length === 0) return { ok: false, error: "no addresses" };
+    const guid =
+      addresses.length === 1
+        ? `iMessage;-;${addresses[0]}`
+        : `iMessage;+;fake-group-${++this.seq}`;
+    const participants = addresses.map((address) => ({ address, service: "iMessage" }));
+    this.chatMeta.set(guid, { displayName: null, participants });
+    const sent = await this.sendText(guid, message);
+    if (!sent.ok) return sent;
+    return {
+      ok: true,
+      value: { guid, participants, lastMessage: sent.value },
+    };
   }
 
   sendAudio(): Promise<Result<BBMessage>> {
