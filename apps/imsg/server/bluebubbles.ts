@@ -40,6 +40,7 @@ export interface BlueBubbles {
     offset: number;
     unreadInboundOnly?: boolean;
   }): Promise<Result<BBMessage[]>>;
+  messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>>;
   sendText(
     chatGuid: string,
     message: string,
@@ -231,6 +232,30 @@ export class BlueBubblesClient implements BlueBubbles {
           }
         : {}),
     });
+  }
+
+  async messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>> {
+    const [message, reactions] = await Promise.all([
+      this.get<BBMessage>(`/api/v1/message/${messageGuid}`, {
+        with: "attachment,handle,message.attributedBody",
+      }),
+      this.post<BBMessage[]>("/api/v1/message/query", {
+        limit: 100,
+        offset: 0,
+        sort: "DESC",
+        with: ["handle"],
+        where: [
+          {
+            statement:
+              "message.associatedMessageGuid = :guid OR message.associatedMessageGuid LIKE :partGuid",
+            args: { guid: messageGuid, partGuid: `%/${messageGuid}` },
+          },
+        ],
+      }),
+    ]);
+    if (!message.ok) return message;
+    if (!reactions.ok) return reactions;
+    return { ok: true, value: [message.value, ...reactions.value] };
   }
 
   sendText(

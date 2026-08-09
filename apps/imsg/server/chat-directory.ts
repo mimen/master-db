@@ -1,9 +1,13 @@
-import type { BBMessage } from "./bb-types";
+import type { BBChat, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
-import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
-import { mapChat, mapMessage, type UnreadSummary } from "./map";
+import {
+  applyMessage as applyMessageToSummaries,
+  computeFlags,
+  type ChatState,
+} from "../shared/chat-state";
+import { associatedMessageTargetGuid, mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { ChatSummary, Message } from "../shared/types";
 
 /** Emitted whenever a mutation invalidates the directory; clients refetch. */
@@ -12,11 +16,20 @@ export type DirectoryEvent = { kind: "changed" };
 const SUMMARY_TTL_MS = 15_000;
 const UNREAD_TTL_MS = 30_000;
 const UNREAD_PAGE_SIZE = 1000;
+const LAST_REAL_PAGE_SIZE = 20;
+const LAST_REAL_MAX_PAGES = 3;
+const LAST_REAL_CONCURRENCY = 8;
 
 interface RealtimeSpamOverride {
   messageGuid: string;
   dateCreated: number;
   isSpam: boolean;
+}
+
+interface ResolvedLastMessage {
+  rawLastGuid: string;
+  rawLastDate: number;
+  message: BBMessage;
 }
 
 /**
@@ -27,6 +40,9 @@ interface RealtimeSpamOverride {
  */
 export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
+  private resolvedLastMessages = new Map<string, ResolvedLastMessage>();
+  private lastMessageResolutions = new Map<string, Promise<BBMessage | null>>();
+  private realtimeLastMessages = new Map<string, Message>();
   private realtimeSpam = new Map<string, RealtimeSpamOverride>();
   private unreadScan: { at: number; summaries: Map<string, UnreadSummary> } = {
     at: 0,
@@ -153,6 +169,46 @@ export class ChatDirectory {
     });
   }
 
+  private rememberRealtimeLastMessage(chatGuid: string, message: Message): void {
+    const current = this.realtimeLastMessages.get(chatGuid);
+    if (!current || current.dateCreated <= message.dateCreated) {
+      this.realtimeLastMessages.set(chatGuid, message);
+    }
+  }
+
+  private applyRealtimeLastMessages(
+    chats: ChatSummary[],
+    states: Map<string, ChatState>,
+  ): ChatSummary[] {
+    let changed = false;
+    const result = chats.map((chat) => {
+      const message = this.realtimeLastMessages.get(chat.guid);
+      const current = chat.lastMessage;
+      if (!message) return chat;
+      if (current && (current.guid === message.guid || current.dateCreated > message.dateCreated)) {
+        this.realtimeLastMessages.delete(chat.guid);
+        return chat;
+      }
+      changed = true;
+      return {
+        ...chat,
+        isSpam: message.isSpam === true,
+        lastMessage: {
+          guid: message.guid,
+          text: message.text || (message.attachments.length > 0 ? "Attachment" : ""),
+          dateCreated: message.dateCreated,
+          isFromMe: message.isFromMe,
+          senderName: message.sender?.name ?? message.sender?.address ?? null,
+          hasAttachments: message.attachments.length > 0,
+        },
+        flags: computeFlags(states.get(chat.guid), message, chat.unreadCount),
+      };
+    });
+    return changed
+      ? result.sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0))
+      : chats;
+  }
+
   private rememberRealtimeSpam(chatGuid: string, message: Message): void {
     const current = this.realtimeSpam.get(chatGuid);
     if (!current || current.dateCreated <= message.dateCreated) {
@@ -181,6 +237,7 @@ export class ChatDirectory {
    * socket event; the next TTL rebuild reconciles fully.
    */
   private patchSummaries(chatGuid: string, m: Message): void {
+    this.rememberRealtimeLastMessage(chatGuid, m);
     this.rememberRealtimeSpam(chatGuid, m);
     if (!this.summaryCache) return;
     const result = applyMessageToSummaries(this.summaryCache.chats, chatGuid, m);
@@ -192,6 +249,88 @@ export class ChatDirectory {
     this.summaryCache = { at: this.summaryCache.at, chats: result };
   }
 
+  private forgetResolvedMessage(messageGuid: string): void {
+    for (const [chatGuid, resolved] of this.resolvedLastMessages) {
+      if (resolved.message.guid === messageGuid) this.resolvedLastMessages.delete(chatGuid);
+    }
+  }
+
+  private async findLastRealMessage(chatGuid: string): Promise<BBMessage | null> {
+    try {
+      let before: number | undefined;
+      for (let page = 0; page < LAST_REAL_MAX_PAGES; page++) {
+        const result = await this.bb.chatMessages(chatGuid, {
+          before,
+          limit: LAST_REAL_PAGE_SIZE,
+          sort: "DESC",
+        });
+        if (!result.ok) return null;
+        const resolved = result.value.find(
+          (message) => !associatedMessageTargetGuid(message) && !message.dateRetracted,
+        );
+        if (resolved) return resolved;
+        if (result.value.length < LAST_REAL_PAGE_SIZE) break;
+        const dates = result.value
+          .map((message) => message.dateCreated ?? 0)
+          .filter((date) => date > 0);
+        if (dates.length === 0) break;
+        before = Math.min(...dates);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async resolveLastMessage(chat: BBChat): Promise<BBChat> {
+    const rawLast = chat.lastMessage;
+    if (!rawLast || !associatedMessageTargetGuid(rawLast)) return chat;
+
+    const cached = this.resolvedLastMessages.get(chat.guid);
+    if (cached?.rawLastGuid === rawLast.guid) return { ...chat, lastMessage: cached.message };
+
+    let resolution = this.lastMessageResolutions.get(rawLast.guid);
+    if (!resolution) {
+      resolution = this.findLastRealMessage(chat.guid);
+      this.lastMessageResolutions.set(rawLast.guid, resolution);
+      void resolution.finally(() => {
+        if (this.lastMessageResolutions.get(rawLast.guid) === resolution) {
+          this.lastMessageResolutions.delete(rawLast.guid);
+        }
+      });
+    }
+    const resolved = await resolution;
+    if (!resolved) return chat;
+
+    const rawLastDate = rawLast.dateCreated ?? 0;
+    const current = this.resolvedLastMessages.get(chat.guid);
+    if (!current || current.rawLastDate <= rawLastDate) {
+      this.resolvedLastMessages.set(chat.guid, {
+        rawLastGuid: rawLast.guid,
+        rawLastDate,
+        message: resolved,
+      });
+    }
+    return { ...chat, lastMessage: resolved };
+  }
+
+  private async resolveLastMessages(chats: BBChat[]): Promise<BBChat[]> {
+    const resolved = [...chats];
+    let nextIndex = 0;
+    const workers = Array.from(
+      { length: Math.min(LAST_REAL_CONCURRENCY, chats.length) },
+      async () => {
+        while (nextIndex < chats.length) {
+          const index = nextIndex++;
+          const chat = chats[index];
+          if (chat) resolved[index] = await this.resolveLastMessage(chat);
+        }
+      },
+    );
+    await Promise.all(workers);
+    return resolved;
+  }
+
   async summaries(): Promise<{ ok: true; chats: ChatSummary[] } | { ok: false; error: string }> {
     if (this.summaryCache && this.now() - this.summaryCache.at < SUMMARY_TTL_MS) {
       return { ok: true, chats: this.summaryCache.chats };
@@ -200,8 +339,9 @@ export class ChatDirectory {
     if (!result.ok) return { ok: false, error: result.error };
     await this.contacts.refresh();
     const unread = await this.unreadCounts();
+    const sourceChats = await this.resolveLastMessages(result.value);
     const overlay = this.db.getAll();
-    let chats = result.value
+    let chats = sourceChats
       .map((chat) => {
         const state = overlay.get(chat.guid);
         const summary = mapChat(chat, state, this.contacts, unread.get(chat.guid));
@@ -216,6 +356,7 @@ export class ChatDirectory {
       })
       .filter((chat) => chat.lastMessage !== null)
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
+    chats = this.applyRealtimeLastMessages(chats, overlay);
     chats = this.applyRealtimeSpam(chats);
     this.summaryCache = { at: this.now(), chats };
     return { ok: true, chats };
@@ -232,6 +373,7 @@ export class ChatDirectory {
       this.clearCache();
       return null;
     }
+    if (associatedMessageTargetGuid(message)) return null;
     const mapped = mapMessage(message, chatGuid, this.contacts);
     this.patchUnreadSummary(chatGuid, mapped);
     this.patchSummaries(chatGuid, mapped);
@@ -240,6 +382,8 @@ export class ChatDirectory {
 
   /** Updated messages can remove unread eligibility, so rebuild instead of guessing. */
   applyUpdatedMessage(chatGuid: string | null, message: BBMessage): Message | null {
+    if (associatedMessageTargetGuid(message)) return null;
+    this.forgetResolvedMessage(message.guid);
     this.resetUnreadScan();
     this.clearCache();
     if (!chatGuid) return null;

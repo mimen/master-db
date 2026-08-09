@@ -263,46 +263,63 @@ describe("matchesFilters — state lenses", () => {
 });
 
 describe("matchesFilters — type lenses", () => {
-  test("dm excludes groups and unknown senders", () => {
-    expect(matchesFilters(makeChat({ isGroup: false, known: true }), "all", "dm")).toBe(true);
-    expect(matchesFilters(makeChat({ isGroup: true, known: true }), "all", "dm")).toBe(false);
-    expect(matchesFilters(makeChat({ isGroup: false, known: false }), "all", "dm")).toBe(false);
+  test("dm excludes groups and screened conversations", () => {
+    expect(matchesFilters(makeChat({ isGroup: false }), "all", "dm")).toBe(true);
+    expect(matchesFilters(makeChat({ isGroup: true }), "all", "dm")).toBe(false);
+    expect(matchesFilters(makeChat({ known: false }), "all", "dm")).toBe(false);
+    expect(matchesFilters(makeChat({ isSpam: true }), "all", "dm")).toBe(false);
   });
 
-  test("group requires a group", () => {
+  test("group requires a known, non-spam group", () => {
     expect(matchesFilters(makeChat({ isGroup: true }), "all", "group")).toBe(true);
     expect(matchesFilters(makeChat({ isGroup: false }), "all", "group")).toBe(false);
+    expect(matchesFilters(makeChat({ isGroup: true, known: false }), "all", "group")).toBe(false);
+    expect(matchesFilters(makeChat({ isGroup: true, isSpam: true }), "all", "group")).toBe(false);
   });
 
-  test("unknown requires an unknown sender", () => {
+  test("unknown reveals unknown and spam conversations", () => {
     expect(matchesFilters(makeChat({ known: false }), "all", "unknown")).toBe(true);
-    expect(matchesFilters(makeChat({ known: true }), "all", "unknown")).toBe(false);
+    expect(matchesFilters(makeChat({ isSpam: true }), "all", "unknown")).toBe(true);
+    expect(matchesFilters(makeChat(), "all", "unknown")).toBe(false);
+  });
+
+  test("contact classification failures fail open", () => {
+    const unresolved = makeChat({ known: false, contactsAvailable: false });
+    const unresolvedSpam = makeChat({ known: false, contactsAvailable: false, isSpam: true });
+
+    expect(matchesFilters(unresolved, "all", "all")).toBe(true);
+    expect(matchesFilters(unresolved, "all", "dm")).toBe(true);
+    expect(matchesFilters(unresolved, "all", "unknown")).toBe(false);
+    expect(matchesFilters(unresolvedSpam, "all", "all")).toBe(false);
+    expect(matchesFilters(unresolvedSpam, "all", "unknown")).toBe(true);
   });
 });
 
-describe("matchesFilters — spam and unknown exclusion", () => {
-  test("spam is excluded from attention filters", () => {
-    const spam = makeChat({ isSpam: true, flags: makeFlags({ unread: true, unresponded: true }) });
-    expect(matchesFilters(spam, "unread", "all")).toBe(false);
-    expect(matchesFilters(spam, "unresponded", "all")).toBe(false);
-  });
-
-  test("unknown senders are excluded from attention filters", () => {
-    const unknown = makeChat({ known: false, flags: makeFlags({ unresponded: true, waiting: true }) });
-    expect(matchesFilters(unknown, "unresponded", "all")).toBe(false);
-    expect(matchesFilters(unknown, "waiting", "all")).toBe(false);
-  });
-
-  test("spam and unknown still appear under all and archived", () => {
-    const spam = makeChat({ isSpam: true });
-    expect(matchesFilters(spam, "all", "all")).toBe(true);
+describe("matchesFilters — screened conversation exclusion", () => {
+  test("unknown and spam conversations are hidden from every standard lens", () => {
+    const unknown = makeChat({ known: false, flags: makeFlags({ unread: true }) });
+    const spam = makeChat({ isSpam: true, flags: makeFlags({ unread: true }) });
     const archivedUnknown = makeChat({ known: false, flags: makeFlags({ archived: true }) });
-    expect(matchesFilters(archivedUnknown, "archived", "all")).toBe(true);
+    const archivedSpam = makeChat({ isSpam: true, flags: makeFlags({ archived: true }) });
+
+    for (const type of ["all", "dm", "group"] as const) {
+      expect(matchesFilters(unknown, "all", type)).toBe(false);
+      expect(matchesFilters(unknown, "unread", type)).toBe(false);
+      expect(matchesFilters(archivedUnknown, "archived", type)).toBe(false);
+      expect(matchesFilters(spam, "all", type)).toBe(false);
+      expect(matchesFilters(spam, "unread", type)).toBe(false);
+      expect(matchesFilters(archivedSpam, "archived", type)).toBe(false);
+    }
   });
 
-  test("spam and unknown remain visible under the unknown lens attention filters", () => {
+  test("unknown lens preserves state filtering for screened conversations", () => {
     const unknownUnread = makeChat({ known: false, flags: makeFlags({ unread: true }) });
+    const archivedSpam = makeChat({ isSpam: true, flags: makeFlags({ archived: true }) });
+
     expect(matchesFilters(unknownUnread, "unread", "unknown")).toBe(true);
+    expect(matchesFilters(unknownUnread, "archived", "unknown")).toBe(false);
+    expect(matchesFilters(archivedSpam, "all", "unknown")).toBe(false);
+    expect(matchesFilters(archivedSpam, "archived", "unknown")).toBe(true);
   });
 });
 
@@ -402,6 +419,15 @@ describe("applyMessage", () => {
     expect(next[0]!.flags.archived).toBe(false);
     expect(next[0]!.firstUnreadAt).toBe(6000);
     expect(next[0]!.unreadCount).toBe(1);
+  });
+
+  test("realtime junk classification updates screening immediately", () => {
+    const chats = [makeChat({ guid: "chat-1" })];
+    const next = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 6000, isSpam: true }))!;
+
+    expect(next[0]!.isSpam).toBe(true);
+    expect(matchesFilters(next[0]!, "all", "all")).toBe(false);
+    expect(matchesFilters(next[0]!, "all", "unknown")).toBe(true);
   });
 
   test("inbound message on a muted chat does not set unresponded", () => {

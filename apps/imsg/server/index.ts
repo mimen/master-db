@@ -12,7 +12,7 @@ import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
-import { buildThread, mapMessage } from "./map";
+import { associatedMessageTargetGuid, buildThread, mapMessage } from "./map";
 import { transcodeAttachment } from "./transcode";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
@@ -108,8 +108,13 @@ bb.onEvent((event) => {
         event.kind === "new-message"
           ? directory.applyMessage(chatGuid, event.message)
           : directory.applyUpdatedMessage(chatGuid, event.message);
-      if (!chatGuid || mapped === null) {
+      if (!chatGuid) {
         broadcast({ kind: "chats-changed" });
+        return;
+      }
+      if (mapped === null) {
+        const messageGuid = associatedMessageTargetGuid(event.message);
+        if (messageGuid) broadcast({ kind: "thread-changed", chatGuid, messageGuid });
         return;
       }
       broadcast({ kind: event.kind, chatGuid, message: mapped });
@@ -210,6 +215,17 @@ app.get("/api/chats/:guid/messages", async (c) => {
   }
 
   return c.json(buildThread(raw, chatGuid, contacts));
+});
+
+app.get("/api/chats/:guid/messages/:messageGuid", async (c) => {
+  const chatGuid = c.req.param("guid");
+  const messageGuid = c.req.param("messageGuid");
+  const result = await bb.messageWithReactions(messageGuid);
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  const message = buildThread(result.value, chatGuid, contacts).find(
+    (candidate) => candidate.guid === messageGuid,
+  );
+  return message ? c.json(message) : c.json({ error: "message not found" }, 404);
 });
 
 app.get("/api/avatars/:address", async (c) => {

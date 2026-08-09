@@ -101,6 +101,139 @@ describe("ChatDirectory.summaries", () => {
     expect(a.flags.unread).toBe(true);
   });
 
+  test("uses the latest real message when a reaction is the raw last message", async () => {
+    const reaction: BBMessage = {
+      guid: "reaction-love",
+      text: "Loved a message",
+      dateCreated: 2_000,
+      isFromMe: false,
+      associatedMessageGuid: "p:0/real-message",
+      associatedMessageType: "love",
+    };
+    const removal: BBMessage = {
+      guid: "reaction-removal",
+      text: "Removed a reaction",
+      dateCreated: 3_000,
+      isFromMe: true,
+      associatedMessageGuid: "p:0/real-message",
+      associatedMessageType: "3006",
+    };
+    const { bb, directory } = await setup([
+      {
+        guid: CHAT_A,
+        participants: [{ address: "+15550001111" }],
+        messages: [inbound("real-message", 1_000, "We do!"), reaction, removal],
+      },
+    ]);
+
+    const result = await directory.summaries();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.lastMessage?.guid).toBe("real-message");
+    expect(chat.lastMessage?.text).toBe("We do!");
+    expect(chat.flags.unresponded).toBe(true);
+    expect(chat.flags.waiting).toBe(false);
+    expect(bb.calls.chatMessages).toBe(1);
+
+    directory.invalidate();
+    await directory.summaries();
+    expect(bb.calls.chatMessages).toBe(1);
+  });
+
+  test("bounds concurrent reaction preview lookups", async () => {
+    const chats: FakeChatSeed[] = Array.from({ length: 12 }, (_, index) => {
+      const realGuid = `real-${index}`;
+      return {
+        guid: `iMessage;-;+1555000${String(index).padStart(4, "0")}`,
+        messages: [
+          inbound(realGuid, 1_000, `Real ${index}`),
+          {
+            guid: `reaction-${index}`,
+            text: "Loved a message",
+            dateCreated: 2_000,
+            isFromMe: false,
+            associatedMessageGuid: `p:0/${realGuid}`,
+            associatedMessageType: "love",
+          },
+        ],
+      };
+    });
+    const { bb, directory } = await setup(chats);
+    const chatMessages = bb.chatMessages.bind(bb);
+    let active = 0;
+    let maxActive = 0;
+    bb.chatMessages = async (...args) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await Promise.resolve();
+      const result = await chatMessages(...args);
+      active--;
+      return result;
+    };
+
+    const result = await directory.summaries();
+
+    expect(result.ok).toBe(true);
+    expect(maxActive).toBeLessThanOrEqual(8);
+    expect(bb.calls.chatMessages).toBe(12);
+  });
+
+  test("keeps the directory available when a reaction preview lookup rejects", async () => {
+    const reaction: BBMessage = {
+      guid: "reaction",
+      text: "Loved a message",
+      dateCreated: 2_000,
+      isFromMe: false,
+      associatedMessageGuid: "p:0/real-message",
+      associatedMessageType: "love",
+    };
+    const { bb, directory } = await setup([
+      {
+        guid: CHAT_A,
+        participants: [{ address: "+15550001111" }],
+        messages: [inbound("real-message", 1_000, "Real message"), reaction],
+      },
+    ]);
+    bb.chatMessages = () => Promise.reject(new Error("transport failed"));
+
+    const result = await directory.summaries();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).lastMessage?.guid).toBe("reaction");
+  });
+
+  test("preserves a realtime message while BlueBubbles chat metadata lags", async () => {
+    const reaction: BBMessage = {
+      guid: "reaction",
+      text: "Loved a message",
+      dateCreated: 2_000,
+      isFromMe: false,
+      associatedMessageGuid: "p:0/old-real",
+      associatedMessageType: "love",
+    };
+    const { directory } = await setup([
+      {
+        guid: CHAT_A,
+        participants: [{ address: "+15550001111" }],
+        messages: [inbound("old-real", 1_000, "Old real message"), reaction],
+      },
+    ]);
+    await directory.summaries();
+
+    directory.applyMessage(CHAT_A, inbound("new-real", 3_000, "Newest real message"));
+    directory.invalidate();
+    const result = await directory.summaries();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.lastMessage?.guid).toBe("new-real");
+    expect(chat.lastMessage?.text).toBe("Newest real message");
+  });
+
   test("fails open when contact classification becomes unavailable", async () => {
     const unknownGuid = "iMessage;-;+15550003333";
     const bb = new FakeBlueBubbles({
@@ -293,6 +426,24 @@ describe("ChatDirectory reactive fast path", () => {
     expect(a.flags.unread).toBe(true);
     expect(a.unreadCount).toBe(2);
     expect(a.firstUnreadAt).toBe(1000);
+  });
+
+  test("does not return reaction removals as renderable messages", async () => {
+    const { bb, directory } = await setup();
+    await directory.summaries();
+    const rebuilds = bb.calls.queryChats;
+    const scans = bb.calls.queryMessages;
+    const removal: BBMessage = {
+      ...inbound("remove-reaction", 3000, "Removed a reaction"),
+      associatedMessageGuid: "p:0/target",
+      associatedMessageType: "3006",
+    };
+
+    expect(directory.applyMessage(CHAT_A, removal)).toBeNull();
+    expect(directory.applyUpdatedMessage(CHAT_A, removal)).toBeNull();
+    await directory.summaries();
+    expect(bb.calls.queryChats).toBe(rebuilds);
+    expect(bb.calls.queryMessages).toBe(scans);
   });
 
   test("realtime junk messages keep an aged cache screened through reconciliation", async () => {

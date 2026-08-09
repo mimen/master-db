@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="30">
+<title>Structured names for the identity graph — plan</title>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; max-width: 900px; margin: 0 auto; padding: 2rem 1.25rem 5rem; color: #1a1a1a; }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; }
+  h3 { font-size: 1rem; margin-top: 1.25rem; }
+  code { font-family: ui-monospace, monospace; background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f4; padding: 0.75rem; border-radius: 6px; overflow-x: auto; font-size: 0.85em; }
+  .status { display: inline-block; background: #fef3c7; color: #92400e; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }
+  .meta { color: #666; font-size: 0.85rem; }
+  .rec { background: #ecfdf5; border-left: 3px solid #10b981; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
+  .open { background: #fef2f2; border-left: 3px solid #ef4444; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
+  .fact { background: #eff6ff; border-left: 3px solid #3b82f6; padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #f4f4f4; }
+  ul { margin: 0.4rem 0; }
+  .q { font-weight: 600; }
+</style>
+<script>
+  try { const y = sessionStorage.getItem('planScroll'); if (y) window.scrollTo(0, +y); } catch (e) {}
+  window.addEventListener('scroll', () => { try { sessionStorage.setItem('planScroll', String(window.scrollY)); } catch (e) {} });
+</script>
+</head>
+<body>
+
+<h1>Structured names for the identity graph</h1>
+<p class="meta">Plan · <code>/Users/mimen/Programming/Repos/convex-db/docs/plans/structured-names.html</code></p>
+<p><span class="status" style="background:#dcfce7;color:#166534;">PHASE 1 DEPLOYED &amp; VERIFIED · 2026-07-24</span></p>
+
+<h2>Phase 1 execution status (deployed to prod)</h2>
+<div class="rec">
+<strong>Live &amp; verified.</strong> Merged to main (commit <code>0619041</code>), Convex schema+functions deployed, imsg web+server redeployed, both backfills run (Apple via Mini server restart, Airtable via <code>syncAirtableHumans</code>).
+<ul>
+  <li><strong>1195 / 1356 people now have clean structured first + last.</strong> Apple contacts got clean names; Airtable enriched matches.</li>
+  <li>Tests: 101 convex identity + 245 imsg, all green. Fresh-contact ingest test confirmed the write path end to end.</li>
+  <li>The ~160 without clean first/last are expected: <strong>beeper-only</strong> people (no structured source — Karissa, 10 identities), <strong>manually-locked</strong> people (Chris — the lock correctly freezes names), and single-name contacts.</li>
+</ul>
+</div>
+<div class="rec">
+<strong>Follow-ups — all resolved (2026-07-24):</strong>
+<ul>
+  <li><strong>Airtable junk names ✓</strong> — the "garbage" was really a mix: legit artist names (SPID3Y, Mom3nts) left untouched; 14 real-names-with-junk-suffix records cleaned (promo codes like <code>G6337336</code>, <code>(+1)</code> suffixes stripped from Last Name — the <code>Name</code> field is computed and auto-fixed). Airtable re-synced to propagate.</li>
+  <li><strong>Locked-pre-structure backfill ✓</strong> — new internal <code>rederiveLockedStructuredNames</code>: 3 found, 2 filled (Chris now has first/last, locked display kept). The 3rd has no source identity with structured parts.</li>
+  <li><strong>Test row deleted ✓</strong> — added internal <code>deletePersonByHandle</code> (we had no delete before), removed <code>Zztest</code>/<code>+19995551234</code>.</li>
+  <li><strong>Edit UI redesigned + deployed ✓</strong> — per Milad's feedback (unclear fields / poor space use): iOS-Contacts grouped cards, persistent inline labels (First/Last/Nickname/Company), display override on its own card with a plain-language caption. <em>Wants a final eyeball.</em></li>
+</ul>
+</div>
+
+<h2>Goal &amp; status</h2>
+<p>Replace the single collapsed <code>display_name</code> string with <strong>structured names</strong> (first / last) end to end: stored losslessly from every source, editable with separate First/Last fields, and forming the foundation for cross-platform write-back and a last-name sort/display option.</p>
+<p><strong>Status:</strong> facts gathered, three decisions resolved (below), scope split into phases. <strong>Phase 1 (structured-name foundation) is ready for authorization.</strong> Phases 2–3 are sequenced follow-ups, not part of the first implementation.</p>
+
+<h2>Phasing</h2>
+<table>
+  <tr><th>Phase</th><th>Scope</th><th>State</th></tr>
+  <tr><td><strong>1 — Structured-name foundation</strong></td><td>Schema (<code>first_name</code>/<code>last_name</code>/<code>nickname</code> on identities + people; <code>organization</code> as Convex-native on people), all three ingest paths, aggregation with single name-lock, edit UI (First/Last/Nickname/Display-override/Organization), backfill. Default display &amp; sort unchanged. No write-back.</td><td>This implementation — awaiting go</td></tr>
+  <tr><td>2 — Settings panel + name-order preference</td><td>Build a real settings surface (none exists today) and add a "sort / show by last name" toggle, OFF by default. Also the home for other prefs later. Depends on Phase 1 data.</td><td>Follow-up</td></tr>
+  <tr><td>2.5 — Enrichment display + Airtable deep-link</td><td>Show Airtable-only fields (Instagram, birthday, maybe city) read-only in the person view; deep-link to the Airtable record. Pass-through role. Small, independent.</td><td>Follow-up (candidate to pull earlier)</td></tr>
+  <tr><td>3a — Airtable write-back</td><td>In-app name/field edits PATCH the linked Airtable Humans record. Feasible now (REST + record ids). Needs conflict/loop handling.</td><td>Future — confirmed wanted</td></tr>
+  <tr><td>3b — Apple Contacts read+write (replace BlueBubbles for contacts)</td><td>A local mechanism on the Mini that does granular R/W of the full field set (incl. birthday + organization, which BlueBubbles can't even READ). Two viable options from research — see below.</td><td>Future — new component; research done</td></tr>
+</table>
+
+<div class="fact">
+<strong>Apple Contacts R/W research (Grok/X + web, July 2026) — two good options, both do granular updates and the full field set (first/last/nickname/birthday/org), unlike BlueBubbles:</strong>
+<ul>
+  <li><strong>CardDAV → iCloud</strong> (app-specific password; <code>vdirsyncer</code>+<code>khard</code> or a thin client; PUT vCard with <code>If-Match</code> ETag). <em>No Contacts TCC permission at all</em> — cleanest headless/launchd story; writes iCloud so changes fan out to all devices. Downside: sync lag, iCloud CardDAV quirks. <strong>Best fit for a headless Mini agent.</strong></li>
+  <li><strong>Swift CLI over <code>Contacts.framework</code></strong> (<code>CNContactStore</code>+<code>CNSaveRequest</code>, or the <code>node-mac-contacts</code> binding). Immediate local-DB mutation, Apple-supported. Downside: TCC grant tied to the signed binary's identity/path (grant once from a GUI session, run as LaunchAgent under the user, avoid Homebrew path-churn); must fetch all keys before save or you wipe unfetched fields.</li>
+  <li>Avoid: JXA/AppleScript (dual TCC + flaky unattended + wrong-person risk), Shortcuts CLI (consent prompts hang headless), most CLIs (read-only).</li>
+</ul>
+<strong>Bonus:</strong> either mechanism also fixes the READ gap — we could ingest birthday + organization from Apple (BlueBubbles omits both), so birthday becomes Apple-syncable and organization gains a source. (Claims are Grok-reported leads with links; verify <code>node-mac-contacts</code> field coverage + iCloud CardDAV specifics before building 3b.)
+</div>
+
+<h2>Confirmed facts (verified this session)</h2>
+<div class="fact">
+<strong>All three name sources carry structure</strong> — the earlier "single field" assumption was wrong.
+<table>
+  <tr><th>Source</th><th>Structured fields available</th><th>Today we ingest</th></tr>
+  <tr><td>Apple Contacts (via BlueBubbles)</td><td><code>firstName</code>, <code>lastName</code>, <code>nickname</code>, <code>displayName</code>, <code>organization</code> (<code>bb-types.ts</code>)</td><td>Only an assembled single string (<code>identity-sync.ts:101</code> joins first+last)</td></tr>
+  <tr><td>Airtable Humans (<code>tbl6LptFEMKLaN0I9</code>)</td><td><code>First Name</code>, <code>Last Name</code> (singleLineText) + <code>Name</code> (primary, freeform display)</td><td>Only <code>Name</code> (<code>airtableSync.ts</code> <code>FIELDS</code> omits First/Last)</td></tr>
+  <tr><td>Manual add / rename</td><td>n/a — whatever we build</td><td>One free-text field → <code>display_name</code></td></tr>
+</table>
+</div>
+<div class="fact">
+Sampled Airtable data: <code>Name</code> is reliable as a display value but not a formula — usually "First Last", sometimes freeform (<code>"The Brooklyn Mirage"</code> → first="The"/last="Brooklyn Mirage"; <code>"@nataliekowal_"</code> has no First/Last at all). So <strong>structured parts can be naive or empty; the source's own display string stays the trustworthy label.</strong>
+</div>
+<div class="fact">
+Current schema: <code>people.display_name</code> + <code>people.display_name_locked</code>; <code>identities.display_name</code>. ~1,357 people, ~4,000 identities live. <code>recomputePersonAggregates</code> currently sets <code>display_name</code> = longest identity display_name (unless locked). The identity mirror's <code>nameDirectory</code> serves <code>display_name</code> for inbox names.
+</div>
+<div class="fact">
+<strong>Source schemas barely overlap.</strong> Airtable Humans has ~150 fields; ~140 are AUF operations (W-9, Shotgun promoter IDs, UW ticket comps, Mailchimp, coupons) — not identity, can't round-trip. Apple via BlueBubbles exposes only 6: first/last/display/nickname/emails/phones (no organization, no birthday). The shared identity core is small.
+</div>
+<div class="fact">
+<strong>Write-back capability is asymmetric (verified).</strong> Airtable = full REST PATCH, we hold the record ids → easy. Apple Contacts = <strong>not writable through BlueBubbles</strong> (issue #701: updates are non-granular / create duplicates; no birthday/org support; no read of birthday either). Keeping Apple Contacts updated needs a NEW local agent on the Mini using Apple's Contacts framework — a separate component, not a bridge call.
+</div>
+
+<h2>Phase 2.1 — Identity-aware search (DEPLOYED &amp; VERIFIED · 2026-07-24)</h2>
+<div class="rec">
+<strong>Live.</strong> nameDirectory now returns each person's full <code>terms</code>; the IdentityMirror holds them and backs both a Convex-aware <code>/api/contacts</code> and per-chat <code>searchNames</code>; the palette scorer folds <code>searchNames</code> into conversation/group matching (one-line edit, no other palette lines touched). Verified on the real case: searching "Jimmy Sciandra" returns Uncle Jimmy's contact AND his DM/group conversations now carry <code>['uncle jimmy','jimmy','sciandra','jimmy sciandra']</code> in searchNames. 103 convex + 257 imsg tests green.
+</div>
+<div class="fact">
+<strong>Bug that motivated this:</strong> after renaming "Jimmy Sciandra" → "Uncle Jimmy", searching "Jimmy Sciandra" surfaced his <em>contact</em> but not his <em>conversation</em>. Root cause: search is fragmented across two sources that don't share the identity —
+<ul>
+  <li><strong>Contacts</strong>: <code>/api/contacts</code> → server <code>ContactBook.search</code> (Apple Contacts only). Apple still has the old "Jimmy Sciandra" → contact hit. Blind to Convex names (nickname, rename, org).</li>
+  <li><strong>Conversations</strong>: matched client-side (palette <code>buildPaletteSections</code>) on <code>chat.displayName</code> + participant names, both from the Convex mirror = "Uncle Jimmy" → no match for the old name.</li>
+</ul>
+Neither search sees the person's FULL name set (display + first + last + nickname + org). Convex is the identity source of truth but isn't the search backend.
+</div>
+<div class="rec">
+<strong>Fix: make the Identity Mirror the name-search backend for both surfaces.</strong>
+<ul>
+  <li><strong>Convex</strong> <code>nameDirectory</code> → return per handle <code>{ normalized, display_name, terms }</code>, where <code>terms</code> = deduped lowercase [display, first, last, nickname, org, "first last"].</li>
+  <li><strong>Server IdentityMirror</strong>: store handle → { name, terms }. Add <code>searchTerms(address)</code> (for conversation matching) and <code>search(query, limit)</code> (Convex-backed contact results).</li>
+  <li><strong>/api/contacts</strong>: search the mirror's Convex terms, merged with ContactBook (Apple freshness), deduped — so "Uncle Jimmy" AND "Jimmy Sciandra" both return the contact.</li>
+  <li><strong>ChatSummary</strong> gains <code>searchNames?: string[]</code> (participants' mirror terms); the palette conversation/group scorer matches against it → the conversation surfaces for any of the person's names.</li>
+</ul>
+Touches the ⌘K palette (a concurrent session's active file) minimally — one added score term. Cross-system: Convex query + server mirror/chat-directory/map + client palette.
+</div>
+
+<h2>CRM subjects: people AND chats — DEPLOYED &amp; VERIFIED 2026-07-24</h2>
+<div class="rec">
+<strong>Live.</strong> P1–P5 priority, <code>chat_crm</code>, generalized <code>tags</code>, and Airtable <code>event_links</code> all deployed. <strong>Inheritance verified on live data:</strong> after setting Shonna Gillis to P1, her DM reports <code>{"is_favorite":true,"priority":1}</code> — inherited from the person, not stored twice. 5 favorited people with DMs all carry their star through. 170 identity + 287 imsg tests green.
+<br><br>
+<strong>Both migrations ran clean:</strong> <code>migratePriorityToNumeric</code> → 1358 scanned / 0 migrated / 0 unrecognized (every row unset); <code>migratePersonTags</code> → 0 scanned. Neither transitional shape holds data.
+<br><br>
+<strong>Known debt (deliberate):</strong> <code>people.priority</code> keeps its transitional <code>v.union(number, "high"|"normal"|"low")</code> and the empty <code>person_tags</code> table remains declared. Narrowing both is safe (verified empty) but orphans the two migrations that read those shapes plus their tests — a clean follow-up PR, not an inline integration edit. Documented on both fields.
+</div>
+
+<h2>CRM subjects: people AND chats (decided 2026-07-24)</h2>
+<div class="rec">
+<strong>The insight:</strong> a DM's priority IS the person's priority — giving DM chats their own would create two competing truths for one conversation. Groups have no single person, so they need their own. Hence:
+<ul>
+  <li><strong>Groups</strong> carry their own favorite / priority / tags / event links (<code>chat_crm</code>, keyed by chat guid, in Convex).</li>
+  <li><strong>DMs inherit</strong> from the linked person — resolved in <code>mapChat</code>, never stored twice.</li>
+  <li><strong>Stored in Convex, not the Overlay.</strong> The Overlay is deliberately ephemeral UI mechanics (archived-at, dismissal guids, mute); CRM is durable personal metadata that must survive a Mini rebuild and be browsable across people + chats in ONE index.</li>
+  <li><strong>Priority = P1–P5, 1 = highest.</strong> Matches the Todoist mental model; explicitly NOT inverted like Todoist's own API (see root CLAUDE.md's warning).</li>
+  <li><strong><code>person_tags</code> generalized to <code>tags</code></strong> (person_id XOR chat_guid + <code>by_tag</code>) so "everything tagged X" is one lookup.</li>
+  <li><strong>Event/project association is a typed link to an Airtable Event record</strong> (id + cached name), on people and chats alike — Airtable stays the owner of event data, consistent with the three-owner rule. Freeform tags would have meant no deep-link and typo-fragmented projects.</li>
+</ul>
+<strong>Favorites set:</strong> Mojgan Seraji, Marissa Carlene Aguilar, Chase Petersen, Johann Sevilla, Shonna Gillis, Nick Chase, Sarah Park.
+</div>
+
+<h2>CRM surfacing — DEPLOYED &amp; VERIFIED 2026-07-24</h2>
+<div class="rec">
+<strong>Live, verified against real data.</strong> The shelf now reads: <code>1. Shonna Gillis P=1 unread=no</code> — a P1 with zero unread outranking eight genuinely-unread conversations, which is precisely the behavior that was impossible before. 302 imsg + 170 identity tests green.
+<ul>
+  <li><strong>★ Favorites atop Contacts</strong> — pinned section; favorited people ALSO remain in their letter section (iOS semantics). Zero favorites ⇒ byte-identical to before.</li>
+  <li><strong>⌘K favorite ranking</strong> — <code>FAVORITE_BONUS = 0.5</code> applied only on an already-nonzero score. matchScore tiers step by ≥1, so a favorite wins ties but can never cross a tier: an exact-prefix non-favorite still beats a fuzzy favorite, and a zero-match favorite is never conjured in. <em>Contacts deliberately excluded from re-scoring</em> — they arrive server-filtered against the mirror's full term set (incl. old names the client never sees), so local re-scoring would risk the exact false-drop the Phase 2.1 search fix eliminated; they get a stable favorite-first partition instead.</li>
+  <li><strong>Priority shelf is now genuinely priority-driven</strong> — P1/P2 first (best first, ties on oldest-unread then index), then oldest-unread fills the rest, capped at 10. No unread AND no P1/P2 ⇒ excluded, so it never becomes a permanent pin list. With no CRM priority anywhere it degrades to exactly the old behavior. P-badge shown on entries that qualified via priority alone.</li>
+</ul>
+</div>
+<div class="fact">
+<strong>Before this:</strong> favorites and priority were effectively WRITE-ONLY — a ★ in Contacts and nothing else; priority appeared nowhere outside the editor that set it.
+</div>
+<div class="fact">
+<strong>Naming collision found:</strong> the inbox already has a <em>"priority shelf"</em> — but it has nothing to do with CRM priority. <code>partitionPriorityShelf</code> (<code>shared/chat-state.ts</code>) selects the 10 <strong>oldest unread</strong> conversations. Two unrelated "priority" concepts would otherwise end up inches apart in the same screen.
+</div>
+<div class="rec">
+<strong>Decided surfacing:</strong>
+<ul>
+  <li><strong>★ Favorites section atop Contacts</strong> — pinned group above the A–Z sections (iOS Contacts style).</li>
+  <li><strong>Favorites rank first in ⌘K</strong> — favorited people/chats score higher, so "ma" surfaces Marissa above other Ma-names.</li>
+  <li><strong>Feed CRM priority INTO the existing shelf, keep the name</strong> — P1–P2 conversations first, oldest-unread as the fallback. Resolves the collision by making the shelf genuinely priority-driven rather than renaming it. One coherent concept.</li>
+  <li>Explicitly NOT chosen: favorites filter lens in the inbox; favorites pinned atop the conversation list.</li>
+</ul>
+<strong>Sequencing:</strong> all three depended on <code>ChatSummary.crm</code> from the chat-CRM branch — <strong>which merged and deployed 2026-07-24, so this work is now IN FLIGHT.</strong>
+</div>
+
+<h2>MEMBERSHIP ≠ OWNERSHIP (the rule that protects privacy)</h2>
+<div class="rec">
+<strong>Neither Apple nor Airtable is a superset, and we deliberately don't make either one.</strong> Apple ≈ 1,518 personal contacts; Airtable ≈ 7,267 AUF community records (6,479 never talked to); only 788 overlap. Forcing either to be complete is actively harmful — personal contacts in a <em>shared AUF business database</em> is a privacy problem, and 6,479 strangers in your phone would wreck autocomplete.
+<ul>
+  <li><strong>Ownership</strong> decides where a field lives <em>for people who exist in both</em>. It says nothing about who should exist where.</li>
+  <li><strong>Convex is the only superset</strong> — the union of Apple ∪ Airtable ∪ Beeper is precisely its job.</li>
+  <li><strong>Sync NEVER creates a record in a source — update-only.</strong> The mirror image of the <code>link_only</code> rule already shipped on the read path. <em>Consequence: personal contacts can never leak into Airtable — there's no record to update and we don't create one.</em></li>
+  <li><strong>Promotion is explicit:</strong> an "Add to Apple Contacts" action in the person view for a Convex-only person who turns out to matter. One at a time, deliberate — never automatic (auto-creation is what produced the 6,433 phantom people earlier).</li>
+</ul>
+</div>
+
+<h2>THE RULE: three owners + the card test (decided 2026-07-24)</h2>
+<p>Every identity field has exactly one owner. New fields get slotted by the test — no per-field debate.</p>
+<table>
+  <tr><th>Owner</th><th>Domain</th><th>The test</th><th>Examples</th></tr>
+  <tr><td><strong>Apple Contacts</strong></td><td>Personal identity</td><td><em>"Would I want this on my phone's contact card?"</em></td><td>first, last, nickname, birthday, organization, photo, phones, emails</td></tr>
+  <tr><td><strong>Airtable Humans</strong></td><td>AUF relationship</td><td><em>"Is this about their role in AUF?"</em></td><td>Instagram handle, promo status, tickets, W-9, the ~140 ops fields</td></tr>
+  <tr><td><strong>Convex</strong></td><td>App-native + the join</td><td><em>"Does this only make sense inside imsg?"</em></td><td>the identity graph itself, display override, message-derived signals, relationship notes/tags</td></tr>
+</table>
+<div class="fact">
+<strong>Key correction that unlocked this:</strong> "birthday can't come from Apple" and "organization has no source" were never real design constraints — they're artifacts of BlueBubbles' skinny 6-field contact API. Apple has both. Replacing that bridge (CardDAV, decided below) removes the special cases entirely.
+</div>
+<p>Storage role then follows from ownership: <strong>projected</strong> (mirrored into Convex because the app displays/edits/resolves on it), <strong>Convex-native</strong> (Convex IS the record), or <strong>pass-through</strong> (lives in the source; app displays and edits it through, Convex needn't store).</p>
+
+<h2>Bidirectional sync topology (answering "can changes propagate both ways?")</h2>
+<div class="rec">
+<strong>Yes — and the hard part is already built.</strong> Two-way sync normally needs a per-source snapshot to answer "what changed since last time." The <code>identities</code> table IS that snapshot:
+<pre>identities[source=apple_contact].&lt;field&gt;    ← what we last saw from Apple
+identities[source=airtable_human].&lt;field&gt;   ← what we last saw from Airtable
+people.&lt;field&gt;                              ← canonical merged value</pre>
+That's a three-way merge; change detection is a diff, requiring no vendor change-feed:
+<ul>
+  <li>Source A's current value ≠ our stored A row → <strong>A changed</strong> → propagate to B, update both stored rows.</li>
+  <li>Both changed to different values between syncs → <strong>conflict</strong> → queue for review (rare enough to stay empty in practice; exists so it fails loudly instead of clobbering).</li>
+  <li><strong>Loop prevention:</strong> when WE write to a source, immediately update that source's stored row to the value written. Next sync sees current == stored → "no change" → no echo. This is the classic gotcha; the ledger solves it.</li>
+</ul>
+Airtable has no Last Modified Time field on Humans today (standard field type, trivially addable) and offers a webhooks API — but neither is required, they're optimizations over polling+diff.
+</div>
+
+<h2>Phase 3 sequencing (revised — ship 3a standalone)</h2>
+<table>
+  <tr><th>Step</th><th>Scope</th><th>Effort</th><th>Why this order</th></tr>
+  <tr><td><strong>3a · CardDAV read</strong></td><td>Replace BlueBubbles as the Apple contacts source. Full field set arrives: birthday, organization, nickname, socials.</td><td>Medium (auth, vCard parse, field mapping)</td><td><strong>Delivers most of the value alone, zero write risk.</strong> Kills the homeless-field special cases. Strictly additive.</td></tr>
+  <tr><td>3b · One-way write-back</td><td>imsg edit → Apple. Ledger updated on write (loop prevention).</td><td>Small-medium</td><td>Writes only after reads are proven</td></tr>
+  <tr><td>3c · Airtable write-back + true bidirectional</td><td>Add Last Modified Time (or webhooks), the merge engine, the conflict queue.</td><td>Small-medium</td><td>Merge engine is the SMALL part — the ledger already exists</td></tr>
+</table>
+
+<h2>Field-by-field matrix (resolved under the rule)</h2>
+<table>
+  <tr><th>Field</th><th>Owner</th><th>Role</th><th>App edits</th><th>Sync</th></tr>
+  <tr><td>first / last</td><td>Apple</td><td>Projected ✓</td><td>yes</td><td>bidirectional after 3a/3b; Airtable mirrors</td></tr>
+  <tr><td>nickname</td><td>Apple</td><td>Projected ✓ (Convex + Apple, per Milad)</td><td>yes</td><td>real synced contact field — writes to Apple</td></tr>
+  <tr><td>birthday</td><td><strong>Apple</strong> (was Airtable)</td><td>Projected ✓</td><td>yes</td><td><strong>bidirectional Apple ↔ Airtable</strong> via the ledger; Airtable keeps a copy for campaigns</td></tr>
+  <tr><td>organization</td><td><strong>Apple</strong> (was Convex-native)</td><td>Projected ✓</td><td>yes</td><td>becomes a real synced field once 3a lands</td></tr>
+  <tr><td>photo</td><td>Apple</td><td>Not stored (served via imsg avatar route)</td><td>no</td><td>Apple always wins at runtime. When Apple has NO photo and Airtable does → <strong>push Airtable's into Apple</strong> (3b write). Keeps one runtime source; Airtable only backfills gaps. No proxy/caching needed.</td></tr>
+  <tr><td>emails / phones (multi)</td><td>Apple + Airtable</td><td>Projected ✓ (one identity per handle)</td><td>no (join keys)</td><td><strong>FIXED ✓</strong> — now pulls all 4 email + 3 phone columns (excl. PayPal/Shotgun addresses). Result: identities 4,000 → 4,084, Airtable matches 788 → 791, people unchanged at 1,358 (link_only held — no phantoms).</td></tr>
+  <tr><td>favorite / priority</td><td>Convex</td><td>Convex-native (typed fields)</td><td>yes</td><td><strong>SHIPPED ✓</strong> — ★ toggle + high/normal/low; absent ≠ "normal"</td></tr>
+  <tr><td>tags / groups (personal)</td><td>Convex</td><td>Convex-native (<code>person_tags</code> many-to-many)</td><td>yes</td><td><strong>SHIPPED ✓</strong> — table not array, so "browse everyone tagged X" is an index lookup; <code>listTags</code> returns counts</td></tr>
+  <tr><td>tags (organizational)</td><td>Airtable</td><td>Pass-through, read-only</td><td>no</td><td>event associations, UW teams/departments — shown in the person view <em>visually distinct</em> from personal tags, so "their AUF role" is never conflated with "my note about them"</td></tr>
+  <tr><td>phones / emails</td><td>Apple</td><td>Projected ✓ (resolution keys)</td><td><strong>no — deferred</strong></td><td>these are the join keys; editing one re-links people. Needs its own design pass, not a text field</td></tr>
+  <tr><td>display override</td><td>Convex</td><td>Convex-native</td><td>yes</td><td>local only by design; lock guards it</td></tr>
+  <tr><td>Instagram handle</td><td>Airtable</td><td>Pass-through</td><td>later → Airtable</td><td>display + deep-link (<code>airtable_human_id</code> already stored)</td></tr>
+  <tr><td>other socials, city/location</td><td>Airtable</td><td>Pass-through</td><td>later</td><td><strong>deferred</strong> — add when a surface needs them; no hosting decision required today</td></tr>
+  <tr><td>notes / tags / relationship</td><td>Convex</td><td>Convex-native</td><td>future</td><td>the "fits nowhere else" CRM bucket</td></tr>
+  <tr><td>AUF ops (~140 fields)</td><td>Airtable</td><td>Never enters Convex</td><td>no</td><td>settled — powers other AUF interfaces</td></tr>
+</table>
+<div class="fact">
+<strong>Multi-platform reach already works</strong> — 4,000 identities across networks; the person view already renders iMessage / WhatsApp / Telegram / Slack / Google Messages / Signal / Matrix with brand icons. Beeper IS integrated (that's the origin of the beeper-only people). <code>identities</code> is per-(network, handle) by design, so "where can I reach this person" is solved — just underfed.
+</div>
+<div class="open">
+<strong>Open follow-ups:</strong>
+<ul>
+  <li>"Uncle Jimmy" is stored as a <em>locked display override</em> (Convex-only) but is semantically an Apple <em>nickname</em>. When 3a lands, decide whether to migrate such overrides into the nickname field so they sync to the phone.</li>
+  <li><strong>Next build queue:</strong> (1) ✓ done — Airtable join-key gap; (2) ✓ done — private CRM layer (favorite/priority/tags); (3) <strong>Airtable ORGANIZATIONAL tags</strong> — needs a decision on which of the ~150 Humans columns qualify as tags (UW Team, UW Department, Promo Team Roles, Team Category, event links via a separate table…); (4) <strong>Phase 3a CardDAV read</strong> — the big one, unblocks birthday/org/nickname and all write-back.</li>
+  <li><strong>Not yet visually checked:</strong> the CRM section (★ / priority pills / tag chips) on the person screen, and the ★ on favorited contact rows.</li>
+</ul>
+</div>
+
+<h2>Proposed design (Phase 1 mechanics)</h2>
+
+<h3>1 · Schema (additive, optional — no destructive migration)</h3>
+<pre>identities: + first_name?, last_name?, nickname?   (per-source structured parts)
+            + source_contact_id?  (Apple contact id — for Phase 3b write-back)
+people:     + first_name?, last_name?, nickname?   (aggregated projected)
+            + organization?                        (Convex-native, app-owned)
+            display_name / display_name_locked stay (lock now guards ALL name fields)</pre>
+<p>All optional, so existing rows stay valid; structure fills in as syncs re-run. Apple's contact id is retained now so Phase 3 write-back can target the right source record (Airtable's is already stored as <code>airtable_human_id</code>).</p>
+
+<h3>2 · One "primary name identity" per person (coherence rule)</h3>
+<p>To keep <code>display_name</code> and <code>first/last</code> from disagreeing, <code>recomputePersonAggregates</code> picks a single primary identity by <strong>source priority</strong> — <code>apple_contact</code> &gt; <code>airtable_human</code> &gt; <code>manual</code> &gt; beeper — and takes <code>display_name</code>, <code>first_name</code>, <code>last_name</code> all from it. Apple wins because it's already the canonical name source (consistent with the identity-mirror hierarchy). A locked person keeps its manually-set name regardless.</p>
+
+<h3>3 · display_name derivation</h3>
+<p>Per identity: <code>display_name</code> = the source's own display string (Apple <code>displayName</code>/nickname, Airtable <code>Name</code>) if present, else <code>"First Last"</code> from the parts, else the handle. This preserves good labels like "The Brooklyn Mirage" while still capturing first/last separately for sort.</p>
+
+<h3>4 · Ingest changes</h3>
+<ul>
+  <li><code>identity-sync.ts</code> (Apple): pass through <code>firstName</code>/<code>lastName</code> instead of discarding; keep the assembled <code>display_name</code>.</li>
+  <li><code>airtableSync.ts</code>: add <code>First Name</code>/<code>Last Name</code> to <code>FIELDS</code>; map into the card.</li>
+  <li><code>ingestContacts.ts</code> <code>ContactCard</code> + <code>ingestOneCard</code>: carry <code>first_name</code>/<code>last_name</code> onto the identity (respecting the no-op-write discipline already in place).</li>
+  <li><code>mutations.ts</code> <code>createPerson</code>/<code>renamePerson</code>: accept <code>first_name</code>/<code>last_name</code>; a manual edit sets the parts, derives <code>display_name</code>, and locks all three.</li>
+</ul>
+
+<h3>5 · Client (Phase 1)</h3>
+<ul>
+  <li><code>person-content.tsx</code> edit UI: replace the single Name box with <strong>First</strong>, <strong>Last</strong>, <strong>Nickname</strong>, <strong>Organization</strong>, and a <strong>Display-name override</strong> (both rename + add-contact flows).</li>
+  <li><code>lib/identity.ts</code>: thread <code>first_name</code>/<code>last_name</code> through the hand-typed refs + hooks (<code>useCreatePerson</code>, <code>useRenamePerson</code>), plus the shared-key arg.</li>
+  <li><code>contacts-list-pane.tsx</code>: <strong>no change in Phase 1</strong> — sort and display stay exactly as today. Last-name sort + "Last, First" is Phase 2, behind the settings toggle.</li>
+  <li>Chat headers / inbox names stay natural "First Last" (unchanged — they read <code>display_name</code> via the mirror).</li>
+</ul>
+
+<h3>6 · Backfill (no one-off migration script needed)</h3>
+<p>Fields are additive, so backfill is just re-running the syncs once they carry the new data: trigger an Apple <code>identity-sync</code> pass and an <code>airtableSync</code> run after deploy; <code>recomputePersonAggregates</code> then derives each person's first/last. Manually-locked names are preserved by the lock guard. Verify with <code>internal:stats</code> and a spot-check of a known contact.</p>
+
+<h2>Resolved decisions</h2>
+<div class="rec">
+<p class="q">Q1 — Write-back → future Phase 3 (confirmed wanted).</p>
+<p>"It will [push back] — maybe not right this second, but we definitely want to start resolving things across platforms." Phase 1 stores structured names losslessly and keeps the source record ids (<code>airtable_human_id</code> already; Apple contact id to retain), so Phase 3 write-back has everything it needs. Not implemented in Phase 1.</p>
+</div>
+<div class="rec">
+<p class="q">Q2 — One lock covers the whole name. ✓</p>
+<p>A manual edit locks display + first + last together; syncs never overwrite any of them. Reuse/rename the existing <code>display_name_locked</code> guard to cover all name fields.</p>
+</div>
+<div class="rec">
+<p class="q">Q3 — Last-name sort/display is a SETTING, off by default → Phase 2.</p>
+<p>"Just an option, I don't want to use it as of right now, but we should introduce a settings panel somewhere." So Phase 1 leaves display and sort exactly as they are (natural "First Last", current order) and only stores the structured data. Phase 2 builds the settings panel (there's no general one today — only scattered action-sheet popovers) and adds the name-order toggle that flips the Contacts list to last-name sort + "Last, First".</p>
+</div>
+
+<h2>Non-goals</h2>
+<ul>
+  <li>Pushing edits back to Apple Contacts or Airtable (pending Q1).</li>
+  <li>Middle name / prefix / suffix / phonetic / organization fields — Apple has them, but out of scope; first/last covers the stated goals. Can extend later (additive).</li>
+  <li>Changing how inbox / chat-header names render (they stay "First Last" via <code>display_name</code>).</li>
+  <li>Heuristic parsing of any single-field name — unnecessary now that every source has real structured columns.</li>
+</ul>
+
+<h2>What changed</h2>
+<ul>
+  <li>Initial plan drafted after confirming (against the live Airtable base and the codebase) that all three sources carry structured first/last, correcting the earlier single-field assumption.</li>
+  <li>Three decisions resolved by Milad; scope split into phases. Write-back confirmed as a wanted future phase. Last-name sort/display moved behind a settings toggle (Phase 2) — off by default — after learning no general settings panel exists yet.</li>
+  <li>Scope deepened after Milad asked for a field-by-field treatment and raised app-native metadata: added the <strong>three storage roles</strong> (projected / Convex-native / pass-through) and the <strong>field matrix</strong>. Phase 1 edit set expanded to nickname, display-override, and organization (Convex-native).</li>
+  <li>Verified <strong>Apple Contacts is not writable via BlueBubbles</strong> (issue #701) and doesn't expose birthday. Split write-back into 3a (Airtable, feasible) and 3b (Apple — needs a new local Contacts-framework agent on the Mini). This is the load-bearing constraint on cross-platform sync.</li>
+</ul>
+
+</body>
+</html>

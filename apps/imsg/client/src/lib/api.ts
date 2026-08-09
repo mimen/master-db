@@ -48,6 +48,11 @@ export const api = {
     const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/messages${qs}`);
   },
+  message(chatGuid: string, messageGuid: string): Promise<Message> {
+    return request(
+      `/api/chats/${encodeURIComponent(chatGuid)}/messages/${encodeURIComponent(messageGuid)}`,
+    );
+  },
   sendText(
     chatGuid: string,
     body: { text: string; replyToGuid?: string },

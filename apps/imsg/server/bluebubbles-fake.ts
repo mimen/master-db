@@ -30,7 +30,7 @@ export class FakeBlueBubbles implements BlueBubbles {
   private seq = 0;
 
   /** Per-method call counters so tests can assert the reactive path avoids rebuilds. */
-  readonly calls = { queryChats: 0, queryMessages: 0, chatMessages: 0 };
+  readonly calls = { queryChats: 0, queryMessages: 0, chatMessages: 0, messageWithReactions: 0 };
   /** Chat GUIDs passed to markRead, in order. */
   readonly markReadCalls: string[] = [];
   /** Texts passed to sendText, in order. */
@@ -162,6 +162,18 @@ export class FakeBlueBubbles implements BlueBubbles {
       : this.allMessages();
     const value = messages.slice(options.offset, options.offset + options.limit);
     return Promise.resolve({ ok: true, value });
+  }
+
+  messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>> {
+    this.calls.messageWithReactions++;
+    const messages = this.allMessages();
+    const target = messages.find((message) => message.guid === messageGuid);
+    if (!target) return Promise.resolve({ ok: false, error: "no such message" });
+    const reactions = messages.filter((message) => {
+      const associated = message.associatedMessageGuid?.replace(/^b?p:\d+\//, "");
+      return associated === messageGuid && Boolean(message.associatedMessageType);
+    });
+    return Promise.resolve({ ok: true, value: [target, ...reactions] });
   }
 
   contacts(): Promise<Result<BBContact[]>> {

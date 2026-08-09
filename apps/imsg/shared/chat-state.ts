@@ -62,13 +62,17 @@ export function computeFlags(
 }
 
 export function matchesFilters(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {
-  if (type === "dm" && (chat.isGroup || !chat.known)) return false;
-  if (type === "group" && !chat.isGroup) return false;
-  if (type === "unknown" && chat.known) return false;
-  // Spam and unknown senders stay out of the attention filters unless
-  // you're explicitly looking at the Unknown lens.
-  if (type !== "unknown" && state !== "all" && state !== "archived") {
-    if (chat.isSpam || !chat.known) return false;
+  const unknown = chat.contactsAvailable !== false && !chat.known;
+  const screened = chat.isSpam || unknown;
+  // Unknown is the explicit reveal surface for screened conversations. Every
+  // other type lens keeps them out of the inbox, counts, inbox search, and shelf.
+  // Contact failures fail open instead of making the whole inbox disappear.
+  if (type === "unknown") {
+    if (!screened) return false;
+  } else {
+    if (screened) return false;
+    if (type === "dm" && chat.isGroup) return false;
+    if (type === "group" && !chat.isGroup) return false;
   }
   switch (state) {
     case "all":
@@ -145,6 +149,7 @@ export function applyMessage(
     : chat.firstUnreadAt;
   const updated: ChatSummary = {
     ...chat,
+    isSpam: message.isSpam === true,
     firstUnreadAt,
     unreadCount: qualifiesForUnreadAge ? chat.unreadCount + 1 : chat.unreadCount,
     lastMessage: {

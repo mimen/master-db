@@ -15,6 +15,7 @@ interface UseMessagesResult {
   hasNewer: boolean;
   loadOlder: () => void;
   loadNewer: () => void;
+  refresh: (messageGuid: string) => void;
   upsert: (message: Message) => void;
   replaceTemp: (tempGuid: string, message: Message) => void;
   remove: (guid: string) => void;
@@ -57,6 +58,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const [hasMore, setHasMore] = useState(false);
   const [hasNewer, setHasNewer] = useState(false);
   const generation = useRef(0);
+  const refreshVersions = useRef(new Map<string, number>());
 
   useEffect(() => {
     setHasMore(false);
@@ -96,6 +98,34 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   useEffect(() => {
     if (chatGuid && !target && messages.length > 0) cacheThread(chatGuid, messages);
   }, [chatGuid, target, messages]);
+
+  const refresh = useCallback(
+    (messageGuid: string) => {
+      if (!chatGuid || !messages.some((message) => message.guid === messageGuid)) return;
+      const gen = generation.current;
+      const version = (refreshVersions.current.get(messageGuid) ?? 0) + 1;
+      refreshVersions.current.set(messageGuid, version);
+      api
+        .message(chatGuid, messageGuid)
+        .then((refreshed) => {
+          if (
+            generation.current !== gen ||
+            refreshVersions.current.get(messageGuid) !== version
+          ) {
+            return;
+          }
+          setMessages((current) => {
+            const index = current.findIndex((message) => message.guid === messageGuid);
+            if (index < 0) return current;
+            const next = [...current];
+            next[index] = refreshed;
+            return next;
+          });
+        })
+        .catch(() => undefined);
+    },
+    [chatGuid, messages],
+  );
 
   const loadOlder = useCallback(() => {
     if (!chatGuid || messages.length === 0) return;
@@ -177,5 +207,16 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
     });
   }, []);
 
-  return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove };
+  return {
+    messages,
+    loading,
+    hasMore,
+    hasNewer,
+    loadOlder,
+    loadNewer,
+    refresh,
+    upsert,
+    replaceTemp,
+    remove,
+  };
 }

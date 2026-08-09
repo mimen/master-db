@@ -71,10 +71,8 @@ export function ThreadView({
   const privateApi = usePrivateApi();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
-  const { messages, loading, hasMore, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
-    chatGuid,
-    jumpTarget,
-  );
+  const { messages, loading, hasMore, loadOlder, loadNewer, refresh, upsert, replaceTemp } =
+    useMessages(chatGuid, jumpTarget);
   // Milad owes a reply when the newest real message is inbound. Drives whether
   // the suggestion shelf appears at all.
   const awaitingReply = useMemo(() => {
@@ -152,6 +150,8 @@ export function ThreadView({
             void api.markRead(chatGuid);
             setPeerTyping(false);
           }
+        } else if (event.kind === "thread-changed" && event.chatGuid === chatGuid) {
+          refresh(event.messageGuid);
         } else if (event.kind === "typing" && event.chatGuid === chatGuid) {
           setPeerTyping(event.display);
           if (typingClear.current) clearTimeout(typingClear.current);
@@ -160,7 +160,7 @@ export function ThreadView({
           }
         }
       },
-      [chatGuid, upsert],
+      [chatGuid, refresh, upsert],
     ),
   );
 

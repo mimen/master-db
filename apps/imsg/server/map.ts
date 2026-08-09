@@ -30,24 +30,39 @@ function specialContent(m: BBMessage): SpecialContent | null {
 
 const TAPBACK_NAMES = ["love", "like", "dislike", "laugh", "emphasize", "question"] as const;
 
-/** Returns the tapback name for add-type reactions, null for non-tapbacks or removals. */
-function tapbackType(value: string | number | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number") {
-    if (value >= 2000 && value <= 2005) return TAPBACK_NAMES[value - 2000] ?? null;
-    return null; // 3000s = removal
-  }
-  if (value.startsWith("-")) return null;
-  return TAPBACK_NAMES.includes(value as (typeof TAPBACK_NAMES)[number]) ? value : null;
+function customReactionType(text: string | null | undefined): string | null {
+  const normalized = (text ?? "").replace(/[\u200B\u2060\uFEFF]/gu, "").trim();
+  const match = normalized.match(/^(.+?)\s+to\s+[“"]/u);
+  return match?.[1]?.trim() || null;
 }
 
-/** Strips the "p:0/" / "bp:0/" part prefix from an associated message GUID. */
+/** Returns the visible reaction for add records, null for non-reactions or removals. */
+function tapbackType(message: BBMessage): string | null {
+  const value = message.associatedMessageType;
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && !/^\d+$/.test(value)) {
+    if (value.startsWith("-")) return null;
+    return TAPBACK_NAMES.includes(value as (typeof TAPBACK_NAMES)[number]) ? value : null;
+  }
+
+  const numeric = Number(value);
+  if (numeric >= 2000 && numeric <= 2005) return TAPBACK_NAMES[numeric - 2000] ?? null;
+  if (numeric === 2006) return customReactionType(message.text);
+  return null; // 3000s = removal
+}
+
 function stripPartPrefix(guid: string): string {
   return guid.replace(/^b?p:\d+\//, "");
 }
 
-function isTapback(m: BBMessage): boolean {
-  return Boolean(m.associatedMessageGuid && m.associatedMessageType);
+/** Returns the target GUID for an associated message, without its part prefix. */
+export function associatedMessageTargetGuid(message: BBMessage): string | null {
+  if (!message.associatedMessageGuid || !message.associatedMessageType) return null;
+  return stripPartPrefix(message.associatedMessageGuid);
+}
+
+function isTapback(message: BBMessage): boolean {
+  return associatedMessageTargetGuid(message) !== null;
 }
 
 function isGroupEvent(m: BBMessage): boolean {
@@ -115,10 +130,10 @@ export function buildThread(
 ): Message[] {
   const tapbacks = new Map<string, Reaction[]>();
   for (const m of raw) {
-    if (!isTapback(m)) continue;
-    const type = tapbackType(m.associatedMessageType);
-    if (!type || !m.associatedMessageGuid) continue;
-    const target = stripPartPrefix(m.associatedMessageGuid);
+    const target = associatedMessageTargetGuid(m);
+    if (!target) continue;
+    const type = tapbackType(m);
+    if (!type) continue;
     const list = tapbacks.get(target) ?? [];
     list.push({
       type,
@@ -240,7 +255,7 @@ const TAPBACK_VERBS: Record<string, string> = {
 
 function summarizeLast(m: BBMessage): string {
   if (isTapback(m)) {
-    const type = tapbackType(m.associatedMessageType);
+    const type = tapbackType(m);
     return type ? (TAPBACK_VERBS[type] ?? `Reacted ${type}`) : "Removed a reaction";
   }
   const text = cleanText(m);
