@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Phase B uploader — copies Beeper's locally-cached attachment bytes into
+ * Phase B uploader — streams Beeper attachment bytes from the Mac Mini into
  * Convex File Storage, dedupes by Matrix mxc_id, and records each
  * (mxc_id → convex_storage_id) mapping via /beeper/attachments/record.
  *
@@ -12,9 +12,9 @@
  *   2. Dedupes by mxc_id (same media file often appears in many messages).
  *   3. Asks Convex which mxc_ids are already uploaded (resumable: skips them).
  *   4. For each missing mxc_id, in parallel:
- *        - Verify the file exists at the local srcURL path.
  *        - Ask Convex for an upload URL.
- *        - PUT the bytes — Convex returns a { storageId } on success.
+ *        - Stream the mxc:// asset from Beeper's authenticated /assets/serve route.
+ *        - POST the bytes — Convex returns a { storageId } on success.
  *        - POST the storage id + metadata to /beeper/attachments/record.
  *   5. Logs progress and saves a local manifest (.beeper-attachments-progress.json)
  *      so subsequent runs only re-fetch attachment metadata from Beeper.
@@ -32,11 +32,17 @@
  *   BEEPER_INGEST_SECRET
  */
 
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { resolveBeeperUrl } from "./beeper-config";
+import {
+  ATTACHMENT_UPLOAD_TIMEOUT_MS,
+  beeperFetch,
+  CONVEX_REQUEST_TIMEOUT_MS,
+  fetchBeeperAsset,
+  resolveBeeperAssetSource,
+} from "./beeper-http";
 
 // ---------------------------- args + env -------------------------------------
 
@@ -71,11 +77,10 @@ function usage(): string {
 const ARGS = parseArgs(Bun.argv.slice(2));
 
 const BEEPER_URL = resolveBeeperUrl(process.env.BEEPER_URL);
-const BEEPER_TOKEN = process.env.BEEPER_ACCESS_TOKEN;
+const BEEPER_TOKEN = requiredEnv("BEEPER_ACCESS_TOKEN");
 const INGEST_BASE = (process.env.CONVEX_INGEST_URL ?? "").replace(/\/beeper\/ingest\/?$/, "");
 const INGEST_SECRET = process.env.BEEPER_INGEST_SECRET;
 
-if (!BEEPER_TOKEN) die("BEEPER_ACCESS_TOKEN not set");
 if (!ARGS.dryRun && !INGEST_BASE) die("CONVEX_INGEST_URL not set");
 if (!ARGS.dryRun && !INGEST_SECRET) die("BEEPER_INGEST_SECRET not set");
 
@@ -92,7 +97,7 @@ const ENDPOINTS = {
 type AttachmentMeta = {
   mxc_id: string;
   network: string;
-  src_path: string;
+  source_url: string;
   mime_type?: string;
   file_name?: string;
   file_size?: number;
@@ -121,9 +126,7 @@ interface BeeperMessage {
 async function beeperGet<T>(path: string): Promise<T> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      const res = await fetch(`${BEEPER_URL}${path}`, {
-        headers: { Authorization: `Bearer ${BEEPER_TOKEN}` },
-      });
+      const res = await beeperFetch(BEEPER_URL, BEEPER_TOKEN, path);
       if (!res.ok) throw new Error(`Beeper ${res.status} ${res.statusText} for ${path}`);
       return (await res.json()) as T;
     } catch (e) {
@@ -141,6 +144,7 @@ async function convexPost<T>(url: string, body: unknown): Promise<T> {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${INGEST_SECRET}` },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(CONVEX_REQUEST_TIMEOUT_MS),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -187,12 +191,10 @@ async function fetchAttachmentsForChat(chat: BeeperChatLite): Promise<Attachment
     for (const m of data.items) {
       for (const a of m.attachments ?? []) {
         if (!a.id) continue;
-        const srcPath = a.srcURL ? fileURLToLocalPath(a.srcURL) : undefined;
-        if (!srcPath) continue;
         out.push({
           mxc_id: a.id,
           network: chat.network,
-          src_path: srcPath,
+          source_url: resolveBeeperAssetSource(a.id, a.srcURL),
           mime_type: a.mimeType,
           file_name: a.fileName,
           file_size: a.fileSize,
@@ -207,15 +209,6 @@ async function fetchAttachmentsForChat(chat: BeeperChatLite): Promise<Attachment
     await sleep(20);
   }
   return out;
-}
-
-function fileURLToLocalPath(srcURL: string): string | undefined {
-  if (!srcURL.startsWith("file://")) return undefined;
-  try {
-    return fileURLToPath(srcURL);
-  } catch {
-    return undefined;
-  }
 }
 
 // ---------------------------- progress ---------------------------------------
@@ -264,17 +257,7 @@ function saveProgress(p: Progress): void {
 // ---------------------------- upload one --------------------------------------
 
 async function uploadOne(att: AttachmentMeta): Promise<{ ok: true; storageId: string } | { ok: false; error: string }> {
-  if (!existsSync(att.src_path)) {
-    return { ok: false, error: `missing local file: ${att.src_path}` };
-  }
-  let onDiskSize: number | undefined;
-  try {
-    onDiskSize = statSync(att.src_path).size;
-  } catch (e) {
-    return { ok: false, error: `stat failed: ${(e as Error).message}` };
-  }
-
-  // 1) ask for an upload URL
+  // 1) ask for a single-use Convex upload URL
   let uploadUrl: string;
   try {
     const resp = await convexPost<{ uploadUrl: string }>(ENDPOINTS.uploadUrl, {});
@@ -283,18 +266,27 @@ async function uploadOne(att: AttachmentMeta): Promise<{ ok: true; storageId: st
     return { ok: false, error: `uploadUrl: ${(e as Error).message}` };
   }
 
-  // 2) PUT the bytes (Convex's upload URL expects POST with the file body)
+  // 2) stream the attachment from the Mini. Local file:// paths returned by
+  // Beeper are paths on the Mini and cannot be opened from another machine.
+  let asset: Awaited<ReturnType<typeof fetchBeeperAsset>>;
+  try {
+    asset = await fetchBeeperAsset(BEEPER_URL, BEEPER_TOKEN, att.source_url);
+  } catch (e) {
+    return { ok: false, error: `Beeper asset: ${(e as Error).message}` };
+  }
+
+  // 3) stream the bytes into Convex File Storage
   let storageId: string;
   try {
-    const file = Bun.file(att.src_path);
     const res = await fetch(uploadUrl, {
       method: "POST",
       headers: att.mime_type ? { "Content-Type": att.mime_type } : {},
-      body: file,
+      body: asset.body,
+      signal: AbortSignal.timeout(ATTACHMENT_UPLOAD_TIMEOUT_MS),
     });
     if (!res.ok) {
       const text = await res.text();
-      return { ok: false, error: `upload PUT ${res.status}: ${text}` };
+      return { ok: false, error: `upload POST ${res.status}: ${text}` };
     }
     const json = (await res.json()) as { storageId?: string };
     if (!json.storageId) return { ok: false, error: "upload response missing storageId" };
@@ -303,7 +295,7 @@ async function uploadOne(att: AttachmentMeta): Promise<{ ok: true; storageId: st
     return { ok: false, error: `upload bytes: ${(e as Error).message}` };
   }
 
-  // 3) record the mapping
+  // 4) record the mapping
   try {
     await convexPost(ENDPOINTS.record, {
       mxc_id: att.mxc_id,
@@ -311,7 +303,7 @@ async function uploadOne(att: AttachmentMeta): Promise<{ ok: true; storageId: st
       network: att.network,
       mime_type: att.mime_type,
       file_name: att.file_name,
-      file_size: att.file_size ?? onDiskSize,
+      file_size: att.file_size ?? asset.contentLength,
       width: att.width,
       height: att.height,
       duration_ms: att.duration_ms,
@@ -327,6 +319,11 @@ async function uploadOne(att: AttachmentMeta): Promise<{ ok: true; storageId: st
 
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 function die(msg: string): never { console.error(`error: ${msg}`); process.exit(1); }
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) die(`${name} not set`);
+  return value;
+}
 
 async function main(): Promise<void> {
   console.log(`Beeper attachments uploader — account=${ARGS.account} concurrency=${ARGS.concurrency} dryRun=${ARGS.dryRun}`);
@@ -411,7 +408,7 @@ async function main(): Promise<void> {
       if (idx >= toUpload.length) return;
       const att = toUpload[idx]!;
       const result = await uploadOne(att);
-      if (result.ok) {
+      if (result.ok === true) {
         progress.uploaded[att.mxc_id] = result.storageId;
         delete progress.failed[att.mxc_id];
         okCount += 1;

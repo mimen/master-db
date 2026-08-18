@@ -28,6 +28,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { resolveBeeperUrl } from "./beeper-config";
+import {
+  beeperFetch,
+  CONVEX_REQUEST_TIMEOUT_MS,
+} from "./beeper-http";
 
 // ---------------------------- args & env -------------------------------------
 
@@ -63,11 +67,10 @@ function usage(): string {
 const ARGS = parseArgs(Bun.argv.slice(2));
 
 const BEEPER_URL = resolveBeeperUrl(process.env.BEEPER_URL);
-const BEEPER_TOKEN = process.env.BEEPER_ACCESS_TOKEN;
+const BEEPER_TOKEN = requiredEnv("BEEPER_ACCESS_TOKEN");
 const CONVEX_INGEST_URL = process.env.CONVEX_INGEST_URL;
 const INGEST_SECRET = process.env.BEEPER_INGEST_SECRET;
 
-if (!BEEPER_TOKEN) die("BEEPER_ACCESS_TOKEN not set");
 if (!ARGS.dryRun && !CONVEX_INGEST_URL) die("CONVEX_INGEST_URL not set");
 if (!ARGS.dryRun && !INGEST_SECRET) die("BEEPER_INGEST_SECRET not set");
 
@@ -165,9 +168,7 @@ type Progress = {
 async function beeperGet<T>(path: string): Promise<T> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     try {
-      const res = await fetch(`${BEEPER_URL}${path}`, {
-        headers: { Authorization: `Bearer ${BEEPER_TOKEN}` },
-      });
+      const res = await beeperFetch(BEEPER_URL, BEEPER_TOKEN, path);
       if (!res.ok) {
         throw new Error(`Beeper ${res.status} ${res.statusText} for ${path}`);
       }
@@ -364,6 +365,7 @@ async function postIngest(payload: IngestPayload): Promise<void> {
           Authorization: `Bearer ${INGEST_SECRET}`,
         },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(CONVEX_REQUEST_TIMEOUT_MS),
       });
       if (!res.ok) {
         const body = await res.text();
@@ -416,6 +418,12 @@ function sleep(ms: number): Promise<void> {
 function die(msg: string): never {
   console.error(`error: ${msg}`);
   process.exit(1);
+}
+
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) die(`${name} not set`);
+  return value;
 }
 
 async function main(): Promise<void> {

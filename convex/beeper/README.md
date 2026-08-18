@@ -104,7 +104,7 @@ Run `bun run scripts/sync-beeper.ts` from the laptop or Mac Mini. Real-time upda
 
 ## Phase B — attachment pipeline
 
-Beeper Desktop caches every attachment locally under `~/Library/Application Support/BeeperTexts/media/<homeserver>/<key>`. Each message we ingest in Phase A carries a `mxc_id` per attachment that points back into that cache. Phase B walks every chat once, collects every unique `mxc_id`, and uploads the referenced bytes into Convex File Storage.
+Each message ingested in Phase A carries an `mxc_id` for every attachment. Phase B walks every chat once, collects each unique `mxc_id`, and streams the referenced bytes from the Mini's authenticated `/assets/serve?url=<encoded mxc URL>` endpoint into Convex File Storage. The uploader never opens Beeper's `file://` cache paths because those paths belong to the Mini and are not readable from the laptop.
 
 Three HTTP routes are added (all share the same `BEEPER_INGEST_SECRET` bearer auth as `/beeper/ingest`):
 
