@@ -2,12 +2,12 @@
 
 Mirror of Milad's Beeper Desktop message history into Convex for searchable, durable backup across all bridged networks (WhatsApp, Telegram, iMessage, Slack, Google Messages, Matrix).
 
-Built as the second-class citizen alongside the Todoist integration. Same general shape (schema/queries/mutations/sync/types) with one major difference: **the source of truth (Beeper Desktop) is local-only**, so ingest is pushed from a local script rather than pulled by a Convex action.
+Built as the second-class citizen alongside the Todoist integration. Same general shape (schema/queries/mutations/sync/types) with one major difference: **the source of truth (Beeper Desktop) is tailnet-only on the Mac Mini**, so ingest is pushed from a trusted machine rather than pulled by a Convex action.
 
 ## Pipeline
 
 ```
-Beeper Desktop (localhost:23373) ──┐
+Beeper Desktop (Mini via Tailscale HTTPS :8448) ──┐
                                    │  (1) HTTP GET — list chats, list messages
                                    ▼
 scripts/sync-beeper.ts (on Milad's Mac, Bun)
@@ -50,7 +50,7 @@ If the env var is unset on the deployment, the endpoint returns 500 with a clear
 bunx convex env set BEEPER_INGEST_SECRET "$(openssl rand -hex 32)"
 
 # Local .env.local needs (alongside CONVEX_URL etc.):
-#   BEEPER_URL=http://localhost:23373/v1
+#   BEEPER_URL=https://milads-mac-mini.taild31e9a.ts.net:8448/v1  # optional override; this is the default
 #   BEEPER_ACCESS_TOKEN=...                                 # from Beeper Desktop > Developers
 #   CONVEX_INGEST_URL=https://<deployment>.convex.site/beeper/ingest
 #   BEEPER_INGEST_SECRET=<same as the one above>
@@ -88,12 +88,12 @@ bunx convex run beeper:queries.searchMessages.searchMessages '{"query": "umbrell
 
 ## Why local-push instead of Convex-pull
 
-Beeper's API only exists at `localhost:23373` on Milad's machines. Convex actions run in a Convex-hosted runtime that cannot reach Milad's localhost. So ingest has to originate on a machine that has both:
+Beeper's API is bound to loopback on the Mac Mini and exposed to trusted machines through a tailnet-only Tailscale HTTPS proxy. Convex actions run in a Convex-hosted runtime that cannot reach the private tailnet. So ingest has to originate on a trusted machine that has both:
 
-1. A logged-in Beeper Desktop with the API enabled.
+1. Tailscale access to the Mini's Beeper Desktop API.
 2. Network access to the Convex deployment.
 
-That's the laptop or Mac Mini running `bun run scripts/sync-beeper.ts`. Real-time updates (Phase C, not yet built) will use Beeper's WebSocket subscription (`ws://localhost:23373/v1/ws`) on the same local script, streaming `message.upserted` events into the same ingest endpoint.
+Run `bun run scripts/sync-beeper.ts` from the laptop or Mac Mini. Real-time updates (Phase C, not yet built) will use Beeper's WebSocket subscription (`wss://milads-mac-mini.taild31e9a.ts.net:8448/v1/ws`) from the same script, streaming `message.upserted` events into the same ingest endpoint.
 
 ## Phase plan
 

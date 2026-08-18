@@ -26,7 +26,7 @@
  *   bun run scripts/upload-beeper-attachments.ts --concurrency 16
  *
  * Env (read from .env.local):
- *   BEEPER_URL                 (default http://localhost:23373/v1)
+ *   BEEPER_URL                 (default https://milads-mac-mini.taild31e9a.ts.net:8448/v1)
  *   BEEPER_ACCESS_TOKEN
  *   CONVEX_INGEST_URL          base URL for /beeper/* (no trailing path)
  *   BEEPER_INGEST_SECRET
@@ -35,6 +35,8 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { resolveBeeperUrl } from "./beeper-config";
 
 // ---------------------------- args + env -------------------------------------
 
@@ -68,7 +70,7 @@ function usage(): string {
 
 const ARGS = parseArgs(Bun.argv.slice(2));
 
-const BEEPER_URL = process.env.BEEPER_URL ?? "http://localhost:23373/v1";
+const BEEPER_URL = resolveBeeperUrl(process.env.BEEPER_URL);
 const BEEPER_TOKEN = process.env.BEEPER_ACCESS_TOKEN;
 const INGEST_BASE = (process.env.CONVEX_INGEST_URL ?? "").replace(/\/beeper\/ingest\/?$/, "");
 const INGEST_SECRET = process.env.BEEPER_INGEST_SECRET;

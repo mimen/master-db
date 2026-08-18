@@ -14,7 +14,7 @@
  *   bun run scripts/sync-beeper.ts --limit-chats 5       # smoke test
  *
  * Env (in .env.local):
- *   BEEPER_URL                 default http://localhost:23373/v1
+ *   BEEPER_URL                 default https://milads-mac-mini.taild31e9a.ts.net:8448/v1
  *   BEEPER_ACCESS_TOKEN        required — Beeper Desktop developer token
  *   CONVEX_INGEST_URL          required — https://<deployment>.convex.site/beeper/ingest
  *   BEEPER_INGEST_SECRET       required — shared secret matching the Convex env var
@@ -26,6 +26,8 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { resolveBeeperUrl } from "./beeper-config";
 
 // ---------------------------- args & env -------------------------------------
 
@@ -60,7 +62,7 @@ function usage(): string {
 
 const ARGS = parseArgs(Bun.argv.slice(2));
 
-const BEEPER_URL = process.env.BEEPER_URL ?? "http://localhost:23373/v1";
+const BEEPER_URL = resolveBeeperUrl(process.env.BEEPER_URL);
 const BEEPER_TOKEN = process.env.BEEPER_ACCESS_TOKEN;
 const CONVEX_INGEST_URL = process.env.CONVEX_INGEST_URL;
 const INGEST_SECRET = process.env.BEEPER_INGEST_SECRET;

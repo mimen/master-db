@@ -3,7 +3,8 @@ import { v } from "convex/values";
 /**
  * Validators for payloads coming in over the /beeper/ingest HTTP route.
  *
- * Source-of-truth is the Beeper Desktop local HTTP API (http://localhost:23373/v1).
+ * Source-of-truth is the Mac Mini's tailnet-only Beeper Desktop HTTP API
+ * (https://milads-mac-mini.taild31e9a.ts.net:8448/v1).
  * The local sync script reshapes Beeper's camelCase responses into the
  * snake_case payloads defined here before POSTing them to Convex.
  *
