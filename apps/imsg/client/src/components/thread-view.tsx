@@ -83,10 +83,8 @@ export function ThreadView({
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp } = useMessages(
-    chatGuid,
-    jumpTarget,
-  );
+  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, reconcile } =
+    useMessages(chatGuid, jumpTarget);
   messagesRef.current = messages;
   // Milad owes a reply when the newest real message is inbound. Drives whether
   // the suggestion shelf appears at all.
@@ -228,9 +226,14 @@ export function ThreadView({
           if (event.display) {
             typingClear.current = setTimeout(() => setPeerTyping(false), 12000);
           }
+        } else if (event.kind === "resync") {
+          // The event stream had a gap — anything sent or received meanwhile
+          // never arrived as an event. Pull the thread current again.
+          reconcile();
+          if (!previewOnly) void api.markRead(chatGuid);
         }
       },
-      [chatGuid, upsert, previewOnly],
+      [chatGuid, upsert, reconcile, previewOnly],
     ),
   );
 

@@ -20,7 +20,8 @@ import {
 import { NameResolver } from "./name-resolver";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview } from "./link-preview";
-import { buildThread, mapMessage, tapbackReactionEvent } from "./map";
+import { buildThread, mapMessage } from "./map";
+import { wireLiveEvents } from "./live-events";
 import type { MentionAnnotation } from "../shared/mentions";
 import { buildMentionAttributedBody } from "./mention-body";
 import { transcodeAttachment } from "./transcode";
@@ -103,58 +104,7 @@ directory.onEvent(() => broadcast({ kind: "chats-changed" }));
 
 // ------------------------------------------------- BlueBubbles event stream
 
-function chatGuidOf(message: BBMessage): string | null {
-  return message.chats?.[0]?.guid ?? null;
-}
-
-bb.onEvent((event) => {
-  switch (event.kind) {
-    case "new-message":
-    case "updated-message": {
-      // Resolve sender data against the raw per-service chat, then broadcast
-      // under the merged conversation's canonical guid.
-      const rawChatGuid = chatGuidOf(event.message);
-      const chatGuid = rawChatGuid ? directory.canonicalGuid(rawChatGuid) : null;
-      // Tapbacks are reactions, not messages: patch the target message's
-      // reactions live instead of injecting a "Loved …" bubble (reload folds
-      // them via buildThread; this keeps realtime consistent with that).
-      const tapback = tapbackReactionEvent(
-        event.message,
-        names,
-        rawChatGuid ? directory.participantHandlesFor(rawChatGuid) : [],
-      );
-      if (tapback && rawChatGuid && chatGuid) {
-        directory.applyMessage(rawChatGuid, event.message); // sidebar preview verb
-        broadcast({ kind: "reaction", chatGuid, ...tapback });
-        broadcast({ kind: "chats-changed" });
-        return;
-      }
-      const mapped =
-        event.kind === "new-message"
-          ? directory.applyMessage(rawChatGuid, event.message)
-          : directory.applyUpdatedMessage(rawChatGuid, event.message);
-      if (!chatGuid || mapped === null) {
-        broadcast({ kind: "chats-changed" });
-        return;
-      }
-      broadcast({ kind: event.kind, chatGuid, message: mapped });
-      return;
-    }
-    case "chat-read-status-changed":
-      directory.invalidate(true);
-      return;
-    case "typing":
-      broadcast({
-        kind: "typing",
-        chatGuid: directory.canonicalGuid(event.chatGuid),
-        display: event.display,
-      });
-      return;
-    case "group-changed":
-      directory.invalidate();
-      return;
-  }
-});
+wireLiveEvents(bb, directory, names, broadcast);
 
 // ------------------------------------------------------------------- routes
 

@@ -248,4 +248,10 @@ export type ServerEvent =
   | { kind: "updated-message"; chatGuid: string; message: Message }
   | { kind: "reaction"; chatGuid: string; targetGuid: string; reaction: Reaction; remove: boolean }
   | { kind: "chats-changed" }
-  | { kind: "typing"; chatGuid: string; display: boolean };
+  | { kind: "typing"; chatGuid: string; display: boolean }
+  /**
+   * The server's BlueBubbles event stream (or the client's own /events
+   * connection) was down and has recovered: anything that happened in the gap
+   * was silently missed. Consumers must refetch what they render.
+   */
+  | { kind: "resync" };

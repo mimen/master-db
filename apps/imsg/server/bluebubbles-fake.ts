@@ -110,6 +110,11 @@ export class FakeBlueBubbles implements BlueBubbles {
     return message;
   }
 
+  /** Appends WITHOUT emitting — a message that landed while the stream was down. */
+  appendMessage(chatGuid: string, message: BBMessage): void {
+    this.append(chatGuid, message);
+  }
+
   private append(chatGuid: string, message: BBMessage): void {
     const list = this.messages.get(chatGuid);
     if (list) list.push(message);

@@ -18,6 +18,8 @@ interface UseMessagesResult {
   upsert: (message: Message) => void;
   replaceTemp: (tempGuid: string, message: Message) => void;
   remove: (guid: string) => void;
+  /** Refetch the newest window and fold it in — for after an event-stream gap. */
+  reconcile: () => void;
 }
 
 function sortByDate(messages: Message[]): Message[] {
@@ -154,6 +156,40 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
       });
   }, [chatGuid, messages]);
 
+  // After an SSE gap (sleep, dropped stream) anything that arrived meanwhile
+  // was simply never delivered — refetch the newest window and merge. Skipped
+  // while anchored in history (target/hasNewer): folding the newest page into
+  // an older window would render a false continuity across the unloaded gap.
+  const reconcile = useCallback(() => {
+    if (!chatGuid || target || pagingNewer.current) return;
+    const gen = generation.current;
+    api
+      .messages(chatGuid)
+      .then((batch) => {
+        if (generation.current !== gen) return;
+        setMessages((current) => {
+          const byGuid = new Map(current.map((m) => [m.guid, m]));
+          let changed = false;
+          for (const m of batch) {
+            const known = byGuid.get(m.guid);
+            if (m.retracted) {
+              if (known) {
+                byGuid.delete(m.guid);
+                changed = true;
+              }
+              continue;
+            }
+            if (!known || JSON.stringify(known) !== JSON.stringify(m)) {
+              byGuid.set(m.guid, m);
+              changed = true;
+            }
+          }
+          return changed ? sortByDate([...byGuid.values()]) : current;
+        });
+      })
+      .catch(() => undefined);
+  }, [chatGuid, target]);
+
   const remove = useCallback((guid: string) => {
     setMessages((current) => current.filter((m) => m.guid !== guid));
   }, []);
@@ -191,5 +227,5 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
     });
   }, []);
 
-  return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove };
+  return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, reconcile };
 }

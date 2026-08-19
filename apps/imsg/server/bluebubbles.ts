@@ -28,7 +28,9 @@ export type BBEvent =
   | { kind: "updated-message"; message: BBMessage }
   | { kind: "chat-read-status-changed" }
   | { kind: "typing"; chatGuid: string; display: boolean }
-  | { kind: "group-changed" };
+  | { kind: "group-changed" }
+  /** The socket (re)connected; events may have been missed while it was down. */
+  | { kind: "stream-connected" };
 
 /**
  * The BlueBubbles seam: the single interface to BlueBubbles — REST operations
@@ -130,7 +132,11 @@ export class BlueBubblesClient implements BlueBubbles {
       reconnectionDelayMax: 30_000,
     });
     this.socket = socket;
-    socket.on("connect", () => console.log("socket.io connected to BlueBubbles"));
+    socket.on("connect", () => {
+      console.log("socket.io connected to BlueBubbles");
+      this.emit({ kind: "stream-connected" });
+    });
+    socket.on("disconnect", (reason: string) => console.log(`socket.io disconnected: ${reason}`));
     socket.on("connect_error", (err: Error) => console.error("socket.io error:", err.message));
     socket.on("new-message", (payload: BBMessage) => this.emit({ kind: "new-message", message: payload }));
     socket.on("updated-message", (payload: BBMessage) =>
