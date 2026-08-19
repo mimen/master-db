@@ -6,9 +6,14 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
 ## Repo layout (important)
 
 - Lives in the **master-db monorepo** at `apps/imsg`. `~/Programming/Repos/imsg` is a
-  **symlink**: on the laptop → `convex-db/.worktrees/main/apps/imsg`; on the Mini →
+  **symlink**: on the laptop → `convex-db/apps/imsg` (the primary checkout); on the Mini →
   `master-db/apps/imsg`. The pre-migration standalone repo is parked at
   `~/Programming/Repos/imsg.pre-migration-backup` on both machines.
+- **The app runs ONLY on the Mini.** Every machine uses
+  `https://milads-mac-mini.taild31e9a.ts.net:8447` (web/PWA) or Expo Go; there is no
+  resident laptop server, so all overlay state (archives/pins/dismissals) lives in one
+  place. For local development run `bun run dev:server` manually with a scratch
+  `DB_PATH` so real overlay state stays untouched.
 - Client: `client/` (Expo, SDK **54** — pinned to the Expo Go App Store ceiling; do not
   bump without an EAS build). Server: `server/`. Shared types/logic: `shared/`
   (imported as `@shared/*`; the client keeps a synced copy at `client/src/lib/types.ts`).
