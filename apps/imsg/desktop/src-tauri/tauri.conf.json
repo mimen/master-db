@@ -11,6 +11,8 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "imsg",
         "hiddenTitle": true,
         "titleBarStyle": "Overlay",

@@ -1,73 +1,54 @@
 import type { ViewStyle } from "react-native";
 
-import { isDesktopShell } from "./desktop-shell";
-
-// Keep in lockstep with Radii.card / CardShadow in constants/theme.ts.
-const CARD_RADIUS = 14;
-const CARD_SHADOW = { shadowColor: "#000" } as const;
 /** 1px divider — RN's hairlineWidth isn't available in bun tests of this module. */
 const HAIRLINE = 1;
 
 export interface FrameTheme {
   readonly background: string;
-  readonly desk: string;
-  readonly cardBorder: string;
   readonly divider: string;
 }
 
 export interface DesktopFrameStyles {
-  readonly shell: boolean;
   readonly split: ViewStyle;
   readonly pane: ViewStyle;
   readonly listPane: ViewStyle;
   readonly detailPane: ViewStyle;
+  readonly auxPane: ViewStyle;
 }
 
-/** Shared Messages/Contacts split: floating cards on the web; edge-to-edge in Tauri. */
-export function desktopFrame(
-  theme: FrameTheme,
-  shell: boolean = isDesktopShell(),
-): DesktopFrameStyles {
+/**
+ * Wide/desktop split: flush to the window, panes separated by a hairline.
+ * Used for both the PWA at desktop width and the Tauri shell.
+ */
+export function desktopFrame(theme: FrameTheme): DesktopFrameStyles {
   return {
-    shell,
     split: {
       flex: 1,
       flexDirection: "row",
-      gap: shell ? 0 : 10,
-      padding: shell ? 0 : 10,
-      backgroundColor: shell ? theme.background : theme.desk,
+      backgroundColor: theme.background,
     },
-    pane: shell
-      ? {
-          backgroundColor: theme.background,
-          overflow: "hidden",
-        }
-      : {
-          backgroundColor: theme.background,
-          borderColor: theme.cardBorder,
-          borderRadius: CARD_RADIUS,
-          borderTopColor: "rgba(255,255,255,0.14)",
-          borderWidth: HAIRLINE,
-          overflow: "hidden",
-          ...CARD_SHADOW,
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.32,
-          shadowRadius: 22,
-        },
+    pane: {
+      backgroundColor: theme.background,
+      overflow: "hidden",
+    },
     listPane: {
       flexBasis: 380,
       flexGrow: 0,
       flexShrink: 0,
       width: 380,
-      ...(shell
-        ? {
-            borderRightColor: theme.divider,
-            borderRightWidth: HAIRLINE,
-          }
-        : {}),
+      borderRightColor: theme.divider,
+      borderRightWidth: HAIRLINE,
     },
     detailPane: {
       flex: 1,
+    },
+    auxPane: {
+      flexBasis: 330,
+      flexGrow: 0,
+      flexShrink: 0,
+      width: 330,
+      borderLeftColor: theme.divider,
+      borderLeftWidth: HAIRLINE,
     },
   };
 }

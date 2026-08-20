@@ -62,6 +62,18 @@ pub fn run() {
         .setup(|app| {
             let menu = build_menu(app)?;
             app.set_menu(menu)?;
+            let window_config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .expect("main window config");
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &window_config)?
+                .initialization_script(
+                    "Object.defineProperty(window,'__IMSG_NATIVE_SHELL__',{value:true,enumerable:true});",
+                )
+                .build()?;
             Ok(())
         })
         .on_menu_event(|app, event| {

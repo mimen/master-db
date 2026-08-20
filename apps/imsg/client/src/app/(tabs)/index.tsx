@@ -398,7 +398,7 @@ export default function ChatListScreen() {
         )}
       </View>
       {rightPane && (
-        <View style={[frame.pane, styles.infoCard]}>
+        <View style={[frame.pane, frame.auxPane]}>
           {rightPane.mode === "details" ? (
             <ChatInfoContent
               key={rightPane.guid}
@@ -433,7 +433,7 @@ export default function ChatListScreen() {
         </View>
       )}
       {canShadow && shadowOpen && selected && (
-        <View style={[frame.pane, styles.infoCard]}>
+        <View style={[frame.pane, frame.auxPane]}>
           <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
         </View>
       )}
@@ -442,12 +442,6 @@ export default function ChatListScreen() {
 }
 
 const styles = StyleSheet.create({
-  infoCard: {
-    flexBasis: 330,
-    flexGrow: 0,
-    flexShrink: 0,
-    width: 330,
-  },
   // Not fully centered — offset from the top, matching the original inline
   // Modal backdrops this shell replaced.
   overlayBackdrop: {

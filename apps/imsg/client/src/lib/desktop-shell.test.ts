@@ -25,36 +25,28 @@ describe("isDesktopShell", () => {
     };
     expect(isDesktopShell(win)).toBe(true);
   });
+
+  test("true when the native-shell init flag is set", () => {
+    expect(isDesktopShell({ __IMSG_NATIVE_SHELL__: true })).toBe(true);
+  });
 });
 
 describe("desktopFrame", () => {
   const theme = {
     background: "#ffffff",
-    desk: "#e6e7ee",
-    cardBorder: "rgba(0,0,0,0.08)",
     divider: "#E5E5EA",
   };
 
-  test("web keeps the desk, padding, and floating cards", () => {
-    const frame = desktopFrame(theme, false);
-    expect(frame.shell).toBe(false);
-    expect(frame.split.padding).toBe(10);
-    expect(frame.split.gap).toBe(10);
-    expect(frame.split.backgroundColor).toBe(theme.desk);
-    expect(frame.pane.borderRadius).toBe(14);
-    expect(frame.pane.shadowRadius).toBe(22);
-    expect(frame.listPane.borderRightWidth).toBeUndefined();
-  });
-
-  test("shell is edge-to-edge with a hairline list divider", () => {
-    const frame = desktopFrame(theme, true);
-    expect(frame.split.padding).toBe(0);
-    expect(frame.split.gap).toBe(0);
+  test("wide split is flush with hairline pane dividers", () => {
+    const frame = desktopFrame(theme);
+    expect(frame.split.padding).toBeUndefined();
+    expect(frame.split.gap).toBeUndefined();
     expect(frame.split.backgroundColor).toBe(theme.background);
     expect(frame.pane.borderRadius).toBeUndefined();
-    expect(frame.pane.shadowRadius).toBeUndefined();
-    expect(frame.listPane.borderRightWidth).toBeGreaterThan(0);
+    expect(frame.listPane.borderRightWidth).toBe(1);
     expect(frame.listPane.width).toBe(380);
+    expect(frame.auxPane.borderLeftWidth).toBe(1);
+    expect(frame.auxPane.width).toBe(330);
   });
 });
 

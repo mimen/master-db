@@ -4,9 +4,10 @@ import type { CommandId } from "./keyboard/types";
 
 /**
  * Space reserved at the left of SidebarChrome for overlay traffic lights.
- * Matches the spike: lights at (16, 20) in a 58px chrome bar.
+ * Lights sit at (16, 20); three 12px buttons with 8px gaps need ~72px,
+ * plus a gap before the Messages/Contacts control.
  */
-export const DESKTOP_TRAFFIC_LIGHT_INSET = 76;
+export const DESKTOP_TRAFFIC_LIGHT_INSET = 88;
 
 type TauriListenUnlisten = () => void;
 
@@ -24,6 +25,7 @@ type TauriGlobal = {
 
 export type DesktopShellWindow = {
   __TAURI__?: TauriGlobal;
+  __IMSG_NATIVE_SHELL__?: boolean;
 };
 
 function defaultWindow(): DesktopShellWindow | undefined {
@@ -33,7 +35,7 @@ function defaultWindow(): DesktopShellWindow | undefined {
 
 /** True when the page is running inside the Tauri desktop shell. */
 export function isDesktopShell(win: DesktopShellWindow | undefined = defaultWindow()): boolean {
-  return win !== undefined && win.__TAURI__ !== undefined;
+  return win !== undefined && (win.__TAURI__ !== undefined || win.__IMSG_NATIVE_SHELL__ === true);
 }
 
 function tauriGlobal(win: DesktopShellWindow | undefined = defaultWindow()): TauriGlobal | null {

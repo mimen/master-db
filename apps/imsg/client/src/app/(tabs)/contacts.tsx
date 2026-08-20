@@ -29,7 +29,7 @@ export default function ContactsScreen() {
     );
   }
 
-  // Same split as Messages — floating cards on the web, edge-to-edge in Tauri.
+  // Same flush split as Messages.
   const frame = desktopFrame(theme);
 
   return (

@@ -15,8 +15,8 @@ export interface SidebarFrameProps {
 /**
  * Structural shell shared by the Messages and Contacts sidebars: safe area,
  * a relative body host whose content scrolls BEHIND the fixed chrome, and
- * the thumb overlay seam. Owns only the left pane — the desktop floating
- * cards/split are screen-level layout and must never live here.
+ * the thumb overlay seam. Owns only the left pane — the desktop split is
+ * screen-level layout and must never live here.
  */
 export function SidebarFrame({ chrome, thumb, children }: SidebarFrameProps): React.JSX.Element {
   const theme = useTheme();
