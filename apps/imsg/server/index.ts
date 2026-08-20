@@ -29,6 +29,7 @@ import { mapScheduledMessage } from "./scheduled";
 import { WhisperService } from "./whisper";
 import { createAndSendFaceTimeLink } from "./facetime";
 import { parseByteRange } from "./byte-range";
+import { staticCacheControl } from "./static-cache";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
@@ -925,8 +926,24 @@ app.get("/events", (c) => {
 // The universal Expo web export. Expo static output has one HTML file per
 // route, so dynamic segments need explicit rewrites.
 
-app.use("/*", serveStatic({ root: "./client/dist" }));
-app.get("*", serveStatic({ path: "./client/dist/index.html" }));
+app.use(
+  "/*",
+  serveStatic({
+    root: "./client/dist",
+    onFound: (_path, c) => {
+      c.header("Cache-Control", staticCacheControl(c.req.path));
+    },
+  }),
+);
+app.get(
+  "*",
+  serveStatic({
+    path: "./client/dist/index.html",
+    onFound: (_path, c) => {
+      c.header("Cache-Control", "no-store");
+    },
+  }),
+);
 
 export default {
   hostname: config.hostname,

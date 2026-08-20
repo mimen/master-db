@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ConvexProvider } from "convex/react";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { hydrateDrafts } from "@/lib/drafts";
+import { installDeployReloader } from "@/lib/deploy-reload";
 import { hydrateSettings } from "@/lib/settings";
 import { convexClient } from "@/lib/identity";
 import { LightboxProvider } from "@/lib/lightbox";
@@ -20,6 +21,12 @@ export default function RootLayout() {
   useEffect(() => {
     void hydrateDrafts();
     void hydrateSettings();
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    return installDeployReloader({
+      document,
+      fetchHtml: () => fetch("/", { cache: "no-store" }).then((r) => r.text()),
+      reload: () => window.location.reload(),
+    });
   }, []);
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
