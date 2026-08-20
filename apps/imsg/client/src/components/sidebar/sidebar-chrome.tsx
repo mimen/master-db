@@ -2,9 +2,13 @@ import { Platform, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { useType } from "@/hooks/use-type";
 import { DESKTOP_TRAFFIC_LIGHT_INSET, isDesktopShell } from "@/lib/desktop-shell";
-import { SIDEBAR_TITLE_HEIGHT, SIDEBAR_TOOLBAR_HEIGHT } from "@/lib/sidebar-metrics";
+import {
+  SIDEBAR_NAV_HEIGHT,
+  SIDEBAR_TITLE_HEIGHT,
+  SIDEBAR_TOOLBAR_HEIGHT,
+} from "@/lib/sidebar-metrics";
+import { WORDMARK_FONT } from "@/lib/wordmark-font";
 
 import { SIDEBAR_CHROME_HEIGHT } from "./use-synthetic-scroll-metrics";
 
@@ -17,43 +21,36 @@ const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 export interface SidebarChromeProps {
   /** Left slot: the pane's search field on mobile. Null on wide (toolbar). */
   readonly leading: React.ReactNode;
-  /** Right slot: the pane's action buttons. */
+  /** Right slot: new-message on wide; settings/filter/new on mobile. */
   readonly actions: React.ReactNode;
   /** Wide: sticky search row under the app name. */
   readonly toolbar?: React.ReactNode;
-  /** Wide: trailing title-row control (Messages/Contacts). */
-  readonly titleAccessory?: React.ReactNode;
+  /** Wide: Messages/Contacts on its own row under search. */
+  readonly nav?: React.ReactNode;
 }
 
 /**
  * The fixed frosted-glass top bar shared by both sidebars — the only fixed
- * chrome. Content scrolls behind it at ~10% with a blur (web-only
- * backdrop-filter; solid elsewhere). Behavior lives with the caller; this
- * component owns only geometry and glass.
- *
- * Wide/desktop is two rows: app name + nav on the traffic-light row,
- * search and actions on the row below. Mobile stays a single bar with
- * search inline.
+ * top chrome. No hairlines. Wide is three rows: wordmark (optically centered
+ * on overlay traffic lights), search + new, then the Messages/Contacts
+ * switcher. Mobile stays a single bar with search inline.
  */
 export function SidebarChrome({
   leading,
   actions,
   toolbar,
-  titleAccessory,
+  nav,
 }: SidebarChromeProps): React.JSX.Element {
   const theme = useTheme();
-  const type = useType();
   const { wide } = useLayoutMode();
   const shell = isDesktopShell();
   const compact = wide || shell;
   const glassStyle =
     Platform.OS === "web"
       ? ({
-          backgroundColor: `${theme.background}E6`,
+          backgroundColor: `${theme.background}F2`,
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          borderBottomColor: theme.divider,
-          borderBottomWidth: StyleSheet.hairlineWidth,
         } as object)
       : { backgroundColor: theme.background };
   const dragProps = shell ? DRAG : {};
@@ -72,20 +69,20 @@ export function SidebarChrome({
             accessibilityRole="header"
             numberOfLines={1}
             selectable={false}
-            style={[styles.wordmark, { color: theme.text, fontSize: type.title }]}
+            style={[styles.wordmark, { color: theme.text }]}
           >
-            Comma
+            Comma,
           </Text>
-          {titleAccessory ? (
-            <View style={styles.titleTrailing} {...(shell ? NO_DRAG : {})}>
-              {titleAccessory}
-            </View>
-          ) : null}
         </View>
         <View style={styles.toolbar} {...(shell ? NO_DRAG : {})}>
           {toolbar}
           {actionCluster}
         </View>
+        {nav ? (
+          <View style={styles.navRow} {...(shell ? NO_DRAG : {})}>
+            {nav}
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -138,7 +135,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     height: SIDEBAR_TITLE_HEIGHT,
-    justifyContent: "space-between",
     paddingHorizontal: 12,
   },
   titleRowShell: {
@@ -146,11 +142,13 @@ const styles = StyleSheet.create({
   },
   wordmark: {
     flexShrink: 0,
-    fontWeight: "600",
-    letterSpacing: -0.3,
-  },
-  titleTrailing: {
-    flexShrink: 0,
+    fontFamily: WORDMARK_FONT,
+    fontSize: 22,
+    // Line box = glyph box so the parent row's alignItems centers against
+    // the traffic lights (12px at y:20 → center 26, in a 52px row).
+    lineHeight: 22,
+    // Coolvetica's em-box sits optically high; 1px down matches the lights.
+    transform: [{ translateY: 1 }],
   },
   toolbar: {
     alignItems: "center",
@@ -159,6 +157,12 @@ const styles = StyleSheet.create({
     height: SIDEBAR_TOOLBAR_HEIGHT,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  navRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: SIDEBAR_NAV_HEIGHT,
+    paddingHorizontal: 10,
   },
   bar: {
     alignItems: "center",

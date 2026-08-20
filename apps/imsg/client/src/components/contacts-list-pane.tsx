@@ -21,12 +21,13 @@ import { FAVORITE_GOLD } from "./person-crm-section";
 import { NavSwitcher } from "./nav-switcher";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
-import { SidebarChrome, useChromeActions } from "./sidebar/sidebar-chrome";
+import { SidebarChrome } from "./sidebar/sidebar-chrome";
+import { SidebarFooter } from "./sidebar/sidebar-footer";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { useSyntheticScrollMetrics } from "./sidebar/use-synthetic-scroll-metrics";
-import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
+import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
 
 type Row =
   | { kind: "header"; key: string; letter: string }
@@ -73,10 +74,10 @@ export interface ContactsListPaneProps {
  */
 export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
-  const chromeActions = useChromeActions();
   const nameOrder = useNameOrder();
   const [query, setQuery] = useState("");
   const topBarH = sidebarChromeHeight(wide);
+  const footerH = sidebarFooterHeight(wide);
   const needle = query.trim().toLowerCase();
 
   const { results: airtableResults, people, add: addAirtableContact, addingId } = useAirtableSearch(
@@ -110,7 +111,8 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   // reliable, so it feeds content height directly.
   const metrics = useSyntheticScrollMetrics({
     chromeHeight: topBarH,
-    estimatedContentHeight: rows.length * 44 + topBarH + 64,
+    footerHeight: footerH,
+    estimatedContentHeight: rows.length * 44 + topBarH + footerH + 64,
   });
 
   const searchField = (
@@ -188,14 +190,10 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     <SidebarChrome
       leading={wide ? null : searchField}
       toolbar={wide ? searchField : undefined}
-      titleAccessory={wide ? <NavSwitcher active="contacts" /> : undefined}
+      nav={wide ? <NavSwitcher active="contacts" /> : undefined}
       actions={
         <>
-          <SettingsButton />
-          {/* Filters are a Messages concept — present for bar parity, inert here. */}
-          <View style={[chromeActions.button, { opacity: 0.3 }]}>
-            <Ionicons name="options-outline" size={chromeActions.iconSize} color={theme.accent} />
-          </View>
+          {wide ? null : <SettingsButton />}
           <ChromeIconButton
             icon="create-outline"
             accessibilityLabel="New message"
@@ -207,7 +205,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   );
 
   return (
-    <SidebarFrame chrome={chrome} thumb={<SyntheticScrollThumb state={metrics.thumb} />}>
+    <SidebarFrame
+      chrome={chrome}
+      footer={wide ? <SidebarFooter><SettingsButton /></SidebarFooter> : undefined}
+      thumb={<SyntheticScrollThumb state={metrics.thumb} />}
+    >
       {people === undefined ? (
         <CenteredSpinner style={styles.center} />
       ) : (
@@ -220,7 +222,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: 12,
+            paddingBottom: footerH + 12,
             paddingTop: Platform.OS === "web" && wide ? 0 : topBarH + 8,
           }}
           onLayout={(e) => metrics.onViewportHeight(e.nativeEvent.layout.height)}

@@ -38,10 +38,11 @@ export function useConversationListViewport(args: {
    * visible range are only meaningful against it. */
   readonly renderedChats: readonly ChatSummary[];
   readonly chromeHeight: number;
+  readonly footerHeight?: number;
   /** Changes exactly when the view changes (lens/query) — resets to top. */
   readonly viewKey: string;
 }): ConversationListViewport {
-  const { renderedChats, chromeHeight, viewKey } = args;
+  const { renderedChats, chromeHeight, footerHeight = 0, viewKey } = args;
   const listRef = useRef<FlashListRef<ChatSummary>>(null);
   const scrollOffset = useRef(0);
   // Nullable: null = "no measurement for the current view yet". Reset when
@@ -50,7 +51,8 @@ export function useConversationListViewport(args: {
 
   const metrics = useSyntheticScrollMetrics({
     chromeHeight,
-    estimatedContentHeight: renderedChats.length * 76 + chromeHeight + 240,
+    footerHeight,
+    estimatedContentHeight: renderedChats.length * 76 + chromeHeight + footerHeight + 240,
   });
 
   // Changing a lens or the query is a NEW view — start it from the top.

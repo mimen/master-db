@@ -51,7 +51,6 @@ function shelfMeta(chat: ChatSummary): { text: string; isPriorityBadge: boolean 
 
 export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>(
   function PriorityShelf({ chats, selectedGuid, onPress, onLongPress, variant = "full" }, ref) {
-  const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   // Measured per-item frames (x/width relative to the scroll content) — the
   // shelf can hold ten conversations in a 380px sidebar, so a keyboard
@@ -84,7 +83,7 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
     <View
       accessibilityRole="summary"
       accessibilityLabel={`Priority conversations, ${chats.length}`}
-      style={strip ? styles.strip : [styles.section, { borderBottomColor: theme.divider }]}
+      style={strip ? styles.strip : styles.section}
     >
       <ScrollView
         ref={scrollRef}
@@ -225,7 +224,6 @@ const styles = StyleSheet.create({
     padding: 1,
   },
   section: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingBottom: 20,
     paddingTop: 12,
   },

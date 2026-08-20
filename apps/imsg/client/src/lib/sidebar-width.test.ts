@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import {
   clampSidebarWidth,
+  SIDEBAR_FOOTER_HEIGHT,
+  SIDEBAR_NAV_HEIGHT,
   SIDEBAR_TITLE_HEIGHT,
   SIDEBAR_TOOLBAR_HEIGHT,
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   sidebarChromeHeight,
+  sidebarFooterHeight,
 } from "./sidebar-metrics";
 
 describe("clampSidebarWidth", () => {
@@ -31,7 +34,16 @@ describe("sidebarChromeHeight", () => {
     expect(sidebarChromeHeight(false)).toBe(SIDEBAR_TITLE_HEIGHT);
   });
 
-  test("wide stacks title and toolbar", () => {
-    expect(sidebarChromeHeight(true)).toBe(SIDEBAR_TITLE_HEIGHT + SIDEBAR_TOOLBAR_HEIGHT);
+  test("wide stacks title, search, and nav", () => {
+    expect(sidebarChromeHeight(true)).toBe(
+      SIDEBAR_TITLE_HEIGHT + SIDEBAR_TOOLBAR_HEIGHT + SIDEBAR_NAV_HEIGHT,
+    );
+  });
+});
+
+describe("sidebarFooterHeight", () => {
+  test("wide has a settings footer; mobile does not", () => {
+    expect(sidebarFooterHeight(true)).toBe(SIDEBAR_FOOTER_HEIGHT);
+    expect(sidebarFooterHeight(false)).toBe(0);
   });
 });

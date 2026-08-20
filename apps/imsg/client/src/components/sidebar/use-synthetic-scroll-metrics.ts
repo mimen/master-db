@@ -40,9 +40,10 @@ export interface SyntheticScrollMetrics {
  */
 export function useSyntheticScrollMetrics(args: {
   readonly chromeHeight: number;
+  readonly footerHeight?: number;
   readonly estimatedContentHeight: number;
 }): SyntheticScrollMetrics {
-  const { chromeHeight, estimatedContentHeight } = args;
+  const { chromeHeight, footerHeight = 0, estimatedContentHeight } = args;
   const [contentH, setContentH] = useState(0);
   const [viewportH, setViewportH] = useState(0);
   const contentHRef = useRef(0);
@@ -69,7 +70,7 @@ export function useSyntheticScrollMetrics(args: {
   );
 
   const effContentH = contentH > 0 ? contentH : estimatedContentHeight;
-  const trackH = Math.max(0, viewportH - chromeHeight - 6);
+  const trackH = Math.max(0, viewportH - chromeHeight - footerHeight - 6);
   const visible = viewportH > 0 && effContentH > viewportH + 4;
   const height = visible ? Math.max(36, (trackH * viewportH) / effContentH) : 0;
   const translateY = scrollYAnim.interpolate({

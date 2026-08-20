@@ -1,4 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { useFonts } from "expo-font";
 import { ensureGlobalWebCss } from "@/lib/web-css";
 
 ensureGlobalWebCss();
@@ -6,6 +7,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
 import { useEffect } from "react";
+import { WORDMARK_FONT, WORDMARK_FONT_SOURCE } from "@/lib/wordmark-font";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ConvexProvider } from "convex/react";
 import { ActionSheetProvider } from "@/lib/action-sheet";
@@ -18,6 +20,7 @@ import { LightboxProvider } from "@/lib/lightbox";
 import { ToastHost } from "@/lib/toast";
 
 export default function RootLayout() {
+  useFonts({ [WORDMARK_FONT]: WORDMARK_FONT_SOURCE });
   const colorScheme = useColorScheme();
   useEffect(() => {
     void hydrateDrafts();

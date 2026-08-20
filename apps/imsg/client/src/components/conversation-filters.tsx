@@ -144,7 +144,9 @@ export function ConversationFilters({
             />
           ))}
         </View>
-        <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
+        {compact ? null : (
+          <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
+        )}
         <View
           accessibilityRole="radiogroup"
           accessibilityLabel="Conversation type"

@@ -10,7 +10,9 @@ needs a deliberate decision, not a drive-by edit.
 ```
 components/sidebar/            shared, passive
 ├── sidebar-frame.tsx          safe area + scroll-behind-chrome host + thumb seam
-├── sidebar-chrome.tsx         the ONLY fixed chrome (title+toolbar on wide) + action styles
+├── sidebar-chrome.tsx         the ONLY fixed top chrome (title/search/nav on wide)
+├── sidebar-footer.tsx         wide settings footer
+├── sidebar-scroll-fades.tsx   top/bottom scroll-edge fades on wide
 ├── sidebar-search-field.tsx   presentation-only field (list-header | chrome placements)
 ├── synthetic-scroll-thumb.tsx thumb overlay
 ├── suggestion-settings-button.tsx
@@ -44,12 +46,15 @@ Floating desktop cards and the pane split are screen-level layout
 
 ## 2. Desktop search-header rules
 
-- Wide/desktop chrome is two sticky rows: app name + Messages/Contacts
-  on the traffic-light row, search and actions on the row below. Mobile
-  search stays inline in the single chrome bar. Both use the same
+- Wide/desktop chrome is three sticky rows and a footer: `Comma,` on the
+  traffic-light row (Coolvetica, optically centered on the lights), search
+  + new-message on the next, Messages/Contacts on the third. Settings
+  lives in the footer. No hairlines inside the left pane. Mobile search
+  stays inline in the single chrome bar. Both use the same
   `SidebarSearchField`.
 - Desktop search is sticky chrome, not a scrolling list header. Do not
   put it back in `ListHeaderComponent` on wide.
+- Wide lists fade to transparent at the chrome and footer edges.
 - Query/filter changes must not replace the FlashList data-array identity
   wholesale or the header root type/key — the model reads one stable
   universe (`allChats`) and filters inside `deriveInboxModel`.

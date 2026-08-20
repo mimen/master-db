@@ -13,6 +13,7 @@ import { SkeletonList } from "./skeleton-list";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
+import { SidebarFooter } from "./sidebar/sidebar-footer";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
@@ -24,7 +25,7 @@ import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
-import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
+import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -68,6 +69,7 @@ export function ConversationListPane({
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
   const topBarH = sidebarChromeHeight(wide);
+  const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
@@ -108,6 +110,7 @@ export function ConversationListPane({
   const viewport = useConversationListViewport({
     renderedChats: model.listChats,
     chromeHeight: topBarH,
+    footerHeight: footerH,
     viewKey: search.viewKey,
   });
   // FlashList's cell memo compares renderItem by identity, so a fresh arrow here
@@ -151,16 +154,20 @@ export function ConversationListPane({
     <SidebarChrome
       leading={wide ? null : searchField}
       toolbar={wide ? searchField : undefined}
-      titleAccessory={wide ? <NavSwitcher active="messages" /> : undefined}
+      nav={wide ? <NavSwitcher active="messages" /> : undefined}
       actions={
         <>
-          <SettingsButton />
-          <ChromeIconButton
-            ref={filterBtnRef}
-            icon="options-outline"
-            accessibilityLabel="Filter conversations"
-            onPress={openFilters}
-          />
+          {wide ? null : (
+            <>
+              <SettingsButton />
+              <ChromeIconButton
+                ref={filterBtnRef}
+                icon="options-outline"
+                accessibilityLabel="Filter conversations"
+                onPress={openFilters}
+              />
+            </>
+          )}
           <ChromeIconButton
             icon="create-outline"
             accessibilityLabel="New message"
@@ -172,7 +179,11 @@ export function ConversationListPane({
   );
 
   return (
-    <SidebarFrame chrome={chrome} thumb={<SyntheticScrollThumb state={viewport.thumb} />}>
+    <SidebarFrame
+      chrome={chrome}
+      footer={wide ? <SidebarFooter><SettingsButton /></SidebarFooter> : undefined}
+      thumb={<SyntheticScrollThumb state={viewport.thumb} />}
+    >
       {/* Filters and the labeled shelf ride the list header, passing
           behind the glass top bar. Wide search is sticky chrome. */}
       <FlashList
@@ -189,7 +200,10 @@ export function ConversationListPane({
           keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           viewabilityConfig={viewport.viewabilityConfig}
           onViewableItemsChanged={viewport.onViewableItemsChanged}
-          contentContainerStyle={{ paddingTop: Platform.OS === "web" ? 0 : topBarH + 8 }}
+          contentContainerStyle={{
+            paddingTop: Platform.OS === "web" ? 0 : topBarH + 8,
+            paddingBottom: footerH + 12,
+          }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
           automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}
           contentInsetAdjustmentBehavior={iosMobile ? "never" : undefined}
