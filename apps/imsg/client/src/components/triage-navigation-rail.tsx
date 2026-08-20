@@ -5,6 +5,8 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { isDesktopShell } from "@/lib/desktop-shell";
+import { openScheduledPane } from "@/lib/scheduled-pane";
+import { openSettingsPane } from "@/lib/settings-pane";
 import { DesktopWindowControls } from "./desktop-window-controls";
 
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
@@ -47,11 +49,11 @@ export function TriageNavigationRail({ state, counts, onStateChange }: { state: 
           <Item icon="hourglass-outline" label="Waiting" active={state === "waiting"} onPress={() => onStateChange("waiting")} />
           <Item icon="chatbubbles-outline" label="All messages" active={state === "all"} onPress={() => onStateChange("all")} />
           <Item icon="people-outline" label="Contacts" onPress={() => router.push("/(tabs)/contacts")} />
-          <Item icon="send-outline" label="Scheduled" onPress={() => router.push("/scheduled")} />
+          <Item icon="send-outline" label="Scheduled" onPress={() => { if (!openScheduledPane()) router.push("/scheduled"); }} />
         </View>
       </View>
       <View style={styles.utility}>
-        <Item icon="settings-outline" label="Settings" onPress={() => router.push("/settings")} />
+        <Item icon="settings-outline" label="Settings" onPress={() => { if (!openSettingsPane()) router.push("/settings"); }} />
       </View>
     </View>
   );
