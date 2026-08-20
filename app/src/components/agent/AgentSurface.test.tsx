@@ -186,6 +186,23 @@ describe("AgentSurface", () => {
     expect(screen.getByText("urgent")).toBeInTheDocument()
   })
 
+  test("hides the routine label chip while keeping the others", () => {
+    queryResult = {
+      ...META,
+      labels: [
+        { name: "routine", color: "charcoal" },
+        { name: "urgent", color: "red" },
+      ],
+    }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.queryByText("routine")).not.toBeInTheDocument()
+    expect(screen.getByText("urgent")).toBeInTheDocument()
+  })
+
   test("renders the full description from meta as markdown with a link", () => {
     render(
       <AgentComposerProvider>

@@ -20,6 +20,17 @@ import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
 
 /**
+ * One label as `getQueueEntityMeta` returns it — mirrors the `labels` entries
+ * of `EnrichedQueueRun` (convex/agentic/queries/_enrichQueueRun.ts), where
+ * `color` is the RAW todoist color string.
+ *
+ * Declared here because the checked-in `_generated` api types don't carry the
+ * convex modules, so `useQuery` widens `meta` to `any` at this boundary and
+ * bare callback params fall foul of noImplicitAny under `tsc -b`.
+ */
+type QueueEntityLabel = { name: string; color: string }
+
+/**
  * Resolve the Todoist task id for the focused entity. Prefer the enriched
  * `entity_id` from meta; fall back to parsing the entity_ref slug
  * ("todoist:task:<id>" → "<id>") so the Complete button still works before
@@ -183,8 +194,8 @@ export function AgentSurface({ entity_ref }: { entity_ref: string }) {
                 />
               )}
               {meta?.labels
-                ?.filter((label) => label.name !== "routine")
-                .map((label) => {
+                ?.filter((label: QueueEntityLabel) => label.name !== "routine")
+                .map((label: QueueEntityLabel) => {
                   const color = getProjectColor(label.color)
                   return (
                     <LabelBadge
