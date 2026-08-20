@@ -15,6 +15,9 @@ build/
 # Production
 dist/
 
+# Rust
+**/target/
+
 # Misc
 .DS_Store
 *.pem

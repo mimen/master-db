@@ -1,8 +1,9 @@
-import type { CommandDefinition, KeyBinding } from "./types";
+import type { CommandDefinition, CommandId, KeyBinding } from "./types";
 
 /** Single source of truth: every command, once. Help/palette render from this. */
 export const COMMANDS: readonly CommandDefinition[] = [
   { id: "navigation.escape", title: "Glide mode (from composer) / close", group: "Navigation" },
+  { id: "navigation.close", title: "Close panel / window", group: "Navigation" },
   { id: "conversation.next", title: "Next conversation", group: "Navigation" },
   { id: "conversation.previous", title: "Previous conversation", group: "Navigation" },
   { id: "conversation.activate", title: "Reply to selected", group: "Navigation" },
@@ -35,6 +36,7 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "list.focusSearch", combo: "mod+shift+f", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
   // Browser-reserved; fires only under the future Tauri shell's native menu.
   { commandId: "conversation.new", combo: "mod+n", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
+  { commandId: "navigation.close", combo: "mod+w", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
 
   // Navigation glides from anywhere (app load included) whenever focus is NOT
   // in a text field — j/k and the arrows are identical. While typing, arrows
@@ -83,6 +85,10 @@ export function formatCombo(combo: string): string {
 export interface HelpEntry {
   title: string;
   keys: string[];
+}
+
+export function isCommandId(value: string): value is CommandId {
+  return COMMANDS.some((command) => command.id === value);
 }
 
 /** Help entries derived from the registry — cannot drift from behavior. */

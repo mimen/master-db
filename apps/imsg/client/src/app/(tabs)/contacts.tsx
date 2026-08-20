@@ -1,12 +1,12 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { ContactsListPane } from "@/components/contacts-list-pane";
 import { EmptyState } from "@/components/empty-state";
 import { PersonContent } from "@/components/person-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { CardShadow, Radii } from "@/constants/theme";
+import { desktopFrame } from "@/lib/desktop-frame";
 import { primaryHandle, type ContactListRow } from "@/lib/identity";
 
 export default function ContactsScreen() {
@@ -29,16 +29,15 @@ export default function ContactsScreen() {
     );
   }
 
-  // Same desk + floating-card layout as the Messages split — Contacts is just
-  // a toggled mode of the same shell, with the person view in the second pane.
-  const cardStyle = [styles.card, { backgroundColor: theme.background, borderColor: theme.cardBorder }];
+  // Same split as Messages — floating cards on the web, edge-to-edge in Tauri.
+  const frame = desktopFrame(theme);
 
   return (
-    <View style={[styles.split, { backgroundColor: theme.desk }]}>
-      <View style={[styles.listCard, ...cardStyle]}>
+    <View style={frame.split}>
+      <View style={[frame.pane, frame.listPane]}>
         <ContactsListPane wide selectedId={selectedPerson?._id} onSelectPerson={setSelectedPerson} />
       </View>
-      <View style={[styles.detailCard, ...cardStyle]}>
+      <View style={[frame.pane, frame.detailPane]}>
         {selectedPerson ? (
           <PersonContent
             key={selectedPerson._id}
@@ -52,32 +51,3 @@ export default function ContactsScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  split: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 10,
-    padding: 10,
-  },
-  card: {
-    borderRadius: Radii.card,
-    // Top-lit edge highlight, not a theme color — see app/(tabs)/index.tsx.
-    borderTopColor: "rgba(255,255,255,0.14)",
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-    ...CardShadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.32,
-    shadowRadius: 22,
-  },
-  listCard: {
-    flexBasis: 380,
-    flexGrow: 0,
-    flexShrink: 0,
-    width: 380,
-  },
-  detailCard: {
-    flex: 1,
-  },
-});

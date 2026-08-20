@@ -16,8 +16,10 @@ import { useChats } from "@/hooks/use-chats";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { CardShadow, Radii, Type } from "@/constants/theme";
+import { Type } from "@/constants/theme";
 import { archiveChat, markChatUnread, undoLastAction } from "@/lib/chat-actions";
+import { desktopFrame } from "@/lib/desktop-frame";
+import { installNativeMenuBridge } from "@/lib/desktop-shell";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import {
   getListAdapter,
@@ -197,10 +199,10 @@ export default function ChatListScreen() {
   // React Compiler bail on this entire screen, and the readers are all keyboard
   // handlers that run well after commit.
   const selectedRef = useRef(selected);
-  const overlaysRef = useRef({ helpOpen, searchOpen, rightPane });
+  const overlaysRef = useRef({ helpOpen, searchOpen, rightPane, shadowOpen });
   useEffect(() => {
     selectedRef.current = selected;
-    overlaysRef.current = { helpOpen, searchOpen, rightPane };
+    overlaysRef.current = { helpOpen, searchOpen, rightPane, shadowOpen };
   });
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
@@ -266,10 +268,37 @@ export default function ChatListScreen() {
         if (o.rightPane) return setRightPane(null);
         // Already gliding with nothing to close — stay.
       },
+      closePanel: () => {
+        const o = overlaysRef.current;
+        if (o.helpOpen) {
+          setHelpOpen(false);
+          return true;
+        }
+        if (o.searchOpen) {
+          setSearchOpen(false);
+          return true;
+        }
+        if (getListAdapter()?.clearSearch()) return true;
+        if (o.shadowOpen) {
+          setShadowOpen(false);
+          return true;
+        }
+        if (o.rightPane) {
+          setRightPane(null);
+          return true;
+        }
+        if (selectedRef.current) {
+          setSelected(null);
+          return true;
+        }
+        return false;
+      },
     });
-    const uninstall = installKeyboardDispatcher();
+    const uninstallKeys = installKeyboardDispatcher();
+    const uninstallMenu = installNativeMenuBridge();
     return () => {
-      uninstall();
+      uninstallKeys();
+      uninstallMenu();
       setKeyboardRuntime(null);
       setListMode(false);
     };
@@ -299,11 +328,11 @@ export default function ChatListScreen() {
     return <View style={{ flex: 1, backgroundColor: theme.background }}>{list}</View>;
   }
 
-  const cardStyle = [styles.card, { backgroundColor: theme.background, borderColor: theme.cardBorder }];
+  const frame = desktopFrame(theme);
 
   return (
-    <View style={[styles.split, { backgroundColor: theme.desk }]}>
-      <View style={[styles.listCard, ...cardStyle]}>{list}</View>
+    <View style={frame.split}>
+      <View style={[frame.pane, frame.listPane]}>{list}</View>
       <OverlayShell
         visible={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -352,7 +381,7 @@ export default function ChatListScreen() {
           </View>
         ))}
       </OverlayShell>
-      <View style={[styles.threadCard, ...cardStyle]}>
+      <View style={[frame.pane, frame.detailPane]}>
         {selected ? (
           <ThreadView
             key={selected.guid + (jumpTarget?.guid ?? "")}
@@ -369,7 +398,7 @@ export default function ChatListScreen() {
         )}
       </View>
       {rightPane && (
-        <View style={[styles.infoCard, ...cardStyle]}>
+        <View style={[frame.pane, styles.infoCard]}>
           {rightPane.mode === "details" ? (
             <ChatInfoContent
               key={rightPane.guid}
@@ -404,7 +433,7 @@ export default function ChatListScreen() {
         </View>
       )}
       {canShadow && shadowOpen && selected && (
-        <View style={[styles.infoCard, ...cardStyle]}>
+        <View style={[frame.pane, styles.infoCard]}>
           <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
         </View>
       )}
@@ -413,34 +442,6 @@ export default function ChatListScreen() {
 }
 
 const styles = StyleSheet.create({
-  split: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 10,
-    padding: 10,
-  },
-  // Floating "3D" panels: elevated ground, rounded, top-lit border + drop shadow.
-  card: {
-    borderRadius: Radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    // Top-lit edge highlight, not a theme color — same effect works on both
-    // schemes' dark "desk" backdrop.
-    borderTopColor: "rgba(255,255,255,0.14)",
-    overflow: "hidden",
-    ...CardShadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.32,
-    shadowRadius: 22,
-  },
-  listCard: {
-    flexBasis: 380,
-    flexGrow: 0,
-    flexShrink: 0,
-    width: 380,
-  },
-  threadCard: {
-    flex: 1,
-  },
   infoCard: {
     flexBasis: 330,
     flexGrow: 0,

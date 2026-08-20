@@ -17,6 +17,9 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
 - Client: `client/` (Expo, SDK **54** — pinned to the Expo Go App Store ceiling; do not
   bump without an EAS build). Server: `server/`. Shared types/logic: `shared/`
   (imported as `@shared/*`; the client keeps a synced copy at `client/src/lib/types.ts`).
+- Desktop shell: `desktop/` (Tauri v2). Thin remote window — loads the Mini tailnet
+  URL, overlay title bar, native menu. Run with `cd apps/imsg/desktop && bun run tauri dev`.
+  The web UI flattens to edge-to-edge when `window.__TAURI__` is set.
 
 ## The Mini serves TWO things — and they read from DIFFERENT sources
 

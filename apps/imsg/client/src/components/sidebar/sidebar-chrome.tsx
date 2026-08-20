@@ -1,6 +1,7 @@
 import { Platform, StyleSheet, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
+import { DESKTOP_TRAFFIC_LIGHT_INSET, isDesktopShell } from "@/lib/desktop-shell";
 
 import { SIDEBAR_CHROME_HEIGHT } from "./use-synthetic-scroll-metrics";
 
@@ -19,6 +20,7 @@ export interface SidebarChromeProps {
  */
 export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.JSX.Element {
   const theme = useTheme();
+  const shell = isDesktopShell();
   const glassStyle =
     Platform.OS === "web"
       ? ({
@@ -29,8 +31,13 @@ export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.J
           borderBottomWidth: StyleSheet.hairlineWidth,
         } as object)
       : { backgroundColor: theme.background };
+  // RNW maps dataSet to data-* attributes; RN's types don't know it.
+  const dragProps = shell ? ({ dataSet: { tauriDragRegion: "" } } as object) : {};
   return (
-    <View style={[styles.bar, glassStyle]}>
+    <View
+      style={[styles.bar, glassStyle, shell && styles.barShell]}
+      {...dragProps}
+    >
       {leading}
       <View style={styles.actions}>{actions}</View>
     </View>
@@ -60,6 +67,9 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 10,
+  },
+  barShell: {
+    paddingLeft: DESKTOP_TRAFFIC_LIGHT_INSET,
   },
   actions: {
     flexDirection: "row",

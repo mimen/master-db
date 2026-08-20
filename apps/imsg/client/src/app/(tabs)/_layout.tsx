@@ -4,6 +4,7 @@ import { Platform, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { isDesktopShell } from "@/lib/desktop-shell";
 
 /**
  * Real bottom tab bar on mobile: Messages and Contacts are equal primary
@@ -16,6 +17,7 @@ export default function TabsLayout() {
   const iosMobile = Platform.OS === "ios" && !wide;
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const shell = isDesktopShell();
 
   return (
     <Tabs
@@ -24,7 +26,7 @@ export default function TabsLayout() {
         // Mount both tabs at startup — first switch to Contacts otherwise
         // mounts the whole screen live (jarring full-screen flash).
         lazy: false,
-        sceneStyle: { backgroundColor: wide ? theme.desk : theme.background },
+        sceneStyle: { backgroundColor: wide && !shell ? theme.desk : theme.background },
         // Shorter bar with breathing room above the icons; the home-indicator
         // inset stays below the content instead of reading as dead space.
         tabBarStyle: wide

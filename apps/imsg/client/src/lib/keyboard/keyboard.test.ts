@@ -6,7 +6,7 @@ import {
   setListMode,
   type KeyStroke,
 } from "./controller";
-import { formatCombo, helpEntries } from "./registry";
+import { formatCombo, helpEntries, isCommandId } from "./registry";
 
 function stroke(partial: Partial<KeyStroke> & { key: string }): KeyStroke {
   return { metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...partial };
@@ -15,6 +15,11 @@ function stroke(partial: Partial<KeyStroke> & { key: string }): KeyStroke {
 afterEach(() => setListMode(false));
 
 describe("global chords", () => {
+  test("⌘N and ⌘W are registered but hidden (native menu)", () => {
+    expect(matchBinding(stroke({ key: "n", metaKey: true }))?.commandId).toBe("conversation.new");
+    expect(matchBinding(stroke({ key: "w", metaKey: true }))?.commandId).toBe("navigation.close");
+  });
+
   test("⌘K matches the palette", () => {
     expect(matchBinding(stroke({ key: "k", metaKey: true }))?.commandId).toBe("palette.open");
   });
@@ -103,7 +108,7 @@ describe("registry", () => {
     expect(formatCombo("shift+?")).toBe("?");
   });
 
-  test("help hides shell-only ⌘N but shows glide keys", () => {
+  test("help hides shell-only ⌘N / ⌘W but shows glide keys", () => {
     const entries = helpEntries();
     const next = entries.find((e) => e.title === "Next conversation");
     expect(next?.keys).toEqual(["J", "↓"]);
@@ -111,6 +116,13 @@ describe("registry", () => {
     expect(archive?.keys).toEqual(["E"]);
     const nw = entries.find((e) => e.title === "New message");
     expect(nw?.keys).toEqual(["C"]);
+    expect(entries.find((e) => e.title === "Close panel / window")).toBeUndefined();
+  });
+
+  test("isCommandId accepts registry ids only", () => {
+    expect(isCommandId("conversation.new")).toBe(true);
+    expect(isCommandId("navigation.close")).toBe(true);
+    expect(isCommandId("not-a-command")).toBe(false);
   });
 });
 

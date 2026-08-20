@@ -131,40 +131,57 @@ export function matchBinding(e: KeyStroke): KeyBinding | null {
 }
 
 // --------------------------------------------------------------- execution
-export function runCommand(id: CommandId, _source: CommandSource): void {
+/** Returns false only for `navigation.close` when nothing was open to close. */
+export function runCommand(id: CommandId, _source: CommandSource): boolean {
   const rt = runtime;
-  if (!rt) return;
+  if (!rt) return false;
   switch (id) {
     case "palette.open":
-      return rt.openPalette();
+      rt.openPalette();
+      return true;
     case "conversation.new":
-      return rt.openNewMessage();
+      rt.openNewMessage();
+      return true;
     case "conversation.next":
-      return rt.moveSelection(1);
+      rt.moveSelection(1);
+      return true;
     case "conversation.previous":
-      return rt.moveSelection(-1);
+      rt.moveSelection(-1);
+      return true;
     case "conversation.activate":
-      return rt.activateSelection();
+      rt.activateSelection();
+      return true;
     case "composer.focus":
       // Deliberately not routed through the runtime: "put the cursor in the
       // reply box of whatever conversation is open" needs no screen state,
       // and requestFocus already handles the not-yet-mounted case.
-      return requestFocus("composer");
+      requestFocus("composer");
+      return true;
     case "conversation.find":
-      return rt.findInConversation();
+      rt.findInConversation();
+      return true;
     case "conversation.archive":
-      return rt.archiveSelected();
+      rt.archiveSelected();
+      return true;
     case "conversation.markUnread":
-      return rt.markUnreadSelected();
+      rt.markUnreadSelected();
+      return true;
     case "conversation.details":
-      return rt.toggleDetails();
+      rt.toggleDetails();
+      return true;
     case "list.focusSearch":
-      return rt.focusListSearch();
+      rt.focusListSearch();
+      return true;
     case "action.undo":
-      return rt.undoLast();
+      rt.undoLast();
+      return true;
     case "navigation.escape":
-      return rt.escape();
+      rt.escape();
+      return true;
+    case "navigation.close":
+      return rt.closePanel();
     case "help.open":
-      return rt.openHelp();
+      rt.openHelp();
+      return true;
   }
 }

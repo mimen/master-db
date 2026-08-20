@@ -19,6 +19,7 @@ export type CommandId =
   | "list.focusSearch"
   | "action.undo"
   | "navigation.escape"
+  | "navigation.close"
   | "help.open";
 
 export type ScopeKind = "global" | "list" | "thread" | "composer" | "inspector" | "overlay";
@@ -64,6 +65,8 @@ export interface KeyboardRuntime {
   focusListSearch(): void;
   undoLast(): void;
   escape(): void;
+  /** ⌘W ladder: close overlay/pane/thread. Return true if something closed. */
+  closePanel(): boolean;
 }
 
 /**
