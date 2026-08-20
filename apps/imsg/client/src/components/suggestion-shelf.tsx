@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { useSuggestionMode } from "@/lib/settings";
 import { chromeControlFill } from "./sidebar/chrome-control-fill";
 
@@ -28,6 +29,7 @@ interface SuggestionShelfProps {
 
 export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: SuggestionShelfProps) {
   const theme = useTheme();
+  const type = useType();
   const mode = useSuggestionMode();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,13 +122,18 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
               style={[
                 styles.pill,
                 {
-                  backgroundColor: theme.backgroundElement,
-                  borderColor: theme.divider,
+                  backgroundColor: theme.bubbleTheirs,
                   opacity: stale ? 0.55 : 1,
                 },
               ]}
             >
-              <Text numberOfLines={2} style={[styles.pillText, { color: theme.text }]}>
+              <Text
+                numberOfLines={2}
+                style={[
+                  styles.pillText,
+                  { color: theme.bubbleTheirsText, fontSize: type.body, lineHeight: 18 },
+                ]}
+              >
                 {text}
               </Text>
             </Pressable>
@@ -216,14 +223,13 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   pill: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 18,
     maxWidth: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   pillText: {
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 18,
   },
 });

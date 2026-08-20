@@ -223,28 +223,10 @@ function ChatRowInner({
                 style={[styles.priorityDot, { backgroundColor: theme.accent }]}
               />
             )}
-            {last && !(compact && hovered) && (
+            {last && (
               <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
                 {formatListTimestamp(last.dateCreated)}
               </Text>
-            )}
-            {compact && hovered && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={chat.flags.archived ? "Unarchive conversation" : "Archive conversation"}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  archiveChat(chat, !chat.flags.archived);
-                }}
-                hitSlop={6}
-                style={[styles.hoverArchive, { backgroundColor: theme.backgroundElement }]}
-              >
-                <Ionicons
-                  name={chat.flags.archived ? "arrow-undo-outline" : "archive-outline"}
-                  size={15}
-                  color={theme.textSecondary}
-                />
-              </Pressable>
             )}
           </View>
           <View style={styles.previewLine}>
@@ -262,23 +244,45 @@ function ChatRowInner({
             >
               {snippet}
             </Text>
-            {!(compact && hovered) && chat.unreadCount > 0 && (
+            {chat.unreadCount > 0 && (
               <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
                 <Text style={styles.unreadBadgeText}>{chat.unreadCount > 99 ? "99+" : chat.unreadCount}</Text>
               </View>
             )}
-            {!(compact && hovered) && chat.flags.archived && (
+            {chat.flags.archived && (
               <View style={[styles.stateChip, { backgroundColor: theme.backgroundElement }]}>
                 <Ionicons name="archive-outline" size={11} color={theme.textSecondary} />
               </View>
             )}
-            {!(compact && hovered) && chat.flags.unresponded && !chat.flags.unread && (
+            {chat.flags.unresponded && !chat.flags.unread && (
               <View style={[styles.stateChip, { backgroundColor: "#F0A50026" }]}>
                 <Ionicons name="arrow-undo-outline" size={11} color="#F0A500" />
               </View>
             )}
           </View>
         </View>
+        {compact && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={chat.flags.archived ? "Unarchive conversation" : "Archive conversation"}
+            onPress={(e) => {
+              e.stopPropagation();
+              archiveChat(chat, !chat.flags.archived);
+            }}
+            hitSlop={6}
+            pointerEvents={hovered ? "auto" : "none"}
+            style={[
+              styles.hoverArchive,
+              { backgroundColor: theme.backgroundSelected, opacity: hovered ? 1 : 0 },
+            ]}
+          >
+            <Ionicons
+              name={chat.flags.archived ? "arrow-undo-outline" : "archive-outline"}
+              size={15}
+              color={theme.text}
+            />
+          </Pressable>
+        )}
       </Pressable>
     </ReanimatedSwipeable>
   );
@@ -375,11 +379,15 @@ const styles = StyleSheet.create({
   },
   hoverArchive: {
     alignItems: "center",
-    borderRadius: 6,
-    flexShrink: 0,
-    height: 26,
+    borderRadius: 14,
+    height: 28,
     justifyContent: "center",
-    width: 26,
+    marginTop: -14,
+    position: "absolute",
+    right: 10,
+    top: "50%",
+    width: 28,
+    zIndex: 2,
   },
   swipeAction: {
     width: ACTION_WIDTH,
