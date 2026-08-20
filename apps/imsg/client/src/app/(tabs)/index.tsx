@@ -36,6 +36,7 @@ import {
 import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
 import { helpEntries } from "@/lib/keyboard/registry";
 import { onOpenChatInfo } from "@/lib/chat-info";
+import { onRequestInboxFilter } from "@/lib/inbox-filter";
 import { onOpenPersonPane, type PersonTarget } from "@/lib/person-pane";
 import { onOpenScheduledPane } from "@/lib/scheduled-pane";
 import { onOpenSettingsPane } from "@/lib/settings-pane";
@@ -150,6 +151,10 @@ export default function ChatListScreen() {
     if (!wide) return;
     return onOpenPersonPane((target) => setRightPane({ mode: "person", target }));
   }, [wide]);
+
+  // The rail renders on Contacts too; its inbox items reach this screen's
+  // filter state through the bus, then navigate here.
+  useEffect(() => onRequestInboxFilter(setState), []);
 
   // The settings gear and the command palette open the scheduled queue /
   // settings as a right-hand pane here instead of a full-screen modal —

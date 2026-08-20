@@ -5,6 +5,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { isDesktopShell } from "@/lib/desktop-shell";
+import { requestInboxFilter } from "@/lib/inbox-filter";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { openSettingsPane } from "@/lib/settings-pane";
 import { DesktopWindowControls } from "./desktop-window-controls";
@@ -32,9 +33,34 @@ function Item({ icon, label, active = false, count, onPress }: { icon: keyof typ
   );
 }
 
-export function TriageNavigationRail({ state, counts, onStateChange }: { state: StateFilter; counts: StateCounts | null; onStateChange: (state: StateFilter) => void }): React.JSX.Element {
+/**
+ * The desktop rail — the app's primary navigation, rendered by BOTH sidebars
+ * so the shell is identical on Messages and Contacts. Contacts has no local
+ * filter state, so its inbox items publish through the inbox-filter bus and
+ * then navigate to Messages (both tabs stay mounted, so the listener is live).
+ */
+export function TriageNavigationRail({
+  state,
+  counts,
+  onStateChange,
+  destination = "messages",
+}: {
+  state?: StateFilter;
+  counts?: StateCounts | null;
+  onStateChange?: (state: StateFilter) => void;
+  destination?: "messages" | "contacts";
+}): React.JSX.Element {
   const visual = useTriageTheme();
   const shell = isDesktopShell();
+  const onMessages = destination === "messages";
+  const goToState = (next: StateFilter): void => {
+    if (onMessages) {
+      onStateChange?.(next);
+      return;
+    }
+    requestInboxFilter(next);
+    router.push("/");
+  };
   const glass = Platform.OS === "web" ? ({
     backgroundColor: visual.rail,
     backdropFilter: "blur(40px) saturate(1.6)",
@@ -45,10 +71,10 @@ export function TriageNavigationRail({ state, counts, onStateChange }: { state: 
       <View style={styles.top}>
         <DesktopWindowControls />
         <View style={[styles.primary, !shell && styles.primaryWeb]}>
-          <Item icon="file-tray-full-outline" label="Needs reply" count={counts?.unresponded} active={state === "unresponded"} onPress={() => onStateChange("unresponded")} />
-          <Item icon="hourglass-outline" label="Waiting" active={state === "waiting"} onPress={() => onStateChange("waiting")} />
-          <Item icon="chatbubbles-outline" label="All messages" active={state === "all"} onPress={() => onStateChange("all")} />
-          <Item icon="people-outline" label="Contacts" onPress={() => router.push("/(tabs)/contacts")} />
+          <Item icon="file-tray-full-outline" label="Needs reply" count={counts?.unresponded} active={onMessages && state === "unresponded"} onPress={() => goToState("unresponded")} />
+          <Item icon="hourglass-outline" label="Waiting" active={onMessages && state === "waiting"} onPress={() => goToState("waiting")} />
+          <Item icon="chatbubbles-outline" label="All messages" active={onMessages && state === "all"} onPress={() => goToState("all")} />
+          <Item icon="people-outline" label="Contacts" active={!onMessages} onPress={() => router.push("/(tabs)/contacts")} />
           <Item icon="send-outline" label="Scheduled" onPress={() => { if (!openScheduledPane()) router.push("/scheduled"); }} />
         </View>
       </View>

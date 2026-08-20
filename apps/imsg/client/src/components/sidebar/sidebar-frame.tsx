@@ -56,7 +56,9 @@ export function SidebarFrame({
           <SidebarScrollFades
             background={wide ? visual.queue : theme.background}
             chromeHeight={effectiveChromeHeight}
-            footerHeight={sidebarFooterHeight(true)}
+            // Panes without a footer (Contacts) must not reserve a bottom
+            // fade for one, or the list ends in an empty gradient band.
+            footerHeight={footer ? sidebarFooterHeight(true) : 0}
           />
         ) : null}
         {chrome}

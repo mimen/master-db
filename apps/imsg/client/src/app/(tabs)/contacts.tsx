@@ -31,6 +31,7 @@ export default function ContactsScreen() {
 
   return (
     <DesktopSplit
+      listInset={64}
       list={<ContactsListPane wide selectedId={selectedPerson?._id} onSelectPerson={setSelectedPerson} />}
       detail={
         selectedPerson ? (
