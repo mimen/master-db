@@ -221,12 +221,26 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           // focused input (the search focus-theft bug family).
           keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 12, paddingTop: topBarH + 8 }}
+          contentContainerStyle={{
+            paddingBottom: 12,
+            paddingTop: Platform.OS === "web" && wide ? 0 : topBarH + 8,
+          }}
           onLayout={(e) => metrics.onViewportHeight(e.nativeEvent.layout.height)}
           onContentSizeChange={(_w, h) => metrics.onContentHeight(h)}
           onScroll={metrics.onScroll}
           scrollEventThrottle={16}
-          ListHeaderComponent={wide ? <View style={{ paddingBottom: 6 }}>{searchField}</View> : null}
+          ListHeaderComponent={
+            wide ? (
+              <View
+                style={{
+                  paddingTop: Platform.OS === "web" ? topBarH + 8 : 0,
+                  paddingBottom: 6,
+                }}
+              >
+                {searchField}
+              </View>
+            ) : null
+          }
           ListEmptyComponent={<EmptyState message="No contacts found." style={styles.center} />}
           renderItem={renderRow}
         />

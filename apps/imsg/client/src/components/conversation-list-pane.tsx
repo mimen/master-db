@@ -191,7 +191,7 @@ export function ConversationListPane({
           keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           viewabilityConfig={viewport.viewabilityConfig}
           onViewableItemsChanged={viewport.onViewableItemsChanged}
-          contentContainerStyle={{ paddingTop: topBarH + 8 }}
+          contentContainerStyle={{ paddingTop: Platform.OS === "web" ? 0 : topBarH + 8 }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
           automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}
           contentInsetAdjustmentBehavior={iosMobile ? "never" : undefined}
@@ -200,7 +200,14 @@ export function ConversationListPane({
           onScroll={viewport.onScroll}
           scrollEventThrottle={16}
           ListHeaderComponent={
-            <View style={wide ? { paddingBottom: 6 } : null}>
+            <View
+              style={{
+                // FlashList on web drops contentContainerStyle paddingTop; the
+                // header has to own the chrome offset or search sits under the bar.
+                paddingTop: Platform.OS === "web" ? topBarH + 8 : 0,
+                paddingBottom: wide ? 6 : 0,
+              }}
+            >
               {wide && searchField}
               <ConversationFilters
                 compact={wide}
