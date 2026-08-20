@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { getChats, setChats, subscribeChats } from "./chat-store";
+import {
+  getChats,
+  mutationEpochNow,
+  patchChatFlags,
+  resetChatStore,
+  setChats,
+  settlePendingFlags,
+  subscribeChats,
+} from "./chat-store";
 import type { ChatSummary } from "@shared/types";
 
 function chat(guid: string, unreadCount = 0): ChatSummary {
@@ -39,6 +47,7 @@ function refetched(chats: ChatSummary[]): ChatSummary[] {
 
 describe("setChats identity reconciliation", () => {
   beforeEach(() => {
+    resetChatStore();
     setChats([]);
   });
 
@@ -101,5 +110,39 @@ describe("setChats identity reconciliation", () => {
 
     setChats(refetched([chat("a"), chat("c")]));
     expect(getChats()?.map((c) => c.guid)).toEqual(["a", "c"]);
+  });
+});
+
+describe("optimistic archive vs stale refetch", () => {
+  beforeEach(() => {
+    resetChatStore();
+    setChats([chat("a")]);
+  });
+
+  test("a refetch that started before archive cannot resurrect the row", () => {
+    const epochBefore = mutationEpochNow();
+    patchChatFlags("a", { archived: true });
+    expect(getChats()?.[0]?.flags.archived).toBe(true);
+
+    const stale = refetched([chat("a")]);
+    stale[0]!.flags.archived = false;
+    setChats(stale, epochBefore);
+
+    expect(getChats()?.[0]?.flags.archived).toBe(true);
+  });
+
+  test("a refetch that started after archive settled can confirm it", () => {
+    patchChatFlags("a", { archived: true });
+    settlePendingFlags("a");
+    const epoch = mutationEpochNow();
+    const confirmed = refetched([chat("a")]);
+    confirmed[0]!.flags.archived = true;
+    setChats(confirmed, epoch);
+    expect(getChats()?.[0]?.flags.archived).toBe(true);
+
+    const later = refetched([chat("a")]);
+    later[0]!.flags.archived = false;
+    setChats(later, epoch);
+    expect(getChats()?.[0]?.flags.archived).toBe(false);
   });
 });

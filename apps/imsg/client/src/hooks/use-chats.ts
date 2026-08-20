@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
-import { getChats, setChats, subscribeChats } from "@/lib/chat-store";
+import { getChats, mutationEpochNow, setChats, subscribeChats } from "@/lib/chat-store";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
@@ -27,11 +27,12 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
 
   const refresh = useCallback(() => {
     const gen = ++generation.current;
+    const epoch = mutationEpochNow();
     api
       .allChats()
       .then((result) => {
         if (generation.current !== gen) return;
-        setChats(result);
+        setChats(result, epoch);
         setError(null);
         setLoading(false);
       })

@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import { patchChatFlags } from "@/lib/chat-store";
+import { patchChatFlags, revertChatFlags, settlePendingFlags } from "@/lib/chat-store";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 
@@ -11,10 +11,13 @@ import type { ChatSummary } from "@shared/types";
 
 function run(chatGuid: string, patch: Parameters<typeof patchChatFlags>[1], call: Promise<unknown>, failMsg: string, rollback: Parameters<typeof patchChatFlags>[1]): void {
   patchChatFlags(chatGuid, patch);
-  void call.catch(() => {
-    patchChatFlags(chatGuid, rollback);
-    showToast(failMsg);
-  });
+  void call.then(
+    () => settlePendingFlags(chatGuid),
+    () => {
+      revertChatFlags(chatGuid, rollback);
+      showToast(failMsg);
+    },
+  );
 }
 
 // Single-slot undo (Gmail's z): archive/unread record their inverse here, from
