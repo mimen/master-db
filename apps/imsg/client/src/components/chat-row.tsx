@@ -19,9 +19,15 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { Colors, Radii, Type } from "@/constants/theme";
+import { Colors, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { formatListTimestamp } from "@/lib/format";
+import {
+  ROW_SIGNAL_SIZE,
+  RowSignalColor,
+  rowSignal,
+  unreadLabel,
+} from "@/lib/row-signal";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
@@ -29,6 +35,38 @@ import { ChatAvatar } from "./avatar";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
+
+function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
+  const kind = rowSignal(chat);
+  return (
+    <View
+      accessibilityElementsHidden={kind === null}
+      accessibilityLabel={
+        kind === "unread"
+          ? `${unreadLabel(chat.unreadCount)} unread`
+          : kind === "unresponded"
+            ? "Unresponded"
+            : kind === "archived"
+              ? "Archived"
+              : undefined
+      }
+      style={[
+        styles.signal,
+        kind === "unread" && { backgroundColor: RowSignalColor.unread },
+        kind === "unresponded" && { backgroundColor: RowSignalColor.unresponded },
+        kind === "archived" && { backgroundColor: RowSignalColor.archived },
+      ]}
+    >
+      {kind === "unread" ? (
+        <Text style={styles.signalCount}>{unreadLabel(chat.unreadCount)}</Text>
+      ) : kind === "unresponded" ? (
+        <Ionicons name="arrow-undo-outline" size={11} color={RowSignalColor.unrespondedGlyph} />
+      ) : kind === "archived" ? (
+        <Ionicons name="archive-outline" size={11} color={RowSignalColor.onFill} />
+      ) : null}
+    </View>
+  );
+}
 
 /**
  * iMessage/Mail-style action pane: the colored panel tracks the finger (its
@@ -254,21 +292,7 @@ function ChatRowInner({
             >
               {snippet}
             </Text>
-            {chat.unreadCount > 0 && (
-              <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
-                <Text style={styles.unreadBadgeText}>{chat.unreadCount > 99 ? "99+" : chat.unreadCount}</Text>
-              </View>
-            )}
-            {chat.flags.archived && (
-              <View style={[styles.stateChip, { backgroundColor: theme.backgroundElement }]}>
-                <Ionicons name="archive-outline" size={11} color={theme.textSecondary} />
-              </View>
-            )}
-            {chat.flags.unresponded && !chat.flags.unread && (
-              <View style={[styles.stateChip, { backgroundColor: "#F0A50026" }]}>
-                <Ionicons name="arrow-undo-outline" size={11} color="#F0A500" />
-              </View>
-            )}
+            <RowSignal chat={chat} />
           </View>
         </View>
         {compact && (
@@ -371,27 +395,18 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     minWidth: 0,
   },
-  unreadBadge: {
+  signal: {
     alignItems: "center",
-    borderRadius: Radii.chip,
-    height: 19,
+    borderRadius: ROW_SIGNAL_SIZE / 2,
+    flexShrink: 0,
+    height: ROW_SIGNAL_SIZE,
     justifyContent: "center",
-    minWidth: 19,
-    paddingHorizontal: 5,
+    width: ROW_SIGNAL_SIZE,
   },
-  stateChip: {
-    alignItems: "center",
-    borderRadius: Radii.chip,
-    height: 19,
-    justifyContent: "center",
-    minWidth: 19,
-    paddingHorizontal: 4,
-  },
-  unreadBadgeText: {
-    // Badge text sits on theme.accent, which is the same in both schemes here
-    // (the badge itself isn't theme-forked) — onAccent is identical light/dark.
-    color: Colors.light.onAccent,
-    fontSize: Type.caption,
+  signalCount: {
+    color: RowSignalColor.onFill,
+    fontSize: 10,
+    fontVariant: ["tabular-nums"],
     fontWeight: "700",
   },
   hoverArchive: {
