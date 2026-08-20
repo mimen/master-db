@@ -4,7 +4,7 @@ import { Pressable } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
 
-import { chromeStyles } from "./sidebar-chrome";
+import { useChromeActions } from "./sidebar-chrome";
 
 /**
  * The settings entry point (gear) shared by both sidebars — opens the
@@ -16,15 +16,16 @@ import { chromeStyles } from "./sidebar-chrome";
  */
 export function SettingsButton(): React.JSX.Element {
   const theme = useTheme();
+  const chrome = useChromeActions();
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Settings"
       onPress={() => router.push("/settings")}
-      style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+      style={({ pressed }) => [chrome.button, pressed && { opacity: 0.55 }]}
     >
-      <Ionicons name="settings-outline" size={20} color={theme.accent} />
+      <Ionicons name="settings-outline" size={chrome.iconSize} color={theme.accent} />
     </Pressable>
   );
 }

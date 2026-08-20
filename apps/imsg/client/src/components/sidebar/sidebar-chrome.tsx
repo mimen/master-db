@@ -1,9 +1,13 @@
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, type ViewStyle } from "react-native";
 
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { DESKTOP_TRAFFIC_LIGHT_INSET, isDesktopShell } from "@/lib/desktop-shell";
 
 import { SIDEBAR_CHROME_HEIGHT } from "./use-synthetic-scroll-metrics";
+
+/** Icon glyph size inside the chrome action buttons. */
+export const CHROME_ICON_SIZE = { compact: 16, regular: 21 } as const;
 
 export interface SidebarChromeProps {
   /** Left slot: NavSwitcher on desktop, the pane's search field on mobile. */
@@ -20,7 +24,9 @@ export interface SidebarChromeProps {
  */
 export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.JSX.Element {
   const theme = useTheme();
+  const { wide } = useLayoutMode();
   const shell = isDesktopShell();
+  const compact = wide || shell;
   const glassStyle =
     Platform.OS === "web"
       ? ({
@@ -35,7 +41,7 @@ export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.J
   const dragProps = shell ? ({ dataSet: { tauriDragRegion: "" } } as object) : {};
   return (
     <View
-      style={[styles.bar, glassStyle, shell && styles.barShell]}
+      style={[styles.bar, glassStyle, compact && styles.barCompact, shell && styles.barShell]}
       {...dragProps}
     >
       {leading}
@@ -44,13 +50,28 @@ export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.J
   );
 }
 
-/** Shared 38px square action-button geometry for chrome icons. */
+export function useChromeActions(): { button: ViewStyle; iconSize: number } {
+  const { wide } = useLayoutMode();
+  const compact = wide || isDesktopShell();
+  return {
+    button: compact ? chromeStyles.actionButtonCompact : chromeStyles.actionButton,
+    iconSize: compact ? CHROME_ICON_SIZE.compact : CHROME_ICON_SIZE.regular,
+  };
+}
+
+/** Shared square action-button geometry for chrome icons. */
 export const chromeStyles = StyleSheet.create({
   actionButton: {
     alignItems: "center",
     height: 38,
     justifyContent: "center",
     width: 38,
+  },
+  actionButtonCompact: {
+    alignItems: "center",
+    height: 28,
+    justifyContent: "center",
+    width: 28,
   },
 });
 
@@ -68,11 +89,15 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 10,
   },
+  barCompact: {
+    paddingHorizontal: 10,
+  },
   barShell: {
     paddingLeft: DESKTOP_TRAFFIC_LIGHT_INSET,
   },
   actions: {
     flexDirection: "row",
+    flexShrink: 0,
     gap: 2,
   },
 });

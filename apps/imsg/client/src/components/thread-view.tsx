@@ -26,6 +26,7 @@ import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { CardShadow, Radii } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
@@ -79,6 +80,7 @@ export function ThreadView({
   shadowOpen = false,
 }: ThreadViewProps) {
   const theme = useTheme();
+  const type = useType();
   const privateApi = usePrivateApi();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
@@ -504,7 +506,7 @@ export function ThreadView({
               <ChatAvatar chat={headerChat} size={32} />
             )}
             <View style={styles.paneIdentityText}>
-              <Text numberOfLines={1} style={{ color: theme.text, fontSize: 16, fontWeight: "600" }}>
+              <Text numberOfLines={1} style={{ color: theme.text, fontSize: type.title, fontWeight: "600" }}>
                 {headerChat.displayName}
               </Text>
               {headerChat.isGroup && (

@@ -18,6 +18,7 @@ import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { formatListTimestamp } from "@/lib/format";
@@ -97,6 +98,7 @@ function ChatRowInner({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const type = useType();
   const { openMenu } = useChatActions();
   const { width: winW, wide: compact } = useLayoutMode();
   const [hovered, setHovered] = useState(false);
@@ -182,6 +184,7 @@ function ChatRowInner({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
+          { minHeight: compact ? 62 : 75 },
           {
             backgroundColor: selected
               ? theme.backgroundSelected
@@ -195,10 +198,10 @@ function ChatRowInner({
         {keyboardFocused && (
           <View style={[styles.glideCursor, { backgroundColor: theme.accent }]} />
         )}
-        <ChatAvatar chat={chat} size={52} />
+        <ChatAvatar chat={chat} size={compact ? 40 : 52} />
         <View style={styles.content}>
           <View style={styles.topLine}>
-            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontWeight: chat.flags.unread ? "700" : "600" }]}>
+            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
               {chat.displayName}
             </Text>
             {/* Private CRM layer (favorite/priority) — mirrors the star shown
@@ -221,7 +224,7 @@ function ChatRowInner({
               />
             )}
             {last && (
-              <Text style={[styles.time, { color: theme.textSecondary }]}>
+              <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
                 {formatListTimestamp(last.dateCreated)}
               </Text>
             )}
@@ -229,7 +232,15 @@ function ChatRowInner({
           <View style={styles.previewLine}>
             <Text
               numberOfLines={2}
-              style={[styles.snippet, { color: theme.textSecondary, fontWeight: chat.flags.unread ? "500" : "400" }]}
+              style={[
+                styles.snippet,
+                {
+                  color: theme.textSecondary,
+                  fontSize: compact ? type.secondary : 14,
+                  lineHeight: compact ? 16 : 18,
+                  fontWeight: chat.flags.unread ? "500" : "400",
+                },
+              ]}
             >
               {snippet}
             </Text>

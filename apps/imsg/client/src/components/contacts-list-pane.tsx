@@ -21,7 +21,7 @@ import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
 import { NavSwitcher } from "./nav-switcher";
 import { SettingsButton } from "./sidebar/settings-button";
-import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
+import { SidebarChrome, useChromeActions } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
@@ -75,6 +75,7 @@ export interface ContactsListPaneProps {
  */
 export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
+  const chromeActions = useChromeActions();
   const nameOrder = useNameOrder();
   const [query, setQuery] = useState("");
   const topBarH = SIDEBAR_CHROME_HEIGHT;
@@ -192,16 +193,16 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
         <>
           <SettingsButton />
           {/* Filters are a Messages concept — present for bar parity, inert here. */}
-          <View style={[chromeStyles.actionButton, { opacity: 0.3 }]}>
-            <Ionicons name="options-outline" size={21} color={theme.accent} />
+          <View style={[chromeActions.button, { opacity: 0.3 }]}>
+            <Ionicons name="options-outline" size={chromeActions.iconSize} color={theme.accent} />
           </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="New message"
             onPress={() => router.push("/new-chat")}
-            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+            style={({ pressed }) => [chromeActions.button, pressed && { opacity: 0.55 }]}
           >
-            <Ionicons name="create-outline" size={23} color={theme.accent} />
+            <Ionicons name="create-outline" size={chromeActions.iconSize} color={theme.accent} />
           </Pressable>
         </>
       }

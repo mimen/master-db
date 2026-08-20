@@ -10,6 +10,7 @@ import type { Message, SpecialContent } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble } from "./media";
 import { PersonAvatar } from "./avatar";
@@ -212,6 +213,7 @@ export const Bubble = memo(function Bubble({
   onShowReactions,
 }: BubbleProps) {
   const theme = useTheme();
+  const type = useType();
   const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
@@ -332,8 +334,8 @@ export const Bubble = memo(function Bubble({
                   <Text
                     selectable
                     style={{
-                      fontSize: 17,
-                      lineHeight: 22,
+                      fontSize: wide ? type.body : 17,
+                      lineHeight: wide ? 18 : 22,
                       color: mine ? theme.onAccent : theme.bubbleTheirsText,
                       // Break long unbroken strings (URLs) so they never overflow.
                       ...(Platform.OS === "web"

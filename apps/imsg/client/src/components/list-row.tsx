@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { Spacing, Type } from "@/constants/theme";
 
 export interface ListRowProps {
@@ -57,6 +58,7 @@ export function ListRow({
   style,
 }: ListRowProps) {
   const theme = useTheme();
+  const type = useType();
   return (
     <Pressable
       disabled={disabled}
@@ -75,7 +77,7 @@ export function ListRow({
         {typeof title === "string" ? (
           <Text
             numberOfLines={titleNumberOfLines}
-            style={[styles.title, { color: theme.text, fontWeight: titleWeight }]}
+            style={[styles.title, { color: theme.text, fontSize: type.body, fontWeight: titleWeight }]}
           >
             {title}
           </Text>
@@ -84,7 +86,7 @@ export function ListRow({
         )}
         {subtitle !== undefined &&
           (typeof subtitle === "string" ? (
-            <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
+            <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary, fontSize: type.secondary }]}>
               {subtitle}
             </Text>
           ) : (

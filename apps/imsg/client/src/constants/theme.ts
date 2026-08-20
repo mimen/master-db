@@ -111,16 +111,7 @@ export const Radii = {
 
 // Recurring font sizes pulled from actual usage. Many other sizes (10, 12, 14,
 // 15, 18, 20...) remain as literals — this is the pattern, not the full scale.
-export const Type = {
-  /** Sheet/section titles, primary action labels. */
-  title: 17,
-  /** Message text, standard body copy. */
-  body: 16,
-  /** Secondary/meta text (timestamps, subtitles). */
-  secondary: 13,
-  /** Captions, badges, smallest legible text. */
-  caption: 11,
-} as const;
+export { DesktopType, Type, type TypeScale } from "./type-scale";
 
 // Layout breakpoints used to switch between compact/wide UI. Kept here so the
 // numbers have a canonical home; `hooks/use-layout-mode.ts` is the only place

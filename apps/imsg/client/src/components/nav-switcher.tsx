@@ -23,7 +23,10 @@ export function NavSwitcher({
         style={[styles.segment, active === "messages" && { backgroundColor: theme.background }]}
         onPress={() => router.push("/")}
       >
-        <Text style={[styles.label, { color: active === "messages" ? theme.text : theme.textSecondary }]}>
+        <Text
+          numberOfLines={1}
+          style={[styles.label, { color: active === "messages" ? theme.text : theme.textSecondary }]}
+        >
           Messages
         </Text>
       </Pressable>
@@ -31,7 +34,10 @@ export function NavSwitcher({
         style={[styles.segment, active === "contacts" && { backgroundColor: theme.background }]}
         onPress={() => router.push("/contacts")}
       >
-        <Text style={[styles.label, { color: active === "contacts" ? theme.text : theme.textSecondary }]}>
+        <Text
+          numberOfLines={1}
+          style={[styles.label, { color: active === "contacts" ? theme.text : theme.textSecondary }]}
+        >
           Contacts
         </Text>
       </Pressable>
@@ -41,18 +47,19 @@ export function NavSwitcher({
 
 const styles = StyleSheet.create({
   container: {
+    borderRadius: 8,
     flexDirection: "row",
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 4,
-    borderRadius: 10,
+    flexShrink: 1,
+    minWidth: 0,
     padding: 2,
   },
   segment: {
-    flex: 1,
     alignItems: "center",
-    paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 6,
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  label: { fontSize: 14, fontWeight: "600" },
+  label: { fontSize: 12, fontWeight: "600" },
 });

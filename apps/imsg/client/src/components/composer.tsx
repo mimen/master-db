@@ -30,6 +30,7 @@ import type { Contact, Message, Participant } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { Radii } from "@/constants/theme";
 import {
   browserFilesToAttachments,
@@ -232,6 +233,7 @@ export function Composer({
   onSent,
 }: ComposerProps) {
   const theme = useTheme();
+  const type = useType();
   const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
@@ -1057,7 +1059,7 @@ ${url}` : url;
                   height: inputHeight,
                   lineHeight: IOS_INPUT_LINE_HEIGHT,
                 },
-                { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background },
+                { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background, fontSize: type.body },
               ]}
             />
           </View>

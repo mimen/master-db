@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { Spacing } from "@/constants/theme";
 
 export interface EmptyStateProps {
@@ -21,11 +22,12 @@ export interface EmptyStateProps {
 /** Centered icon + message for "nothing here yet" panes. */
 export function EmptyState({ icon, iconSize = 28, message, children, style }: EmptyStateProps) {
   const theme = useTheme();
+  const type = useType();
   return (
     <View style={[styles.container, style]}>
       {icon && <Ionicons name={icon} size={iconSize} color={theme.textSecondary} />}
       {typeof message === "string" ? (
-        <Text style={[styles.message, { color: theme.textSecondary }]}>{message}</Text>
+        <Text style={[styles.message, { color: theme.textSecondary, fontSize: type.body }]}>{message}</Text>
       ) : (
         message
       )}

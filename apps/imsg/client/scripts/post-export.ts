@@ -19,6 +19,7 @@ const tags = [
   // never show the browser focus ring/outline; fill the dynamic viewport so a
   // standalone PWA doesn't leave a white bar over the home-indicator area.
   "<style>input,textarea,select{font-size:16px!important}" +
+    "@media (min-width:768px){input,textarea,select{font-size:13px!important}}" +
     // Policy: no focus outlines anywhere in this app — inputs, buttons, anything.
     "*:focus,*:focus-visible{outline:none!important;box-shadow:none!important}" +
     "html,body,#root{height:100dvh!important;min-height:100dvh!important}" +

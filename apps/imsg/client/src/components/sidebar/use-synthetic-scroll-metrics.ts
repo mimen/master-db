@@ -4,7 +4,7 @@ import { Animated, type NativeScrollEvent, type NativeSyntheticEvent } from "rea
 /** Height of the fixed frosted-glass sidebar bar. Styled, not measured —
  * runtime measurement once fed the keyboard adapter a stale pre-measure
  * value (up-pin landed under the bar). One source of truth for both panes. */
-export const SIDEBAR_CHROME_HEIGHT = 58;
+export const SIDEBAR_CHROME_HEIGHT = 52;
 
 export interface SyntheticThumbState {
   readonly visible: boolean;

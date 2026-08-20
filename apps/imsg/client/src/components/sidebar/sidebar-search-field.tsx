@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
 
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 
 export interface SidebarSearchFieldProps {
   readonly value: string;
@@ -30,12 +32,14 @@ export function SidebarSearchField({
   returnKeyType = "search",
 }: SidebarSearchFieldProps): React.JSX.Element {
   const theme = useTheme();
+  const type = useType();
+  const { wide } = useLayoutMode();
   return (
     <View
       style={[
         styles.field,
         placement === "chrome" && styles.fieldChrome,
-        { backgroundColor: theme.backgroundElement },
+        { backgroundColor: theme.backgroundElement, height: wide ? 32 : 38 },
       ]}
     >
       <Ionicons name="search" size={17} color={theme.textSecondary} />
@@ -53,7 +57,7 @@ export function SidebarSearchField({
         // search-session reset that hangs off it, leaving state stale. The
         // custom button below is the one control on every platform.
         clearButtonMode="never"
-        style={[styles.input, { color: theme.text }]}
+        style={[styles.input, { color: theme.text, fontSize: type.body }]}
       />
       {value.trim().length > 0 && (
         <Pressable

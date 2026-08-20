@@ -13,6 +13,7 @@ export function ensureGlobalWebCss(): void {
   style.id = "imsg-global-css";
   style.textContent =
     "*:focus,*:focus-visible{outline:none!important;box-shadow:none!important}" +
-    "input,textarea,select{font-size:16px!important}";
+    "input,textarea,select{font-size:16px!important}" +
+    "@media (min-width:768px){input,textarea,select{font-size:13px!important}}";
   document.head.appendChild(style);
 }

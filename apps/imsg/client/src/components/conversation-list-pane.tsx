@@ -12,7 +12,7 @@ import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
 import { SettingsButton } from "./sidebar/settings-button";
-import { SidebarChrome, chromeStyles } from "./sidebar/sidebar-chrome";
+import { SidebarChrome, useChromeActions } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
@@ -23,6 +23,7 @@ import { useConversationSearch } from "./conversations/use-conversation-search";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
@@ -60,6 +61,8 @@ export function ConversationListPane({
   onNewMessage,
 }: ConversationListPaneProps) {
   const theme = useTheme();
+  const type = useType();
+  const chromeActions = useChromeActions();
   const { openMenu } = useChatActions();
   const iosMobile = Platform.OS === "ios" && !wide;
   const search = useConversationSearch({ filters, onFiltersChange });
@@ -156,17 +159,17 @@ export function ConversationListPane({
             accessibilityRole="button"
             accessibilityLabel="Filter conversations"
             onPress={openFilters}
-            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+            style={({ pressed }) => [chromeActions.button, pressed && { opacity: 0.55 }]}
           >
-            <Ionicons name="options-outline" size={21} color={theme.accent} />
+            <Ionicons name="options-outline" size={chromeActions.iconSize} color={theme.accent} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="New message"
             onPress={onNewMessage}
-            style={({ pressed }) => [chromeStyles.actionButton, pressed && { opacity: 0.55 }]}
+            style={({ pressed }) => [chromeActions.button, pressed && { opacity: 0.55 }]}
           >
-            <Ionicons name="create-outline" size={23} color={theme.accent} />
+            <Ionicons name="create-outline" size={chromeActions.iconSize} color={theme.accent} />
           </Pressable>
         </>
       }
@@ -228,8 +231,8 @@ export function ConversationListPane({
               {/* Default "Recent" needs no label; a filtered view keeps its name. */}
               {model.sectionLabel !== "Recent" && (
                 <View style={styles.sectionHeading}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>{model.sectionLabel}</Text>
-                  <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{model.sectionCount}</Text>
+                  <Text style={[styles.sectionTitle, { color: theme.text, fontSize: type.title }]}>{model.sectionLabel}</Text>
+                  <Text style={[styles.sectionCount, { color: theme.textSecondary, fontSize: type.secondary }]}>{model.sectionCount}</Text>
                 </View>
               )}
             </View>
