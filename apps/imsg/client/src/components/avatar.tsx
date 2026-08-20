@@ -121,6 +121,18 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
   );
 }
 
+const STACK_RING = 2;
+
+/** Layout width of an overlapping group stack, including the ring around each face. */
+export function groupAvatarStackWidth(size: number, count: number): number {
+  const n = Math.max(0, Math.min(3, count));
+  if (n === 0) return size;
+  const av = Math.round(size * 0.66);
+  const overlap = Math.round(av * 0.42);
+  const face = av + STACK_RING * 2;
+  return face + (n - 1) * (face - overlap);
+}
+
 /** Overlapping member avatars for a group, Apple-style (up to 3). */
 export function GroupAvatarStack({ chat, size }: { chat: ChatSummary; size: number }) {
   const theme = useTheme();
@@ -130,17 +142,17 @@ export function GroupAvatarStack({ chat, size }: { chat: ChatSummary; size: numb
   if (members.length === 0) return <ChatAvatar chat={chat} size={size} />;
   const av = Math.round(size * 0.66);
   const overlap = Math.round(av * 0.42);
-  const width = av + (members.length - 1) * (av - overlap);
+  const width = groupAvatarStackWidth(size, members.length);
   return (
-    <View style={{ width, height: size, flexDirection: "row", alignItems: "center" }}>
+    <View style={{ width, height: size, flexDirection: "row", alignItems: "center", flexShrink: 0 }}>
       {members.map((m, i) => (
         <View
           key={m.address}
           style={{
             marginLeft: i === 0 ? 0 : -overlap,
             zIndex: members.length - i,
-            borderRadius: (av + 4) / 2,
-            borderWidth: 2,
+            borderRadius: (av + STACK_RING * 2) / 2,
+            borderWidth: STACK_RING,
             borderColor: theme.background,
           }}
         >

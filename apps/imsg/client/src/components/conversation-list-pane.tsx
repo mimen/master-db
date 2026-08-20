@@ -255,7 +255,7 @@ export function ConversationListPane({
 
 const styles = StyleSheet.create({
   navInline: {
-    flex: 1,
+    flexShrink: 0,
     marginBottom: 0,
     marginHorizontal: 0,
     marginTop: 0,

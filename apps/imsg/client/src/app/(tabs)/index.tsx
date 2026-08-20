@@ -18,7 +18,7 @@ import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { Type } from "@/constants/theme";
 import { archiveChat, markChatUnread, undoLastAction } from "@/lib/chat-actions";
-import { desktopFrame } from "@/lib/desktop-frame";
+import { DesktopAuxPane, DesktopSplit } from "@/components/desktop-split";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import {
@@ -328,11 +328,26 @@ export default function ChatListScreen() {
     return <View style={{ flex: 1, backgroundColor: theme.background }}>{list}</View>;
   }
 
-  const frame = desktopFrame(theme);
-
   return (
-    <View style={frame.split}>
-      <View style={[frame.pane, frame.listPane]}>{list}</View>
+    <DesktopSplit
+      list={list}
+      detail={
+        selected ? (
+          <ThreadView
+            key={selected.guid + (jumpTarget?.guid ?? "")}
+            chatGuid={selected.guid}
+            isGroup={selected.isGroup}
+            jumpTarget={jumpTarget}
+            headerChat={selected}
+            previewOnly={selectionIntent === "preview"}
+            onToggleShadow={canShadow ? () => setShadowOpen((v) => !v) : undefined}
+            shadowOpen={shadowOpen}
+          />
+        ) : (
+          <EmptyState icon="chatbubble-ellipses-outline" message="Select a conversation" />
+        )
+      }
+    >
       <OverlayShell
         visible={searchOpen}
         onClose={() => setSearchOpen(false)}
@@ -381,24 +396,8 @@ export default function ChatListScreen() {
           </View>
         ))}
       </OverlayShell>
-      <View style={[frame.pane, frame.detailPane]}>
-        {selected ? (
-          <ThreadView
-            key={selected.guid + (jumpTarget?.guid ?? "")}
-            chatGuid={selected.guid}
-            isGroup={selected.isGroup}
-            jumpTarget={jumpTarget}
-            headerChat={selected}
-            previewOnly={selectionIntent === "preview"}
-            onToggleShadow={canShadow ? () => setShadowOpen((v) => !v) : undefined}
-            shadowOpen={shadowOpen}
-          />
-        ) : (
-          <EmptyState icon="chatbubble-ellipses-outline" message="Select a conversation" />
-        )}
-      </View>
       {rightPane && (
-        <View style={[frame.pane, frame.auxPane]}>
+        <DesktopAuxPane>
           {rightPane.mode === "details" ? (
             <ChatInfoContent
               key={rightPane.guid}
@@ -430,14 +429,14 @@ export default function ChatListScreen() {
               }
             />
           )}
-        </View>
+        </DesktopAuxPane>
       )}
       {canShadow && shadowOpen && selected && (
-        <View style={[frame.pane, frame.auxPane]}>
+        <DesktopAuxPane>
           <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
-        </View>
+        </DesktopAuxPane>
       )}
-    </View>
+    </DesktopSplit>
   );
 }
 

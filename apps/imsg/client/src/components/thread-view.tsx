@@ -488,7 +488,6 @@ export function ThreadView({
             { backgroundColor: theme.background, borderBottomColor: theme.divider },
           ]}
         >
-          <View style={styles.paneHeaderSpace} />
           <Pressable
             style={styles.paneIdentity}
             onPress={() => {
@@ -516,7 +515,7 @@ export function ThreadView({
               )}
             </View>
           </Pressable>
-          <View style={[styles.paneHeaderSpace, styles.paneHeaderActions]}>
+          <View style={styles.paneHeaderActions}>
             <FaceTimeButton
               chatGuid={chatGuid}
               isGroup={isGroup}
@@ -752,19 +751,17 @@ function TypingDots({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   paneHeader: {
-    height: 58,
-    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  paneHeaderSpace: {
-    flex: 1,
+    flexDirection: "row",
+    height: 58,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
   },
   paneHeaderActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
     alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
     gap: 14,
   },
   searchShelf: {
@@ -789,13 +786,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   paneIdentity: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    maxWidth: "70%",
+    flex: 1,
+    flexDirection: "row",
+    gap: 10,
+    minWidth: 0,
+    paddingRight: 12,
   },
   paneIdentityText: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
   },
   dayChipWrap: {
     position: "absolute",

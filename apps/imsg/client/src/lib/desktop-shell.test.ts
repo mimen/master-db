@@ -48,6 +48,12 @@ describe("desktopFrame", () => {
     expect(frame.auxPane.borderLeftWidth).toBe(1);
     expect(frame.auxPane.width).toBe(330);
   });
+
+  test("list pane width is caller-supplied", () => {
+    const frame = desktopFrame(theme, 440);
+    expect(frame.listPane.width).toBe(440);
+    expect(frame.listPane.flexBasis).toBe(440);
+  });
 });
 
 describe("native menu bridge", () => {

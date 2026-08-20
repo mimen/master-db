@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PersonContent } from "@/components/person-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { desktopFrame } from "@/lib/desktop-frame";
+import { DesktopSplit } from "@/components/desktop-split";
 import { primaryHandle, type ContactListRow } from "@/lib/identity";
 
 export default function ContactsScreen() {
@@ -29,16 +29,11 @@ export default function ContactsScreen() {
     );
   }
 
-  // Same flush split as Messages.
-  const frame = desktopFrame(theme);
-
   return (
-    <View style={frame.split}>
-      <View style={[frame.pane, frame.listPane]}>
-        <ContactsListPane wide selectedId={selectedPerson?._id} onSelectPerson={setSelectedPerson} />
-      </View>
-      <View style={[frame.pane, frame.detailPane]}>
-        {selectedPerson ? (
+    <DesktopSplit
+      list={<ContactsListPane wide selectedId={selectedPerson?._id} onSelectPerson={setSelectedPerson} />}
+      detail={
+        selectedPerson ? (
           <PersonContent
             key={selectedPerson._id}
             address={primaryHandle(selectedPerson) ?? ""}
@@ -46,8 +41,8 @@ export default function ContactsScreen() {
           />
         ) : (
           <EmptyState icon="person-circle-outline" message="Select a contact" />
-        )}
-      </View>
-    </View>
+        )
+      }
+    />
   );
 }

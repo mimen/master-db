@@ -1,5 +1,6 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { router } from "expo-router";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -26,11 +27,13 @@ export function NavSwitcher({
       {...NO_DRAG}
     >
       <Segment
+        icon="chatbubble-ellipses"
         label="Messages"
         selected={active === "messages"}
         onPress={() => router.push("/")}
       />
       <Segment
+        icon="people"
         label="Contacts"
         selected={active === "contacts"}
         onPress={() => router.push("/contacts")}
@@ -40,10 +43,12 @@ export function NavSwitcher({
 }
 
 function Segment({
+  icon,
   label,
   selected,
   onPress,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   selected: boolean;
   onPress: () => void;
@@ -53,6 +58,7 @@ function Segment({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ selected }}
       onPress={onPress}
       onHoverIn={() => setHovered(true)}
@@ -65,12 +71,7 @@ function Segment({
         Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
       ]}
     >
-      <Text
-        numberOfLines={1}
-        style={[styles.label, { color: selected ? theme.text : theme.textSecondary }]}
-      >
-        {label}
-      </Text>
+      <Ionicons name={icon} size={15} color={selected ? theme.text : theme.textSecondary} />
     </Pressable>
   );
 }
@@ -79,17 +80,14 @@ const styles = StyleSheet.create({
   container: {
     borderRadius: 8,
     flexDirection: "row",
-    flexShrink: 1,
-    minWidth: 0,
+    flexShrink: 0,
     padding: 2,
   },
   segment: {
     alignItems: "center",
     borderRadius: 6,
-    flex: 1,
+    height: 24,
     justifyContent: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    width: 28,
   },
-  label: { fontSize: 12, fontWeight: "600" },
 });

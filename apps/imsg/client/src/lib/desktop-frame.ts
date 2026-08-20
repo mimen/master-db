@@ -20,7 +20,7 @@ export interface DesktopFrameStyles {
  * Wide/desktop split: flush to the window, panes separated by a hairline.
  * Used for both the PWA at desktop width and the Tauri shell.
  */
-export function desktopFrame(theme: FrameTheme): DesktopFrameStyles {
+export function desktopFrame(theme: FrameTheme, listWidth = 380): DesktopFrameStyles {
   return {
     split: {
       flex: 1,
@@ -32,10 +32,10 @@ export function desktopFrame(theme: FrameTheme): DesktopFrameStyles {
       overflow: "hidden",
     },
     listPane: {
-      flexBasis: 380,
+      flexBasis: listWidth,
       flexGrow: 0,
       flexShrink: 0,
-      width: 380,
+      width: listWidth,
       borderRightColor: theme.divider,
       borderRightWidth: HAIRLINE,
     },

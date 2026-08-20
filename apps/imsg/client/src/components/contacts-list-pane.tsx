@@ -250,7 +250,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
 const styles = StyleSheet.create({
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
   navInline: {
-    flex: 1,
+    flexShrink: 0,
     marginBottom: 0,
     marginHorizontal: 0,
     marginTop: 0,

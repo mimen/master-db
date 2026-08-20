@@ -12,6 +12,7 @@ import { ActionSheetProvider } from "@/lib/action-sheet";
 import { hydrateDrafts } from "@/lib/drafts";
 import { installDeployReloader } from "@/lib/deploy-reload";
 import { hydrateSettings } from "@/lib/settings";
+import { hydrateSidebarWidth } from "@/lib/sidebar-width";
 import { convexClient } from "@/lib/identity";
 import { LightboxProvider } from "@/lib/lightbox";
 import { ToastHost } from "@/lib/toast";
@@ -21,6 +22,7 @@ export default function RootLayout() {
   useEffect(() => {
     void hydrateDrafts();
     void hydrateSettings();
+    void hydrateSidebarWidth();
     if (typeof document === "undefined" || typeof window === "undefined") return;
     return installDeployReloader({
       document,

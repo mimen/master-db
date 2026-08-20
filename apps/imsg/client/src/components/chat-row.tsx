@@ -19,7 +19,7 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { CardShadow, Colors, Radii, Type } from "@/constants/theme";
+import { Colors, Radii, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { formatListTimestamp } from "@/lib/format";
 import { hapticCommit } from "@/lib/haptics";
@@ -223,10 +223,28 @@ function ChatRowInner({
                 style={[styles.priorityDot, { backgroundColor: theme.accent }]}
               />
             )}
-            {last && (
+            {last && !(compact && hovered) && (
               <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
                 {formatListTimestamp(last.dateCreated)}
               </Text>
+            )}
+            {compact && hovered && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={chat.flags.archived ? "Unarchive conversation" : "Archive conversation"}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  archiveChat(chat, !chat.flags.archived);
+                }}
+                hitSlop={6}
+                style={[styles.hoverArchive, { backgroundColor: theme.backgroundElement }]}
+              >
+                <Ionicons
+                  name={chat.flags.archived ? "arrow-undo-outline" : "archive-outline"}
+                  size={15}
+                  color={theme.textSecondary}
+                />
+              </Pressable>
             )}
           </View>
           <View style={styles.previewLine}>
@@ -244,43 +262,23 @@ function ChatRowInner({
             >
               {snippet}
             </Text>
-            {chat.unreadCount > 0 && (
+            {!(compact && hovered) && chat.unreadCount > 0 && (
               <View style={[styles.unreadBadge, { backgroundColor: theme.accent }]}>
                 <Text style={styles.unreadBadgeText}>{chat.unreadCount > 99 ? "99+" : chat.unreadCount}</Text>
               </View>
             )}
-            {chat.flags.archived && (
+            {!(compact && hovered) && chat.flags.archived && (
               <View style={[styles.stateChip, { backgroundColor: theme.backgroundElement }]}>
                 <Ionicons name="archive-outline" size={11} color={theme.textSecondary} />
               </View>
             )}
-            {chat.flags.unresponded && !chat.flags.unread && (
+            {!(compact && hovered) && chat.flags.unresponded && !chat.flags.unread && (
               <View style={[styles.stateChip, { backgroundColor: "#F0A50026" }]}>
                 <Ionicons name="arrow-undo-outline" size={11} color="#F0A500" />
               </View>
             )}
           </View>
         </View>
-        {compact && (
-          <Pressable
-            onPress={(e) => {
-              e.stopPropagation();
-              archiveChat(chat, !chat.flags.archived);
-            }}
-            hitSlop={6}
-            pointerEvents={hovered ? "auto" : "none"}
-            style={[
-              styles.hoverArchive,
-              { backgroundColor: theme.backgroundSelected, opacity: hovered ? 1 : 0 },
-            ]}
-          >
-            <Ionicons
-              name={chat.flags.archived ? "arrow-undo-outline" : "checkmark"}
-              size={16}
-              color={theme.text}
-            />
-          </Pressable>
-        )}
       </Pressable>
     </ReanimatedSwipeable>
   );
@@ -376,20 +374,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   hoverArchive: {
-    position: "absolute",
-    right: 10,
-    top: "50%",
-    marginTop: -14,
-    width: 28,
-    height: 28,
-    borderRadius: 14, // geometric: half the 28px button, a circle — not Radii.card
     alignItems: "center",
+    borderRadius: 6,
+    flexShrink: 0,
+    height: 26,
     justifyContent: "center",
-    zIndex: 2,
-    ...CardShadow,
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    width: 26,
   },
   swipeAction: {
     width: ACTION_WIDTH,
