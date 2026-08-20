@@ -15,9 +15,10 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         .accelerator("CmdOrCtrl+K")
         .build(app)?;
 
-    let app_menu = SubmenuBuilder::new(app, "imsg")
+    let display_name = app.package_info().name.clone();
+    let app_menu = SubmenuBuilder::new(app, &display_name)
         .about(Some(AboutMetadata {
-            name: Some("imsg".into()),
+            name: Some(display_name),
             ..Default::default()
         }))
         .separator()

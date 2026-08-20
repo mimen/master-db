@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Messages",
+    "name": "Comma",
     "slug": "imsg",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,7 +39,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Messages to add your current location to a message."
+          "locationWhenInUsePermission": "Allow Comma to add your current location to a message."
         }
       ]
     ],

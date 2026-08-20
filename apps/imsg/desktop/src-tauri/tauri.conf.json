@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "imsg",
+  "productName": "Comma",
   "version": "0.1.0",
   "identifier": "com.milad.imsg.desktop",
   "build": {
@@ -13,7 +13,7 @@
       {
         "label": "main",
         "create": false,
-        "title": "imsg",
+        "title": "Comma",
         "hiddenTitle": true,
         "titleBarStyle": "Overlay",
         "trafficLightPosition": { "x": 16, "y": 20 },
