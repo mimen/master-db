@@ -396,46 +396,46 @@ export default function ChatListScreen() {
           </View>
         ))}
       </OverlayShell>
-      {rightPane && (
-        <DesktopAuxPane>
-          {rightPane.mode === "details" ? (
-            <ChatInfoContent
-              key={rightPane.guid}
-              guid={rightPane.guid}
-              showHeader
-              onClose={() => setRightPane(null)}
-              onOpenPerson={(address, name) =>
-                setRightPane({ mode: "person", target: { address, name, backGuid: rightPane.guid } })
-              }
-              onDeleted={() => {
-                setRightPane(null);
-                setSelected(null);
-                refresh();
-              }}
-            />
-          ) : (
-            <PersonContent
-              key={rightPane.target.address}
-              address={rightPane.target.address}
-              name={rightPane.target.name}
-              showHeader
-              // Palette-opened cards have no originating conversation to go
-              // back to; the header just offers close in that case.
-              backLabel={rightPane.target.backGuid ? "Details" : undefined}
-              onBack={
-                rightPane.target.backGuid
-                  ? () => setRightPane({ mode: "details", guid: rightPane.target.backGuid })
-                  : undefined
-              }
-            />
-          )}
+      <DesktopAuxPane open={rightPane !== null}>
+        {rightPane?.mode === "details" ? (
+          <ChatInfoContent
+            key={rightPane.guid}
+            guid={rightPane.guid}
+            showHeader
+            onClose={() => setRightPane(null)}
+            onOpenPerson={(address, name) =>
+              setRightPane({ mode: "person", target: { address, name, backGuid: rightPane.guid } })
+            }
+            onDeleted={() => {
+              setRightPane(null);
+              setSelected(null);
+              refresh();
+            }}
+          />
+        ) : rightPane ? (
+          <PersonContent
+            key={rightPane.target.address}
+            address={rightPane.target.address}
+            name={rightPane.target.name}
+            showHeader
+            // Palette-opened cards have no originating conversation to go
+            // back to; the header just offers close in that case.
+            backLabel={rightPane.target.backGuid ? "Details" : undefined}
+            onBack={
+              rightPane.target.backGuid
+                ? () => setRightPane({ mode: "details", guid: rightPane.target.backGuid })
+                : undefined
+            }
+          />
+        ) : null}
+      </DesktopAuxPane>
+      {canShadow ? (
+        <DesktopAuxPane open={shadowOpen && selected !== null}>
+          {selected ? (
+            <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
+          ) : null}
         </DesktopAuxPane>
-      )}
-      {canShadow && shadowOpen && selected && (
-        <DesktopAuxPane>
-          <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
-        </DesktopAuxPane>
-      )}
+      ) : null}
     </DesktopSplit>
   );
 }

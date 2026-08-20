@@ -3,6 +3,8 @@ import type { ViewStyle } from "react-native";
 /** 1px divider — RN's hairlineWidth isn't available in bun tests of this module. */
 const HAIRLINE = 1;
 
+export const AUX_PANE_WIDTH = 330;
+
 export interface FrameTheme {
   readonly background: string;
   readonly divider: string;
@@ -43,10 +45,10 @@ export function desktopFrame(theme: FrameTheme, listWidth = 380): DesktopFrameSt
       flex: 1,
     },
     auxPane: {
-      flexBasis: 330,
+      flexBasis: AUX_PANE_WIDTH,
       flexGrow: 0,
       flexShrink: 0,
-      width: 330,
+      width: AUX_PANE_WIDTH,
       borderLeftColor: theme.divider,
       borderLeftWidth: HAIRLINE,
     },

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { desktopFrame } from "./desktop-frame";
+import { AUX_PANE_WIDTH, desktopFrame } from "./desktop-frame";
 import {
   installNativeMenuBridge,
   isDesktopShell,
@@ -46,7 +46,7 @@ describe("desktopFrame", () => {
     expect(frame.listPane.borderRightWidth).toBe(1);
     expect(frame.listPane.width).toBe(380);
     expect(frame.auxPane.borderLeftWidth).toBe(1);
-    expect(frame.auxPane.width).toBe(330);
+    expect(frame.auxPane.width).toBe(AUX_PANE_WIDTH);
   });
 
   test("list pane width is caller-supplied", () => {

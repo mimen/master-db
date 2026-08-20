@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/use-theme";
-import { desktopFrame, type DesktopFrameStyles } from "@/lib/desktop-frame";
+import { AUX_PANE_WIDTH, desktopFrame, type DesktopFrameStyles } from "@/lib/desktop-frame";
 import { useSidebarWidth } from "@/lib/sidebar-width";
 
 import { SidebarResizeHandle } from "./sidebar/sidebar-resize-handle";
@@ -38,7 +39,56 @@ export function DesktopSplit({ list, detail, children }: DesktopSplitProps): Rea
   );
 }
 
-export function DesktopAuxPane({ children }: { readonly children: ReactNode }): React.JSX.Element {
-  const { frame } = useDesktopFrame();
-  return <View style={[frame.pane, frame.auxPane]}>{children}</View>;
+const SLIDE_MS = 220;
+const SLIDE_EASE = Easing.out(Easing.cubic);
+
+export function DesktopAuxPane({
+  open,
+  children,
+}: {
+  readonly open: boolean;
+  readonly children: ReactNode;
+}): React.JSX.Element | null {
+  const theme = useTheme();
+  const [mounted, setMounted] = useState(open);
+  const held = useRef(children);
+  if (open && children != null) held.current = children;
+
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      width.value = withTiming(AUX_PANE_WIDTH, { duration: SLIDE_MS, easing: SLIDE_EASE });
+      return;
+    }
+    width.value = withTiming(0, { duration: 180, easing: Easing.in(Easing.cubic) }, (finished) => {
+      if (finished) runOnJS(setMounted)(false);
+    });
+  }, [open, width]);
+
+  const slide = useAnimatedStyle(() => ({
+    borderLeftWidth: width.value > 2 ? 1 : 0,
+    flexBasis: width.value,
+    width: width.value,
+  }));
+
+  if (!mounted) return null;
+
+  return (
+    <Animated.View
+      style={[
+        {
+          backgroundColor: theme.background,
+          borderLeftColor: theme.divider,
+          flexGrow: 0,
+          flexShrink: 0,
+          overflow: "hidden",
+        },
+        slide,
+      ]}
+    >
+      <View style={{ flex: 1, width: AUX_PANE_WIDTH }}>{held.current}</View>
+    </Animated.View>
+  );
 }

@@ -20,6 +20,7 @@ import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion, GalleryItem } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { PersonAvatar } from "./avatar";
@@ -50,6 +51,7 @@ export function ChatInfoContent({
   onOpenPerson,
 }: ChatInfoContentProps) {
   const theme = useTheme();
+  const type = useType();
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
   const [info, setInfo] = useState<{
@@ -112,7 +114,7 @@ export function ChatInfoContent({
 
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
-      <Text style={[styles.paneHeaderTitle, { color: theme.text }]}>Details</Text>
+      <Text style={[styles.paneHeaderTitle, { color: theme.text, fontSize: type.title }]}>Details</Text>
       <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close details">
         <Ionicons name="close" size={20} color={theme.textSecondary} />
       </Pressable>
@@ -123,7 +125,7 @@ export function ChatInfoContent({
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
         {header}
-        <CenteredSpinner style={{ backgroundColor: theme.background }} />
+        {showHeader ? null : <CenteredSpinner style={{ backgroundColor: theme.background }} />}
       </View>
     );
   }
@@ -253,7 +255,7 @@ export function ChatInfoContent({
           ) : (
             <View>
               <Pressable style={styles.titleRow} onPress={() => setRenaming(true)}>
-                <Text style={[styles.title, { color: theme.text }]}>
+                <Text style={[styles.title, { color: theme.text, fontSize: type.title, fontWeight: "600" }]}>
                   {info.displayName || `${info.participants.length} people`}
                 </Text>
                 <Ionicons name="pencil" size={16} color={theme.textSecondary} />
@@ -528,12 +530,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
-  paneHeaderTitle: { fontSize: 16, fontWeight: "600" },
+  paneHeaderTitle: { fontWeight: "600" },
   quickRow: { flexDirection: "row", justifyContent: "center", gap: 28, marginBottom: 8 },
   quickAction: { alignItems: "center", gap: 6 },
   quickIcon: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  title: { fontSize: 24, fontWeight: "700" },
+  title: { fontWeight: "600" },
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   renameInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 18 },
   suggestBlock: { marginTop: 10, gap: 8 },
