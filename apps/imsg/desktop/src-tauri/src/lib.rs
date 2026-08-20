@@ -1,4 +1,4 @@
-use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -15,6 +15,19 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         .accelerator("CmdOrCtrl+K")
         .build(app)?;
 
+    let app_menu = SubmenuBuilder::new(app, "imsg")
+        .about(Some(AboutMetadata {
+            name: Some("imsg".into()),
+            ..Default::default()
+        }))
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .separator()
+        .quit()
+        .build()?;
     let file = SubmenuBuilder::new(app, "File")
         .item(&new_message)
         .separator()
@@ -35,6 +48,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         .build()?;
 
     MenuBuilder::new(app)
+        .item(&app_menu)
         .item(&file)
         .item(&edit)
         .item(&find_menu)
