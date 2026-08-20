@@ -151,18 +151,7 @@ export function ConversationListPane({
     <SidebarChrome
       leading={wide ? null : searchField}
       toolbar={wide ? searchField : undefined}
-      titleAccessory={
-        wide && model.showPriorityShelf ? (
-          <PriorityShelf
-            ref={shelfRef}
-            variant="strip"
-            chats={model.priority}
-            selectedGuid={selectedGuid}
-            onPress={onOpenChat}
-            onLongPress={openMenu}
-          />
-        ) : undefined
-      }
+      titleAccessory={wide ? <NavSwitcher active="messages" /> : undefined}
       actions={
         <>
           <SettingsButton />
@@ -184,8 +173,8 @@ export function ConversationListPane({
 
   return (
     <SidebarFrame chrome={chrome} thumb={<SyntheticScrollThumb state={viewport.thumb} />}>
-      {/* Filters, nav, and (on mobile) the labeled shelf ride the list
-          header, passing behind the glass top bar. Wide search is sticky. */}
+      {/* Filters and the labeled shelf ride the list header, passing
+          behind the glass top bar. Wide search is sticky chrome. */}
       <FlashList
           ref={viewport.listRef}
           data={model.listChats}
@@ -217,7 +206,6 @@ export function ConversationListPane({
                 paddingBottom: wide ? 6 : 0,
               }}
             >
-              {wide ? <NavSwitcher active="messages" style={styles.navInline} /> : null}
               <ConversationFilters
                 compact={wide}
                 filters={filters}
@@ -225,7 +213,7 @@ export function ConversationListPane({
                 // Picking a badge exits search — the two never compose.
                 onFiltersChange={(f) => search.applyFilters(f)}
               />
-              {!wide && model.showPriorityShelf && (
+              {model.showPriorityShelf && (
                 <PriorityShelf
                   ref={shelfRef}
                   chats={model.priority}
@@ -234,8 +222,9 @@ export function ConversationListPane({
                   onLongPress={openMenu}
                 />
               )}
-              {/* Default "Recent" needs no label; a filtered view keeps its name. */}
-              {model.sectionLabel !== "Recent" && (
+              {/* Default "Recent" needs no label. Wide already names the
+                  view via the filter chips — don't stack a second heading. */}
+              {!wide && model.sectionLabel !== "Recent" && (
                 <View style={styles.sectionHeading}>
                   <Text style={[styles.sectionTitle, { color: theme.text, fontSize: type.title }]}>{model.sectionLabel}</Text>
                   <Text style={[styles.sectionCount, { color: theme.textSecondary, fontSize: type.secondary }]}>{model.sectionCount}</Text>
@@ -267,13 +256,6 @@ export function ConversationListPane({
 }
 
 const styles = StyleSheet.create({
-  navInline: {
-    alignSelf: "flex-start",
-    flexShrink: 0,
-    marginBottom: 8,
-    marginHorizontal: 10,
-    marginTop: 2,
-  },
   sectionHeading: {
     alignItems: "baseline",
     flexDirection: "row",

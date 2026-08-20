@@ -44,9 +44,9 @@ Floating desktop cards and the pane split are screen-level layout
 
 ## 2. Desktop search-header rules
 
-- Wide/desktop chrome is two sticky rows: app name (+ optional priority
-  strip) on the traffic-light row, search and actions on the row below.
-  Mobile search stays inline in the single chrome bar. Both use the same
+- Wide/desktop chrome is two sticky rows: app name + Messages/Contacts
+  on the traffic-light row, search and actions on the row below. Mobile
+  search stays inline in the single chrome bar. Both use the same
   `SidebarSearchField`.
 - Desktop search is sticky chrome, not a scrolling list header. Do not
   put it back in `ListHeaderComponent` on wide.

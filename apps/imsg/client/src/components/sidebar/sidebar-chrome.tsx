@@ -21,7 +21,7 @@ export interface SidebarChromeProps {
   readonly actions: React.ReactNode;
   /** Wide: sticky search row under the app name. */
   readonly toolbar?: React.ReactNode;
-  /** Wide: sits in the title row after the wordmark (priority shelf). */
+  /** Wide: trailing title-row control (Messages/Contacts). */
   readonly titleAccessory?: React.ReactNode;
 }
 
@@ -31,9 +31,9 @@ export interface SidebarChromeProps {
  * backdrop-filter; solid elsewhere). Behavior lives with the caller; this
  * component owns only geometry and glass.
  *
- * Wide/desktop is two rows, T3-style: app name (+ optional shelf) on the
- * traffic-light row, search and actions on the row below. Mobile stays a
- * single bar with search inline.
+ * Wide/desktop is two rows: app name + nav on the traffic-light row,
+ * search and actions on the row below. Mobile stays a single bar with
+ * search inline.
  */
 export function SidebarChrome({
   leading,
@@ -77,7 +77,7 @@ export function SidebarChrome({
             Comma
           </Text>
           {titleAccessory ? (
-            <View style={styles.accessory} {...(shell ? NO_DRAG : {})}>
+            <View style={styles.titleTrailing} {...(shell ? NO_DRAG : {})}>
               {titleAccessory}
             </View>
           ) : null}
@@ -137,8 +137,8 @@ const styles = StyleSheet.create({
   titleRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
     height: SIDEBAR_TITLE_HEIGHT,
+    justifyContent: "space-between",
     paddingHorizontal: 12,
   },
   titleRowShell: {
@@ -149,9 +149,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.3,
   },
-  accessory: {
-    flex: 1,
-    minWidth: 0,
+  titleTrailing: {
+    flexShrink: 0,
   },
   toolbar: {
     alignItems: "center",

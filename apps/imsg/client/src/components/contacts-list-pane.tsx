@@ -188,6 +188,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     <SidebarChrome
       leading={wide ? null : searchField}
       toolbar={wide ? searchField : undefined}
+      titleAccessory={wide ? <NavSwitcher active="contacts" /> : undefined}
       actions={
         <>
           <SettingsButton />
@@ -231,11 +232,8 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
               <View
                 style={{
                   paddingTop: Platform.OS === "web" ? topBarH + 8 : 0,
-                  paddingBottom: 6,
                 }}
-              >
-                <NavSwitcher active="contacts" style={styles.navInline} />
-              </View>
+              />
             ) : null
           }
           ListEmptyComponent={<EmptyState message="No contacts found." style={styles.center} />}
@@ -248,12 +246,5 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
 
 const styles = StyleSheet.create({
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
-  navInline: {
-    alignSelf: "flex-start",
-    flexShrink: 0,
-    marginBottom: 4,
-    marginHorizontal: 10,
-    marginTop: 2,
-  },
   sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 18, paddingVertical: 4 },
 });
