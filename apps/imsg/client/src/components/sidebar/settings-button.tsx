@@ -1,10 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Pressable } from "react-native";
 
-import { useTheme } from "@/hooks/use-theme";
-
-import { useChromeActions } from "./sidebar-chrome";
+import { ChromeIconButton } from "./chrome-icon-button";
 
 /**
  * The settings entry point (gear) shared by both sidebars — opens the
@@ -15,17 +11,11 @@ import { useChromeActions } from "./sidebar-chrome";
  * useAiStatus()?.suggestions).
  */
 export function SettingsButton(): React.JSX.Element {
-  const theme = useTheme();
-  const chrome = useChromeActions();
-
   return (
-    <Pressable
-      accessibilityRole="button"
+    <ChromeIconButton
+      icon="settings-outline"
       accessibilityLabel="Settings"
       onPress={() => router.push("/settings")}
-      style={({ pressed }) => [chrome.button, pressed && { opacity: 0.55 }]}
-    >
-      <Ionicons name="settings-outline" size={chrome.iconSize} color={theme.accent} />
-    </Pressable>
+    />
   );
 }

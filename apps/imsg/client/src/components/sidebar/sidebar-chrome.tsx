@@ -45,7 +45,9 @@ export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.J
       {...dragProps}
     >
       {leading}
-      <View style={styles.actions}>{actions}</View>
+      <View style={styles.actions} {...(shell ? ({ dataSet: { tauriDragRegion: "false" } } as object) : {})}>
+        {actions}
+      </View>
     </View>
   );
 }

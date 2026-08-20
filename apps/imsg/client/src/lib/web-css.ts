@@ -14,6 +14,8 @@ export function ensureGlobalWebCss(): void {
   style.textContent =
     "*:focus,*:focus-visible{outline:none!important;box-shadow:none!important}" +
     "input,textarea,select{font-size:16px!important}" +
-    "@media (min-width:768px){input,textarea,select{font-size:13px!important}}";
+    "@media (min-width:768px){input,textarea,select{font-size:13px!important}}" +
+    "[data-tauri-drag-region]{-webkit-app-region:drag;app-region:drag}" +
+    '[data-tauri-drag-region="false"],button,a,input,textarea,[role="button"]{-webkit-app-region:no-drag;app-region:no-drag;cursor:pointer}';
   document.head.appendChild(style);
 }

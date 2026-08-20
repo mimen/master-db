@@ -1,7 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, StateCounts } from "@shared/types";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 
@@ -11,8 +10,9 @@ import { NavSwitcher } from "./nav-switcher";
 import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 
+import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
-import { SidebarChrome, useChromeActions } from "./sidebar/sidebar-chrome";
+import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
@@ -62,7 +62,6 @@ export function ConversationListPane({
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const type = useType();
-  const chromeActions = useChromeActions();
   const { openMenu } = useChatActions();
   const iosMobile = Platform.OS === "ios" && !wide;
   const search = useConversationSearch({ filters, onFiltersChange });
@@ -154,23 +153,17 @@ export function ConversationListPane({
       actions={
         <>
           <SettingsButton />
-          <Pressable
+          <ChromeIconButton
             ref={filterBtnRef}
-            accessibilityRole="button"
+            icon="options-outline"
             accessibilityLabel="Filter conversations"
             onPress={openFilters}
-            style={({ pressed }) => [chromeActions.button, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="options-outline" size={chromeActions.iconSize} color={theme.accent} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
+          />
+          <ChromeIconButton
+            icon="create-outline"
             accessibilityLabel="New message"
             onPress={onNewMessage}
-            style={({ pressed }) => [chromeActions.button, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="create-outline" size={chromeActions.iconSize} color={theme.accent} />
-          </Pressable>
+          />
         </>
       }
     />

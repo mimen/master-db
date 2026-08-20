@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -20,6 +19,7 @@ import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
 import { NavSwitcher } from "./nav-switcher";
+import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome, useChromeActions } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
@@ -196,14 +196,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
           <View style={[chromeActions.button, { opacity: 0.3 }]}>
             <Ionicons name="options-outline" size={chromeActions.iconSize} color={theme.accent} />
           </View>
-          <Pressable
-            accessibilityRole="button"
+          <ChromeIconButton
+            icon="create-outline"
             accessibilityLabel="New message"
             onPress={() => router.push("/new-chat")}
-            style={({ pressed }) => [chromeActions.button, pressed && { opacity: 0.55 }]}
-          >
-            <Ionicons name="create-outline" size={chromeActions.iconSize} color={theme.accent} />
-          </Pressable>
+          />
         </>
       }
     />

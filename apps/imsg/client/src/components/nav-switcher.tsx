@@ -1,6 +1,9 @@
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { router } from "expo-router";
 import { useTheme } from "@/hooks/use-theme";
+
+const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 
 /**
  * Desktop-only segmented control between the two primary destinations.
@@ -18,30 +21,57 @@ export function NavSwitcher({
 }) {
   const theme = useTheme();
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundElement }, style]}>
-      <Pressable
-        style={[styles.segment, active === "messages" && { backgroundColor: theme.background }]}
+    <View
+      style={[styles.container, { backgroundColor: theme.backgroundElement }, style]}
+      {...NO_DRAG}
+    >
+      <Segment
+        label="Messages"
+        selected={active === "messages"}
         onPress={() => router.push("/")}
-      >
-        <Text
-          numberOfLines={1}
-          style={[styles.label, { color: active === "messages" ? theme.text : theme.textSecondary }]}
-        >
-          Messages
-        </Text>
-      </Pressable>
-      <Pressable
-        style={[styles.segment, active === "contacts" && { backgroundColor: theme.background }]}
+      />
+      <Segment
+        label="Contacts"
+        selected={active === "contacts"}
         onPress={() => router.push("/contacts")}
-      >
-        <Text
-          numberOfLines={1}
-          style={[styles.label, { color: active === "contacts" ? theme.text : theme.textSecondary }]}
-        >
-          Contacts
-        </Text>
-      </Pressable>
+      />
     </View>
+  );
+}
+
+function Segment({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={({ pressed }) => [
+        styles.segment,
+        selected && { backgroundColor: theme.background },
+        !selected && hovered && !pressed && { backgroundColor: theme.backgroundSelected },
+        !selected && pressed && { backgroundColor: theme.backgroundSelected, opacity: 0.85 },
+        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
+      ]}
+    >
+      <Text
+        numberOfLines={1}
+        style={[styles.label, { color: selected ? theme.text : theme.textSecondary }]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

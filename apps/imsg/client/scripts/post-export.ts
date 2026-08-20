@@ -20,6 +20,8 @@ const tags = [
   // standalone PWA doesn't leave a white bar over the home-indicator area.
   "<style>input,textarea,select{font-size:16px!important}" +
     "@media (min-width:768px){input,textarea,select{font-size:13px!important}}" +
+    "[data-tauri-drag-region]{-webkit-app-region:drag;app-region:drag}" +
+    '[data-tauri-drag-region="false"],button,a,input,textarea,[role="button"]{-webkit-app-region:no-drag;app-region:no-drag}' +
     // Policy: no focus outlines anywhere in this app — inputs, buttons, anything.
     "*:focus,*:focus-visible{outline:none!important;box-shadow:none!important}" +
     "html,body,#root{height:100dvh!important;min-height:100dvh!important}" +
