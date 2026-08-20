@@ -10,6 +10,7 @@ html = html.replace(
 
 const tags = [
   '<link rel="manifest" href="/manifest.webmanifest"/>',
+  '<link rel="icon" href="/favicon.png" type="image/png"/>',
   '<link rel="apple-touch-icon" href="/apple-touch-icon.png"/>',
   '<meta name="apple-mobile-web-app-capable" content="yes"/>',
   '<meta name="mobile-web-app-capable" content="yes"/>',
