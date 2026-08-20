@@ -10,7 +10,7 @@ needs a deliberate decision, not a drive-by edit.
 ```
 components/sidebar/            shared, passive
 ├── sidebar-frame.tsx          safe area + scroll-behind-chrome host + thumb seam
-├── sidebar-chrome.tsx         the ONLY fixed chrome (58px glass bar) + action-button styles
+├── sidebar-chrome.tsx         the ONLY fixed chrome (title+toolbar on wide) + action styles
 ├── sidebar-search-field.tsx   presentation-only field (list-header | chrome placements)
 ├── synthetic-scroll-thumb.tsx thumb overlay
 ├── suggestion-settings-button.tsx
@@ -44,9 +44,12 @@ Floating desktop cards and the pane split are screen-level layout
 
 ## 2. Desktop search-header rules
 
-- Desktop search lives INSIDE the scrolling list header (explicit design:
-  it rides the scroll). Mobile search lives in the fixed chrome. Both are
-  the same `SidebarSearchField`.
+- Wide/desktop chrome is two sticky rows: app name (+ optional priority
+  strip) on the traffic-light row, search and actions on the row below.
+  Mobile search stays inline in the single chrome bar. Both use the same
+  `SidebarSearchField`.
+- Desktop search is sticky chrome, not a scrolling list header. Do not
+  put it back in `ListHeaderComponent` on wide.
 - Query/filter changes must not replace the FlashList data-array identity
   wholesale or the header root type/key — the model reads one stable
   universe (`allChats`) and filters inside `deriveInboxModel`.
@@ -85,8 +88,9 @@ Floating desktop cards and the pane split are screen-level layout
   `onContentSizeChange` loops (it echoes set frames — the composer
   oscillation family). Dimensions come from scroll events; plain FlatLists
   (Contacts) may use `onContentSizeChange` — theirs is reliable.
-- `SIDEBAR_CHROME_HEIGHT` (58) is the only chrome-height source. Styled,
-  not measured — runtime measurement once fed glide a stale value.
+- `sidebarChromeHeight(wide)` is the only chrome-height source (title row
+  on mobile; title + toolbar on wide). Styled, not measured — runtime
+  measurement once fed glide a stale value.
 
 ## 5. Keyboard rules
 

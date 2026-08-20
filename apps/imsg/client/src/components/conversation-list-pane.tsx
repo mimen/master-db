@@ -16,7 +16,6 @@ import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
-import { SIDEBAR_CHROME_HEIGHT } from "./sidebar/use-synthetic-scroll-metrics";
 import { useConversationListKeyboard } from "./conversations/use-conversation-list-keyboard";
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
@@ -25,6 +24,7 @@ import { useChatActions } from "@/hooks/use-chat-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -67,7 +67,7 @@ export function ConversationListPane({
   const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
-  const topBarH = SIDEBAR_CHROME_HEIGHT;
+  const topBarH = sidebarChromeHeight(wide);
   const filterBtnRef = useRef<View>(null);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
@@ -140,7 +140,7 @@ export function ConversationListPane({
     <SidebarSearchField
       value={search.query}
       accessibilityLabel="Search conversations and messages"
-      placement={wide ? "list-header" : "chrome"}
+      placement="chrome"
       inputRef={search.inputRef}
       onChangeText={search.setQuery}
       onClear={() => search.clear()}
@@ -149,7 +149,20 @@ export function ConversationListPane({
 
   const chrome = (
     <SidebarChrome
-      leading={wide ? <NavSwitcher active="messages" style={styles.navInline} /> : searchField}
+      leading={wide ? null : searchField}
+      toolbar={wide ? searchField : undefined}
+      titleAccessory={
+        wide && model.showPriorityShelf ? (
+          <PriorityShelf
+            ref={shelfRef}
+            variant="strip"
+            chats={model.priority}
+            selectedGuid={selectedGuid}
+            onPress={onOpenChat}
+            onLongPress={openMenu}
+          />
+        ) : undefined
+      }
       actions={
         <>
           <SettingsButton />
@@ -171,8 +184,8 @@ export function ConversationListPane({
 
   return (
     <SidebarFrame chrome={chrome} thumb={<SyntheticScrollThumb state={viewport.thumb} />}>
-      {/* Everything scrolls together — search, filters, and priority shelf ride
-          along as the list's header, passing behind the glass top bar. */}
+      {/* Filters, nav, and (on mobile) the labeled shelf ride the list
+          header, passing behind the glass top bar. Wide search is sticky. */}
       <FlashList
           ref={viewport.listRef}
           data={model.listChats}
@@ -204,7 +217,7 @@ export function ConversationListPane({
                 paddingBottom: wide ? 6 : 0,
               }}
             >
-              {wide && searchField}
+              {wide ? <NavSwitcher active="messages" style={styles.navInline} /> : null}
               <ConversationFilters
                 compact={wide}
                 filters={filters}
@@ -212,7 +225,7 @@ export function ConversationListPane({
                 // Picking a badge exits search — the two never compose.
                 onFiltersChange={(f) => search.applyFilters(f)}
               />
-              {model.showPriorityShelf && (
+              {!wide && model.showPriorityShelf && (
                 <PriorityShelf
                   ref={shelfRef}
                   chats={model.priority}
@@ -255,10 +268,11 @@ export function ConversationListPane({
 
 const styles = StyleSheet.create({
   navInline: {
+    alignSelf: "flex-start",
     flexShrink: 0,
-    marginBottom: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
+    marginBottom: 8,
+    marginHorizontal: 10,
+    marginTop: 2,
   },
   sectionHeading: {
     alignItems: "baseline",

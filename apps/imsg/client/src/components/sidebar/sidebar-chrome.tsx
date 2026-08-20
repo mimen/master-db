@@ -1,19 +1,28 @@
-import { Platform, StyleSheet, View, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { DESKTOP_TRAFFIC_LIGHT_INSET, isDesktopShell } from "@/lib/desktop-shell";
+import { SIDEBAR_TITLE_HEIGHT, SIDEBAR_TOOLBAR_HEIGHT } from "@/lib/sidebar-metrics";
 
 import { SIDEBAR_CHROME_HEIGHT } from "./use-synthetic-scroll-metrics";
 
 /** Icon glyph size inside the chrome action buttons. */
 export const CHROME_ICON_SIZE = { compact: 16, regular: 21 } as const;
 
+const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
+const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
+
 export interface SidebarChromeProps {
-  /** Left slot: NavSwitcher on desktop, the pane's search field on mobile. */
+  /** Left slot: the pane's search field on mobile. Null on wide (toolbar). */
   readonly leading: React.ReactNode;
   /** Right slot: the pane's action buttons. */
   readonly actions: React.ReactNode;
+  /** Wide: sticky search row under the app name. */
+  readonly toolbar?: React.ReactNode;
+  /** Wide: sits in the title row after the wordmark (priority shelf). */
+  readonly titleAccessory?: React.ReactNode;
 }
 
 /**
@@ -21,9 +30,19 @@ export interface SidebarChromeProps {
  * chrome. Content scrolls behind it at ~10% with a blur (web-only
  * backdrop-filter; solid elsewhere). Behavior lives with the caller; this
  * component owns only geometry and glass.
+ *
+ * Wide/desktop is two rows, T3-style: app name (+ optional shelf) on the
+ * traffic-light row, search and actions on the row below. Mobile stays a
+ * single bar with search inline.
  */
-export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.JSX.Element {
+export function SidebarChrome({
+  leading,
+  actions,
+  toolbar,
+  titleAccessory,
+}: SidebarChromeProps): React.JSX.Element {
   const theme = useTheme();
+  const type = useType();
   const { wide } = useLayoutMode();
   const shell = isDesktopShell();
   const compact = wide || shell;
@@ -37,17 +56,47 @@ export function SidebarChrome({ leading, actions }: SidebarChromeProps): React.J
           borderBottomWidth: StyleSheet.hairlineWidth,
         } as object)
       : { backgroundColor: theme.background };
-  // RNW maps dataSet to data-* attributes; RN's types don't know it.
-  const dragProps = shell ? ({ dataSet: { tauriDragRegion: "" } } as object) : {};
+  const dragProps = shell ? DRAG : {};
+
+  const actionCluster = (
+    <View style={styles.actions} {...(shell ? NO_DRAG : {})}>
+      {actions}
+    </View>
+  );
+
+  if (wide && toolbar) {
+    return (
+      <View style={[styles.stack, glassStyle]} {...dragProps}>
+        <View style={[styles.titleRow, shell && styles.titleRowShell]}>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            selectable={false}
+            style={[styles.wordmark, { color: theme.text, fontSize: type.title }]}
+          >
+            Comma
+          </Text>
+          {titleAccessory ? (
+            <View style={styles.accessory} {...(shell ? NO_DRAG : {})}>
+              {titleAccessory}
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.toolbar} {...(shell ? NO_DRAG : {})}>
+          {toolbar}
+          {actionCluster}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.bar, glassStyle, compact && styles.barCompact, shell && styles.barShell]}
       {...dragProps}
     >
       {leading}
-      <View style={styles.actions} {...(shell ? ({ dataSet: { tauriDragRegion: "false" } } as object) : {})}>
-        {actions}
-      </View>
+      {actionCluster}
     </View>
   );
 }
@@ -78,6 +127,40 @@ export const chromeStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  stack: {
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 10,
+  },
+  titleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    height: SIDEBAR_TITLE_HEIGHT,
+    paddingHorizontal: 12,
+  },
+  titleRowShell: {
+    paddingLeft: DESKTOP_TRAFFIC_LIGHT_INSET,
+  },
+  wordmark: {
+    flexShrink: 0,
+    fontWeight: "600",
+    letterSpacing: -0.3,
+  },
+  accessory: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toolbar: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    height: SIDEBAR_TOOLBAR_HEIGHT,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   bar: {
     alignItems: "center",
     flexDirection: "row",

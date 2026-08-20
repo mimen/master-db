@@ -22,6 +22,8 @@ interface PriorityShelfProps {
   selectedGuid?: string;
   onPress: (chat: ChatSummary) => void;
   onLongPress?: (chat: ChatSummary) => void;
+  /** "strip" is the desktop title-row faces. "full" is the labeled iOS shelf. */
+  variant?: "full" | "strip";
 }
 
 /** Narrow imperative surface for keyboard glide: the shelf owns its own
@@ -48,7 +50,7 @@ function shelfMeta(chat: ChatSummary): { text: string; isPriorityBadge: boolean 
 }
 
 export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>(
-  function PriorityShelf({ chats, selectedGuid, onPress, onLongPress }, ref) {
+  function PriorityShelf({ chats, selectedGuid, onPress, onLongPress, variant = "full" }, ref) {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   // Measured per-item frames (x/width relative to the scroll content) — the
@@ -77,17 +79,18 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
 
   if (chats.length === 0) return null;
 
+  const strip = variant === "strip";
   return (
     <View
       accessibilityRole="summary"
       accessibilityLabel={`Priority conversations, ${chats.length}`}
-      style={[styles.section, { borderBottomColor: theme.divider }]}
+      style={strip ? styles.strip : [styles.section, { borderBottomColor: theme.divider }]}
     >
       <ScrollView
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={strip ? styles.stripContent : styles.content}
         onLayout={(e) => {
           viewW.current = e.nativeEvent.layout.width;
         }}
@@ -96,14 +99,17 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
         }}
         scrollEventThrottle={16}
       >
-        <View style={styles.leadIcon}>
-          <Ionicons name="star" size={20} color="#FFCC00" />
-        </View>
+        {strip ? null : (
+          <View style={styles.leadIcon}>
+            <Ionicons name="star" size={20} color="#FFCC00" />
+          </View>
+        )}
         {chats.map((chat, index) => (
           <PriorityItem
             key={chat.guid}
             chat={chat}
             selected={chat.guid === selectedGuid}
+            strip={strip}
             onLayout={(e) => {
               itemFrames.current[index] = {
                 x: e.nativeEvent.layout.x,
@@ -122,12 +128,14 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
 function PriorityItem({
   chat,
   selected,
+  strip,
   onLayout,
   onPress,
   onLongPress,
 }: {
   chat: ChatSummary;
   selected: boolean;
+  strip: boolean;
   onLayout: (event: LayoutChangeEvent) => void;
   onPress: () => void;
   onLongPress: () => void;
@@ -135,6 +143,7 @@ function PriorityItem({
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
   const meta = shelfMeta(chat);
+  const avatar = strip ? 26 : 58;
   return (
     <Pressable
       onLayout={onLayout}
@@ -149,40 +158,72 @@ function PriorityItem({
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
-        styles.item,
-        hovered && !pressed && { backgroundColor: theme.backgroundElement },
-        pressed && { backgroundColor: theme.backgroundSelected },
+        strip ? styles.stripItem : styles.item,
+        hovered && !pressed && !strip && { backgroundColor: theme.backgroundElement },
+        pressed && !strip && { backgroundColor: theme.backgroundSelected },
         Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
       ]}
     >
-      <View style={styles.avatarWrap}>
-        <ChatAvatar chat={chat} size={58} />
-        <View
-          style={[
-            styles.status,
-            {
-              backgroundColor: selected ? theme.accent : theme.background,
-              borderColor: theme.background,
-            },
-          ]}
-        >
-          <Ionicons name="ellipse" size={8} color={selected ? theme.onAccent : theme.accent} />
-        </View>
-      </View>
-      <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
-        {chat.displayName}
-      </Text>
-      <Text
-        numberOfLines={1}
-        style={[styles.meta, { color: meta.isPriorityBadge ? theme.accent : theme.textSecondary }]}
+      <View
+        style={
+          strip
+            ? [
+                styles.stripAvatar,
+                { borderColor: selected ? theme.accent : hovered ? theme.divider : "transparent" },
+              ]
+            : styles.avatarWrap
+        }
       >
-        {meta.text}
-      </Text>
+        <ChatAvatar chat={chat} size={avatar} />
+        {strip ? null : (
+          <View
+            style={[
+              styles.status,
+              {
+                backgroundColor: selected ? theme.accent : theme.background,
+                borderColor: theme.background,
+              },
+            ]}
+          >
+            <Ionicons name="ellipse" size={8} color={selected ? theme.onAccent : theme.accent} />
+          </View>
+        )}
+      </View>
+      {strip ? null : (
+        <>
+          <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
+            {chat.displayName}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[styles.meta, { color: meta.isPriorityBadge ? theme.accent : theme.textSecondary }]}
+          >
+            {meta.text}
+          </Text>
+        </>
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  strip: {
+    flex: 1,
+    minWidth: 0,
+  },
+  stripContent: {
+    alignItems: "center",
+    gap: 6,
+    paddingRight: 4,
+  },
+  stripItem: {
+    borderRadius: 16,
+  },
+  stripAvatar: {
+    borderRadius: 16,
+    borderWidth: 2,
+    padding: 1,
+  },
   section: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingBottom: 20,

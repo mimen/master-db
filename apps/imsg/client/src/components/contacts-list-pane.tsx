@@ -25,10 +25,8 @@ import { SidebarChrome, useChromeActions } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
-import {
-  SIDEBAR_CHROME_HEIGHT,
-  useSyntheticScrollMetrics,
-} from "./sidebar/use-synthetic-scroll-metrics";
+import { useSyntheticScrollMetrics } from "./sidebar/use-synthetic-scroll-metrics";
+import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
 
 type Row =
   | { kind: "header"; key: string; letter: string }
@@ -78,7 +76,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   const chromeActions = useChromeActions();
   const nameOrder = useNameOrder();
   const [query, setQuery] = useState("");
-  const topBarH = SIDEBAR_CHROME_HEIGHT;
+  const topBarH = sidebarChromeHeight(wide);
   const needle = query.trim().toLowerCase();
 
   const { results: airtableResults, people, add: addAirtableContact, addingId } = useAirtableSearch(
@@ -119,7 +117,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     <SidebarSearchField
       value={query}
       accessibilityLabel="Search contacts"
-      placement={wide ? "list-header" : "chrome"}
+      placement="chrome"
       onChangeText={setQuery}
       onClear={() => setQuery("")}
     />
@@ -188,7 +186,8 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
 
   const chrome = (
     <SidebarChrome
-      leading={wide ? <NavSwitcher active="contacts" style={styles.navInline} /> : searchField}
+      leading={wide ? null : searchField}
+      toolbar={wide ? searchField : undefined}
       actions={
         <>
           <SettingsButton />
@@ -235,7 +234,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
                   paddingBottom: 6,
                 }}
               >
-                {searchField}
+                <NavSwitcher active="contacts" style={styles.navInline} />
               </View>
             ) : null
           }
@@ -250,10 +249,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
 const styles = StyleSheet.create({
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
   navInline: {
+    alignSelf: "flex-start",
     flexShrink: 0,
-    marginBottom: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
+    marginBottom: 4,
+    marginHorizontal: 10,
+    marginTop: 2,
   },
   sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 18, paddingVertical: 4 },
 });

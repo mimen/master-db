@@ -5,9 +5,9 @@ import type { CommandId } from "./keyboard/types";
 /**
  * Space reserved at the left of SidebarChrome for overlay traffic lights.
  * Lights sit at (16, 20); three 12px buttons with 8px gaps need ~72px,
- * plus a gap before the Messages/Contacts control.
+ * plus a gap before the wordmark.
  */
-export const DESKTOP_TRAFFIC_LIGHT_INSET = 88;
+export const DESKTOP_TRAFFIC_LIGHT_INSET = 80;
 
 type TauriListenUnlisten = () => void;
 

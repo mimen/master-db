@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { Animated, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
-/** Height of the fixed frosted-glass sidebar bar. Styled, not measured —
- * runtime measurement once fed the keyboard adapter a stale pre-measure
- * value (up-pin landed under the bar). One source of truth for both panes. */
-export const SIDEBAR_CHROME_HEIGHT = 52;
+import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
+
+/** Height of the mobile/title frosted-glass bar. Wide chrome is taller —
+ * use `sidebarChromeHeight(wide)` from sidebar-metrics. Styled, not measured. */
+export const SIDEBAR_CHROME_HEIGHT = SIDEBAR_TITLE_HEIGHT;
 
 export interface SyntheticThumbState {
   readonly visible: boolean;
