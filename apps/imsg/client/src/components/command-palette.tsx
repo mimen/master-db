@@ -14,6 +14,8 @@ import {
   type PaletteItem,
 } from "@/lib/palette/model";
 import { openPersonPane } from "@/lib/person-pane";
+import { openScheduledPane } from "@/lib/scheduled-pane";
+import { openSettingsPane } from "@/lib/settings-pane";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
@@ -157,8 +159,14 @@ function PaletteRoot({
         return;
       case "action":
         if (id.value === "new-message") return onCompose();
-        if (id.value === "scheduled") return void router.push("/scheduled");
-        if (id.value === "settings") return void router.push("/settings");
+        if (id.value === "scheduled") {
+          if (openScheduledPane()) return;
+          return void router.push("/scheduled");
+        }
+        if (id.value === "settings") {
+          if (openSettingsPane()) return;
+          return void router.push("/settings");
+        }
         return onShowHelp();
     }
   };

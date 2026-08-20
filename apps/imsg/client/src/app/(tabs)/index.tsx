@@ -8,6 +8,8 @@ import { ConversationListPane } from "@/components/conversation-list-pane";
 import { EmptyState } from "@/components/empty-state";
 import { OverlayShell } from "@/components/overlay-shell";
 import { PersonContent } from "@/components/person-content";
+import { ScheduledContent } from "@/components/scheduled-content";
+import { SettingsContent } from "@/components/settings-content";
 import { CommandPalette } from "@/components/command-palette";
 import { ThreadView } from "@/components/thread-view";
 import { ShadowPanel } from "@/components/shadow-panel";
@@ -35,6 +37,8 @@ import { installKeyboardDispatcher } from "@/lib/keyboard/dispatcher";
 import { helpEntries } from "@/lib/keyboard/registry";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { onOpenPersonPane, type PersonTarget } from "@/lib/person-pane";
+import { onOpenScheduledPane } from "@/lib/scheduled-pane";
+import { onOpenSettingsPane } from "@/lib/settings-pane";
 import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
@@ -42,10 +46,14 @@ import { openThreadSearch } from "@/lib/thread-search";
 import { showToast } from "@/lib/toast";
 import { useActionSheet } from "@/lib/action-sheet";
 
-/** Desktop right pane: conversation details, or a contact opened over them. */
+/** Desktop right pane: conversation details, a contact opened over them, or a
+ * standalone surface (scheduled queue, settings) that preserves the window
+ * instead of opening a full-screen modal. */
 type RightPane =
   | { mode: "details"; guid: string }
-  | { mode: "person"; target: PersonTarget };
+  | { mode: "person"; target: PersonTarget }
+  | { mode: "scheduled" }
+  | { mode: "settings" };
 
 /** Rendered from the keyboard registry — cannot drift from actual bindings. */
 const HELP_ENTRIES = helpEntries();
@@ -143,9 +151,25 @@ export default function ChatListScreen() {
     return onOpenPersonPane((target) => setRightPane({ mode: "person", target }));
   }, [wide]);
 
-  // Right pane is per-thread; close it when the selected conversation changes.
+  // The settings gear and the command palette open the scheduled queue /
+  // settings as a right-hand pane here instead of a full-screen modal —
+  // the shell (list + thread) stays put.
   useEffect(() => {
-    setRightPane(null);
+    if (!wide) return;
+    return onOpenScheduledPane(() => setRightPane({ mode: "scheduled" }));
+  }, [wide]);
+  useEffect(() => {
+    if (!wide) return;
+    return onOpenSettingsPane(() => setRightPane({ mode: "settings" }));
+  }, [wide]);
+
+  // Details/person panes are per-thread; close them when the selected
+  // conversation changes. Scheduled/settings aren't tied to a thread, so a
+  // thread switch leaves them open.
+  useEffect(() => {
+    setRightPane((cur) =>
+      cur && (cur.mode === "details" || cur.mode === "person") ? null : cur,
+    );
   }, [selected?.guid]);
 
   // Keep the selected chat's flags fresh as the directory reconciles.
@@ -353,7 +377,7 @@ export default function ChatListScreen() {
       onOpenPerson={(address, name) => setRightPane({ mode: "person", target: { address, name, backGuid: rightPane.guid } })}
       onDeleted={() => { setRightPane(null); setSelected(null); refresh(); }}
     />
-  ) : rightPane ? (
+  ) : rightPane?.mode === "person" ? (
     <PersonContent
       key={rightPane.target.address}
       address={rightPane.target.address}
@@ -362,6 +386,10 @@ export default function ChatListScreen() {
       backLabel={rightPane.target.backGuid ? "Details" : undefined}
       onBack={rightPane.target.backGuid ? () => setRightPane({ mode: "details", guid: rightPane.target.backGuid }) : undefined}
     />
+  ) : rightPane?.mode === "scheduled" ? (
+    <ScheduledContent key="scheduled" showHeader onClose={() => setRightPane(null)} />
+  ) : rightPane?.mode === "settings" ? (
+    <SettingsContent key="settings" showHeader onClose={() => setRightPane(null)} />
   ) : null;
 
   if (!wide) {
