@@ -52,7 +52,7 @@ export function useConversationListViewport(args: {
   const metrics = useSyntheticScrollMetrics({
     chromeHeight,
     footerHeight,
-    estimatedContentHeight: renderedChats.length * 76 + chromeHeight + footerHeight + 240,
+    estimatedContentHeight: renderedChats.length * 90 + chromeHeight + footerHeight + 240,
   });
 
   // Changing a lens or the query is a NEW view — start it from the top.

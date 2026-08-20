@@ -184,7 +184,7 @@ function ChatRowInner({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
-          { minHeight: compact ? 62 : 75 },
+          { minHeight: compact ? 80 : 92 },
           {
             backgroundColor: selected
               ? theme.backgroundSelected
@@ -199,6 +199,16 @@ function ChatRowInner({
           <View style={[styles.glideCursor, { backgroundColor: theme.accent }]} />
         )}
         <ChatAvatar chat={chat} size={compact ? 40 : 52} />
+        {/* Messages-style hairline: starts after the avatar, not under it. */}
+        <View
+          style={[
+            styles.separator,
+            {
+              backgroundColor: theme.divider,
+              left: 16 + (compact ? 40 : 52) + 11,
+            },
+          ]}
+        />
         <View style={styles.content}>
           <View style={styles.topLine}>
             <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
@@ -300,23 +310,30 @@ const styles = StyleSheet.create({
   row: {
     alignItems: "center",
     flexDirection: "row",
-    minHeight: 75,
+    minHeight: 80,
     paddingLeft: 16,
     paddingRight: 16,
+    paddingVertical: 14,
+  },
+  separator: {
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
+    position: "absolute",
+    right: 0,
   },
   glideCursor: {
     borderRadius: 2,
-    bottom: 10,
+    bottom: 14,
     left: 4,
     position: "absolute",
-    top: 10,
+    top: 14,
     width: 3,
   },
   content: {
     flex: 1,
     marginLeft: 11,
     minWidth: 0,
-    paddingVertical: 10,
+    paddingVertical: 2,
   },
   topLine: {
     alignItems: "baseline",
