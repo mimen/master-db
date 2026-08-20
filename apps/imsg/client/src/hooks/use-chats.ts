@@ -19,7 +19,7 @@ interface UseChatsResult {
  * Fetches the complete chat list once and filters locally — filter/lens
  * switches are pure computation, no network.
  */
-export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
+export function useChats(state: StateFilter, type: TypeFilter, freezeMembership = true): UseChatsResult {
   const [all, setAll] = useState<ChatSummary[]>(getChats() ?? []);
   const [loading, setLoading] = useState(getChats() === null);
   const [error, setError] = useState<string | null>(null);
@@ -49,18 +49,15 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
     return unsubscribe;
   }, [refresh]);
 
-  // Filter views are FROZEN for triage consistency: once a chat appears in an
-  // active state filter (Unread, Unresponded…), acting on it (reading,
-  // replying) must not evict it mid-session. Membership accumulates while the
-  // filter is active and resets when the state filter changes. Chats that
-  // leave the "all" universe entirely (archived) still drop out — an explicit
-  // archive should remove the row.
+  // Passive review lenses may freeze membership so an item does not jump while
+  // being inspected. The active triage queues must not: replying, Done, and
+  // Later are defined to clear Needs reply / Waiting immediately.
   const frozenRef = useRef<{ state: StateFilter; guids: Set<string> }>({
     state,
     guids: new Set(),
   });
   const chats = useMemo(() => {
-    if (state === "all") {
+    if (state === "all" || state === "unresponded" || state === "waiting" || !freezeMembership) {
       frozenRef.current = { state, guids: new Set() };
       return all.filter((c) => matchesFilters(c, state, type));
     }
@@ -73,7 +70,7 @@ export function useChats(state: StateFilter, type: TypeFilter): UseChatsResult {
       }
       return frozen.has(c.guid) && matchesFilters(c, "all", type);
     });
-  }, [all, state, type]);
+  }, [all, state, type, freezeMembership]);
   const counts = useMemo(() => computeCounts(all, type), [all, type]);
 
   // Dock/home-screen unread badge (Safari web apps + installed PWAs).

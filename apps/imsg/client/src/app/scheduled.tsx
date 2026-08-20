@@ -8,11 +8,12 @@ import { ScheduleEditor } from "@/components/schedule-editor";
 import { formatScheduledWhen, useScheduled } from "@/hooks/use-scheduled";
 import { scheduledStatusLabel } from "@/lib/scheduled";
 import { useTheme } from "@/hooks/use-theme";
+import { showToast } from "@/lib/toast";
 import { Radii, Type } from "@/constants/theme";
 
 export default function ScheduledScreen() {
   const theme = useTheme();
-  const { items, loading, cancel, edit } = useScheduled();
+  const { items, loading, cancel, sendNow, edit } = useScheduled();
   const [editing, setEditing] = useState<ScheduledMessage | null>(null);
 
   return (
@@ -63,9 +64,26 @@ export default function ScheduledScreen() {
                   </View>
                 }
                 trailing={
-                  <Pressable onPress={() => cancel(item.id)} hitSlop={8}>
-                    <Ionicons name="close-circle" size={24} color={theme.textSecondary} />
-                  </Pressable>
+                  editable ? (
+                    <View style={styles.actions}>
+                      <Pressable onPress={() => setEditing(item)} hitSlop={6}>
+                        <Text style={[styles.actionText, { color: theme.textSecondary }]}>Edit</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          void sendNow(item.id)
+                            .then(() => showToast("Sent now"))
+                            .catch(() => showToast("Could not send scheduled message"));
+                        }}
+                        hitSlop={6}
+                      >
+                        <Text style={[styles.actionText, { color: theme.accent }]}>Send now</Text>
+                      </Pressable>
+                      <Pressable onPress={() => cancel(item.id)} hitSlop={6}>
+                        <Ionicons name="close-circle" size={22} color={theme.textSecondary} />
+                      </Pressable>
+                    </View>
+                  ) : null
                 }
               />
             );
@@ -79,5 +97,14 @@ export default function ScheduledScreen() {
 const styles = StyleSheet.create({
   card: {
     borderRadius: Radii.input,
+  },
+  actions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
 });

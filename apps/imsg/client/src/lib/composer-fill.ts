@@ -1,19 +1,21 @@
 /**
- * Signal bus for dropping text into the composer, matching the thread-search
- * bus. The suggestion shelf uses it: tapping a suggestion fills the input for
- * editing — it is never sent automatically.
+ * Stack-aware signal bus for dropping text into the active composer. Overlay
+ * composers (Sweep) temporarily sit above the underlying thread; removing the
+ * overlay restores the previous listener instead of disconnecting all fills.
+ * Suggestions always fill visible text for editing and never send.
  */
 type Listener = (text: string) => void;
 
-let listener: Listener | null = null;
+const listeners: Listener[] = [];
 
 export function fillComposer(text: string): void {
-  listener?.(text);
+  listeners[listeners.length - 1]?.(text);
 }
 
 export function onFillComposer(cb: Listener): () => void {
-  listener = cb;
+  listeners.push(cb);
   return () => {
-    if (listener === cb) listener = null;
+    const index = listeners.lastIndexOf(cb);
+    if (index >= 0) listeners.splice(index, 1);
   };
 }

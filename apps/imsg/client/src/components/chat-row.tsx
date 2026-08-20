@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, SmartCloser } from "@shared/types";
 import { memo, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -15,6 +15,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
+import { laterOptions, useSmartCloser } from "@/hooks/use-triage-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -29,12 +30,40 @@ import {
   unreadLabel,
 } from "@/lib/row-signal";
 import { hapticCommit } from "@/lib/haptics";
+import { fillComposer } from "@/lib/composer-fill";
+import { api } from "@/lib/api";
+import { showToast } from "@/lib/toast";
+import { useActionSheet } from "@/lib/action-sheet";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
+
+function closerReactionType(reaction: string | undefined): string | null {
+  if (!reaction) return null;
+  const normalized = reaction.trim().toLowerCase();
+  const map: Record<string, string> = {
+    "👍": "like", like: "like",
+    "👎": "dislike", dislike: "dislike",
+    "❤️": "love", "❤": "love", love: "love",
+    "😂": "laugh", laugh: "laugh",
+    "‼️": "emphasize", "!!": "emphasize", emphasize: "emphasize",
+    "❓": "question", "?": "question", question: "question",
+  };
+  return map[normalized] ?? null;
+}
+
+function isSpecificCloser(action: SmartCloser | null): boolean {
+  if (!action) return false;
+  if (action.kind === "reply") return Boolean(action.draft?.trim());
+  if (action.kind === "call") return true;
+  if (action.kind === "react_done") return closerReactionType(action.reaction) !== null;
+  if (action.kind === "archive") return !/^archive$/i.test(action.label);
+  if (action.kind === "later") return !/^later$/i.test(action.label);
+  return false;
+}
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const kind = rowSignal(chat);
@@ -128,18 +157,27 @@ function ChatRowInner({
   selected,
   keyboardFocused = false,
   onPress,
+  onDone,
+  onLater,
 }: {
   chat: ChatSummary;
   selected: boolean;
   /** Glide-mode cursor: accent edge on the selected row while navigating. */
   keyboardFocused?: boolean;
   onPress: () => void;
+  onDone?: () => void;
+  onLater?: (until: number) => void;
 }) {
   const theme = useTheme();
   const type = useType();
   const { openMenu } = useChatActions();
+  const showSheet = useActionSheet();
   const { width: winW, wide: compact } = useLayoutMode();
   const [hovered, setHovered] = useState(false);
+  const closer = useSmartCloser(chat.guid, compact);
+  const specificCloser = isSpecificCloser(closer.closer) ? closer.closer : null;
+  const closerLabel = specificCloser?.kind === "reply" && specificCloser.draft ? `“${specificCloser.draft}”` : specificCloser?.label;
+  const actionsVisible = compact && (hovered || selected);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
   const snippet = last
@@ -167,7 +205,7 @@ function ChatRowInner({
       node.removeEventListener("mouseenter", enter);
       node.removeEventListener("mouseleave", leave);
     };
-  }, [chat.guid]);
+  }, [chat.guid, contextRef]);
 
   // Commit distance scales with row width so it's a deliberate full swipe on a
   // phone, not a hair-trigger. Capped so a tablet/desktop doesn't need a marathon.
@@ -216,13 +254,14 @@ function ChatRowInner({
       }}
     >
       <Pressable
+        testID="conversation-row"
         ref={contextRef as never}
         onPress={onPress}
         onPressIn={() => prefetchThread(chat.guid)}
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
-          { minHeight: compact ? 80 : 92 },
+          { height: compact ? 62 : undefined, minHeight: compact ? 62 : 92 },
           {
             backgroundColor: selected
               ? theme.backgroundSelected
@@ -236,14 +275,14 @@ function ChatRowInner({
         {keyboardFocused && (
           <View style={[styles.glideCursor, { backgroundColor: theme.accent }]} />
         )}
-        <ChatAvatar chat={chat} size={compact ? 40 : 52} />
+        <ChatAvatar chat={chat} size={compact ? 36 : 52} />
         {/* Messages-style hairline: starts after the avatar, not under it. */}
         <View
           style={[
             styles.separator,
             {
               backgroundColor: theme.divider,
-              left: 16 + (compact ? 40 : 52) + 11,
+              left: 16 + (compact ? 36 : 52) + 11,
             },
           ]}
         />
@@ -278,24 +317,22 @@ function ChatRowInner({
             )}
           </View>
           <View style={styles.previewLine}>
-            <Text
-              numberOfLines={2}
-              style={[
-                styles.snippet,
-                {
-                  color: theme.textSecondary,
-                  fontSize: compact ? type.secondary : 14,
-                  lineHeight: compact ? 16 : 18,
-                  fontWeight: chat.flags.unread ? "500" : "400",
-                },
-              ]}
-            >
-              {snippet}
-            </Text>
-            <RowSignal chat={chat} />
+            {actionsVisible ? (
+              <View style={styles.inlineActions}>
+                <Pressable accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></Pressable>
+                <Pressable accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: theme.backgroundSelected }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: theme.text }]}>Done</Text></Pressable>
+                <Pressable accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} style={[styles.inlineAction, { backgroundColor: theme.backgroundSelected }]}><Ionicons name="time-outline" size={13} color={theme.textSecondary} /><Text style={[styles.inlineActionText, { color: theme.text }]}>Later</Text></Pressable>
+                <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={theme.textSecondary} /></Pressable>
+              </View>
+            ) : (
+              <>
+                <Text numberOfLines={1} style={[styles.snippet, { color: theme.textSecondary, fontSize: compact ? type.secondary : 14, lineHeight: compact ? 16 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
+                {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} style={[styles.closer, { borderColor: theme.divider }]}><Ionicons name="sparkles-outline" size={11} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.textSecondary }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
+              </>
+            )}
           </View>
         </View>
-        {compact && (
+        {!compact && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={chat.flags.archived ? "Unarchive conversation" : "Archive conversation"}
@@ -394,6 +431,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     minWidth: 0,
+  },
+  inlineActions: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 5,
+  },
+  inlineAction: {
+    alignItems: "center",
+    borderRadius: 7,
+    flexDirection: "row",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  inlineActionText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  moreAction: {
+    alignItems: "center",
+    height: 24,
+    justifyContent: "center",
+    width: 24,
+  },
+  closer: {
+    alignItems: "center",
+    borderRadius: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    flexShrink: 1,
+    gap: 3,
+    maxWidth: 142,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  closerText: {
+    flexShrink: 1,
+    fontSize: 11,
   },
   signal: {
     alignItems: "center",

@@ -22,16 +22,19 @@ export interface DesktopSplitProps {
   readonly list: ReactNode;
   readonly detail: ReactNode;
   readonly children?: ReactNode;
+  /** Fixed chrome placed inside the resizable list pane, such as the triage rail. */
+  readonly listInset?: number;
 }
 
 /** Shared Messages/Contacts desktop shell: list | drag | thread, optional extra panes. */
-export function DesktopSplit({ list, detail, children }: DesktopSplitProps): React.JSX.Element {
+export function DesktopSplit({ list, detail, children, listInset = 0 }: DesktopSplitProps): React.JSX.Element {
   const { frame, listWidth, setListWidth } = useDesktopFrame();
+  const renderedListWidth = listWidth + listInset;
   return (
     <View style={frame.split}>
-      <View style={[frame.pane, frame.listPane]}>
+      <View style={[frame.pane, frame.listPane, { flexBasis: renderedListWidth, width: renderedListWidth }]}>
         {list}
-        <SidebarResizeHandle width={listWidth} onResize={setListWidth} />
+        <SidebarResizeHandle width={renderedListWidth} onResize={(next) => setListWidth(next - listInset)} />
       </View>
       <View style={[frame.pane, frame.detailPane]}>{detail}</View>
       {children}

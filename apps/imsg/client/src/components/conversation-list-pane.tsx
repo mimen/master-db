@@ -1,14 +1,16 @@
-import type { ChatSummary, StateCounts } from "@shared/types";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import type { ChatSummary, StateCounts, TriageProgressStats } from "@shared/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
-import { NavSwitcher } from "./nav-switcher";
-import { PriorityShelf, type PriorityShelfHandle } from "./priority-shelf";
+import type { PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
+import { SweepOverlay } from "./sweep-overlay";
+import { TriageNavigationRail } from "./triage-navigation-rail";
+import { TriageSummary } from "./triage-summary";
 
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
@@ -21,7 +23,8 @@ import { useConversationListKeyboard } from "./conversations/use-conversation-li
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
 
-import { useChatActions } from "@/hooks/use-chat-actions";
+import { finishTriageChat, setTriageLater } from "@/hooks/use-triage-actions";
+import { api } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
@@ -63,14 +66,21 @@ export function ConversationListPane({
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const type = useType();
-  const { openMenu } = useChatActions();
   const iosMobile = Platform.OS === "ios" && !wide;
   const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
+  const [stats, setStats] = useState<TriageProgressStats | null>(null);
+  const [sweepOpen, setSweepOpen] = useState(false);
+  const refreshStats = useCallback((): void => {
+    if (!wide) return;
+    void api.getTriageStats().then(setStats, () => undefined);
+  }, [wide]);
+  useEffect(() => { refreshStats(); }, [refreshStats, chats]);
   const topBarH = sidebarChromeHeight(wide);
   const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
+  const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "all" ? "All messages" : filters.state === "unread" ? "Unread" : "Archived";
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   // useCallback, not a bare arrow: the compiler can't prove a render-scope
@@ -103,12 +113,27 @@ export function ConversationListPane({
     () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids),
     [allChats, filters, search.query, search.deepMatches, browseGuids],
   );
+  const deskChats = useMemo(() => {
+    return [...model.listChats].sort((a, b) => {
+      const aRank = a.flags.pinned ? 0 : a.crm?.priority !== undefined && a.crm.priority <= 2 ? 1 : 2;
+      const bRank = b.flags.pinned ? 0 : b.crm?.priority !== undefined && b.crm.priority <= 2 ? 1 : 2;
+      if (aRank !== bRank) return aRank - bRank;
+      return (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0);
+    });
+  }, [model.listChats]);
+  const deskModel = useMemo(() => wide ? ({
+    ...model,
+    showPriorityShelf: false,
+    priority: [],
+    listChats: deskChats,
+    navigationEntries: deskChats.map((chat, index) => ({ chat, location: { kind: "list" as const, index } })),
+  }) : model, [model, deskChats, wide]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
   // recovery) and the synthetic thumb live in the viewport hook.
   const viewport = useConversationListViewport({
-    renderedChats: model.listChats,
+    renderedChats: deskModel.listChats,
     chromeHeight: topBarH,
     footerHeight: footerH,
     viewKey: search.viewKey,
@@ -122,15 +147,17 @@ export function ConversationListPane({
         selected={wide && selectedGuid === item.guid}
         keyboardFocused={wide && glide && selectedGuid === item.guid}
         onPress={() => onOpenChat(item)}
+        onDone={wide ? () => { void finishTriageChat(item).then(refreshStats, () => undefined); } : undefined}
+        onLater={wide ? (until) => { void setTriageLater(item, until).then(() => { onRefresh(); refreshStats(); }, onRefresh); } : undefined}
       />
     ),
-    [wide, glide, selectedGuid, onOpenChat],
+    [wide, glide, selectedGuid, onOpenChat, onRefresh, refreshStats],
   );
 
   const shelfRef = useRef<PriorityShelfHandle>(null);
   useConversationListKeyboard({
     enabled: wide,
-    model,
+    model: deskModel,
     selectedGuid,
     viewport,
     search,
@@ -150,11 +177,25 @@ export function ConversationListPane({
     />
   );
 
+  const triageSummary = wide ? (
+    <TriageSummary
+      remaining={deskModel.listChats.length}
+      completed={stats?.clearedToday ?? 0}
+      oldestAt={stats?.oldestQueueAt ?? deskModel.listChats.reduce<number | null>((oldest, chat) => {
+        const at = chat.lastMessage?.dateCreated ?? null;
+        return at === null ? oldest : oldest === null ? at : Math.min(oldest, at);
+      }, null)}
+      onSweep={() => setSweepOpen(true)}
+    />
+  ) : undefined;
+
   const chrome = (
     <SidebarChrome
       leading={wide ? null : searchField}
+      title={wide ? deskTitle : undefined}
       toolbar={wide ? searchField : undefined}
-      nav={wide ? <NavSwitcher active="messages" /> : undefined}
+      nav={triageSummary}
+      trafficLightsInRail={wide}
       actions={
         <>
           {wide ? null : (
@@ -178,17 +219,26 @@ export function ConversationListPane({
     />
   );
 
-  return (
+  const pane = (
     <SidebarFrame
       chrome={chrome}
-      footer={wide ? <SidebarFooter><SettingsButton /></SidebarFooter> : undefined}
+      footer={wide ? (
+        <SidebarFooter>
+          <View style={styles.quietLinks}>
+            <Pressable onPress={() => onFiltersChange({ state: "unread", type: "all" })}><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unread {counts?.unread ?? 0}</Text></Pressable>
+            <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })}><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
+            <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })}><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
+          </View>
+        </SidebarFooter>
+      ) : undefined}
       thumb={<SyntheticScrollThumb state={viewport.thumb} />}
     >
       {/* Filters and the labeled shelf ride the list header, passing
           behind the glass top bar. Wide search is sticky chrome. */}
       <FlashList
+          testID="conversation-list-scroll"
           ref={viewport.listRef}
-          data={model.listChats}
+          data={deskModel.listChats}
           keyExtractor={(chat) => chat.guid}
           // Default iOS draw distance is 250px — barely three rows here, so a fast
           // flick outruns it and shows blanks.
@@ -227,15 +277,6 @@ export function ConversationListPane({
                 // Picking a badge exits search — the two never compose.
                 onFiltersChange={(f) => search.applyFilters(f)}
               />
-              {model.showPriorityShelf && (
-                <PriorityShelf
-                  ref={shelfRef}
-                  chats={model.priority}
-                  selectedGuid={selectedGuid}
-                  onPress={onOpenChat}
-                  onLongPress={openMenu}
-                />
-              )}
               {/* Default "Recent" needs no label. Wide already names the
                   view via the filter chips — don't stack a second heading. */}
               {!wide && model.sectionLabel !== "Recent" && (
@@ -267,9 +308,34 @@ export function ConversationListPane({
       />
     </SidebarFrame>
   );
+  if (!wide) return pane;
+  return (
+    <View style={styles.desktopDesk}>
+      <TriageNavigationRail
+        state={filters.state}
+        counts={counts}
+        onStateChange={(state) => search.applyFilters({ ...filters, state })}
+      />
+      <View style={styles.desktopList}>{pane}</View>
+      <SweepOverlay visible={sweepOpen} chats={deskModel.listChats} startGuid={selectedGuid} onClose={() => setSweepOpen(false)} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  desktopDesk: { flex: 1, flexDirection: "row" },
+  desktopList: { flex: 1, minWidth: 0 },
+  quietLinks: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 12,
+  },
+  quietLink: {
+    fontSize: 11,
+    paddingVertical: 8,
+  },
   sectionHeading: {
     alignItems: "baseline",
     flexDirection: "row",

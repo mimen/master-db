@@ -1,4 +1,4 @@
-export const SIDEBAR_WIDTH_DEFAULT = 380;
+export const SIDEBAR_WIDTH_DEFAULT = 352;
 export const SIDEBAR_WIDTH_MIN = 280;
 export const SIDEBAR_WIDTH_MAX = 560;
 
@@ -7,7 +7,7 @@ export const SIDEBAR_TITLE_HEIGHT = 52;
 /** Sticky search + new-message under the title on wide/desktop. */
 export const SIDEBAR_TOOLBAR_HEIGHT = 44;
 /** Messages/Contacts switcher row under search. */
-export const SIDEBAR_NAV_HEIGHT = 36;
+export const SIDEBAR_NAV_HEIGHT = 56;
 /** Settings footer on wide/desktop. */
 export const SIDEBAR_FOOTER_HEIGHT = 44;
 /** Scroll-edge fade length. */

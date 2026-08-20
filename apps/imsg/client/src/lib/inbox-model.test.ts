@@ -29,6 +29,7 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
       hasAttachments: false,
     },
     unreadCount: 0,
+    laterUntil: null,
     firstUnreadAt: null,
     flags: {
       archived: false,

@@ -15,7 +15,7 @@ import { fillComposer } from "@/lib/composer-fill";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 import { CenteredSpinner, EmptyState } from "./empty-state";
-import type { ShadowMessage } from "@shared/types";
+import type { ShadowBrief, ShadowMessage } from "@shared/types";
 
 /**
  * Shadow conversation: a side panel for thinking and acting alongside an open
@@ -45,6 +45,8 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [brief, setBrief] = useState<ShadowBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
   const listRef = useRef<FlatList<Row>>(null);
   const inputRef = useRef<TextInput>(null);
   const activeGuid = useRef(chatGuid);
@@ -87,6 +89,24 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
     refresh(true); // resumes polling if a turn is still running from before
     return stopPolling;
   }, [chatGuid, refresh, stopPolling]);
+
+  const loadBrief = useCallback((regenerate = false) => {
+    setBriefLoading(true);
+    api
+      .getShadowBrief(chatGuid, regenerate)
+      .then((result) => {
+        if (activeGuid.current === chatGuid) setBrief(result);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (activeGuid.current === chatGuid) setBriefLoading(false);
+      });
+  }, [chatGuid]);
+
+  useEffect(() => {
+    setBrief(null);
+    loadBrief();
+  }, [chatGuid, loadBrief]);
 
   const send = useCallback(async () => {
     const trimmed = text.trim();
@@ -148,6 +168,14 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
           <Ionicons name="close" size={20} color={theme.textSecondary} />
         </Pressable>
       </View>
+
+      {(brief || briefLoading) && (
+        <ShadowBriefCard
+          brief={brief}
+          loading={briefLoading}
+          onRegenerate={() => loadBrief(true)}
+        />
+      )}
 
       {loading ? (
         <CenteredSpinner style={styles.center} />
@@ -213,6 +241,64 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
   );
 }
 
+
+function ShadowBriefCard({
+  brief,
+  loading,
+  onRegenerate,
+}: {
+  brief: ShadowBrief | null;
+  loading: boolean;
+  onRegenerate: () => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  return (
+    <View style={[styles.brief, { borderBottomColor: theme.divider, backgroundColor: theme.backgroundElement }]}>
+      {brief ? (
+        <>
+          <View style={styles.briefHeading}>
+            <Text style={[styles.briefLabel, { color: theme.textSecondary }]}>Context</Text>
+            <Pressable onPress={onRegenerate} disabled={loading} hitSlop={6}>
+              {loading ? (
+                <ActivityIndicator size="small" color={theme.textSecondary} />
+              ) : (
+                <Ionicons name="refresh" size={15} color={theme.textSecondary} />
+              )}
+            </Pressable>
+          </View>
+          <Text style={[styles.briefText, { color: theme.text }]}>{brief.context}</Text>
+          {brief.actionItems.length > 0 && (
+            <View style={styles.briefSection}>
+              <Text style={[styles.briefLabel, { color: theme.textSecondary }]}>You owe</Text>
+              {brief.actionItems.map((item) => (
+                <View key={item} style={styles.briefAction}>
+                  <Ionicons name="ellipse-outline" size={13} color={theme.textSecondary} />
+                  <Text style={[styles.briefActionText, { color: theme.text }]}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          {brief.draft ? (
+            <View style={styles.briefSection}>
+              <Text style={[styles.briefLabel, { color: theme.textSecondary }]}>Draft</Text>
+              <Text style={[styles.briefDraft, { color: theme.text }]}>{brief.draft}</Text>
+              <Pressable onPress={() => fillComposer(brief.draft)} style={styles.briefInsert}>
+                <Ionicons name="arrow-forward" size={14} color={theme.accent} />
+                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: "600" }}>Insert into composer</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <View style={styles.briefLoading}>
+          <ActivityIndicator size="small" color={theme.textSecondary} />
+          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Building conversation context…</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function ShadowRow({ row }: { row: Row }) {
   const theme = useTheme();
   const mine = row.role === "user";
@@ -266,6 +352,57 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: "600",
+  },
+  brief: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  briefHeading: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  briefLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  briefText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  briefSection: {
+    gap: 5,
+    marginTop: 5,
+  },
+  briefAction: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 6,
+  },
+  briefActionText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  briefDraft: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  briefInsert: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 4,
+  },
+  briefLoading: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 54,
   },
   center: {
     flex: 1,

@@ -1,12 +1,14 @@
 import type { Result } from "../bluebubbles";
 import type { AiConfig } from "../config";
 import type { OverlayDb } from "../db";
-import type { ContactSuggestion, Message, ReplySuggestions } from "../../shared/types";
+import type { ContactSuggestion, Message, ReplySuggestions, ShadowBrief, SmartCloser } from "../../shared/types";
 import { loadProfile, renderTranscript } from "./context";
 import { Gateway } from "./gateway";
 import { contactCandidate, mergeCandidates, vaultCandidates } from "./identify";
-import { groupNamePrompt, identifyPrompt, replySuggestionPrompt } from "./prompts";
+import { groupNamePrompt, identifyPrompt, replySuggestionPrompt, shadowBriefPrompt, smartCloserPrompt } from "./prompts";
 import { ShadowRunner } from "./shadow";
+import { deterministicSmartCloser, parseSmartCloser, parseSmartCloserJson, type JsonValue } from "./smart-closer";
+import { parseShadowBriefContent, parseShadowBriefJson } from "./shadow-brief";
 
 /**
  * Orchestration for both AI lanes. Everything the routes need lives here so
@@ -40,6 +42,10 @@ function lastGuid(messages: Message[]): string | null {
 export class AiService {
   /** Per-chat serialization of shadow turns; also the "is a turn pending" set. */
   private shadowQueues = new Map<string, Promise<void>>();
+  private structuredInFlight = new Map<string, Promise<SmartCloser | ShadowBrief>>();
+  private aiActive = 0;
+  private aiWaiters: Array<() => void> = [];
+  private readonly aiConcurrency = 2;
 
   constructor(private deps: AiDeps) {}
 
@@ -50,7 +56,7 @@ export class AiService {
   async groupNames(chatGuid: string, participants: string[]): Promise<Result<string[]>> {
     const messages = await this.deps.fetchMessages(chatGuid);
     const transcript = renderTranscript(messages, { limit: 30 });
-    return this.deps.gateway.completeJson<string[]>(groupNamePrompt(transcript, participants), {
+    return this.completeJsonLimited<string[]>(groupNamePrompt(transcript, participants), {
       maxTokens: 300,
     });
   }
@@ -79,7 +85,7 @@ export class AiService {
 
     const profile = await loadProfile(this.deps.config.vaultPath);
     const transcript = renderTranscript(messages, { limit: 40, peerName });
-    const generated = await this.deps.gateway.completeJson<string[]>(
+    const generated = await this.completeJsonLimited<string[]>(
       replySuggestionPrompt(transcript, profile, peerName),
       { maxTokens: 600 },
     );
@@ -93,6 +99,108 @@ export class AiService {
     };
   }
 
+  async smartCloser(chatGuid: string): Promise<Result<SmartCloser>> {
+    const messages = await this.deps.fetchMessages(chatGuid);
+    const inbound = [...messages].reverse().find((message) => !message.isFromMe);
+    if (!inbound) return { ok: true, value: { kind: "done", label: "Done" } };
+
+    const cached = this.deps.db.getSmartCloserCache(chatGuid);
+    if (cached?.inbound_message_guid === inbound.guid) {
+      const parsed = parseSmartCloserJson(cached.payload);
+      if (parsed.ok) return parsed;
+    }
+
+    const key = `closer:${chatGuid}:${inbound.guid}`;
+    const existing = this.structuredInFlight.get(key);
+    if (existing) return { ok: true, value: (await existing) as SmartCloser };
+    const pending = this.generateSmartCloser(chatGuid, inbound.guid, inbound.text, messages);
+    this.structuredInFlight.set(key, pending);
+    try {
+      return { ok: true, value: await pending };
+    } finally {
+      if (this.structuredInFlight.get(key) === pending) this.structuredInFlight.delete(key);
+    }
+  }
+
+  private async generateSmartCloser(
+    chatGuid: string,
+    inboundGuid: string,
+    inboundText: string,
+    messages: Message[],
+  ): Promise<SmartCloser> {
+    let closer = deterministicSmartCloser(inboundText);
+    if (this.available) {
+      const generated = await this.completeJsonLimited<JsonValue>(
+        smartCloserPrompt(renderTranscript(messages, { limit: 30 })),
+        { maxTokens: 240 },
+      );
+      if (generated.ok) {
+        const parsed = parseSmartCloser(generated.value);
+        if (parsed.ok) closer = parsed.value;
+      }
+    }
+    this.deps.db.setSmartCloserCache(chatGuid, inboundGuid, JSON.stringify(closer));
+    return closer;
+  }
+
+  async shadowBrief(chatGuid: string, force: boolean): Promise<Result<ShadowBrief>> {
+    const messages = await this.deps.fetchMessages(chatGuid);
+    const messageGuid = lastGuid(messages);
+    if (!messageGuid) return { ok: false, error: "chat has no messages" };
+    const cached = this.deps.db.getShadowBriefCache(chatGuid);
+    if (!force && cached?.message_guid === messageGuid) {
+      const parsed = parseShadowBriefJson(cached.payload);
+      if (parsed.ok) return { ok: true, value: { ...parsed.value, basedOnMessageGuid: messageGuid } };
+    }
+
+    const key = `brief:${chatGuid}:${messageGuid}`;
+    const existing = this.structuredInFlight.get(key);
+    if (existing) return { ok: true, value: (await existing) as ShadowBrief };
+    const pending = this.generateShadowBrief(chatGuid, messageGuid, messages);
+    this.structuredInFlight.set(key, pending);
+    try {
+      return { ok: true, value: await pending };
+    } finally {
+      if (this.structuredInFlight.get(key) === pending) this.structuredInFlight.delete(key);
+    }
+  }
+
+  private async generateShadowBrief(
+    chatGuid: string,
+    messageGuid: string,
+    messages: Message[],
+  ): Promise<ShadowBrief> {
+    let content: Omit<ShadowBrief, "basedOnMessageGuid"> = { context: "", actionItems: [], draft: "" };
+    if (this.available) {
+      const generated = await this.completeJsonLimited<JsonValue>(
+        shadowBriefPrompt(renderTranscript(messages, { limit: 50 })),
+        { maxTokens: 700 },
+      );
+      if (generated.ok) {
+        const parsed = parseShadowBriefContent(generated.value);
+        if (parsed.ok) content = parsed.value;
+      }
+    }
+    this.deps.db.setShadowBriefCache(chatGuid, messageGuid, JSON.stringify(content));
+    return { ...content, basedOnMessageGuid: messageGuid };
+  }
+
+  private async completeJsonLimited<T>(
+    prompt: string,
+    options: { maxTokens?: number } = {},
+  ): Promise<Result<T>> {
+    if (this.aiActive >= this.aiConcurrency) {
+      await new Promise<void>((resolve) => this.aiWaiters.push(resolve));
+    }
+    this.aiActive++;
+    try {
+      return await this.deps.gateway.completeJson<T>(prompt, options);
+    } finally {
+      this.aiActive--;
+      this.aiWaiters.shift()?.();
+    }
+  }
+
   async identify(
     chatGuid: string,
     address: string,
@@ -104,7 +212,7 @@ export class AiService {
     ]);
     const candidates = mergeCandidates([contactCandidate(knownName), vault]);
     const transcript = renderTranscript(messages, { limit: 25 });
-    return this.deps.gateway.completeJson<ContactSuggestion>(
+    return this.completeJsonLimited<ContactSuggestion>(
       identifyPrompt(address, transcript, candidates),
       { maxTokens: 400 },
     );
@@ -173,8 +281,8 @@ export class AiService {
 
 function safeParse(payload: string): string[] {
   try {
-    const parsed = JSON.parse(payload) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
+    const parsed = JSON.parse(payload) as JsonValue;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
   } catch {
     return [];
   }

@@ -10,7 +10,7 @@ export {
   SIDEBAR_WIDTH_MIN,
 } from "./sidebar-metrics";
 
-const KEY = "imsg.sidebarWidth.v1";
+const KEY = "imsg.sidebarWidth.v2";
 
 let width = SIDEBAR_WIDTH_DEFAULT;
 let hydrated = false;

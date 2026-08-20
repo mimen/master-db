@@ -127,23 +127,15 @@ export function ConversationFilters({
         contentContainerStyle={[styles.railContent, compact && styles.railContentCompact]}
         accessibilityLabel="Conversation filters"
       >
-        <View
+        {!compact ? <View
           accessibilityRole="radiogroup"
           accessibilityLabel="Conversation state"
-          style={[styles.filterGroup, compact && styles.filterGroupCompact]}
+          style={styles.filterGroup}
         >
           {STATE_FILTERS.map((filter) => (
-            <FilterPill
-              key={filter.value}
-              compact={compact}
-              label={filter.label}
-              count={counts?.[filter.value]}
-              selected={filters.state === filter.value}
-              selection={{ kind: "state", value: filter.value }}
-              onSelect={select}
-            />
+            <FilterPill key={filter.value} label={filter.label} count={counts?.[filter.value]} selected={filters.state === filter.value} selection={{ kind: "state", value: filter.value }} onSelect={select} />
           ))}
-        </View>
+        </View> : null}
         {compact ? null : (
           <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
         )}
@@ -152,7 +144,7 @@ export function ConversationFilters({
           accessibilityLabel="Conversation type"
           style={[styles.filterGroup, compact && styles.filterGroupCompact]}
         >
-          {TYPE_FILTERS.map((filter) => (
+          {TYPE_FILTERS.filter((filter) => !compact || filter.value !== "unknown").map((filter) => (
             <FilterPill
               key={filter.value}
               compact={compact}

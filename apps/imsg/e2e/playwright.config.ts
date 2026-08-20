@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 
-const LIVE_APP_URL = "https://milads-mac-mini.taild31e9a.ts.net:8447";
+const LIVE_APP_URL = process.env.IMSG_E2E_URL ?? "https://milads-mac-mini.taild31e9a.ts.net:8447";
 const CACHE_ROOT = join(homedir(), "Library", "Caches", "ms-playwright");
 
 interface CachedChromium {

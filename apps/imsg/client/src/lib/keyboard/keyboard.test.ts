@@ -112,8 +112,10 @@ describe("registry", () => {
     const entries = helpEntries();
     const next = entries.find((e) => e.title === "Next conversation");
     expect(next?.keys).toEqual(["J", "↓"]);
-    const archive = entries.find((e) => e.title === "Archive / unarchive");
-    expect(archive?.keys).toEqual(["E"]);
+    const done = entries.find((e) => e.title === "Done (clear from queue)");
+    expect(done?.keys).toEqual(["E"]);
+    const later = entries.find((e) => e.title === "Later");
+    expect(later?.keys).toEqual(["H"]);
     const nw = entries.find((e) => e.title === "New message");
     expect(nw?.keys).toEqual(["C"]);
     expect(entries.find((e) => e.title === "Close panel / window")).toBeUndefined();

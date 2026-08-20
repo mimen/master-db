@@ -5,7 +5,7 @@ import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
-import type { ChatSummary, Message } from "../shared/types";
+import type { ChatSummary, Message, TriageProgressStats } from "../shared/types";
 import { sameSendAddress } from "./message-verification";
 
 export interface ChatLookup {
@@ -74,6 +74,7 @@ export class ChatDirectory {
   // Chats we've marked read, ahead of BlueBubbles' DB reflecting it.
   private localReadAt = new Map<string, number>();
   private listeners = new Set<(event: DirectoryEvent) => void>();
+  private laterExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * The name source used for participant/display-name resolution. Defaults
@@ -93,6 +94,25 @@ export class ChatDirectory {
   ) {
     this.names = names ?? contacts;
     this.contacts.onAvailabilityChange(() => this.invalidate());
+    this.rescheduleLaterExpiry();
+  }
+
+  private rescheduleLaterExpiry(): void {
+    if (this.laterExpiryTimer) clearTimeout(this.laterExpiryTimer);
+    this.laterExpiryTimer = null;
+    const now = this.now();
+    const cleared = this.db.clearExpiredLater(now);
+    if (cleared.length > 0) this.invalidate();
+    const deadlines = [...this.db.getAll().values()]
+      .map((state) => state.laterUntil)
+      .filter((until): until is number => typeof until === "number" && until > now);
+    if (deadlines.length === 0) return;
+    const nearest = Math.min(...deadlines);
+    this.laterExpiryTimer = setTimeout(() => {
+      this.laterExpiryTimer = null;
+      this.rescheduleLaterExpiry();
+    }, Math.max(1, nearest - now));
+    this.laterExpiryTimer.unref?.();
   }
 
   onEvent(cb: (event: DirectoryEvent) => void): () => void {
@@ -230,22 +250,49 @@ export class ChatDirectory {
    */
   private patchSummaries(chatGuid: string, m: Message): void {
     this.rememberRealtimeSpam(chatGuid, m);
+    const prior = this.summaryCache?.chats.find((chat) => chat.guid === chatGuid);
+    const open = this.db.getOpenTriageItem(chatGuid);
+    const replyAnchor =
+      open?.messageGuid ??
+      (prior?.flags.unresponded && prior.lastMessage && !prior.lastMessage.isFromMe
+        ? prior.lastMessage.guid
+        : null);
+    if (m.isFromMe && replyAnchor) {
+      this.db.recordTriageClear(chatGuid, replyAnchor, "reply", this.now());
+      this.db.clearOpenTriageItem(chatGuid);
+    }
     // An INBOUND message is the event that auto-unarchives a chat, so persist
     // the clear here rather than only when summaries rebuild. Waiting for the
     // rebuild loses the race against a fast reply: once your outbound message
     // is the last one, isArchived() derives "archived" again and the rebuild
     // never sees the condition that would have cleared it.
     if (!m.isFromMe) {
-      const archivedAt = this.db.getAll().get(chatGuid)?.archivedAt;
+      const overlay = this.db.getAll();
+      const archivedAt = overlay.get(chatGuid)?.archivedAt;
       if (archivedAt && m.dateCreated > archivedAt) this.db.setArchived(chatGuid, false);
+      for (const sibling of this.siblingGuids(chatGuid)) {
+        if (overlay.get(sibling)?.laterUntil) this.db.setLater(sibling, null, null);
+      }
+      this.rescheduleLaterExpiry();
     }
-    if (!this.summaryCache) return;
+    if (!this.summaryCache) {
+      if (!m.isFromMe && this.db.getAll().get(chatGuid)?.mutedUnresponded !== 1) {
+        this.db.setOpenTriageItem(chatGuid, m.guid, m.dateCreated);
+      }
+      return;
+    }
     const result = applyMessageToSummaries(this.summaryCache.chats, chatGuid, m);
     if (result === null) {
       this.clearCache();
       return;
     }
     if (result === this.summaryCache.chats) return; // stale message — nothing changed
+    const updated = result.find((chat) => chat.guid === chatGuid);
+    if (updated?.flags.unresponded && updated.lastMessage) {
+      this.db.setOpenTriageItem(chatGuid, updated.lastMessage.guid, updated.lastMessage.dateCreated);
+    } else {
+      this.db.clearOpenTriageItem(chatGuid);
+    }
     this.summaryCache = { at: this.summaryCache.at, chats: result };
   }
 
@@ -264,7 +311,7 @@ export class ChatDirectory {
     let chats = result.value
       .map((chat) => {
         const state = overlay.get(chat.guid);
-        const summary = mapChat(chat, state, this.names, unread.get(chat.guid));
+        const summary = mapChat(chat, state, this.names, unread.get(chat.guid), this.now());
         // Materialize a lazy auto-unarchive. isArchived() only *derives*
         // "an inbound message arrived after you archived this" — it never
         // cleared archived_at, so the moment you REPLIED the last message
@@ -274,6 +321,9 @@ export class ChatDirectory {
         // is what "lazily self-clearing" was always meant to be.
         if (state?.archivedAt && !summary.flags.archived) {
           this.db.setArchived(chat.guid, false);
+        }
+        if (state?.laterUntil && summary.laterUntil === null) {
+          this.db.setLater(chat.guid, null, null);
         }
         // Mark-read override: trust our own mark-read over BB's lagging DB.
         // Persisted (overlay) readAt survives restarts — Apple never back-fills
@@ -289,8 +339,16 @@ export class ChatDirectory {
       })
       .filter((chat) => chat.lastMessage !== null)
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
+    this.rescheduleLaterExpiry();
     chats = this.applyRealtimeSpam(chats);
     chats = this.mergeServiceSiblings(chats);
+    for (const chat of chats) {
+      if (chat.flags.unresponded && chat.lastMessage) {
+        this.db.setOpenTriageItem(chat.guid, chat.lastMessage.guid, chat.lastMessage.dateCreated);
+      } else {
+        this.db.clearOpenTriageItem(chat.guid);
+      }
+    }
     this.summaryCache = { at: this.now(), chats };
     return { ok: true, chats };
   }
@@ -419,6 +477,21 @@ export class ChatDirectory {
     this.emitChanged();
   }
 
+  async setLater(
+    guid: string,
+    until: number | null,
+  ): Promise<{ ok: boolean; error?: string; status?: 404 | 502 }> {
+    const result = await this.summaries();
+    if (!result.ok) return { ok: false, error: result.error, status: 502 };
+    const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
+    const anchor = chat?.lastMessage?.guid;
+    if (until !== null && !anchor) return { ok: false, error: "chat has no last message", status: 404 };
+    for (const sibling of this.siblingGuids(guid)) this.db.setLater(sibling, until, anchor ?? null);
+    this.rescheduleLaterExpiry();
+    this.invalidate();
+    return { ok: true };
+  }
+
   setArchived(guid: string, archived: boolean): void {
     this.db.setArchived(guid, archived);
     this.invalidate();
@@ -437,16 +510,59 @@ export class ChatDirectory {
   async dismiss(
     guid: string,
     kind: "unresponded" | "waiting",
-  ): Promise<{ ok: boolean; error?: string; status?: 404 | 502 }> {
+    expectedLatestMessageGuid?: string,
+  ): Promise<{ ok: boolean; error?: string; status?: 404 | 409 | 502 }> {
     const result = await this.summaries();
     if (!result.ok) return { ok: false, error: result.error, status: 502 };
-    const chat = result.chats.find((x) => x.guid === guid);
+    const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
     const lastGuid = chat?.lastMessage?.guid;
     if (!lastGuid) return { ok: false, error: "chat has no last message", status: 404 };
-    if (kind === "unresponded") this.db.dismissUnresponded(guid, lastGuid);
-    else this.db.dismissWaiting(guid, lastGuid);
+    if (expectedLatestMessageGuid && expectedLatestMessageGuid !== lastGuid) {
+      return { ok: false, error: "latest message changed", status: 409 };
+    }
+    for (const sibling of this.siblingGuids(guid)) {
+      if (kind === "unresponded") this.db.dismissUnresponded(sibling, lastGuid);
+      else this.db.dismissWaiting(sibling, lastGuid);
+    }
+    const canonical = this.canonicalGuid(guid);
+    this.db.recordTriageClear(canonical, lastGuid, "dismiss", this.now());
+    this.db.clearOpenTriageItem(canonical);
     this.invalidate();
     return { ok: true };
+  }
+
+  async undismiss(
+    guid: string,
+    kind: "unresponded" | "waiting",
+  ): Promise<{ ok: boolean; error?: string; status?: 502 }> {
+    const result = await this.summaries();
+    if (!result.ok) return { ok: false, error: result.error, status: 502 };
+    const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
+    for (const sibling of this.siblingGuids(guid)) this.db.clearDismissal(sibling, kind);
+    if (chat?.lastMessage) this.db.deleteTriageClear(this.canonicalGuid(guid), chat.lastMessage.guid);
+    this.invalidate();
+    return { ok: true };
+  }
+
+  async triageStats(): Promise<{ ok: true; value: TriageProgressStats } | { ok: false; error: string }> {
+    const result = await this.summaries();
+    if (!result.ok) return result;
+    const now = this.now();
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const queueDates = result.chats
+      .filter((chat) => chat.flags.unresponded || chat.flags.waiting)
+      .map((chat) => chat.lastMessage?.dateCreated)
+      .filter((at): at is number => typeof at === "number" && at > 0);
+    const oldestQueueAt = queueDates.length > 0 ? Math.min(...queueDates) : null;
+    return {
+      ok: true,
+      value: {
+        clearedToday: this.db.countTriageClearsSince(start.getTime()),
+        oldestQueueAgeMs: oldestQueueAt === null ? null : Math.max(0, now - oldestQueueAt),
+        oldestQueueAt,
+      },
+    };
   }
 
   async findByAddress(

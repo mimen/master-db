@@ -7,10 +7,9 @@ import {
 
 const HEALTH_PATH = "/api/health";
 const SEARCH_NAME = "Search conversations and messages";
-const SCROLL_MARKER = "data-imsg-e2e-sidebar-scroll";
 
 export interface SidebarHarness {
-  readonly chrome: Locator;
+  readonly heading: Locator;
   readonly page: Page;
   readonly scroll: Locator;
   readonly search: Locator;
@@ -33,42 +32,25 @@ export const test = base.extend<SidebarFixtures>({
             return false;
           }
         },
-        { message: "live imsg health endpoint should return ok" },
+        { message: "imsg health endpoint should return ok" },
       )
       .toBe(true);
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     const search = page.getByRole("textbox", { name: SEARCH_NAME });
-    const stateFilters = page.getByRole("radiogroup", { name: "Conversation state" });
-    const loadedAllPill = page.getByRole("radio", {
-      name: /^All, \d+ conversations$/,
-    });
-    const filterButton = page.getByRole("button", { name: "Filter conversations" });
+    const heading = page.getByRole("heading", { name: "Needs reply" });
+    const needs = page.getByRole("button", { name: /^Needs, \d+/ });
+    const waiting = page.getByRole("button", { name: "Waiting" });
+    const all = page.getByRole("button", { name: "All" });
+    const scroll = page.getByTestId("conversation-list-scroll");
 
     await expect(search).toBeVisible();
-    await expect(stateFilters).toBeVisible();
-    await expect(loadedAllPill).toBeVisible();
-    await expect(filterButton).toBeVisible();
-
-    await search.evaluate((input, marker): void => {
-      let element = input.parentElement;
-      while (element) {
-        const style = globalThis.getComputedStyle(element);
-        const verticallyScrollable = style.overflowY === "auto" || style.overflowY === "scroll";
-        if (verticallyScrollable) {
-          element.setAttribute(marker, "true");
-          return;
-        }
-        element = element.parentElement;
-      }
-      throw new Error("Could not find the sidebar scroll container");
-    }, SCROLL_MARKER);
-
-    const scroll = page.locator(`[${SCROLL_MARKER}="true"]`);
-    const chrome = filterButton.locator("..").locator("..");
-    await expect(scroll).toHaveCount(1);
-    await expect(chrome).toBeVisible();
+    await expect(heading).toBeVisible();
+    await expect(needs).toBeVisible();
+    await expect(waiting).toBeVisible();
+    await expect(all).toBeVisible();
+    await expect(scroll).toBeVisible();
     await expect
       .poll(async (): Promise<boolean> => {
         const firstHeight = await scroll.evaluate((element) => element.scrollHeight);
@@ -79,7 +61,7 @@ export const test = base.extend<SidebarFixtures>({
       })
       .toBe(true);
 
-    await provide({ chrome, page, scroll, search });
+    await provide({ heading, page, scroll, search });
   },
 });
 

@@ -26,6 +26,7 @@ import type { MentionAnnotation } from "../shared/mentions";
 import { buildMentionAttributedBody } from "./mention-body";
 import { transcodeAttachment } from "./transcode";
 import { mapScheduledMessage } from "./scheduled";
+import { ScheduledSendNow } from "./scheduled-send-now";
 import { WhisperService } from "./whisper";
 import { createAndSendFaceTimeLink } from "./facetime";
 import { parseByteRange } from "./byte-range";
@@ -47,6 +48,7 @@ const search = new MessageSearch(bb, names);
 const photos = new GroupPhotos(bb);
 const identitySync = new IdentitySync(bb, config, () => void identityMirror.refresh());
 const whisper = new WhisperService(config.whisper, bb, db);
+const scheduledSendNow = new ScheduledSendNow(bb);
 
 const gateway = new Gateway(config.ai);
 const ai = new AiService({
@@ -306,6 +308,7 @@ app.post("/api/chats/:guid/send", async (c) => {
     if (!built.ok) return c.json({ error: built.error }, 400);
     attributedBody = built.value;
   }
+  await directory.summaries();
   const result = await bb.sendText(
     chatGuid,
     body.text,
@@ -327,6 +330,7 @@ app.post("/api/chats/:guid/attachment", async (c) => {
   const caption = (form.get("caption") as string | null)?.trim() || undefined;
   const isAudio = form.get("isAudioMessage") === "true";
   const name = file.name || "attachment";
+  await directory.summaries();
   const result = isAudio
     ? await bb.sendAudio(chatGuid, name, bytes)
     : await bb.sendAttachmentWithCaption(chatGuid, name, bytes, caption);
@@ -349,6 +353,7 @@ app.post("/api/chats/:guid/contact", async (c) => {
     "\r\n",
   );
   const filename = `${body.name.replace(/[^\w -]/g, "").trim() || "Contact"}.vcf`;
+  await directory.summaries();
   const result = await bb.sendAttachmentWithCaption(
     chatGuid,
     filename,
@@ -389,10 +394,47 @@ app.post("/api/chats/:guid/archive", async (c) => {
 
 app.post("/api/chats/:guid/dismiss", async (c) => {
   const chatGuid = c.req.param("guid");
-  const body = (await c.req.json()) as { kind: "unresponded" | "waiting" };
-  const result = await directory.dismiss(chatGuid, body.kind);
+  const body = (await c.req.json()) as {
+    kind?: string;
+    expectedLatestMessageGuid?: string;
+  };
+  if (body.kind !== "unresponded" && body.kind !== "waiting") {
+    return c.json({ error: "invalid dismiss kind" }, 400);
+  }
+  if (body.expectedLatestMessageGuid !== undefined && !body.expectedLatestMessageGuid.trim()) {
+    return c.json({ error: "expectedLatestMessageGuid must be non-empty" }, 400);
+  }
+  const result = await directory.dismiss(chatGuid, body.kind, body.expectedLatestMessageGuid);
   if (!result.ok) return c.json({ error: result.error }, result.status ?? 502);
   return c.json({ ok: true });
+});
+
+app.post("/api/chats/:guid/undismiss", async (c) => {
+  const body = (await c.req.json()) as { kind?: string };
+  if (body.kind !== "unresponded" && body.kind !== "waiting") {
+    return c.json({ error: "invalid dismiss kind" }, 400);
+  }
+  const result = await directory.undismiss(c.req.param("guid"), body.kind);
+  if (!result.ok) return c.json({ error: result.error }, result.status ?? 502);
+  return c.json({ ok: true });
+});
+
+app.post("/api/chats/:guid/later", async (c) => {
+  const body = (await c.req.json()) as { until?: number | null };
+  if (body.until !== null && (typeof body.until !== "number" || !Number.isFinite(body.until))) {
+    return c.json({ error: "until must be an epoch-ms number or null" }, 400);
+  }
+  const until = body.until ?? null;
+  if (until !== null && until <= Date.now()) return c.json({ error: "until must be in the future" }, 400);
+  const result = await directory.setLater(c.req.param("guid"), until);
+  if (!result.ok) return c.json({ error: result.error }, result.status ?? 502);
+  return c.json({ ok: true });
+});
+
+app.get("/api/triage/stats", async (c) => {
+  const result = await directory.triageStats();
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.value);
 });
 
 app.post("/api/chats/:guid/pin", async (c) => {
@@ -685,6 +727,17 @@ app.delete("/api/scheduled/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+app.post("/api/scheduled/:id/send-now", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
+  const result = await scheduledSendNow.send(id);
+  if (!result.ok) {
+    const status = result.error.includes("not found") || result.error.includes("claimed") ? 409 : 502;
+    return c.json({ error: result.error }, status);
+  }
+  return c.json({ ok: true });
+});
+
 // ------------------------------------------------ transcription / attachments
 
 app.get("/api/attachments/:guid/transcript", (c) => {
@@ -857,6 +910,18 @@ app.get("/api/ai/identify/:guid", async (c) => {
   await contacts.refresh();
   const result = await ai.identify(chatGuid, address, names.lookup(address));
   if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.value);
+});
+
+app.get("/api/chats/:guid/smart-closer", async (c) => {
+  const result = await ai.smartCloser(c.req.param("guid"));
+  if (!result.ok) return c.json({ error: result.error }, 502);
+  return c.json(result.value);
+});
+
+app.get("/api/chats/:guid/shadow-brief", async (c) => {
+  const result = await ai.shadowBrief(c.req.param("guid"), c.req.query("regenerate") === "1");
+  if (!result.ok) return c.json({ error: result.error }, result.error === "chat has no messages" ? 404 : 502);
   return c.json(result.value);
 });
 

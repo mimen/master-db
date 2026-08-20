@@ -13,11 +13,12 @@ import { ThreadView } from "@/components/thread-view";
 import { ShadowPanel } from "@/components/shadow-panel";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
+import { finishTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { Type } from "@/constants/theme";
-import { archiveChat, markChatUnread, undoLastAction } from "@/lib/chat-actions";
+import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DesktopAuxPane, DesktopSplit } from "@/components/desktop-split";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
@@ -37,6 +38,7 @@ import { playReceive } from "@/lib/sounds";
 import { useServerEvents } from "@/lib/sse";
 import { openThreadSearch } from "@/lib/thread-search";
 import { showToast } from "@/lib/toast";
+import { useActionSheet } from "@/lib/action-sheet";
 
 /** Desktop right pane: conversation details, or a contact opened over them. */
 type RightPane =
@@ -50,6 +52,7 @@ export default function ChatListScreen() {
   const theme = useTheme();
   const { wide, canShadow: canShadowLayout } = useLayoutMode();
   const aiStatus = useAiStatus();
+  const showSheet = useActionSheet();
   // The shadow panel needs room beyond the list+thread; keep it to wide desktops.
   const canShadow = canShadowLayout && aiStatus?.shadow === true;
   const [shadowOpen, setShadowOpen] = useState(false);
@@ -65,7 +68,7 @@ export default function ChatListScreen() {
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [rightPane, setRightPane] = useState<RightPane | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const { chats, allChats, counts, loading, refresh } = useChats(state, type);
+  const { chats, allChats, counts, loading, refresh } = useChats(state, type, !wide);
 
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
   useServerEvents(
@@ -105,6 +108,7 @@ export default function ChatListScreen() {
           participants: [],
           lastMessage: null,
           unreadCount: 0,
+          laterUntil: null,
           flags: {
             archived: false,
             unresponded: false,
@@ -227,12 +231,23 @@ export default function ChatListScreen() {
       archiveSelected: () => {
         const sel = selectedRef.current;
         if (!sel) return;
-        const archived = !sel.flags.archived;
-        archiveChat(sel, archived);
-        showToast(archived ? "Archived — Z to undo" : "Unarchived — Z to undo");
-        // The row leaves the current view — glide onto its neighbor so the
-        // cursor never dangles on a vanished conversation.
+        finishTriageChat(sel);
+        showToast("Done — Z to undo");
         getListAdapter()?.selectNeighborOf(sel.guid);
+      },
+      laterSelected: () => {
+        const sel = selectedRef.current;
+        if (!sel) return;
+        showSheet({
+          title: `Later · ${sel.displayName}`,
+          actions: laterOptions().map((option) => ({
+            label: option.label,
+            onPress: () => {
+              void setTriageLater(sel, option.until).then(refresh, () => showToast("Could not move conversation to Later"));
+              getListAdapter()?.selectNeighborOf(sel.guid);
+            },
+          })),
+        });
       },
       markUnreadSelected: () => {
         const sel = selectedRef.current;
@@ -250,7 +265,7 @@ export default function ChatListScreen() {
         );
       },
       focusListSearch: () => getListAdapter()?.focusSearch(),
-      undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
+      undoLast: () => showToast(undoLastTriageAction() || undoLastAction() ? "Undone" : "Nothing to undo"),
       // Esc precedence ladder — first applicable step only.
       escape: () => {
         const o = overlaysRef.current;
@@ -302,7 +317,7 @@ export default function ChatListScreen() {
       setKeyboardRuntime(null);
       setListMode(false);
     };
-  }, [wide]);
+  }, [wide, showSheet, refresh]);
 
   const list = (
     <ConversationListPane
@@ -330,6 +345,7 @@ export default function ChatListScreen() {
 
   return (
     <DesktopSplit
+      listInset={64}
       list={list}
       detail={
         selected ? (

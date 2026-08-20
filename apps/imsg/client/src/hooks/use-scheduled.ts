@@ -8,6 +8,7 @@ export interface UseScheduledResult {
   items: ScheduledMessage[];
   loading: boolean;
   cancel: (id: number) => void;
+  sendNow: (id: number) => Promise<void>;
   edit: (item: ScheduledMessage, text: string, sendAt: number) => Promise<void>;
 }
 
@@ -55,6 +56,19 @@ export function useScheduled(): UseScheduledResult {
     [load],
   );
 
+  const sendNow = useCallback(
+    async (id: number): Promise<void> => {
+      setItems((current) => current.filter((item) => item.id !== id));
+      try {
+        await api.sendScheduledNow(id);
+      } catch (error) {
+        load();
+        throw error;
+      }
+    },
+    [load],
+  );
+
   const edit = useCallback(
     async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
       const updated = await api.updateScheduled(item.id, item.chatGuid, text, sendAt);
@@ -63,5 +77,5 @@ export function useScheduled(): UseScheduledResult {
     [],
   );
 
-  return { items, loading, cancel, edit };
+  return { items, loading, cancel, sendNow, edit };
 }

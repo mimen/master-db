@@ -44,7 +44,7 @@ describe("desktopFrame", () => {
     expect(frame.split.backgroundColor).toBe(theme.background);
     expect(frame.pane.borderRadius).toBeUndefined();
     expect(frame.listPane.borderRightWidth).toBe(1);
-    expect(frame.listPane.width).toBe(380);
+    expect(frame.listPane.width).toBe(352);
     expect(frame.auxPane.borderLeftWidth).toBe(1);
     expect(frame.auxPane.width).toBe(AUX_PANE_WIDTH);
   });
@@ -69,6 +69,7 @@ describe("native menu bridge", () => {
       activateSelection: () => undefined,
       findInConversation: () => undefined,
       archiveSelected: () => undefined,
+      laterSelected: () => undefined,
       markUnreadSelected: () => undefined,
       toggleDetails: () => undefined,
       focusListSearch: () => undefined,
@@ -106,6 +107,7 @@ describe("native menu bridge", () => {
       activateSelection: () => undefined,
       findInConversation: () => undefined,
       archiveSelected: () => undefined,
+      laterSelected: () => undefined,
       markUnreadSelected: () => undefined,
       toggleDetails: () => undefined,
       focusListSearch: () => undefined,

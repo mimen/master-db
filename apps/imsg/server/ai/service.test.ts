@@ -235,3 +235,60 @@ describe("identify", () => {
     }
   });
 });
+
+describe("smartCloser", () => {
+  test("validates, caches by latest inbound, and serves the cache", async () => {
+    const { service, db } = makeService({
+      messages: [makeMessage({ guid: "in-9", text: "can you call me?" })],
+      reply: '{"kind":"call","label":"Call"}',
+    });
+    const first = await service.smartCloser("chat-1");
+    const second = await service.smartCloser("chat-1");
+    expect(first).toEqual({ ok: true, value: { kind: "call", label: "Call" } });
+    expect(second).toEqual(first);
+    expect(db.getSmartCloserCache("chat-1")?.inbound_message_guid).toBe("in-9");
+  });
+
+  test("falls back deterministically when model output fails strict parsing", async () => {
+    const { service } = makeService({
+      messages: [makeMessage({ text: "thanks" })],
+      reply: '{"kind":"send","label":"Send","draft":"bad"}',
+    });
+    expect(await service.smartCloser("chat-1")).toEqual({
+      ok: true,
+      value: { kind: "done", label: "Done" },
+    });
+  });
+});
+
+describe("shadowBrief", () => {
+  test("strictly parses and caches a brief by last message GUID", async () => {
+    const { service, db } = makeService({
+      messages: [makeMessage({ guid: "m12" })],
+      reply: '{"context":"Sarah needs the venue","actionItems":["send venue"],"draft":"sending now"}',
+    });
+    const result = await service.shadowBrief("chat-1", false);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        context: "Sarah needs the venue",
+        actionItems: ["send venue"],
+        draft: "sending now",
+        basedOnMessageGuid: "m12",
+      },
+    });
+    expect(db.getShadowBriefCache("chat-1")?.message_guid).toBe("m12");
+  });
+
+  test("uses a safe empty brief for malformed generated data", async () => {
+    const { service } = makeService({
+      messages: [makeMessage()],
+      reply: '{"context":"x","actionItems":"not-an-array","draft":"send"}',
+    });
+    const result = await service.shadowBrief("chat-1", true);
+    expect(result).toEqual({
+      ok: true,
+      value: { context: "", actionItems: [], draft: "", basedOnMessageGuid: "m1" },
+    });
+  });
+});

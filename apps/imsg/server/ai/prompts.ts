@@ -97,3 +97,41 @@ export function identifyPrompt(
     'Reply with ONLY JSON: {"name": string | null, "confidence": "high" | "medium" | "low", "reasoning": string}',
   ].join("\n");
 }
+
+
+export function smartCloserPrompt(transcript: string): string {
+  return [
+    VOICE,
+    "",
+    "Classify the best non-automatic triage action for the latest inbound message.",
+    "This path only recommends. It never sends, reacts, archives, or changes state.",
+    "",
+    "Conversation:",
+    transcript || "(no messages)",
+    "",
+    UNTRUSTED_NOTICE,
+    "",
+    "Choose exactly one kind: reply, done, later, call, react_done, archive.",
+    "label is a short human button label.",
+    "reply may include a draft. react_done may include a reaction. No other fields are allowed.",
+    `Reply with ONLY JSON, e.g. {"kind":"reply","label":"Reply","draft":"sounds good"}.`,
+  ].join("\n");
+}
+
+export function shadowBriefPrompt(transcript: string): string {
+  return [
+    VOICE,
+    "",
+    "Brief the open conversation for Milad. This path only summarizes and drafts; it never sends.",
+    "",
+    "Conversation:",
+    transcript || "(no messages)",
+    "",
+    UNTRUSTED_NOTICE,
+    "",
+    "context: concise factual context needed to act.",
+    "actionItems: concrete open actions, [] if none.",
+    "draft: one send-ready draft, or an empty string when no reply is appropriate.",
+    `Reply with ONLY JSON: {"context":"...","actionItems":["..."],"draft":"..."}.`,
+  ].join("\n");
+}

@@ -14,6 +14,7 @@ export type CommandId =
   | "composer.focus"
   | "conversation.find"
   | "conversation.archive"
+  | "conversation.later"
   | "conversation.markUnread"
   | "conversation.details"
   | "list.focusSearch"
@@ -60,6 +61,7 @@ export interface KeyboardRuntime {
   activateSelection(): void;
   findInConversation(): void;
   archiveSelected(): void;
+  laterSelected(): void;
   markUnreadSelected(): void;
   toggleDetails(): void;
   focusListSearch(): void;

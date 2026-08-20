@@ -23,7 +23,11 @@ export interface SidebarChromeProps {
   readonly leading: React.ReactNode;
   /** Right slot: new-message on wide; settings/filter/new on mobile. */
   readonly actions: React.ReactNode;
-  /** Wide: sticky search row under the app name. */
+  /** Wide: title shown above the search row. */
+  readonly title?: string;
+  /** The desktop traffic lights are cleared by a rail before this pane. */
+  readonly trafficLightsInRail?: boolean;
+  /** Wide: sticky search row under the title. */
   readonly toolbar?: React.ReactNode;
   /** Wide: Messages/Contacts on its own row under search. */
   readonly nav?: React.ReactNode;
@@ -38,6 +42,8 @@ export interface SidebarChromeProps {
 export function SidebarChrome({
   leading,
   actions,
+  title = "Comma,",
+  trafficLightsInRail = false,
   toolbar,
   nav,
 }: SidebarChromeProps): React.JSX.Element {
@@ -64,14 +70,14 @@ export function SidebarChrome({
   if (wide && toolbar) {
     return (
       <View style={[styles.stack, glassStyle]} {...dragProps}>
-        <View style={[styles.titleRow, shell && styles.titleRowShell]}>
+        <View style={[styles.titleRow, shell && !trafficLightsInRail && styles.titleRowShell]}>
           <Text
             accessibilityRole="header"
             numberOfLines={1}
             selectable={false}
             style={[styles.wordmark, { color: theme.text }]}
           >
-            Comma,
+            {title}
           </Text>
         </View>
         <View style={styles.toolbar} {...(shell ? NO_DRAG : {})}>
@@ -159,10 +165,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   navRow: {
-    alignItems: "center",
     flexDirection: "row",
     height: SIDEBAR_NAV_HEIGHT,
-    paddingHorizontal: 10,
   },
   bar: {
     alignItems: "center",

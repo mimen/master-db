@@ -66,6 +66,7 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
     unreadCount: 0,
     firstUnreadAt: null,
     flags: makeFlags(),
+    laterUntil: null,
     ...overrides,
   };
 }

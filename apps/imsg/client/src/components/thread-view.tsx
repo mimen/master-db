@@ -32,6 +32,7 @@ import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
+import { finishTriageChat } from "@/hooks/use-triage-actions";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
@@ -42,6 +43,11 @@ import { FaceTimeButton } from "./facetime-button";
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
 const GROUP_GAP_MS = 10 * 60 * 1000;
+
+function formatWindowRemaining(windowMs: number, ageMs: number): string {
+  const minutes = Math.max(1, Math.ceil((windowMs - ageMs) / 60_000));
+  return `${minutes} min left`;
+}
 
 interface Row {
   message: Message;
@@ -68,6 +74,8 @@ interface ThreadViewProps {
   /** When provided (desktop split-pane with AI shadow available), show the toggle. */
   onToggleShadow?: () => void;
   shadowOpen?: boolean;
+  /** Sweep mode advances only after a real send settles successfully. */
+  onMessageSent?: () => void;
 }
 
 export function ThreadView({
@@ -78,6 +86,7 @@ export function ThreadView({
   previewOnly = false,
   onToggleShadow,
   shadowOpen = false,
+  onMessageSent,
 }: ThreadViewProps) {
   const theme = useTheme();
   const type = useType();
@@ -406,12 +415,12 @@ export function ThreadView({
             ]
           : []),
         ...(mine && privateApi && message.text && age < EDIT_WINDOW_MS && !message.pending
-          ? [{ label: "Edit", onPress: () => setEditing(message) }]
+          ? [{ label: `Edit · ${formatWindowRemaining(EDIT_WINDOW_MS, age)}`, onPress: () => setEditing(message) }]
           : []),
         ...(mine && privateApi && age < UNSEND_WINDOW_MS && !message.pending
           ? [
               {
-                label: "Unsend",
+                label: `Unsend · ${formatWindowRemaining(UNSEND_WINDOW_MS, age)}`,
                 destructive: true,
                 onPress: () => {
                   void api
@@ -516,6 +525,17 @@ export function ThreadView({
             </View>
           </Pressable>
           <View style={styles.paneHeaderActions}>
+            {(headerChat.flags.unresponded || headerChat.flags.waiting) && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Mark conversation done"
+                onPress={() => finishTriageChat(headerChat)}
+                style={[styles.doneButton, { backgroundColor: theme.backgroundElement }]}
+              >
+                <Ionicons name="checkmark" size={14} color={theme.accent} />
+                <Text style={[styles.doneButtonText, { color: theme.text }]}>Done</Text>
+              </Pressable>
+            )}
             <FaceTimeButton
               chatGuid={chatGuid}
               isGroup={isGroup}
@@ -638,42 +658,59 @@ export function ThreadView({
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
-            <Reanimated.View
-              entering={
-                // FadeInUp, not Down: the list is inverted, so each cell carries
-                // scaleY:-1 and a downward animation renders as an upward one.
-                Date.now() - item.message.dateCreated < 4000 &&
-                !settledGuids.current.has(item.message.guid)
-                  ? FadeInUp.springify().damping(22)
-                  : undefined
-              }
-            >
-              {item.newDay && (
-                <Text style={[styles.dayDivider, { color: theme.textSecondary }]}>
-                  {formatDayDivider(item.message.dateCreated)}
-                </Text>
-              )}
-              {item.message.isGroupEvent ? (
-                <Text style={[styles.groupEvent, { color: theme.textSecondary }]}>
-                  {item.message.text}
-                </Text>
-              ) : (
-                <Bubble
-                  message={item.message}
-                  paneWidth={paneW}
-                  groupStart={item.groupStart}
-                  groupEnd={item.groupEnd}
-                  isGroupChat={isGroup}
-                  isLatestOutgoing={item.message.guid === latestOutgoingGuid}
-                  highlighted={item.message.guid === highlightGuid}
-                  onLongPress={openMessageSheet}
-                  onRetry={retry}
-                  onShowReactions={showReactions}
-                />
-              )}
-            </Reanimated.View>
-          )}
+          renderItem={({ item, index }) => {
+            const olderMessage = rows[index + 1]?.message ?? null;
+            const unreadBoundary =
+              firstUnreadAt !== null &&
+              !item.message.isFromMe &&
+              item.message.dateCreated >= firstUnreadAt &&
+              (olderMessage === null || olderMessage.dateCreated < firstUnreadAt);
+            return (
+              <Reanimated.View
+                entering={
+                  // FadeInUp, not Down: the list is inverted, so each cell carries
+                  // scaleY:-1 and a downward animation renders as an upward one.
+                  Date.now() - item.message.dateCreated < 4000 &&
+                  !settledGuids.current.has(item.message.guid)
+                    ? FadeInUp.springify().damping(22)
+                    : undefined
+                }
+              >
+                {unreadBoundary && (
+                  <View style={styles.unreadDivider}>
+                    <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
+                    <Text style={[styles.unreadLabel, { color: theme.accent }]}>
+                      {headerChat?.unreadCount ?? 1} unread
+                    </Text>
+                    <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
+                  </View>
+                )}
+                {item.newDay && (
+                  <Text style={[styles.dayDivider, { color: theme.textSecondary }]}>
+                    {formatDayDivider(item.message.dateCreated)}
+                  </Text>
+                )}
+                {item.message.isGroupEvent ? (
+                  <Text style={[styles.groupEvent, { color: theme.textSecondary }]}>
+                    {item.message.text}
+                  </Text>
+                ) : (
+                  <Bubble
+                    message={item.message}
+                    paneWidth={paneW}
+                    groupStart={item.groupStart}
+                    groupEnd={item.groupEnd}
+                    isGroupChat={isGroup}
+                    isLatestOutgoing={item.message.guid === latestOutgoingGuid}
+                    highlighted={item.message.guid === highlightGuid}
+                    onLongPress={openMessageSheet}
+                    onRetry={retry}
+                    onShowReactions={showReactions}
+                  />
+                )}
+              </Reanimated.View>
+            );
+          }}
         />
       )}
       {dayChip && (
@@ -719,6 +756,7 @@ export function ThreadView({
           upsert(message);
           patchChatWithMessage(chatGuid, message);
           scrollToLatest();
+          onMessageSent?.();
         }}
       />
     </View>
@@ -763,6 +801,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexShrink: 0,
     gap: 14,
+  },
+  doneButton: {
+    alignItems: "center",
+    borderRadius: 9,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  doneButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   searchShelf: {
     flexDirection: "row",
@@ -829,6 +879,21 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 4,
+  },
+  unreadDivider: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginHorizontal: 18,
+    marginVertical: 8,
+  },
+  unreadLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  unreadLabel: {
+    fontSize: 10,
+    fontWeight: "600",
   },
   dayDivider: {
     textAlign: "center",

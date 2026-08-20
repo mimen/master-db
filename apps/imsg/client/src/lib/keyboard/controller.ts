@@ -163,6 +163,9 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
     case "conversation.archive":
       rt.archiveSelected();
       return true;
+    case "conversation.later":
+      rt.laterSelected();
+      return true;
     case "conversation.markUnread":
       rt.markUnreadSelected();
       return true;

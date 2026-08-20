@@ -112,6 +112,8 @@ export interface ChatSummary {
   /** Epoch ms of the oldest genuine unread inbound message, or null when unavailable. */
   firstUnreadAt?: number | null;
   flags: ChatFlags;
+  /** Active Later/snooze deadline in epoch ms, or null when not snoozed. */
+  laterUntil: number | null;
   /**
    * Deduped, lowercased name terms (display, first, last, nickname,
    * organization…) drawn from every participant's Identity Mirror record —
@@ -141,6 +143,30 @@ export interface ChatSummary {
     tags?: string[];
     events?: Array<{ id: string; name: string }>;
   };
+}
+
+export type SmartCloser =
+  | { kind: "reply"; label: string; draft?: string }
+  | { kind: "done"; label: string }
+  | { kind: "later"; label: string }
+  | { kind: "call"; label: string }
+  | { kind: "react_done"; label: string; reaction?: string }
+  | { kind: "archive"; label: string };
+
+export interface ShadowBrief {
+  context: string;
+  actionItems: string[];
+  draft: string;
+  basedOnMessageGuid: string;
+}
+
+export interface TriageProgressStats {
+  /** Explicit dismissals plus successful replies since local midnight. */
+  clearedToday: number;
+  /** Age of the oldest active Needs reply / Waiting item, or null for an empty queue. */
+  oldestQueueAgeMs: number | null;
+  /** Epoch ms of that oldest queue item, or null for an empty queue. */
+  oldestQueueAt: number | null;
 }
 
 export type StateCounts = Record<StateFilter, number>;

@@ -875,3 +875,65 @@ describe("ChatDirectory.findByAddress", () => {
     expect(await directory.findByAddress(requested, "iMessage")).toBeNull();
   });
 });
+
+describe("Triage Desk state", () => {
+  test("Later hides queue flags, expires, and wakes on a new inbound", async () => {
+    let now = 5_000;
+    const { bb, db, directory } = await setup(twoChatSeed(), () => now);
+    expect((await directory.setLater(CHAT_A, 10_000)).ok).toBe(true);
+    let result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).laterUntil).toBe(10_000);
+    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(false);
+
+    bb.receiveMessage(CHAT_A, "wake up");
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).laterUntil).toBeNull();
+    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
+    expect(db.getAll().get(CHAT_A)?.laterUntil).toBeNull();
+
+    expect((await directory.setLater(CHAT_A, 10_000)).ok).toBe(true);
+    now = 10_001;
+    directory.invalidate();
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).laterUntil).toBeNull();
+    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
+  });
+
+  test("rejects stale Done anchors and supports durable undismiss", async () => {
+    const { db, directory } = await setup();
+    const stale = await directory.dismiss(CHAT_A, "unresponded", "old-guid");
+    expect(stale).toMatchObject({ ok: false, status: 409 });
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid ?? null).toBeNull();
+
+    expect((await directory.dismiss(CHAT_A, "unresponded", "a1")).ok).toBe(true);
+    let result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(false);
+    expect((await directory.undismiss(CHAT_A, "unresponded")).ok).toBe(true);
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
+  });
+
+  test("records dismiss and outbound clear exactly once", async () => {
+    const { directory, contacts } = await setup(twoChatSeed(), () => 50_000);
+    await directory.summaries();
+    await directory.dismiss(CHAT_A, "unresponded", "a1");
+    await directory.summaries();
+    const outbound = mapMessage(
+      { guid: "reply-b", text: "reply", dateCreated: 40_000, isFromMe: true },
+      CHAT_B,
+      contacts,
+    );
+    directory.applyKnownMessage(CHAT_B, outbound);
+    directory.applyKnownMessage(CHAT_B, outbound);
+    const stats = await directory.triageStats();
+    expect(stats.ok).toBe(true);
+    if (!stats.ok) return;
+    expect(stats.value.clearedToday).toBe(2);
+    expect(stats.value.oldestQueueAgeMs).toBe(10_000);
+  });
+});

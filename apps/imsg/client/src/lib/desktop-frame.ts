@@ -3,7 +3,7 @@ import type { ViewStyle } from "react-native";
 /** 1px divider — RN's hairlineWidth isn't available in bun tests of this module. */
 const HAIRLINE = 1;
 
-export const AUX_PANE_WIDTH = 330;
+export const AUX_PANE_WIDTH = 312;
 
 export interface FrameTheme {
   readonly background: string;
@@ -22,7 +22,7 @@ export interface DesktopFrameStyles {
  * Wide/desktop split: flush to the window, panes separated by a hairline.
  * Used for both the PWA at desktop width and the Tauri shell.
  */
-export function desktopFrame(theme: FrameTheme, listWidth = 380): DesktopFrameStyles {
+export function desktopFrame(theme: FrameTheme, listWidth = 352): DesktopFrameStyles {
   return {
     split: {
       flex: 1,

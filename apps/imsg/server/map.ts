@@ -2,7 +2,7 @@ import type { BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { MentionAnnotation } from "../shared/mentions";
 import type { ChatState } from "../shared/chat-state";
-import { computeFlags } from "../shared/chat-state";
+import { computeFlags, isLaterActive } from "../shared/chat-state";
 import { formatAddress } from "../shared/address";
 import type { CrmData, NameSource } from "./name-resolver";
 
@@ -322,6 +322,7 @@ export function mapChat(
   state: ChatState | undefined,
   contacts: NameSource,
   scannedUnread?: UnreadSummary,
+  now: number = Date.now(),
 ): ChatSummary {
   const last = chat.lastMessage ?? null;
   const participants = chat.participants ?? [];
@@ -363,7 +364,8 @@ export function mapChat(
     lastMessage: lastSummary,
     unreadCount,
     firstUnreadAt,
-    flags: computeFlags(state, flagInput, unreadCount),
+    flags: computeFlags(state, flagInput, unreadCount, now),
+    laterUntil: isLaterActive(state, flagInput, now) ? (state?.laterUntil ?? null) : null,
     searchNames,
     crm: chatCrmField(chat.guid, isGroup, participants, contacts),
   };

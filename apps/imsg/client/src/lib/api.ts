@@ -9,10 +9,13 @@ import type {
   ReplySuggestions,
   ScheduledMessage,
   SendTextRequest,
+  ShadowBrief,
   ShadowMessage,
+  SmartCloser,
   StateCounts,
   StateFilter,
   TranscriptState,
+  TriageProgressStats,
   TypeFilter,
 } from "@shared/types";
 
@@ -71,11 +74,37 @@ export const api = {
       body: JSON.stringify({ archived }),
     });
   },
-  dismiss(chatGuid: string, kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
+  dismiss(
+    chatGuid: string,
+    kind: "unresponded" | "waiting",
+    expectedLatestMessageGuid?: string,
+  ): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/dismiss`, {
+      method: "POST",
+      body: JSON.stringify({ kind, expectedLatestMessageGuid }),
+    });
+  },
+  undismiss(chatGuid: string, kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/undismiss`, {
       method: "POST",
       body: JSON.stringify({ kind }),
     });
+  },
+  setChatLater(chatGuid: string, until: number | null): Promise<{ ok: boolean }> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/later`, {
+      method: "POST",
+      body: JSON.stringify({ until }),
+    });
+  },
+  getTriageStats(): Promise<TriageProgressStats> {
+    return request("/api/triage/stats");
+  },
+  getSmartCloser(chatGuid: string): Promise<SmartCloser> {
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/smart-closer`);
+  },
+  getShadowBrief(chatGuid: string, regenerate = false): Promise<ShadowBrief> {
+    const query = regenerate ? "?regenerate=1" : "";
+    return request(`/api/chats/${encodeURIComponent(chatGuid)}/shadow-brief${query}`);
   },
   setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/pin`, {
@@ -182,6 +211,9 @@ export const api = {
   },
   cancelScheduled(id: number): Promise<{ ok: boolean }> {
     return request(`/api/scheduled/${id}`, { method: "DELETE" });
+  },
+  sendScheduledNow(id: number): Promise<{ ok: true }> {
+    return request(`/api/scheduled/${id}/send-now`, { method: "POST" });
   },
   transcriptState(attachmentGuid: string): Promise<TranscriptState> {
     return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`);

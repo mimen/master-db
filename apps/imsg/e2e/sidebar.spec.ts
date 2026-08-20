@@ -5,7 +5,7 @@ const playwrightTest = "Bun" in globalThis ? undefined : test;
 const COMMAND_BEARING_QUERY = "jkeucz";
 const QUERY_RESET_TEXT = "q";
 
-interface PillAppearance {
+interface ButtonAppearance {
   readonly backgroundColor: string;
   readonly textColor: string;
 }
@@ -16,15 +16,15 @@ interface ScrollGeometry {
   readonly scrollTop: number;
 }
 
-function statePill(page: Page, label: "All" | "Unread"): Locator {
-  return page.getByRole("radio", {
-    name: new RegExp(`^${label}(?:, \\d+ conversations)?$`),
+function lensButton(page: Page, label: "Needs" | "Waiting" | "All"): Locator {
+  return page.getByRole("button", {
+    name: label === "Needs" ? /^Needs, \d+/ : label,
   });
 }
 
-async function pillAppearance(pill: Locator): Promise<PillAppearance> {
-  return pill.evaluate((element): PillAppearance => {
-    const textElement = element.firstElementChild ?? element;
+async function buttonAppearance(button: Locator): Promise<ButtonAppearance> {
+  return button.evaluate((element): ButtonAppearance => {
+    const textElement = [...element.children].find((child) => child.tagName === "DIV") ?? element;
     return {
       backgroundColor: globalThis.getComputedStyle(element).backgroundColor,
       textColor: globalThis.getComputedStyle(textElement).color,
@@ -32,11 +32,11 @@ async function pillAppearance(pill: Locator): Promise<PillAppearance> {
   });
 }
 
-async function expectPillAppearance(
-  pill: Locator,
-  appearance: PillAppearance,
+async function expectButtonAppearance(
+  button: Locator,
+  appearance: ButtonAppearance,
 ): Promise<void> {
-  await expect.poll(() => pillAppearance(pill)).toEqual(appearance);
+  await expect.poll(() => buttonAppearance(button)).toEqual(appearance);
 }
 
 async function scrollGeometry(scroll: Locator): Promise<ScrollGeometry> {
@@ -71,7 +71,6 @@ playwrightTest?.("search focus survives programmatic scroll and shortcut-bearing
   const { page, scroll, search } = sidebar;
   const emptySelection = page.getByText("Select a conversation", { exact: true });
   await expect(emptySelection).toBeVisible();
-  const initialSelectionText = await emptySelection.innerText();
 
   await search.click();
   await expect(search).toBeFocused();
@@ -83,39 +82,30 @@ playwrightTest?.("search focus survives programmatic scroll and shortcut-bearing
   await expect(search).toHaveValue(COMMAND_BEARING_QUERY);
   await expect(search).toBeFocused();
   await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeLessThan(2);
-  await expect(page.getByText(initialSelectionText, { exact: true })).toBeVisible();
+  await expect(emptySelection).toBeVisible();
 });
 
-playwrightTest?.("desktop search scrolls away while chrome remains fixed", async ({ sidebar }) => {
-  const { chrome, scroll, search } = sidebar;
-  const chromeBefore = await chrome.boundingBox();
+playwrightTest?.("desktop title and search remain fixed while the queue scrolls", async ({ sidebar }) => {
+  const { heading, scroll, search } = sidebar;
+  const headingBefore = await heading.boundingBox();
   const searchBefore = await search.boundingBox();
-  const scrollBox = await scroll.boundingBox();
-  expect(chromeBefore).not.toBeNull();
+  expect(headingBefore).not.toBeNull();
   expect(searchBefore).not.toBeNull();
-  expect(scrollBox).not.toBeNull();
-  if (!chromeBefore || !searchBefore || !scrollBox) {
-    throw new Error("Sidebar elements must have bounding boxes");
-  }
+  if (!headingBefore || !searchBefore) throw new Error("Desktop chrome must have bounding boxes");
 
-  expect(searchBefore.y).toBeGreaterThanOrEqual(chromeBefore.y + chromeBefore.height);
   const target = await scrollTarget(scroll);
   await wheelSidebar(sidebar, target);
 
-  const chromeAfter = await chrome.boundingBox();
+  const headingAfter = await heading.boundingBox();
   const searchAfter = await search.boundingBox();
-  expect(chromeAfter).not.toBeNull();
+  expect(headingAfter).not.toBeNull();
   expect(searchAfter).not.toBeNull();
-  if (!chromeAfter || !searchAfter) {
-    throw new Error("Sidebar elements lost their bounding boxes after scrolling");
-  }
+  if (!headingAfter || !searchAfter) throw new Error("Desktop chrome disappeared after scrolling");
 
-  expect(chromeAfter.x).toBeCloseTo(chromeBefore.x, 1);
-  expect(chromeAfter.y).toBeCloseTo(chromeBefore.y, 1);
-  expect(chromeAfter.width).toBeCloseTo(chromeBefore.width, 1);
-  expect(chromeAfter.height).toBeCloseTo(chromeBefore.height, 1);
-  expect(searchAfter.y).toBeLessThan(searchBefore.y);
-  expect(searchAfter.y + searchAfter.height).toBeLessThan(scrollBox.y);
+  expect(headingAfter.x).toBeCloseTo(headingBefore.x, 1);
+  expect(headingAfter.y).toBeCloseTo(headingBefore.y, 1);
+  expect(searchAfter.x).toBeCloseTo(searchBefore.x, 1);
+  expect(searchAfter.y).toBeCloseTo(searchBefore.y, 1);
 });
 
 playwrightTest?.("web wheel and query-reset scrolling retain search focus", async ({ sidebar }) => {
@@ -133,43 +123,57 @@ playwrightTest?.("web wheel and query-reset scrolling retain search focus", asyn
   await expect(search).toBeFocused();
 });
 
-playwrightTest?.("search and conversation lenses supersede each other", async ({ sidebar }) => {
+playwrightTest?.("search and Triage Desk lenses supersede each other", async ({ sidebar }) => {
   const { page, search } = sidebar;
-  const allPill = statePill(page, "All");
-  const unreadPill = statePill(page, "Unread");
+  const needs = lensButton(page, "Needs");
+  const waiting = lensButton(page, "Waiting");
+  const all = lensButton(page, "All");
 
-  await expect(allPill).toHaveAccessibleName(/^All, \d+ conversations$/);
-  await expect(unreadPill).toHaveAccessibleName(/^Unread, \d+ conversations$/);
-  await expect(allPill).toContainText("All");
-  await expect(unreadPill).toContainText("Unread");
-
-  const selectedAppearance = await pillAppearance(allPill);
-  const unselectedAppearance = await pillAppearance(unreadPill);
+  const selectedAppearance = await buttonAppearance(needs);
+  const unselectedAppearance = await buttonAppearance(waiting);
   expect(selectedAppearance).not.toEqual(unselectedAppearance);
 
-  await unreadPill.click();
-  await expectPillAppearance(unreadPill, selectedAppearance);
-  await expectPillAppearance(allPill, unselectedAppearance);
+  await waiting.click();
+  await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
+  await expectButtonAppearance(waiting, selectedAppearance);
+  await expectButtonAppearance(needs, unselectedAppearance);
 
   await search.click();
   await search.pressSequentially("first search");
   await expect(search).toHaveValue("first search");
-  await expectPillAppearance(allPill, selectedAppearance);
-  await expectPillAppearance(unreadPill, unselectedAppearance);
+  await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
+  await expectButtonAppearance(all, selectedAppearance);
 
   const clearSearch = page.getByRole("button", { name: "Clear search" });
   await clearSearch.click();
   await expect(search).toHaveValue("");
   await expect(clearSearch).toBeHidden();
-  await expectPillAppearance(allPill, selectedAppearance);
+  await expectButtonAppearance(all, selectedAppearance);
 
   await search.click();
   await search.pressSequentially("second search");
-  await expect(search).toHaveValue("second search");
-  await unreadPill.click();
+  await waiting.click();
 
   await expect(search).toHaveValue("");
   await expect(page.getByRole("button", { name: "Clear search" })).toBeHidden();
-  await expectPillAppearance(unreadPill, selectedAppearance);
-  await expectPillAppearance(allPill, unselectedAppearance);
+  await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
+  await expectButtonAppearance(waiting, selectedAppearance);
+});
+
+playwrightTest?.("conversation rows stay constant-height while actions swap in", async ({ sidebar }) => {
+  const row = sidebar.page.getByTestId("conversation-row").first();
+  await expect(row).toBeVisible();
+  const before = await row.boundingBox();
+  expect(before).not.toBeNull();
+  if (!before) throw new Error("Conversation row has no bounding box");
+  expect(before.height).toBeCloseTo(62, 1);
+
+  await row.hover();
+  await expect(row.getByText("Reply", { exact: true })).toBeVisible();
+  await expect(row.getByText("Done", { exact: true })).toBeVisible();
+  await expect(row.getByText("Later", { exact: true })).toBeVisible();
+  const after = await row.boundingBox();
+  expect(after).not.toBeNull();
+  if (!after) throw new Error("Conversation row disappeared after hover");
+  expect(after.height).toBeCloseTo(before.height, 1);
 });

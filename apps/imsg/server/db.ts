@@ -11,6 +11,20 @@ export interface ShadowMessageRow {
   created_at: number;
 }
 
+export interface AiMessageCacheRow {
+  chat_guid: string;
+  message_guid: string;
+  payload: string;
+  created_at: number;
+}
+
+export interface SmartCloserCacheRow {
+  chat_guid: string;
+  inbound_message_guid: string;
+  payload: string;
+  created_at: number;
+}
+
 export interface SuggestionCacheRow {
   chat_guid: string;
   last_message_guid: string | null;
@@ -37,6 +51,8 @@ export class OverlayDb {
       "ALTER TABLE chat_state ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE chat_state ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE chat_state ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0;",
+      "ALTER TABLE chat_state ADD COLUMN later_until INTEGER;",
+      "ALTER TABLE chat_state ADD COLUMN later_anchor_guid TEXT;",
     ]) {
       try {
         this.db.exec(ddl);
@@ -82,6 +98,42 @@ export class OverlayDb {
         last_message_guid TEXT,
         payload TEXT NOT NULL,
         created_at INTEGER NOT NULL
+      );
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS smart_closer_cache (
+        chat_guid TEXT PRIMARY KEY,
+        inbound_message_guid TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS shadow_brief_cache (
+        chat_guid TEXT PRIMARY KEY,
+        message_guid TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS triage_clear_event (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_guid TEXT NOT NULL,
+        message_guid TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        cleared_at INTEGER NOT NULL,
+        UNIQUE(chat_guid, message_guid)
+      );
+    `);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_triage_clear_event_at ON triage_clear_event(cleared_at);",
+    );
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS triage_open_item (
+        chat_guid TEXT PRIMARY KEY,
+        message_guid TEXT NOT NULL,
+        opened_at INTEGER NOT NULL
       );
     `);
   }
@@ -150,6 +202,103 @@ export class OverlayDb {
       .run(chatGuid, lastMessageGuid, payload, Date.now());
   }
 
+  getShadowBriefCache(chatGuid: string): AiMessageCacheRow | null {
+    return (
+      (this.db
+        .query(
+          `SELECT chat_guid, message_guid, payload, created_at
+           FROM shadow_brief_cache WHERE chat_guid = ?`,
+        )
+        .get(chatGuid) as AiMessageCacheRow | undefined) ?? null
+    );
+  }
+
+  setShadowBriefCache(chatGuid: string, messageGuid: string, payload: string): void {
+    this.db
+      .query(
+        `INSERT INTO shadow_brief_cache (chat_guid, message_guid, payload, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(chat_guid) DO UPDATE SET
+           message_guid = excluded.message_guid,
+           payload = excluded.payload,
+           created_at = excluded.created_at`,
+      )
+      .run(chatGuid, messageGuid, payload, Date.now());
+  }
+
+  getSmartCloserCache(chatGuid: string): SmartCloserCacheRow | null {
+    return (
+      (this.db
+        .query(
+          `SELECT chat_guid, inbound_message_guid, payload, created_at
+           FROM smart_closer_cache WHERE chat_guid = ?`,
+        )
+        .get(chatGuid) as SmartCloserCacheRow | undefined) ?? null
+    );
+  }
+
+  setSmartCloserCache(chatGuid: string, inboundMessageGuid: string, payload: string): void {
+    this.db
+      .query(
+        `INSERT INTO smart_closer_cache (chat_guid, inbound_message_guid, payload, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(chat_guid) DO UPDATE SET
+           inbound_message_guid = excluded.inbound_message_guid,
+           payload = excluded.payload,
+           created_at = excluded.created_at`,
+      )
+      .run(chatGuid, inboundMessageGuid, payload, Date.now());
+  }
+
+  setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {
+    this.db
+      .query(
+        `INSERT INTO triage_open_item (chat_guid, message_guid, opened_at) VALUES (?, ?, ?)
+         ON CONFLICT(chat_guid) DO UPDATE SET
+           message_guid = excluded.message_guid, opened_at = excluded.opened_at`,
+      )
+      .run(chatGuid, messageGuid, openedAt);
+  }
+
+  getOpenTriageItem(chatGuid: string): { messageGuid: string; openedAt: number } | null {
+    const row = this.db
+      .query("SELECT message_guid, opened_at FROM triage_open_item WHERE chat_guid = ?")
+      .get(chatGuid) as { message_guid: string; opened_at: number } | undefined;
+    return row ? { messageGuid: row.message_guid, openedAt: row.opened_at } : null;
+  }
+
+  clearOpenTriageItem(chatGuid: string): void {
+    this.db.query("DELETE FROM triage_open_item WHERE chat_guid = ?").run(chatGuid);
+  }
+
+  recordTriageClear(
+    chatGuid: string,
+    messageGuid: string,
+    reason: "dismiss" | "reply",
+    clearedAt: number = Date.now(),
+  ): boolean {
+    const result = this.db
+      .query(
+        `INSERT OR IGNORE INTO triage_clear_event
+         (chat_guid, message_guid, reason, cleared_at) VALUES (?, ?, ?, ?)`,
+      )
+      .run(chatGuid, messageGuid, reason, clearedAt);
+    return result.changes > 0;
+  }
+
+  deleteTriageClear(chatGuid: string, messageGuid: string): void {
+    this.db
+      .query("DELETE FROM triage_clear_event WHERE chat_guid = ? AND message_guid = ?")
+      .run(chatGuid, messageGuid);
+  }
+
+  countTriageClearsSince(since: number): number {
+    const row = this.db
+      .query("SELECT COUNT(*) AS count FROM triage_clear_event WHERE cleared_at >= ?")
+      .get(since) as { count: number };
+    return row.count;
+  }
+
   // --------------------------------------------------- attachment transcripts
 
   getAttachmentTranscript(attachmentGuid: string): string | null {
@@ -173,7 +322,8 @@ export class OverlayDb {
     const rows = this.db
       .query(
         `SELECT chat_guid, archived_at, dismissed_unresponded_guid,
-                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at
+                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at,
+                later_until, later_anchor_guid
          FROM chat_state`,
       )
       .all() as Array<{
@@ -185,6 +335,8 @@ export class OverlayDb {
       marked_unread: number;
       pinned: number;
       read_at: number;
+      later_until: number | null;
+      later_anchor_guid: string | null;
     }>;
     const map = new Map<string, ChatState>();
     for (const row of rows) {
@@ -197,6 +349,8 @@ export class OverlayDb {
         markedUnread: row.marked_unread,
         pinned: row.pinned,
         readAt: row.read_at,
+        laterUntil: row.later_until,
+        laterAnchorGuid: row.later_anchor_guid,
       });
     }
     return map;
@@ -211,6 +365,28 @@ export class OverlayDb {
       .run(chatGuid, value);
   }
 
+  clearExpiredLater(now: number): string[] {
+    const rows = this.db
+      .query("SELECT chat_guid FROM chat_state WHERE later_until IS NOT NULL AND later_until <= ?")
+      .all(now) as Array<{ chat_guid: string }>;
+    if (rows.length > 0) {
+      this.db
+        .query(
+          `UPDATE chat_state SET later_until = NULL, later_anchor_guid = NULL
+           WHERE later_until IS NOT NULL AND later_until <= ?`,
+        )
+        .run(now);
+    }
+    return rows.map((row) => row.chat_guid);
+  }
+
+  setLater(chatGuid: string, until: number | null, anchorGuid: string | null): void {
+    this.db.transaction(() => {
+      this.upsert(chatGuid, "later_until", until);
+      this.upsert(chatGuid, "later_anchor_guid", until === null ? null : anchorGuid);
+    })();
+  }
+
   setArchived(chatGuid: string, archived: boolean): void {
     this.upsert(chatGuid, "archived_at", archived ? Date.now() : null);
   }
@@ -221,6 +397,14 @@ export class OverlayDb {
 
   dismissWaiting(chatGuid: string, lastMessageGuid: string): void {
     this.upsert(chatGuid, "dismissed_waiting_guid", lastMessageGuid);
+  }
+
+  clearDismissal(chatGuid: string, kind: "unresponded" | "waiting"): void {
+    this.upsert(
+      chatGuid,
+      kind === "unresponded" ? "dismissed_unresponded_guid" : "dismissed_waiting_guid",
+      null,
+    );
   }
 
   setMutedUnresponded(chatGuid: string, muted: boolean): void {
