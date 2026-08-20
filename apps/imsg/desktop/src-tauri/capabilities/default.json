@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Main window, including the remote imsg origin",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "remote": {
     "urls": [
       "https://milads-mac-mini.taild31e9a.ts.net:8447",
@@ -14,6 +16,8 @@
     "core:event:default",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
     "opener:default"
   ]
 }

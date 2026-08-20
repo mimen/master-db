@@ -1,13 +1,14 @@
 import type { ViewStyle } from "react-native";
 
 /** 1px divider — RN's hairlineWidth isn't available in bun tests of this module. */
-const HAIRLINE = 1;
+const HAIRLINE = 0.5;
 
 export const AUX_PANE_WIDTH = 312;
 
 export interface FrameTheme {
   readonly background: string;
   readonly divider: string;
+  readonly desk?: string;
 }
 
 export interface DesktopFrameStyles {
@@ -27,10 +28,10 @@ export function desktopFrame(theme: FrameTheme, listWidth = 352): DesktopFrameSt
     split: {
       flex: 1,
       flexDirection: "row",
-      backgroundColor: theme.background,
+      backgroundColor: theme.desk ?? theme.background,
     },
     pane: {
-      backgroundColor: theme.background,
+      backgroundColor: "transparent",
       overflow: "hidden",
     },
     listPane: {
@@ -42,6 +43,7 @@ export function desktopFrame(theme: FrameTheme, listWidth = 352): DesktopFrameSt
       borderRightWidth: HAIRLINE,
     },
     detailPane: {
+      backgroundColor: theme.background,
       flex: 1,
     },
     auxPane: {

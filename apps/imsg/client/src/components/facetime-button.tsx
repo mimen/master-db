@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Pressable } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import type { Message } from "@shared/types";
@@ -14,6 +14,7 @@ interface FaceTimeButtonProps {
   address: string | null;
   color: string;
   onSent?: (message: Message) => void;
+  compact?: boolean;
 }
 
 export function FaceTimeButton({
@@ -22,6 +23,7 @@ export function FaceTimeButton({
   address,
   color,
   onSent,
+  compact = false,
 }: FaceTimeButtonProps): ReactElement {
   const showSheet = useActionSheet();
 
@@ -65,8 +67,13 @@ export function FaceTimeButton({
       accessibilityLabel="FaceTime actions"
       onPress={openActions}
       hitSlop={8}
+      style={compact ? styles.compact : undefined}
     >
-      <Ionicons name="videocam-outline" size={22} color={color} />
+      <Ionicons name="videocam-outline" size={compact ? 18 : 22} color={color} />
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  compact: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 32 },
+});

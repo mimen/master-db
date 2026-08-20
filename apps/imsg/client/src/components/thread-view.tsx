@@ -32,7 +32,7 @@ import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { finishTriageChat } from "@/hooks/use-triage-actions";
+import { finishTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
@@ -117,10 +117,13 @@ export function ThreadView({
   const [dayChip, setDayChip] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Participant[]>(headerChat?.participants ?? []);
   const dayChipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollingRef = useRef(false);
+  const scrollingEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // FlatList requires stable identities for viewability callbacks.
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 10 }).current;
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ item: unknown }> }) => {
+      if (!scrollingRef.current) return;
       const top = viewableItems[viewableItems.length - 1];
       const row = top?.item as Row | undefined;
       if (!row) return;
@@ -129,6 +132,14 @@ export function ThreadView({
       dayChipTimer.current = setTimeout(() => setDayChip(null), 1200);
     },
   ).current;
+  const beginDayChipScroll = useCallback((): void => {
+    scrollingRef.current = true;
+    if (scrollingEndTimer.current) clearTimeout(scrollingEndTimer.current);
+  }, []);
+  const endDayChipScroll = useCallback((): void => {
+    if (scrollingEndTimer.current) clearTimeout(scrollingEndTimer.current);
+    scrollingEndTimer.current = setTimeout(() => { scrollingRef.current = false; }, 180);
+  }, []);
   const typingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
   /** Guids whose entrance already played as a temp bubble; see onSettled. */
@@ -194,13 +205,15 @@ export function ThreadView({
     // short and long conversations align identically.
     node.style.scrollbarGutter = "stable";
     const onWheel = (event: WheelEvent) => {
+      beginDayChipScroll();
       event.preventDefault();
       event.stopPropagation();
       node.scrollTop -= event.deltaY;
+      endDayChipScroll();
     };
     node.addEventListener("wheel", onWheel, { passive: false, capture: true });
     return () => node.removeEventListener("wheel", onWheel, { capture: true });
-  }, [listMounted]);
+  }, [beginDayChipScroll, endDayChipScroll, listMounted]);
 
   useServerEvents(
     useCallback(
@@ -511,17 +524,17 @@ export function ThreadView({
             {headerChat.isGroup ? (
               <GroupAvatarStack chat={headerChat} size={34} />
             ) : (
-              <ChatAvatar chat={headerChat} size={32} />
+              <ChatAvatar chat={headerChat} size={30} />
             )}
             <View style={styles.paneIdentityText}>
               <Text numberOfLines={1} style={{ color: theme.text, fontSize: type.title, fontWeight: "600" }}>
                 {headerChat.displayName}
               </Text>
-              {headerChat.isGroup && (
-                <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                  {headerChat.participants.length} people ›
-                </Text>
-              )}
+              <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+                {headerChat.isGroup
+                  ? `${headerChat.participants.length} people ›`
+                  : `${headerChat.flags.unresponded ? "needs reply" : headerChat.flags.waiting ? "waiting" : "conversation"}${headerChat.unreadCount ? ` · ${headerChat.unreadCount} unread` : ""}`}
+              </Text>
             </View>
           </Pressable>
           <View style={styles.paneHeaderActions}>
@@ -530,10 +543,10 @@ export function ThreadView({
                 accessibilityRole="button"
                 accessibilityLabel="Mark conversation done"
                 onPress={() => finishTriageChat(headerChat)}
-                style={[styles.doneButton, { backgroundColor: theme.backgroundElement }]}
+                style={[styles.doneButton, { backgroundColor: theme.accent }]}
               >
-                <Ionicons name="checkmark" size={14} color={theme.accent} />
-                <Text style={[styles.doneButtonText, { color: theme.text }]}>Done</Text>
+                <Ionicons name="checkmark" size={16} color={theme.onAccent} />
+                <Text style={[styles.doneButtonText, { color: theme.onAccent }]}>Done</Text>
               </Pressable>
             )}
             <FaceTimeButton
@@ -541,16 +554,17 @@ export function ThreadView({
               isGroup={isGroup}
               address={isGroup ? null : (participants[0]?.address ?? null)}
               color={theme.textSecondary}
+              compact
               onSent={(message) => {
                 upsert(message);
                 patchChatWithMessage(chatGuid, message);
               }}
             />
-            <Pressable onPress={() => setSearchOpen(true)} hitSlop={8}>
+            <Pressable onPress={() => setSearchOpen(true)} hitSlop={8} style={styles.headerIconButton}>
               <Ionicons name="search" size={21} color={theme.textSecondary} />
             </Pressable>
             {onToggleShadow && (
-              <Pressable onPress={onToggleShadow} hitSlop={8}>
+              <Pressable onPress={onToggleShadow} hitSlop={8} style={styles.headerIconButton}>
                 <Ionicons
                   name={shadowOpen ? "sparkles" : "sparkles-outline"}
                   size={21}
@@ -561,10 +575,19 @@ export function ThreadView({
             <Pressable
               onPress={() => openChatInfo(chatGuid)}
               hitSlop={8}
+              style={styles.headerIconButton}
             >
               <Ionicons name="information-circle-outline" size={24} color={theme.textSecondary} />
             </Pressable>
           </View>
+        </View>
+      )}
+      {headerChat && (headerChat.flags.unresponded || headerChat.flags.waiting) && (
+        <View testID="resolve-strip" style={[styles.resolveStrip, { backgroundColor: "rgba(0,122,255,0.06)", borderBottomColor: "rgba(0,122,255,0.15)" }]}>
+          <Ionicons name="flag" size={16} color={theme.accent} />
+          <Text numberOfLines={1} style={[styles.resolveCopy, { color: theme.text }]}>In your queue — replying clears it automatically.</Text>
+          <Pressable onPress={() => { void finishTriageChat(headerChat); }} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Done <Text style={{ color: theme.textSecondary }}>E</Text></Text></Pressable>
+          <Pressable onPress={() => showSheet({ title: `Later · ${headerChat.displayName}`, actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later <Text style={{ color: theme.textSecondary }}>H</Text></Text></Pressable>
         </View>
       )}
 
@@ -646,6 +669,10 @@ export function ThreadView({
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
           }}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          onScrollBeginDrag={beginDayChipScroll}
+          onMomentumScrollBegin={beginDayChipScroll}
+          onScrollEndDrag={endDayChipScroll}
+          onMomentumScrollEnd={endDayChipScroll}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           contentContainerStyle={{ paddingVertical: 10 }}
@@ -790,9 +817,9 @@ function TypingDots({ color }: { color: string }) {
 const styles = StyleSheet.create({
   paneHeader: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0.5,
     flexDirection: "row",
-    height: 58,
+    height: 52,
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
@@ -800,19 +827,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     flexShrink: 0,
-    gap: 14,
+    gap: 4,
   },
   doneButton: {
     alignItems: "center",
-    borderRadius: 9,
+    borderRadius: 7,
     flexDirection: "row",
     gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    height: 28,
+    paddingHorizontal: 10,
   },
   doneButtonText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  headerIconButton: {
+    alignItems: "center",
+    borderRadius: 7,
+    height: 28,
+    justifyContent: "center",
+    width: 32,
+  },
+  resolveStrip: {
+    alignItems: "center",
+    borderBottomWidth: 0.5,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 41,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  resolveCopy: {
+    flex: 1,
+    fontSize: 12,
+  },
+  resolveAction: {
+    alignItems: "center",
+    borderRadius: 7,
+    flexDirection: "row",
+    gap: 4,
+    height: 24,
+    paddingHorizontal: 8,
+  },
+  resolveActionText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   searchShelf: {
     flexDirection: "row",
@@ -855,7 +914,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dayChipWrapWithHeader: {
-    top: 68,
+    top: 101,
   },
   // The in-thread search shelf sits above the scroll — push the chip below it.
   dayChipWrapWithSearch: {

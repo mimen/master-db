@@ -19,7 +19,12 @@ type TauriGlobal = {
     ) => Promise<TauriListenUnlisten>;
   };
   window: {
-    getCurrentWindow: () => { close: () => Promise<void> };
+    getCurrentWindow: () => {
+      close: () => Promise<void>;
+      minimize?: () => Promise<void>;
+      toggleMaximize?: () => Promise<void>;
+      startDragging?: () => Promise<void>;
+    };
   };
 };
 
@@ -46,6 +51,24 @@ export function closeDesktopWindow(win: DesktopShellWindow | undefined = default
   const tauri = tauriGlobal(win);
   if (!tauri) return;
   void tauri.window.getCurrentWindow().close();
+}
+
+export function minimizeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow()): void {
+  const tauri = tauriGlobal(win);
+  if (!tauri) return;
+  void tauri.window.getCurrentWindow().minimize?.();
+}
+
+export function toggleMaximizeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow()): void {
+  const tauri = tauriGlobal(win);
+  if (!tauri) return;
+  void tauri.window.getCurrentWindow().toggleMaximize?.();
+}
+
+export function startDesktopWindowDrag(win: DesktopShellWindow | undefined = defaultWindow()): void {
+  const tauri = tauriGlobal(win);
+  if (!tauri) return;
+  void tauri.window.getCurrentWindow().startDragging?.();
 }
 
 /**

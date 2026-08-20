@@ -8,6 +8,7 @@ import { Spacing } from "@/constants/theme";
 export interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
   iconSize?: number;
+  iconColor?: string;
   /** A string renders with the default centered/secondary styling; pass a
    * node (e.g. a multi-line <Text> with its own lineHeight) for a site whose
    * copy needs custom typography. */
@@ -20,12 +21,12 @@ export interface EmptyStateProps {
 }
 
 /** Centered icon + message for "nothing here yet" panes. */
-export function EmptyState({ icon, iconSize = 28, message, children, style }: EmptyStateProps) {
+export function EmptyState({ icon, iconSize = 28, iconColor, message, children, style }: EmptyStateProps) {
   const theme = useTheme();
   const type = useType();
   return (
     <View style={[styles.container, style]}>
-      {icon && <Ionicons name={icon} size={iconSize} color={theme.textSecondary} />}
+      {icon && <Ionicons name={icon} size={iconSize} color={iconColor ?? theme.textSecondary} />}
       {typeof message === "string" ? (
         <Text style={[styles.message, { color: theme.textSecondary, fontSize: type.body }]}>{message}</Text>
       ) : (

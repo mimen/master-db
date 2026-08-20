@@ -9,7 +9,7 @@ export const SIDEBAR_TOOLBAR_HEIGHT = 44;
 /** Messages/Contacts switcher row under search. */
 export const SIDEBAR_NAV_HEIGHT = 56;
 /** Settings footer on wide/desktop. */
-export const SIDEBAR_FOOTER_HEIGHT = 44;
+export const SIDEBAR_FOOTER_HEIGHT = 64;
 /** Scroll-edge fade length. */
 export const SIDEBAR_SCROLL_FADE = 28;
 

@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 
 export interface SidebarSearchFieldProps {
   readonly value: string;
@@ -15,6 +16,7 @@ export interface SidebarSearchFieldProps {
   readonly onChangeText: (value: string) => void;
   readonly onClear: () => void;
   readonly returnKeyType?: TextInputProps["returnKeyType"];
+  readonly shortcut?: string;
 }
 
 /**
@@ -30,8 +32,10 @@ export function SidebarSearchField({
   onChangeText,
   onClear,
   returnKeyType = "search",
+  shortcut,
 }: SidebarSearchFieldProps): React.JSX.Element {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const type = useType();
   const { wide } = useLayoutMode();
   return (
@@ -39,7 +43,7 @@ export function SidebarSearchField({
       style={[
         styles.field,
         placement === "chrome" && styles.fieldChrome,
-        { backgroundColor: theme.backgroundElement, height: wide ? 32 : 38 },
+        { backgroundColor: wide ? visual.controlFill : theme.backgroundElement, height: wide ? 30 : 38 },
       ]}
     >
       <Ionicons name="search" size={17} color={theme.textSecondary} />
@@ -59,6 +63,9 @@ export function SidebarSearchField({
         clearButtonMode="never"
         style={[styles.input, { color: theme.text, fontSize: type.body }]}
       />
+      {shortcut && value.trim().length === 0 ? (
+        <Text style={[styles.shortcut, { color: visual.hint, borderColor: visual.hairlineStrong }]}>{shortcut}</Text>
+      ) : null}
       {value.trim().length > 0 && (
         <Pressable
           accessibilityRole="button"
@@ -76,7 +83,7 @@ export function SidebarSearchField({
 const styles = StyleSheet.create({
   field: {
     alignItems: "center",
-    borderRadius: 11,
+    borderRadius: 8,
     flexDirection: "row",
     gap: 8,
     height: 38,
@@ -90,6 +97,14 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     marginHorizontal: 0,
     marginTop: 0,
+  },
+  shortcut: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 4,
+    borderWidth: 0.5,
+    fontSize: 11,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
   },
   input: {
     flex: 1,

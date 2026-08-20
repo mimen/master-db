@@ -13,13 +13,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
+import { archiveChat, markChatUnread, muteChat, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion, GalleryItem } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
 import { Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
@@ -51,6 +52,7 @@ export function ChatInfoContent({
   onOpenPerson,
 }: ChatInfoContentProps) {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const type = useType();
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
@@ -69,6 +71,8 @@ export function ChatInfoContent({
   const [namesDismissed, setNamesDismissed] = useState(false);
   const [identity, setIdentity] = useState<ContactSuggestion | null>(null);
   const [identifying, setIdentifying] = useState(false);
+  const [addingParticipant, setAddingParticipant] = useState(false);
+  const [participantAddress, setParticipantAddress] = useState("");
 
   const suggestNames = () => {
     setSuggesting(true);
@@ -178,20 +182,27 @@ export function ChatInfoContent({
                   onClose();
                 },
               },
-              {
-                icon: (summary.flags.archived
-                  ? "arrow-undo-outline"
-                  : "archive-outline") as keyof typeof Ionicons.glyphMap,
-                label: summary.flags.archived ? "Unarchive" : "Archive",
-                onPress: () => {
-                  archiveChat(summary, !summary.flags.archived);
-                  showToast(summary.flags.archived ? "Unarchived" : "Archived");
-                  onClose();
-                },
-              },
+              info.isGroup
+                ? {
+                    icon: (summary.flags.mutedUnresponded ? "eye-outline" : "eye-off-outline") as keyof typeof Ionicons.glyphMap,
+                    label: summary.flags.mutedUnresponded ? "Show" : "Quiet",
+                    onPress: () => {
+                      muteChat(summary, !summary.flags.mutedUnresponded);
+                      showToast(summary.flags.mutedUnresponded ? "Returned to Needs reply" : "Hidden from Needs reply");
+                    },
+                  }
+                : {
+                    icon: (summary.flags.archived ? "arrow-undo-outline" : "archive-outline") as keyof typeof Ionicons.glyphMap,
+                    label: summary.flags.archived ? "Unarchive" : "Archive",
+                    onPress: () => {
+                      archiveChat(summary, !summary.flags.archived);
+                      showToast(summary.flags.archived ? "Unarchived" : "Archived");
+                      onClose();
+                    },
+                  },
             ] as const).map((a) => (
               <Pressable key={a.label} style={styles.quickAction} onPress={a.onPress}>
-                <View style={[styles.quickIcon, { backgroundColor: theme.backgroundElement }]}>
+                <View style={[styles.quickIcon, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
                   <Ionicons name={a.icon} size={22} color={theme.text} />
                 </View>
                 <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{a.label}</Text>
@@ -261,37 +272,15 @@ export function ChatInfoContent({
                 <Ionicons name="pencil" size={16} color={theme.textSecondary} />
               </Pressable>
               {aiStatus?.suggestions && !namesDismissed && (suggesting || nameIdeas.length > 0) && (
-                <View style={[styles.nameCard, { backgroundColor: theme.backgroundElement }]}>
-                  <View style={styles.nameCardHead}>
-                    <Ionicons name="sparkles-outline" size={13} color={theme.accent} />
-                    <Text style={[styles.nameCardLabel, { color: theme.textSecondary }]}>
-                      Suggested names
-                    </Text>
-                    <Pressable onPress={() => setNamesDismissed(true)} hitSlop={6}>
-                      <Ionicons name="close" size={16} color={theme.textSecondary} />
+                <View style={styles.nameIdeasInline}>
+                  <Ionicons name="sparkles-outline" size={13} color={theme.accent} />
+                  <Text style={[styles.nameIdeasLabel, { color: theme.textSecondary }]}>Name ideas:</Text>
+                  {suggesting && nameIdeas.length === 0 ? <ActivityIndicator size="small" /> : nameIdeas.slice(0, 3).map((idea, i) => (
+                    <Pressable key={`${i}-${idea}`} onPress={() => applyName(idea)} style={[styles.nameIdeaChip, { backgroundColor: visual.card, borderColor: visual.hairlineStrong }]}>
+                      <Text style={{ color: theme.text, fontSize: 11 }}>{idea}</Text>
                     </Pressable>
-                  </View>
-                  {suggesting && nameIdeas.length === 0 ? (
-                    <ActivityIndicator size="small" style={{ alignSelf: "flex-start", marginVertical: 4 }} />
-                  ) : (
-                    nameIdeas.map((idea, i) => (
-                      <View key={`${i}-${idea}`} style={styles.nameIdeaRow}>
-                        <Pressable style={{ flex: 1 }} onPress={() => { setName(idea); setRenaming(true); }}>
-                          <Text style={{ color: theme.text, fontSize: 15 }}>{idea}</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => applyName(idea)}
-                          style={[styles.saveChip, { backgroundColor: theme.accent }]}
-                          hitSlop={4}
-                        >
-                          <Text style={{ color: theme.onAccent, fontSize: Type.secondary, fontWeight: "600" }}>Save</Text>
-                        </Pressable>
-                      </View>
-                    ))
-                  )}
-                  <Text style={[styles.nameCardHint, { color: theme.textSecondary }]}>
-                    Tap a name to edit, or Save to apply.
-                  </Text>
+                  ))}
+                  <Pressable onPress={() => setNamesDismissed(true)} hitSlop={6}><Ionicons name="close" size={14} color={theme.textSecondary} /></Pressable>
                 </View>
               )}
             </View>
@@ -344,7 +333,7 @@ export function ChatInfoContent({
         <Text style={[styles.section, { color: theme.textSecondary }]}>
           {info.participants.length} {info.participants.length === 1 ? "Person" : "People"}
         </Text>
-        <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+        <View style={[styles.card, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
           {info.participants.map((p, i) => (
             <View key={p.address}>
               {i > 0 && <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />}
@@ -365,6 +354,29 @@ export function ChatInfoContent({
               />
             </View>
           ))}
+          {info.isGroup && (addingParticipant ? (
+            <View style={[styles.addPersonEditor, { borderTopColor: visual.hairline }]}>
+              <TextInput
+                autoFocus
+                value={participantAddress}
+                onChangeText={setParticipantAddress}
+                onSubmitEditing={() => {
+                  const address = participantAddress.trim();
+                  if (!address) return;
+                  void api.participant(guid, address, "add").then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, () => showToast("Could not add person"));
+                }}
+                placeholder="Phone number or email"
+                placeholderTextColor={theme.textSecondary}
+                style={[styles.addPersonInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
+              />
+              <Pressable onPress={() => setAddingParticipant(false)}><Ionicons name="close" size={18} color={theme.textSecondary} /></Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
+              <View style={[styles.addPersonIcon, { backgroundColor: "rgba(0,122,255,0.10)" }]}><Ionicons name="person-add" size={15} color={theme.accent} /></View>
+              <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>Add person</Text>
+            </Pressable>
+          ))}
         </View>
 
         {/* CRM: a GROUP gets its own editable favorite/priority/tags/event
@@ -378,7 +390,7 @@ export function ChatInfoContent({
           summary?.crm && <DmCrmNote crm={summary.crm} />
         )}
 
-        <View style={[styles.card, styles.cardGap, { backgroundColor: theme.backgroundElement }]}>
+        <View style={[styles.card, styles.cardGap, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
           {info.isGroup && (
             <>
               <Pressable
@@ -524,16 +536,16 @@ const dmCrmStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   paneHeader: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0.5,
     flexDirection: "row",
-    height: 58,
+    height: 52,
     justifyContent: "space-between",
     paddingHorizontal: 16,
   },
   paneHeaderTitle: { fontWeight: "600" },
-  quickRow: { flexDirection: "row", justifyContent: "center", gap: 28, marginBottom: 8 },
+  quickRow: { flexDirection: "row", justifyContent: "center", gap: 24, marginBottom: 8 },
   quickAction: { alignItems: "center", gap: 6 },
-  quickIcon: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" },
+  quickIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontWeight: "600" },
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -548,20 +560,27 @@ const styles = StyleSheet.create({
   nameIdeaRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
   saveChip: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5 },
   nameCardHint: { fontSize: 11, marginTop: 4 },
+  nameIdeasInline: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  nameIdeasLabel: { fontSize: 11 },
+  nameIdeaChip: { borderRadius: 12, borderWidth: 0.5, paddingHorizontal: 9, paddingVertical: 4 },
+  addPersonRow: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", gap: 10, minHeight: 46, paddingHorizontal: 12 },
+  addPersonIcon: { alignItems: "center", borderRadius: 15, height: 30, justifyContent: "center", width: 30 },
+  addPersonEditor: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", gap: 8, minHeight: 50, paddingHorizontal: 10 },
+  addPersonInput: { borderRadius: 9, flex: 1, fontSize: 13, paddingHorizontal: 10, paddingVertical: 7 },
   identifyBlock: { marginTop: 8 },
   identityCard: { borderRadius: 12, padding: 12, gap: 5 },
   identityHead: { flexDirection: "row", alignItems: "center", gap: 7 },
   confidence: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.3 },
-  section: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", marginTop: 22, marginBottom: 8 },
-  card: { borderRadius: 12, overflow: "hidden" },
+  section: { fontSize: 11, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginTop: 18, marginBottom: 6 },
+  card: { borderRadius: 10, overflow: "hidden" },
   cardGap: { marginTop: 18 },
-  rowDivider: { height: StyleSheet.hairlineWidth, marginLeft: 66 },
+  rowDivider: { height: 0.5, marginLeft: 51 },
   dangerRow: { alignItems: "flex-start", justifyContent: "center", minHeight: 50, paddingHorizontal: 14 },
   // Intentionally NOT theme.destructive: that literal is the iOS system-red
   // LIGHT variant, and it's already correct in light mode. Swapping to the
   // themed token would flip dark mode to #FF453A, which is outside this
   // sweep's two authorized visual changes (accent + #FF453A→light-mode-red).
-  actionDanger: { color: "#FF3B30", fontSize: 16 },
+  actionDanger: { color: "#FF3B30", fontSize: 13, fontWeight: "500" },
   grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
   tileImg: { width: "100%", height: "100%", borderRadius: 6 },
   playBadge: {

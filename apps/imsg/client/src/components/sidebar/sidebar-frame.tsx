@@ -1,8 +1,9 @@
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { isDesktopShell } from "@/lib/desktop-shell";
 import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
 
@@ -17,6 +18,7 @@ export interface SidebarFrameProps {
   readonly thumb?: React.ReactNode;
   /** The scrolling body (the list). */
   readonly children: React.ReactNode;
+  readonly chromeHeight?: number;
 }
 
 /**
@@ -30,13 +32,21 @@ export function SidebarFrame({
   footer,
   thumb,
   children,
+  chromeHeight,
 }: SidebarFrameProps): React.JSX.Element {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const { wide } = useLayoutMode();
   const shell = isDesktopShell();
+  const effectiveChromeHeight = chromeHeight ?? sidebarChromeHeight(wide);
+  const wideSurface = wide && Platform.OS === "web" ? ({
+    backgroundColor: visual.queue,
+    backdropFilter: "blur(40px) saturate(1.5)",
+    WebkitBackdropFilter: "blur(40px) saturate(1.5)",
+  } as object) : { backgroundColor: wide ? visual.queue : theme.background };
   return (
     <SafeAreaView
-      style={[styles.pane, { backgroundColor: theme.background }]}
+      style={[styles.pane, wideSurface]}
       edges={shell ? [] : ["top"]}
     >
       <View style={styles.listWrap}>
@@ -44,8 +54,8 @@ export function SidebarFrame({
         {thumb}
         {wide ? (
           <SidebarScrollFades
-            background={theme.background}
-            chromeHeight={sidebarChromeHeight(true)}
+            background={wide ? visual.queue : theme.background}
+            chromeHeight={effectiveChromeHeight}
             footerHeight={sidebarFooterHeight(true)}
           />
         ) : null}

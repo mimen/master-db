@@ -11,12 +11,14 @@ import { PersonContent } from "@/components/person-content";
 import { CommandPalette } from "@/components/command-palette";
 import { ThreadView } from "@/components/thread-view";
 import { ShadowPanel } from "@/components/shadow-panel";
+import { SweepOverlay } from "@/components/sweep-overlay";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import { finishTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { Type } from "@/constants/theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DesktopAuxPane, DesktopSplit } from "@/components/desktop-split";
@@ -50,6 +52,7 @@ const HELP_ENTRIES = helpEntries();
 
 export default function ChatListScreen() {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const { wide, canShadow: canShadowLayout } = useLayoutMode();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
@@ -68,6 +71,7 @@ export default function ChatListScreen() {
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [rightPane, setRightPane] = useState<RightPane | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [sweep, setSweep] = useState<{ chats: ChatSummary[]; startGuid?: string } | null>(null);
   const { chats, allChats, counts, loading, refresh } = useChats(state, type, !wide);
 
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -336,8 +340,29 @@ export default function ChatListScreen() {
       onPreviewChat={previewChat}
       onRefresh={refresh}
       onNewMessage={openNewMessage}
+      onStartSweep={(sweepChats, startGuid) => setSweep({ chats: sweepChats, startGuid })}
     />
   );
+
+  const inspectorContent = rightPane?.mode === "details" ? (
+    <ChatInfoContent
+      key={rightPane.guid}
+      guid={rightPane.guid}
+      showHeader
+      onClose={() => setRightPane(null)}
+      onOpenPerson={(address, name) => setRightPane({ mode: "person", target: { address, name, backGuid: rightPane.guid } })}
+      onDeleted={() => { setRightPane(null); setSelected(null); refresh(); }}
+    />
+  ) : rightPane ? (
+    <PersonContent
+      key={rightPane.target.address}
+      address={rightPane.target.address}
+      name={rightPane.target.name}
+      showHeader
+      backLabel={rightPane.target.backGuid ? "Details" : undefined}
+      onBack={rightPane.target.backGuid ? () => setRightPane({ mode: "details", guid: rightPane.target.backGuid }) : undefined}
+    />
+  ) : null;
 
   if (!wide) {
     return <View style={{ flex: 1, backgroundColor: theme.background }}>{list}</View>;
@@ -360,7 +385,13 @@ export default function ChatListScreen() {
             shadowOpen={shadowOpen}
           />
         ) : (
-          <EmptyState icon="chatbubble-ellipses-outline" message="Select a conversation" />
+          <EmptyState
+            icon="chatbubble-ellipses-outline"
+            iconSize={44}
+            iconColor={visual.hint}
+            style={{ backgroundColor: visual.empty }}
+            message={<Text style={{ color: visual.meta, fontSize: 14, fontWeight: "600" }}>Select a conversation</Text>}
+          />
         )
       }
     >
@@ -412,39 +443,18 @@ export default function ChatListScreen() {
           </View>
         ))}
       </OverlayShell>
-      <DesktopAuxPane open={rightPane !== null}>
-        {rightPane?.mode === "details" ? (
-          <ChatInfoContent
-            key={rightPane.guid}
-            guid={rightPane.guid}
-            showHeader
-            onClose={() => setRightPane(null)}
-            onOpenPerson={(address, name) =>
-              setRightPane({ mode: "person", target: { address, name, backGuid: rightPane.guid } })
-            }
-            onDeleted={() => {
-              setRightPane(null);
-              setSelected(null);
-              refresh();
-            }}
-          />
-        ) : rightPane ? (
-          <PersonContent
-            key={rightPane.target.address}
-            address={rightPane.target.address}
-            name={rightPane.target.name}
-            showHeader
-            // Palette-opened cards have no originating conversation to go
-            // back to; the header just offers close in that case.
-            backLabel={rightPane.target.backGuid ? "Details" : undefined}
-            onBack={
-              rightPane.target.backGuid
-                ? () => setRightPane({ mode: "details", guid: rightPane.target.backGuid })
-                : undefined
-            }
-          />
-        ) : null}
-      </DesktopAuxPane>
+      {canShadowLayout ? (
+        <DesktopAuxPane open={rightPane !== null}>{inspectorContent}</DesktopAuxPane>
+      ) : (
+        <OverlayShell
+          visible={rightPane !== null}
+          onClose={() => setRightPane(null)}
+          backdropStyle={styles.inspectorOverlayBackdrop}
+          cardStyle={[styles.inspectorOverlayCard, { backgroundColor: visual.inspector, borderColor: visual.hairline }]}
+        >
+          {inspectorContent}
+        </OverlayShell>
+      )}
       {canShadow ? (
         <DesktopAuxPane open={shadowOpen && selected !== null}>
           {selected ? (
@@ -452,6 +462,13 @@ export default function ChatListScreen() {
           ) : null}
         </DesktopAuxPane>
       ) : null}
+      <SweepOverlay
+        visible={sweep !== null}
+        chats={sweep?.chats ?? []}
+        startGuid={sweep?.startGuid}
+        onOpenFullThread={(chat) => { setSweep(null); openChat(chat); }}
+        onClose={() => setSweep(null)}
+      />
     </DesktopSplit>
   );
 }
@@ -459,6 +476,16 @@ export default function ChatListScreen() {
 const styles = StyleSheet.create({
   // Not fully centered — offset from the top, matching the original inline
   // Modal backdrops this shell replaced.
+  inspectorOverlayBackdrop: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+  },
+  inspectorOverlayCard: {
+    borderLeftWidth: 0.5,
+    borderRadius: 0,
+    height: "100%",
+    width: 312,
+  },
   overlayBackdrop: {
     justifyContent: "flex-start",
     paddingTop: 90,

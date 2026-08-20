@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { AUX_PANE_WIDTH, desktopFrame, type DesktopFrameStyles } from "@/lib/desktop-frame";
 import { useSidebarWidth } from "@/lib/sidebar-width";
 
@@ -29,9 +30,11 @@ export interface DesktopSplitProps {
 /** Shared Messages/Contacts desktop shell: list | drag | thread, optional extra panes. */
 export function DesktopSplit({ list, detail, children, listInset = 0 }: DesktopSplitProps): React.JSX.Element {
   const { frame, listWidth, setListWidth } = useDesktopFrame();
+  const visual = useTriageTheme();
   const renderedListWidth = listWidth + listInset;
+  const deskGround = Platform.OS === "web" ? ({ backgroundImage: visual.deskGradient } as object) : { backgroundColor: visual.desk };
   return (
-    <View style={frame.split}>
+    <View style={[frame.split, deskGround]}>
       <View style={[frame.pane, frame.listPane, { flexBasis: renderedListWidth, width: renderedListWidth }]}>
         {list}
         <SidebarResizeHandle width={renderedListWidth} onResize={(next) => setListWidth(next - listInset)} />
@@ -52,7 +55,7 @@ export function DesktopAuxPane({
   readonly open: boolean;
   readonly children: ReactNode;
 }): React.JSX.Element | null {
-  const theme = useTheme();
+  const visual = useTriageTheme();
   const [mounted, setMounted] = useState(open);
   const held = useRef(children);
   if (open && children != null) held.current = children;
@@ -71,7 +74,7 @@ export function DesktopAuxPane({
   }, [open, width]);
 
   const slide = useAnimatedStyle(() => ({
-    borderLeftWidth: width.value > 2 ? 1 : 0,
+    borderLeftWidth: width.value > 2 ? 0.5 : 0,
     flexBasis: width.value,
     width: width.value,
   }));
@@ -82,8 +85,8 @@ export function DesktopAuxPane({
     <Animated.View
       style={[
         {
-          backgroundColor: theme.background,
-          borderLeftColor: theme.divider,
+          backgroundColor: visual.inspector,
+          borderLeftColor: visual.hairline,
           flexGrow: 0,
           flexShrink: 0,
           overflow: "hidden",
@@ -91,7 +94,7 @@ export function DesktopAuxPane({
         slide,
       ]}
     >
-      <View style={{ flex: 1, width: AUX_PANE_WIDTH }}>{held.current}</View>
+      <View style={[{ flex: 1, width: AUX_PANE_WIDTH }, Platform.OS === "web" ? ({ backdropFilter: "blur(40px) saturate(1.5)", WebkitBackdropFilter: "blur(40px) saturate(1.5)" } as object) : null]}>{held.current}</View>
     </Animated.View>
   );
 }

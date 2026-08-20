@@ -1,6 +1,7 @@
-import type { ChatSummary, StateCounts, TriageProgressStats } from "@shared/types";
+import type { ChatSummary, SmartCloser, StateCounts, TriageProgressStats } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 
 
@@ -8,9 +9,9 @@ import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
 import type { PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
-import { SweepOverlay } from "./sweep-overlay";
 import { TriageNavigationRail } from "./triage-navigation-rail";
-import { TriageSummary } from "./triage-summary";
+import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
+import { TriageBatchBanner } from "./triage-batch-banner";
 
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
@@ -48,6 +49,7 @@ interface ConversationListPaneProps {
   onPreviewChat: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
+  onStartSweep: (chats: ChatSummary[], startGuid?: string) => void;
 }
 
 export function ConversationListPane({
@@ -63,6 +65,7 @@ export function ConversationListPane({
   onPreviewChat,
   onRefresh,
   onNewMessage,
+  onStartSweep,
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const type = useType();
@@ -71,15 +74,19 @@ export function ConversationListPane({
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
   const [stats, setStats] = useState<TriageProgressStats | null>(null);
-  const [sweepOpen, setSweepOpen] = useState(false);
+  const [closers, setClosers] = useState<Record<string, SmartCloser | null>>({});
+  const noteCloser = useCallback((chatGuid: string, closer: SmartCloser | null): void => {
+    setClosers((current) => current[chatGuid] === closer ? current : { ...current, [chatGuid]: closer });
+  }, []);
   const refreshStats = useCallback((): void => {
     if (!wide) return;
     void api.getTriageStats().then(setStats, () => undefined);
   }, [wide]);
   useEffect(() => { refreshStats(); }, [refreshStats, chats]);
-  const topBarH = sidebarChromeHeight(wide);
+  const topBarH = wide ? TRIAGE_QUEUE_HEADER_HEIGHT : sidebarChromeHeight(false);
   const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
+  const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
   const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "all" ? "All messages" : filters.state === "unread" ? "Unread" : "Archived";
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
@@ -128,6 +135,13 @@ export function ConversationListPane({
     listChats: deskChats,
     navigationEntries: deskChats.map((chat, index) => ({ chat, location: { kind: "list" as const, index } })),
   }) : model, [model, deskChats, wide]);
+  const sweepableChats = useMemo(() => deskModel.listChats.filter((chat) =>
+    !chat.flags.archived && chat.laterUntil === null && (chat.flags.unresponded || chat.flags.waiting),
+  ), [deskModel.listChats]);
+  const batchChats = useMemo(() => deskModel.listChats.filter((chat) => {
+    const closer = closers[chat.guid];
+    return closer?.kind === "reply" || closer?.kind === "react_done" || closer?.kind === "archive";
+  }), [closers, deskModel.listChats]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -138,6 +152,15 @@ export function ConversationListPane({
     footerHeight: footerH,
     viewKey: search.viewKey,
   });
+  useEffect(() => {
+    if (!wide || !selectedGuid) { selectedPositionRef.current = null; return; }
+    const selectedIndex = deskModel.listChats.findIndex((chat) => chat.guid === selectedGuid);
+    const prior = selectedPositionRef.current;
+    selectedPositionRef.current = { guid: selectedGuid, index: selectedIndex };
+    if (prior?.guid !== selectedGuid || prior.index <= 0 || selectedIndex !== 0) return;
+    requestAnimationFrame(() => viewport.listRef.current?.scrollToOffset({ offset: 0, animated: false }));
+  }, [deskModel.listChats, selectedGuid, viewport.listRef, wide]);
+
   // FlashList's cell memo compares renderItem by identity, so a fresh arrow here
   // re-renders every mounted row on every render of this pane.
   const renderRow = useCallback(
@@ -149,9 +172,10 @@ export function ConversationListPane({
         onPress={() => onOpenChat(item)}
         onDone={wide ? () => { void finishTriageChat(item).then(refreshStats, () => undefined); } : undefined}
         onLater={wide ? (until) => { void setTriageLater(item, until).then(() => { onRefresh(); refreshStats(); }, onRefresh); } : undefined}
+        onCloser={wide ? noteCloser : undefined}
       />
     ),
-    [wide, glide, selectedGuid, onOpenChat, onRefresh, refreshStats],
+    [wide, glide, selectedGuid, onOpenChat, onRefresh, refreshStats, noteCloser],
   );
 
   const shelfRef = useRef<PriorityShelfHandle>(null);
@@ -174,46 +198,32 @@ export function ConversationListPane({
       inputRef={search.inputRef}
       onChangeText={search.setQuery}
       onClear={() => search.clear()}
+      shortcut={wide ? "⌘K" : undefined}
     />
   );
 
-  const triageSummary = wide ? (
-    <TriageSummary
+  const chrome = wide ? (
+    <TriageQueueHeader
+      title={deskTitle}
       remaining={deskModel.listChats.length}
       completed={stats?.clearedToday ?? 0}
+      sweepCount={sweepableChats.length}
       oldestAt={stats?.oldestQueueAt ?? deskModel.listChats.reduce<number | null>((oldest, chat) => {
         const at = chat.lastMessage?.dateCreated ?? null;
         return at === null ? oldest : oldest === null ? at : Math.min(oldest, at);
       }, null)}
-      onSweep={() => setSweepOpen(true)}
+      search={searchField}
+      action={<ChromeIconButton icon="create-outline" accessibilityLabel="New message" onPress={onNewMessage} />}
+      onSweep={() => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); }}
     />
-  ) : undefined;
-
-  const chrome = (
+  ) : (
     <SidebarChrome
-      leading={wide ? null : searchField}
-      title={wide ? deskTitle : undefined}
-      toolbar={wide ? searchField : undefined}
-      nav={triageSummary}
-      trafficLightsInRail={wide}
+      leading={searchField}
       actions={
         <>
-          {wide ? null : (
-            <>
-              <SettingsButton />
-              <ChromeIconButton
-                ref={filterBtnRef}
-                icon="options-outline"
-                accessibilityLabel="Filter conversations"
-                onPress={openFilters}
-              />
-            </>
-          )}
-          <ChromeIconButton
-            icon="create-outline"
-            accessibilityLabel="New message"
-            onPress={onNewMessage}
-          />
+          <SettingsButton />
+          <ChromeIconButton ref={filterBtnRef} icon="options-outline" accessibilityLabel="Filter conversations" onPress={openFilters} />
+          <ChromeIconButton icon="create-outline" accessibilityLabel="New message" onPress={onNewMessage} />
         </>
       }
     />
@@ -222,12 +232,15 @@ export function ConversationListPane({
   const pane = (
     <SidebarFrame
       chrome={chrome}
+      chromeHeight={topBarH}
       footer={wide ? (
         <SidebarFooter>
-          <View style={styles.quietLinks}>
-            <Pressable onPress={() => onFiltersChange({ state: "unread", type: "all" })}><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unread {counts?.unread ?? 0}</Text></Pressable>
-            <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })}><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
-            <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })}><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
+          <View style={styles.footerContent}>
+            <View style={styles.quietLinks}>
+              <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}><Ionicons name="archive-outline" size={14} color={theme.textSecondary} /><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
+              <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}><Ionicons name="ban-outline" size={14} color={theme.textSecondary} /><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
+            </View>
+            <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting auto-clears when they reply" : "Replying clears the queue"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
           </View>
         </SidebarFooter>
       ) : undefined}
@@ -253,6 +266,7 @@ export function ConversationListPane({
           contentContainerStyle={{
             paddingTop: Platform.OS === "web" ? 0 : topBarH + 8,
             paddingBottom: footerH + 12,
+            paddingHorizontal: wide ? 10 : 0,
           }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
           automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}
@@ -270,6 +284,16 @@ export function ConversationListPane({
                 paddingBottom: wide ? 6 : 0,
               }}
             >
+              {wide && deskModel.listChats.length >= 2 && (filters.state === "unresponded" || filters.state === "waiting") ? (
+                <TriageBatchBanner
+                  count={batchChats.length >= 2 ? batchChats.length : sweepableChats.length}
+                  batchable={batchChats.length >= 2}
+                  onSweep={() => {
+                    const scope = batchChats.length >= 2 ? batchChats : sweepableChats;
+                    onStartSweep(scope, scope.some((chat) => chat.guid === selectedGuid) ? selectedGuid : scope[0]?.guid);
+                  }}
+                />
+              ) : null}
               <ConversationFilters
                 compact={wide}
                 filters={filters}
@@ -317,7 +341,6 @@ export function ConversationListPane({
         onStateChange={(state) => search.applyFilters({ ...filters, state })}
       />
       <View style={styles.desktopList}>{pane}</View>
-      <SweepOverlay visible={sweepOpen} chats={deskModel.listChats} startGuid={selectedGuid} onClose={() => setSweepOpen(false)} />
     </View>
   );
 }
@@ -325,17 +348,12 @@ export function ConversationListPane({
 const styles = StyleSheet.create({
   desktopDesk: { flex: 1, flexDirection: "row" },
   desktopList: { flex: 1, minWidth: 0 },
-  quietLinks: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 12,
-  },
-  quietLink: {
-    fontSize: 11,
-    paddingVertical: 8,
-  },
+  footerContent: { flex: 1 },
+  quietLinks: { alignItems: "center", flexDirection: "row", gap: 16, minHeight: 31, paddingHorizontal: 6 },
+  quietLinkButton: { alignItems: "center", flexDirection: "row", gap: 5 },
+  quietLink: { fontSize: 12, fontWeight: "500", paddingVertical: 7 },
+  footerHint: { alignItems: "center", borderTopColor: "rgba(118,118,128,0.18)", borderTopWidth: 0.5, flexDirection: "row", justifyContent: "space-between", minHeight: 31, paddingHorizontal: 6 },
+  footerHintText: { fontSize: 11 },
   sectionHeading: {
     alignItems: "baseline",
     flexDirection: "row",

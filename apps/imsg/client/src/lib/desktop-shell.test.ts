@@ -2,8 +2,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { AUX_PANE_WIDTH, desktopFrame } from "./desktop-frame";
 import {
+  closeDesktopWindow,
   installNativeMenuBridge,
   isDesktopShell,
+  minimizeDesktopWindow,
+  startDesktopWindowDrag,
+  toggleMaximizeDesktopWindow,
   type DesktopShellWindow,
 } from "./desktop-shell";
 import { setKeyboardRuntime } from "./keyboard/controller";
@@ -43,9 +47,9 @@ describe("desktopFrame", () => {
     expect(frame.split.gap).toBeUndefined();
     expect(frame.split.backgroundColor).toBe(theme.background);
     expect(frame.pane.borderRadius).toBeUndefined();
-    expect(frame.listPane.borderRightWidth).toBe(1);
+    expect(frame.listPane.borderRightWidth).toBe(0.5);
     expect(frame.listPane.width).toBe(352);
-    expect(frame.auxPane.borderLeftWidth).toBe(1);
+    expect(frame.auxPane.borderLeftWidth).toBe(0.5);
     expect(frame.auxPane.width).toBe(AUX_PANE_WIDTH);
   });
 
@@ -53,6 +57,31 @@ describe("desktopFrame", () => {
     const frame = desktopFrame(theme, 440);
     expect(frame.listPane.width).toBe(440);
     expect(frame.listPane.flexBasis).toBe(440);
+  });
+});
+
+describe("custom desktop window controls", () => {
+  test("routes close, minimize, zoom, and drag to the current Tauri window", async () => {
+    const calls: string[] = [];
+    const win: DesktopShellWindow = {
+      __TAURI__: {
+        event: { listen: async () => () => undefined },
+        window: {
+          getCurrentWindow: () => ({
+            close: async () => { calls.push("close"); },
+            minimize: async () => { calls.push("minimize"); },
+            toggleMaximize: async () => { calls.push("zoom"); },
+            startDragging: async () => { calls.push("drag"); },
+          }),
+        },
+      },
+    };
+    closeDesktopWindow(win);
+    minimizeDesktopWindow(win);
+    toggleMaximizeDesktopWindow(win);
+    startDesktopWindowDrag(win);
+    await Promise.resolve();
+    expect(calls).toEqual(["close", "minimize", "zoom", "drag"]);
   });
 });
 

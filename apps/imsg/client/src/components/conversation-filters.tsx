@@ -3,6 +3,7 @@ import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { OverlayShell } from "./overlay-shell";
 import { filterChipFill } from "./sidebar/chrome-control-fill";
@@ -67,6 +68,7 @@ function FilterPill({
   compact?: boolean;
 }) {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const [hovered, setHovered] = useState(false);
   return (
     <Pressable
@@ -80,6 +82,10 @@ function FilterPill({
         styles.pill,
         compact && styles.pillCompact,
         filterChipFill(theme, { selected, hovered, pressed }),
+        compact ? ({
+          backgroundColor: selected ? visual.activeChip : pressed || hovered ? visual.controlFill : visual.inactiveChip,
+          boxShadow: selected ? "none" : "0 1px 2px rgba(0,0,0,0.10)",
+        } as object) : null,
         Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
       ]}
     >
@@ -87,7 +93,7 @@ function FilterPill({
         style={[
           styles.pillLabel,
           compact && styles.pillLabelCompact,
-          { color: selected ? theme.background : theme.textSecondary },
+          { color: compact ? selected ? (visual.activeChip === "#f4f4f6" ? "#1a1a1c" : "#ffffff") : visual.meta : selected ? theme.background : theme.textSecondary },
         ]}
       >
         {label}
@@ -415,7 +421,7 @@ const styles = StyleSheet.create({
     height: 50,
   },
   railCompact: {
-    height: 38,
+    height: 36,
   },
   railContent: {
     alignItems: "center",
@@ -446,17 +452,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   pillCompact: {
-    borderRadius: 13,
+    borderRadius: 12,
     gap: 4,
-    height: 26,
-    paddingHorizontal: 10,
+    height: 24,
+    paddingHorizontal: 11,
   },
   pillLabel: {
     fontSize: 13,
     fontWeight: "600",
   },
   pillLabelCompact: {
-    fontSize: 12,
+    fontSize: 11,
   },
   pillCount: {
     fontSize: 12,

@@ -5,7 +5,6 @@ import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
-import { useType } from "@/hooks/use-type";
 import { useSuggestionMode } from "@/lib/settings";
 import { chromeControlFill } from "./sidebar/chrome-control-fill";
 
@@ -29,7 +28,6 @@ interface SuggestionShelfProps {
 
 export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: SuggestionShelfProps) {
   const theme = useTheme();
-  const type = useType();
   const mode = useSuggestionMode();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -122,7 +120,7 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
               style={[
                 styles.pill,
                 {
-                  backgroundColor: theme.bubbleTheirs,
+                  borderColor: "rgba(0,122,255,0.35)",
                   opacity: stale ? 0.55 : 1,
                 },
               ]}
@@ -131,7 +129,7 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
                 numberOfLines={2}
                 style={[
                   styles.pillText,
-                  { color: theme.bubbleTheirsText, fontSize: type.body, lineHeight: 18 },
+                  { color: theme.accent, fontSize: 13, lineHeight: 16 },
                 ]}
               >
                 {text}
@@ -223,13 +221,17 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   pill: {
-    borderRadius: 18,
+    alignItems: "center",
+    borderRadius: 15,
+    borderWidth: 1,
+    justifyContent: "center",
     maxWidth: "100%",
+    minHeight: 30,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 5,
   },
   pillText: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 16,
   },
 });

@@ -1,35 +1,91 @@
 import type { ChatSummary } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Circle } from "react-native-svg";
 
 import { api } from "@/lib/api";
-import { fillComposer } from "@/lib/composer-fill";
+import { patchChatWithMessage } from "@/lib/chat-store";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { finishTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
 import { useActionSheet } from "@/lib/action-sheet";
-import { ThreadView } from "./thread-view";
+import { ChatAvatar } from "./avatar";
 
-export function SweepOverlay({ visible, chats, startGuid, onClose }: { visible: boolean; chats: ChatSummary[]; startGuid?: string; onClose: () => void }): React.JSX.Element | null {
+interface SweepStep {
+  index: number;
+  label?: string;
+  undoable: boolean;
+}
+
+export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onClose }: { visible: boolean; chats: ChatSummary[]; startGuid?: string; onOpenFullThread: (chat: ChatSummary) => void; onClose: () => void }): React.JSX.Element | null {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const showSheet = useActionSheet();
   const chatsRef = useRef(chats);
   chatsRef.current = chats;
   const [queue, setQueue] = useState<ChatSummary[]>([]);
   const [index, setIndex] = useState(0);
-  const [history, setHistory] = useState<number[]>([]);
+  const [history, setHistory] = useState<SweepStep[]>([]);
+  const [cleared, setCleared] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedOption, setSelectedOption] = useState(0);
+  const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const chat = queue[index] ?? null;
-  const advance = useCallback(() => {
-    setHistory((current) => [...current, index]);
+
+  const advance = useCallback((label?: string, undoable = false) => {
+    if (label) setCleared((current) => [...current, label]);
+    setHistory((current) => [
+      ...current.map((step) => undoable && step.undoable ? { ...step, undoable: false } : step),
+      { index, label, undoable },
+    ]);
     setIndex((current) => Math.min(current + 1, queue.length));
+    setDraft("");
+    setSelectedOption(0);
   }, [queue.length, index]);
-  const done = useCallback(() => { if (!chat) return; void finishTriageChat(chat).then(advance, () => undefined); }, [advance, chat]);
+
+  const done = useCallback(() => {
+    if (!chat || sending) return;
+    if (!chat.flags.unresponded && !chat.flags.waiting) { advance(); return; }
+    void finishTriageChat(chat).then(() => advance(`${chat.displayName} · cleared`, true), () => undefined);
+  }, [advance, chat, sending]);
+
   const later = useCallback(() => {
-    if (!chat) return;
-    showSheet({ title: `Later · ${chat.displayName}`, actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(chat, option.until).then(advance, () => undefined); } })) });
-  }, [advance, chat, showSheet]);
+    if (!chat || sending) return;
+    showSheet({
+      title: `Later · ${chat.displayName}`,
+      actions: laterOptions().map((option) => ({
+        label: option.label,
+        onPress: () => { void setTriageLater(chat, option.until).then(() => advance(`${chat.displayName} · later`, true), () => undefined); },
+      })),
+    });
+  }, [advance, chat, sending, showSheet]);
+
+  const send = useCallback(() => {
+    const text = draft.trim();
+    if (!chat || !text || sending) return;
+    setSending(true);
+    void api.sendText(chat.guid, { text }).then(
+      (message) => { patchChatWithMessage(chat.guid, message); advance(`${chat.displayName} · replied`); },
+      () => undefined,
+    ).finally(() => setSending(false));
+  }, [advance, chat, draft, sending]);
+
+  const undo = useCallback(() => {
+    const historyIndex = history.findLastIndex((step) => step.undoable);
+    const prior = history[historyIndex];
+    if (!prior || !undoLastTriageAction()) return;
+    setIndex(prior.index);
+    setHistory((current) => current.filter((_, index) => index !== historyIndex));
+    if (prior.label) {
+      setCleared((current) => {
+        const labelIndex = current.lastIndexOf(prior.label!);
+        return labelIndex < 0 ? current : current.filter((_, index) => index !== labelIndex);
+      });
+    }
+  }, [history]);
 
   useEffect(() => {
     if (!visible) return;
@@ -38,48 +94,188 @@ export function SweepOverlay({ visible, chats, startGuid, onClose }: { visible: 
     setQueue(snapshot);
     setIndex(start);
     setHistory([]);
+    setCleared([]);
+    setDraft("");
   }, [visible, startGuid]);
+
   useEffect(() => {
     if (!visible || !chat) { setSuggestions([]); return; }
-    let cancelled = false; setLoading(true);
-    void api.aiSuggestions(chat.guid).then((result) => { if (!cancelled) setSuggestions(result.suggestions.slice(0, 4)); }, () => { if (!cancelled) setSuggestions([]); }).finally(() => { if (!cancelled) setLoading(false); });
+    let cancelled = false;
+    setLoading(true);
+    void api.aiSuggestions(chat.guid).then(
+      (result) => {
+        if (cancelled) return;
+        const next = result.suggestions.slice(0, 2);
+        setSuggestions(next);
+        setSelectedOption(0);
+        setDraft(next[0] ?? "");
+      },
+      () => { if (!cancelled) setSuggestions([]); },
+    ).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [chat, visible]);
+
   useEffect(() => {
     if (!visible || Platform.OS !== "web") return;
     const keydown = (event: KeyboardEvent): void => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const active = document.activeElement;
       const editable = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || (active instanceof HTMLElement && active.isContentEditable);
-      if (editable) return;
       const key = event.key.toLowerCase();
+      if (key === "escape") { event.preventDefault(); onClose(); return; }
+      if (editable) return;
+      if (key === "s") { event.preventDefault(); advance(); return; }
       if (key === "e") { event.preventDefault(); done(); return; }
       if (key === "h") { event.preventDefault(); later(); return; }
-      if (key === "z") { event.preventDefault(); if (undoLastTriageAction()) { const prior = history[history.length - 1]; if (prior !== undefined) { setIndex(prior); setHistory((current) => current.slice(0, -1)); } } return; }
+      if (key === "z") { event.preventDefault(); undo(); return; }
       const option = Number(event.key) - 1;
-      if (option >= 0 && option < suggestions.length) { event.preventDefault(); const text = suggestions[option]; if (text) fillComposer(text); }
+      if (option >= 0 && option <= 2) {
+        event.preventDefault();
+        setSelectedOption(option);
+        setDraft(option < suggestions.length ? suggestions[option] ?? "" : "");
+      }
     };
-    window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
-  }, [done, history, later, suggestions, visible]);
+    window.addEventListener("keydown", keydown, true);
+    return () => window.removeEventListener("keydown", keydown, true);
+  }, [advance, done, later, onClose, suggestions, undo, visible]);
+
   if (!visible) return null;
-  return <View accessibilityViewIsModal style={[styles.backdrop, { backgroundColor: theme.background }]}>
-    <View style={[styles.topbar, { borderBottomColor: theme.divider }]}>
-      <View><Text style={[styles.title, { color: theme.text }]}>Sweep</Text><Text style={[styles.progress, { color: theme.textSecondary }]}>{chat ? `${index + 1} of ${queue.length}` : "Desk clear"}</Text></View>
-      <View style={styles.topActions}>
-        <Pressable disabled={history.length === 0} accessibilityLabel="Undo sweep advance" onPress={() => { const prior = history[history.length - 1]; if (prior !== undefined && undoLastTriageAction()) { setIndex(prior); setHistory((current) => current.slice(0, -1)); } }} style={styles.iconButton}><Ionicons name="arrow-undo" size={19} color={history.length ? theme.text : theme.textSecondary} /></Pressable>
-        <Pressable accessibilityLabel="Close sweep" onPress={onClose} style={styles.iconButton}><Ionicons name="close" size={23} color={theme.text} /></Pressable>
+  const total = queue.length;
+  const progress = total === 0 ? 1 : Math.min(1, (index + 1) / total);
+  const circumference = 2 * Math.PI * 12;
+  const glass = Platform.OS === "web" ? ({
+    backgroundColor: visual.overlay,
+    backdropFilter: "blur(40px) saturate(1.5)",
+    WebkitBackdropFilter: "blur(40px) saturate(1.5)",
+    boxShadow: "0 24px 60px rgba(0,0,0,0.45), 0 0 0 0.5px rgba(0,0,0,0.25)",
+  } as object) : { backgroundColor: visual.overlay };
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View testID="sweep-backdrop" style={[styles.backdrop, { backgroundColor: "rgba(20,14,24,0.38)" }]}>
+        <View accessibilityViewIsModal testID="sweep-card" style={[styles.card, glass]}>
+          <View style={[styles.header, { borderBottomColor: visual.hairline }]}>
+            <View style={styles.headerTitle}>
+              <Ionicons name="flash" size={18} color={visual.text} />
+              <Text style={[styles.title, { color: visual.text }]}>Sweep · Needs reply</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <View style={styles.progressRing}>
+                <Svg width={30} height={30} viewBox="0 0 30 30">
+                  <Circle cx="15" cy="15" r="12" fill="none" stroke={visual.ringTrack} strokeWidth="3" />
+                  <Circle cx="15" cy="15" r="12" fill="none" stroke={theme.accent} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={circumference * (1 - progress)} rotation="-90" origin="15,15" />
+                </Svg>
+                <Text style={[styles.progressText, { color: visual.text }]}>{Math.min(index + 1, total)}/{total}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Close sweep" onPress={onClose} style={styles.closeButton}>
+                <Ionicons name="close" size={18} color={visual.muted} />
+              </Pressable>
+            </View>
+          </View>
+
+          {chat ? (
+            <>
+              <View style={styles.body}>
+                <View style={styles.personRow}>
+                  <ChatAvatar chat={chat} size={40} />
+                  <View style={styles.personCopy}>
+                    <Text style={[styles.personName, { color: visual.text }]}>{chat.displayName}</Text>
+                    <Text style={[styles.waiting, { color: visual.muted }]}>waiting since {chat.lastMessage ? new Date(chat.lastMessage.dateCreated).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "now"}</Text>
+                  </View>
+                  <Pressable onPress={() => advance()} style={styles.skip}>
+                    <Text style={[styles.skipText, { color: visual.muted }]}>skip ⇢</Text><Text style={[styles.keycap, { color: visual.muted, borderColor: visual.hairlineStrong }]}>S</Text>
+                  </Pressable>
+                </View>
+
+                <View style={[styles.contextBubble, { backgroundColor: visual.controlFill }]}>
+                  <Text style={[styles.contextText, { color: visual.text }]}>{chat.lastMessage?.text || "Attachment"}</Text>
+                </View>
+                <Pressable onPress={() => onOpenFullThread(chat)}>
+                  <Text style={[styles.openThread, { color: visual.muted }]}>…earlier messages · <Text style={{ color: theme.accent, fontWeight: "600" }}>open full thread ↵</Text></Text>
+                </Pressable>
+
+                <View style={styles.options}>
+                  {loading ? <ActivityIndicator color={theme.accent} /> : suggestions.map((suggestion, option) => (
+                    <Pressable
+                      key={`${option}-${suggestion}`}
+                      onPress={() => { setSelectedOption(option); setDraft(suggestion); }}
+                      style={[styles.option, { backgroundColor: visual.card, borderColor: selectedOption === option ? "rgba(0,122,255,0.35)" : visual.hairlineStrong }]}
+                    >
+                      <Text style={[styles.optionKey, { color: visual.meta, borderColor: visual.hairlineStrong }]}>{option + 1}</Text>
+                      <Text numberOfLines={2} style={[styles.optionText, { color: visual.text }]}>{suggestion}</Text>
+                      {selectedOption === option ? <Pressable accessibilityLabel="Send selected reply" disabled={sending} onPress={send}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : <Ionicons name="paper-plane-outline" size={15} color={visual.muted} />}
+                    </Pressable>
+                  ))}
+                  <View style={[styles.option, { backgroundColor: visual.card, borderColor: selectedOption === 2 ? "rgba(0,122,255,0.35)" : visual.hairlineStrong }]}>
+                    <Text style={[styles.optionKey, { color: visual.meta, borderColor: visual.hairlineStrong }]}>3</Text>
+                    <TextInput
+                      value={selectedOption === 2 ? draft : ""}
+                      onFocus={() => { setSelectedOption(2); setDraft(""); }}
+                      onChangeText={setDraft}
+                      onSubmitEditing={send}
+                      placeholder="Type your own…"
+                      placeholderTextColor={visual.hint}
+                      style={[styles.customInput, { color: visual.text }]}
+                    />
+                    {selectedOption === 2 && draft.trim() ? <Pressable accessibilityLabel="Send custom reply" disabled={sending} onPress={send}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : null}
+                  </View>
+                </View>
+
+                <View style={styles.actionsRow}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Mark current conversation done" onPress={done} style={[styles.actionChip, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Done <Text style={{ color: visual.hint }}>E</Text></Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Move current conversation to Later" onPress={later} style={[styles.actionChip, { backgroundColor: visual.controlFill }]}><Ionicons name="time-outline" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Later <Text style={{ color: visual.hint }}>H</Text></Text></Pressable>
+                  <Text style={[styles.autoAdvance, { color: visual.hint }]}>sent replies auto-advance to the next</Text>
+                </View>
+              </View>
+              <View style={[styles.footer, { borderTopColor: visual.hairline }]}>
+                <View style={styles.clearedLog}>{cleared.slice(-3).map((entry) => <View key={entry} style={styles.clearedItem}><Ionicons name="checkmark-circle-outline" size={14} color="#28A745" /><Text style={[styles.clearedText, { color: visual.meta }]}>{entry}</Text></View>)}</View>
+                <Pressable onPress={undo} disabled={!history.some((step) => step.undoable)}><Text style={[styles.undoText, { color: history.some((step) => step.undoable) ? visual.hint : visual.hairlineStrong }]}>Z undoes the last clear</Text></Pressable>
+              </View>
+            </>
+          ) : (
+            <View style={styles.complete}><Ionicons name="checkmark-circle" size={42} color="#28A745" /><Text style={[styles.completeTitle, { color: visual.text }]}>Sweep complete</Text><Pressable onPress={onClose}><Text style={{ color: theme.accent, fontWeight: "600" }}>Return to desk</Text></Pressable></View>
+          )}
+        </View>
       </View>
-    </View>
-    {chat ? <View style={styles.body}>
-      <View style={styles.thread}><ThreadView key={chat.guid} chatGuid={chat.guid} isGroup={chat.isGroup} headerChat={chat} onMessageSent={advance} /></View>
-      <View style={[styles.options, { borderLeftColor: theme.divider, backgroundColor: theme.backgroundElement }]}>
-        <View style={styles.sweepActions}><Pressable onPress={done} style={[styles.primaryAction, { backgroundColor: theme.accent }]}><Ionicons name="checkmark" size={14} color={theme.onAccent} /><Text style={{ color: theme.onAccent, fontSize: 12, fontWeight: "700" }}>Done  E</Text></Pressable><Pressable onPress={later} style={[styles.secondaryAction, { borderColor: theme.divider }]}><Ionicons name="time-outline" size={14} color={theme.textSecondary} /><Text style={{ color: theme.text, fontSize: 12, fontWeight: "600" }}>Later  H</Text></Pressable></View>
-        <Text style={[styles.optionsTitle, { color: theme.text }]}>Reply ideas</Text><Text style={[styles.hint, { color: theme.textSecondary }]}>Press 1–4 to stage a draft. Edit it, then press Enter to send.</Text>
-        {loading ? <ActivityIndicator style={{ marginTop: 20 }} /> : suggestions.map((suggestion, option) => <Pressable key={`${option}-${suggestion}`} onPress={() => fillComposer(suggestion)} style={({ pressed }) => [styles.option, { borderColor: theme.divider, backgroundColor: pressed ? theme.backgroundSelected : theme.background }]}><Text style={[styles.number, { color: theme.accent }]}>{option + 1}</Text><Text style={[styles.optionText, { color: theme.text }]}>{suggestion}</Text></Pressable>)}
-        <Pressable onPress={advance} style={styles.skip}><Text style={{ color: theme.textSecondary, fontSize: 12 }}>Skip for now</Text><Ionicons name="arrow-forward" size={15} color={theme.textSecondary} /></Pressable>
-      </View>
-    </View> : <View style={styles.done}><Ionicons name="checkmark-circle" size={42} color={theme.accent} /><Text style={[styles.doneTitle, { color: theme.text }]}>Sweep complete</Text><Pressable onPress={onClose}><Text style={{ color: theme.accent, fontWeight: "600" }}>Return to desk</Text></Pressable></View>}
-  </View>;
+    </Modal>
+  );
 }
-const styles = StyleSheet.create({ backdrop: { ...StyleSheet.absoluteFillObject, zIndex: 100 }, topbar: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", height: 58, justifyContent: "space-between", paddingHorizontal: 18 }, title: { fontSize: 17, fontWeight: "700" }, progress: { fontSize: 11, marginTop: 1 }, topActions: { flexDirection: "row", gap: 8 }, iconButton: { alignItems: "center", height: 34, justifyContent: "center", width: 34 }, body: { flex: 1, flexDirection: "row" }, thread: { flex: 1 }, options: { borderLeftWidth: StyleSheet.hairlineWidth, padding: 18, width: 312 }, sweepActions: { flexDirection: "row", gap: 8, marginBottom: 20 }, primaryAction: { alignItems: "center", borderRadius: 9, flex: 1, flexDirection: "row", gap: 5, justifyContent: "center", paddingVertical: 9 }, secondaryAction: { alignItems: "center", borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, flex: 1, flexDirection: "row", gap: 5, justifyContent: "center", paddingVertical: 9 }, optionsTitle: { fontSize: 16, fontWeight: "700" }, hint: { fontSize: 11, lineHeight: 16, marginBottom: 16, marginTop: 4 }, option: { borderRadius: 11, borderWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 9, marginBottom: 9, padding: 11 }, number: { fontSize: 12, fontWeight: "800" }, optionText: { flex: 1, fontSize: 13, lineHeight: 18 }, skip: { alignItems: "center", flexDirection: "row", gap: 5, justifyContent: "flex-end", marginTop: 8 }, done: { alignItems: "center", flex: 1, gap: 14, justifyContent: "center" }, doneTitle: { fontSize: 22, fontWeight: "700" } });
+
+const styles = StyleSheet.create({
+  backdrop: { alignItems: "center", flex: 1, justifyContent: "center", padding: 24 },
+  card: { borderRadius: 16, maxHeight: "92%", maxWidth: "100%", overflow: "hidden", width: 560 },
+  header: { alignItems: "center", borderBottomWidth: 0.5, flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 14 },
+  headerTitle: { alignItems: "center", flexDirection: "row", gap: 9 },
+  title: { fontSize: 14, fontWeight: "700" },
+  headerActions: { alignItems: "center", flexDirection: "row", gap: 10 },
+  progressRing: { alignItems: "center", height: 30, justifyContent: "center", position: "relative", width: 30 },
+  progressText: { fontSize: 10, fontVariant: ["tabular-nums"], fontWeight: "700", position: "absolute" },
+  closeButton: { alignItems: "center", height: 28, justifyContent: "center", width: 28 },
+  body: { paddingHorizontal: 22, paddingVertical: 20 },
+  personRow: { alignItems: "center", flexDirection: "row" },
+  personCopy: { flex: 1, marginLeft: 10 },
+  personName: { fontSize: 14, fontWeight: "700" },
+  waiting: { fontSize: 11, marginTop: 2 },
+  skip: { alignItems: "center", flexDirection: "row", gap: 5 },
+  skipText: { fontSize: 11 },
+  keycap: { borderRadius: 4, borderWidth: 0.5, fontSize: 11, fontWeight: "700", paddingHorizontal: 5, paddingVertical: 1 },
+  contextBubble: { alignSelf: "flex-start", borderRadius: 18, marginTop: 18, maxWidth: "80%", paddingHorizontal: 13, paddingVertical: 9 },
+  contextText: { fontSize: 15, lineHeight: 20 },
+  openThread: { fontSize: 11, marginBottom: 16, marginTop: 5 },
+  options: { gap: 7 },
+  option: { alignItems: "center", borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 10, minHeight: 40, paddingHorizontal: 12, paddingVertical: 9 },
+  optionKey: { borderRadius: 4, borderWidth: 0.5, fontSize: 11, fontWeight: "700", minWidth: 20, paddingHorizontal: 6, paddingVertical: 2, textAlign: "center" },
+  optionText: { flex: 1, fontSize: 14, lineHeight: 19 },
+  customInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  actionsRow: { alignItems: "center", flexDirection: "row", gap: 8, marginTop: 16 },
+  actionChip: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 5, height: 28, paddingHorizontal: 11 },
+  actionText: { fontSize: 12, fontWeight: "600" },
+  autoAdvance: { flex: 1, fontSize: 11, textAlign: "right" },
+  footer: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", justifyContent: "space-between", minHeight: 42, paddingHorizontal: 18, paddingVertical: 10 },
+  clearedLog: { alignItems: "center", flex: 1, flexDirection: "row", gap: 12, overflow: "hidden" },
+  clearedItem: { alignItems: "center", flexDirection: "row", gap: 4 },
+  clearedText: { fontSize: 11 },
+  undoText: { fontSize: 11 },
+  complete: { alignItems: "center", gap: 14, justifyContent: "center", minHeight: 360 },
+  completeTitle: { fontSize: 22, fontWeight: "700" },
+});

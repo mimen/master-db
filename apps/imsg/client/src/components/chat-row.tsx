@@ -19,6 +19,7 @@ import { laterOptions, useSmartCloser } from "@/hooks/use-triage-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
 import { Colors, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
@@ -159,6 +160,7 @@ function ChatRowInner({
   onPress,
   onDone,
   onLater,
+  onCloser,
 }: {
   chat: ChatSummary;
   selected: boolean;
@@ -167,19 +169,26 @@ function ChatRowInner({
   onPress: () => void;
   onDone?: () => void;
   onLater?: (until: number) => void;
+  onCloser?: (chatGuid: string, closer: SmartCloser | null) => void;
 }) {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const type = useType();
   const { openMenu } = useChatActions();
   const showSheet = useActionSheet();
   const { width: winW, wide: compact } = useLayoutMode();
   const [hovered, setHovered] = useState(false);
+  const [closerHovered, setCloserHovered] = useState(false);
   const closer = useSmartCloser(chat.guid, compact);
   const specificCloser = isSpecificCloser(closer.closer) ? closer.closer : null;
   const closerLabel = specificCloser?.kind === "reply" && specificCloser.draft ? `“${specificCloser.draft}”` : specificCloser?.label;
-  const actionsVisible = compact && (hovered || selected);
+  // Smart closers remain clickable on hover. Rows without a closer reveal the
+  // action strip; selecting any row always reveals it.
+  const actionsVisible = compact && (selected || (hovered && !specificCloser));
+  useEffect(() => { onCloser?.(chat.guid, closer.closer); }, [chat.guid, closer.closer, onCloser]);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
+  const ageDays = last ? Math.floor((Date.now() - last.dateCreated) / 86_400_000) : 0;
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
         last.text || (last.hasAttachments ? "Attachment" : "")
@@ -217,6 +226,7 @@ function ChatRowInner({
   return (
     <ReanimatedSwipeable
       ref={swipeRef}
+      containerStyle={compact ? styles.desktopCardWrap : undefined}
       friction={1}
       leftThreshold={commit}
       rightThreshold={commit}
@@ -261,34 +271,41 @@ function ChatRowInner({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
+          compact && styles.desktopCard,
           { height: compact ? 62 : undefined, minHeight: compact ? 62 : 92 },
-          {
-            backgroundColor: selected
-              ? theme.backgroundSelected
-              : pressed || (compact && hovered)
-                ? theme.backgroundElement
-                : theme.background,
-          },
+          compact
+            ? ({
+                backgroundColor: selected ? visual.cardSelected : visual.card,
+                boxShadow: selected
+                  ? `0 0 0 2px ${theme.accent}, 0 1px 3px ${visual.cardShadow}`
+                  : hovered || pressed
+                    ? `0 2px 7px ${visual.cardShadow}`
+                    : `0 1px 3px ${visual.cardShadow}`,
+              } as object)
+            : {
+                backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background,
+              },
         ]}
       >
         {/* Glide cursor — absolutely positioned so it never shifts layout. */}
         {keyboardFocused && (
           <View style={[styles.glideCursor, { backgroundColor: theme.accent }]} />
         )}
-        <ChatAvatar chat={chat} size={compact ? 36 : 52} />
+        <ChatAvatar chat={chat} size={compact ? 40 : 52} />
         {/* Messages-style hairline: starts after the avatar, not under it. */}
         <View
           style={[
             styles.separator,
             {
               backgroundColor: theme.divider,
-              left: 16 + (compact ? 36 : 52) + 11,
+              left: 16 + (compact ? 40 : 52) + 11,
+              opacity: compact ? 0 : 1,
             },
           ]}
         />
         <View style={styles.content}>
           <View style={styles.topLine}>
-            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
+            <Text numberOfLines={1} style={[styles.name, { color: compact ? visual.text : theme.text, fontSize: compact ? 13 : type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
               {chat.displayName}
             </Text>
             {/* Private CRM layer (favorite/priority) — mirrors the star shown
@@ -311,25 +328,32 @@ function ChatRowInner({
               />
             )}
             {last && (
-              <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
-                {formatListTimestamp(last.dateCreated)}
-              </Text>
+              ageDays >= 1 && compact ? (
+                <Text style={[styles.ageChip, { color: visual.card === "#232326" ? "#F0A500" : "#B25000", backgroundColor: visual.card === "#232326" ? "rgba(240,165,0,0.20)" : "rgba(240,165,0,0.18)" }]}>{ageDays}d</Text>
+              ) : (
+                <Text style={[styles.time, { color: compact ? visual.muted : theme.textSecondary, fontSize: compact ? 11 : type.secondary }]}>
+                  {formatListTimestamp(last.dateCreated)}
+                </Text>
+              )
             )}
           </View>
           <View style={styles.previewLine}>
-            {actionsVisible ? (
-              <View style={styles.inlineActions}>
-                <Pressable accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></Pressable>
-                <Pressable accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: theme.backgroundSelected }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: theme.text }]}>Done</Text></Pressable>
-                <Pressable accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} style={[styles.inlineAction, { backgroundColor: theme.backgroundSelected }]}><Ionicons name="time-outline" size={13} color={theme.textSecondary} /><Text style={[styles.inlineActionText, { color: theme.text }]}>Later</Text></Pressable>
-                <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={theme.textSecondary} /></Pressable>
-              </View>
-            ) : (
-              <>
-                <Text numberOfLines={1} style={[styles.snippet, { color: theme.textSecondary, fontSize: compact ? type.secondary : 14, lineHeight: compact ? 16 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-                {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} style={[styles.closer, { borderColor: theme.divider }]}><Ionicons name="sparkles-outline" size={11} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.textSecondary }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
-              </>
-            )}
+            <View
+              pointerEvents={actionsVisible ? "none" : "auto"}
+              style={[styles.previewLayer, { opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
+            >
+              <Text numberOfLines={1} style={[styles.snippet, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
+              {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} onHoverIn={() => setCloserHovered(true)} onHoverOut={() => setCloserHovered(false)} style={[styles.closer, { borderColor: specificCloser.kind === "call" ? "rgba(40,200,64,0.5)" : specificCloser.kind === "archive" ? visual.hairlineStrong : "rgba(0,122,255,0.4)", backgroundColor: closerHovered ? "rgba(0,122,255,0.07)" : "transparent", boxShadow: closerHovered ? "0 1px 3px rgba(0,122,255,0.14)" : "none" } as object]}><Ionicons name={specificCloser.kind === "call" ? "call-outline" : specificCloser.kind === "archive" ? "archive-outline" : "paper-plane-outline"} size={13} color={specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
+            </View>
+            <View
+              pointerEvents={actionsVisible ? "auto" : "none"}
+              style={[styles.actionLayer, { opacity: actionsVisible ? 1 : 0 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "visible" : "hidden", transitionDelay: actionsVisible ? "60ms,0ms" : "0ms,60ms" } as object] : null]}
+            >
+              <Pressable accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></Pressable>
+              <Pressable accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></Pressable>
+              <Pressable accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></Pressable>
+              <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>
+            </View>
           </View>
         </View>
         {!compact && (
@@ -368,6 +392,11 @@ function ChatRowInner({
 export const ChatRow = memo(ChatRowInner);
 
 const styles = StyleSheet.create({
+  desktopCardWrap: {
+    borderRadius: 11,
+    marginBottom: 6,
+    overflow: "visible",
+  },
   row: {
     alignItems: "center",
     flexDirection: "row",
@@ -375,6 +404,11 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 16,
     paddingVertical: 14,
+  },
+  desktopCard: {
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
   separator: {
     bottom: 0,
@@ -384,10 +418,10 @@ const styles = StyleSheet.create({
   },
   glideCursor: {
     borderRadius: 2,
-    bottom: 14,
-    left: 4,
+    bottom: 8,
+    left: 0,
     position: "absolute",
-    top: 14,
+    top: 8,
     width: 3,
   },
   content: {
@@ -411,6 +445,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     fontSize: 13,
   },
+  ageChip: {
+    borderRadius: 5,
+    flexShrink: 0,
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
   favoriteStar: {
     flexShrink: 0,
   },
@@ -421,10 +463,34 @@ const styles = StyleSheet.create({
     width: 6,
   },
   previewLine: {
+    height: 24,
+    marginTop: 2,
+    position: "relative",
+  },
+  previewLayer: {
     alignItems: "center",
+    bottom: 0,
     flexDirection: "row",
     gap: 7,
-    marginTop: 2,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  actionLayer: {
+    alignItems: "center",
+    bottom: 0,
+    flexDirection: "row",
+    gap: 5,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+  },
+  opacityTransition: {
+    transitionDuration: "60ms, 0ms",
+    transitionProperty: "opacity, visibility",
+    transitionTimingFunction: "cubic-bezier(0.2,0,0,1)",
   },
   snippet: {
     flex: 1,
@@ -443,8 +509,9 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     flexDirection: "row",
     gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    height: 24,
+    justifyContent: "center",
+    paddingHorizontal: 9,
   },
   inlineActionText: {
     fontSize: 11,
@@ -458,14 +525,15 @@ const styles = StyleSheet.create({
   },
   closer: {
     alignItems: "center",
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    borderWidth: 1,
     flexDirection: "row",
     flexShrink: 1,
     gap: 3,
     maxWidth: 142,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    height: 24,
+    justifyContent: "center",
+    paddingHorizontal: 9,
   },
   closerText: {
     flexShrink: 1,

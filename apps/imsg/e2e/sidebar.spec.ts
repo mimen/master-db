@@ -18,7 +18,7 @@ interface ScrollGeometry {
 
 function lensButton(page: Page, label: "Needs" | "Waiting" | "All"): Locator {
   return page.getByRole("button", {
-    name: label === "Needs" ? /^Needs, \d+/ : label,
+    name: label === "Needs" ? /^Needs reply, \d+/ : label === "All" ? "All messages" : label,
   });
 }
 
@@ -161,14 +161,14 @@ playwrightTest?.("search and Triage Desk lenses supersede each other", async ({ 
 });
 
 playwrightTest?.("conversation rows stay constant-height while actions swap in", async ({ sidebar }) => {
-  const row = sidebar.page.getByTestId("conversation-row").first();
+  const row = sidebar.page.getByTestId("conversation-row").nth(1);
   await expect(row).toBeVisible();
   const before = await row.boundingBox();
   expect(before).not.toBeNull();
   if (!before) throw new Error("Conversation row has no bounding box");
   expect(before.height).toBeCloseTo(62, 1);
 
-  await row.hover();
+  await row.click();
   await expect(row.getByText("Reply", { exact: true })).toBeVisible();
   await expect(row.getByText("Done", { exact: true })).toBeVisible();
   await expect(row.getByText("Later", { exact: true })).toBeVisible();

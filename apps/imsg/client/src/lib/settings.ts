@@ -21,8 +21,8 @@ export interface Settings {
   nameOrder: NameOrder;
 }
 
-const KEY = "imsg.settings.v1";
-const DEFAULT: Settings = { suggestionMode: "on-demand", nameOrder: "first-last" };
+const KEY = "imsg.settings.v2";
+const DEFAULT: Settings = { suggestionMode: "auto", nameOrder: "first-last" };
 
 let state: Settings = { ...DEFAULT };
 let hydrated = false;

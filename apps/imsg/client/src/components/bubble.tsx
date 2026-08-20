@@ -127,6 +127,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
   const theme = useTheme();
   const { width: winW } = useLayoutMode();
   const openLightbox = useLightbox();
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
   const base = paneWidth > 0 ? paneWidth : winW;
   const mediaW = Math.min(260, Math.round(base * 0.6));
@@ -157,9 +158,11 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
             att.width && att.height && att.width > 0 && att.height > 0
               ? att.width / att.height
               : 4 / 3;
+          const failed = failedImages.has(att.guid);
           return (
             <Pressable
               key={att.guid}
+              disabled={failed}
               onPress={() =>
                 openLightbox(
                   images.map((i) => ({ url: attachmentUrl(i.guid), isVideo: false })),
@@ -167,12 +170,20 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
                 )
               }
             >
-              <Image
-                source={{ uri: url }}
-                style={{ width: mediaW, aspectRatio: ratio, borderRadius: Radii.card }}
-                contentFit="cover"
-                transition={100}
-              />
+              {failed ? (
+                <View style={[styles.imageFallback, { width: mediaW, aspectRatio: ratio, backgroundColor: theme.backgroundElement }]}>
+                  <Ionicons name="image-outline" size={28} color={theme.textSecondary} />
+                  <Text numberOfLines={2} style={[styles.imageFallbackText, { color: theme.textSecondary }]}>{att.filename ?? "Photo"}</Text>
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: url }}
+                  style={{ width: mediaW, aspectRatio: ratio, borderRadius: Radii.card, backgroundColor: theme.backgroundElement }}
+                  contentFit="cover"
+                  transition={100}
+                  onError={() => setFailedImages((current) => new Set(current).add(att.guid))}
+                />
+              )}
             </Pressable>
           );
         }
@@ -471,6 +482,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     marginTop: 2,
+  },
+  imageFallback: {
+    alignItems: "center",
+    borderRadius: Radii.card,
+    gap: 8,
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  imageFallbackText: {
+    fontSize: 12,
+    maxWidth: "80%",
+    textAlign: "center",
   },
   attachmentLink: {
     // color comes from theme.accent inline at the call site.
