@@ -17,3 +17,23 @@ export function chromeControlFill(
   if (state.hovered) return { backgroundColor: theme.backgroundElement };
   return undefined;
 }
+
+export interface FilterChipTheme extends ChromeFillTheme {
+  readonly text: string;
+}
+
+export interface FilterChipState extends ChromeFillState {
+  readonly selected: boolean;
+}
+
+/** Inverted when selected; otherwise element → selected on hover/press. */
+export function filterChipFill(
+  theme: FilterChipTheme,
+  state: FilterChipState,
+): { backgroundColor: string; opacity?: number } {
+  if (state.selected) {
+    return { backgroundColor: theme.text, opacity: state.hovered || state.pressed ? 0.88 : 1 };
+  }
+  if (state.pressed || state.hovered) return { backgroundColor: theme.backgroundSelected };
+  return { backgroundColor: theme.backgroundElement };
+}

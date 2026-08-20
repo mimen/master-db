@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
 import { useSuggestionMode } from "@/lib/settings";
+import { chromeControlFill } from "./sidebar/chrome-control-fill";
 
 /**
  * Reply-suggestion shelf, above the composer on desktop.
@@ -80,11 +81,8 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
   // On-demand, nothing generated yet: offer the button instead of the shelf.
   if (mode === "on-demand" && suggestions.length === 0 && !loading && !failed) {
     return (
-      <View style={[styles.container, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
-        <Pressable onPress={() => void load(true)} style={styles.demandButton} hitSlop={6}>
-          <Ionicons name="sparkles-outline" size={15} color={theme.accent} />
-          <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>Suggest a reply</Text>
-        </Pressable>
+      <View style={[styles.container, styles.demandRow, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
+        <DemandButton onPress={() => void load(true)} />
       </View>
     );
   }
@@ -139,12 +137,42 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
   );
 }
 
+function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Suggest a reply"
+      onPress={onPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={({ pressed }) => [
+        styles.demandButton,
+        chromeControlFill(theme, { hovered, pressed }),
+        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
+      ]}
+    >
+      <Ionicons name="sparkles-outline" size={15} color={theme.accent} />
+      <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500", lineHeight: 16 }}>
+        Suggest a reply
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  demandRow: {
+    justifyContent: "center",
+    minHeight: 44,
+    paddingBottom: 8,
+    paddingTop: 8,
   },
   header: {
     flexDirection: "row",
@@ -163,11 +191,13 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   demandButton: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
     alignSelf: "flex-start",
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
   },
   loadingRow: {
     flexDirection: "row",

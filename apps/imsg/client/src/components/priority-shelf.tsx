@@ -1,7 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
-import { forwardRef, useImperativeHandle, useRef } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from "react-native";
 
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -91,58 +99,88 @@ export const PriorityShelf = forwardRef<PriorityShelfHandle, PriorityShelfProps>
         <View style={styles.leadIcon}>
           <Ionicons name="star" size={20} color="#FFCC00" />
         </View>
-        {chats.map((chat, index) => {
-          const selected = chat.guid === selectedGuid;
-          const meta = shelfMeta(chat);
-          return (
-            <Pressable
-              key={chat.guid}
-              onLayout={(e) => {
-                itemFrames.current[index] = {
-                  x: e.nativeEvent.layout.x,
-                  width: e.nativeEvent.layout.width,
-                };
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${chat.displayName}, ${
-                meta.isPriorityBadge ? `priority ${chat.crm!.priority}` : meta.text
-              }`}
-              accessibilityState={{ selected }}
-              onPress={() => onPress(chat)}
-              onLongPress={() => onLongPress?.(chat)}
-              onPressIn={() => prefetchThread(chat.guid)}
-              style={({ pressed }) => [styles.item, { opacity: pressed ? 0.62 : 1 }]}
-            >
-              <View style={styles.avatarWrap}>
-                <ChatAvatar chat={chat} size={58} />
-                <View
-                  style={[
-                    styles.status,
-                    {
-                      backgroundColor: selected ? theme.accent : theme.background,
-                      borderColor: theme.background,
-                    },
-                  ]}
-                >
-                  <Ionicons name="ellipse" size={8} color={selected ? theme.onAccent : theme.accent} />
-                </View>
-              </View>
-              <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
-                {chat.displayName}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={[styles.meta, { color: meta.isPriorityBadge ? theme.accent : theme.textSecondary }]}
-              >
-                {meta.text}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {chats.map((chat, index) => (
+          <PriorityItem
+            key={chat.guid}
+            chat={chat}
+            selected={chat.guid === selectedGuid}
+            onLayout={(e) => {
+              itemFrames.current[index] = {
+                x: e.nativeEvent.layout.x,
+                width: e.nativeEvent.layout.width,
+              };
+            }}
+            onPress={() => onPress(chat)}
+            onLongPress={() => onLongPress?.(chat)}
+          />
+        ))}
       </ScrollView>
     </View>
   );
 });
+
+function PriorityItem({
+  chat,
+  selected,
+  onLayout,
+  onPress,
+  onLongPress,
+}: {
+  chat: ChatSummary;
+  selected: boolean;
+  onLayout: (event: LayoutChangeEvent) => void;
+  onPress: () => void;
+  onLongPress: () => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+  const meta = shelfMeta(chat);
+  return (
+    <Pressable
+      onLayout={onLayout}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${chat.displayName}, ${
+        meta.isPriorityBadge ? `priority ${chat.crm!.priority}` : meta.text
+      }`}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      onPressIn={() => prefetchThread(chat.guid)}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      style={({ pressed }) => [
+        styles.item,
+        hovered && !pressed && { backgroundColor: theme.backgroundElement },
+        pressed && { backgroundColor: theme.backgroundSelected },
+        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
+      ]}
+    >
+      <View style={styles.avatarWrap}>
+        <ChatAvatar chat={chat} size={58} />
+        <View
+          style={[
+            styles.status,
+            {
+              backgroundColor: selected ? theme.accent : theme.background,
+              borderColor: theme.background,
+            },
+          ]}
+        >
+          <Ionicons name="ellipse" size={8} color={selected ? theme.onAccent : theme.accent} />
+        </View>
+      </View>
+      <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
+        {chat.displayName}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={[styles.meta, { color: meta.isPriorityBadge ? theme.accent : theme.textSecondary }]}
+      >
+        {meta.text}
+      </Text>
+    </Pressable>
+  );
+}
 
 const styles = StyleSheet.create({
   section: {
@@ -164,7 +202,10 @@ const styles = StyleSheet.create({
   },
   item: {
     alignItems: "center",
-    width: 66,
+    borderRadius: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    width: 74,
   },
   avatarWrap: {
     marginBottom: 6,

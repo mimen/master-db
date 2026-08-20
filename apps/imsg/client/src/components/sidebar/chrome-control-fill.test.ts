@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { chromeControlFill } from "./chrome-control-fill";
+import { chromeControlFill, filterChipFill } from "./chrome-control-fill";
 
 const theme = {
   backgroundElement: "#F0F0F3",
@@ -21,6 +21,27 @@ describe("chromeControlFill", () => {
   test("press wins over hover", () => {
     expect(chromeControlFill(theme, { hovered: true, pressed: true })).toEqual({
       backgroundColor: theme.backgroundSelected,
+    });
+  });
+});
+
+describe("filterChipFill", () => {
+  const chipTheme = { ...theme, text: "#000000" };
+
+  test("selected inverts, hover dims", () => {
+    expect(filterChipFill(chipTheme, { selected: true, hovered: false, pressed: false })).toEqual({
+      backgroundColor: "#000000",
+      opacity: 1,
+    });
+    expect(filterChipFill(chipTheme, { selected: true, hovered: true, pressed: false }).opacity).toBe(0.88);
+  });
+
+  test("unselected hover uses the selected-chip fill", () => {
+    expect(filterChipFill(chipTheme, { selected: false, hovered: true, pressed: false })).toEqual({
+      backgroundColor: theme.backgroundSelected,
+    });
+    expect(filterChipFill(chipTheme, { selected: false, hovered: false, pressed: false })).toEqual({
+      backgroundColor: theme.backgroundElement,
     });
   });
 });

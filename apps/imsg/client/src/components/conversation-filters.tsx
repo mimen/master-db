@@ -1,9 +1,11 @@
+import { useState } from "react";
 import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { OverlayShell } from "./overlay-shell";
+import { filterChipFill } from "./sidebar/chrome-control-fill";
 import {
   activeInboxFilterCount,
   resetInboxFilters,
@@ -65,17 +67,20 @@ function FilterPill({
   compact?: boolean;
 }) {
   const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityLabel={filterAccessibilityLabel(label, count)}
       accessibilityState={{ checked: selected }}
       onPress={() => onSelect(selection)}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.pill,
         compact && styles.pillCompact,
-        { backgroundColor: selected ? theme.text : theme.backgroundElement },
-        pressed && !selected && { backgroundColor: theme.backgroundSelected },
+        filterChipFill(theme, { selected, hovered, pressed }),
+        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
       ]}
     >
       <Text
