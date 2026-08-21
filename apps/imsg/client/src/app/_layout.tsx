@@ -15,6 +15,7 @@ import { hydrateDrafts } from "@/lib/drafts";
 import { installDeployReloader } from "@/lib/deploy-reload";
 import { hydrateSettings } from "@/lib/settings";
 import { hydrateSidebarWidth } from "@/lib/sidebar-width";
+import { AppErrorBoundary } from "@/lib/app-error-boundary";
 import { convexClient } from "@/lib/identity";
 import { LightboxProvider } from "@/lib/lightbox";
 import { ToastHost } from "@/lib/toast";
@@ -33,7 +34,10 @@ export default function RootLayout() {
       reload: () => window.location.reload(),
     });
   }, []);
+  // A render-phase throw anywhere below (a Convex query timing out, a deploy
+    // blip) must degrade to a visible fallback, not a permanently white window.
   return (
+    <AppErrorBoundary>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ConvexProvider client={convexClient}>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
@@ -70,5 +74,6 @@ export default function RootLayout() {
         </ThemeProvider>
       </ConvexProvider>
     </GestureHandlerRootView>
+    </AppErrorBoundary>
   );
 }

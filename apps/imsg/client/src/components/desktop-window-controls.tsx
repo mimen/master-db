@@ -28,10 +28,13 @@ export function DesktopWindowControls(): React.JSX.Element | null {
           accessibilityRole="button"
           accessibilityLabel={control.label}
           onPress={() => control.action()}
-          style={({ pressed, hovered }) => [
+          // `hovered` exists in RN-web's Pressable state callback but not in
+          // every @types/react-native version — destructure loosely and cast
+          // like the other web-only escapes in this file.
+          style={(state: { pressed?: boolean; hovered?: boolean }) => [
             styles.control,
             { backgroundColor: control.color },
-            shell && (pressed || hovered) && styles.controlHover,
+            shell && (state.pressed || state.hovered) && styles.controlHover,
           ]}
         />
       ))}

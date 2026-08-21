@@ -57,6 +57,40 @@ async function chatEventsFor(ctx: QueryCtx, chatGuid: string): Promise<EventRef[
   return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id }));
 }
 
+/**
+ * EVERY person's tags and event links, each table read exactly once and
+ * grouped by person — the whole-table twin of personTagsFor/personEventsFor.
+ * The per-person helpers are an indexed lookup per person per call site;
+ * whole-directory queries (listPeople/nameDirectory) that loop them over
+ * every person turn that into an N+1 whose read count grows with the people
+ * table until Convex kills the query for "too many system operations". These
+ * tables hold only rows someone actually annotated, so a full scan is cheap
+ * and flat regardless of how many people exist.
+ */
+async function personCrmMaps(ctx: QueryCtx): Promise<{
+  tagsByPerson: Map<Id<"people">, string[]>;
+  eventsByPerson: Map<Id<"people">, EventRef[]>;
+}> {
+  const tagsByPerson = new Map<Id<"people">, string[]>();
+  for (const row of await ctx.db.query("tags").collect()) {
+    if (!row.person_id) continue;
+    const list = tagsByPerson.get(row.person_id);
+    if (list) list.push(row.tag);
+    else tagsByPerson.set(row.person_id, [row.tag]);
+  }
+  for (const list of tagsByPerson.values()) list.sort();
+
+  const eventsByPerson = new Map<Id<"people">, EventRef[]>();
+  for (const row of await ctx.db.query("event_links").collect()) {
+    if (!row.person_id) continue;
+    const ref: EventRef = { id: row.airtable_event_id, name: row.event_name, linkId: row._id };
+    const list = eventsByPerson.get(row.person_id);
+    if (list) list.push(ref);
+    else eventsByPerson.set(row.person_id, [ref]);
+  }
+  return { tagsByPerson, eventsByPerson };
+}
+
 /** Reads a (possibly still-transitional-string) priority as the numeric P1–P5
  * form only — see schema/identity/people.ts's docstring on the transitional
  * union type. A row that hasn't been through `migratePriorityToNumeric` yet
@@ -197,10 +231,12 @@ export const listPeople = query({
     const named = people
       .filter((p) => !p.merged_into && !p.is_self && p.display_name)
       .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
+    // Single pass per table — see personCrmMaps. The per-person lookups this
+    // replaces timed out once the people table grew past Convex's operation
+    // budget ("too many system operations"), white-screening every client.
+    const { tagsByPerson, eventsByPerson } = await personCrmMaps(ctx);
     const out = [];
     for (const p of named) {
-      const tags = await personTagsFor(ctx, p._id);
-      const events = await personEventsFor(ctx, p._id);
       out.push({
         _id: p._id,
         display_name: p.display_name,
@@ -213,8 +249,8 @@ export const listPeople = query({
         airtable_human_id: p.airtable_human_id,
         is_favorite: p.is_favorite,
         priority: numericPriority(p.priority),
-        tags,
-        events,
+        tags: tagsByPerson.get(p._id) ?? [],
+        events: eventsByPerson.get(p._id) ?? [],
       });
     }
     return out;
@@ -247,6 +283,8 @@ export const nameDirectory = query({
   handler: async (ctx, { key }) => {
     requireIdentityKey(key);
     const people = await ctx.db.query("people").collect();
+    // Single pass per table — see personCrmMaps (same N+1 listPeople hit).
+    const { tagsByPerson, eventsByPerson } = await personCrmMaps(ctx);
     const out: Array<{
       normalized: string;
       display_name: string;
@@ -259,8 +297,8 @@ export const nameDirectory = query({
       const crm = {
         is_favorite: p.is_favorite,
         priority: numericPriority(p.priority),
-        tags: await personTagsFor(ctx, p._id),
-        events: await personEventsFor(ctx, p._id),
+        tags: tagsByPerson.get(p._id) ?? [],
+        events: eventsByPerson.get(p._id) ?? [],
       };
       for (const normalized of p.normalized_phones) out.push({ normalized, display_name: p.display_name, terms, crm });
       for (const normalized of p.normalized_emails) out.push({ normalized, display_name: p.display_name, terms, crm });

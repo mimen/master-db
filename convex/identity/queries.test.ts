@@ -445,6 +445,76 @@ describe("nameDirectory", () => {
     const t = convexTest(schema, modules);
     await expect(t.query(nameDirectoryRef, { key: "wrong" })).rejects.toThrow();
   });
+
+  test("carries each person's tags and event links through the flattened crm", async () => {
+    const t = convexTest(schema, modules);
+    const alex = await seedPerson(t, {
+      display_name: "Alex",
+      normalized_phones: ["+16195551111"],
+    });
+    const chase = await seedPerson(t, {
+      display_name: "Chase",
+      normalized_emails: ["chase@example.com"],
+    });
+    await seedTag(t, alex, "vip");
+    await t.mutation(linkEventRef, {
+      key: TEST_KEY,
+      personId: chase,
+      airtable_event_id: "evt1",
+      event_name: "Fall Kickoff",
+    });
+
+    const results = await t.query(nameDirectoryRef, { key: TEST_KEY });
+    const alexRow = results.find((r) => r.normalized === "+16195551111");
+    const chaseRow = results.find((r) => r.normalized === "chase@example.com");
+    expect(alexRow?.crm.tags).toEqual(["vip"]);
+    expect(alexRow?.crm.events).toEqual([]);
+    expect(chaseRow?.crm.events).toEqual([
+      { id: "evt1", name: "Fall Kickoff", linkId: expect.any(String) },
+    ]);
+    expect(chaseRow?.crm.tags).toEqual([]);
+  });
+
+  test("stays flat when many people exist — the whole-table read count must not grow with the people table", async () => {
+    // Regression for the live incident: listPeople/nameDirectory looped a
+    // per-person indexed lookup over every person (N+1), which pushed Convex
+    // past its per-query operation budget ("too many system operations") and
+    // timed out once the directory grew. The fix reads tags and event_links
+    // exactly once regardless of people count; this pins that with more
+    // seeded people than any N+1 budget would tolerate in CI.
+    const t = convexTest(schema, modules);
+    for (let i = 0; i < 60; i++) {
+      await seedPerson(t, { display_name: `P${String(i).padStart(2, "0")}` });
+    }
+    const first = await t.run(async (ctx) =>
+      ctx.db.query("people").order("desc").take(1),
+    );
+    const someone = first[0]!;
+    await seedTag(t, someone._id, "vip");
+    await t.mutation(linkEventRef, {
+      key: TEST_KEY,
+      personId: someone._id,
+      airtable_event_id: "evt9",
+      event_name: "Late Link",
+    });
+
+    const results = (await t.query(listPeopleRef, { key: TEST_KEY })) as Array<{
+      display_name?: string;
+      tags: string[];
+      events: Array<{ id: string; name: string; linkId: string }>;
+    }>;
+    expect(results).toHaveLength(60);
+    const tagged = results.find((r) => r.display_name === someone.display_name);
+    expect(tagged?.tags).toEqual(["vip"]);
+    expect(tagged?.events).toEqual([
+      { id: "evt9", name: "Late Link", linkId: expect.any(String) },
+    ]);
+    // And the mirror projection agrees.
+    const dir = (await t.query(nameDirectoryRef, { key: TEST_KEY })) as Array<{
+      crm: { tags: string[] };
+    }>;
+    expect(dir.every((r) => r.crm.tags.length <= 1)).toBe(true);
+  });
 });
 
 describe("chatCrm", () => {

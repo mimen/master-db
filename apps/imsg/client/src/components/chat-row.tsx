@@ -487,11 +487,15 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  opacityTransition: {
-    transitionDuration: "60ms, 0ms",
-    transitionProperty: "opacity, visibility",
-    transitionTimingFunction: "cubic-bezier(0.2,0,0,1)",
-  },
+  // Web-only CSS transition properties — cast like desktop-split.tsx's
+  // backdrop-filter escape; RN-web passes them through, TS can't see them.
+  opacityTransition: Platform.OS === "web"
+    ? ({
+        transitionDuration: "60ms, 0ms",
+        transitionProperty: "opacity, visibility",
+        transitionTimingFunction: "cubic-bezier(0.2,0,0,1)",
+      } as object)
+    : {},
   snippet: {
     flex: 1,
     fontSize: 14,
