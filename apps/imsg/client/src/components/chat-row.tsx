@@ -180,9 +180,11 @@ function ChatRowInner({
   const [hovered, setHovered] = useState(false);
   const [closerHovered, setCloserHovered] = useState(false);
   const closer = useSmartCloser(chat.guid, compact);
-  const specificCloser = isSpecificCloser(closer.closer) ? closer.closer : null;
-  const closerLabel = specificCloser?.label;
   const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
+  const specificCloser = isSpecificCloser(closer.closer) && !(waitingOnly && closer.closer?.kind === "reply")
+    ? closer.closer
+    : null;
+  const closerLabel = specificCloser?.label;
   // Smart closers remain clickable on hover. Rows without a closer reveal the
   // action strip; selecting any row always reveals it.
   const actionsVisible = compact && (selected || (hovered && !specificCloser));
@@ -339,7 +341,7 @@ function ChatRowInner({
             >
               {waitingOnly ? (
                 <>
-                  <Pressable accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></Pressable>
+                  <Pressable accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></Pressable>
                   <Pressable accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></Pressable>
                 </>
               ) : (
