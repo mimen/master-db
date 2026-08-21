@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { useTheme } from "@/hooks/use-theme";
@@ -34,7 +34,7 @@ export function DesktopSplit({ list, detail, children, listInset = 0 }: DesktopS
   const renderedListWidth = listWidth + listInset;
   const deskGround = Platform.OS === "web" ? ({ backgroundImage: visual.deskGradient } as object) : { backgroundColor: visual.desk };
   return (
-    <View style={[frame.split, deskGround]}>
+    <View style={[frame.split, deskGround, styles.desk]}>
       <View style={[frame.pane, frame.listPane, { flexBasis: renderedListWidth, width: renderedListWidth }]}>
         {list}
         <SidebarResizeHandle width={renderedListWidth} onResize={(next) => setListWidth(next - listInset)} />
@@ -44,6 +44,13 @@ export function DesktopSplit({ list, detail, children, listInset = 0 }: DesktopS
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  desk: {
+    gap: 10,
+    padding: 10,
+  },
+});
 
 const SLIDE_MS = 220;
 const SLIDE_EASE = Easing.out(Easing.cubic);
@@ -74,7 +81,6 @@ export function DesktopAuxPane({
   }, [open, width]);
 
   const slide = useAnimatedStyle(() => ({
-    borderLeftWidth: width.value > 2 ? 0.5 : 0,
     flexBasis: width.value,
     width: width.value,
   }));
@@ -86,7 +92,7 @@ export function DesktopAuxPane({
       style={[
         {
           backgroundColor: visual.inspector,
-          borderLeftColor: visual.hairline,
+          borderRadius: 12,
           flexGrow: 0,
           flexShrink: 0,
           overflow: "hidden",

@@ -41,15 +41,14 @@ describe("desktopFrame", () => {
     divider: "#E5E5EA",
   };
 
-  test("wide split is flush with hairline pane dividers", () => {
+  test("wide split panes float with rounded corners; gutters live on DesktopSplit", () => {
     const frame = desktopFrame(theme);
     expect(frame.split.padding).toBeUndefined();
     expect(frame.split.gap).toBeUndefined();
     expect(frame.split.backgroundColor).toBe(theme.background);
-    expect(frame.pane.borderRadius).toBeUndefined();
-    expect(frame.listPane.borderRightWidth).toBe(0.5);
+    expect(frame.pane.borderRadius).toBe(12);
+    expect(frame.listPane.borderRightWidth).toBeUndefined();
     expect(frame.listPane.width).toBe(352);
-    expect(frame.auxPane.borderLeftWidth).toBe(0.5);
     expect(frame.auxPane.width).toBe(AUX_PANE_WIDTH);
   });
 

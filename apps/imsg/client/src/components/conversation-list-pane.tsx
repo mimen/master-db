@@ -1,4 +1,4 @@
-import type { ChatSummary, SmartCloser, StateCounts, TriageProgressStats } from "@shared/types";
+import type { ChatSummary, StateCounts, TriageProgressStats } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,7 +11,6 @@ import type { PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 import { TriageNavigationRail } from "./triage-navigation-rail";
 import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
-import { TriageBatchBanner } from "./triage-batch-banner";
 
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
@@ -74,10 +73,6 @@ export function ConversationListPane({
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
   const [stats, setStats] = useState<TriageProgressStats | null>(null);
-  const [closers, setClosers] = useState<Record<string, SmartCloser | null>>({});
-  const noteCloser = useCallback((chatGuid: string, closer: SmartCloser | null): void => {
-    setClosers((current) => current[chatGuid] === closer ? current : { ...current, [chatGuid]: closer });
-  }, []);
   const refreshStats = useCallback((): void => {
     if (!wide) return;
     void api.getTriageStats().then(setStats, () => undefined);
@@ -136,12 +131,8 @@ export function ConversationListPane({
     navigationEntries: deskChats.map((chat, index) => ({ chat, location: { kind: "list" as const, index } })),
   }) : model, [model, deskChats, wide]);
   const sweepableChats = useMemo(() => deskModel.listChats.filter((chat) =>
-    !chat.flags.archived && chat.laterUntil === null && (chat.flags.unresponded || chat.flags.waiting),
+    !chat.flags.archived && chat.laterUntil === null && chat.flags.unresponded,
   ), [deskModel.listChats]);
-  const batchChats = useMemo(() => deskModel.listChats.filter((chat) => {
-    const closer = closers[chat.guid];
-    return closer?.kind === "reply" || closer?.kind === "react_done" || closer?.kind === "archive";
-  }), [closers, deskModel.listChats]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -172,10 +163,9 @@ export function ConversationListPane({
         onPress={() => onOpenChat(item)}
         onDone={wide ? () => { void finishTriageChat(item).then(refreshStats, () => undefined); } : undefined}
         onLater={wide ? (until) => { void setTriageLater(item, until).then(() => { onRefresh(); refreshStats(); }, onRefresh); } : undefined}
-        onCloser={wide ? noteCloser : undefined}
       />
     ),
-    [wide, glide, selectedGuid, onOpenChat, onRefresh, refreshStats, noteCloser],
+    [wide, glide, selectedGuid, onOpenChat, onRefresh, refreshStats],
   );
 
   const shelfRef = useRef<PriorityShelfHandle>(null);
@@ -214,7 +204,7 @@ export function ConversationListPane({
       }, null)}
       search={searchField}
       action={<ChromeIconButton icon="create-outline" accessibilityLabel="New message" onPress={onNewMessage} />}
-      onSweep={() => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); }}
+      onSweep={filters.state === "unresponded" ? () => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); } : undefined}
     />
   ) : (
     <SidebarChrome
@@ -284,16 +274,6 @@ export function ConversationListPane({
                 paddingBottom: wide ? 6 : 0,
               }}
             >
-              {wide && deskModel.listChats.length >= 2 && (filters.state === "unresponded" || filters.state === "waiting") ? (
-                <TriageBatchBanner
-                  count={batchChats.length >= 2 ? batchChats.length : sweepableChats.length}
-                  batchable={batchChats.length >= 2}
-                  onSweep={() => {
-                    const scope = batchChats.length >= 2 ? batchChats : sweepableChats;
-                    onStartSweep(scope, scope.some((chat) => chat.guid === selectedGuid) ? selectedGuid : scope[0]?.guid);
-                  }}
-                />
-              ) : null}
               <ConversationFilters
                 compact={wide}
                 filters={filters}
