@@ -17,7 +17,7 @@ import { api } from "@/lib/api";
 import { formatDayDivider, sameDay } from "@/lib/format";
 import { hapticSelect } from "@/lib/haptics";
 import { useServerEvents } from "@/lib/sse";
-import { useActionSheet } from "@/lib/action-sheet";
+import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { openChatInfo } from "@/lib/chat-info";
@@ -39,6 +39,7 @@ import { Composer } from "./composer";
 import { CenteredSpinner } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
+import { HoverFillButton } from "./hover-fill-button";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
@@ -581,11 +582,11 @@ export function ThreadView({
           </Text>
           {headerChat.flags.unresponded ? (
             <>
-              <Pressable accessibilityLabel="Mark conversation done" onPress={() => { void finishTriageChat(headerChat); }} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Done <Text style={{ color: theme.textSecondary }}>E</Text></Text></Pressable>
-              <Pressable accessibilityLabel="Move conversation to Later" onPress={() => showSheet({ title: `Later · ${headerChat.displayName}`, actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later <Text style={{ color: theme.textSecondary }}>H</Text></Text></Pressable>
+              <HoverFillButton accessibilityLabel="Mark conversation done" onPress={() => { void finishTriageChat(headerChat); }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Done <Text style={{ color: theme.textSecondary }}>E</Text></Text></HoverFillButton>
+              <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => showSheet({ title: `Later · ${headerChat.displayName}`, anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later <Text style={{ color: theme.textSecondary }}>H</Text></Text></HoverFillButton>
             </>
           ) : (
-            <Pressable accessibilityLabel="Stop waiting on this conversation" onPress={() => { void finishTriageChat(headerChat); }} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Let go <Text style={{ color: theme.textSecondary }}>E</Text></Text></Pressable>
+            <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={() => { void finishTriageChat(headerChat); }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Let go <Text style={{ color: theme.textSecondary }}>E</Text></Text></HoverFillButton>
           )}
         </View>
       )}

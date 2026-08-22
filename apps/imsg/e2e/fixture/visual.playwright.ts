@@ -35,7 +35,7 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
     for (const width of WIDTHS) {
       await resetAndOpen(desk, width, scheme);
       const page = desk.page;
-      const rail = page.getByTestId("triage-rail");
+      const rail = page.getByTestId("triage-rail").first();
       const header = page.getByTestId("triage-queue-header");
       const controls = page.getByTestId("window-controls").getByRole("button");
       const rows = page.getByTestId("conversation-row");

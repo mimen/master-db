@@ -188,7 +188,6 @@ export function ConversationListPane({
       inputRef={search.inputRef}
       onChangeText={search.setQuery}
       onClear={() => search.clear()}
-      shortcut={wide ? "⌘K" : undefined}
     />
   );
 

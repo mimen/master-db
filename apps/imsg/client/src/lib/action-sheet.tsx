@@ -8,6 +8,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type GestureResponderEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
@@ -41,6 +42,11 @@ const SheetContext = createContext<ShowSheet>(() => undefined);
 
 export function useActionSheet(): ShowSheet {
   return useContext(SheetContext);
+}
+
+/** Viewport point of a press, for desktop popovers that should sit on the button. */
+export function pressAnchor(event: GestureResponderEvent): { x: number; y: number } {
+  return { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
 }
 
 /**
@@ -109,7 +115,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
               const openUp = rendered.anchor.y > winH - 300;
               const place = openUp
                 ? { bottom: winH - rendered.anchor.y + 6 }
-                : { top: Math.min(rendered.anchor.y, winH - 80) };
+                : { top: Math.min(rendered.anchor.y + 10, winH - 80) };
               return (
                 <View
                   style={[
