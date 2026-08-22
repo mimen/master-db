@@ -2,18 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { AUX_PANE_WIDTH, desktopFrame } from "./desktop-frame";
 import {
-  closeDesktopWindow,
   installNativeMenuBridge,
   installShellReleaseBridge,
   isDesktopShell,
-  minimizeDesktopWindow,
   readShellReleaseState,
   restartToStagedShell,
   SHELL_RELEASE_STATE_COMMAND,
   SHELL_RESTART_COMMAND,
   SHELL_UPDATE_STAGED_EVENT,
-  startDesktopWindowDrag,
-  toggleMaximizeDesktopWindow,
+  watchDesktopFullscreen,
   type DesktopShellWindow,
 } from "./desktop-shell";
 import { setKeyboardRuntime } from "./keyboard/controller";
@@ -66,28 +63,43 @@ describe("desktopFrame", () => {
   });
 });
 
-describe("custom desktop window controls", () => {
-  test("routes close, minimize, zoom, and drag to the current Tauri window", async () => {
-    const calls: string[] = [];
+describe("native titlebar inset", () => {
+  test("tracks AppKit fullscreen state and removes its listener", async () => {
+    let fullscreen = false;
+    let resize: (() => void) | undefined;
+    let listening = true;
+    const states: boolean[] = [];
     const win: DesktopShellWindow = {
       __TAURI__: {
         event: { listen: async () => () => undefined },
         window: {
           getCurrentWindow: () => ({
-            close: async () => { calls.push("close"); },
-            minimize: async () => { calls.push("minimize"); },
-            toggleMaximize: async () => { calls.push("zoom"); },
-            startDragging: async () => { calls.push("drag"); },
+            close: async () => undefined,
+            isFullscreen: async () => fullscreen,
+            onResized: async (handler) => {
+              resize = handler;
+              return () => {
+                listening = false;
+              };
+            },
           }),
         },
       },
     };
-    closeDesktopWindow(win);
-    minimizeDesktopWindow(win);
-    toggleMaximizeDesktopWindow(win);
-    startDesktopWindowDrag(win);
+
+    const unwatch = watchDesktopFullscreen((state) => states.push(state), win);
     await Promise.resolve();
-    expect(calls).toEqual(["close", "minimize", "zoom", "drag"]);
+    await Promise.resolve();
+    expect(states).toEqual([false]);
+
+    fullscreen = true;
+    resize?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(states).toEqual([false, true]);
+
+    unwatch();
+    expect(listening).toBe(false);
   });
 });
 

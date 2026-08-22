@@ -13,7 +13,36 @@ interface DeskFixture {
 export const test = base.extend<DeskFixture>({
   desk: async ({ page, request }, provide): Promise<void> => {
     await page.addInitScript(() => {
-      Object.defineProperty(window, "__IMSG_NATIVE_SHELL__", { value: true, enumerable: true });
+      let fullscreen = false;
+      const resized = new Set<() => void>();
+      const currentWindow = {
+        close: async (): Promise<void> => undefined,
+        isFullscreen: async (): Promise<boolean> => fullscreen,
+        onResized: async (handler: () => void): Promise<() => void> => {
+          resized.add(handler);
+          return () => {
+            resized.delete(handler);
+          };
+        },
+      };
+      const target = window as Window & {
+        __fixtureHasFullscreenListener?: () => boolean;
+        __fixtureSetFullscreen?: (value: boolean) => void;
+        __TAURI__?: {
+          event: { listen: () => Promise<() => void> };
+          window: { getCurrentWindow: () => typeof currentWindow };
+        };
+      };
+      Object.defineProperty(target, "__IMSG_NATIVE_SHELL__", { value: true, enumerable: true });
+      target.__fixtureHasFullscreenListener = (): boolean => resized.size > 0;
+      target.__fixtureSetFullscreen = (value: boolean): void => {
+        fullscreen = value;
+        for (const handler of resized) handler();
+      };
+      target.__TAURI__ = {
+        event: { listen: async () => () => undefined },
+        window: { getCurrentWindow: () => currentWindow },
+      };
     });
     const reset = await request.post("/__fixture/reset");
     expect(reset.ok()).toBe(true);

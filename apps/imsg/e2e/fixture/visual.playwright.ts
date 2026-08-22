@@ -43,7 +43,22 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       await expect(rail).toBeVisible();
       await expect(header).toBeVisible();
       await expect(page.getByTestId("window-controls")).toHaveCount(0);
+      expect(await rail.getAttribute("data-tauri-drag-region")).toBe("");
       await expect(rail.locator("svg")).toHaveCount(6);
+      for (const control of await rail.getByRole("button").all()) {
+        expect(await control.getAttribute("data-tauri-drag-region")).toBe("false");
+        const icon = control.locator("svg");
+        await expect(icon).toHaveCount(1);
+        await expect(icon).toBeVisible();
+        expect(await icon.locator("path").count()).toBeGreaterThan(0);
+        const iconBox = await icon.boundingBox();
+        expect(iconBox?.width).toBeGreaterThan(0);
+        expect(iconBox?.height).toBeGreaterThan(0);
+        const strokes = await icon.locator("path").evaluateAll((paths) =>
+          paths.map((path) => getComputedStyle(path).stroke),
+        );
+        expect(strokes.every((stroke) => stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")).toBe(true);
+      }
       await expect(needsReply.locator("svg")).toBeVisible();
       const railBox = await rail.boundingBox();
       const headerBox = await header.boundingBox();
@@ -118,15 +133,34 @@ test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", a
   }
 });
 
-test("native window chrome leaves its traffic-light area clear", async ({ desk }) => {
+test("native window chrome reserves space only while AppKit controls are visible", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const rail = desk.page.getByTestId("triage-rail").first();
   const needsReply = rail.getByRole("button", { name: /^Needs reply/ });
 
   await expect(desk.page.getByTestId("window-controls")).toHaveCount(0);
   await expect(needsReply.locator("svg")).toBeVisible();
-  const box = await needsReply.boundingBox();
-  expect(box?.y).toBeGreaterThanOrEqual(38);
+  const windowedBox = await needsReply.boundingBox();
+  expect(windowedBox?.y).toBeGreaterThanOrEqual(38);
+  await expect
+    .poll(() => desk.page.evaluate(() =>
+      (window as Window & { __fixtureHasFullscreenListener?: () => boolean }).__fixtureHasFullscreenListener?.() ?? false,
+    ))
+    .toBe(true);
+
+  await desk.page.evaluate(() => {
+    (window as Window & { __fixtureSetFullscreen?: (value: boolean) => void }).__fixtureSetFullscreen?.(true);
+  });
+  await expect
+    .poll(async () => (await needsReply.boundingBox())?.y)
+    .toBeLessThanOrEqual(18);
+
+  await desk.page.evaluate(() => {
+    (window as Window & { __fixtureSetFullscreen?: (value: boolean) => void }).__fixtureSetFullscreen?.(false);
+  });
+  await expect
+    .poll(async () => (await needsReply.boundingBox())?.y)
+    .toBeGreaterThanOrEqual(38);
 });
 
 test("every visible control remains stable and usable on hover", async ({ desk }) => {

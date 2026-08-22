@@ -2,7 +2,7 @@ import { Platform, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { DESKTOP_TRAFFIC_LIGHT_INSET, isDesktopShell } from "@/lib/desktop-shell";
+import { isDesktopShell } from "@/lib/desktop-shell";
 import {
   SIDEBAR_NAV_HEIGHT,
   SIDEBAR_TITLE_HEIGHT,
@@ -25,8 +25,6 @@ export interface SidebarChromeProps {
   readonly actions: React.ReactNode;
   /** Wide: title shown above the search row. */
   readonly title?: string;
-  /** The desktop traffic lights are cleared by a rail before this pane. */
-  readonly trafficLightsInRail?: boolean;
   /** Wide: sticky search row under the title. */
   readonly toolbar?: React.ReactNode;
   /** Wide: Messages/Contacts on its own row under search. */
@@ -35,15 +33,13 @@ export interface SidebarChromeProps {
 
 /**
  * The fixed frosted-glass top bar shared by both sidebars — the only fixed
- * top chrome. No hairlines. Wide is three rows: wordmark (optically centered
- * on overlay traffic lights), search + new, then the Messages/Contacts
- * switcher. Mobile stays a single bar with search inline.
+ * top chrome. No hairlines. Wide is three rows: wordmark, search + new, then
+ * the Messages/Contacts switcher. Mobile stays a single bar with search inline.
  */
 export function SidebarChrome({
   leading,
   actions,
   title = "Comma,",
-  trafficLightsInRail = false,
   toolbar,
   nav,
 }: SidebarChromeProps): React.JSX.Element {
@@ -70,7 +66,7 @@ export function SidebarChrome({
   if (wide && toolbar) {
     return (
       <View style={[styles.stack, glassStyle]} {...dragProps}>
-        <View style={[styles.titleRow, shell && !trafficLightsInRail && styles.titleRowShell]}>
+        <View style={styles.titleRow}>
           <Text
             accessibilityRole="header"
             numberOfLines={1}
@@ -95,7 +91,7 @@ export function SidebarChrome({
 
   return (
     <View
-      style={[styles.bar, glassStyle, compact && styles.barCompact, shell && styles.barShell]}
+      style={[styles.bar, glassStyle, compact && styles.barCompact]}
       {...dragProps}
     >
       {leading}
@@ -143,9 +139,6 @@ const styles = StyleSheet.create({
     height: SIDEBAR_TITLE_HEIGHT,
     paddingHorizontal: 12,
   },
-  titleRowShell: {
-    paddingLeft: DESKTOP_TRAFFIC_LIGHT_INSET,
-  },
   wordmark: {
     flexShrink: 0,
     fontFamily: WORDMARK_FONT,
@@ -183,9 +176,6 @@ const styles = StyleSheet.create({
   },
   barCompact: {
     paddingHorizontal: 10,
-  },
-  barShell: {
-    paddingLeft: DESKTOP_TRAFFIC_LIGHT_INSET,
   },
   actions: {
     flexDirection: "row",
