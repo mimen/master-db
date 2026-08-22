@@ -1,3 +1,8 @@
+import {
+  parseShellReleaseState,
+  type ShellReleaseState,
+} from "@shared/release-identity";
+
 import { runCommand } from "./keyboard/controller";
 import { isCommandId } from "./keyboard/registry";
 import type { CommandId } from "./keyboard/types";
@@ -10,12 +15,16 @@ import type { CommandId } from "./keyboard/types";
 export const DESKTOP_TRAFFIC_LIGHT_INSET = 80;
 
 type TauriListenUnlisten = () => void;
+type TauriEventPayload = string | Record<string, string | null | undefined>;
 
 type TauriGlobal = {
+  core?: {
+    invoke: <Result>(command: string) => Promise<Result>;
+  };
   event: {
     listen: (
       event: string,
-      handler: (event: { payload: string }) => void,
+      handler: (event: { payload: TauriEventPayload }) => void,
     ) => Promise<TauriListenUnlisten>;
   };
   window: {
@@ -34,8 +43,8 @@ export type DesktopShellWindow = {
 };
 
 function defaultWindow(): DesktopShellWindow | undefined {
-  if (typeof window === "undefined") return undefined;
-  return window as Window & DesktopShellWindow;
+  if (typeof globalThis.window === "undefined") return undefined;
+  return globalThis.window as Window & DesktopShellWindow;
 }
 
 /** True when the page is running inside the Tauri desktop shell. */
@@ -71,6 +80,65 @@ export function startDesktopWindowDrag(win: DesktopShellWindow | undefined = def
   void tauri.window.getCurrentWindow().startDragging?.();
 }
 
+/** Client-only contract for shell staging and activation; Rust owns the mechanics. */
+export const SHELL_RELEASE_STATE_COMMAND = "get_shell_release_state";
+export const SHELL_RESTART_COMMAND = "restart_to_staged_shell";
+export const SHELL_UPDATE_STAGED_EVENT = "comma-shell-update-staged";
+
+export async function readShellReleaseState(
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): Promise<ShellReleaseState | null> {
+  const invoke = tauriGlobal(win)?.core?.invoke;
+  if (!invoke) return null;
+  try {
+    const state = await invoke<Record<string, string | null | undefined>>(SHELL_RELEASE_STATE_COMMAND);
+    return parseShellReleaseState(state);
+  } catch {
+    return null;
+  }
+}
+
+export async function restartToStagedShell(
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): Promise<boolean> {
+  const invoke = tauriGlobal(win)?.core?.invoke;
+  if (!invoke) return false;
+  try {
+    await invoke<null>(SHELL_RESTART_COMMAND);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reads staged state once, then follows the laptop stager's Tauri event. */
+export function installShellReleaseBridge(
+  onState: (state: ShellReleaseState) => void,
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): () => void {
+  const tauri = tauriGlobal(win);
+  if (!tauri?.core) return () => undefined;
+
+  let cancelled = false;
+  let unlisten: TauriListenUnlisten | undefined;
+  void readShellReleaseState(win).then((state) => {
+    if (!cancelled && state) onState(state);
+  });
+  void tauri.event.listen(SHELL_UPDATE_STAGED_EVENT, (event) => {
+    if (cancelled || typeof event.payload === "string") return;
+    const state = parseShellReleaseState(event.payload);
+    if (state) onState(state);
+  }).then((fn) => {
+    if (cancelled) fn();
+    else unlisten = fn;
+  });
+
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
+}
+
 /**
  * Native menu accelerators emit `imsg-shortcut` with a CommandId payload.
  * No-ops outside Tauri so the PWA bundle is unaffected.
@@ -85,7 +153,8 @@ export function installNativeMenuBridge(
   let unlisten: TauriListenUnlisten | undefined;
   void tauri.event
     .listen("imsg-shortcut", (event) => {
-      const id: string = event.payload;
+      if (typeof event.payload !== "string") return;
+      const id = event.payload;
       if (!isCommandId(id)) return;
       const command: CommandId = id;
       const handled = runCommand(command, "native-menu");
