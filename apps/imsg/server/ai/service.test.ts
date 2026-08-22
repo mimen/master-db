@@ -107,6 +107,43 @@ describe("replySuggestions", () => {
     expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBe("m5");
   });
 
+  test("deduplicates concurrent generation for the same chat and message", async () => {
+    const { service } = makeService({ messages: [makeMessage({ guid: "m5" })] });
+    let calls = 0;
+    (service as unknown as { deps: { shadow: { turn: (prompt: string) => Promise<{ ok: true; value: string }> } } }).deps.shadow.turn = async () => {
+      calls++;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return { ok: true, value: '["fresh"]' };
+    };
+    const [first, second] = await Promise.all([
+      service.replySuggestions("chat-1", null, true),
+      service.replySuggestions("chat-1", null, true),
+    ]);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(calls).toBe(1);
+  });
+
+  test("limits concurrent harness suggestion generation", async () => {
+    const { service } = makeService({ messages: [makeMessage({ guid: "m5" })] });
+    let active = 0;
+    let peak = 0;
+    (service as unknown as { deps: { shadow: { turn: (prompt: string) => Promise<{ ok: true; value: string }> } } }).deps.shadow.turn = async () => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      return { ok: true, value: '["fresh"]' };
+    };
+    await Promise.all([
+      service.replySuggestions("chat-1", null, true),
+      service.replySuggestions("chat-2", null, true),
+      service.replySuggestions("chat-3", null, true),
+      service.replySuggestions("chat-4", null, true),
+    ]);
+    expect(peak).toBe(2);
+  });
+
   test("accepts a bare JSON array with narration around it", async () => {
     const { service } = makeService({
       messages: [makeMessage({ guid: "m5" })],

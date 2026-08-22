@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { ContactsListPane } from "@/components/contacts-list-pane";
@@ -16,17 +17,18 @@ import { onOpenSettingsPane } from "@/lib/settings-pane";
 export default function ContactsScreen() {
   const theme = useTheme();
   const { wide } = useLayoutMode();
+  const isFocused = useIsFocused();
   const [selectedPerson, setSelectedPerson] = useState<ContactListRow | null>(null);
   const [auxPane, setAuxPane] = useState<"scheduled" | "settings" | null>(null);
 
   useEffect(() => {
-    if (!wide) return;
+    if (!wide || !isFocused) return;
     return onOpenScheduledPane(() => setAuxPane("scheduled"));
-  }, [wide]);
+  }, [isFocused, wide]);
   useEffect(() => {
-    if (!wide) return;
+    if (!wide || !isFocused) return;
     return onOpenSettingsPane(() => setAuxPane("settings"));
-  }, [wide]);
+  }, [isFocused, wide]);
 
   if (!wide) {
     return (

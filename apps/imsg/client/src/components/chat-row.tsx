@@ -153,7 +153,11 @@ function ChatRowInner({
   const [hovered, setHovered] = useState(false);
   const [draftHovered, setDraftHovered] = useState(false);
   const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
-  const rowDraft = useRowDraft(chat.guid, compact && (chat.flags.unresponded || chat.flags.waiting));
+  const rowDraft = useRowDraft(
+    chat.guid,
+    chat.lastMessage?.guid ?? null,
+    compact && (chat.flags.unresponded || chat.flags.waiting),
+  );
   // The third lane is always the AI draft, or selected-row actions. The message
   // preview above it never disappears.
   const actionsVisible = compact && (selected || (hovered && !rowDraft));
@@ -293,13 +297,16 @@ function ChatRowInner({
               </Text>
             )}
           </View>
-          <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-          <View style={styles.previewLine}>
+          <View style={styles.messageRow}>
+            <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
+            {!compact ? <RowSignal chat={chat} /> : null}
+          </View>
+          {compact ? <View style={styles.previewLine}>
             <View
               pointerEvents={actionsVisible ? "none" : "auto"}
               style={[styles.previewLayer, { justifyContent: rowDraft ? "flex-start" : "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
             >
-              {compact && rowDraft ? <Pressable accessibilityRole="button" accessibilityLabel="Fill AI draft" onPress={(event) => { event.stopPropagation(); onPress(); requestAnimationFrame(() => fillComposer(rowDraft)); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: "rgba(0,122,255,0.4)", backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="create-outline" size={13} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.accent }]}>Draft: {rowDraft}</Text></Pressable> : <RowSignal chat={chat} />}
+              {rowDraft ? <Pressable accessibilityRole="button" accessibilityLabel="Fill AI draft" onPress={(event) => { event.stopPropagation(); onPress(); requestAnimationFrame(() => fillComposer(rowDraft)); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: "rgba(0,122,255,0.4)", backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="create-outline" size={13} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.accent }]}>Draft: {rowDraft}</Text></Pressable> : <RowSignal chat={chat} />}
             </View>
             <View
               pointerEvents={actionsVisible ? "auto" : "none"}
@@ -319,7 +326,7 @@ function ChatRowInner({
               )}
               <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>
             </View>
-          </View>
+          </View> : null}
         </View>
         {!compact && (
           <Pressable
@@ -413,8 +420,14 @@ const styles = StyleSheet.create({
   favoriteStar: {
     flexShrink: 0,
   },
-  messagePreview: {
+  messageRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7,
     marginTop: 1,
+  },
+  messagePreview: {
+    flex: 1,
     minWidth: 0,
   },
   previewLine: {

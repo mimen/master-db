@@ -47,6 +47,7 @@ function lastGuid(messages: Message[]): string | null {
 export class AiService {
   /** Per-chat serialization of shadow turns; also the "is a turn pending" set. */
   private shadowQueues = new Map<string, Promise<void>>();
+  private suggestionInFlight = new Map<string, Promise<Result<ReplySuggestions>>>();
   private structuredInFlight = new Map<string, Promise<SmartCloser | ShadowBrief>>();
   private aiActive = 0;
   private aiWaiters: Array<() => void> = [];
@@ -96,11 +97,27 @@ export class AiService {
       };
     }
 
+    const key = `${chatGuid}:${currentGuid ?? "empty"}`;
+    const existing = this.suggestionInFlight.get(key);
+    if (existing) return existing;
+    const pending = this.generateReplySuggestions(chatGuid, peerName, messages, currentGuid);
+    this.suggestionInFlight.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.suggestionInFlight.get(key) === pending) this.suggestionInFlight.delete(key);
+    }
+  }
+
+  private async generateReplySuggestions(
+    chatGuid: string,
+    peerName: string | null,
+    messages: Message[],
+    currentGuid: string | null,
+  ): Promise<Result<ReplySuggestions>> {
     const profile = await loadProfile(this.deps.config.vaultPath);
     const transcript = renderTranscript(messages, { limit: 40, peerName });
-    const generated = await this.deps.shadow.turn(
-      replySuggestionPrompt(transcript, profile, peerName),
-    );
+    const generated = await this.shadowTurnLimited(replySuggestionPrompt(transcript, profile, peerName));
     if (!generated.ok) return generated;
 
     const parsed = parseSuggestionArray(generated.value);
@@ -110,6 +127,19 @@ export class AiService {
       ok: true,
       value: { suggestions: parsed.value, basedOnMessageGuid: currentGuid, stale: false, generatedAt: Date.now() },
     };
+  }
+
+  private async shadowTurnLimited(prompt: string): Promise<Result<string>> {
+    if (this.aiActive >= this.aiConcurrency) {
+      await new Promise<void>((resolve) => this.aiWaiters.push(resolve));
+    }
+    this.aiActive++;
+    try {
+      return await this.deps.shadow.turn(prompt);
+    } finally {
+      this.aiActive--;
+      this.aiWaiters.shift()?.();
+    }
   }
 
   async smartCloser(chatGuid: string): Promise<Result<SmartCloser>> {

@@ -85,17 +85,27 @@ export async function setTriageLater(chat: ChatSummary, until: number | null): P
   };
 }
 
-export function useRowDraft(chatGuid: string, enabled: boolean): string | null {
+export function useRowDraft(
+  chatGuid: string,
+  latestMessageGuid: string | null,
+  enabled: boolean,
+): string | null {
   const [draft, setDraft] = useState<string | null>(null);
   useEffect(() => {
     if (!enabled) { setDraft(null); return; }
     let cancelled = false;
-    void api.aiSuggestions(chatGuid).then(
-      (result) => { if (!cancelled) setDraft(result.suggestions[0]?.trim() || null); },
-      () => { if (!cancelled) setDraft(null); },
-    );
+    setDraft(null);
+    void api.aiSuggestions(chatGuid).then(async (cached) => {
+      if (cancelled) return;
+      const current = !cached.stale && cached.basedOnMessageGuid === latestMessageGuid
+        ? cached
+        : await api.aiSuggestions(chatGuid, true);
+      if (cancelled) return;
+      if (current.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
+      setDraft(current.suggestions[0]?.trim() || null);
+    }, () => { if (!cancelled) setDraft(null); });
     return () => { cancelled = true; };
-  }, [chatGuid, enabled]);
+  }, [chatGuid, enabled, latestMessageGuid]);
   return draft;
 }
 

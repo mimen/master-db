@@ -1,5 +1,6 @@
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 
@@ -63,6 +64,7 @@ export default function ChatListScreen() {
   const theme = useTheme();
   const visual = useTriageTheme();
   const { wide, canShadow: canShadowLayout } = useLayoutMode();
+  const isFocused = useIsFocused();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
   // The shadow panel needs room beyond the list+thread; keep it to wide desktops.
@@ -160,13 +162,13 @@ export default function ChatListScreen() {
   // settings as a right-hand pane here instead of a full-screen modal —
   // the shell (list + thread) stays put.
   useEffect(() => {
-    if (!wide) return;
+    if (!wide || !isFocused) return;
     return onOpenScheduledPane(() => setRightPane({ mode: "scheduled" }));
-  }, [wide]);
+  }, [isFocused, wide]);
   useEffect(() => {
-    if (!wide) return;
+    if (!wide || !isFocused) return;
     return onOpenSettingsPane(() => setRightPane({ mode: "settings" }));
-  }, [wide]);
+  }, [isFocused, wide]);
 
   // Details/person panes are per-thread; close them when the selected
   // conversation changes. Scheduled/settings aren't tied to a thread, so a
