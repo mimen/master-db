@@ -32,8 +32,14 @@ jobs:
     runs-on: [self-hosted, imsg-mini]
     timeout-minutes: 30
     steps:
-      - name: Deploy
-        run: bash "$HOME/Programming/Repos/master-db/apps/imsg/scripts/deploy.sh"
+      - name: Sync exact main and deploy
+        run: |
+          REPO="$HOME/Programming/Repos/master-db"
+          git -C "$REPO" checkout -- .
+          git -C "$REPO" fetch origin main
+          git -C "$REPO" checkout main
+          git -C "$REPO" pull --ff-only origin main
+          exec bash "$REPO/apps/imsg/scripts/deploy.sh" --already-synced
 
       - name: Publish release identity
         if: always()

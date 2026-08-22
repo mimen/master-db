@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # Deploys imsg in place on the Mini from its canonical production checkout.
 set -euo pipefail
+export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CANONICAL_REPO="$HOME/Programming/Repos/master-db"
 [ "$REPO_DIR" = "$CANONICAL_REPO" ] || { printf 'production deploy must run from %s\n' "$CANONICAL_REPO" >&2; exit 1; }
+ALREADY_SYNCED=0
+if [ "${1:-}" = "--already-synced" ]; then ALREADY_SYNCED=1; shift; fi
+[ "$#" -eq 0 ] || { printf 'unknown deploy argument: %s\n' "$1" >&2; exit 2; }
 cd "$REPO_DIR"
 DEPLOY_STATE_DIR="${IMSG_DEPLOY_STATE_DIR:-$HOME/Library/Application Support/imsg-deploy}"
 LAST_DEPLOYED_SHA_FILE="$DEPLOY_STATE_DIR/last-deployed-sha"
@@ -66,11 +70,13 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-printf '== Syncing main ==\n'
-git checkout -- .
-git fetch origin main
-git checkout main
-git pull --ff-only origin main
+if [ "$ALREADY_SYNCED" -eq 0 ]; then
+  printf '== Syncing main ==\n'
+  git checkout -- .
+  git fetch origin main
+  git checkout main
+  git pull --ff-only origin main
+fi
 DEPLOYED_SHA="$(git rev-parse HEAD)"
 printf 'Deployed commit: %s %s\n' "${DEPLOYED_SHA:0:7}" "$(git log -1 --pretty=%s)"
 
