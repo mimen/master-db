@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { AUX_PANE_WIDTH, desktopFrame, type DesktopFrameStyles } from "@/lib/desktop-frame";
 import { useSidebarWidth } from "@/lib/sidebar-width";
 
+import { OverlayShell } from "./overlay-shell";
 import { SidebarResizeHandle } from "./sidebar/sidebar-resize-handle";
 
 export function useDesktopFrame(): {
@@ -98,3 +100,70 @@ export function DesktopAuxPane({
     </Animated.View>
   );
 }
+
+/**
+ * One responsive utility surface for every wide screen. At the three-column
+ * breakpoint it is an animated auxiliary pane; below that it is the same
+ * full-height right-edge overlay. Callers supply only open state and content,
+ * so Scheduled/Settings cannot drift between Messages and Contacts.
+ */
+export function DesktopUtilityPane({
+  open,
+  onClose,
+  children,
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+}): React.JSX.Element {
+  const { canShadow } = useLayoutMode();
+  const visual = useTriageTheme();
+  const auxPresentation = useRef(canShadow);
+  const wasOpen = useRef(open);
+  const held = useRef(children);
+  if (open && !wasOpen.current) auxPresentation.current = canShadow;
+  if (open && children != null) held.current = children;
+  wasOpen.current = open;
+
+  // Presentation is captured when the pane opens and held until it closes.
+  // Resizing cannot remount live content, while the next open always uses the
+  // current breakpoint immediately — no timer or stale closed-state window.
+  const content = (
+    <View
+      testID="desktop-utility-pane-content"
+      style={styles.utilityContent}
+      {...({ dataSet: { utilityPresentation: auxPresentation.current ? "pane" : "overlay" } } as object)}
+    >
+      {held.current}
+    </View>
+  );
+
+  if (auxPresentation.current) return <DesktopAuxPane open={open}>{content}</DesktopAuxPane>;
+  return (
+    <OverlayShell
+      visible={open}
+      onClose={onClose}
+      backdropStyle={styles.utilityOverlayBackdrop}
+      cardStyle={[styles.utilityOverlayCard, { backgroundColor: visual.inspector, borderColor: visual.hairline }]}
+    >
+      {content}
+    </OverlayShell>
+  );
+}
+
+const styles = StyleSheet.create({
+  utilityContent: {
+    flex: 1,
+    width: AUX_PANE_WIDTH,
+  },
+  utilityOverlayBackdrop: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+  },
+  utilityOverlayCard: {
+    borderLeftWidth: 0.5,
+    borderRadius: 0,
+    height: "100%",
+    width: AUX_PANE_WIDTH,
+  },
+});

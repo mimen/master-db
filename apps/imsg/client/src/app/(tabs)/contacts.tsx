@@ -9,7 +9,7 @@ import { ScheduledContent } from "@/components/scheduled-content";
 import { SettingsContent } from "@/components/settings-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { DesktopAuxPane, DesktopSplit } from "@/components/desktop-split";
+import { DesktopSplit, DesktopUtilityPane } from "@/components/desktop-split";
 import { primaryHandle, type ContactListRow } from "@/lib/identity";
 import { onOpenScheduledPane } from "@/lib/scheduled-pane";
 import { onOpenSettingsPane } from "@/lib/settings-pane";
@@ -29,6 +29,9 @@ export default function ContactsScreen() {
     if (!wide || !isFocused) return;
     return onOpenSettingsPane(() => setAuxPane("settings"));
   }, [isFocused, wide]);
+  useEffect(() => {
+    if (!isFocused) setAuxPane(null);
+  }, [isFocused]);
 
   if (!wide) {
     return (
@@ -61,13 +64,13 @@ export default function ContactsScreen() {
         )
       }
     >
-      <DesktopAuxPane open={auxPane !== null}>
+      <DesktopUtilityPane open={auxPane !== null} onClose={() => setAuxPane(null)}>
         {auxPane === "scheduled" ? (
           <ScheduledContent showHeader onClose={() => setAuxPane(null)} />
         ) : auxPane === "settings" ? (
           <SettingsContent showHeader onClose={() => setAuxPane(null)} />
         ) : null}
-      </DesktopAuxPane>
+      </DesktopUtilityPane>
     </DesktopSplit>
   );
 }

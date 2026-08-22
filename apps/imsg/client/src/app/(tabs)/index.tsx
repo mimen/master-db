@@ -24,7 +24,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { Type } from "@/constants/theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
-import { DesktopAuxPane, DesktopSplit } from "@/components/desktop-split";
+import { DesktopAuxPane, DesktopSplit, DesktopUtilityPane } from "@/components/desktop-split";
 import { installNativeMenuBridge } from "@/lib/desktop-shell";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import {
@@ -169,6 +169,9 @@ export default function ChatListScreen() {
     if (!wide || !isFocused) return;
     return onOpenSettingsPane(() => setRightPane({ mode: "settings" }));
   }, [isFocused, wide]);
+  useEffect(() => {
+    if (!isFocused) setRightPane(null);
+  }, [isFocused]);
 
   // Details/person panes are per-thread; close them when the selected
   // conversation changes. Scheduled/settings aren't tied to a thread, so a
@@ -478,18 +481,9 @@ export default function ChatListScreen() {
           </View>
         ))}
       </OverlayShell>
-      {canShadowLayout ? (
-        <DesktopAuxPane open={rightPane !== null}>{inspectorContent}</DesktopAuxPane>
-      ) : (
-        <OverlayShell
-          visible={rightPane !== null}
-          onClose={() => setRightPane(null)}
-          backdropStyle={styles.inspectorOverlayBackdrop}
-          cardStyle={[styles.inspectorOverlayCard, { backgroundColor: visual.inspector, borderColor: visual.hairline }]}
-        >
-          {inspectorContent}
-        </OverlayShell>
-      )}
+      <DesktopUtilityPane open={rightPane !== null} onClose={() => setRightPane(null)}>
+        {inspectorContent}
+      </DesktopUtilityPane>
       {canShadow ? (
         <DesktopAuxPane open={shadowOpen && selected !== null}>
           {selected ? (
@@ -509,18 +503,6 @@ export default function ChatListScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Not fully centered — offset from the top, matching the original inline
-  // Modal backdrops this shell replaced.
-  inspectorOverlayBackdrop: {
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
-  },
-  inspectorOverlayCard: {
-    borderLeftWidth: 0.5,
-    borderRadius: 0,
-    height: "100%",
-    width: 312,
-  },
   overlayBackdrop: {
     backgroundColor: "rgba(18,18,22,0.34)",
     justifyContent: "flex-start",

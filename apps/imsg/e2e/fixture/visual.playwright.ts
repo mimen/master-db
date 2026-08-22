@@ -129,6 +129,79 @@ test("native window chrome leaves its traffic-light area clear", async ({ desk }
   expect(box?.y).toBeGreaterThanOrEqual(38);
 });
 
+test("Scheduled uses the same responsive pane on Messages and Contacts", async ({ desk }) => {
+  for (const width of [900, 1300]) {
+    await resetAndOpen(desk, width, "dark");
+    const page = desk.page;
+    const visiblePane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
+
+    await page.getByRole("button", { name: "Scheduled" }).click();
+    await expect(page.getByText("Scheduled", { exact: true }).last()).toBeVisible();
+    await expect(visiblePane).toHaveCount(1);
+    const messagesBox = await visiblePane.boundingBox();
+    await page.screenshot({ path: `/tmp/comma-scheduled-messages-${width}.png`, animations: "disabled" });
+    await page.getByLabel("Close scheduled").click();
+    await expect(visiblePane).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Contacts" }).click();
+    await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+    await page.getByRole("button", { name: "Scheduled" }).click();
+    await expect(page.getByText("Scheduled", { exact: true }).last()).toBeVisible();
+    await expect(visiblePane).toHaveCount(1);
+    const contactsBox = await visiblePane.boundingBox();
+    await page.screenshot({ path: `/tmp/comma-scheduled-contacts-${width}.png`, animations: "disabled" });
+
+    expect(contactsBox).toEqual(messagesBox);
+    await page.getByLabel("Close scheduled").click();
+  }
+});
+
+test("Scheduled edit state survives crossing the utility-pane breakpoint", async ({ desk }) => {
+  for (const [startWidth, endWidth] of [[1039, 1040], [1040, 1039]] as const) {
+    await resetAndOpen(desk, startWidth, "dark");
+    const page = desk.page;
+    await page.getByRole("button", { name: "Scheduled" }).click();
+    await page.getByRole("button", { name: "Edit scheduled message to Jordan Lee" }).click();
+    const message = page.getByPlaceholder("Message");
+    await message.fill(`Preserved across ${startWidth}-${endWidth}`);
+
+    await page.setViewportSize({ width: endWidth, height: 820 });
+    await expect(page.getByText("Edit Scheduled Message", { exact: true })).toBeVisible();
+    await expect(message).toHaveValue(`Preserved across ${startWidth}-${endWidth}`);
+    await page.getByText("Cancel", { exact: true }).click();
+    await page.getByLabel("Close scheduled").click();
+  }
+});
+
+test("a closed utility pane opens in the current breakpoint presentation immediately", async ({ desk }) => {
+  for (const [startWidth, endWidth, presentation] of [[1300, 900, "overlay"], [900, 1300, "pane"]] as const) {
+    await resetAndOpen(desk, startWidth, "dark");
+    const page = desk.page;
+    await page.setViewportSize({ width: endWidth, height: 820 });
+    await page.getByRole("button", { name: "Scheduled" }).click();
+
+    const pane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
+    await expect(pane).toHaveCount(1);
+    await expect(pane).toHaveAttribute("data-utility-presentation", presentation);
+    await page.getByLabel("Close scheduled").click();
+  }
+});
+
+test("an inactive tab cannot surface a retained utility modal after resize", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  const visiblePane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
+
+  await page.getByRole("button", { name: "Scheduled" }).click();
+  await expect(visiblePane).toHaveCount(1);
+  await page.getByRole("button", { name: "Contacts" }).click();
+  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await page.setViewportSize({ width: 900, height: 820 });
+
+  await expect(visiblePane).toHaveCount(0);
+  await expect(page.getByText("Scheduled", { exact: true })).toHaveCount(0);
+});
+
 test("every visible control remains stable and usable on hover", async ({ desk }) => {
   test.setTimeout(120_000);
   for (const scheme of SCHEMES) {
