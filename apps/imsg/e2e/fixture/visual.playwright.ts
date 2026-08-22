@@ -74,7 +74,7 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       await expect(actionRow.getByText("Done", { exact: true })).toBeVisible();
       await expect(actionRow.getByText("Later", { exact: true })).toBeVisible();
       const rowAfter = await actionRow.boundingBox();
-      expect(rowBefore?.height).toBeCloseTo(62, 1);
+      expect(rowBefore?.height).toBeCloseTo(82, 1);
       expect(rowAfter).toEqual(rowBefore);
       expect(await actionRow.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("11px");
 
@@ -189,7 +189,7 @@ test("messages send through the real UI and fixture replies arrive over SSE", as
   const outbound = "Fixture outbound: doors confirmed at eight.";
   await composer.fill(outbound);
   await composer.press("Enter");
-  await expect(page.getByText(outbound, { exact: true })).toBeVisible();
+  await expect(page.getByText(outbound, { exact: true }).last()).toBeVisible();
 
   const inbound = "Fixture inbound: perfect, see you there.";
   await desk.receive(desk.chats.needs, inbound, "+16195550101");

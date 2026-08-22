@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
@@ -18,6 +18,8 @@ export interface ListRowProps {
   onLongPress?: () => void;
   disabled?: boolean;
   selected?: boolean;
+  hoverFill?: string;
+  selectedFill?: string;
   /** Taller touch target for surfaces with a deliberately larger row (e.g.
    * the chat-info participant list) — not exposed as a metric to unify. */
   minHeight?: number;
@@ -51,6 +53,8 @@ export function ListRow({
   onLongPress,
   disabled,
   selected,
+  hoverFill,
+  selectedFill,
   minHeight,
   paddingHorizontal = Spacing.three,
   titleNumberOfLines = 1,
@@ -59,16 +63,20 @@ export function ListRow({
 }: ListRowProps) {
   const theme = useTheme();
   const type = useType();
+  const [hovered, setHovered] = useState(false);
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.row,
         { paddingHorizontal, minHeight },
-        pressed && !selected && { backgroundColor: theme.backgroundElement },
-        selected && { backgroundColor: theme.backgroundSelected },
+        hovered && !selected && { backgroundColor: hoverFill ?? theme.backgroundElement },
+        pressed && !selected && { backgroundColor: hoverFill ?? theme.backgroundElement },
+        selected && { backgroundColor: selectedFill ?? theme.backgroundSelected },
         style,
       ]}
     >

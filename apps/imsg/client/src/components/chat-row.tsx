@@ -57,11 +57,33 @@ function closerReactionType(reaction: string | undefined): string | null {
   return map[normalized] ?? null;
 }
 
+function closerReactionEmoji(reaction: string | undefined): string {
+  const normalized = closerReactionType(reaction);
+  return normalized === "love" ? "❤️" : normalized === "laugh" ? "😂" : normalized === "dislike" ? "👎" : normalized === "emphasize" ? "‼️" : normalized === "question" ? "❓" : "👍";
+}
+
+function smartCloserLabel(action: SmartCloser): string {
+  if (action.kind === "reply" && action.draft) return `Draft: ${action.draft}`;
+  if (action.kind === "react_done") return `React ${closerReactionEmoji(action.reaction)} + Done`;
+  if (action.kind === "later") return `Snooze: ${action.label}`;
+  return action.label;
+}
+
+function smartCloserIcon(action: SmartCloser): keyof typeof Ionicons.glyphMap {
+  if (action.kind === "reply") return "create-outline";
+  if (action.kind === "react_done") return "thumbs-up-outline";
+  if (action.kind === "later") return "time-outline";
+  if (action.kind === "call") return "call-outline";
+  if (action.kind === "archive") return "archive-outline";
+  return "checkmark";
+}
+
 function isSpecificCloser(action: SmartCloser | null): boolean {
   if (!action) return false;
   if (action.kind === "reply") return Boolean(action.draft?.trim());
   if (action.kind === "call") return true;
-  if (action.kind === "react_done") return closerReactionType(action.reaction) !== null;
+  // A tapback plus queue dismissal is too consequential for a one-click row chip.
+  if (action.kind === "react_done") return false;
   if (action.kind === "archive") return !/^archive$/i.test(action.label);
   if (action.kind === "later") return !/^later$/i.test(action.label);
   return false;
@@ -185,7 +207,13 @@ function ChatRowInner({
   const specificCloser = isSpecificCloser(closer.closer) && !(waitingOnly && closer.closer?.kind === "reply")
     ? closer.closer
     : null;
-  const closerLabel = specificCloser?.label;
+  const closerLabel = specificCloser ? smartCloserLabel(specificCloser) : undefined;
+  const closerIcon = specificCloser ? smartCloserIcon(specificCloser) : "checkmark";
+  const closerColor = specificCloser?.kind === "call"
+    ? "#1DAA61"
+    : specificCloser?.kind === "later" || specificCloser?.kind === "archive"
+      ? visual.snippet
+      : theme.accent;
   // Smart closers remain clickable on hover. Rows without a closer reveal the
   // action strip; selecting any row always reveals it.
   const actionsVisible = compact && (selected || (hovered && !specificCloser));
@@ -275,7 +303,7 @@ function ChatRowInner({
         style={({ pressed }) => [
           styles.row,
           compact && styles.desktopCard,
-          { height: compact ? 62 : undefined, minHeight: compact ? 62 : 92 },
+          { height: compact ? 82 : undefined, minHeight: compact ? 82 : 92 },
           compact
             ? ({
                 backgroundColor: selected ? visual.cardSelected : hovered || pressed ? visual.cardHover : visual.card,
@@ -326,13 +354,13 @@ function ChatRowInner({
               </Text>
             )}
           </View>
+          <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
           <View style={styles.previewLine}>
             <View
               pointerEvents={actionsVisible ? "none" : "auto"}
-              style={[styles.previewLayer, { opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
+              style={[styles.previewLayer, { justifyContent: specificCloser ? "flex-start" : "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
             >
-              <Text numberOfLines={1} style={[styles.snippet, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-              {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} onHoverIn={() => setCloserHovered(true)} onHoverOut={() => setCloserHovered(false)} style={[styles.closer, { borderColor: specificCloser.kind === "call" ? "rgba(40,200,64,0.5)" : specificCloser.kind === "archive" ? visual.hairlineStrong : "rgba(0,122,255,0.4)", backgroundColor: closerHovered ? (specificCloser.kind === "call" ? "rgba(40,200,64,0.12)" : visual.controlFillHover) : "transparent" } as object]}><Ionicons name={specificCloser.kind === "call" ? "call-outline" : specificCloser.kind === "archive" ? "archive-outline" : "paper-plane-outline"} size={13} color={specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
+              {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} onHoverIn={() => setCloserHovered(true)} onHoverOut={() => setCloserHovered(false)} style={[styles.closer, { borderColor: specificCloser.kind === "call" ? "rgba(40,200,64,0.5)" : specificCloser.kind === "later" || specificCloser.kind === "archive" ? visual.hairlineStrong : "rgba(0,122,255,0.4)", backgroundColor: closerHovered ? (specificCloser.kind === "call" ? "rgba(40,200,64,0.12)" : visual.controlFillHover) : "transparent" } as object]}><Ionicons name={closerIcon} size={13} color={closerColor} /><Text numberOfLines={1} style={[styles.closerText, { color: closerColor }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
             </View>
             <View
               pointerEvents={actionsVisible ? "auto" : "none"}
@@ -406,7 +434,7 @@ const styles = StyleSheet.create({
   desktopCard: {
     borderRadius: 11,
     paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingVertical: 8,
   },
   separator: {
     bottom: 0,
@@ -446,9 +474,13 @@ const styles = StyleSheet.create({
   favoriteStar: {
     flexShrink: 0,
   },
+  messagePreview: {
+    marginTop: 1,
+    minWidth: 0,
+  },
   previewLine: {
     height: 24,
-    marginTop: 2,
+    marginTop: 3,
     position: "relative",
   },
   previewLayer: {
@@ -480,12 +512,6 @@ const styles = StyleSheet.create({
         transitionTimingFunction: "cubic-bezier(0.2,0,0,1)",
       } as object)
     : {},
-  snippet: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 18,
-    minWidth: 0,
-  },
   inlineActions: {
     alignItems: "center",
     flex: 1,
@@ -518,13 +544,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexShrink: 1,
     gap: 3,
-    maxWidth: 96,
+    maxWidth: "100%",
     height: 24,
     justifyContent: "center",
     paddingHorizontal: 9,
   },
   closerText: {
-    flexShrink: 1,
+    flex: 1,
     fontSize: 11,
   },
   signal: {
