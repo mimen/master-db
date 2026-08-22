@@ -83,6 +83,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
                       onPress={(event) => { event.stopPropagation(); cancel(item.id); }}
                       restFill="transparent"
                       hoverFill={theme.backgroundSelected}
+                      hitSlop={8}
                       style={styles.iconAction}
                     >
                       <Ionicons name="close" size={16} color={theme.textSecondary} />
@@ -98,10 +99,10 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
                   </Text>
                   {editable ? (
                     <View style={styles.actions}>
-                      <HoverFillButton accessibilityLabel={`Edit scheduled message to ${item.chatName}`} onPress={(event) => { event.stopPropagation(); setEditing(item); }} restFill="transparent" hoverFill={theme.backgroundSelected} style={styles.textAction}>
+                      <HoverFillButton accessibilityLabel={`Edit scheduled message to ${item.chatName}`} onPress={(event) => { event.stopPropagation(); setEditing(item); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
                         <Text style={[styles.actionText, { color: theme.textSecondary }]}>Edit</Text>
                       </HoverFillButton>
-                      <HoverFillButton accessibilityLabel={`Send scheduled message to ${item.chatName} now`} onPress={(event) => { event.stopPropagation(); void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Could not send scheduled message")); }} restFill="transparent" hoverFill={theme.backgroundSelected} style={styles.textAction}>
+                      <HoverFillButton accessibilityLabel={`Send scheduled message to ${item.chatName} now`} onPress={(event) => { event.stopPropagation(); void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Could not send scheduled message")); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
                         <Text style={[styles.actionText, { color: theme.accent }]}>Send now</Text>
                       </HoverFillButton>
                     </View>

@@ -278,7 +278,7 @@ function ChatRowInner({
           { height: compact ? 62 : undefined, minHeight: compact ? 62 : 92 },
           compact
             ? ({
-                backgroundColor: selected || hovered || pressed ? visual.cardSelected : visual.card,
+                backgroundColor: selected ? visual.cardSelected : hovered || pressed ? visual.cardHover : visual.card,
                 boxShadow: `0 1px 3px ${visual.cardShadow}`,
               } as object)
             : {
