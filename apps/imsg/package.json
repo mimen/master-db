@@ -11,6 +11,7 @@
     "deploy:status": "bash scripts/deploy-status.sh",
     "deploy:verify": "bun scripts/deploy-verify.ts",
     "deploy:activate": "bash scripts/desktop-activate-bootstrap.sh",
+    "deploy:install-laptop-agents": "bash scripts/install-laptop-launchagents.sh",
     "deploy:rollback": "zsh -c 'unset PROCID PROCID_REF PROCID_OFF; exec -a comma:rollback /bin/bash scripts/desktop-rollback.sh'",
     "build": "tsc -b && cd client && bun run build:web",
     "e2e": "playwright test --config e2e/playwright.config.ts",

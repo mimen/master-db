@@ -28,6 +28,7 @@ bun run deploy:branch -- --dry-run  # show a branch deployment without live writ
 bun run deploy:branch               # push and deploy the current branch preview
 bun run deploy:status               # deployed, staged, installed, activation state, and process identity
 bun run deploy:verify               # require the real production web and app surfaces
+bun run deploy:install-laptop-agents # install stable stager and cleanup LaunchAgents
 bun run deploy:activate             # bootstrap the first staged shell from an older installed Comma
 bun run deploy:rollback             # exchange Comma.app with the retained previous shell
 bun run deploy:cleanup              # inspect expired branch resources
@@ -43,7 +44,7 @@ Production deploys automatically when `main` changes under `apps/imsg/**` or the
 3. Web builds into a sibling `.dist-staging-*` directory. If shell inputs changed, the Mini also builds immutable `Comma-<sha>.app.zip` bytes without moving `desktop/releases/current.json`.
 4. Only after every required build succeeds, the completed web directory swaps atomically into `client/dist`. One prior asset set remains live for already-open clients; two prior full dist generations are retained as bounded recovery archives.
 5. The Mini installs or updates the checked-in `comma:server` and `comma:expo` LaunchAgents, restarts both services, verifies local and tailnet API plus real `/` health, then publishes `web-release.json` and repoints `desktop/releases/current.json`. A failed restart or health check leaves both release pointers unchanged.
-6. The laptop stager downloads and verifies size, checksum, ad-hoc signature, bundle ID, architecture, semver, and embedded SHA. It stages beside the canonical app without replacing the running bundle.
+6. `bun run deploy:install-laptop-agents` copies the stager and cleanup launchers into `~/Library/Application Support/Comma/Deployment` and installs LaunchAgents that depend on that stable path, never a worktree or stale primary checkout. The stager downloads and verifies size, checksum, ad-hoc signature, bundle ID, architecture, semver, and embedded SHA. It stages beside the canonical app without replacing the running bundle.
 7. Comma shows Reload and Restart banners when deployed identity differs from running identity.
 8. Restart uses a detached activator. It waits for Comma to exit, swaps atomically, retains `Comma.app.previous` for seven days, relaunches, and rolls back automatically if the new app does not verify.
 

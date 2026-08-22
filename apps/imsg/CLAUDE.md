@@ -40,6 +40,7 @@ bun run dev:desktop
 bun run deploy:branch -- --dry-run
 bun run deploy:branch
 bun run deploy:status
+bun run deploy:install-laptop-agents
 bun run deploy:activate  # bootstrap the first staged shell from an older installed Comma
 bun run deploy:verify
 bun run deploy:cleanup
