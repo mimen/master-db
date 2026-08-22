@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev:server": "bun --watch server/index.ts",
+    "dev:desktop": "bun scripts/dev-desktop.ts",
+    "deploy:branch": "bun scripts/deploy-branch.ts",
+    "deploy:cleanup": "bun scripts/deploy-cleanup.ts",
     "build": "tsc -b && cd client && bun run build:web",
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:fixture": "playwright test --config e2e/fixture.playwright.config.ts",
