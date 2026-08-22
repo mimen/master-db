@@ -138,7 +138,13 @@ export async function restartToStagedShell(
   }
 }
 
-/** Reads staged state once, then follows the laptop stager's Tauri event. */
+const SHELL_RELEASE_POLL_MS = 30_000;
+
+/**
+ * Reads local shell state immediately and on a bounded poll. The laptop stager
+ * is an external LaunchAgent, so it cannot emit into the running webview; the
+ * optional event keeps same-process development tools instant.
+ */
 export function installShellReleaseBridge(
   onState: (state: ShellReleaseState) => void,
   win: DesktopShellWindow | undefined = defaultWindow(),
@@ -148,9 +154,21 @@ export function installShellReleaseBridge(
 
   let cancelled = false;
   let unlisten: TauriListenUnlisten | undefined;
-  void readShellReleaseState(win).then((state) => {
-    if (!cancelled && state) onState(state);
-  });
+  let inFlight = false;
+  const refresh = (): void => {
+    if (cancelled || inFlight) return;
+    inFlight = true;
+    void readShellReleaseState(win)
+      .then((state) => {
+        if (!cancelled && state) onState(state);
+      })
+      .finally(() => {
+        inFlight = false;
+      });
+  };
+
+  refresh();
+  const timer = setInterval(refresh, SHELL_RELEASE_POLL_MS);
   void tauri.event.listen(SHELL_UPDATE_STAGED_EVENT, (event) => {
     if (cancelled || typeof event.payload === "string") return;
     const state = parseShellReleaseState(event.payload);
@@ -162,6 +180,7 @@ export function installShellReleaseBridge(
 
   return () => {
     cancelled = true;
+    clearInterval(timer);
     unlisten?.();
   };
 }
