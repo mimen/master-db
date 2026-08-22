@@ -5,7 +5,7 @@ import type { BBAttributedBody, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import type { Config } from "./config";
-import { readDesktopVersion } from "./desktop-version";
+import { registerDesktopReleaseRoutes } from "./desktop-version";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { GroupPhotos } from "./group-photos";
@@ -74,6 +74,8 @@ export interface AppDependencies {
   shadowStatus?: { available: boolean; detail: string };
   backgroundServices?: boolean;
   staticRoot?: string;
+  desktopRoot?: string;
+  desktopReleaseRoot?: string;
   configureFixtureRoutes?: (app: Hono, controls: FixtureRouteControls) => void;
 }
 
@@ -85,6 +87,8 @@ export interface CreatedApp {
 export async function createApp(deps: AppDependencies): Promise<CreatedApp> {
 const { config, bb, db } = deps;
 const staticRoot = deps.staticRoot ?? "./client/dist";
+const desktopRoot = deps.desktopRoot ?? `${import.meta.dir}/..`;
+const desktopReleaseRoot = deps.desktopReleaseRoot ?? `${import.meta.dir}/../desktop/releases`;
 const now = deps.now ?? Date.now;
 const contacts = new ContactBook(bb);
 const productionIdentity = deps.identity ? null : new IdentityMirror(config);
@@ -182,10 +186,8 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
 });
 
-// Deployed desktop-shell version (short SHA) or null — see desktop-version.ts.
-app.get("/api/desktop-version", (c) => {
-  return c.json({ version: readDesktopVersion(import.meta.dir) });
-});
+// Immutable Comma shell release metadata and artifact — see desktop-version.ts.
+registerDesktopReleaseRoutes(app, desktopRoot, desktopReleaseRoot);
 
 // Lets the client force the Identity Mirror to catch up immediately after an
 // in-app "Add Contact" / rename, instead of waiting for its 5-minute tick.
