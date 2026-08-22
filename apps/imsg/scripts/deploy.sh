@@ -11,6 +11,12 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_DIR"
+DEPLOY_STATE_DIR="${IMSG_DEPLOY_STATE_DIR:-$HOME/Library/Application Support/imsg-deploy}"
+LAST_DEPLOYED_SHA_FILE="$DEPLOY_STATE_DIR/last-deployed-sha"
+LAST_DEPLOYED_SHA=""
+if [ -f "$LAST_DEPLOYED_SHA_FILE" ]; then
+  LAST_DEPLOYED_SHA="$(tr -d '[:space:]' <"$LAST_DEPLOYED_SHA_FILE")"
+fi
 
 echo "== Syncing main =="
 # Anything dirty here is accidental (manual debugging, an interrupted run) —
@@ -20,15 +26,16 @@ git checkout -- .
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
-DEPLOYED_SHA="$(git rev-parse --short HEAD)"
-echo "Deployed commit: $DEPLOYED_SHA $(git log -1 --pretty=%s)"
+DEPLOYED_SHA="$(git rev-parse HEAD)"
+echo "Deployed commit: ${DEPLOYED_SHA:0:7} $(git log -1 --pretty=%s)"
 
-# Desktop-shell marker: the laptop watcher (scripts/desktop-autoupdate.sh)
-# polls /api/desktop-version and rebuilds Comma.app when this changes.
-# Only stamped when the pull actually touched apps/imsg/desktop, so shell
-# rebuilds stay rare.
-if [ -n "$(git diff --name-only HEAD@{1} HEAD -- apps/imsg/desktop 2>/dev/null)" ]; then
-  echo "$DEPLOYED_SHA" > apps/imsg/desktop/VERSION
+SHELL_RELEASE_REQUIRED=0
+if apps/imsg/scripts/desktop-release-needed.sh "$REPO_DIR" "$LAST_DEPLOYED_SHA" "$DEPLOYED_SHA"; then
+  SHELL_RELEASE_REQUIRED=1
+  echo "Desktop release inputs changed since ${LAST_DEPLOYED_SHA:-the last recorded deploy}"
+else
+  status=$?
+  [ "$status" -eq 1 ] || exit "$status"
 fi
 
 echo "== Installing deps =="
@@ -37,6 +44,7 @@ echo "== Installing deps =="
 bun install --frozen-lockfile
 bun install --frozen-lockfile --cwd apps/imsg
 bun install --frozen-lockfile --cwd apps/imsg/client
+bun install --frozen-lockfile --cwd apps/imsg/desktop
 
 # Expo generates typed-route definitions (client/.expo/types/router.d.ts,
 # gitignored) from the app/ directory — but only the DEV SERVER writes them,
@@ -113,6 +121,12 @@ bun scripts/post-export.ts
 
 cd "$REPO_DIR"
 
+if [ "$SHELL_RELEASE_REQUIRED" -eq 1 ]; then
+  echo "== Building immutable Comma shell release =="
+  /bin/zsh -c 'unset PROCID PROCID_REF PROCID_OFF; exec -a comma:shell-builder "$@"' \
+    comma:shell-builder apps/imsg/scripts/desktop-build-release.sh "$DEPLOYED_SHA"
+fi
+
 echo "== Configuring tailnet HTTPS =="
 TAILSCALE_BIN="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
 IMSG_TAILNET_URL="${IMSG_TAILNET_URL:-https://milads-mac-mini.taild31e9a.ts.net:8447}"
@@ -140,4 +154,7 @@ if [ "$TAILNET_STATUS" != "200" ]; then
   echo "tailnet health check failed"
   exit 1
 fi
-echo "Deploy OK: $(git rev-parse --short HEAD)"
+mkdir -p "$DEPLOY_STATE_DIR"
+printf '%s\n' "$DEPLOYED_SHA" >"${LAST_DEPLOYED_SHA_FILE}.tmp"
+mv "${LAST_DEPLOYED_SHA_FILE}.tmp" "$LAST_DEPLOYED_SHA_FILE"
+echo "Deploy OK: ${DEPLOYED_SHA:0:7}"

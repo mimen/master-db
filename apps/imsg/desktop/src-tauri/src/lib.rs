@@ -1,5 +1,158 @@
+use serde::Serialize;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::{Emitter, Manager};
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Emitter, Manager};
+
+const SOURCE_SHA: &str = env!("COMMA_SOURCE_SHA");
+static ACTIVATION_STARTED: AtomicBool = AtomicBool::new(false);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopShellIdentity {
+    source_sha: String,
+    semver: String,
+    bundle_id: String,
+}
+
+fn app_bundle_path() -> Result<PathBuf, String> {
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    executable
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .filter(|path| path.extension().is_some_and(|extension| extension == "app"))
+        .ok_or_else(|| "Comma is not running from an app bundle".to_owned())
+}
+
+fn plist_value(app: &Path, key: &str) -> Result<String, String> {
+    let plist = app.join("Contents/Info.plist");
+    let output = Command::new("/usr/libexec/PlistBuddy")
+        .args(["-c", &format!("Print :{key}")])
+        .arg(plist)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(format!("missing {key} in Comma Info.plist"));
+    }
+    String::from_utf8(output.stdout)
+        .map(|value| value.trim().to_owned())
+        .map_err(|error| error.to_string())
+}
+
+fn identity_from_bundle(app: &Path) -> Result<DesktopShellIdentity, String> {
+    Ok(DesktopShellIdentity {
+        source_sha: plist_value(app, "CommaSourceSHA")?,
+        semver: plist_value(app, "CFBundleShortVersionString")?,
+        bundle_id: plist_value(app, "CFBundleIdentifier")?,
+    })
+}
+
+#[tauri::command]
+fn desktop_shell_identity(app: AppHandle) -> DesktopShellIdentity {
+    DesktopShellIdentity {
+        source_sha: SOURCE_SHA.to_owned(),
+        semver: app.package_info().version.to_string(),
+        bundle_id: app.config().identifier.clone(),
+    }
+}
+
+#[tauri::command]
+fn staged_desktop_shell() -> Result<Option<DesktopShellIdentity>, String> {
+    let staged = PathBuf::from(format!("{}.staged", app_bundle_path()?.display()));
+    if !staged.is_dir() {
+        return Ok(None);
+    }
+    identity_from_bundle(&staged).map(Some)
+}
+
+fn start_staged_desktop_activation(
+    app: AppHandle,
+    expected_source_sha: &str,
+) -> Result<(), String> {
+    let app_bundle = app_bundle_path()?;
+    let staged_bundle = PathBuf::from(format!("{}.staged", app_bundle.display()));
+    let staged_identity = identity_from_bundle(&staged_bundle)?;
+    if staged_identity.source_sha != expected_source_sha {
+        return Err("staged shell SHA does not match expectedSourceSha".to_owned());
+    }
+    if staged_identity.bundle_id != app.config().identifier {
+        return Err("staged shell bundle ID does not match Comma".to_owned());
+    }
+
+    let helper = app
+        .path()
+        .resolve("bin/desktop-activate.sh", BaseDirectory::Resource)
+        .map_err(|error| error.to_string())?;
+    if !helper.is_file() {
+        return Err("Comma activation helper is missing".to_owned());
+    }
+
+    let pid = std::process::id().to_string();
+    let ready_file = std::env::temp_dir().join(format!("comma-activation-{pid}.ready"));
+    let _ = fs::remove_file(&ready_file);
+    let mut child = Command::new("/usr/bin/nohup")
+        .arg("/bin/zsh")
+        .arg("-c")
+        .arg("unset PROCID PROCID_REF PROCID_OFF; exec -a comma:activator /bin/bash \"$@\"")
+        .arg("comma:activator")
+        .arg(helper)
+        .args(["--app", &app_bundle.display().to_string()])
+        .args(["--expected-sha", expected_source_sha])
+        .args(["--wait-pid", &pid])
+        .args(["--ready-file", &ready_file.display().to_string()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("failed to start Comma activator: {error}"))?;
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if ready_file.is_file() {
+            let _ = fs::remove_file(&ready_file);
+            break;
+        }
+        if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+            return Err(format!("Comma activator exited before readiness: {status}"));
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            return Err("Comma activator did not become ready".to_owned());
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        app.exit(0);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn activate_staged_desktop_shell(app: AppHandle, expected_source_sha: String) -> Result<(), String> {
+    if expected_source_sha.len() != 40
+        || !expected_source_sha
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("expectedSourceSha must be a full lowercase Git SHA".to_owned());
+    }
+    if ACTIVATION_STARTED.swap(true, Ordering::AcqRel) {
+        return Err("Comma activation is already starting".to_owned());
+    }
+    let result = start_staged_desktop_activation(app, &expected_source_sha);
+    if result.is_err() {
+        ACTIVATION_STARTED.store(false, Ordering::Release);
+    }
+    result
+}
 
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let new_message = MenuItemBuilder::with_id("conversation.new", "New Message")
@@ -60,6 +213,11 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![
+            desktop_shell_identity,
+            staged_desktop_shell,
+            activate_staged_desktop_shell
+        ])
         .setup(|app| {
             let menu = build_menu(app)?;
             app.set_menu(menu)?;

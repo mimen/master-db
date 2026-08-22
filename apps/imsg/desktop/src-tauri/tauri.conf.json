@@ -36,6 +36,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../../scripts/desktop-activate.sh": "bin/desktop-activate.sh",
+      "../../scripts/desktop-app-verify.sh": "bin/desktop-app-verify.sh",
+      "../../scripts/desktop-swap-apps.py": "bin/desktop-swap-apps.py"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",
