@@ -59,7 +59,7 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       expect(dots[2]!.y - dots[1]!.y).toBeCloseTo(20, 1);
 
       const closerRow = rows.first();
-      const closer = closerRow.getByRole("button", { name: /Smart action/ });
+      const closer = closerRow.getByRole("button", { name: "Fill AI draft" });
       const closerBefore = await closer.boundingBox();
       const closerRowBefore = await closerRow.boundingBox();
       await closer.hover();
