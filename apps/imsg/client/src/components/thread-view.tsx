@@ -896,7 +896,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   typingRow: {
-    paddingHorizontal: 42,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     alignItems: "flex-start",
   },

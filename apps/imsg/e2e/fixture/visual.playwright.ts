@@ -277,6 +277,9 @@ test("typing indicator renders from peer presence", async ({ desk }) => {
   const firstDot = indicator.locator("div").first();
   await expect(indicator).toBeVisible();
   await expect(indicator.locator("div")).toHaveCount(3);
+  const indicatorBox = await indicator.boundingBox();
+  const threadBox = await desk.page.getByTestId("resolve-strip").boundingBox();
+  expect(indicatorBox?.x).toBeCloseTo((threadBox?.x ?? 0) + 14, 1);
 
   const positions = await firstDot.evaluate(async (dot) => {
     const samples: number[] = [];
