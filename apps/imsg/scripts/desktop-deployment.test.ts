@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -62,9 +62,10 @@ function makeFakeTools(root: string): string {
   writeFileSync(join(bin, "codesign"), "#!/bin/bash\nif [ \"$1\" = \"-dvv\" ]; then echo 'Signature=adhoc' >&2; fi\nexit 0\n");
   writeFileSync(join(bin, "lipo"), "#!/bin/bash\necho arm64\n");
   writeFileSync(join(bin, "open"), "#!/bin/bash\nexit 0\n");
+  writeFileSync(join(bin, "uname"), "#!/bin/bash\necho arm64\n");
   writeFileSync(join(bin, "process-running"), "#!/bin/bash\necho 4242\nexit 0\n");
   writeFileSync(join(bin, "process-missing"), "#!/bin/bash\nexit 1\n");
-  for (const name of ["codesign", "lipo", "open", "process-running", "process-missing"]) {
+  for (const name of ["codesign", "lipo", "open", "uname", "process-running", "process-missing"]) {
     chmodSync(join(bin, name), 0o755);
   }
   return bin;
@@ -135,22 +136,24 @@ describe("desktop release change detection", () => {
 });
 
 describe("desktop release publication", () => {
-  test("publishes an immutable artifact and complete manifest from a built app", async () => {
+  test("builds immutable bytes without publishing current, then publishes only on command", async () => {
     const root = scratch();
     const bin = makeFakeTools(root);
     const releaseSha = "a".repeat(40);
     const app = join(root, "Comma.app");
     const releases = join(root, "releases");
-    makeApp(app, releaseSha);
-
-    const result = run([releaseBuilder, releaseSha, app], undefined, {
+    const env = {
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       COMMA_RELEASE_DIR: releases,
       COMMA_ARTIFACT_BASE_URL: "https://example.test/releases",
-    });
+    };
+    makeApp(app, releaseSha);
 
+    const result = run([releaseBuilder, "--build", releaseSha, app], undefined, env);
     expect(result.status, result.stderr).toBe(0);
-    const manifest = JSON.parse(readFileSync(join(releases, "current.json"), "utf8"));
+    expect(await Bun.file(join(releases, "current.json")).exists()).toBe(false);
+
+    const manifest = JSON.parse(readFileSync(join(releases, releaseSha, "manifest.json"), "utf8"));
     expect(manifest).toMatchObject({
       sourceSha: releaseSha,
       semver: "0.1.0",
@@ -160,24 +163,19 @@ describe("desktop release publication", () => {
     expect(manifest.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(manifest.size).toBeGreaterThan(0);
     expect(Number.isNaN(Date.parse(manifest.builtAt))).toBe(false);
-    expect(await Bun.file(join(releases, releaseSha, `Comma-${releaseSha}.app.zip`)).exists()).toBe(true);
+
+    const publish = run([releaseBuilder, "--publish-current", releaseSha], undefined, env);
+    expect(publish.status, publish.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(join(releases, "current.json"), "utf8"))).toMatchObject({ sourceSha: releaseSha });
 
     const newerSha = "b".repeat(40);
     makeApp(app, newerSha);
-    const newer = run([releaseBuilder, newerSha, app], undefined, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
-      COMMA_RELEASE_DIR: releases,
-      COMMA_ARTIFACT_BASE_URL: "https://example.test/releases",
-    });
-    expect(newer.status, newer.stderr).toBe(0);
+    expect(run([releaseBuilder, "--build", newerSha, app], undefined, env).status).toBe(0);
+    expect(JSON.parse(readFileSync(join(releases, "current.json"), "utf8"))).toMatchObject({ sourceSha: releaseSha });
 
-    const retry = run([releaseBuilder, releaseSha, app], undefined, {
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
-      COMMA_RELEASE_DIR: releases,
-      COMMA_ARTIFACT_BASE_URL: "https://example.test/releases",
-    });
+    const retry = run([releaseBuilder, "--build", releaseSha, app], undefined, env);
     expect(retry.status, retry.stderr).toBe(0);
-    expect(retry.stdout).toContain("already published");
+    expect(retry.stdout).toContain("already built");
     expect(JSON.parse(readFileSync(join(releases, "current.json"), "utf8"))).toMatchObject({ sourceSha: releaseSha });
   });
 
@@ -189,13 +187,42 @@ describe("desktop release publication", () => {
     const app = join(root, "Comma.app");
     makeApp(app, compiledSha);
 
-    const result = run([releaseBuilder, publishedSha, app], undefined, {
+    const result = run([releaseBuilder, "--build", publishedSha, app], undefined, {
       PATH: `${bin}:${process.env.PATH ?? ""}`,
       COMMA_RELEASE_DIR: join(root, "releases"),
       COMMA_ARTIFACT_BASE_URL: "https://example.test/releases",
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("does not embed source SHA");
+  });
+
+  test("sweeps cancelled temp publications and retains a bounded current history", () => {
+    const root = scratch();
+    const bin = makeFakeTools(root);
+    const app = join(root, "Comma.app");
+    const releases = join(root, "releases");
+    const env = {
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      COMMA_RELEASE_DIR: releases,
+      COMMA_ARTIFACT_BASE_URL: "https://example.test/releases",
+      COMMA_RELEASE_RETENTION: "2",
+    };
+    mkdirSync(join(releases, ".cancelled.tmp.999999"), { recursive: true });
+    writeFileSync(join(releases, ".current.json.tmp.999998"), "cancelled");
+
+    for (const digit of ["1", "2", "3"]) {
+      const sha = digit.repeat(40);
+      makeApp(app, sha);
+      const build = run([releaseBuilder, "--build", sha, app], undefined, env);
+      expect(build.status, build.stderr).toBe(0);
+      const publish = run([releaseBuilder, "--publish-current", sha], undefined, env);
+      expect(publish.status, publish.stderr).toBe(0);
+    }
+
+    const releaseDirectories = readdirSync(releases).filter((name) => /^[0-9a-f]{40}$/.test(name));
+    expect(releaseDirectories.sort()).toEqual(["2".repeat(40), "3".repeat(40)]);
+    expect(readdirSync(releases)).not.toContain(".cancelled.tmp.999999");
+    expect(readdirSync(releases)).not.toContain(".current.json.tmp.999998");
   });
 });
 

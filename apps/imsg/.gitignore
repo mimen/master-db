@@ -28,5 +28,7 @@ dist-ssr
 *.db-*
 .cache/
 client/dist
+client/.dist-staging-*
+client/web-releases/
 client/node_modules
 client/.expo

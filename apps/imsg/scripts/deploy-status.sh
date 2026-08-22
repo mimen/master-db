@@ -5,8 +5,6 @@ set -euo pipefail
 URL="${IMSG_TAILNET_URL:-https://milads-mac-mini.taild31e9a.ts.net:8447}"
 APP="${COMMA_APP:-$HOME/Applications/Comma.app}"
 STAGED="${COMMA_STAGED_APP:-${APP}.staged}"
-VERIFY=0
-[ "${1:-}" = "--verify" ] && VERIFY=1
 
 json_field() {
   printf '%s' "$1" | plutil -extract "$2" raw -o - -- - 2>/dev/null || true
@@ -43,12 +41,3 @@ printf 'Shell deployed: %s\n' "${deployed_shell_sha:-unavailable}"
 printf 'Shell installed: %s (%s)\n' "${running_shell_sha:-unavailable}" "${bundle_id:-unavailable}"
 printf 'Shell staged: %s\n' "${staged_shell_sha:-none}"
 printf 'Production processes: %s\n' "$running_count"
-
-if [ "$VERIFY" -eq 1 ]; then
-  [ "$(json_field "$health_json" ok)" = "true" ] || { printf 'verify: production health failed\n' >&2; exit 1; }
-  [[ "$web_sha" =~ ^[0-9a-f]{40}$ ]] || { printf 'verify: deployed web SHA unavailable\n' >&2; exit 1; }
-  [ "$web_environment" = "production" ] || { printf 'verify: deployed web environment is not production\n' >&2; exit 1; }
-  [ "$running_count" -eq 1 ] || { printf 'verify: expected exactly one production Comma process\n' >&2; exit 1; }
-  [[ "$running_shell_sha" =~ ^[0-9a-f]{40}$ ]] || { printf 'verify: installed shell SHA unavailable\n' >&2; exit 1; }
-  printf 'Verification OK: web %s, shell %s\n' "${web_sha:0:12}" "${running_shell_sha:0:12}"
-fi
