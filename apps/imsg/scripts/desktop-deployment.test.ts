@@ -549,6 +549,8 @@ describe("desktop activation bootstrap", () => {
     const newSha = "b".repeat(40);
     const app = join(root, "Comma.app");
     makeApp(app, oldSha);
+    // The currently installed pre-provenance Comma has no CommaSourceSHA.
+    expect(run(["plutil", "-remove", "CommaSourceSHA", join(app, "Contents/Info.plist")]).status).toBe(0);
     makeApp(`${app}.staged`, newSha);
     const fakeApp = Bun.spawn(["sleep", "30"]);
     const launchApp = join(bin, "bootstrap-open");

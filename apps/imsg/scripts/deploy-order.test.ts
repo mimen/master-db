@@ -29,6 +29,12 @@ describe("production deployment publication order", () => {
     expect(servedBytes).toBeLessThan(position("desktop-build-release.sh --publish-current", publishing));
   });
 
+  test("removes a first shell pointer when post-publication verification fails", () => {
+    expect(deploy).toContain("SHELL_POINTER_EXISTED=0");
+    expect(deploy).toContain('elif [ "$SHELL_POINTER_EXISTED" -eq 0 ]; then');
+    expect(deploy).toContain('rm -f "$REPO_DIR/apps/imsg/desktop/releases/current.json"');
+  });
+
   test("includes lint in the production gate", () => {
     expect(position("bun run typecheck:imsg")).toBeLessThan(position("(cd apps/imsg && bun run lint)"));
     expect(position("(cd apps/imsg && bun run lint)")).toBeLessThan(position("(cd apps/imsg && bun test)"));

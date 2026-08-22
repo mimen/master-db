@@ -101,8 +101,23 @@ trap 'comma_release_lock "$LOCK" "$ACTIVATOR_ID"' EXIT
 comma_verify_app "$STAGED" "$EXPECTED_SHA" || fail_before_swap "staged app verification failed"
 [ -d "$APP" ] || fail_transient "canonical app is missing"
 PREVIOUS_SHA="$(comma_plist_value "$APP" CommaSourceSHA 2>/dev/null || true)"
-[[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || fail_transient "canonical app has an invalid source SHA"
-comma_verify_app "$APP" "$PREVIOUS_SHA" || fail_transient "canonical app is not a valid rollback target"
+PREVIOUS_IS_LEGACY=0
+if [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  comma_verify_app "$APP" "$PREVIOUS_SHA" || fail_transient "canonical app is not a valid rollback target"
+else
+  # The one-time migration from the pre-provenance Comma has no CommaSourceSHA.
+  # Its signature, bundle ID, and architecture still make it a safe rollback target.
+  comma_verify_app_identity "$APP" || fail_transient "legacy canonical app is not a valid rollback target"
+  PREVIOUS_IS_LEGACY=1
+fi
+verify_previous_bundle() {
+  local bundle="$1"
+  if [ "$PREVIOUS_IS_LEGACY" -eq 1 ]; then
+    comma_verify_app_identity "$bundle"
+  else
+    comma_verify_app "$bundle" "$PREVIOUS_SHA"
+  fi
+}
 printf 'ready\n' >"$READY_FILE"
 
 log "waiting for Comma PID $WAIT_PID to exit"
@@ -136,9 +151,8 @@ fi
 touch "$PREVIOUS" || log "warning: could not refresh rollback retention timestamp"
 
 rollback() {
-  local reason="$1" restored_sha restored_binary restored_pid restore_failure=""
+  local reason="$1" restored_binary restored_pid restore_failure=""
   log "$reason; rolling back"
-  restored_sha="$(comma_plist_value "$PREVIOUS" CommaSourceSHA 2>/dev/null || true)"
   if [ -n "$BINARY" ] && ! comma_stop_processes "$BINARY" 5; then
     write_state rollback-failed "$reason; failed shell processes could not be stopped"
     comma_notify "Comma rollback failed" "Failed shell processes could not be stopped safely"
@@ -150,7 +164,7 @@ rollback() {
     comma_notify "Comma rollback failed" "$reason"
     exit 1
   fi
-  comma_verify_app "$APP" "$restored_sha" || restore_failure="restored app identity verification failed"
+  verify_previous_bundle "$APP" || restore_failure="restored app identity verification failed"
   if [ -z "$restore_failure" ] && ! "$OPEN_BIN" -n "$APP"; then
     restore_failure="restored app launch command failed"
   fi
@@ -163,7 +177,7 @@ rollback() {
     && ! comma_process_stable "$restored_binary" "$restored_pid" "$HEALTH_STABILIZATION"; then
     restore_failure="restored Comma process did not remain healthy"
   fi
-  if [ -z "$restore_failure" ] && ! comma_verify_app "$APP" "$restored_sha"; then
+  if [ -z "$restore_failure" ] && ! verify_previous_bundle "$APP"; then
     restore_failure="restored app identity changed after launch"
   fi
   if [ -n "$restore_failure" ]; then

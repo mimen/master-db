@@ -144,12 +144,11 @@ end run
 APPLESCRIPT
 }
 
-comma_verify_app() {
+comma_verify_app_identity() {
   local app="$1"
-  local expected_sha="$2"
-  local expected_bundle_id="${3:-com.milad.imsg.desktop}"
-  local expected_arch="${4:-arm64}"
-  local bundle_id source_sha executable archs signature
+  local expected_bundle_id="${2:-com.milad.imsg.desktop}"
+  local expected_arch="${3:-arm64}"
+  local bundle_id executable archs signature
 
   [ -d "$app" ] || { printf 'missing app bundle: %s\n' "$app" >&2; return 1; }
   codesign --verify --deep --strict "$app" || return 1
@@ -158,15 +157,9 @@ comma_verify_app() {
     printf 'app is not ad-hoc signed: %s\n' "$app" >&2
     return 1
   }
-
   bundle_id="$(comma_plist_value "$app" CFBundleIdentifier)" || return 1
   [ "$bundle_id" = "$expected_bundle_id" ] || {
     printf 'unexpected bundle ID: %s\n' "$bundle_id" >&2
-    return 1
-  }
-  source_sha="$(comma_plist_value "$app" CommaSourceSHA)" || return 1
-  [ "$source_sha" = "$expected_sha" ] || {
-    printf 'unexpected shell SHA: %s\n' "$source_sha" >&2
     return 1
   }
   executable="$(comma_plist_value "$app" CFBundleExecutable)" || return 1
@@ -175,4 +168,19 @@ comma_verify_app() {
     *" $expected_arch "*) ;;
     *) printf 'missing expected architecture %s: %s\n' "$expected_arch" "$archs" >&2; return 1 ;;
   esac
+}
+
+comma_verify_app() {
+  local app="$1"
+  local expected_sha="$2"
+  local expected_bundle_id="${3:-com.milad.imsg.desktop}"
+  local expected_arch="${4:-arm64}"
+  local source_sha
+
+  comma_verify_app_identity "$app" "$expected_bundle_id" "$expected_arch" || return 1
+  source_sha="$(comma_plist_value "$app" CommaSourceSHA)" || return 1
+  [ "$source_sha" = "$expected_sha" ] || {
+    printf 'unexpected shell SHA: %s\n' "$source_sha" >&2
+    return 1
+  }
 }

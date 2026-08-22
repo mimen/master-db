@@ -17,12 +17,14 @@ WEB_ACTIVATED=0
 WEB_MANIFEST_SNAPSHOTTED=0
 WEB_MANIFEST_EXISTED=0
 SHELL_POINTER_PUBLISHED=0
+SHELL_POINTER_EXISTED=0
 DEPLOY_SUCCEEDED=0
 PREVIOUS_SHELL_SHA=""
 if [ -f "$LAST_DEPLOYED_SHA_FILE" ]; then
   LAST_DEPLOYED_SHA="$(tr -d '[:space:]' <"$LAST_DEPLOYED_SHA_FILE")"
 fi
 if [ -f "$REPO_DIR/apps/imsg/desktop/releases/current.json" ]; then
+  SHELL_POINTER_EXISTED=1
   PREVIOUS_SHELL_SHA="$(plutil -extract sourceSha raw -o - "$REPO_DIR/apps/imsg/desktop/releases/current.json" 2>/dev/null || true)"
 fi
 
@@ -47,9 +49,13 @@ cleanup() {
         rm -f "$WEB_RELEASE_MANIFEST"
       fi
     fi
-    if [ "$SHELL_POINTER_PUBLISHED" -eq 1 ] && [[ "$PREVIOUS_SHELL_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-      if ! apps/imsg/scripts/desktop-build-release.sh --publish-current "$PREVIOUS_SHELL_SHA"; then
-        printf 'failed to restore prior shell release pointer %s\n' "$PREVIOUS_SHELL_SHA" >&2
+    if [ "$SHELL_POINTER_PUBLISHED" -eq 1 ]; then
+      if [[ "$PREVIOUS_SHELL_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+        if ! apps/imsg/scripts/desktop-build-release.sh --publish-current "$PREVIOUS_SHELL_SHA"; then
+          printf 'failed to restore prior shell release pointer %s\n' "$PREVIOUS_SHELL_SHA" >&2
+        fi
+      elif [ "$SHELL_POINTER_EXISTED" -eq 0 ]; then
+        rm -f "$REPO_DIR/apps/imsg/desktop/releases/current.json"
       fi
     fi
   fi
