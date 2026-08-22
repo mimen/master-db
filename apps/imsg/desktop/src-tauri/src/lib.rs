@@ -183,12 +183,23 @@ fn restart_to_staged_shell(app: AppHandle) -> Result<(), String> {
 }
 
 const PRODUCTION_BUNDLE_ID: &str = "com.milad.imsg.desktop";
+const PRODUCTION_APP_PATH: &str = "/Users/mimen/Applications/Comma.app";
 
-fn production_identity_allowed(identifier: &str, executable_path: &std::path::Path) -> bool {
+fn executable_app_bundle(executable_path: &Path) -> Option<&Path> {
+    let macos = executable_path.parent()?;
+    if macos.file_name()? != "MacOS" {
+        return None;
+    }
+    let contents = macos.parent()?;
+    if contents.file_name()? != "Contents" {
+        return None;
+    }
+    contents.parent()
+}
+
+fn production_identity_allowed(identifier: &str, executable_path: &Path) -> bool {
     identifier != PRODUCTION_BUNDLE_ID
-        || executable_path
-            .to_string_lossy()
-            .contains(".app/Contents/MacOS/")
+        || executable_app_bundle(executable_path) == Some(Path::new(PRODUCTION_APP_PATH))
 }
 
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -261,7 +272,7 @@ pub fn run() {
             let executable_path = std::env::current_exe()?;
             if !production_identity_allowed(&app.config().identifier, &executable_path) {
                 return Err(std::io::Error::other(format!(
-                    "production-identical unpackaged desktop launch is disabled: {}",
+                    "production-identical desktop launch requires /Users/mimen/Applications/Comma.app: {}",
                     executable_path.display()
                 ))
                 .into());
@@ -298,14 +309,17 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn production_identity_requires_a_packaged_app_executable() {
-        assert!(!production_identity_allowed(
-            PRODUCTION_BUNDLE_ID,
-            Path::new("/tmp/target/release/imsg-desktop")
-        ));
+    fn production_identity_requires_the_canonical_installed_app() {
+        for path in [
+            "/tmp/target/release/imsg-desktop",
+            "/Applications/Comma.app/Contents/MacOS/imsg-desktop",
+            "/Users/mimen/Programming/Repos/convex-db/apps/imsg/desktop/src-tauri/target/release/bundle/macos/Comma.app/Contents/MacOS/imsg-desktop",
+        ] {
+            assert!(!production_identity_allowed(PRODUCTION_BUNDLE_ID, Path::new(path)));
+        }
         assert!(production_identity_allowed(
             PRODUCTION_BUNDLE_ID,
-            Path::new("/Applications/Comma.app/Contents/MacOS/imsg-desktop")
+            Path::new("/Users/mimen/Applications/Comma.app/Contents/MacOS/imsg-desktop")
         ));
     }
 

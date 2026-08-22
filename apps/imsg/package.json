@@ -9,9 +9,9 @@
     "deploy:branch": "bun scripts/deploy-branch.ts",
     "deploy:cleanup": "bun scripts/deploy-cleanup.ts",
     "deploy:status": "bash scripts/deploy-status.sh",
-    "deploy:verify": "bash scripts/deploy-status.sh --verify",
+    "deploy:verify": "bun scripts/deploy-verify.ts",
     "deploy:activate": "bash scripts/desktop-activate-bootstrap.sh",
-    "deploy:rollback": "zsh -c 'unset PROCID PROCID_REF PROCID_OFF; exec -a comma:rollback /bin/bash scripts/desktop-rollback.sh'",
+    "deploy:rollback": "zsh -c 'unset PROCID PROCID_REF PROCID_OFF; exec -a comma:rollback /bin/bash scripts/desktop-rollback.sh'"
     "build": "tsc -b && cd client && bun run build:web",
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:fixture": "playwright test --config e2e/fixture.playwright.config.ts",

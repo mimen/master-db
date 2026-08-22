@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds and publishes one immutable arm64 Comma shell release on the Mini.
+# Builds immutable arm64 Comma shell bytes, or publishes a verified current pointer.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,12 +8,20 @@ DESKTOP_DIR="$REPO_DIR/apps/imsg/desktop"
 RELEASE_DIR="${COMMA_RELEASE_DIR:-$DESKTOP_DIR/releases}"
 ARTIFACT_BASE_URL="${COMMA_ARTIFACT_BASE_URL:-https://milads-mac-mini.taild31e9a.ts.net:8447/api/desktop-release/artifact}"
 EXPECTED_BUNDLE_ID="${COMMA_BUNDLE_ID:-com.milad.imsg.desktop}"
-SOURCE_SHA="${1:-$(git -C "$REPO_DIR" rev-parse HEAD)}"
-BUNDLE="${2:-}"
+RETENTION="${COMMA_RELEASE_RETENTION:-3}"
+TEMP_MAX_AGE_SECONDS="${COMMA_RELEASE_TEMP_MAX_AGE_SECONDS:-1800}"
+MODE="${1:---build}"
+SOURCE_SHA="${2:-$(git -C "$REPO_DIR" rev-parse HEAD)}"
+BUNDLE="${3:-}"
+TMP_RELEASE=""
+CURRENT_TMP=""
 
 fail() { printf 'desktop release: %s\n' "$*" >&2; exit 1; }
+[[ "$MODE" = "--build" || "$MODE" = "--publish-current" ]] || fail "mode must be --build or --publish-current"
 [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "source SHA must be a full lowercase Git SHA"
 [[ "$ARTIFACT_BASE_URL" == https://* ]] || fail "artifact base URL must use HTTPS"
+[[ "$RETENTION" =~ ^[1-9][0-9]*$ ]] && [ "$RETENTION" -ge 2 ] || fail "release retention must be an integer of at least two"
+[[ "$TEMP_MAX_AGE_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail "temp max age must be a positive integer"
 [ "$(uname -m)" = "arm64" ] || fail "production Comma releases must be built on arm64"
 
 mkdir -p "$RELEASE_DIR"
@@ -24,10 +32,34 @@ RELEASE_MANIFEST="$RELEASE_PATH/manifest.json"
 CURRENT_MANIFEST="$RELEASE_DIR/current.json"
 ARTIFACT_URL="${ARTIFACT_BASE_URL%/}/$ARTIFACT_NAME"
 
-publish_current_pointer() {
-  local manifest="$1" temporary="$RELEASE_DIR/.current.json.tmp.$$"
-  cp "$manifest" "$temporary"
-  mv "$temporary" "$CURRENT_MANIFEST"
+cleanup() {
+  [ -z "$TMP_RELEASE" ] || rm -rf "$TMP_RELEASE"
+  [ -z "$CURRENT_TMP" ] || rm -f "$CURRENT_TMP"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+sweep_cancelled_publications() {
+  local path base pid modified now age
+  now="$(date +%s)"
+  for path in "$RELEASE_DIR"/.*.tmp.*; do
+    [ -e "$path" ] || continue
+    base="${path##*/}"
+    pid="${base##*.tmp.}"
+    modified="$(stat -f %m "$path" 2>/dev/null || printf '0')"
+    age=$((now - modified))
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+      if ! kill -0 "$pid" 2>/dev/null; then
+        rm -rf "$path"
+      elif [ "$age" -gt "$TEMP_MAX_AGE_SECONDS" ] \
+        && ! ps -p "$pid" -o args= | /usr/bin/grep -F 'comma:shell-builder' >/dev/null; then
+        rm -rf "$path"
+      fi
+    elif [ "$age" -gt "$TEMP_MAX_AGE_SECONDS" ]; then
+      rm -rf "$path"
+    fi
+  done
 }
 
 verify_published_release() {
@@ -52,17 +84,48 @@ verify_published_release() {
     && [ "$published_url" = "$ARTIFACT_URL" ]
 }
 
-# The SHA directory is the immutable publication unit. Repointing current.json
-# to a previously published release supports deterministic rollback without
-# replacing the artifact bytes at their existing URL.
-if [ -e "$RELEASE_PATH" ]; then
-  verify_published_release || fail "existing immutable release is incomplete or invalid: $RELEASE_PATH"
-  publish_current_pointer "$RELEASE_MANIFEST"
-  printf 'Comma shell release already published: %s\n' "$SOURCE_SHA"
+prune_releases() {
+  local prior_sha="${1:-}" path sha kept=0
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    sha="${path##*/}"
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || continue
+    if [ "$sha" = "$SOURCE_SHA" ] || { [ -n "$prior_sha" ] && [ "$sha" = "$prior_sha" ]; }; then
+      continue
+    fi
+    kept=$((kept + 1))
+    if [ "$kept" -gt $((RETENTION - 2)) ]; then rm -rf "$path"; fi
+  done < <(find "$RELEASE_DIR" -mindepth 1 -maxdepth 1 -type d -print0 | xargs -0 ls -1dt 2>/dev/null || true)
+}
+
+publish_current_pointer() {
+  verify_published_release || fail "immutable release is incomplete or invalid: $RELEASE_PATH"
+  local prior_sha=""
+  if [ -f "$CURRENT_MANIFEST" ]; then
+    prior_sha="$(plutil -extract sourceSha raw -o - "$CURRENT_MANIFEST" 2>/dev/null || true)"
+  fi
+  CURRENT_TMP="$RELEASE_DIR/.current.json.tmp.$$"
+  cp "$RELEASE_MANIFEST" "$CURRENT_TMP"
+  mv "$CURRENT_TMP" "$CURRENT_MANIFEST"
+  CURRENT_TMP=""
+  prune_releases "$prior_sha"
+  printf 'Published current Comma shell release %s\n' "$SOURCE_SHA"
+}
+
+sweep_cancelled_publications
+
+if [ "$MODE" = "--publish-current" ]; then
+  publish_current_pointer
   exit 0
 fi
 
-printf 'Building Comma shell release %s\n' "$SOURCE_SHA"
+if [ -e "$RELEASE_PATH" ]; then
+  verify_published_release || fail "existing immutable release is incomplete or invalid: $RELEASE_PATH"
+  printf 'Comma shell release already built: %s\n' "$SOURCE_SHA"
+  exit 0
+fi
+
+printf 'Building immutable Comma shell release %s\n' "$SOURCE_SHA"
 if [ -z "$BUNDLE" ]; then
   command -v cargo >/dev/null || fail "Rust cargo is required on the Mini shell builder"
   [ -x "$DESKTOP_DIR/node_modules/.bin/tauri" ] || fail "locked Tauri CLI is missing; install desktop dependencies first"
@@ -97,7 +160,6 @@ TMP_RELEASE="$RELEASE_DIR/.${SOURCE_SHA}.tmp.$$"
 TMP_ARTIFACT="$TMP_RELEASE/$ARTIFACT_NAME"
 TMP_MANIFEST="$TMP_RELEASE/manifest.json"
 mkdir "$TMP_RELEASE"
-trap 'rm -rf "$TMP_RELEASE" "$RELEASE_DIR/.current.json.tmp.$$"' EXIT
 ditto -c -k --keepParent "$BUNDLE" "$TMP_ARTIFACT"
 SHA256="$(shasum -a 256 "$TMP_ARTIFACT" | cut -d ' ' -f 1)"
 SIZE="$(stat -f %z "$TMP_ARTIFACT")"
@@ -121,9 +183,6 @@ TMP_MANIFEST="$TMP_MANIFEST" /bin/zsh -c '
   '\''
 '
 
-# One atomic directory rename publishes artifact plus manifest together; the
-# current pointer moves only after that immutable unit is complete.
 mv "$TMP_RELEASE" "$RELEASE_PATH"
-publish_current_pointer "$RELEASE_MANIFEST"
-trap - EXIT
-printf 'Published %s (%s bytes, %s)\n' "$ARTIFACT_URL" "$SIZE" "$SHA256"
+TMP_RELEASE=""
+printf 'Built %s (%s bytes, %s)\n' "$ARTIFACT_URL" "$SIZE" "$SHA256"

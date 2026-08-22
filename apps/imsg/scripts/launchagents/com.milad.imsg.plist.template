@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.milad.imsg</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-c</string>
+    <string>unset PROCID PROCID_REF PROCID_OFF; exec -a comma:server __HOME__/.bun/bin/bun server/index.ts</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO_DIR__/apps/imsg</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/imsg.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/imsg.log</string>
+</dict>
+</plist>

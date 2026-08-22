@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.milad.imsg-expo</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-c</string>
+    <string>unset PROCID PROCID_REF PROCID_OFF; exec -a comma:expo __HOME__/.bun/bin/bun node_modules/expo/bin/cli start --port 8081</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO_DIR__/apps/imsg/client</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CI</key><string>1</string>
+    <key>EXPO_NO_TELEMETRY</key><string>1</string>
+    <key>PATH</key><string>__HOME__/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>KeepAlive</key><true/>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/imsg-expo.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/imsg-expo.log</string>
+</dict>
+</plist>

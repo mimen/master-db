@@ -1,5 +1,6 @@
 /** Injects PWA head tags + a zoom-lock viewport into the exported SPA shell. */
-const path = new URL("../dist/index.html", import.meta.url).pathname;
+export async function postExport(outputDirectory: string, webSha: string | undefined): Promise<void> {
+const path = `${outputDirectory.replace(/\/$/, "")}/index.html`;
 let html = await Bun.file(path).text();
 
 // Replace Expo's default viewport with a zoom-locked, safe-area-aware one.
@@ -43,8 +44,18 @@ const tags = [
     "*{scrollbar-width:thin;scrollbar-color:rgba(140,140,150,0.4) transparent}</style>",
 ].join("");
 
+if (webSha && !html.includes('name="comma-web-sha"')) {
+  html = html.replace("</head>", `<meta name="comma-web-sha" content="${webSha}"/></head>`);
+}
 if (!html.includes("manifest.webmanifest")) {
   html = html.replace("</head>", `${tags}</head>`);
 }
 await Bun.write(path, html);
 console.log("PWA tags + zoom lock injected");
+}
+
+if (import.meta.main) {
+  const outputDirectory = process.argv[2]
+    ?? new URL("../dist", import.meta.url).pathname;
+  await postExport(outputDirectory, process.env.EXPO_PUBLIC_IMSG_WEB_SHA);
+}

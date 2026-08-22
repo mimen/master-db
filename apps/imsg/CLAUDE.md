@@ -45,10 +45,15 @@ bun run deploy:verify
 bun run deploy:cleanup
 ```
 
-A merge to `main` automatically deploys production through the Mini runner. Do not rsync
-`dist`, run raw `tauri dev`, copy worktree apps into Applications, or manually replace a
-running production bundle. Web and shell updates activate through the in-app Reload and
-Restart banners.
+A merge to `main` automatically deploys production through the Mini runner. The gate runs
+typecheck, lint, and tests; builds web in a sibling directory; builds immutable shell bytes;
+atomically activates web; restarts and health-checks the services; then publishes release
+pointers. The checked-in LaunchAgent installer gives the Mini processes `comma:server` and
+`comma:expo` argv identities. Do not rsync `dist`, run raw `tauri dev`, copy worktree apps
+into Applications, or manually replace a running production bundle. Production-identical
+shell runtime is restricted to `/Users/mimen/Applications/Comma.app`; the Mini may build
+that artifact but never launches it. Web and shell updates activate through the in-app Reload
+and Restart banners.
 
 ## Gotchas
 
