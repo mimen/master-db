@@ -1,8 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import { displayReleaseSha } from "@shared/release-identity";
+import { useSyncExternalStore, type JSX } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+
+import { ListRow } from "./list-row";
+
+import { Fonts, Radii, Spacing } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useTheme } from "@/hooks/use-theme";
-import { Radii, Spacing } from "@/constants/theme";
+import { releaseStatus } from "@/lib/release-status";
 import {
   setNameOrder,
   setSuggestionMode,
@@ -11,7 +17,6 @@ import {
   type NameOrder,
   type SuggestionMode,
 } from "@/lib/settings";
-import { ListRow } from "./list-row";
 
 export interface SettingsContentProps {
   /** Desktop pane wants its own header with a close button. */
@@ -32,6 +37,37 @@ const SUGGESTION_MODE_OPTIONS: ReadonlyArray<{ value: SuggestionMode; label: str
   { value: "on-demand", label: "On demand" },
   { value: "auto", label: "Automatic" },
 ];
+
+function ReleaseIdentityFooter(): JSX.Element {
+  const theme = useTheme();
+  const snapshot = useSyncExternalStore(
+    releaseStatus.subscribe,
+    releaseStatus.getSnapshot,
+    releaseStatus.getSnapshot,
+  );
+  const rows = [
+    ["Environment", snapshot.running.environment],
+    ["Branch", snapshot.running.branch ?? "—"],
+    ["Running web", displayReleaseSha(snapshot.running.webSha)],
+    ["Deployed web", displayReleaseSha(snapshot.deployedWeb?.webSha ?? null)],
+    ["Running shell", displayReleaseSha(snapshot.shell.runningSha)],
+    ["Staged shell", displayReleaseSha(snapshot.shell.stagedSha)],
+  ] as const;
+
+  return (
+    <View
+      style={[styles.releaseFooter, { borderTopColor: theme.divider }]}
+      testID="release-identity-footer"
+    >
+      {rows.map(([label, value]) => (
+        <View key={label} style={styles.releaseRow}>
+          <Text style={[styles.releaseLabel, { color: theme.textSecondary }]}>{label}</Text>
+          <Text selectable style={[styles.releaseValue, { color: theme.textSecondary }]}>{value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 /**
  * The app's one settings surface — grouped option cards, iOS-Settings style
@@ -128,6 +164,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             </Text>
           </View>
         )}
+        <ReleaseIdentityFooter />
       </ScrollView>
     </View>
   );
@@ -149,4 +186,14 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", marginBottom: 8 },
   fieldGroup: { width: "100%", borderRadius: Radii.input, overflow: "hidden" },
   fieldCaption: { fontSize: 12, marginTop: 6, paddingHorizontal: 6 },
+  releaseFooter: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 5,
+    marginTop: Spacing.two,
+    paddingHorizontal: 6,
+    paddingTop: Spacing.three,
+  },
+  releaseRow: { flexDirection: "row", justifyContent: "space-between", gap: Spacing.three },
+  releaseLabel: { fontSize: 11 },
+  releaseValue: { fontFamily: Fonts.mono, fontSize: 11, textAlign: "right" },
 });
