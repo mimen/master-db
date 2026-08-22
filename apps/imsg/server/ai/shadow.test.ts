@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AiConfig } from "../config";
 import {
+  zshenvExports,
   anchorCommand,
   automationEnv,
   delegateCommand,
@@ -218,5 +219,37 @@ describe("ShadowRunner", () => {
     const result = await runner.ensureAnchor();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("stable, non-empty");
+  });
+});
+
+describe("zshenvExports", () => {
+  test("harvests export lines for keys the env lacks", () => {
+    const result = zshenvExports("/nonexistent/../fixture-does-not-exist");
+    expect(result).toEqual({});
+  });
+
+  test("returns an empty object for a missing file instead of throwing", () => {
+    const result = zshenvExports(`${import.meta.dir}/fixtures/zshenv-missing`);
+    expect(result).toEqual({});
+  });
+
+  test("parses quoted and unquoted values and skips comments", () => {
+    const { writeFileSync, mkdtempSync } = require("node:fs");
+    const { join } = require("node:path");
+    const dir = mkdtempSync("/tmp/imsg-zshenv-");
+    const file = join(dir, "zshenv");
+    writeFileSync(file, [
+      "# a comment",
+      "export CLAUDE_CODE_OAUTH_TOKEN=abc123",
+      'export QUOTED="with spaces"',
+      "not an export line",
+      "export EMPTY=",
+      "",
+    ].join("\n"));
+    const result = zshenvExports(file);
+    expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("abc123");
+    expect(result.QUOTED).toBe("with spaces");
+    expect(result.EMPTY).toBeUndefined();
+    expect(Object.keys(result)).toHaveLength(2);
   });
 });

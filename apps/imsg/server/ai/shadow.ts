@@ -186,11 +186,39 @@ const HARNESS_PATH = [
   "/bin",
 ].join(":");
 
+/**
+ * The Mini's ~/.zshenv carries credentials shell jobs depend on (notably
+ * CLAUDE_CODE_OAUTH_TOKEN for Claude auth). A launchd server never sources
+ * it, so harvest its `export KEY=value` lines for anything the server env
+ * lacks. Cached per file; a missing or unreadable file is fine.
+ */
+const zshenvCache = new Map<string, Record<string, string>>();
+export function zshenvExports(path = `${process.env.HOME ?? ""}/.zshenv`): Record<string, string> {
+  const cached = zshenvCache.get(path);
+  if (cached) return cached;
+  const harvested: Record<string, string> = {};
+  try {
+    const lines = require("node:fs").readFileSync(path, "utf8").split("\n");
+    for (const line of lines) {
+      const match = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/);
+      if (!match) continue;
+      const [, key, raw] = match;
+      const value = raw.replace(/^["']|["']$/g, "");
+      if (value && !(key in process.env)) harvested[key] = value;
+    }
+  } catch {
+    // no zshenv, no problem — the env is just what the server already has
+  }
+  zshenvCache.set(path, harvested);
+  return harvested;
+}
+
 /** Real process execution, used outside tests. Kills the child on timeout. */
 export const spawnExec: Exec = async (spec) => {
   const proc = Bun.spawn([spec.command, ...spec.args], {
     env: {
       ...process.env,
+      ...zshenvExports(),
       PATH: process.env.PATH?.includes("/opt/homebrew/bin") ? process.env.PATH : HARNESS_PATH,
       HOME: process.env.HOME ?? "/Users/mimen",
       ...spec.env,
