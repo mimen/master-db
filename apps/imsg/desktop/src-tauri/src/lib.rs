@@ -175,6 +175,15 @@ fn restart_to_staged_shell(app: AppHandle) -> Result<(), String> {
     activate_staged_desktop_shell(app, staged.source_sha)
 }
 
+const PRODUCTION_BUNDLE_ID: &str = "com.milad.imsg.desktop";
+
+fn production_identity_allowed(identifier: &str, executable_path: &std::path::Path) -> bool {
+    identifier != PRODUCTION_BUNDLE_ID
+        || executable_path
+            .to_string_lossy()
+            .contains(".app/Contents/MacOS/")
+}
+
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let new_message = MenuItemBuilder::with_id("conversation.new", "New Message")
         .accelerator("CmdOrCtrl+N")
@@ -242,6 +251,14 @@ pub fn run() {
             restart_to_staged_shell
         ])
         .setup(|app| {
+            let executable_path = std::env::current_exe()?;
+            if !production_identity_allowed(&app.config().identifier, &executable_path) {
+                return Err(std::io::Error::other(format!(
+                    "production-identical unpackaged desktop launch is disabled: {}",
+                    executable_path.display()
+                ))
+                .into());
+            }
             let menu = build_menu(app)?;
             app.set_menu(menu)?;
             let window_config = app
@@ -266,4 +283,30 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{production_identity_allowed, PRODUCTION_BUNDLE_ID};
+    use std::path::Path;
+
+    #[test]
+    fn production_identity_requires_a_packaged_app_executable() {
+        assert!(!production_identity_allowed(
+            PRODUCTION_BUNDLE_ID,
+            Path::new("/tmp/target/release/imsg-desktop")
+        ));
+        assert!(production_identity_allowed(
+            PRODUCTION_BUNDLE_ID,
+            Path::new("/Applications/Comma.app/Contents/MacOS/imsg-desktop")
+        ));
+    }
+
+    #[test]
+    fn development_bundle_identity_can_run_unpacked() {
+        assert!(production_identity_allowed(
+            "com.milad.comma.dev.b123456789abc",
+            Path::new("/tmp/target/debug/imsg-desktop")
+        ));
+    }
 }
