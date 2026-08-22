@@ -545,10 +545,20 @@ describe("desktop activation bootstrap", () => {
   test("activates the first staged shell without relying on installed Tauri commands", async () => {
     const root = scratch();
     const bin = makeFakeTools(root);
+    // The real legacy bundle has an invalid old signature; only the staged app
+    // is required to satisfy the modern signature check during bootstrap.
+    writeFileSync(join(bin, "codesign"), `#!/bin/bash
+app="\${!#}"
+/usr/bin/plutil -extract CommaSourceSHA raw -o - "$app/Contents/Info.plist" >/dev/null 2>&1 || exit 1
+case "$*" in *-dvv*) echo 'Signature=adhoc' >&2 ;; esac
+exit 0
+`);
+    chmodSync(join(bin, "codesign"), 0o755);
     const oldSha = "a".repeat(40);
     const newSha = "b".repeat(40);
     const app = join(root, "Comma.app");
     makeApp(app, oldSha);
+    chmodSync(join(app, "Contents/MacOS/Comma"), 0o755);
     // The currently installed pre-provenance Comma has no CommaSourceSHA.
     expect(run(["plutil", "-remove", "CommaSourceSHA", join(app, "Contents/Info.plist")]).status).toBe(0);
     makeApp(`${app}.staged`, newSha);

@@ -106,14 +106,14 @@ if [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
   comma_verify_app "$APP" "$PREVIOUS_SHA" || fail_transient "canonical app is not a valid rollback target"
 else
   # The one-time migration from the pre-provenance Comma has no CommaSourceSHA.
-  # Its signature, bundle ID, and architecture still make it a safe rollback target.
-  comma_verify_app_identity "$APP" || fail_transient "legacy canonical app is not a valid rollback target"
+  # Its canonical path, bundle ID, executable, and architecture make it a bounded rollback target.
+  comma_verify_legacy_app "$APP" || fail_transient "legacy canonical app is not a valid rollback target"
   PREVIOUS_IS_LEGACY=1
 fi
 verify_previous_bundle() {
   local bundle="$1"
   if [ "$PREVIOUS_IS_LEGACY" -eq 1 ]; then
-    comma_verify_app_identity "$bundle"
+    comma_verify_legacy_app "$bundle"
   else
     comma_verify_app "$bundle" "$PREVIOUS_SHA"
   fi

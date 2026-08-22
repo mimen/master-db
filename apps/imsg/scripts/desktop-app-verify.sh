@@ -170,6 +170,27 @@ comma_verify_app_identity() {
   esac
 }
 
+comma_verify_legacy_app() {
+  local app="$1"
+  local expected_bundle_id="${2:-com.milad.imsg.desktop}"
+  local expected_arch="${3:-arm64}"
+  local bundle_id executable archs
+
+  [ -d "$app" ] || { printf 'missing legacy app bundle: %s\n' "$app" >&2; return 1; }
+  bundle_id="$(comma_plist_value "$app" CFBundleIdentifier)" || return 1
+  [ "$bundle_id" = "$expected_bundle_id" ] || {
+    printf 'unexpected legacy bundle ID: %s\n' "$bundle_id" >&2
+    return 1
+  }
+  executable="$(comma_plist_value "$app" CFBundleExecutable)" || return 1
+  [ -x "$app/Contents/MacOS/$executable" ] || { printf 'legacy app executable is missing\n' >&2; return 1; }
+  archs="$(lipo -archs "$app/Contents/MacOS/$executable")" || return 1
+  case " $archs " in
+    *" $expected_arch "*) ;;
+    *) printf 'legacy app is missing expected architecture %s: %s\n' "$expected_arch" "$archs" >&2; return 1 ;;
+  esac
+}
+
 comma_verify_app() {
   local app="$1"
   local expected_sha="$2"
