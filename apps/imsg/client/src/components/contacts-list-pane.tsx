@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -39,10 +39,7 @@ type Row =
   | { kind: "airtable-header"; key: string }
   | { kind: "airtable"; key: string; human: AirtableHumanRow };
 
-/** Pinned "★ Favorites" section above the normal A–Z sections (iOS Contacts
- * behavior: a shortcut, not a move — every favorited person still appears in
- * their letter section below, unchanged). No section at all when nobody is
- * favorited. */
+/** Pinned favorites above A–Z. A favorite appears once, not again below. */
 function buildRows(people: ContactListRow[], nameOrder: ReturnType<typeof useNameOrder>): Row[] {
   const rows: Row[] = [];
   const { favorites, alpha } = groupContacts(people, nameOrder);
@@ -54,6 +51,7 @@ function buildRows(people: ContactListRow[], nameOrder: ReturnType<typeof useNam
   }
   let lastLetter: string | null = null;
   for (const { person, title, sectionLetter } of alpha) {
+    if (person.is_favorite) continue;
     if (sectionLetter !== lastLetter) {
       rows.push({ kind: "header", key: `h-${sectionLetter}`, letter: sectionLetter });
       lastLetter = sectionLetter;
@@ -100,6 +98,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     if (!needle) return people;
     return people.filter((p) => p.display_name.toLowerCase().includes(needle));
   }, [people, needle]);
+
+  useEffect(() => {
+    if (!wide || selectedId || !filtered?.[0]) return;
+    onSelectPerson(filtered[0]);
+  }, [filtered, onSelectPerson, selectedId, wide]);
 
   const rows = useMemo(() => {
     const base = filtered ? buildRows(filtered, nameOrder) : [];
@@ -165,6 +168,9 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
         <ContactCard wide={wide}>
           <ListRow
             paddingHorizontal={wide ? 12 : 18}
+            minHeight={wide ? TriageGeometry.rowHeight : undefined}
+            hoverFill={wide ? visual.cardHover : undefined}
+            selectedFill={wide ? visual.cardSelected : undefined}
             titleWeight="400"
             disabled={adding}
             onPress={() => addAirtableContact(item.human)}
@@ -185,8 +191,11 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
       <ContactCard wide={wide} selected={selectedId === item.person._id}>
         <ListRow
           paddingHorizontal={wide ? 12 : 18}
+          minHeight={wide ? TriageGeometry.rowHeight : undefined}
+          hoverFill={wide ? visual.cardHover : undefined}
+          selectedFill={wide ? visual.cardSelected : undefined}
           titleWeight="400"
-          selected={!wide && selectedId === item.person._id}
+          selected={selectedId === item.person._id}
           onPress={() => onSelectPerson(item.person)}
           leading={
             <PersonAvatar address={primaryHandle(item.person) ?? null} name={item.person.display_name} size={wide ? 34 : 36} />
@@ -279,7 +288,6 @@ function ContactCard({
   selected?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
-  const theme = useTheme();
   const visual = useTriageTheme();
   if (!wide) return <>{children}</>;
   return (
@@ -289,11 +297,7 @@ function ContactCard({
         {
           backgroundColor: selected ? visual.cardSelected : visual.card,
           ...(Platform.OS === "web"
-            ? ({
-                boxShadow: selected
-                  ? `0 0 0 2px ${theme.accent}, 0 1px 3px ${visual.cardShadow}`
-                  : `0 1px 3px ${visual.cardShadow}`,
-              } as object)
+            ? ({ boxShadow: `0 1px 3px ${visual.cardShadow}` } as object)
             : null),
         },
       ]}

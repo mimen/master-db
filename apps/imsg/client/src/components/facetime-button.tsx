@@ -69,7 +69,7 @@ export function FaceTimeButton({
       hitSlop={8}
       style={compact ? styles.compact : undefined}
     >
-      <Ionicons name="videocam-outline" size={compact ? 18 : 22} color={color} />
+      <Ionicons name="videocam-outline" size={compact ? 21 : 22} color={color} />
     </Pressable>
   );
 }
