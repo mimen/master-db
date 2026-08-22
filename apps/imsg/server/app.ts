@@ -5,6 +5,7 @@ import type { BBAttributedBody, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import type { Config } from "./config";
+import { readDesktopVersion } from "./desktop-version";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { GroupPhotos } from "./group-photos";
@@ -179,6 +180,11 @@ app.onError((err, c) => {
 
 app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
+});
+
+// Deployed desktop-shell version (short SHA) or null — see desktop-version.ts.
+app.get("/api/desktop-version", (c) => {
+  return c.json({ version: readDesktopVersion(import.meta.dir) });
 });
 
 // Lets the client force the Identity Mirror to catch up immediately after an

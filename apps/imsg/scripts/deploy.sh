@@ -20,7 +20,16 @@ git checkout -- .
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
-echo "Deployed commit: $(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
+DEPLOYED_SHA="$(git rev-parse --short HEAD)"
+echo "Deployed commit: $DEPLOYED_SHA $(git log -1 --pretty=%s)"
+
+# Desktop-shell marker: the laptop watcher (scripts/desktop-autoupdate.sh)
+# polls /api/desktop-version and rebuilds Comma.app when this changes.
+# Only stamped when the pull actually touched apps/imsg/desktop, so shell
+# rebuilds stay rare.
+if [ -n "$(git diff --name-only HEAD@{1} HEAD -- apps/imsg/desktop 2>/dev/null)" ]; then
+  echo "$DEPLOYED_SHA" > apps/imsg/desktop/VERSION
+fi
 
 echo "== Installing deps =="
 # Frozen: a deploy must install exactly what's committed, never rewrite
