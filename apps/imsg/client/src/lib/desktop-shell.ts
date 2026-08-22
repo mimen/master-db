@@ -15,7 +15,7 @@ type TauriEventPayload = string | Record<string, string | null | undefined>;
 
 type TauriGlobal = {
   core?: {
-    invoke: <Result>(command: string) => Promise<Result>;
+    invoke: <Result>(command: string, args?: Readonly<Record<string, string>>) => Promise<Result>;
   };
   event: {
     listen: (
@@ -109,6 +109,7 @@ export function watchDesktopFullscreen(
 
 /** Client-only contract for shell staging and activation; Rust owns the mechanics. */
 export const SHELL_RELEASE_STATE_COMMAND = "get_shell_release_state";
+export const SHELL_ACTIVATE_COMMAND = "activate_staged_desktop_shell";
 export const SHELL_RESTART_COMMAND = "restart_to_staged_shell";
 export const SHELL_UPDATE_STAGED_EVENT = "comma-shell-update-staged";
 
@@ -127,11 +128,16 @@ export async function readShellReleaseState(
 
 export async function restartToStagedShell(
   win: DesktopShellWindow | undefined = defaultWindow(),
+  expectedSourceSha?: string,
 ): Promise<boolean> {
   const invoke = tauriGlobal(win)?.core?.invoke;
   if (!invoke) return false;
   try {
-    await invoke<null>(SHELL_RESTART_COMMAND);
+    if (expectedSourceSha) {
+      await invoke<null>(SHELL_ACTIVATE_COMMAND, { expectedSourceSha });
+    } else {
+      await invoke<null>(SHELL_RESTART_COMMAND);
+    }
     return true;
   } catch {
     return false;

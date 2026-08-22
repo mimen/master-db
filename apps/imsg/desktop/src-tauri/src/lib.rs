@@ -127,7 +127,14 @@ fn start_staged_desktop_activation(
         .spawn()
         .map_err(|error| format!("failed to start Comma activator: {error}"))?;
 
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // Match the helper's bounded lock wait, then leave a fixed verification
+    // budget for codesign, plist, and architecture checks.
+    let lock_wait_seconds = std::env::var("COMMA_ACTIVATION_LOCK_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value <= 60)
+        .unwrap_or(15);
+    let deadline = Instant::now() + Duration::from_secs(lock_wait_seconds + 20);
     loop {
         if ready_file.is_file() {
             let _ = fs::remove_file(&ready_file);

@@ -7,6 +7,7 @@ import {
   isDesktopShell,
   readShellReleaseState,
   restartToStagedShell,
+  SHELL_ACTIVATE_COMMAND,
   SHELL_RELEASE_STATE_COMMAND,
   SHELL_RESTART_COMMAND,
   SHELL_UPDATE_STAGED_EVENT,
@@ -108,12 +109,12 @@ describe("shell release bridge", () => {
   const stagedSha = "2222222222222222222222222222222222222222";
 
   test("reads local shell identity and requests explicit staged restart", async () => {
-    const commands: string[] = [];
+    const commands: Array<{ command: string; args?: Readonly<Record<string, string>> }> = [];
     const win: DesktopShellWindow = {
       __TAURI__: {
         core: {
-          invoke: async <Result,>(command: string): Promise<Result> => {
-            commands.push(command);
+          invoke: async <Result,>(command: string, args?: Readonly<Record<string, string>>): Promise<Result> => {
+            commands.push({ command, args });
             return (command === SHELL_RELEASE_STATE_COMMAND
               ? { runningSha, stagedSha }
               : null) as Result;
@@ -126,7 +127,12 @@ describe("shell release bridge", () => {
 
     expect(await readShellReleaseState(win)).toEqual({ runningSha, stagedSha });
     expect(await restartToStagedShell(win)).toBe(true);
-    expect(commands).toEqual([SHELL_RELEASE_STATE_COMMAND, SHELL_RESTART_COMMAND]);
+    expect(await restartToStagedShell(win, stagedSha)).toBe(true);
+    expect(commands).toEqual([
+      { command: SHELL_RELEASE_STATE_COMMAND, args: undefined },
+      { command: SHELL_RESTART_COMMAND, args: undefined },
+      { command: SHELL_ACTIVATE_COMMAND, args: { expectedSourceSha: stagedSha } },
+    ]);
   });
 
   test("publishes staged-state events and cleans up its listener", async () => {

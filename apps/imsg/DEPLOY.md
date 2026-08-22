@@ -26,8 +26,9 @@ Run from `apps/imsg` unless noted otherwise.
 bun run dev:desktop                 # guarded, branch-identified native development
 bun run deploy:branch -- --dry-run  # show a branch deployment without live writes
 bun run deploy:branch               # push and deploy the current branch preview
-bun run deploy:status               # deployed, staged, installed, and process identity
+bun run deploy:status               # deployed, staged, installed, activation state, and process identity
 bun run deploy:verify               # require the real production web and app surfaces
+bun run deploy:activate             # bootstrap the first staged shell from an older installed Comma
 bun run deploy:rollback             # exchange Comma.app with the retained previous shell
 bun run deploy:cleanup              # inspect expired branch resources
 bun run deploy:cleanup -- --apply   # remove expired resources, skipping running apps

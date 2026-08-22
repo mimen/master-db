@@ -27,7 +27,7 @@ test("release banners and Settings expose deployed, running, and staged identity
     releaseWindow.__TAURI__ = {
       core: {
         invoke: async <Result,>(command: string): Promise<Result> => {
-          if (command === "restart_to_staged_shell") {
+          if (command === "activate_staged_desktop_shell") {
             globalThis.document.documentElement.dataset.fixtureRestartRequested = "true";
             return null as Result;
           }
@@ -76,4 +76,54 @@ test("release banners and Settings expose deployed, running, and staged identity
   await expect.poll(() => desk.page.evaluate(
     () => globalThis.document.documentElement.dataset.fixtureRestartRequested,
   )).toBe("true");
+});
+
+test("a rejected native restart remains visibly failed", async ({ desk }) => {
+  await desk.page.addInitScript(({ runningWeb, runningShell, stagedShell }) => {
+    const releaseWindow = globalThis.window as Window & {
+      __IMSG_RELEASE_BUILD__?: {
+        environment: "production";
+        branch: null;
+        webSha: string;
+      };
+      __TAURI__?: {
+        core: { invoke<Result>(command: string): Promise<Result> };
+        event: { listen(): Promise<() => void> };
+        window: { getCurrentWindow(): { close(): Promise<void> } };
+      };
+    };
+    releaseWindow.__IMSG_RELEASE_BUILD__ = {
+      environment: "production",
+      branch: null,
+      webSha: runningWeb,
+    };
+    releaseWindow.__TAURI__ = {
+      core: {
+        invoke: async <Result,>(command: string): Promise<Result> => {
+          if (command === "activate_staged_desktop_shell") throw new Error("command not found");
+          return { runningSha: runningShell, stagedSha: stagedShell } as Result;
+        },
+      },
+      event: { listen: async () => () => undefined },
+      window: { getCurrentWindow: () => ({ close: async () => undefined }) },
+    };
+  }, { runningWeb: RUNNING_WEB, runningShell: RUNNING_SHELL, stagedShell: STAGED_SHELL });
+  await desk.page.route("**/api/deploy/status", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ environment: "production", branch: null, webSha: RUNNING_WEB }),
+    });
+  });
+
+  await desk.page.setViewportSize({ width: 1440, height: 900 });
+  await desk.page.goto("/", { waitUntil: "domcontentloaded" });
+  const banners = desk.page.getByTestId("release-update-banners");
+  await banners.getByRole("button", { name: "Restart into staged shell update" }).click();
+  await expect(banners.getByText("Restart failed")).toBeVisible();
+  await expect(banners.getByText("Run bun run deploy:activate")).toBeVisible();
+  await expect(banners.getByRole("button", { name: "Retry staged shell restart" })).toBeVisible();
+  await desk.page.screenshot({
+    path: "/tmp/comma-release-activation-failed.png",
+    animations: "disabled",
+  });
 });
