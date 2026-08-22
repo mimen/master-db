@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { ChatSummary, SmartCloser } from "@shared/types";
+import type { ChatSummary } from "@shared/types";
 import { memo, useEffect, useRef, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -15,7 +15,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
-import { laterOptions, useSmartCloser } from "@/hooks/use-triage-actions";
+import { laterOptions, useRowDraft } from "@/hooks/use-triage-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -32,8 +32,6 @@ import {
 } from "@/lib/row-signal";
 import { hapticCommit } from "@/lib/haptics";
 import { fillComposer } from "@/lib/composer-fill";
-import { api } from "@/lib/api";
-import { showToast } from "@/lib/toast";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
@@ -42,52 +40,6 @@ import { HoverFillButton } from "./hover-fill-button";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
-
-function closerReactionType(reaction: string | undefined): string | null {
-  if (!reaction) return null;
-  const normalized = reaction.trim().toLowerCase();
-  const map: Record<string, string> = {
-    "👍": "like", like: "like",
-    "👎": "dislike", dislike: "dislike",
-    "❤️": "love", "❤": "love", love: "love",
-    "😂": "laugh", laugh: "laugh",
-    "‼️": "emphasize", "!!": "emphasize", emphasize: "emphasize",
-    "❓": "question", "?": "question", question: "question",
-  };
-  return map[normalized] ?? null;
-}
-
-function closerReactionEmoji(reaction: string | undefined): string {
-  const normalized = closerReactionType(reaction);
-  return normalized === "love" ? "❤️" : normalized === "laugh" ? "😂" : normalized === "dislike" ? "👎" : normalized === "emphasize" ? "‼️" : normalized === "question" ? "❓" : "👍";
-}
-
-function smartCloserLabel(action: SmartCloser): string {
-  if (action.kind === "reply" && action.draft) return `Draft: ${action.draft}`;
-  if (action.kind === "react_done") return `React ${closerReactionEmoji(action.reaction)} + Done`;
-  if (action.kind === "later") return `Snooze: ${action.label}`;
-  return action.label;
-}
-
-function smartCloserIcon(action: SmartCloser): keyof typeof Ionicons.glyphMap {
-  if (action.kind === "reply") return "create-outline";
-  if (action.kind === "react_done") return "thumbs-up-outline";
-  if (action.kind === "later") return "time-outline";
-  if (action.kind === "call") return "call-outline";
-  if (action.kind === "archive") return "archive-outline";
-  return "checkmark";
-}
-
-function isSpecificCloser(action: SmartCloser | null): boolean {
-  if (!action) return false;
-  if (action.kind === "reply") return Boolean(action.draft?.trim());
-  if (action.kind === "call") return true;
-  // A tapback plus queue dismissal is too consequential for a one-click row chip.
-  if (action.kind === "react_done") return false;
-  if (action.kind === "archive") return !/^archive$/i.test(action.label);
-  if (action.kind === "later") return !/^later$/i.test(action.label);
-  return false;
-}
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const kind = rowSignal(chat);
@@ -183,7 +135,6 @@ function ChatRowInner({
   onPress,
   onDone,
   onLater,
-  onCloser,
 }: {
   chat: ChatSummary;
   selected: boolean;
@@ -192,7 +143,6 @@ function ChatRowInner({
   onPress: () => void;
   onDone?: () => void;
   onLater?: (until: number) => void;
-  onCloser?: (chatGuid: string, closer: SmartCloser | null) => void;
 }) {
   const theme = useTheme();
   const visual = useTriageTheme();
@@ -201,23 +151,12 @@ function ChatRowInner({
   const showSheet = useActionSheet();
   const { width: winW, wide: compact } = useLayoutMode();
   const [hovered, setHovered] = useState(false);
-  const [closerHovered, setCloserHovered] = useState(false);
-  const closer = useSmartCloser(chat.guid, compact);
+  const [draftHovered, setDraftHovered] = useState(false);
   const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
-  const specificCloser = isSpecificCloser(closer.closer) && !(waitingOnly && closer.closer?.kind === "reply")
-    ? closer.closer
-    : null;
-  const closerLabel = specificCloser ? smartCloserLabel(specificCloser) : undefined;
-  const closerIcon = specificCloser ? smartCloserIcon(specificCloser) : "checkmark";
-  const closerColor = specificCloser?.kind === "call"
-    ? "#1DAA61"
-    : specificCloser?.kind === "later" || specificCloser?.kind === "archive"
-      ? visual.snippet
-      : theme.accent;
-  // Smart closers remain clickable on hover. Rows without a closer reveal the
-  // action strip; selecting any row always reveals it.
-  const actionsVisible = compact && (selected || (hovered && !specificCloser));
-  useEffect(() => { onCloser?.(chat.guid, closer.closer); }, [chat.guid, closer.closer, onCloser]);
+  const rowDraft = useRowDraft(chat.guid, compact && (chat.flags.unresponded || chat.flags.waiting));
+  // The third lane is always the AI draft, or selected-row actions. The message
+  // preview above it never disappears.
+  const actionsVisible = compact && (selected || (hovered && !rowDraft));
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
   const snippet = last
@@ -358,9 +297,9 @@ function ChatRowInner({
           <View style={styles.previewLine}>
             <View
               pointerEvents={actionsVisible ? "none" : "auto"}
-              style={[styles.previewLayer, { justifyContent: specificCloser ? "flex-start" : "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
+              style={[styles.previewLayer, { justifyContent: rowDraft ? "flex-start" : "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
             >
-              {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} onHoverIn={() => setCloserHovered(true)} onHoverOut={() => setCloserHovered(false)} style={[styles.closer, { borderColor: specificCloser.kind === "call" ? "rgba(40,200,64,0.5)" : specificCloser.kind === "later" || specificCloser.kind === "archive" ? visual.hairlineStrong : "rgba(0,122,255,0.4)", backgroundColor: closerHovered ? (specificCloser.kind === "call" ? "rgba(40,200,64,0.12)" : visual.controlFillHover) : "transparent" } as object]}><Ionicons name={closerIcon} size={13} color={closerColor} /><Text numberOfLines={1} style={[styles.closerText, { color: closerColor }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
+              {compact && rowDraft ? <Pressable accessibilityRole="button" accessibilityLabel="Fill AI draft" onPress={(event) => { event.stopPropagation(); onPress(); requestAnimationFrame(() => fillComposer(rowDraft)); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: "rgba(0,122,255,0.4)", backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="create-outline" size={13} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.accent }]}>Draft: {rowDraft}</Text></Pressable> : <RowSignal chat={chat} />}
             </View>
             <View
               pointerEvents={actionsVisible ? "auto" : "none"}
@@ -368,12 +307,12 @@ function ChatRowInner({
             >
               {waitingOnly ? (
                 <>
-                  <HoverFillButton accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></HoverFillButton>
+                  <HoverFillButton accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></HoverFillButton>
                   <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></HoverFillButton>
                 </>
               ) : (
                 <>
-                  <HoverFillButton accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></HoverFillButton>
+                  <HoverFillButton accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></HoverFillButton>
                   <HoverFillButton accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></HoverFillButton>
                   <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></HoverFillButton>
                 </>
