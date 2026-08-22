@@ -7,7 +7,12 @@ import {
   allocatePreviewPort,
   backendModeForChanges,
   createBranchManifest,
+  desktopBuildCommands,
   nativeInputsChanged,
+  previewBuildEnvironment,
+  previewPortReleaseScript,
+  previewPortReservationScript,
+  previewWebBuildCommands,
   type OccupiedPreviewPort,
 } from "./deployment/branch-core";
 import { prepareDesktopConfig } from "./deployment/desktop-config";
@@ -60,6 +65,7 @@ try {
 }
 const port = allocation.port;
 const remoteDirectory = `${remoteRoot}/${identity.branchHash}`;
+const remoteIncomingDirectory = `${remoteDirectory}/.incoming-${identity.sha}`;
 const scratchDbPath = `${remoteDirectory}/state/imsg.db`;
 const localStage = resolve(CACHE_ROOT, `branch-${identity.branchHash}`);
 const localManifest = resolve(localStage, "manifest.json");
@@ -87,14 +93,20 @@ if (dryRun) {
 }
 
 try {
+await assertSourceSha();
 if (!skipPush) {
   await run(["git", "push", "origin", `HEAD:refs/heads/${identity.branch}`], { cwd: IMSG_ROOT });
 }
 
 await rm(localStage, { recursive: true, force: true });
 await mkdir(localStage, { recursive: true });
-await run(["bun", "run", "build:web"], { cwd: resolve(IMSG_ROOT, "client") });
-await run(["rsync", "-a", "--delete", `${resolve(IMSG_ROOT, "client/dist")}/`, `${localDist}/`]);
+const clientRoot = resolve(IMSG_ROOT, "client");
+const previewEnvironment = previewBuildEnvironment(identity);
+for (const command of previewWebBuildCommands()) {
+  await run(command, { cwd: clientRoot, env: previewEnvironment });
+}
+await assertSourceSha();
+await run(["rsync", "-a", "--delete", `${resolve(clientRoot, "dist")}/`, `${localDist}/`]);
 if (backendMode === "scratch") {
   await mkdir(resolve(localStage, "source"), { recursive: true });
   const archive = `git -C ${shellQuote(resolve(IMSG_ROOT, "../.."))} archive HEAD apps/imsg | tar -x -C ${shellQuote(resolve(localStage, "source"))}`;
@@ -105,11 +117,12 @@ await assertCleanTree();
 await writeJson(localManifest, manifest);
 
 if (desktopRequired) await buildAndInstallDesktop();
+await assertSourceSha();
 
-await run(["ssh", sshTarget, `mkdir -p ${shellQuote(remoteDirectory)}`]);
+await run(["ssh", sshTarget, `mkdir -p ${shellQuote(remoteDirectory)} && rm -rf ${shellQuote(remoteIncomingDirectory)} && mkdir ${shellQuote(remoteIncomingDirectory)}`]);
 if (backendMode === "production-proxy") {
-  await run(["rsync", "-a", "--delete", `${localDist}/`, remoteSpec("dist/")]);
-  await run(["rsync", "-a", resolve(IMSG_ROOT, "scripts/deployment/preview-server.ts"), remoteSpec("preview-server.ts")]);
+  await run(["rsync", "-a", "--delete", `${localDist}/`, incomingSpec("dist/")]);
+  await run(["rsync", "-a", resolve(IMSG_ROOT, "scripts/deployment/preview-server.ts"), incomingSpec("preview-server.ts")]);
 } else {
   await run([
     "rsync", "-a", "--delete",
@@ -118,26 +131,27 @@ if (backendMode === "production-proxy") {
     "--exclude", "node_modules",
     "--exclude", "*.db",
     "--exclude", "*.db-*",
-    `${localSource}/`, remoteSpec("source/"),
+    `${localSource}/`, incomingSpec("source/"),
   ]);
 }
-await run(["rsync", "-a", localManifest, remoteSpec("manifest.json")]);
+await run(["rsync", "-a", localManifest, incomingSpec("manifest.json")]);
 await startRemotePreview();
 
 console.log(`Branch preview deployed: ${manifest.previewUrl}`);
 console.log(`Manifest: ${manifest.previewUrl}/__comma/manifest`);
 if (desktopRequired) console.log(`Comma Dev app: ${localAppPath}`);
 } catch (error) {
+  await tryRun(["ssh", sshTarget, `rm -rf ${shellQuote(remoteIncomingDirectory)}`]);
   if (allocation.reservationCreated) {
-    await tryRun(["ssh", sshTarget, `rmdir ${shellQuote(`${remoteRoot}/.port-locks/${port}`)}`]);
+    await releasePreviewPortLock(sshTarget, remoteRoot, port, identity.branchHash);
   }
   throw error;
 } finally {
   await tryRun(["ssh", sshTarget, `rm -rf ${shellQuote(branchLockPath)}`]);
 }
 
-function remoteSpec(relativePath: string): string {
-  const path = `${remoteDirectory}/${relativePath}`.replaceAll(" ", "\\ ");
+function incomingSpec(relativePath: string): string {
+  const path = `${remoteIncomingDirectory}/${relativePath}`.replaceAll(" ", "\\ ");
   return `${sshTarget}:${path}`;
 }
 
@@ -145,10 +159,15 @@ async function buildAndInstallDesktop(): Promise<void> {
   if (await appIsRunning(localAppPath)) {
     throw new Error(`Refusing to replace running Comma Dev app: ${localAppPath}`);
   }
-  const config = await prepareDesktopConfig(identity, manifest.previewUrl, { dryRun: false });
-  await run(["bunx", "tauri", "build", "--config", config.configPath], {
+  const pendingConfigPath = resolve(IMSG_ROOT, `.cache/comma-deploy/desktop-${identity.instanceHash}/tauri.dev.conf.json`);
+  const commands = desktopBuildCommands(pendingConfigPath);
+  await run(commands.preflight, { cwd: resolve(IMSG_ROOT, "desktop/src-tauri") });
+  await prepareDesktopConfig(identity, manifest.previewUrl, { dryRun: false });
+  await run(commands.build, {
     cwd: resolve(IMSG_ROOT, "desktop"),
+    env: { COMMA_SOURCE_SHA: identity.sha },
   });
+  await assertSourceSha();
   await assertCleanTree();
   const builtApp = resolve(IMSG_ROOT, "desktop/src-tauri/target/release/bundle/macos", `${identity.appName}.app`);
   const stagedApp = `${localAppPath}.staged`;
@@ -190,6 +209,22 @@ async function appIsRunning(appPath: string): Promise<boolean> {
 
 async function startRemotePreview(): Promise<void> {
   const processIdentity = manifest.processIdentity;
+  const payloadItems = backendMode === "production-proxy"
+    ? ["dist", "preview-server.ts", "manifest.json"]
+    : ["source", "manifest.json"];
+  const previousPayload = `${remoteDirectory}/.previous-payload`;
+  const swapPayload = [
+    `incoming=${shellQuote(remoteIncomingDirectory)}`,
+    'test -f "$incoming/manifest.json"',
+    `previous=${shellQuote(previousPayload)}`,
+    'rm -rf "$previous"',
+    'mkdir "$previous"',
+    ...payloadItems.flatMap((item) => [
+      `if [ -e "$dir/${item}" ]; then mv "$dir/${item}" "$previous/${item}"; fi`,
+      `mv "$incoming/${item}" "$dir/${item}"`,
+    ]),
+    'rmdir "$incoming"',
+  ];
   const common = [
     "set -euo pipefail",
     `dir=${shellQuote(remoteDirectory)}`,
@@ -213,8 +248,15 @@ async function startRemotePreview(): Promise<void> {
     `for _ in {1..60}; do pid="$(<"$dir/preview.pid")"; if /usr/sbin/lsof -nP -a -p "$pid" -iTCP:${port} -sTCP:LISTEN >/dev/null 2>&1 && /bin/ps -p "$pid" -o args= | /usr/bin/grep -Fq ${shellQuote(processIdentity)} && /usr/bin/curl -fsS --max-time 2 http://127.0.0.1:${port}/__comma/manifest | /usr/bin/grep -q ${shellQuote(manifest.sourceSha)}; then ready=1; break; fi; kill -0 "$pid" 2>/dev/null || break; sleep 1; done`,
     'if [ "$ready" -ne 1 ]; then print -u2 "Preview failed readiness/identity probe"; /usr/bin/tail -80 "$dir/logs/preview.log" >&2; exit 1; fi',
   ];
-  const script = [...common, ...launch, 'echo $! > "$dir/preview.pid"', ...probe, `${shellQuote(tailscaleBin)} serve --bg --yes --https=${port} http://127.0.0.1:${port}`].join("; ");
+  const script = [...common, ...swapPayload, ...launch, 'echo $! > "$dir/preview.pid"', ...probe, `${shellQuote(tailscaleBin)} serve --bg --yes --https=${port} http://127.0.0.1:${port}`].join("; ");
   await run(["ssh", sshTarget, `zsh -lc ${shellQuote(script)}`]);
+}
+
+async function assertSourceSha(): Promise<void> {
+  const currentSha = (await run(["git", "-C", resolve(IMSG_ROOT, "../.."), "rev-parse", "HEAD"])).stdout;
+  if (currentSha !== identity.sha) {
+    throw new Error(`Branch HEAD changed during deployment: expected ${identity.sha}, found ${currentSha}`);
+  }
 }
 
 function printDryRunContract(): void {
@@ -256,13 +298,40 @@ async function reservePreviewPort(
 
   for (let attempt = 0; attempt < 32; attempt += 1) {
     const port = allocatePreviewPort(branchHash, occupied);
-    const lock = `${root}/.port-locks/${port}`;
-    await run(["ssh", target, `mkdir -p ${shellQuote(`${root}/.port-locks`)}`]);
-    const reservation = await tryRun(["ssh", target, `mkdir ${shellQuote(lock)}`]);
-    if (reservation.exitCode === 0) return { port, reservationCreated: true };
+    const reservation = await reservePortLock(target, root, port, branchHash);
+    if (reservation) return { port, reservationCreated: true };
     occupied.push({ port, branchHash: `collision-${attempt}` });
   }
   throw new Error("Could not atomically reserve a branch preview port after 32 attempts");
+}
+
+async function reservePortLock(
+  target: string,
+  root: string,
+  port: number,
+  branchHash: string,
+): Promise<boolean> {
+  const script = previewPortReservationScript();
+  const result = await tryRun([
+    "ssh",
+    target,
+    `python3 -c ${shellQuote(script)} ${shellQuote(root)} ${port} ${shellQuote(branchHash)} 7200`,
+  ]);
+  return result.exitCode === 0;
+}
+
+async function releasePreviewPortLock(
+  target: string,
+  root: string,
+  port: number,
+  branchHash: string,
+): Promise<void> {
+  const script = previewPortReleaseScript();
+  await tryRun([
+    "ssh",
+    target,
+    `python3 -c ${shellQuote(script)} ${shellQuote(`${root}/.port-locks/${port}`)} ${shellQuote(branchHash)}`,
+  ]);
 }
 
 async function readOccupiedPorts(target: string, root: string): Promise<readonly OccupiedPreviewPort[]> {

@@ -18,7 +18,27 @@ describe("Comma Dev Tauri config", () => {
         devUrl: "https://mini.example:9001",
         frontendDist: "https://mini.example:9001",
       },
-      app: { windows: [{ title: identity.windowTitle }] },
+      app: {
+        security: {
+          capabilities: [
+            "default",
+            {
+              identifier: `comma-preview-${identity.branchHash}`,
+              local: false,
+              windows: ["main"],
+              remote: {
+                urls: ["https://mini.example:9001", "https://mini.example:9001/**"],
+              },
+              permissions: expect.arrayContaining([
+                "core:default",
+                "core:window:allow-start-dragging",
+                "opener:default",
+              ]),
+            },
+          ],
+        },
+        windows: [{ title: identity.windowTitle }],
+      },
       bundle: { icon: expect.arrayContaining(["/tmp/icons/icon.icns"]) },
     });
     expect(identity.bundleId).not.toBe("com.milad.imsg.desktop");

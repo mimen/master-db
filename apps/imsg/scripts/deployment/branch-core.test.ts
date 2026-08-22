@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
 import {
   PREVIEW_EXPIRY_MS,
   allocatePreviewPort,
@@ -6,9 +9,14 @@ import {
   cleanupDecision,
   createBranchManifest,
   deriveBranchIdentity,
+  desktopBuildCommands,
   nativeInputsChanged,
+  previewBuildEnvironment,
+  previewWebBuildCommands,
   normalizeIdentitySegment,
   parseBranchManifest,
+  previewPortReleaseScript,
+  previewPortReservationScript,
 } from "./branch-core";
 
 const input = {
@@ -83,7 +91,31 @@ describe("branch mode", () => {
 
   test("detects native artifact inputs separately", () => {
     expect(nativeInputsChanged(["apps/imsg/desktop/src-tauri/tauri.conf.json"])).toBe(true);
+    expect(nativeInputsChanged(["apps/imsg/scripts/deployment/desktop-config.ts"])).toBe(true);
+    expect(nativeInputsChanged(["apps/imsg/scripts/deploy-branch.ts"])).toBe(true);
+    expect(nativeInputsChanged(["apps/imsg/scripts/desktop-activate.sh"])).toBe(true);
     expect(nativeInputsChanged(["apps/imsg/client/src/app.tsx"])).toBe(false);
+  });
+
+  test("embeds exact preview release identity in branch web builds", () => {
+    const identity = deriveBranchIdentity(input, true);
+    expect(previewBuildEnvironment(identity)).toEqual({
+      EXPO_PUBLIC_IMSG_RELEASE_ENVIRONMENT: "preview",
+      EXPO_PUBLIC_IMSG_RELEASE_BRANCH: input.branch,
+      EXPO_PUBLIC_IMSG_WEB_SHA: input.sha,
+    });
+    expect(previewWebBuildCommands()).toEqual([
+      ["bun", "scripts/validate-public-env.ts"],
+      ["bunx", "expo", "export", "--platform", "web", "--clear"],
+      ["bun", "scripts/post-export.ts"],
+    ]);
+  });
+
+  test("checks Cargo.lock before a locked native build", () => {
+    expect(desktopBuildCommands("/tmp/tauri.dev.conf.json")).toEqual({
+      preflight: ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
+      build: ["bunx", "tauri", "build", "--config", "/tmp/tauri.dev.conf.json", "--", "--locked"],
+    });
   });
 });
 
@@ -108,6 +140,93 @@ describe("cleanup policy", () => {
   test("retains recent active previews", () => {
     expect(cleanupDecision({ manifest: manifest(), merged: false, remoteBranchExists: true, appRunning: false }, now))
       .toEqual({ remove: false, reason: "active" });
+  });
+
+  test("retains candidates whose source SHA cannot be resolved", () => {
+    expect(cleanupDecision({ manifest: manifest(), merged: null, remoteBranchExists: false, appRunning: false }, now))
+      .toEqual({ remove: false, reason: "source-unresolved" });
+  });
+});
+
+describe("preview port lock cleanup", () => {
+  function reserve(root: string, port: number, branchHash: string, staleAfterSeconds: number): number {
+    return Bun.spawnSync([
+      "python3",
+      "-c",
+      previewPortReservationScript(),
+      root,
+      String(port),
+      branchHash,
+      String(staleAfterSeconds),
+    ]).exitCode;
+  }
+
+  function release(root: string, port: number, branchHash: string): number {
+    return Bun.spawnSync([
+      "python3",
+      "-c",
+      previewPortReleaseScript(),
+      resolve(root, `.port-locks/${port}`),
+      branchHash,
+    ]).exitCode;
+  }
+
+  test("reclaims a stale orphan and records the new owner", () => {
+    const root = mkdtempSync(resolve(tmpdir(), "comma-port-lock-"));
+    try {
+      expect(reserve(root, 9001, "aaaaaaaaaaaa", 3600)).toBe(0);
+      expect(reserve(root, 9001, "bbbbbbbbbbbb", 3600)).toBe(1);
+      writeFileSync(resolve(root, ".port-locks/9001/created-at"), "0\n");
+      expect(reserve(root, 9001, "bbbbbbbbbbbb", 1)).toBe(0);
+      expect(readFileSync(resolve(root, ".port-locks/9001/branch-hash"), "utf8").trim())
+        .toBe("bbbbbbbbbbbb");
+      expect(release(root, 9001, "aaaaaaaaaaaa")).toBe(2);
+      expect(existsSync(resolve(root, ".port-locks/9001"))).toBe(true);
+      expect(release(root, 9001, "bbbbbbbbbbbb")).toBe(0);
+      expect(existsSync(resolve(root, ".port-locks/9001"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("allows only one concurrent stale-lock reclaimer", async () => {
+    const root = mkdtempSync(resolve(tmpdir(), "comma-port-lock-"));
+    try {
+      expect(reserve(root, 9003, "eeeeeeeeeeee", 3600)).toBe(0);
+      writeFileSync(resolve(root, ".port-locks/9003/created-at"), "0\n");
+      const launch = (branchHash: string) => Bun.spawn([
+        "python3",
+        "-c",
+        previewPortReservationScript(),
+        root,
+        "9003",
+        branchHash,
+        "1",
+      ], { stdout: "ignore", stderr: "ignore" });
+      const first = launch("111111111111");
+      const second = launch("222222222222");
+      const exits = await Promise.all([first.exited, second.exited]);
+      expect(exits.sort()).toEqual([0, 1]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("retains locks claimed by a manifest or active branch deployment", () => {
+    const root = mkdtempSync(resolve(tmpdir(), "comma-port-lock-"));
+    try {
+      expect(reserve(root, 9002, "cccccccccccc", 3600)).toBe(0);
+      writeFileSync(resolve(root, ".port-locks/9002/created-at"), "0\n");
+      mkdirSync(resolve(root, "preview"));
+      writeFileSync(resolve(root, "preview/manifest.json"), JSON.stringify({ previewPort: 9002 }));
+      expect(reserve(root, 9002, "dddddddddddd", 1)).toBe(1);
+
+      rmSync(resolve(root, "preview"), { recursive: true });
+      mkdirSync(resolve(root, ".branch-locks/cccccccccccc"), { recursive: true });
+      expect(reserve(root, 9002, "dddddddddddd", 3600)).toBe(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -144,11 +263,13 @@ describe("manifest", () => {
     expect(() => parseBranchManifest(JSON.stringify(unsafe))).toThrow("outside the branch allocation range");
     const traversal = { ...manifest(), branchHash: "../../badpath" };
     expect(() => parseBranchManifest(JSON.stringify(traversal))).toThrow("Invalid branch hash");
+    const mismatchedBranch = { ...manifest(), branch: "feat/another-preview" };
+    expect(() => parseBranchManifest(JSON.stringify(mismatchedBranch))).toThrow("does not match its branch name");
     const productionBundle = {
       ...manifest(),
       desktop: { ...manifest().desktop, bundleId: "com.milad.imsg.desktop" },
     };
-    expect(() => parseBranchManifest(JSON.stringify(productionBundle))).toThrow("Development bundle ID");
+    expect(() => parseBranchManifest(JSON.stringify(productionBundle))).toThrow("Development app identity");
     const pathEscape = {
       ...manifest(),
       desktop: { ...manifest().desktop, appName: "Comma Dev — x/../../Comma" },

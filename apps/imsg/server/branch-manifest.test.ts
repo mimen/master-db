@@ -14,7 +14,7 @@ describe("scratch preview branch manifest", () => {
     const directory = await mkdtemp(resolve(tmpdir(), "comma-manifest-"));
     directories.push(directory);
     const manifestPath = resolve(directory, "manifest.json");
-    await writeFile(manifestPath, '{"branch":"feat/server"}');
+    await writeFile(manifestPath, JSON.stringify({ branch: "feat/server", sourceSha: "b".repeat(40) }));
     const fetch = withBranchManifest(() => new Response("app"), manifestPath);
 
     const manifest = await fetch(new Request("http://preview/__comma/manifest"));
@@ -23,6 +23,12 @@ describe("scratch preview branch manifest", () => {
       lastActivityAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
     expect(manifest.headers.get("cache-control")).toBe("no-store");
+    const deployStatus = await fetch(new Request("http://preview/api/deploy/status"));
+    expect(await deployStatus.json()).toEqual({
+      environment: "preview",
+      branch: "feat/server",
+      webSha: "b".repeat(40),
+    });
     expect(await (await fetch(new Request("http://preview/api/health"))).text()).toBe("app");
   });
 

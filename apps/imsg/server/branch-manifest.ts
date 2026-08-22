@@ -7,15 +7,38 @@ export function withBranchManifest(
   const recordActivity = manifestPath ? createActivityRecorder(manifestPath) : null;
   return async (request: Request): Promise<Response> => {
     if (recordActivity) await recordActivity();
-    if (manifestPath && new URL(request.url).pathname === "/__comma/manifest") {
+    const pathname = new URL(request.url).pathname;
+    if (manifestPath && pathname === "/__comma/manifest") {
       const manifest = Bun.file(manifestPath);
       if (!(await manifest.exists())) return new Response("Branch manifest unavailable", { status: 503 });
       return new Response(manifest, {
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
+    if (manifestPath && pathname === "/api/deploy/status") {
+      return branchDeployStatus(manifestPath);
+    }
     return appFetch(request);
   };
+}
+
+export async function branchDeployStatus(manifestPath: string): Promise<Response> {
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      branch?: string;
+      sourceSha?: string;
+    };
+    if (!manifest.branch?.trim() || !/^[a-f0-9]{40}$/i.test(manifest.sourceSha ?? "")) {
+      return Response.json({ error: "branch release unavailable" }, { status: 503 });
+    }
+    return Response.json({
+      environment: "preview",
+      branch: manifest.branch,
+      webSha: manifest.sourceSha?.toLowerCase(),
+    }, { headers: { "cache-control": "no-store" } });
+  } catch {
+    return Response.json({ error: "branch release unavailable" }, { status: 503 });
+  }
 }
 
 export function createActivityRecorder(

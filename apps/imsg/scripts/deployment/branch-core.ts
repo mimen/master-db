@@ -66,14 +66,14 @@ export interface OccupiedPreviewPort {
 
 export interface CleanupCandidate {
   readonly manifest: BranchManifest;
-  readonly merged: boolean;
+  readonly merged: boolean | null;
   readonly remoteBranchExists: boolean;
   readonly appRunning: boolean;
 }
 
 export interface CleanupDecision {
   readonly remove: boolean;
-  readonly reason: "merged" | "deleted" | "inactive" | "running" | "active";
+  readonly reason: "merged" | "deleted" | "inactive" | "running" | "active" | "source-unresolved";
 }
 
 export function normalizeIdentitySegment(value: string): string {
@@ -174,12 +174,50 @@ export function backendModeForChanges(paths: readonly string[]): BackendMode {
     : "production-proxy";
 }
 
+const NATIVE_DEPLOYMENT_FILES = new Set([
+  "apps/imsg/scripts/deploy-branch.ts",
+  "apps/imsg/scripts/deployment/branch-core.ts",
+  "apps/imsg/scripts/deployment/desktop-config.ts",
+  "apps/imsg/scripts/deployment/runtime.ts",
+  "apps/imsg/scripts/desktop-activate.sh",
+  "apps/imsg/scripts/desktop-app-verify.sh",
+  "apps/imsg/scripts/desktop-swap-apps.py",
+  "apps/imsg/scripts/dev-desktop.ts",
+]);
+
 export function nativeInputsChanged(paths: readonly string[]): boolean {
-  return paths.some((path) => path.startsWith("apps/imsg/desktop/"));
+  return paths.some((path) => path.startsWith("apps/imsg/desktop/") || NATIVE_DEPLOYMENT_FILES.has(path));
+}
+
+export function previewBuildEnvironment(identity: BranchIdentity): Readonly<Record<string, string>> {
+  return {
+    EXPO_PUBLIC_IMSG_RELEASE_ENVIRONMENT: "preview",
+    EXPO_PUBLIC_IMSG_RELEASE_BRANCH: identity.branch,
+    EXPO_PUBLIC_IMSG_WEB_SHA: identity.sha,
+  };
+}
+
+export function previewWebBuildCommands(): readonly (readonly string[])[] {
+  return [
+    ["bun", "scripts/validate-public-env.ts"],
+    ["bunx", "expo", "export", "--platform", "web", "--clear"],
+    ["bun", "scripts/post-export.ts"],
+  ];
+}
+
+export function desktopBuildCommands(configPath: string): {
+  readonly preflight: readonly string[];
+  readonly build: readonly string[];
+} {
+  return {
+    preflight: ["cargo", "metadata", "--locked", "--format-version", "1", "--no-deps"],
+    build: ["bunx", "tauri", "build", "--config", configPath, "--", "--locked"],
+  };
 }
 
 export function cleanupDecision(candidate: CleanupCandidate, now: number): CleanupDecision {
   if (candidate.appRunning) return { remove: false, reason: "running" };
+  if (candidate.merged === null) return { remove: false, reason: "source-unresolved" };
   if (candidate.merged) return { remove: true, reason: "merged" };
   if (!candidate.remoteBranchExists) return { remove: true, reason: "deleted" };
   const lastActivity = Date.parse(candidate.manifest.lastActivityAt);
@@ -188,12 +226,111 @@ export function cleanupDecision(candidate: CleanupCandidate, now: number): Clean
   return { remove: false, reason: "active" };
 }
 
+export function previewPortReleaseScript(): string {
+  return [
+    "import fcntl, pathlib, shutil, sys",
+    "lock = pathlib.Path(sys.argv[1])",
+    "expected = sys.argv[2]",
+    "allow_legacy = len(sys.argv) > 3 and sys.argv[3] == '1'",
+    "guard = open(lock.parent / f'.guard-{lock.name}.lock', 'a+')",
+    "try:",
+    "  fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)",
+    "except BlockingIOError:",
+    "  raise SystemExit(3)",
+    "try:",
+    "  tombstone = lock.parent / f'.release-{lock.name}-{expected}'",
+    "  shutil.rmtree(tombstone, ignore_errors=True)",
+    "  try:",
+    "    lock.rename(tombstone)",
+    "  except FileNotFoundError:",
+    "    raise SystemExit(0)",
+    "  try:",
+    "    owner = (tombstone / 'branch-hash').read_text().strip()",
+    "  except OSError:",
+    "    owner = ''",
+    "  if owner == expected or (allow_legacy and not owner):",
+    "    shutil.rmtree(tombstone, ignore_errors=True)",
+    "  elif not lock.exists():",
+    "    tombstone.rename(lock)",
+    "    raise SystemExit(2)",
+    "finally:",
+    "  guard.close()",
+  ].join("\n");
+}
+
+export function previewPortReservationScript(): string {
+  return [
+    "import fcntl, json, os, pathlib, shutil, sys, time",
+    "root = pathlib.Path(sys.argv[1]).expanduser()",
+    "port = int(sys.argv[2])",
+    "branch_hash = sys.argv[3]",
+    "stale_after = int(sys.argv[4])",
+    "lock_root = root / '.port-locks'",
+    "lock_root.mkdir(parents=True, exist_ok=True)",
+    "lock = lock_root / str(port)",
+    "guard = open(lock_root / f'.guard-{port}.lock', 'a+')",
+    "def create_lock():",
+    "  lock.mkdir()",
+    "  (lock / 'branch-hash').write_text(branch_hash + '\\n')",
+    "  (lock / 'created-at').write_text(str(int(time.time())) + '\\n')",
+    "def reserve():",
+    "  try:",
+    "    create_lock()",
+    "    return 0",
+    "  except FileExistsError:",
+    "    pass",
+    "  for manifest_path in root.glob('*/manifest.json'):",
+    "    try:",
+    "      if int(json.loads(manifest_path.read_text())['previewPort']) == port: return 1",
+    "    except (OSError, ValueError, KeyError, json.JSONDecodeError):",
+    "      continue",
+    "  try:",
+    "    owner = (lock / 'branch-hash').read_text().strip()",
+    "  except OSError:",
+    "    owner = ''",
+    "  branch_lock = root / '.branch-locks' / owner if owner else None",
+    "  if branch_lock and branch_lock.exists() and time.time() - branch_lock.stat().st_mtime < stale_after:",
+    "    return 1",
+    "  try:",
+    "    created = int((lock / 'created-at').read_text().strip())",
+    "  except (OSError, ValueError):",
+    "    created = int(lock.stat().st_mtime)",
+    "  if time.time() - created < stale_after:",
+    "    return 1",
+    "  tombstone = lock_root / f'.reclaim-{port}-{os.getpid()}-{time.time_ns()}'",
+    "  try:",
+    "    lock.rename(tombstone)",
+    "    create_lock()",
+    "  except (FileNotFoundError, FileExistsError):",
+    "    if tombstone.exists() and not lock.exists(): tombstone.rename(lock)",
+    "    return 1",
+    "  shutil.rmtree(tombstone, ignore_errors=True)",
+    "  return 0",
+    "try:",
+    "  fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)",
+    "except BlockingIOError:",
+    "  raise SystemExit(1)",
+    "try:",
+    "  raise SystemExit(reserve())",
+    "finally:",
+    "  guard.close()",
+  ].join("\n");
+}
+
 export function parseBranchManifest(serialized: string): BranchManifest {
   const manifest = JSON.parse(serialized) as BranchManifest;
   if (manifest.schemaVersion !== 1) throw new Error("Unsupported branch manifest schema");
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.branchSlug)) throw new Error("Invalid branch slug");
   if (!/^[0-9a-f]{12}$/.test(manifest.branchHash)) throw new Error("Invalid branch hash");
   if (!/^[0-9a-f]{40}$/.test(manifest.sourceSha)) throw new Error("Invalid source SHA");
+  const expectedIdentity = deriveBranchIdentity({
+    branch: manifest.branch,
+    worktreePath: "/branch-preview",
+    sha: manifest.sourceSha,
+  }, true);
+  if (manifest.branchSlug !== expectedIdentity.branchSlug || manifest.branchHash !== expectedIdentity.branchHash) {
+    throw new Error("Branch manifest identity does not match its branch name");
+  }
   if (!Number.isInteger(manifest.previewPort) || manifest.previewPort < PREVIEW_PORT_START || manifest.previewPort >= PREVIEW_PORT_START + PREVIEW_PORT_COUNT) {
     throw new Error("Preview port is outside the branch allocation range");
   }
@@ -214,8 +351,12 @@ export function parseBranchManifest(serialized: string): BranchManifest {
   ) {
     throw new Error("Invalid development app name");
   }
-  if (manifest.desktop.bundleId !== `com.milad.comma.dev.b${manifest.branchHash}`) {
-    throw new Error("Development bundle ID does not match the manifest branch");
+  if (
+    manifest.desktop.appName !== expectedIdentity.appName
+    || manifest.desktop.bundleId !== expectedIdentity.bundleId
+    || manifest.desktop.title !== expectedIdentity.windowTitle
+  ) {
+    throw new Error("Development app identity does not match the manifest branch");
   }
   if (manifest.desktop.previewUrl !== manifest.previewUrl) throw new Error("Desktop preview URL mismatch");
   if (!Number.isFinite(Date.parse(manifest.deployedAt)) || !Number.isFinite(Date.parse(manifest.lastActivityAt))) {

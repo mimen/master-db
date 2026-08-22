@@ -18,7 +18,7 @@ async function fixture(): Promise<{ root: string; manifestPath: string }> {
   await writeFile(resolve(root, "index.html"), "<main>branch client</main>");
   await writeFile(resolve(root, "asset.js"), "branch-asset");
   const manifestPath = resolve(root, "manifest.json");
-  await writeFile(manifestPath, '{"branch":"feat/test"}');
+  await writeFile(manifestPath, JSON.stringify({ branch: "feat/test", sourceSha: "a".repeat(40) }));
   return { root, manifestPath };
 }
 
@@ -46,6 +46,9 @@ describe("UI-only preview server", () => {
         if (url.pathname === "/events") {
           return new Response("data: one\n\ndata: two\n\n", { headers: { "content-type": "text/event-stream" } });
         }
+        if (url.pathname === "/api/deploy/status") {
+          return Response.json({ environment: "production", branch: null, webSha: "f".repeat(40) });
+        }
         return Response.json({
           method: request.method,
           body: request.method === "POST" ? "accepted" : null,
@@ -63,6 +66,12 @@ describe("UI-only preview server", () => {
 
     const api = await fetchPreview(new Request("http://preview/api/send", { method: "POST", body: "accepted" }));
     expect(await api.json()).toEqual({ method: "POST", body: "accepted", preview: "production-proxy" });
+    const deployStatus = await fetchPreview(new Request("http://preview/api/deploy/status"));
+    expect(await deployStatus.json()).toEqual({
+      environment: "preview",
+      branch: "feat/test",
+      webSha: "a".repeat(40),
+    });
     const events = await fetchPreview(new Request("http://preview/events"));
     expect(events.headers.get("content-type")).toContain("text/event-stream");
     expect(await events.text()).toBe("data: one\n\ndata: two\n\n");

@@ -18,6 +18,9 @@ export function createPreviewFetch(options: PreviewServerOptions): (request: Req
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
+    if (url.pathname === "/api/deploy/status") {
+      return branchDeployStatus(options.manifestPath);
+    }
     if (url.pathname === "/events" || url.pathname.startsWith("/api/")) {
       const upstream = new URL(`${url.pathname}${url.search}`, options.upstreamUrl);
       const headers = new Headers(request.headers);
@@ -44,6 +47,25 @@ export function createPreviewFetch(options: PreviewServerOptions): (request: Req
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
     });
   };
+}
+
+export async function branchDeployStatus(manifestPath: string): Promise<Response> {
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      branch?: string;
+      sourceSha?: string;
+    };
+    if (!manifest.branch?.trim() || !/^[a-f0-9]{40}$/i.test(manifest.sourceSha ?? "")) {
+      return Response.json({ error: "branch release unavailable" }, { status: 503 });
+    }
+    return Response.json({
+      environment: "preview",
+      branch: manifest.branch,
+      webSha: manifest.sourceSha?.toLowerCase(),
+    }, { headers: { "cache-control": "no-store" } });
+  } catch {
+    return Response.json({ error: "branch release unavailable" }, { status: 503 });
+  }
 }
 
 export function createActivityRecorder(

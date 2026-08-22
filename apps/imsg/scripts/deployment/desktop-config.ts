@@ -41,6 +41,16 @@ export async function prepareDesktopConfig(
   return { directory, configPath, iconSourcePath, iconDirectory };
 }
 
+const PREVIEW_IPC_PERMISSIONS = [
+  "core:default",
+  "core:event:default",
+  "core:window:allow-close",
+  "core:window:allow-start-dragging",
+  "core:window:allow-minimize",
+  "core:window:allow-toggle-maximize",
+  "opener:default",
+] as const;
+
 export function tauriConfig(identity: BranchIdentity, previewUrl: string, iconDirectory: string): object {
   return {
     productName: identity.appName,
@@ -50,6 +60,19 @@ export function tauriConfig(identity: BranchIdentity, previewUrl: string, iconDi
       frontendDist: previewUrl,
     },
     app: {
+      security: {
+        capabilities: [
+          "default",
+          {
+            identifier: `comma-preview-${identity.branchHash}`,
+            description: `Comma Dev IPC for ${identity.branch}`,
+            windows: ["main"],
+            local: false,
+            remote: { urls: [previewUrl, `${previewUrl}/**`] },
+            permissions: [...PREVIEW_IPC_PERMISSIONS],
+          },
+        ],
+      },
       windows: [{
         label: "main",
         create: false,

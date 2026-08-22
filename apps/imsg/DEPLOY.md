@@ -13,7 +13,7 @@ Git commit → web and shell artifacts → Mini / laptop → running client → 
 | Production web/API | Mini, `127.0.0.1:8377`, exposed at `https://milads-mac-mini.taild31e9a.ts.net:8447` | `/api/deploy/status` |
 | Expo Go | Mini Metro server, `exp://milads-mac-mini:8081` | pulled source revision on the Mini |
 | Production desktop | `/Users/mimen/Applications/Comma.app` | bundle ID `com.milad.imsg.desktop`, embedded `CommaSourceSHA` |
-| Branch preview | Branch-specific Mini port and tailnet URL | branch manifest served at `/__comma/manifest` |
+| Branch preview | Branch-specific Mini port and tailnet URL | preview release at `/api/deploy/status`; branch manifest at `/__comma/manifest` |
 | Branch desktop | `Comma Dev — <branch>` | branch-derived bundle ID, title, icon, URL, and SHA |
 
 A release can be **deployed** before it is **activated**. Web activation happens when the user accepts the Reload banner. Shell activation happens when the laptop has staged the published app and the user accepts Restart.
@@ -61,7 +61,8 @@ bun run deploy:status
 
 `bun run deploy:branch` requires a clean named branch. It derives isolated ports, output paths, process identity, URL, manifest, app name, and bundle ID from the branch/worktree.
 
-- UI-only branches serve their own static export and proxy `/api` and `/events` to the single production server. These previews have full live behavior, including real sends and mutations.
+- Every branch web export embeds `preview`, the exact branch name, and the source SHA. `/api/deploy/status` returns that same branch identity in both preview modes instead of production release state.
+- UI-only branches serve their own static export and proxy other `/api` routes and `/events` to the single production server. These previews have full live behavior, including real sends and mutations.
 - Branches changing server code run a separate server against a scratch overlay database. They never open production `imsg.db`.
 - Native branches may build a separately identified Comma Dev app. They never replace production Comma or another branch app.
 
