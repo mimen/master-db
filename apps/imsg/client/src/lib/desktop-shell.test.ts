@@ -4,8 +4,14 @@ import { AUX_PANE_WIDTH, desktopFrame } from "./desktop-frame";
 import {
   closeDesktopWindow,
   installNativeMenuBridge,
+  installShellReleaseBridge,
   isDesktopShell,
   minimizeDesktopWindow,
+  readShellReleaseState,
+  restartToStagedShell,
+  SHELL_RELEASE_STATE_COMMAND,
+  SHELL_RESTART_COMMAND,
+  SHELL_UPDATE_STAGED_EVENT,
   startDesktopWindowDrag,
   toggleMaximizeDesktopWindow,
   type DesktopShellWindow,
@@ -82,6 +88,65 @@ describe("custom desktop window controls", () => {
     startDesktopWindowDrag(win);
     await Promise.resolve();
     expect(calls).toEqual(["close", "minimize", "zoom", "drag"]);
+  });
+});
+
+describe("shell release bridge", () => {
+  const runningSha = "1111111111111111111111111111111111111111";
+  const stagedSha = "2222222222222222222222222222222222222222";
+
+  test("reads local shell identity and requests explicit staged restart", async () => {
+    const commands: string[] = [];
+    const win: DesktopShellWindow = {
+      __TAURI__: {
+        core: {
+          invoke: async <Result,>(command: string): Promise<Result> => {
+            commands.push(command);
+            return (command === SHELL_RELEASE_STATE_COMMAND
+              ? { runningSha, stagedSha }
+              : null) as Result;
+          },
+        },
+        event: { listen: async () => () => undefined },
+        window: { getCurrentWindow: () => ({ close: async () => undefined }) },
+      },
+    };
+
+    expect(await readShellReleaseState(win)).toEqual({ runningSha, stagedSha });
+    expect(await restartToStagedShell(win)).toBe(true);
+    expect(commands).toEqual([SHELL_RELEASE_STATE_COMMAND, SHELL_RESTART_COMMAND]);
+  });
+
+  test("publishes staged-state events and cleans up its listener", async () => {
+    let handler: ((event: { payload: Record<string, string | null> }) => void) | undefined;
+    let unlistened = false;
+    const states: Array<{ runningSha: string | null; stagedSha: string | null }> = [];
+    const win: DesktopShellWindow = {
+      __TAURI__: {
+        core: {
+          invoke: async <Result,>(): Promise<Result> => ({ runningSha, stagedSha: null }) as Result,
+        },
+        event: {
+          listen: async (event, fn) => {
+            expect(event).toBe(SHELL_UPDATE_STAGED_EVENT);
+            handler = fn as (event: { payload: Record<string, string | null> }) => void;
+            return () => { unlistened = true; };
+          },
+        },
+        window: { getCurrentWindow: () => ({ close: async () => undefined }) },
+      },
+    };
+
+    const uninstall = installShellReleaseBridge((state) => states.push(state), win);
+    await Promise.resolve();
+    await Promise.resolve();
+    handler?.({ payload: { runningSha, stagedSha } });
+    expect(states).toEqual([
+      { runningSha, stagedSha: null },
+      { runningSha, stagedSha },
+    ]);
+    uninstall();
+    expect(unlistened).toBe(true);
   });
 });
 

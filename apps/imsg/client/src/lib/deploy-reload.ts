@@ -1,62 +1,59 @@
-/** Hashed Expo web entry — changes on every production client build. */
-const ENTRY_SRC = /\/_expo\/static\/js\/web\/entry-[a-f0-9]+\.js/;
+import {
+  parseDeployedWebRelease,
+  type DeployedWebRelease,
+} from "@shared/release-identity";
 
-export function bundleStampFromHtml(html: string): string | null {
-  return html.match(ENTRY_SRC)?.[0] ?? null;
+export const DEPLOYED_WEB_RELEASE_PATH = "/api/deploy/status";
+
+export interface DeployMonitorDocument {
+  readonly visibilityState: string;
+  addEventListener(type: "visibilitychange", listener: () => void): void;
+  removeEventListener(type: "visibilitychange", listener: () => void): void;
 }
 
-export function currentBundleStamp(doc: Document): string | null {
-  const scripts = Array.prototype.slice.call(doc.querySelectorAll("script[src]")) as Element[];
-  for (let i = 0; i < scripts.length; i++) {
-    const src = scripts[i]?.getAttribute("src") ?? "";
-    const match = src.match(ENTRY_SRC);
-    if (match) return match[0];
-  }
-  return null;
-}
-
-export function shouldReloadForDeploy(current: string | null, incoming: string | null): boolean {
-  return current !== null && incoming !== null && current !== incoming;
-}
-
-export function composerIsBusy(doc: Document): boolean {
-  const el = doc.activeElement;
-  if (!el) return false;
-  const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || el.getAttribute("contenteditable") === "true";
-}
-
-export interface DeployReloadHost {
-  readonly document: Document;
-  fetchHtml: () => Promise<string>;
-  reload: () => void;
-  nowBusy?: () => boolean;
-  intervalMs?: number;
+export interface WebReleaseMonitorHost {
+  readonly document: DeployMonitorDocument;
+  readonly fetchRelease: () => Promise<DeployedWebRelease | null>;
+  readonly onRelease: (release: DeployedWebRelease) => void;
+  readonly intervalMs?: number;
 }
 
 const DEFAULT_INTERVAL_MS = 45_000;
 
+export function deployedWebReleaseFromJson(json: string): DeployedWebRelease | null {
+  try {
+    const value = JSON.parse(json) as Record<string, string | null | undefined>;
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+    return parseDeployedWebRelease(value);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchDeployedWebRelease(
+  request: (path: string) => Promise<{ readonly ok: boolean; text(): Promise<string> }>,
+): Promise<DeployedWebRelease | null> {
+  const response = await request(DEPLOYED_WEB_RELEASE_PATH);
+  if (!response.ok) return null;
+  return deployedWebReleaseFromJson(await response.text());
+}
+
 /**
- * When the Mini deploys a new web export, reload the page (Tauri or PWA)
- * so the running window isn't stuck on a cached bundle. Skips while the
- * composer/search field is focused so a half-typed message isn't wiped.
+ * Polls deployed identity without activating it. A release mismatch stays visible
+ * until the user explicitly reloads, so focused composers and unsaved drafts are
+ * never discarded by a deploy timer.
  */
-export function installDeployReloader(host: DeployReloadHost): () => void {
+export function installWebReleaseMonitor(host: WebReleaseMonitorHost): () => void {
   const intervalMs = host.intervalMs ?? DEFAULT_INTERVAL_MS;
   let cancelled = false;
   let inFlight = false;
 
   const check = (): void => {
     if (cancelled || inFlight) return;
-    if ((host.nowBusy ?? (() => composerIsBusy(host.document)))()) return;
-    const current = currentBundleStamp(host.document);
-    if (!current) return;
     inFlight = true;
-    void host
-      .fetchHtml()
-      .then((html) => {
-        if (cancelled) return;
-        if (shouldReloadForDeploy(current, bundleStampFromHtml(html))) host.reload();
+    void host.fetchRelease()
+      .then((release) => {
+        if (!cancelled && release) host.onRelease(release);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -77,4 +74,8 @@ export function installDeployReloader(host: DeployReloadHost): () => void {
     host.document.removeEventListener("visibilitychange", onVisible);
     clearInterval(timer);
   };
+}
+
+export function reloadWebClient(reload: () => void = () => globalThis.window.location.reload()): void {
+  reload();
 }
