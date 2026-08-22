@@ -172,11 +172,19 @@ export class ShadowRunner {
 export const SHADOW_TIMEOUT_MS = 150_000;
 
 /**
- * launchd runs this server with a minimal PATH (~/.bun/bin only), and the ccs
- * script shells out through `env` for bun/node — without these it dies with
- * exit 127 before ever reaching the model.
+ * launchd runs this server with a minimal PATH (~/.bun/bin only), and both the
+ * ccs script and the seat launchers it execs (`claudex` in ~/.ccs/bin) shell
+ * out through `env` for bun/node — without these they die with exit 127
+ * before ever reaching the model.
  */
-const HARNESS_PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
+const HARNESS_PATH = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  `${process.env.HOME ?? ""}/.ccs/bin`,
+  `${process.env.HOME ?? ""}/.local/bin`,
+  "/usr/bin",
+  "/bin",
+].join(":");
 
 /** Real process execution, used outside tests. Kills the child on timeout. */
 export const spawnExec: Exec = async (spec) => {
