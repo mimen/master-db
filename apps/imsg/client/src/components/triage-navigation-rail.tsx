@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { StateCounts, StateFilter } from "@shared/types";
 import { router } from "expo-router";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { useState } from "react";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { isDesktopShell } from "@/lib/desktop-shell";
@@ -26,9 +26,6 @@ function Item({ icon, label, active = false, count, onPress }: { icon: keyof typ
       {...NO_DRAG}
     >
       <Ionicons name={icon} size={21} color={active ? "#FFFFFF" : "rgba(255,255,255,0.65)"} />
-      {count !== undefined && count > 0 ? (
-        <Text style={styles.count}>{count > 99 ? "99+" : count}</Text>
-      ) : null}
     </Pressable>
   );
 }
@@ -116,22 +113,5 @@ const styles = StyleSheet.create({
   },
   itemPressed: {
     transform: [{ scale: 0.96 }],
-  },
-  count: {
-    backgroundColor: "#FF453A",
-    borderRadius: 9,
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-    height: 17,
-    lineHeight: 17,
-    minWidth: 17,
-    overflow: "hidden",
-    paddingHorizontal: 4,
-    position: "absolute",
-    right: -4,
-    textAlign: "center",
-    top: -4,
   },
 });
