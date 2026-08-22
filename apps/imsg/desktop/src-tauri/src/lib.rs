@@ -19,6 +19,13 @@ struct DesktopShellIdentity {
     bundle_id: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShellReleaseState {
+    running_sha: String,
+    staged_sha: Option<String>,
+}
+
 fn app_bundle_path() -> Result<PathBuf, String> {
     let executable = std::env::current_exe().map_err(|error| error.to_string())?;
     executable
@@ -69,6 +76,14 @@ fn staged_desktop_shell() -> Result<Option<DesktopShellIdentity>, String> {
         return Ok(None);
     }
     identity_from_bundle(&staged).map(Some)
+}
+
+#[tauri::command]
+fn get_shell_release_state() -> Result<ShellReleaseState, String> {
+    Ok(ShellReleaseState {
+        running_sha: SOURCE_SHA.to_owned(),
+        staged_sha: staged_desktop_shell()?.map(|identity| identity.source_sha),
+    })
 }
 
 fn start_staged_desktop_activation(
@@ -154,6 +169,12 @@ fn activate_staged_desktop_shell(app: AppHandle, expected_source_sha: String) ->
     result
 }
 
+#[tauri::command]
+fn restart_to_staged_shell(app: AppHandle) -> Result<(), String> {
+    let staged = staged_desktop_shell()?.ok_or_else(|| "no staged Comma update".to_owned())?;
+    activate_staged_desktop_shell(app, staged.source_sha)
+}
+
 fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let new_message = MenuItemBuilder::with_id("conversation.new", "New Message")
         .accelerator("CmdOrCtrl+N")
@@ -216,7 +237,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             desktop_shell_identity,
             staged_desktop_shell,
-            activate_staged_desktop_shell
+            get_shell_release_state,
+            activate_staged_desktop_shell,
+            restart_to_staged_shell
         ])
         .setup(|app| {
             let menu = build_menu(app)?;
