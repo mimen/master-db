@@ -51,12 +51,15 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
 
       const dots = await controls.evaluateAll((items) => items.map((item) => {
         const rect = item.getBoundingClientRect();
-        return { width: rect.width, height: rect.height, y: rect.y };
+        return { width: rect.width, height: rect.height, x: rect.x, y: rect.y };
       }));
       expect(dots.map((dot) => dot.width)).toEqual([12, 12, 12]);
       expect(dots.map((dot) => dot.height)).toEqual([12, 12, 12]);
-      expect(dots[1]!.y - dots[0]!.y).toBeCloseTo(20, 1);
-      expect(dots[2]!.y - dots[1]!.y).toBeCloseTo(20, 1);
+      // Horizontal macOS trio: shared baseline, 8px gaps.
+      expect(dots[0]!.y).toBeCloseTo(dots[1]!.y, 1);
+      expect(dots[1]!.y).toBeCloseTo(dots[2]!.y, 1);
+      expect(dots[1]!.x - dots[0]!.x).toBeCloseTo(20, 1);
+      expect(dots[2]!.x - dots[1]!.x).toBeCloseTo(20, 1);
 
       const closerRow = rows.first();
       const closer = closerRow.getByRole("button", { name: "Fill AI draft" });
@@ -123,7 +126,7 @@ test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", a
   }
 });
 
-test("custom vertical window controls call the Tauri window API", async ({ desk }) => {
+test("desktop window controls call the Tauri window API", async ({ desk }) => {
   await desk.page.addInitScript(() => {
     const calls: string[] = [];
     const currentWindow = {

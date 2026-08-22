@@ -94,7 +94,9 @@ const styles = StyleSheet.create({
   },
   primary: {
     gap: 6,
-    marginTop: 22,
+    // Stoplights are a 16px-tall horizontal row now (was a 52px vertical
+    // stack); extra margin keeps the nav cluster's rhythm.
+    marginTop: 30,
   },
   primaryWeb: { marginTop: 0 },
   utility: {
