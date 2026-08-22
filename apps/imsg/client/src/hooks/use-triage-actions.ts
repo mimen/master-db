@@ -85,10 +85,24 @@ export async function setTriageLater(chat: ChatSummary, until: number | null): P
   };
 }
 
+/**
+ * Auto-draft budget. Each harness generation costs a full Terra turn (~10-30s),
+ * so automatic generation is bounded: one at a time, at most a handful queued,
+ * and each (chat, message) auto-generated at most once per client session.
+ * The server caches per chat+message, so anything generated here is instant
+ * for every later surface that reads it. Rows past the budget keep the
+ * explicit Generate draft button.
+ */
+const MAX_AUTO_DRAFT_PENDING = 4;
+let autoDraftPending = 0;
+const autoDraftAttempted = new Set<string>();
+
 export function useRowDraft(
   chatGuid: string,
   latestMessageGuid: string | null,
   enabled: boolean,
+  /** Auto-generate when the cache is empty; bounded by the budget above. */
+  auto = false,
 ): { draft: string | null; generate: () => void; loading: boolean } {
   const [draft, setDraft] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,6 +117,27 @@ export function useRowDraft(
     }, () => { if (!cancelled) setDraft(null); });
     return () => { cancelled = true; };
   }, [chatGuid, enabled, latestMessageGuid]);
+
+  // Auto lane: cache miss + within budget + never tried this session.
+  useEffect(() => {
+    if (!auto || !enabled || draft !== null || loading) return;
+    if (latestMessageGuid === null) return;
+    const key = `${chatGuid}:${latestMessageGuid}`;
+    if (autoDraftAttempted.has(key)) return;
+    if (autoDraftPending >= MAX_AUTO_DRAFT_PENDING) return;
+    autoDraftAttempted.add(key);
+    autoDraftPending++;
+    setLoading(true);
+    void api.aiSuggestions(chatGuid, true)
+      .then((fresh) => {
+        if (fresh.basedOnMessageGuid !== latestMessageGuid) return;
+        setDraft(fresh.suggestions[0]?.trim() || null);
+      }, () => undefined)
+      .finally(() => {
+        autoDraftPending--;
+        setLoading(false);
+      });
+  }, [auto, enabled, chatGuid, latestMessageGuid, draft, loading]);
 
   const generate = (): void => {
     if (!enabled || loading) return;

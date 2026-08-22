@@ -157,11 +157,16 @@ function ChatRowInner({
     chat.guid,
     chat.lastMessage?.guid ?? null,
     compact && (chat.flags.unresponded || chat.flags.waiting),
+    // Auto-draft only what Milad actually owes a reply to; waiting-only rows
+    // keep the explicit button. The budget lives in useRowDraft.
+    compact && chat.flags.unresponded,
   );
   const rowDraft = rowDraftState.draft;
   // The third lane is always the AI draft, or selected-row actions. The message
-  // preview above it never disappears.
-  const actionsVisible = compact && (selected || (hovered && !rowDraft));
+  // preview above it never disappears. Actions are selection-only: hover used
+  // to swap them in exactly when no draft existed, covering the Generate
+  // draft button it was supposed to accompany.
+  const actionsVisible = compact && selected;
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
   const snippet = last
