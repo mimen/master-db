@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChatSummary, SmartCloser } from "@shared/types";
+import type { ChatSummary, ReplySuggestions, SmartCloser } from "@shared/types";
 import { api } from "@/lib/api";
 import { patchChatFlags, revertChatFlags } from "@/lib/chat-store";
 import { showToast } from "@/lib/toast";
@@ -97,28 +97,57 @@ const MAX_AUTO_DRAFT_PENDING = 4;
 let autoDraftPending = 0;
 const autoDraftAttempted = new Set<string>();
 
+/**
+ * The row's draft text: the smart closer's reply draft when it has one
+ * (decisive, classification-first), else the first shelf suggestion.
+ */
+function closerReplyDraft(closer: SmartCloser | null): string | null {
+  const draft = closer?.kind === "reply" ? closer.draft?.trim() : null;
+  return draft || null;
+}
+
+function suggestionDraft(suggestions: ReplySuggestions): string | null {
+  if (suggestions.basedOnMessageGuid == null) return null;
+  return suggestions.suggestions[0]?.trim() || null;
+}
+
 export function useRowDraft(
   chatGuid: string,
   latestMessageGuid: string | null,
   enabled: boolean,
-  /** Auto-generate when the cache is empty; bounded by the budget above. */
+  /** Auto-generate when nothing cached; bounded by the budget above. */
   auto = false,
 ): { draft: string | null; generate: () => void; loading: boolean } {
   const [draft, setDraft] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // First source: the smart closer. Fast-lane cheap, so this runs for every
+  // enabled row without a budget, and its reply draft is the row's preferred text.
   useEffect(() => {
     if (!enabled) { setDraft(null); setLoading(false); return; }
     let cancelled = false;
-    setDraft(null);
+    setLoading(true);
+    void api.getSmartCloser(chatGuid).then((closer) => {
+      if (cancelled) return;
+      setDraft(closer.kind === "reply" ? closerReplyDraft(closer) : null);
+    }, () => undefined).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [chatGuid, enabled]);
+
+  // Second source: the cached shelf. Only fills a gap the closer left.
+  useEffect(() => {
+    if (!enabled) { setDraft(null); return; }
+    let cancelled = false;
     void api.cachedAiSuggestions(chatGuid).then((cached) => {
       if (cancelled) return;
-      if (cached.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
-      setDraft(cached.suggestions[0]?.trim() || null);
-    }, () => { if (!cancelled) setDraft(null); });
+      if (cached.basedOnMessageGuid !== latestMessageGuid) return;
+      const fallback = suggestionDraft(cached);
+      if (fallback) setDraft((current) => current ?? fallback);
+    }, () => undefined);
     return () => { cancelled = true; };
   }, [chatGuid, enabled, latestMessageGuid]);
 
-  // Auto lane: cache miss + within budget + never tried this session.
+  // Auto lane: nothing from either source + within budget + not tried this session.
   useEffect(() => {
     if (!auto || !enabled || draft !== null || loading) return;
     if (latestMessageGuid === null) return;
@@ -131,7 +160,7 @@ export function useRowDraft(
     void api.aiSuggestions(chatGuid, true)
       .then((fresh) => {
         if (fresh.basedOnMessageGuid !== latestMessageGuid) return;
-        setDraft(fresh.suggestions[0]?.trim() || null);
+        setDraft(suggestionDraft(fresh));
       }, () => undefined)
       .finally(() => {
         autoDraftPending--;
@@ -144,7 +173,7 @@ export function useRowDraft(
     setLoading(true);
     void api.aiSuggestions(chatGuid, true).then((fresh) => {
       if (fresh.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
-      setDraft(fresh.suggestions[0]?.trim() || null);
+      setDraft(suggestionDraft(fresh));
     }, () => setDraft(null)).finally(() => setLoading(false));
   };
 

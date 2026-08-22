@@ -8,6 +8,7 @@ import { UNTRUSTED_NOTICE } from "./context";
 const VOICE = [
   "You are helping Milad, who runs Afternoon Umbrella Friends (AUF), an events and music brand.",
   "He texts dry, lowercase-ish, brief. No exclamation marks, no corporate warmth, no emoji unless he used one first.",
+  "Never use em dashes or en dashes in anything you draft for him; plain sentences and commas only.",
 ].join(" ");
 
 export function groupNamePrompt(transcript: string, participants: string[]): string {
@@ -48,14 +49,15 @@ export function replySuggestionPrompt(
     UNTRUSTED_NOTICE,
     "",
     "Rules:",
-    "- 3 options, each a complete message he could send as-is.",
+    "- 2 options, each a complete message he could send as-is.",
     "- Each under 200 characters unless the thread clearly warrants more.",
-    "- If there is one obviously right reply, all three options may share its intent — vary tone and length, not meaning. Manufactured disagreement reads as filler.",
+    "- The two options are variations of the same reply: same intent, different tone or length. Never manufacture disagreement; if there is one obviously right answer, both options say it.",
+    "- Lead with the most specific and committed phrasing. He sees the first one first.",
     "- Match his voice. Never invent commitments, dates, or facts he has not stated.",
     "- A reaction can be an option when that is what the moment calls for (e.g. a short playful jab at what they said).",
     "- If the last message needs no reply, still offer the most natural thing to say.",
     "",
-    'Reply with ONLY a JSON array of strings, e.g. ["first", "second", "third"].',
+    'Reply with ONLY a JSON array of strings, e.g. ["first", "second"].',
   ]
     .filter(Boolean)
     .join("\n");
@@ -114,6 +116,7 @@ export function smartCloserPrompt(transcript: string): string {
     "",
     "Choose exactly one kind: reply, done, later, call, react_done, archive.",
     "label is a short human button label.",
+    "When the right action is a reply, always include a draft: one concrete message he could send as-is, decisive and specific, not filler.",
     "reply may include a draft. react_done may include a reaction. No other fields are allowed.",
     `Reply with ONLY JSON, e.g. {"kind":"reply","label":"Reply","draft":"sounds good"}.`,
   ].join("\n");

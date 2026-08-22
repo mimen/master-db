@@ -37,10 +37,16 @@ describe("replySuggestionPrompt", () => {
     expect(prompt).toContain("Never invent commitments");
   });
 
-  test("allows shared intent across options instead of manufacturing disagreement", () => {
+  test("asks for two variations of one reply, leading with the most specific", () => {
     const prompt = replySuggestionPrompt("t", "", null);
-    expect(prompt).toContain("may share its intent");
-    expect(prompt).toContain("reaction can be an option");
+    expect(prompt).toContain("2 options");
+    expect(prompt).toContain("same intent, different tone or length");
+    expect(prompt).toContain("Lead with the most specific and committed phrasing");
+  });
+
+  test("bans dashes in drafts", () => {
+    const prompt = replySuggestionPrompt("t", "", null);
+    expect(prompt).toContain("em dashes");
   });
 });
 

@@ -95,12 +95,12 @@ describe("replySuggestions", () => {
   test("generates through the harness lane, caps at three, and caches", async () => {
     const { service, db } = makeService({
       messages: [makeMessage({ guid: "m5" })],
-      shadowReply: 'Sure — here are three:\n```json\n["a","b","c","d"]\n```',
+      shadowReply: 'Two variations:\n```json\n["a","b","c","d"]\n```',
     });
     const result = await service.replySuggestions("chat-1", "Sarah", false);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.suggestions).toEqual(["a", "b", "c"]);
+      expect(result.value.suggestions).toEqual(["a", "b"]);
       expect(result.value.stale).toBe(false);
       expect(result.value.basedOnMessageGuid).toBe("m5");
     }
@@ -147,10 +147,10 @@ describe("replySuggestions", () => {
   test("accepts a bare JSON array with narration around it", async () => {
     const { service } = makeService({
       messages: [makeMessage({ guid: "m5" })],
-      shadowReply: 'The thread is light. ["one","two","three"] — pick any.',
+      shadowReply: 'The thread is light. ["one","two"] — pick any.',
     });
     const result = await service.replySuggestions("chat-1", null, false);
-    if (result.ok) expect(result.value.suggestions).toEqual(["one", "two", "three"]);
+    if (result.ok) expect(result.value.suggestions).toEqual(["one", "two"]);
   });
 
   test("serves cache without regenerating", async () => {

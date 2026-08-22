@@ -341,7 +341,7 @@ export function parseSuggestionArray(reply: string): Result<string[]> {
       const strings = parsed.filter(
         (item): item is string => typeof item === "string" && item.trim().length > 0,
       );
-      if (strings.length > 0) return { ok: true, value: strings.slice(0, 3) };
+      if (strings.length > 0) return { ok: true, value: strings.slice(0, 2) };
     } catch {
       // fall through to the next candidate
     }

@@ -29,8 +29,7 @@ export function DesktopWindowControls(): React.JSX.Element | null {
       testID="window-controls"
       accessibilityLabel="Window controls"
       style={styles.row}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
+      {...({ onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) } as object)}
       {...({ dataSet: { tauriDragRegion: "false" } } as object)}
     >
       {controls.map((control) => (
