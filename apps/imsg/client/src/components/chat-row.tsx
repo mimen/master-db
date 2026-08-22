@@ -34,10 +34,11 @@ import { hapticCommit } from "@/lib/haptics";
 import { fillComposer } from "@/lib/composer-fill";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { useActionSheet } from "@/lib/action-sheet";
+import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
+import { HoverFillButton } from "./hover-fill-button";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
@@ -277,10 +278,8 @@ function ChatRowInner({
           { height: compact ? 62 : undefined, minHeight: compact ? 62 : 92 },
           compact
             ? ({
-                backgroundColor: selected ? visual.cardSelected : visual.card,
-                boxShadow: hovered || pressed
-                  ? `0 2px 7px ${visual.cardShadow}`
-                  : `0 1px 3px ${visual.cardShadow}`,
+                backgroundColor: selected || hovered || pressed ? visual.cardSelected : visual.card,
+                boxShadow: `0 1px 3px ${visual.cardShadow}`,
               } as object)
             : {
                 backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background,
@@ -333,7 +332,7 @@ function ChatRowInner({
               style={[styles.previewLayer, { opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
             >
               <Text numberOfLines={1} style={[styles.snippet, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-              {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} onHoverIn={() => setCloserHovered(true)} onHoverOut={() => setCloserHovered(false)} style={[styles.closer, { borderColor: specificCloser.kind === "call" ? "rgba(40,200,64,0.5)" : specificCloser.kind === "archive" ? visual.hairlineStrong : "rgba(0,122,255,0.4)", backgroundColor: closerHovered ? "rgba(0,122,255,0.07)" : "transparent", boxShadow: closerHovered ? "0 1px 3px rgba(0,122,255,0.14)" : "none" } as object]}><Ionicons name={specificCloser.kind === "call" ? "call-outline" : specificCloser.kind === "archive" ? "archive-outline" : "paper-plane-outline"} size={13} color={specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
+              {compact && specificCloser ? <Pressable accessibilityRole="button" accessibilityLabel={`Smart action: ${specificCloser.label}`} onPress={(event) => { event.stopPropagation(); const action = specificCloser; if (action.kind === "reply" && action.draft) { onPress(); requestAnimationFrame(() => fillComposer(action.draft ?? "")); } else if (action.kind === "react_done") { const reaction = closerReactionType(action.reaction); if (reaction && last) void api.react(last.guid, { chatGuid: chat.guid, reaction }).then(() => onDone?.(), () => showToast("Could not react")); } else if (action.kind === "later") showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); else if (action.kind === "archive") archiveChat(chat, true); else if (action.kind === "call") { const address = chat.participants[0]?.address; if (address) void Linking.openURL(`tel:${address}`); else onPress(); } else onPress(); }} onHoverIn={() => setCloserHovered(true)} onHoverOut={() => setCloserHovered(false)} style={[styles.closer, { borderColor: specificCloser.kind === "call" ? "rgba(40,200,64,0.5)" : specificCloser.kind === "archive" ? visual.hairlineStrong : "rgba(0,122,255,0.4)", backgroundColor: closerHovered ? (specificCloser.kind === "call" ? "rgba(40,200,64,0.12)" : visual.controlFillHover) : "transparent" } as object]}><Ionicons name={specificCloser.kind === "call" ? "call-outline" : specificCloser.kind === "archive" ? "archive-outline" : "paper-plane-outline"} size={13} color={specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: specificCloser.kind === "call" ? "#1DAA61" : specificCloser.kind === "archive" ? visual.snippet : theme.accent }]}>{closerLabel}</Text></Pressable> : <RowSignal chat={chat} />}
             </View>
             <View
               pointerEvents={actionsVisible ? "auto" : "none"}
@@ -341,14 +340,14 @@ function ChatRowInner({
             >
               {waitingOnly ? (
                 <>
-                  <Pressable accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></Pressable>
-                  <Pressable accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></Pressable>
+                  <HoverFillButton accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></HoverFillButton>
+                  <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></HoverFillButton>
                 </>
               ) : (
                 <>
-                  <Pressable accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></Pressable>
-                  <Pressable accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></Pressable>
-                  <Pressable accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></Pressable>
+                  <HoverFillButton accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></HoverFillButton>
+                  <HoverFillButton accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></HoverFillButton>
+                  <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></HoverFillButton>
                 </>
               )}
               <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>

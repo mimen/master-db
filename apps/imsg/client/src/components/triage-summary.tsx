@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { HoverFillButton } from "./hover-fill-button";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { queueAgeLabel } from "@/lib/queue-age";
 
@@ -27,16 +28,17 @@ export function TriageSummary({
       </View>
       <Text style={[styles.count, { color: visual.text }]}>{remaining}</Text>
       {onSweep ? (
-        <Pressable
-          accessibilityRole="button"
+        <HoverFillButton
           accessibilityLabel={`Start sweep, ${sweepCount} conversations`}
           disabled={sweepCount === 0}
           onPress={onSweep}
-          style={({ pressed }) => [styles.sweep, { backgroundColor: visual.controlFill }, sweepCount === 0 && styles.sweepDisabled, pressed && sweepCount > 0 && styles.sweepPressed]}
+          restFill={visual.controlFill}
+          hoverFill={visual.controlFillHover}
+          style={[styles.sweep, sweepCount === 0 && styles.sweepDisabled]}
         >
           <Ionicons name="flash" size={14} color={visual.text} />
           <Text style={[styles.sweepText, { color: visual.text }]}>Sweep</Text>
-        </Pressable>
+        </HoverFillButton>
       ) : null}
     </View>
   );
@@ -78,10 +80,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   sweepDisabled: { opacity: 0.35 },
-  sweepPressed: {
-    opacity: 0.78,
-    transform: [{ scale: 0.96 }],
-  },
   sweepText: {
     fontSize: 12,
     fontWeight: "600",

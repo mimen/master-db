@@ -1059,6 +1059,7 @@ ${url}` : url;
                   height: inputHeight,
                   lineHeight: IOS_INPUT_LINE_HEIGHT,
                 },
+                Platform.OS === "web" && styles.webInput,
                 { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background, fontSize: type.body },
               ]}
             />
@@ -1225,6 +1226,13 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
     fontSize: 17,
+  },
+  webInput: {
+    lineHeight: 22,
+    minHeight: 38,
+    paddingBottom: 7,
+    paddingTop: 7,
+    textAlignVertical: "center",
   },
   recordingBar: {
     flexDirection: "row",

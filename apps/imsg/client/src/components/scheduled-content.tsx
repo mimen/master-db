@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { ScheduledMessage } from "@shared/types";
 import { CenteredSpinner, EmptyState } from "@/components/empty-state";
-import { ListRow } from "@/components/list-row";
+import { HoverFillButton } from "@/components/hover-fill-button";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { formatScheduledWhen, useScheduled } from "@/hooks/use-scheduled";
 import { scheduledStatusLabel } from "@/lib/scheduled";
@@ -65,58 +65,49 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
             const editable = item.status === "pending";
             const errorState =
               item.status === "failed" || item.status === "interrupted" || item.status === "expired";
+            const statusColor = errorState
+              ? theme.destructive
+              : item.status === "pending"
+                ? theme.accent
+                : theme.textSecondary;
             return (
-              <ListRow
+              <Pressable
                 onPress={editable ? () => setEditing(item) : undefined}
-                paddingHorizontal={12}
                 style={[styles.card, { backgroundColor: theme.backgroundElement }]}
-                title={item.chatName}
-                subtitle={
-                  <View>
-                    <Text numberOfLines={2} style={{ color: theme.text, fontSize: 14, marginTop: 2 }}>
-                      {item.text}
-                    </Text>
-                    <Text
-                      style={{
-                        color:
-                          errorState
-                            ? theme.destructive
-                            : item.status === "pending"
-                              ? theme.accent
-                              : theme.textSecondary,
-                        fontSize: Type.secondary,
-                        marginTop: 4,
-                      }}
+              >
+                <View style={styles.cardHeader}>
+                  <Text numberOfLines={1} style={[styles.chatName, { color: theme.text }]}>{item.chatName}</Text>
+                  {editable ? (
+                    <HoverFillButton
+                      accessibilityLabel={`Cancel scheduled message to ${item.chatName}`}
+                      onPress={(event) => { event.stopPropagation(); cancel(item.id); }}
+                      restFill="transparent"
+                      hoverFill={theme.backgroundSelected}
+                      style={styles.iconAction}
                     >
-                      {item.status === "pending" ? `${formatScheduledWhen(item.sendAt)} · ` : ""}
-                      {scheduledStatusLabel(item.status)}
-                      {item.error ? ` · ${item.error}` : ""}
-                    </Text>
-                  </View>
-                }
-                trailing={
-                  editable ? (
+                      <Ionicons name="close" size={16} color={theme.textSecondary} />
+                    </HoverFillButton>
+                  ) : null}
+                </View>
+                <Text numberOfLines={3} style={[styles.message, { color: theme.text }]}>{item.text}</Text>
+                <View style={styles.cardFooter}>
+                  <Text style={[styles.status, { color: statusColor }]}>
+                    {item.status === "pending" ? `${formatScheduledWhen(item.sendAt)} · ` : ""}
+                    {scheduledStatusLabel(item.status)}
+                    {item.error ? ` · ${item.error}` : ""}
+                  </Text>
+                  {editable ? (
                     <View style={styles.actions}>
-                      <Pressable onPress={() => setEditing(item)} hitSlop={6}>
+                      <HoverFillButton accessibilityLabel={`Edit scheduled message to ${item.chatName}`} onPress={(event) => { event.stopPropagation(); setEditing(item); }} restFill="transparent" hoverFill={theme.backgroundSelected} style={styles.textAction}>
                         <Text style={[styles.actionText, { color: theme.textSecondary }]}>Edit</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => {
-                          void sendNow(item.id)
-                            .then(() => showToast("Sent now"))
-                            .catch(() => showToast("Could not send scheduled message"));
-                        }}
-                        hitSlop={6}
-                      >
+                      </HoverFillButton>
+                      <HoverFillButton accessibilityLabel={`Send scheduled message to ${item.chatName} now`} onPress={(event) => { event.stopPropagation(); void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Could not send scheduled message")); }} restFill="transparent" hoverFill={theme.backgroundSelected} style={styles.textAction}>
                         <Text style={[styles.actionText, { color: theme.accent }]}>Send now</Text>
-                      </Pressable>
-                      <Pressable onPress={() => cancel(item.id)} hitSlop={6}>
-                        <Ionicons name="close-circle" size={22} color={theme.textSecondary} />
-                      </Pressable>
+                      </HoverFillButton>
                     </View>
-                  ) : null
-                }
-              />
+                  ) : null}
+                </View>
+              </Pressable>
             );
           }}
         />
@@ -137,11 +128,50 @@ const styles = StyleSheet.create({
   paneHeaderTitle: { fontSize: 16, fontWeight: "600" },
   card: {
     borderRadius: Radii.input,
+    gap: 8,
+    padding: 12,
+  },
+  cardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  chatName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  message: {
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  cardFooter: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  status: {
+    flex: 1,
+    fontSize: Type.secondary,
+    lineHeight: 16,
   },
   actions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
+    gap: 2,
+  },
+  textAction: {
+    borderRadius: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+  },
+  iconAction: {
+    alignItems: "center",
+    borderRadius: 7,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
   },
   actionText: {
     fontSize: 12,

@@ -2,15 +2,15 @@ import type { ChatSummary } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Circle } from "react-native-svg";
 
 import { api } from "@/lib/api";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { finishTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
-import { useActionSheet } from "@/lib/action-sheet";
+import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 import { ChatAvatar } from "./avatar";
+import { HoverFillButton } from "./hover-fill-button";
 
 interface SweepStep {
   index: number;
@@ -52,10 +52,11 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     void finishTriageChat(chat).then(() => advance(`${chat.displayName} · cleared`, true), () => undefined);
   }, [advance, chat, sending]);
 
-  const later = useCallback(() => {
+  const later = useCallback((anchor?: { x: number; y: number }) => {
     if (!chat || sending) return;
     showSheet({
       title: `Later · ${chat.displayName}`,
+      anchor,
       actions: laterOptions().map((option) => ({
         label: option.label,
         onPress: () => { void setTriageLater(chat, option.until).then(() => advance(`${chat.displayName} · later`, true), () => undefined); },
@@ -141,8 +142,6 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
 
   if (!visible) return null;
   const total = queue.length;
-  const progress = total === 0 ? 1 : Math.min(1, (index + 1) / total);
-  const circumference = 2 * Math.PI * 12;
   const glass = Platform.OS === "web" ? ({
     backgroundColor: visual.overlay,
     backdropFilter: "blur(40px) saturate(1.5)",
@@ -160,13 +159,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
               <Text style={[styles.title, { color: visual.text }]}>Sweep · Needs reply</Text>
             </View>
             <View style={styles.headerActions}>
-              <View style={styles.progressRing}>
-                <Svg width={30} height={30} viewBox="0 0 30 30">
-                  <Circle cx="15" cy="15" r="12" fill="none" stroke={visual.ringTrack} strokeWidth="3" />
-                  <Circle cx="15" cy="15" r="12" fill="none" stroke={theme.accent} strokeWidth="3" strokeLinecap="round" strokeDasharray={`${circumference} ${circumference}`} strokeDashoffset={circumference * (1 - progress)} rotation="-90" origin="15,15" />
-                </Svg>
-                <Text style={[styles.progressText, { color: visual.text }]}>{Math.min(index + 1, total)}/{total}</Text>
-              </View>
+              <Text style={[styles.progressText, { color: visual.meta }]}>{Math.min(index + 1, total)} of {total}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Close sweep" onPress={onClose} style={styles.closeButton}>
                 <Ionicons name="close" size={18} color={visual.muted} />
               </Pressable>
@@ -222,8 +215,8 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                 </View>
 
                 <View style={styles.actionsRow}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Mark current conversation done" onPress={done} style={[styles.actionChip, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Done <Text style={{ color: visual.hint }}>E</Text></Text></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Move current conversation to Later" onPress={later} style={[styles.actionChip, { backgroundColor: visual.controlFill }]}><Ionicons name="time-outline" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Later <Text style={{ color: visual.hint }}>H</Text></Text></Pressable>
+                  <HoverFillButton accessibilityLabel="Mark current conversation done" onPress={done} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.actionChip}><Ionicons name="checkmark" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Done <Text style={{ color: visual.hint }}>E</Text></Text></HoverFillButton>
+                  <HoverFillButton accessibilityLabel="Move current conversation to Later" onPress={(event) => later(pressAnchor(event))} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.actionChip}><Ionicons name="time-outline" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Later <Text style={{ color: visual.hint }}>H</Text></Text></HoverFillButton>
                   <Text style={[styles.autoAdvance, { color: visual.hint }]}>sent replies auto-advance to the next</Text>
                 </View>
               </View>
@@ -248,8 +241,7 @@ const styles = StyleSheet.create({
   headerTitle: { alignItems: "center", flexDirection: "row", gap: 9 },
   title: { fontSize: 14, fontWeight: "700" },
   headerActions: { alignItems: "center", flexDirection: "row", gap: 10 },
-  progressRing: { alignItems: "center", height: 30, justifyContent: "center", position: "relative", width: 30 },
-  progressText: { fontSize: 10, fontVariant: ["tabular-nums"], fontWeight: "700", position: "absolute" },
+  progressText: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
   closeButton: { alignItems: "center", height: 28, justifyContent: "center", width: 28 },
   body: { paddingHorizontal: 22, paddingVertical: 20 },
   personRow: { alignItems: "center", flexDirection: "row" },

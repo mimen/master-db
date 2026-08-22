@@ -19,6 +19,7 @@ import { openSettingsPane } from "@/lib/settings-pane";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 import type { AirtableHumanRow } from "@/lib/identity";
 
 import { ChatAvatar } from "./avatar";
@@ -102,6 +103,7 @@ function PaletteRoot({
   onShowHelp: () => void;
 }) {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -230,7 +232,7 @@ function PaletteRoot({
   let flatIndex = -1;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: visual.overlay }}>
       <View style={[styles.inputRow, { borderBottomColor: theme.divider }]}>
         <Ionicons name="search" size={18} color={theme.textSecondary} />
         <TextInput
@@ -377,6 +379,7 @@ type ComposeRow =
  * the same cursor/row primitives as the root view. */
 function PaletteCompose({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
+  const visual = useTriageTheme();
   const [recipients, setRecipients] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
@@ -514,7 +517,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   const canSend = recipients.length > 0 && text.trim().length > 0 && !sending;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: visual.overlay }}>
       <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: theme.divider }]}>
         <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>To:</Text>
         <View style={styles.chipWrap}>

@@ -432,7 +432,7 @@ export default function ChatListScreen() {
         visible={searchOpen}
         onClose={() => setSearchOpen(false)}
         backdropStyle={styles.overlayBackdrop}
-        cardStyle={styles.overlayPanel}
+        cardStyle={[styles.overlayPanel, { backgroundColor: visual.overlay, borderColor: visual.hairline }]}
       >
         <CommandPalette
           key={paletteCompose ? "compose" : "root"}
@@ -520,8 +520,9 @@ const styles = StyleSheet.create({
     width: 312,
   },
   overlayBackdrop: {
+    backgroundColor: "rgba(18,18,22,0.34)",
     justifyContent: "flex-start",
-    paddingTop: 90,
+    paddingTop: 72,
   },
   helpCard: {
     borderRadius: 16,
@@ -566,14 +567,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   overlayPanel: {
-    borderRadius: 16,
-    height: 560,
-    maxHeight: "75%",
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 500,
+    maxHeight: "72%",
     maxWidth: "90%",
     overflow: "hidden",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.35,
-    shadowRadius: 40,
-    width: 600,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    width: 540,
   },
 });

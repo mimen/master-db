@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
+import { useTriageTheme } from "@/hooks/use-triage-theme";
 
 /**
  * Shared list behavior for every palette surface (root search, compose, and
@@ -83,7 +84,7 @@ export function PaletteListRow({
   onHover: () => void;
   children: React.ReactNode;
 }) {
-  const theme = useTheme();
+  const visual = useTriageTheme();
   return (
     <Pressable
       // RNW renders dataSet as data-* attributes; RN's types don't know it.
@@ -91,7 +92,7 @@ export function PaletteListRow({
       disabled={disabled}
       onPress={onPress}
       onHoverIn={onHover}
-      style={[paletteStyles.row, selected && { backgroundColor: theme.backgroundSelected }]}
+      style={[paletteStyles.row, selected && { backgroundColor: visual.cardSelected }]}
     >
       {children}
     </Pressable>

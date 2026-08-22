@@ -5,9 +5,6 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { isDesktopShell } from "@/lib/desktop-shell";
-import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
-
-import { SidebarScrollFades } from "./sidebar-scroll-fades";
 
 export interface SidebarFrameProps {
   /** The fixed glass bar content — a SidebarChrome. */
@@ -32,13 +29,11 @@ export function SidebarFrame({
   footer,
   thumb,
   children,
-  chromeHeight,
 }: SidebarFrameProps): React.JSX.Element {
   const theme = useTheme();
   const visual = useTriageTheme();
   const { wide } = useLayoutMode();
   const shell = isDesktopShell();
-  const effectiveChromeHeight = chromeHeight ?? sidebarChromeHeight(wide);
   const wideSurface = wide && Platform.OS === "web" ? ({
     backgroundColor: visual.queue,
     backdropFilter: "blur(40px) saturate(1.5)",
@@ -52,15 +47,6 @@ export function SidebarFrame({
       <View style={styles.listWrap}>
         {children}
         {thumb}
-        {wide ? (
-          <SidebarScrollFades
-            background={wide ? visual.queue : theme.background}
-            chromeHeight={effectiveChromeHeight}
-            // Panes without a footer (Contacts) must not reserve a bottom
-            // fade for one, or the list ends in an empty gradient band.
-            footerHeight={footer ? sidebarFooterHeight(true) : 0}
-          />
-        ) : null}
         {chrome}
         {footer}
       </View>
