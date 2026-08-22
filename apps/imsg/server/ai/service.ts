@@ -6,7 +6,7 @@ import { loadProfile, renderTranscript } from "./context";
 import { Gateway } from "./gateway";
 import { contactCandidate, mergeCandidates, vaultCandidates } from "./identify";
 import { groupNamePrompt, identifyPrompt, replySuggestionPrompt, shadowBriefPrompt, smartCloserPrompt } from "./prompts";
-import { ShadowRunner } from "./shadow";
+import { ShadowRunner, type ShadowAvailability } from "./shadow";
 import { deterministicSmartCloser, parseSmartCloser, parseSmartCloserJson, type JsonValue } from "./smart-closer";
 import { parseShadowBriefContent, parseShadowBriefJson } from "./shadow-brief";
 
@@ -20,6 +20,11 @@ export interface AiDeps {
   db: OverlayDb;
   gateway: Gateway;
   shadow: ShadowRunner;
+  /**
+   * Startup probe of the harness lane, injected by index.ts. The shelf and
+   * the shadow panel both ride that lane, so both surfaces gate on it.
+   */
+  shadowStatus?: ShadowAvailability;
   /** Newest-last messages for a chat. */
   fetchMessages: (chatGuid: string) => Promise<Message[]>;
   /** Vault grep, injected so tests never touch the filesystem. */
@@ -51,6 +56,14 @@ export class AiService {
 
   get available(): boolean {
     return this.deps.gateway.available;
+  }
+
+  /**
+   * Whether the harness lane (ccs delegate) can run. The shelf rides it too,
+   * so the client gates both surfaces on this rather than the gateway key.
+   */
+  get shadowAvailable(): boolean {
+    return this.deps.shadowStatus?.available ?? false;
   }
 
   async groupNames(chatGuid: string, participants: string[]): Promise<Result<string[]>> {
@@ -85,17 +98,17 @@ export class AiService {
 
     const profile = await loadProfile(this.deps.config.vaultPath);
     const transcript = renderTranscript(messages, { limit: 40, peerName });
-    const generated = await this.completeJsonLimited<string[]>(
+    const generated = await this.deps.shadow.turn(
       replySuggestionPrompt(transcript, profile, peerName),
-      { maxTokens: 600 },
     );
     if (!generated.ok) return generated;
 
-    const suggestions = generated.value.filter((s) => typeof s === "string" && s.trim()).slice(0, 3);
-    this.deps.db.setSuggestionCache(chatGuid, currentGuid, JSON.stringify(suggestions));
+    const parsed = parseSuggestionArray(generated.value);
+    if (!parsed.ok) return parsed;
+    this.deps.db.setSuggestionCache(chatGuid, currentGuid, JSON.stringify(parsed.value));
     return {
       ok: true,
-      value: { suggestions, basedOnMessageGuid: currentGuid, stale: false, generatedAt: Date.now() },
+      value: { suggestions: parsed.value, basedOnMessageGuid: currentGuid, stale: false, generatedAt: Date.now() },
     };
   }
 
@@ -277,6 +290,33 @@ export class AiService {
     const text = reply.ok ? reply.value : `⚠️ ${reply.error}`;
     this.deps.db.addShadowMessage(newId(), chatGuid, "assistant", text);
   }
+}
+
+/**
+ * The harness lane returns prose, not a guaranteed JSON document. Models wrap
+ * arrays in code fences or narrate around them, so find the array instead of
+ * demanding the whole reply be one.
+ */
+export function parseSuggestionArray(reply: string): Result<string[]> {
+  // Prefer a fenced ```json block when present; otherwise the first [...] run.
+  const fenced = reply.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidates = [fenced?.[1], reply].filter((text): text is string => typeof text === "string");
+  for (const candidate of candidates) {
+    const start = candidate.indexOf("[");
+    const end = candidate.lastIndexOf("]");
+    if (start === -1 || end <= start) continue;
+    try {
+      const parsed = JSON.parse(candidate.slice(start, end + 1)) as JsonValue;
+      if (!Array.isArray(parsed)) continue;
+      const strings = parsed.filter(
+        (item): item is string => typeof item === "string" && item.trim().length > 0,
+      );
+      if (strings.length > 0) return { ok: true, value: strings.slice(0, 3) };
+    } catch {
+      // fall through to the next candidate
+    }
+  }
+  return { ok: false, error: "no suggestion array in harness reply" };
 }
 
 function safeParse(payload: string): string[] {

@@ -36,6 +36,12 @@ describe("replySuggestionPrompt", () => {
     expect(prompt).toContain("No exclamation marks");
     expect(prompt).toContain("Never invent commitments");
   });
+
+  test("allows shared intent across options instead of manufacturing disagreement", () => {
+    const prompt = replySuggestionPrompt("t", "", null);
+    expect(prompt).toContain("may share its intent");
+    expect(prompt).toContain("reaction can be an option");
+  });
 });
 
 describe("identifyPrompt", () => {

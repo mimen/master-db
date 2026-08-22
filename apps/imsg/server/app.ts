@@ -98,6 +98,18 @@ const whisper = new WhisperService(config.whisper, bb, db);
 const scheduledSendNow = new ScheduledSendNow(bb);
 
 const gateway = new Gateway(config.ai);
+// Probed once per app creation: whether the harness lane's dependencies (ccs
+// binary, synced seat) are actually present, not merely whether the key exists.
+const shadowStatus = deps.shadowStatus ?? probeShadow(config.ai, {
+  which: (bin) => Bun.which(bin),
+  seatExists: (dir) => {
+    try {
+      return require("node:fs").statSync(dir).isFile();
+    } catch {
+      return false;
+    }
+  },
+});
 const ai = deps.ai ?? new AiService({
   config: config.ai,
   db,
@@ -107,6 +119,7 @@ const ai = deps.ai ?? new AiService({
     { get: (key) => db.getAiMeta(key), set: (key, value) => db.setAiMeta(key, value) },
     spawnExec,
   ),
+  shadowStatus,
   fetchMessages: async (chatGuid) => {
     const result = await bb.chatMessages(chatGuid, { limit: 60, sort: "DESC" });
     if (!result.ok) return [];
@@ -893,25 +906,16 @@ app.get("/api/attachments/:guid", async (c) => {
 // Desktop-only surfaces. Every model call originates here so the gateway key
 // never reaches the client.
 
-// Probed once at startup: whether the shadow lane's dependencies (ccs binary,
-// synced seat) are actually present, not merely whether the key exists.
-const shadowStatus = deps.shadowStatus ?? probeShadow(config.ai, {
-  which: (bin) => Bun.which(bin),
-  seatExists: (dir) => {
-    try {
-      return require("node:fs").statSync(dir).isDirectory();
-    } catch {
-      return false;
-    }
-  },
-});
+// Probed above, before AiService — the shelf rides the harness lane too.
 console.log(
-  `AI: suggestions ${ai.available ? "on" : "off"}, shadow ${shadowStatus.available ? "on" : `off (${shadowStatus.detail})`}`,
+  `AI: harness lane ${shadowStatus.available ? "on" : `off (${shadowStatus.detail})`}, fast lane ${ai.available ? "on" : "off"}`,
 );
 
 app.get("/api/ai/status", async (c) => {
   return c.json({
-    suggestions: ai.available,
+    // The shelf generates through the harness lane now; group-name and
+    // identify still use the fast lane but nothing gates on them client-side.
+    suggestions: ai.available && shadowStatus.available,
     shadow: shadowStatus.available,
     shadowDetail: shadowStatus.detail,
   });

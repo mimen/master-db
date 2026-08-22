@@ -88,9 +88,9 @@ export interface ShadowAvailability {
 }
 
 /**
- * Whether the shadow lane can actually run, as opposed to whether the gateway
+ * Whether the harness lane can actually run, as opposed to whether the gateway
  * key merely exists. Cheap and side-effect-free: resolve the ccs binary and
- * confirm the seat directory is present. Meant to be called once at startup —
+ * confirm the seat file is present. Meant to be called once at startup —
  * spawning ccs on every status poll would be wasteful.
  */
 export function probeShadow(
@@ -101,9 +101,9 @@ export function probeShadow(
   if (!deps.which(config.ccsBin)) {
     return { available: false, detail: `ccs not found on PATH (AI_CCS_BIN=${config.ccsBin})` };
   }
-  const seatDir = `${config.vaultPath}/ClaudeConfig/seats/${config.shadowSeat}`;
+  const seatDir = `${config.vaultPath}/ClaudeConfig/agents/${config.shadowSeat}.md`;
   if (!deps.seatExists(seatDir)) {
-    return { available: false, detail: `seat "${config.shadowSeat}" not found — has it synced?` };
+    return { available: false, detail: `seat "${config.shadowSeat}.md" not found — has it synced?` };
   }
   return { available: true, detail: null };
 }

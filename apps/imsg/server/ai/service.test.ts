@@ -92,10 +92,10 @@ describe("isStale", () => {
 });
 
 describe("replySuggestions", () => {
-  test("generates, caps at three, and caches", async () => {
+  test("generates through the harness lane, caps at three, and caches", async () => {
     const { service, db } = makeService({
       messages: [makeMessage({ guid: "m5" })],
-      reply: '["a","b","c","d"]',
+      shadowReply: 'Sure — here are three:\n```json\n["a","b","c","d"]\n```',
     });
     const result = await service.replySuggestions("chat-1", "Sarah", false);
     expect(result.ok).toBe(true);
@@ -107,10 +107,23 @@ describe("replySuggestions", () => {
     expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBe("m5");
   });
 
+  test("accepts a bare JSON array with narration around it", async () => {
+    const { service } = makeService({
+      messages: [makeMessage({ guid: "m5" })],
+      shadowReply: 'The thread is light. ["one","two","three"] — pick any.',
+    });
+    const result = await service.replySuggestions("chat-1", null, false);
+    if (result.ok) expect(result.value.suggestions).toEqual(["one", "two", "three"]);
+  });
+
   test("serves cache without regenerating", async () => {
     const db = new OverlayDb(":memory:");
     db.setSuggestionCache("chat-1", "m5", '["cached"]');
-    const { service } = makeService({ messages: [makeMessage({ guid: "m5" })], db, reply: '["fresh"]' });
+    const { service } = makeService({
+      messages: [makeMessage({ guid: "m5" })],
+      db,
+      shadowReply: '["fresh"]',
+    });
     const result = await service.replySuggestions("chat-1", null, false);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.suggestions).toEqual(["cached"]);
@@ -128,7 +141,11 @@ describe("replySuggestions", () => {
   test("force regenerates and refreshes the anchor", async () => {
     const db = new OverlayDb(":memory:");
     db.setSuggestionCache("chat-1", "m5", '["cached"]');
-    const { service } = makeService({ messages: [makeMessage({ guid: "m6" })], db, reply: '["fresh"]' });
+    const { service } = makeService({
+      messages: [makeMessage({ guid: "m6" })],
+      db,
+      shadowReply: '["fresh"]',
+    });
     const result = await service.replySuggestions("chat-1", null, true);
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -139,9 +156,22 @@ describe("replySuggestions", () => {
   });
 
   test("drops non-string entries the model may emit", async () => {
-    const { service } = makeService({ messages: [makeMessage()], reply: '["ok", 42, null]' });
+    const { service } = makeService({
+      messages: [makeMessage()],
+      shadowReply: '["ok", 42, null]',
+    });
     const result = await service.replySuggestions("chat-1", null, true);
     if (result.ok) expect(result.value.suggestions).toEqual(["ok"]);
+  });
+
+  test("fails cleanly when the harness reply contains no array", async () => {
+    const { service } = makeService({
+      messages: [makeMessage()],
+      shadowReply: "I thought about it and here is what I would say…",
+    });
+    const result = await service.replySuggestions("chat-1", null, true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("no suggestion array");
   });
 
   test("survives a corrupt cache payload", async () => {

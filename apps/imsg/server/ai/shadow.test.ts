@@ -132,7 +132,7 @@ describe("probeShadow", () => {
     expect(result.detail).toContain("synced");
   });
 
-  test("checks the seat under the configured vault path", () => {
+  test("checks the seat file under the configured vault path", () => {
     let checkedDir = "";
     probeShadow(makeConfig({ vaultPath: "/v", shadowSeat: "imsg-shadow" }), {
       which: () => "/ccs",
@@ -141,7 +141,7 @@ describe("probeShadow", () => {
         return true;
       },
     });
-    expect(checkedDir).toBe("/v/ClaudeConfig/seats/imsg-shadow");
+    expect(checkedDir).toBe("/v/ClaudeConfig/agents/imsg-shadow.md");
   });
 });
 
