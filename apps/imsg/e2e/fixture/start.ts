@@ -55,6 +55,21 @@ function seedOverlay(): void {
   db.setPinned(CHAT_GUIDS.needs, true);
   db.setMarkedUnread(CHAT_GUIDS.unreadGroup, true);
   db.setArchived(CHAT_GUIDS.archived, true);
+  const seed = fixtureSeed();
+  const contactNames = new Map(
+    seed.contacts.flatMap((contact) => contact.phoneNumbers.map((phone) => [phone.address, contact.displayName] as const)),
+  );
+  for (const chat of seed.chats) {
+    const last = chat.messages.at(-1);
+    if (!last || last.isFromMe) continue;
+    const address = chat.participants[0]?.address;
+    const firstName = address ? contactNames.get(address)?.split(" ")[0] : undefined;
+    db.setSuggestionCache(
+      chat.guid,
+      last.guid,
+      JSON.stringify([`Yes${firstName ? `, ${firstName}` : ""} — I’ll send the final timing shortly.`]),
+    );
+  }
 }
 
 function resetOverlay(): void {

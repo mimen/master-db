@@ -934,6 +934,26 @@ app.post("/api/ai/group-name/:guid", async (c) => {
   return c.json({ names: result.value.filter((n) => typeof n === "string").slice(0, 5) });
 });
 
+app.get("/api/ai/suggestions/:guid/cached", (c) => {
+  const cached = db.getSuggestionCache(c.req.param("guid"));
+  if (!cached) {
+    return c.json({ suggestions: [], basedOnMessageGuid: null, stale: false, generatedAt: 0 });
+  }
+  let suggestions: string[] = [];
+  try {
+    const parsed = JSON.parse(cached.payload) as unknown;
+    if (Array.isArray(parsed)) suggestions = parsed.filter((value): value is string => typeof value === "string").slice(0, 3);
+  } catch {
+    suggestions = [];
+  }
+  return c.json({
+    suggestions,
+    basedOnMessageGuid: cached.last_message_guid,
+    stale: false,
+    generatedAt: cached.created_at,
+  });
+});
+
 app.get("/api/ai/suggestions/:guid", async (c) => {
   const result = await ai.replySuggestions(
     c.req.param("guid"),

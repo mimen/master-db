@@ -89,24 +89,31 @@ export function useRowDraft(
   chatGuid: string,
   latestMessageGuid: string | null,
   enabled: boolean,
-): string | null {
+): { draft: string | null; generate: () => void; loading: boolean } {
   const [draft, setDraft] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   useEffect(() => {
-    if (!enabled) { setDraft(null); return; }
+    if (!enabled) { setDraft(null); setLoading(false); return; }
     let cancelled = false;
     setDraft(null);
-    void api.aiSuggestions(chatGuid).then(async (cached) => {
+    void api.cachedAiSuggestions(chatGuid).then((cached) => {
       if (cancelled) return;
-      const current = !cached.stale && cached.basedOnMessageGuid === latestMessageGuid
-        ? cached
-        : await api.aiSuggestions(chatGuid, true);
-      if (cancelled) return;
-      if (current.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
-      setDraft(current.suggestions[0]?.trim() || null);
+      if (cached.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
+      setDraft(cached.suggestions[0]?.trim() || null);
     }, () => { if (!cancelled) setDraft(null); });
     return () => { cancelled = true; };
   }, [chatGuid, enabled, latestMessageGuid]);
-  return draft;
+
+  const generate = (): void => {
+    if (!enabled || loading) return;
+    setLoading(true);
+    void api.aiSuggestions(chatGuid, true).then((fresh) => {
+      if (fresh.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
+      setDraft(fresh.suggestions[0]?.trim() || null);
+    }, () => setDraft(null)).finally(() => setLoading(false));
+  };
+
+  return { draft, generate, loading };
 }
 
 export function useSmartCloser(chatGuid: string, enabled: boolean): { closer: SmartCloser | null; loading: boolean } {

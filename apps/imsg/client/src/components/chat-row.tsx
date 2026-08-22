@@ -153,11 +153,12 @@ function ChatRowInner({
   const [hovered, setHovered] = useState(false);
   const [draftHovered, setDraftHovered] = useState(false);
   const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
-  const rowDraft = useRowDraft(
+  const rowDraftState = useRowDraft(
     chat.guid,
     chat.lastMessage?.guid ?? null,
     compact && (chat.flags.unresponded || chat.flags.waiting),
   );
+  const rowDraft = rowDraftState.draft;
   // The third lane is always the AI draft, or selected-row actions. The message
   // preview above it never disappears.
   const actionsVisible = compact && (selected || (hovered && !rowDraft));
@@ -306,7 +307,7 @@ function ChatRowInner({
               pointerEvents={actionsVisible ? "none" : "auto"}
               style={[styles.previewLayer, { justifyContent: rowDraft ? "flex-start" : "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
             >
-              {rowDraft ? <Pressable accessibilityRole="button" accessibilityLabel="Fill AI draft" onPress={(event) => { event.stopPropagation(); onPress(); requestAnimationFrame(() => fillComposer(rowDraft)); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: "rgba(0,122,255,0.4)", backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="create-outline" size={13} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.accent }]}>Draft: {rowDraft}</Text></Pressable> : <RowSignal chat={chat} />}
+              {rowDraft ? <Pressable accessibilityRole="button" accessibilityLabel="Fill AI draft" onPress={(event) => { event.stopPropagation(); onPress(); requestAnimationFrame(() => fillComposer(rowDraft)); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: "rgba(0,122,255,0.4)", backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="create-outline" size={13} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.accent }]}>Draft: {rowDraft}</Text></Pressable> : <Pressable accessibilityRole="button" accessibilityLabel="Generate AI draft" disabled={rowDraftState.loading} onPress={(event) => { event.stopPropagation(); rowDraftState.generate(); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: visual.hairlineStrong, backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="sparkles-outline" size={13} color={visual.snippet} /><Text numberOfLines={1} style={[styles.closerText, { color: visual.snippet }]}>{rowDraftState.loading ? "Drafting…" : "Generate draft"}</Text></Pressable>}
             </View>
             <View
               pointerEvents={actionsVisible ? "auto" : "none"}

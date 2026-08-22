@@ -244,6 +244,9 @@ export const api = {
   aiGroupNames(chatGuid: string): Promise<{ names: string[] }> {
     return request(`/api/ai/group-name/${encodeURIComponent(chatGuid)}`, { method: "POST" });
   },
+  cachedAiSuggestions(chatGuid: string): Promise<ReplySuggestions> {
+    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}/cached`);
+  },
   aiSuggestions(chatGuid: string, refresh = false): Promise<ReplySuggestions> {
     const qs = refresh ? "?refresh=1" : "";
     return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}${qs}`);
