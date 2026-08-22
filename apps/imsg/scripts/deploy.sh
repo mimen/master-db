@@ -64,7 +64,7 @@ bun run typecheck:imsg
 echo "== Tests =="
 # Same gate as local validation: a push that passes types but fails tests
 # must not ship to the only environment.
-cd apps/imsg && bun test
+(cd apps/imsg && bun test)
 
 echo "== Building web client =="
 cd apps/imsg/client
