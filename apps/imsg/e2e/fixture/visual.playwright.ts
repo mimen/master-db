@@ -43,6 +43,7 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       await expect(rail).toBeVisible();
       await expect(header).toBeVisible();
       await expect(page.getByTestId("window-controls")).toHaveCount(0);
+      await expect(rail.locator("svg")).toHaveCount(6);
       await expect(needsReply.locator("svg")).toBeVisible();
       const railBox = await rail.boundingBox();
       const headerBox = await header.boundingBox();
