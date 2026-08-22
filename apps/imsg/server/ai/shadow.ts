@@ -171,10 +171,22 @@ export class ShadowRunner {
 /** A delegated turn may use tools, but must not hang the panel forever. */
 export const SHADOW_TIMEOUT_MS = 150_000;
 
+/**
+ * launchd runs this server with a minimal PATH (~/.bun/bin only), and the ccs
+ * script shells out through `env` for bun/node — without these it dies with
+ * exit 127 before ever reaching the model.
+ */
+const HARNESS_PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":");
+
 /** Real process execution, used outside tests. Kills the child on timeout. */
 export const spawnExec: Exec = async (spec) => {
   const proc = Bun.spawn([spec.command, ...spec.args], {
-    env: { ...process.env, ...spec.env },
+    env: {
+      ...process.env,
+      PATH: process.env.PATH?.includes("/opt/homebrew/bin") ? process.env.PATH : HARNESS_PATH,
+      HOME: process.env.HOME ?? "/Users/mimen",
+      ...spec.env,
+    },
     stdout: "pipe",
     stderr: "pipe",
   });
