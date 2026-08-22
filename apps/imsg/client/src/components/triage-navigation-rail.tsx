@@ -1,10 +1,14 @@
 import type { StateCounts, StateFilter } from "@shared/types";
 import { router } from "expo-router";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Svg, { Path } from "react-native-svg";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { isDesktopShell } from "@/lib/desktop-shell";
+import {
+  isDesktopShell,
+  NATIVE_TITLEBAR_INSET,
+  watchDesktopFullscreen,
+} from "@/lib/desktop-shell";
 import { requestInboxFilter } from "@/lib/inbox-filter";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { openSettingsPane } from "@/lib/settings-pane";
@@ -84,6 +88,9 @@ export function TriageNavigationRail({
 }): React.JSX.Element {
   const visual = useTriageTheme();
   const shell = isDesktopShell();
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => watchDesktopFullscreen(setFullscreen), []);
+  const titlebarInset = shell && !fullscreen ? NATIVE_TITLEBAR_INSET : 0;
   const onMessages = destination === "messages";
   const goToState = (next: StateFilter): void => {
     if (onMessages) {
@@ -101,7 +108,7 @@ export function TriageNavigationRail({
   return (
     <View testID="triage-rail" style={[styles.rail, glass]} {...DRAG}>
       <View style={styles.top}>
-        <View style={[styles.primary, !shell && styles.primaryWeb]}>
+        <View style={[styles.primary, { marginTop: titlebarInset }]}>
           <Item icon="inbox" label="Needs reply" count={counts?.unresponded} active={onMessages && state === "unresponded"} onPress={() => goToState("unresponded")} />
           <Item icon="waiting" label="Waiting" active={onMessages && state === "waiting"} onPress={() => goToState("waiting")} />
           <Item icon="messages" label="All messages" active={onMessages && state === "all"} onPress={() => goToState("all")} />
@@ -128,10 +135,7 @@ const styles = StyleSheet.create({
   },
   primary: {
     gap: 6,
-    // Keep the first navigation item clear of the native macOS title-bar controls.
-    marginTop: 30,
   },
-  primaryWeb: { marginTop: 0 },
   utility: {
     alignItems: "center",
   },

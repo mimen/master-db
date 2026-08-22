@@ -7,12 +7,8 @@ import { runCommand } from "./keyboard/controller";
 import { isCommandId } from "./keyboard/registry";
 import type { CommandId } from "./keyboard/types";
 
-/**
- * Space reserved at the left of SidebarChrome for overlay traffic lights.
- * Lights sit at (16, 20); three 12px buttons with 8px gaps need ~72px,
- * plus a gap before the wordmark.
- */
-export const DESKTOP_TRAFFIC_LIGHT_INSET = 80;
+/** Vertical space occupied by AppKit's overlay titlebar outside fullscreen. */
+export const NATIVE_TITLEBAR_INSET = 30;
 
 type TauriListenUnlisten = () => void;
 type TauriEventPayload = string | Record<string, string | null | undefined>;
@@ -30,9 +26,8 @@ type TauriGlobal = {
   window: {
     getCurrentWindow: () => {
       close: () => Promise<void>;
-      minimize?: () => Promise<void>;
-      toggleMaximize?: () => Promise<void>;
-      startDragging?: () => Promise<void>;
+      isFullscreen?: () => Promise<boolean>;
+      onResized?: (handler: () => void) => Promise<TauriListenUnlisten>;
     };
   };
 };
@@ -56,28 +51,60 @@ function tauriGlobal(win: DesktopShellWindow | undefined = defaultWindow()): Tau
   return win?.__TAURI__ ?? null;
 }
 
-export function closeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow()): void {
+function closeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow()): void {
   const tauri = tauriGlobal(win);
   if (!tauri) return;
   void tauri.window.getCurrentWindow().close();
 }
 
-export function minimizeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow()): void {
-  const tauri = tauriGlobal(win);
-  if (!tauri) return;
-  void tauri.window.getCurrentWindow().minimize?.();
-}
+/**
+ * Mirrors AppKit fullscreen state so web content only reserves titlebar space
+ * while the overlay controls are visible. Resize is the Tauri v2 event emitted
+ * by native fullscreen transitions.
+ */
+export function watchDesktopFullscreen(
+  onChange: (fullscreen: boolean) => void,
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): () => void {
+  const currentWindow = tauriGlobal(win)?.window.getCurrentWindow();
+  if (!currentWindow?.isFullscreen || !currentWindow.onResized) return () => undefined;
 
-export function toggleMaximizeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow()): void {
-  const tauri = tauriGlobal(win);
-  if (!tauri) return;
-  void tauri.window.getCurrentWindow().toggleMaximize?.();
-}
+  let cancelled = false;
+  let reading = false;
+  let readAgain = false;
+  let unlisten: TauriListenUnlisten | undefined;
+  const refresh = (): void => {
+    if (reading) {
+      readAgain = true;
+      return;
+    }
+    reading = true;
+    void currentWindow.isFullscreen?.().then(
+      (fullscreen) => {
+        if (!cancelled) onChange(fullscreen);
+      },
+      () => undefined,
+    ).finally(() => {
+      reading = false;
+      if (!cancelled && readAgain) {
+        readAgain = false;
+        refresh();
+      }
+    });
+  };
 
-export function startDesktopWindowDrag(win: DesktopShellWindow | undefined = defaultWindow()): void {
-  const tauri = tauriGlobal(win);
-  if (!tauri) return;
-  void tauri.window.getCurrentWindow().startDragging?.();
+  void currentWindow.onResized(refresh).then((fn) => {
+    if (cancelled) fn();
+    else {
+      unlisten = fn;
+      refresh();
+    }
+  });
+
+  return () => {
+    cancelled = true;
+    unlisten?.();
+  };
 }
 
 /** Client-only contract for shell staging and activation; Rust owns the mechanics. */
