@@ -16,8 +16,10 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
     releaseStatus.getSnapshot,
   );
   const [restarting, setRestarting] = useState(false);
+  const [failedStagedSha, setFailedStagedSha] = useState<string | null>(null);
   const webReady = webUpdateAvailable(snapshot);
   const shellReady = shellUpdateAvailable(snapshot);
+  const restartFailed = shellReady && failedStagedSha === snapshot.shell.stagedSha;
 
   if (!webReady && !shellReady) return null;
 
@@ -49,22 +51,34 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
       )}
       {shellReady && (
         <View style={[styles.banner, surface]}>
-          <Text style={[styles.message, { color: theme.text }]}>Shell update ready</Text>
+          <Text style={[styles.message, { color: restartFailed ? theme.destructive : theme.text }]}>
+            {restartFailed ? "Restart failed" : "Shell update ready"}
+          </Text>
           <Text style={[styles.separator, { color: theme.textSecondary }]}>—</Text>
+          {restartFailed && (
+            <Text style={[styles.bootstrapHint, { color: theme.textSecondary }]}>Run bun run deploy:activate</Text>
+          )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Restart into staged shell update"
+            accessibilityLabel={restartFailed
+              ? "Retry staged shell restart"
+              : "Restart into staged shell update"}
             disabled={restarting}
             onPress={() => {
+              const attemptedSha = snapshot.shell.stagedSha;
+              setFailedStagedSha(null);
               setRestarting(true);
-              void restartToStagedShell().then((started) => {
-                if (!started) setRestarting(false);
+              void restartToStagedShell(undefined, attemptedSha ?? undefined).then((started) => {
+                if (!started) {
+                  setRestarting(false);
+                  setFailedStagedSha(attemptedSha);
+                }
               });
             }}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
             <Text style={[styles.actionText, { color: theme.accent }]}>
-              {restarting ? "Restarting…" : "Restart"}
+              {restarting ? "Restarting…" : restartFailed ? "Retry" : "Restart"}
             </Text>
           </Pressable>
         </View>
@@ -97,6 +111,7 @@ const styles = StyleSheet.create({
   },
   message: { fontSize: 12, fontWeight: "600" },
   separator: { fontSize: 12, marginHorizontal: 5 },
+  bootstrapHint: { fontSize: 12, marginRight: 8 },
   action: { minHeight: 30, justifyContent: "center" },
   actionText: { fontSize: 12, fontWeight: "700" },
   pressed: { opacity: 0.55 },
