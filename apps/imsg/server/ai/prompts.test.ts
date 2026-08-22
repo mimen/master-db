@@ -48,6 +48,12 @@ describe("replySuggestionPrompt", () => {
     const prompt = replySuggestionPrompt("t", "", null);
     expect(prompt).toContain("em dashes");
   });
+
+  test("treats delivered attachments and later praise as closed-loop evidence", () => {
+    const prompt = replySuggestionPrompt("t", "", null);
+    expect(prompt).toContain("Attachments are delivered work");
+    expect(prompt).toContain("already completed");
+  });
 });
 
 describe("identifyPrompt", () => {

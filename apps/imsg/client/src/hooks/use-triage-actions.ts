@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChatSummary, ReplySuggestions, SmartCloser } from "@shared/types";
+import type { ChatSummary, SmartCloser } from "@shared/types";
 import { api } from "@/lib/api";
 import { patchChatFlags, revertChatFlags } from "@/lib/chat-store";
 import { showToast } from "@/lib/toast";
@@ -86,98 +86,31 @@ export async function setTriageLater(chat: ChatSummary, until: number | null): P
 }
 
 /**
- * Auto-draft budget. Each harness generation costs a full Terra turn (~10-30s),
- * so automatic generation is bounded: one at a time, at most a handful queued,
- * and each (chat, message) auto-generated at most once per client session.
- * The server caches per chat+message, so anything generated here is instant
- * for every later surface that reads it. Rows past the budget keep the
- * explicit Generate draft button.
+ * The smart closer is authoritative for sidebar rows. A reply classification
+ * exposes its one decisive draft. Every other classification means no message
+ * should be suggested, so rows never fall back to shelf text and accidentally
+ * reopen a request the closer recognized as complete.
  */
-const MAX_AUTO_DRAFT_PENDING = 4;
-let autoDraftPending = 0;
-const autoDraftAttempted = new Set<string>();
-
-/**
- * The row's draft text: the smart closer's reply draft when it has one
- * (decisive, classification-first), else the first shelf suggestion.
- */
-function closerReplyDraft(closer: SmartCloser | null): string | null {
-  const draft = closer?.kind === "reply" ? closer.draft?.trim() : null;
-  return draft || null;
-}
-
-function suggestionDraft(suggestions: ReplySuggestions): string | null {
-  if (suggestions.basedOnMessageGuid == null) return null;
-  return suggestions.suggestions[0]?.trim() || null;
-}
-
 export function useRowDraft(
   chatGuid: string,
-  latestMessageGuid: string | null,
   enabled: boolean,
-  /** Auto-generate when nothing cached; bounded by the budget above. */
-  auto = false,
-): { draft: string | null; generate: () => void; loading: boolean } {
+): { draft: string | null; loading: boolean } {
   const [draft, setDraft] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // First source: the smart closer. Fast-lane cheap, so this runs for every
-  // enabled row without a budget, and its reply draft is the row's preferred text.
   useEffect(() => {
     if (!enabled) { setDraft(null); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     void api.getSmartCloser(chatGuid).then((closer) => {
       if (cancelled) return;
-      setDraft(closer.kind === "reply" ? closerReplyDraft(closer) : null);
-    }, () => undefined).finally(() => { if (!cancelled) setLoading(false); });
+      const reply = closer.kind === "reply" ? closer.draft?.trim() : null;
+      setDraft(reply || null);
+    }, () => { if (!cancelled) setDraft(null); }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => { cancelled = true; };
   }, [chatGuid, enabled]);
-
-  // Second source: the cached shelf. Only fills a gap the closer left.
-  useEffect(() => {
-    if (!enabled) { setDraft(null); return; }
-    let cancelled = false;
-    void api.cachedAiSuggestions(chatGuid).then((cached) => {
-      if (cancelled) return;
-      if (cached.basedOnMessageGuid !== latestMessageGuid) return;
-      const fallback = suggestionDraft(cached);
-      if (fallback) setDraft((current) => current ?? fallback);
-    }, () => undefined);
-    return () => { cancelled = true; };
-  }, [chatGuid, enabled, latestMessageGuid]);
-
-  // Auto lane: nothing from either source + within budget + not tried this session.
-  useEffect(() => {
-    if (!auto || !enabled || draft !== null || loading) return;
-    if (latestMessageGuid === null) return;
-    const key = `${chatGuid}:${latestMessageGuid}`;
-    if (autoDraftAttempted.has(key)) return;
-    if (autoDraftPending >= MAX_AUTO_DRAFT_PENDING) return;
-    autoDraftAttempted.add(key);
-    autoDraftPending++;
-    setLoading(true);
-    void api.aiSuggestions(chatGuid, true)
-      .then((fresh) => {
-        if (fresh.basedOnMessageGuid !== latestMessageGuid) return;
-        setDraft(suggestionDraft(fresh));
-      }, () => undefined)
-      .finally(() => {
-        autoDraftPending--;
-        setLoading(false);
-      });
-  }, [auto, enabled, chatGuid, latestMessageGuid, draft, loading]);
-
-  const generate = (): void => {
-    if (!enabled || loading) return;
-    setLoading(true);
-    void api.aiSuggestions(chatGuid, true).then((fresh) => {
-      if (fresh.basedOnMessageGuid !== latestMessageGuid) { setDraft(null); return; }
-      setDraft(suggestionDraft(fresh));
-    }, () => setDraft(null)).finally(() => setLoading(false));
-  };
-
-  return { draft, generate, loading };
+  return { draft, loading };
 }
 
 export function useSmartCloser(chatGuid: string, enabled: boolean): { closer: SmartCloser | null; loading: boolean } {

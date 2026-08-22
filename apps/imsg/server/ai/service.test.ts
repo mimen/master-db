@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { AiConfig } from "../config";
 import { OverlayDb } from "../db";
 import type { Message } from "../../shared/types";
-import { AiService, isStale } from "./service";
+import { AiService, isStale, serializeSuggestionCache } from "./service";
 import { Gateway } from "./gateway";
 import { ShadowRunner } from "./shadow";
 
@@ -155,7 +155,7 @@ describe("replySuggestions", () => {
 
   test("serves cache without regenerating", async () => {
     const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", '["cached"]');
+    db.setSuggestionCache("chat-1", "m5", serializeSuggestionCache(["cached"]));
     const { service } = makeService({
       messages: [makeMessage({ guid: "m5" })],
       db,
@@ -168,7 +168,7 @@ describe("replySuggestions", () => {
 
   test("marks the shelf stale when a newer message arrived", async () => {
     const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", '["cached"]');
+    db.setSuggestionCache("chat-1", "m5", serializeSuggestionCache(["cached"]));
     const { service } = makeService({ messages: [makeMessage({ guid: "m6" })], db });
     const result = await service.replySuggestions("chat-1", null, false);
     expect(result.ok).toBe(true);
@@ -177,7 +177,7 @@ describe("replySuggestions", () => {
 
   test("force regenerates and refreshes the anchor", async () => {
     const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", '["cached"]');
+    db.setSuggestionCache("chat-1", "m5", serializeSuggestionCache(["cached"]));
     const { service } = makeService({
       messages: [makeMessage({ guid: "m6" })],
       db,
@@ -211,13 +211,30 @@ describe("replySuggestions", () => {
     if (!result.ok) expect(result.error).toContain("no suggestion array");
   });
 
-  test("survives a corrupt cache payload", async () => {
+  test("regenerates a corrupt cache payload", async () => {
     const db = new OverlayDb(":memory:");
     db.setSuggestionCache("chat-1", "m5", "not json");
-    const { service } = makeService({ messages: [makeMessage({ guid: "m5" })], db });
+    const { service } = makeService({
+      messages: [makeMessage({ guid: "m5" })],
+      db,
+      shadowReply: '["fresh one", "fresh two"]',
+    });
     const result = await service.replySuggestions("chat-1", null, false);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.suggestions).toEqual([]);
+    if (result.ok) expect(result.value.suggestions).toEqual(["fresh one", "fresh two"]);
+  });
+
+  test("regenerates legacy array caches after the prompt contract changes", async () => {
+    const db = new OverlayDb(":memory:");
+    db.setSuggestionCache("chat-1", "m5", '["obsolete"]');
+    const { service } = makeService({
+      messages: [makeMessage({ guid: "m5" })],
+      db,
+      shadowReply: '["current one", "current two"]',
+    });
+    const result = await service.replySuggestions("chat-1", null, false);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.suggestions).toEqual(["current one", "current two"]);
   });
 });
 

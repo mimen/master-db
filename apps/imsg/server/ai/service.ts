@@ -44,6 +44,31 @@ function lastGuid(messages: Message[]): string | null {
   return messages[messages.length - 1]?.guid ?? null;
 }
 
+const SUGGESTION_CACHE_VERSION = 2;
+
+export function serializeSuggestionCache(suggestions: string[]): string {
+  return JSON.stringify({ version: SUGGESTION_CACHE_VERSION, suggestions });
+}
+
+/** null means corrupt or from an older prompt/context contract. */
+export function parseSuggestionCache(payload: string): string[] | null {
+  try {
+    const parsed = JSON.parse(payload) as JsonValue;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      parsed.version !== SUGGESTION_CACHE_VERSION ||
+      !Array.isArray(parsed.suggestions)
+    ) return null;
+    return parsed.suggestions.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    ).slice(0, 2);
+  } catch {
+    return null;
+  }
+}
+
 export class AiService {
   /** Per-chat serialization of shadow turns; also the "is a turn pending" set. */
   private shadowQueues = new Map<string, Promise<void>>();
@@ -86,15 +111,18 @@ export class AiService {
     const cached = this.deps.db.getSuggestionCache(chatGuid);
 
     if (cached && !force) {
-      return {
-        ok: true,
-        value: {
-          suggestions: safeParse(cached.payload),
-          basedOnMessageGuid: cached.last_message_guid,
-          stale: isStale(cached.last_message_guid, currentGuid),
-          generatedAt: cached.created_at,
-        },
-      };
+      const suggestions = parseSuggestionCache(cached.payload);
+      if (suggestions) {
+        return {
+          ok: true,
+          value: {
+            suggestions,
+            basedOnMessageGuid: cached.last_message_guid,
+            stale: isStale(cached.last_message_guid, currentGuid),
+            generatedAt: cached.created_at,
+          },
+        };
+      }
     }
 
     const key = `${chatGuid}:${currentGuid ?? "empty"}`;
@@ -122,7 +150,7 @@ export class AiService {
 
     const parsed = parseSuggestionArray(generated.value);
     if (!parsed.ok) return parsed;
-    this.deps.db.setSuggestionCache(chatGuid, currentGuid, JSON.stringify(parsed.value));
+    this.deps.db.setSuggestionCache(chatGuid, currentGuid, serializeSuggestionCache(parsed.value));
     return {
       ok: true,
       value: { suggestions: parsed.value, basedOnMessageGuid: currentGuid, stale: false, generatedAt: Date.now() },
@@ -347,15 +375,6 @@ export function parseSuggestionArray(reply: string): Result<string[]> {
     }
   }
   return { ok: false, error: "no suggestion array in harness reply" };
-}
-
-function safeParse(payload: string): string[] {
-  try {
-    const parsed = JSON.parse(payload) as JsonValue;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
 }
 
 function newId(): string {

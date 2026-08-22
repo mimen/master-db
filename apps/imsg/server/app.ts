@@ -32,7 +32,7 @@ import { WhisperService } from "./whisper";
 import { createAndSendFaceTimeLink } from "./facetime";
 import { parseByteRange } from "./byte-range";
 import { staticCacheControl } from "./static-cache";
-import { AiService } from "./ai/service";
+import { AiService, parseSuggestionCache } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
 import { makeVaultSearch } from "./ai/vault";
@@ -945,12 +945,9 @@ app.get("/api/ai/suggestions/:guid/cached", (c) => {
   if (!cached) {
     return c.json({ suggestions: [], basedOnMessageGuid: null, stale: false, generatedAt: 0 });
   }
-  let suggestions: string[] = [];
-  try {
-    const parsed = JSON.parse(cached.payload) as unknown;
-    if (Array.isArray(parsed)) suggestions = parsed.filter((value): value is string => typeof value === "string").slice(0, 3);
-  } catch {
-    suggestions = [];
+  const suggestions = parseSuggestionCache(cached.payload);
+  if (!suggestions) {
+    return c.json({ suggestions: [], basedOnMessageGuid: null, stale: false, generatedAt: 0 });
   }
   return c.json({
     suggestions,
