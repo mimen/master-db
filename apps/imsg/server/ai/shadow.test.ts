@@ -240,14 +240,14 @@ describe("zshenvExports", () => {
     const file = join(dir, "zshenv");
     writeFileSync(file, [
       "# a comment",
-      "export CLAUDE_CODE_OAUTH_TOKEN=abc123",
+      "export IMSG_TEST_ONLY_KEY=abc123",
       'export QUOTED="with spaces"',
       "not an export line",
       "export EMPTY=",
       "",
     ].join("\n"));
     const result = zshenvExports(file);
-    expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("abc123");
+    expect(result.IMSG_TEST_ONLY_KEY).toBe("abc123");
     expect(result.QUOTED).toBe("with spaces");
     expect(result.EMPTY).toBeUndefined();
     expect(Object.keys(result)).toHaveLength(2);
