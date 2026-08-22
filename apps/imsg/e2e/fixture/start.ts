@@ -156,6 +156,15 @@ const { app, dispose } = await createApp({
       return c.json({ ok: true, message });
     });
 
+    fixtureApp.post("/__fixture/typing", async (c) => {
+      const body = (await c.req.json()) as { chatGuid?: string; display?: boolean };
+      if (!body.chatGuid || typeof body.display !== "boolean") {
+        return c.json({ error: "chatGuid and display are required" }, 400);
+      }
+      controls.broadcast({ kind: "typing", chatGuid: body.chatGuid, display: body.display });
+      return c.json({ ok: true });
+    });
+
     fixtureApp.post("/__fixture/fault", async (c) => {
       const body = (await c.req.json()) as { method?: string | null; error?: string };
       if (body.method === null || body.method === undefined) {

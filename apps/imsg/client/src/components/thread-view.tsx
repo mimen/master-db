@@ -40,6 +40,7 @@ import { CenteredSpinner } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
 import { HoverFillButton } from "./hover-fill-button";
+import { TypingIndicator } from "./typing-indicator";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
@@ -679,9 +680,10 @@ export function ThreadView({
           ListHeaderComponent={
             peerTyping ? (
               <View style={styles.typingRow}>
-                <View style={[styles.typingBubble, { backgroundColor: theme.bubbleTheirs }]}>
-                  <TypingDots color={theme.textSecondary} />
-                </View>
+                <TypingIndicator
+                  backgroundColor={theme.bubbleTheirs}
+                  color={theme.bubbleTheirsText}
+                />
               </View>
             ) : null
           }
@@ -786,30 +788,6 @@ export function ThreadView({
           onMessageSent?.();
         }}
       />
-    </View>
-  );
-}
-
-function TypingDots({ color }: { color: string }) {
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setPhase((p) => (p + 1) % 3), 350);
-    return () => clearInterval(timer);
-  }, []);
-  return (
-    <View style={{ flexDirection: "row", gap: 4, paddingVertical: 6, paddingHorizontal: 2 }}>
-      {[0, 1, 2].map((i) => (
-        <View
-          key={i}
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: color,
-            opacity: phase === i ? 1 : 0.35,
-          }}
-        />
-      ))}
     </View>
   );
 }
@@ -921,11 +899,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 42,
     paddingVertical: 6,
     alignItems: "flex-start",
-  },
-  typingBubble: {
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
   },
   unreadDivider: {
     alignItems: "center",

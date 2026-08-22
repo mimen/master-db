@@ -21,10 +21,15 @@ async function expectHoverStable(control: Locator): Promise<void> {
 const WIDTHS = [820, 900, 1039, 1040, 1280, 1300, 1440, 1512] as const;
 const SCHEMES = ["light", "dark"] as const;
 
-async function resetAndOpen(desk: Parameters<Parameters<typeof test>[1]>[0]["desk"], width: number, scheme: "light" | "dark"): Promise<void> {
+async function resetAndOpen(
+  desk: Parameters<Parameters<typeof test>[1]>[0]["desk"],
+  width: number,
+  scheme: "light" | "dark",
+  reducedMotion: "reduce" | "no-preference" = "reduce",
+): Promise<void> {
   await desk.request.post("/__fixture/reset");
   await desk.page.setViewportSize({ width, height: 820 });
-  await desk.page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+  await desk.page.emulateMedia({ colorScheme: scheme, reducedMotion });
   await desk.page.goto(`/?visual=${scheme}-${width}`, { waitUntil: "domcontentloaded" });
   await expect(desk.page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
 }
@@ -228,6 +233,43 @@ test("every visible control remains stable and usable on hover", async ({ desk }
     await page.screenshot({ path: `/tmp/comma-hover-sweep-${scheme}.png`, animations: "disabled" });
     await page.getByRole("button", { name: "Close sweep" }).click();
   }
+});
+
+test("typing indicator renders from peer presence", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "light", "no-preference");
+  await desk.page.getByTestId("conversation-row").first().click();
+  await desk.setTyping(desk.chats.needs, true);
+  const indicator = desk.page.getByRole("status", { name: "Someone is typing" });
+  const firstDot = indicator.locator("div").first();
+  await expect(indicator).toBeVisible();
+  await expect(indicator.locator("div")).toHaveCount(3);
+
+  const positions = await firstDot.evaluate(async (dot) => {
+    const samples: number[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      samples.push(dot.getBoundingClientRect().y);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return samples;
+  });
+  expect(Math.max(...positions) - Math.min(...positions)).toBeGreaterThan(1);
+  await desk.page.screenshot({ path: "/tmp/imsg-typing-indicator-after.png" });
+
+  await desk.setTyping(desk.chats.needs, false);
+  await expect(indicator).toBeHidden();
+
+  await desk.page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await desk.setTyping(desk.chats.needs, true);
+  await expect(indicator).toBeVisible();
+  const reducedPositions = await firstDot.evaluate(async (dot) => {
+    const samples: number[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      samples.push(dot.getBoundingClientRect().y);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return samples;
+  });
+  expect(Math.max(...reducedPositions) - Math.min(...reducedPositions)).toBeLessThan(0.1);
 });
 
 test("messages send through the real UI and fixture replies arrive over SSE", async ({ desk }) => {

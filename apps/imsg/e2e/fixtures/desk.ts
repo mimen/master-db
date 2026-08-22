@@ -7,6 +7,7 @@ interface DeskFixture {
     readonly page: Page;
     readonly request: APIRequestContext;
     receive(chatGuid: string, text: string, handle?: string): Promise<void>;
+    setTyping(chatGuid: string, display: boolean): Promise<void>;
   };
 }
 
@@ -25,6 +26,12 @@ export const test = base.extend<DeskFixture>({
       receive: async (chatGuid, text, handle): Promise<void> => {
         const response = await request.post("/__fixture/receive", {
           data: { chatGuid, text, handle },
+        });
+        expect(response.ok()).toBe(true);
+      },
+      setTyping: async (chatGuid, display): Promise<void> => {
+        const response = await request.post("/__fixture/typing", {
+          data: { chatGuid, display },
         });
         expect(response.ok()).toBe(true);
       },
