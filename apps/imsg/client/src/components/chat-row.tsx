@@ -180,17 +180,15 @@ function ChatRowInner({
   const [hovered, setHovered] = useState(false);
   const [closerHovered, setCloserHovered] = useState(false);
   const closer = useSmartCloser(chat.guid, compact);
-  const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
-  const specificCloser = isSpecificCloser(closer.closer) && !(waitingOnly && closer.closer?.kind === "reply")
-    ? closer.closer
-    : null;
-  const closerLabel = specificCloser?.label;
+  const specificCloser = isSpecificCloser(closer.closer) ? closer.closer : null;
+  const closerLabel = specificCloser?.kind === "reply" && specificCloser.draft ? `“${specificCloser.draft}”` : specificCloser?.label;
   // Smart closers remain clickable on hover. Rows without a closer reveal the
   // action strip; selecting any row always reveals it.
   const actionsVisible = compact && (selected || (hovered && !specificCloser));
   useEffect(() => { onCloser?.(chat.guid, closer.closer); }, [chat.guid, closer.closer, onCloser]);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
+  const ageDays = last ? Math.floor((Date.now() - last.dateCreated) / 86_400_000) : 0;
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
         last.text || (last.hasAttachments ? "Attachment" : "")
@@ -278,9 +276,11 @@ function ChatRowInner({
           compact
             ? ({
                 backgroundColor: selected ? visual.cardSelected : visual.card,
-                boxShadow: hovered || pressed
-                  ? `0 2px 7px ${visual.cardShadow}`
-                  : `0 1px 3px ${visual.cardShadow}`,
+                boxShadow: selected
+                  ? `0 0 0 2px ${theme.accent}, 0 1px 3px ${visual.cardShadow}`
+                  : hovered || pressed
+                    ? `0 2px 7px ${visual.cardShadow}`
+                    : `0 1px 3px ${visual.cardShadow}`,
               } as object)
             : {
                 backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background,
@@ -321,10 +321,20 @@ function ChatRowInner({
                 style={styles.favoriteStar}
               />
             )}
+            {chat.crm?.priority !== undefined && chat.crm.priority <= 2 && (
+              <View
+                accessibilityLabel={`Priority ${chat.crm.priority}`}
+                style={[styles.priorityDot, { backgroundColor: theme.accent }]}
+              />
+            )}
             {last && (
-              <Text style={[styles.time, { color: compact ? visual.muted : theme.textSecondary, fontSize: compact ? 11 : type.secondary }]}>
-                {formatListTimestamp(last.dateCreated)}
-              </Text>
+              ageDays >= 1 && compact ? (
+                <Text style={[styles.ageChip, { color: visual.card === "#232326" ? "#F0A500" : "#B25000", backgroundColor: visual.card === "#232326" ? "rgba(240,165,0,0.20)" : "rgba(240,165,0,0.18)" }]}>{ageDays}d</Text>
+              ) : (
+                <Text style={[styles.time, { color: compact ? visual.muted : theme.textSecondary, fontSize: compact ? 11 : type.secondary }]}>
+                  {formatListTimestamp(last.dateCreated)}
+                </Text>
+              )
             )}
           </View>
           <View style={styles.previewLine}>
@@ -339,18 +349,9 @@ function ChatRowInner({
               pointerEvents={actionsVisible ? "auto" : "none"}
               style={[styles.actionLayer, { opacity: actionsVisible ? 1 : 0 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "visible" : "hidden", transitionDelay: actionsVisible ? "60ms,0ms" : "0ms,60ms" } as object] : null]}
             >
-              {waitingOnly ? (
-                <>
-                  <Pressable accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></Pressable>
-                  <Pressable accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></Pressable>
-                </>
-              ) : (
-                <>
-                  <Pressable accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></Pressable>
-                  <Pressable accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></Pressable>
-                  <Pressable accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></Pressable>
-                </>
-              )}
+              <Pressable accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (specificCloser?.kind === "reply" && specificCloser.draft) requestAnimationFrame(() => fillComposer(specificCloser.draft ?? "")); }} style={[styles.inlineAction, { backgroundColor: theme.accent }]}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></Pressable>
+              <Pressable accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></Pressable>
+              <Pressable accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} style={[styles.inlineAction, { backgroundColor: visual.controlFill }]}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></Pressable>
               <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>
             </View>
           </View>
@@ -444,8 +445,22 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     fontSize: 13,
   },
+  ageChip: {
+    borderRadius: 5,
+    flexShrink: 0,
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
   favoriteStar: {
     flexShrink: 0,
+  },
+  priorityDot: {
+    borderRadius: 3,
+    flexShrink: 0,
+    height: 6,
+    width: 6,
   },
   previewLine: {
     height: 24,
@@ -519,7 +534,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexShrink: 1,
     gap: 3,
-    maxWidth: 96,
+    maxWidth: 142,
     height: 24,
     justifyContent: "center",
     paddingHorizontal: 9,

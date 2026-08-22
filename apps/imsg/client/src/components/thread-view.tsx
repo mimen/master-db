@@ -538,6 +538,17 @@ export function ThreadView({
             </View>
           </Pressable>
           <View style={styles.paneHeaderActions}>
+            {(headerChat.flags.unresponded || headerChat.flags.waiting) && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Mark conversation done"
+                onPress={() => finishTriageChat(headerChat)}
+                style={[styles.doneButton, { backgroundColor: theme.accent }]}
+              >
+                <Ionicons name="checkmark" size={16} color={theme.onAccent} />
+                <Text style={[styles.doneButtonText, { color: theme.onAccent }]}>Done</Text>
+              </Pressable>
+            )}
             <FaceTimeButton
               chatGuid={chatGuid}
               isGroup={isGroup}
@@ -572,21 +583,11 @@ export function ThreadView({
         </View>
       )}
       {headerChat && (headerChat.flags.unresponded || headerChat.flags.waiting) && (
-        <View testID="resolve-strip" style={[styles.resolveStrip, { backgroundColor: headerChat.flags.unresponded ? "rgba(0,122,255,0.06)" : theme.backgroundElement, borderBottomColor: headerChat.flags.unresponded ? "rgba(0,122,255,0.15)" : theme.divider }]}>
-          <Ionicons name={headerChat.flags.unresponded ? "flag" : "hourglass-outline"} size={16} color={headerChat.flags.unresponded ? theme.accent : theme.textSecondary} />
-          <Text numberOfLines={1} style={[styles.resolveCopy, { color: theme.text }]}>
-            {headerChat.flags.unresponded
-              ? "In your queue. Replying clears it automatically."
-              : "You're waiting on them. Nudge below, or let go."}
-          </Text>
-          {headerChat.flags.unresponded ? (
-            <>
-              <Pressable accessibilityLabel="Mark conversation done" onPress={() => { void finishTriageChat(headerChat); }} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Done <Text style={{ color: theme.textSecondary }}>E</Text></Text></Pressable>
-              <Pressable accessibilityLabel="Move conversation to Later" onPress={() => showSheet({ title: `Later · ${headerChat.displayName}`, actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later <Text style={{ color: theme.textSecondary }}>H</Text></Text></Pressable>
-            </>
-          ) : (
-            <Pressable accessibilityLabel="Stop waiting on this conversation" onPress={() => { void finishTriageChat(headerChat); }} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Let go <Text style={{ color: theme.textSecondary }}>E</Text></Text></Pressable>
-          )}
+        <View testID="resolve-strip" style={[styles.resolveStrip, { backgroundColor: "rgba(0,122,255,0.06)", borderBottomColor: "rgba(0,122,255,0.15)" }]}>
+          <Ionicons name="flag" size={16} color={theme.accent} />
+          <Text numberOfLines={1} style={[styles.resolveCopy, { color: theme.text }]}>In your queue — replying clears it automatically.</Text>
+          <Pressable onPress={() => { void finishTriageChat(headerChat); }} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Done <Text style={{ color: theme.textSecondary }}>E</Text></Text></Pressable>
+          <Pressable onPress={() => showSheet({ title: `Later · ${headerChat.displayName}`, actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} style={[styles.resolveAction, { backgroundColor: theme.background }]}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later <Text style={{ color: theme.textSecondary }}>H</Text></Text></Pressable>
         </View>
       )}
 
@@ -827,6 +828,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexShrink: 0,
     gap: 4,
+  },
+  doneButton: {
+    alignItems: "center",
+    borderRadius: 7,
+    flexDirection: "row",
+    gap: 4,
+    height: 28,
+    paddingHorizontal: 10,
+  },
+  doneButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   headerIconButton: {
     alignItems: "center",

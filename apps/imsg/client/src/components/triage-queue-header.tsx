@@ -21,7 +21,7 @@ export function TriageQueueHeader({
   oldestAt: number | null;
   search: React.ReactNode;
   action: React.ReactNode;
-  onSweep?: () => void;
+  onSweep: () => void;
 }): React.JSX.Element {
   return (
     <DeskHeader
