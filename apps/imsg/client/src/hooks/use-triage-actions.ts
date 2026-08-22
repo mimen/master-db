@@ -85,6 +85,20 @@ export async function setTriageLater(chat: ChatSummary, until: number | null): P
   };
 }
 
+export function useRowDraft(chatGuid: string, enabled: boolean): string | null {
+  const [draft, setDraft] = useState<string | null>(null);
+  useEffect(() => {
+    if (!enabled) { setDraft(null); return; }
+    let cancelled = false;
+    void api.aiSuggestions(chatGuid).then(
+      (result) => { if (!cancelled) setDraft(result.suggestions[0]?.trim() || null); },
+      () => { if (!cancelled) setDraft(null); },
+    );
+    return () => { cancelled = true; };
+  }, [chatGuid, enabled]);
+  return draft;
+}
+
 export function useSmartCloser(chatGuid: string, enabled: boolean): { closer: SmartCloser | null; loading: boolean } {
   const [closer, setCloser] = useState<SmartCloser | null>(null);
   const [loading, setLoading] = useState(false);
