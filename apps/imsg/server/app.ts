@@ -6,6 +6,7 @@ import type { BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import type { Config } from "./config";
 import { registerDesktopReleaseRoutes } from "./desktop-version";
+import { registerDeployStatusRoute } from "./deploy-status";
 import { ContactBook } from "./contacts";
 import { OverlayDb } from "./db";
 import { GroupPhotos } from "./group-photos";
@@ -76,6 +77,7 @@ export interface AppDependencies {
   staticRoot?: string;
   desktopRoot?: string;
   desktopReleaseRoot?: string;
+  webReleaseManifestPath?: string;
   configureFixtureRoutes?: (app: Hono, controls: FixtureRouteControls) => void;
 }
 
@@ -89,6 +91,9 @@ const { config, bb, db } = deps;
 const staticRoot = deps.staticRoot ?? "./client/dist";
 const desktopRoot = deps.desktopRoot ?? `${import.meta.dir}/..`;
 const desktopReleaseRoot = deps.desktopReleaseRoot ?? `${import.meta.dir}/../desktop/releases`;
+const deployStateDir = process.env.IMSG_DEPLOY_STATE_DIR
+  ?? `${process.env.HOME ?? ""}/Library/Application Support/imsg-deploy`;
+const webReleaseManifestPath = deps.webReleaseManifestPath ?? `${deployStateDir}/web-release.json`;
 const now = deps.now ?? Date.now;
 const contacts = new ContactBook(bb);
 const productionIdentity = deps.identity ? null : new IdentityMirror(config);
@@ -186,7 +191,8 @@ app.get("/api/health", async (c) => {
   return c.json({ ok: true, privateApi: bb.hasPrivateApi });
 });
 
-// Immutable Comma shell release metadata and artifact — see desktop-version.ts.
+// Immutable release identity consumed by the thin desktop shell.
+registerDeployStatusRoute(app, webReleaseManifestPath);
 registerDesktopReleaseRoutes(app, desktopRoot, desktopReleaseRoot);
 
 // Lets the client force the Identity Mirror to catch up immediately after an

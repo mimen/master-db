@@ -79,7 +79,10 @@ cd apps/imsg/client
 bun scripts/validate-public-env.ts
 rm -rf dist
 BUILD_LOG="$(mktemp)"
-bun x expo export --platform web >"$BUILD_LOG" 2>&1 &
+EXPO_PUBLIC_IMSG_RELEASE_ENVIRONMENT=production \
+EXPO_PUBLIC_IMSG_RELEASE_BRANCH= \
+EXPO_PUBLIC_IMSG_WEB_SHA="$DEPLOYED_SHA" \
+  bun x expo export --platform web >"$BUILD_LOG" 2>&1 &
 BUILD_PID=$!
 
 # Known quirk: `expo export` can finish writing dist/ and then hang instead
@@ -120,6 +123,14 @@ echo "running post-export"
 bun scripts/post-export.ts
 
 cd "$REPO_DIR"
+
+# The running client compares its embedded build SHA with this manifest and
+# offers an explicit Reload instead of discarding drafts behind its back.
+mkdir -p "$DEPLOY_STATE_DIR"
+WEB_RELEASE_MANIFEST="$DEPLOY_STATE_DIR/web-release.json"
+printf '{"environment":"production","branch":null,"webSha":"%s"}\n' "$DEPLOYED_SHA" \
+  >"${WEB_RELEASE_MANIFEST}.tmp"
+mv "${WEB_RELEASE_MANIFEST}.tmp" "$WEB_RELEASE_MANIFEST"
 
 if [ "$SHELL_RELEASE_REQUIRED" -eq 1 ]; then
   echo "== Building immutable Comma shell release =="

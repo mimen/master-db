@@ -33,3 +33,17 @@ jobs:
     steps:
       - name: Deploy
         run: bash "$HOME/Programming/Repos/master-db/apps/imsg/scripts/deploy.sh"
+
+      - name: Publish release identity
+        if: always()
+        run: |
+          URL="https://milads-mac-mini.taild31e9a.ts.net:8447"
+          {
+            echo "## Comma deployment"
+            echo
+            echo '```json'
+            curl -sf "$URL/api/deploy/status" || echo '{"web":"unavailable"}'
+            curl -sf "$URL/api/desktop-version" || echo '{"shell":"unavailable"}'
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

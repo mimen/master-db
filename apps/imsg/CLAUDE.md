@@ -9,17 +9,16 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
   **symlink**: on the laptop → `convex-db/apps/imsg` (the primary checkout); on the Mini →
   `master-db/apps/imsg`. The pre-migration standalone repo is parked at
   `~/Programming/Repos/imsg.pre-migration-backup` on both machines.
-- **The app runs ONLY on the Mini.** Every machine uses
-  `https://milads-mac-mini.taild31e9a.ts.net:8447` (web/PWA) or Expo Go; there is no
-  resident laptop server, so all overlay state (archives/pins/dismissals) lives in one
-  place. For local development run `bun run dev:server` manually with a scratch
-  `DB_PATH` so real overlay state stays untouched.
+- **The server runs ONLY on the Mini.** Every client uses
+  `https://milads-mac-mini.taild31e9a.ts.net:8447` (web/PWA/desktop) or Expo Go; there is no
+  resident laptop server, so all production overlay state lives in one place. Branches
+  changing server code use the deployment command's scratch DB mode.
 - Client: `client/` (Expo, SDK **54** — pinned to the Expo Go App Store ceiling; do not
   bump without an EAS build). Server: `server/`. Shared types/logic: `shared/`
   (imported as `@shared/*`; the client keeps a synced copy at `client/src/lib/types.ts`).
 - Desktop shell: `desktop/` (Tauri v2). Thin remote window — loads the Mini tailnet
-  URL, overlay title bar, native menu. Run with `cd apps/imsg/desktop && bun run tauri dev`.
-  The web UI flattens to edge-to-edge when `window.__TAURI__` is set.
+  URL with native AppKit chrome and menu. `bun run dev:desktop` is the only supported
+  development launcher; it derives a branch-specific Comma Dev identity.
 
 ## The Mini serves TWO things — and they read from DIFFERENT sources
 
@@ -32,39 +31,23 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
 ⚠️ **The #1 deploy footgun:** rsyncing `dist/` updates the web app but NOT Expo Go. If a
 fix "isn't landing on the phone," the Mini's source is stale — you forgot the `git pull`.
 
-## Deploy (do the whole thing every time)
+## Deployment
+
+Read [`DEPLOY.md`](DEPLOY.md) before changing or operating delivery. The canonical paths are:
 
 ```bash
-# 1. Verify locally
-cd ~/Programming/Repos/imsg && bun test        # 75 tests
-cd client && bunx tsc --noEmit                  # client typecheck
-cd .. && bunx tsc -b tsconfig.server.json       # server typecheck
-cd client && bun run build:web                  # builds dist/ + injects PWA/zoom-lock head
-
-# 2. Commit + push to origin/main (rebase — other sessions share master-db)
-cd ~/Programming/Repos/imsg && git add -A && git commit -m "…"
-cd ~/Programming/Repos/convex-db/.worktrees/main && git pull --rebase origin main && git push origin main
-
-# 3. Ship BOTH surfaces to the Mini
-rsync -a --delete ~/Programming/Repos/imsg/client/dist/ macmini:Programming/Repos/master-db/apps/imsg/client/dist/
-ssh macmini 'export PATH="$HOME/.bun/bin:$PATH" && cd ~/Programming/Repos/master-db \
-  && git checkout -- apps/imsg/client/bun.lock apps/imsg/bun.lock 2>/dev/null; git pull \
-  && cd apps/imsg/client && bun install \
-  && cd ~/Programming/Repos/master-db \
-  && /Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg --yes --https=8447 http://127.0.0.1:8377 \
-  && launchctl kickstart -k gui/$(id -u)/com.milad.imsg \
-  && launchctl kickstart -k gui/$(id -u)/com.milad.imsg-expo'
+bun run dev:desktop
+bun run deploy:branch -- --dry-run
+bun run deploy:branch
+bun run deploy:status
+bun run deploy:verify
+bun run deploy:cleanup
 ```
 
-Then **shake → Reload in Expo Go** (native) / hard-refresh or re-add the PWA (web).
-
-## Verify after deploy
-
-- Local API: `ssh macmini 'curl -s http://127.0.0.1:8377/api/health'` → `{"ok":true,"privateApi":true}`
-- Tailnet API: `curl -s https://milads-mac-mini.taild31e9a.ts.net:8447/api/health` → the same response
-- Listener: `ssh macmini 'lsof -nP -iTCP:8377 -sTCP:LISTEN'` → `127.0.0.1:8377`, never `*:8377`
-- Expo bundle: `curl -s -H "expo-platform: ios" http://Milads-Mac-mini:8081` → JSON with `runtimeVersion: exposdk:54.0.0`
-- URLs: `https://milads-mac-mini.taild31e9a.ts.net:8447` (web/PWA/API), `exp://milads-mac-mini:8081` (Expo Go).
+A merge to `main` automatically deploys production through the Mini runner. Do not rsync
+`dist`, run raw `tauri dev`, copy worktree apps into Applications, or manually replace a
+running production bundle. Web and shell updates activate through the in-app Reload and
+Restart banners.
 
 ## Gotchas
 
@@ -76,5 +59,6 @@ Then **shake → Reload in Expo Go** (native) / hard-refresh or re-add the PWA (
 - Contact avatars: run `bun scripts/export-avatars.ts` **on the Mini** (needs FDA via ssh)
   after contact-photo changes; BlueBubbles itself returns no avatars.
 - master-db `bun.lock` churns across sessions — `git checkout -- **/bun.lock` before pull.
-- **To iterate, use Expo Go** (always-live source). The Safari home-screen PWA caches
-  aggressively and will show half-applied fixes; re-add it to clear the service worker.
+- Test shared UI/business behavior in the browser fixture. Use Expo Go for iOS seams and
+  `bun run dev:desktop` for native shell seams. Production clients expose explicit update
+  banners instead of relying on cache-clearing rituals.
