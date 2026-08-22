@@ -37,29 +37,20 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       const page = desk.page;
       const rail = page.getByTestId("triage-rail").first();
       const header = page.getByTestId("triage-queue-header");
-      const controls = page.getByTestId("window-controls").getByRole("button");
+      const needsReply = rail.getByRole("button", { name: /^Needs reply/ });
       const rows = page.getByTestId("conversation-row");
 
       await expect(rail).toBeVisible();
       await expect(header).toBeVisible();
-      await expect(controls).toHaveCount(3);
+      await expect(page.getByTestId("window-controls")).toHaveCount(0);
+      await expect(needsReply.locator("svg")).toBeVisible();
       const railBox = await rail.boundingBox();
       const headerBox = await header.boundingBox();
+      const needsReplyBox = await needsReply.boundingBox();
       expect(railBox?.width).toBeCloseTo(64, 1);
       expect(headerBox?.height).toBeCloseTo(112, 1);
+      expect(needsReplyBox?.y).toBeGreaterThanOrEqual(38);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-
-      const dots = await controls.evaluateAll((items) => items.map((item) => {
-        const rect = item.getBoundingClientRect();
-        return { width: rect.width, height: rect.height, x: rect.x, y: rect.y };
-      }));
-      expect(dots.map((dot) => dot.width)).toEqual([12, 12, 12]);
-      expect(dots.map((dot) => dot.height)).toEqual([12, 12, 12]);
-      // Horizontal macOS trio: shared baseline, 8px gaps.
-      expect(dots[0]!.y).toBeCloseTo(dots[1]!.y, 1);
-      expect(dots[1]!.y).toBeCloseTo(dots[2]!.y, 1);
-      expect(dots[1]!.x - dots[0]!.x).toBeCloseTo(20, 1);
-      expect(dots[2]!.x - dots[1]!.x).toBeCloseTo(20, 1);
 
       const closerRow = rows.first();
       const closer = closerRow.getByRole("button", { name: "Fill AI draft" });
@@ -126,34 +117,15 @@ test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", a
   }
 });
 
-test("desktop window controls call the Tauri window API", async ({ desk }) => {
-  await desk.page.addInitScript(() => {
-    const calls: string[] = [];
-    const currentWindow = {
-      close: async (): Promise<void> => { calls.push("close"); },
-      minimize: async (): Promise<void> => { calls.push("minimize"); },
-      toggleMaximize: async (): Promise<void> => { calls.push("zoom"); },
-      startDragging: async (): Promise<void> => { calls.push("drag"); },
-    };
-    const target = window as Window & {
-      __fixtureWindowCalls?: string[];
-      __TAURI__?: {
-        event: { listen: () => Promise<() => void> };
-        window: { getCurrentWindow: () => typeof currentWindow };
-      };
-    };
-    target.__fixtureWindowCalls = calls;
-    target.__TAURI__ = {
-      event: { listen: async () => () => undefined },
-      window: { getCurrentWindow: () => currentWindow },
-    };
-  });
+test("native window chrome leaves its traffic-light area clear", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
-  const controls = desk.page.getByTestId("window-controls");
-  await controls.getByRole("button", { name: "Close window" }).click();
-  await controls.getByRole("button", { name: "Minimize window" }).click();
-  await controls.getByRole("button", { name: "Zoom window" }).click();
-  await expect.poll(() => desk.page.evaluate(() => (window as Window & { __fixtureWindowCalls?: string[] }).__fixtureWindowCalls)).toEqual(["close", "minimize", "zoom"]);
+  const rail = desk.page.getByTestId("triage-rail").first();
+  const needsReply = rail.getByRole("button", { name: /^Needs reply/ });
+
+  await expect(desk.page.getByTestId("window-controls")).toHaveCount(0);
+  await expect(needsReply.locator("svg")).toBeVisible();
+  const box = await needsReply.boundingBox();
+  expect(box?.y).toBeGreaterThanOrEqual(38);
 });
 
 test("every visible control remains stable and usable on hover", async ({ desk }) => {
