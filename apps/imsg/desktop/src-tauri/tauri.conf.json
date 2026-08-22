@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.milad.imsg.desktop",
   "build": {
+    "beforeDevCommand": "bun ../scripts/verify-desktop-dev-guard.ts",
     "devUrl": "https://milads-mac-mini.taild31e9a.ts.net:8447",
     "frontendDist": "https://milads-mac-mini.taild31e9a.ts.net:8447"
   },
