@@ -17,7 +17,7 @@
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
     "typecheck": "bun run typecheck:app && bun run typecheck:convex && bun run typecheck:engine && bun run typecheck:imsg",
-    "typecheck:app": "bun --cwd app tsc --noEmit",
+    "typecheck:app": "bun --cwd app tsc -b --force",
     "typecheck:engine": "bun --cwd engine tsc --noEmit",
     "typecheck:convex": "cd convex && npx tsc --noEmit",
     "typecheck:imsg": "cd apps/imsg && bunx tsc -b && cd client && bunx tsc --noEmit"

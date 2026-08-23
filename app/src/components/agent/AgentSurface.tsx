@@ -20,6 +20,26 @@ import { formatSmartDate } from "@/lib/dateFormatters"
 import { usePriority } from "@/lib/priorities"
 
 /**
+ * Display shape returned by `agentic/queries/getQueueEntityMeta` (the backend's
+ * `EnrichedQueueRun`). The generated Convex API types carry argument validators
+ * only — query results come back as `any` — so the fields this surface reads
+ * are declared here and kept in lockstep with `_enrichQueueRun.ts`.
+ */
+type QueueEntityMeta = {
+  entity_ref: string
+  entity_type: string
+  entity_id: string
+  entity_title: string
+  description: string | null
+  priority: number | null
+  due: string | null
+  deadline: string | null
+  labels: Array<{ name: string; color: string }>
+  project: { name: string; color: string } | null
+  checked: boolean
+}
+
+/**
  * Resolve the Todoist task id for the focused entity. Prefer the enriched
  * `entity_id` from meta; fall back to parsing the entity_ref slug
  * ("todoist:task:<id>" → "<id>") so the Complete button still works before
@@ -38,7 +58,10 @@ function resolveTodoistId(
 
 export function AgentSurface({ entity_ref }: { entity_ref: string }) {
   const { run, isRunning } = useAgentRuntime(entity_ref)
-  const meta = useQuery(api.agentic.queries.getQueueEntityMeta.default, { entity_ref })
+  const meta: QueueEntityMeta | null | undefined = useQuery(
+    api.agentic.queries.getQueueEntityMeta.default,
+    { entity_ref },
+  )
   const priority = usePriority(meta?.priority ?? undefined)
   const title = meta?.entity_title ?? entity_ref
 
