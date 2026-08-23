@@ -223,22 +223,34 @@ test("persistent desktop workspaces keep one rail, selections, and independent s
   await page.screenshot({ path: "/tmp/comma-persistent-workspaces.png", animations: "disabled" });
 });
 
-test("Scheduled and Settings share one utility owner and close on workspace change", async ({ desk }) => {
+test("Scheduled and Settings remain open across every rail destination", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "dark");
   const page = desk.page;
   const visiblePane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
 
   await page.getByRole("button", { name: "Scheduled" }).click();
   await expect(visiblePane).toHaveCount(1);
-  await page.getByLabel("Close scheduled").click();
-  await page.getByRole("button", { name: "Settings" }).click();
-  await expect(visiblePane).toHaveCount(1);
-  await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
   await page.getByRole("button", { name: "Contacts" }).click();
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
-  await expect(visiblePane).toHaveCount(0);
-  await expect(page.getByText("Settings", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("desktop-shell")).toHaveAttribute("data-utility-kind", "scheduled");
+  await expect(page.getByTestId("desktop-shell")).toHaveAttribute("data-utility-workspace", "contacts");
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
+
+  await page.getByRole("button", { name: /^Needs reply/ }).click();
+  await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
+
+  await page.getByRole("button", { name: "Waiting" }).click();
+  await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
+
+  await page.getByLabel("Close scheduled").click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Contacts" }).click();
+  await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
+  await expect(visiblePane).toHaveCount(1);
 });
 
 test("compact tabs keep their eager route structure", async ({ desk }) => {
@@ -322,7 +334,7 @@ test("a closed utility pane opens in the current breakpoint presentation immedia
   }
 });
 
-test("an inactive tab cannot surface a retained utility modal after resize", async ({ desk }) => {
+test("the one global utility survives a workspace switch and resize", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "dark");
   const page = desk.page;
   const visiblePane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
@@ -333,8 +345,8 @@ test("an inactive tab cannot surface a retained utility modal after resize", asy
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
   await page.setViewportSize({ width: 900, height: 820 });
 
-  await expect(visiblePane).toHaveCount(0);
-  await expect(page.getByText("Scheduled", { exact: true })).toHaveCount(0);
+  await expect(visiblePane).toHaveCount(1);
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
 });
 
 test("global command palette applies Messages views from Contacts", async ({ desk }) => {

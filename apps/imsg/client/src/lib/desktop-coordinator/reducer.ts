@@ -47,10 +47,14 @@ function commitRoute(
   route: DesktopRouteProjection,
 ): DesktopShellState {
   const workspaceChanged = route.workspace !== state.activeWorkspace;
+  const globalUtility =
+    state.utility?.kind === "scheduled" || state.utility?.kind === "settings"
+      ? { ...state.utility, workspace: route.workspace }
+      : null;
   const base: DesktopShellState = {
     ...state,
     activeWorkspace: route.workspace,
-    utility: null,
+    utility: globalUtility,
     routeOverlay: null,
     transientOverlay: workspaceChanged ? null : state.transientOverlay,
     shadow: workspaceChanged ? null : state.shadow,

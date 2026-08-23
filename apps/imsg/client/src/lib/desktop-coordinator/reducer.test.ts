@@ -103,7 +103,25 @@ describe("desktop shell reducer", () => {
     expect(state.shadow).toBeNull();
   });
 
-  test("closes utility, route overlay, transient overlay, and shadow on workspace switches", () => {
+  test("keeps app-global utilities open across every workspace and inbox destination", () => {
+    let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
+      type: "utility/toggled",
+      utility: { kind: "scheduled", workspace: "messages" },
+    });
+    state = dispatchRoute(state, "/contacts");
+    expect(state.utility).toEqual({ kind: "scheduled", workspace: "contacts" });
+
+    state = dispatchRoute(state, "/");
+    expect(state.utility).toEqual({ kind: "scheduled", workspace: "messages" });
+
+    state = reduceDesktopShell(state, {
+      type: "messages/filters-changed",
+      filters: { state: "waiting", type: "all" },
+    });
+    expect(state.utility).toEqual({ kind: "scheduled", workspace: "messages" });
+  });
+
+  test("closes route overlays, transient overlays, and shadow on workspace switches", () => {
     let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
       type: "utility/toggled",
       utility: { kind: "settings", workspace: "messages" },

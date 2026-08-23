@@ -1,6 +1,6 @@
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
-import { useCallback, useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { Platform, Text, useWindowDimensions, View } from "react-native";
 
 import { ConversationListPane } from "@/components/conversation-list-pane";
@@ -38,11 +38,9 @@ import { showToast } from "@/lib/toast";
 export function MessagesWorkspace({
   active,
   wide,
-  utilityPane = null,
 }: {
   readonly active: boolean;
   readonly wide: boolean;
-  readonly utilityPane?: ReactNode;
 }): JSX.Element {
   const theme = useTheme();
   const visual = useTriageTheme();
@@ -429,7 +427,6 @@ export function MessagesWorkspace({
         )
       }
     >
-      {utilityPane}
       {canShadow ? (
         <DesktopAuxPane open={shadowOpen && selected !== null}>
           {selected ? (

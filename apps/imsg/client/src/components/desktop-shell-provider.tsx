@@ -235,7 +235,11 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     }),
     [activeWorkspace, closeTopSurface, closeUtility, openHelp, openPalette, registerMessagesActions, reportMessagesRail, state],
   );
-  const utility = shellOwnsRoute && state.utility?.workspace === activeWorkspace ? state.utility : null;
+  const utilityIsGlobal = state.utility?.kind === "scheduled" || state.utility?.kind === "settings";
+  const utility =
+    shellOwnsRoute && state.utility && (utilityIsGlobal || state.utility.workspace === activeWorkspace)
+      ? state.utility
+      : null;
   const utilityContent = utility?.kind === "chat-info" ? (
     <ChatInfoContent
       key={utility.guid}
@@ -321,6 +325,10 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
           <View
             testID="desktop-shell"
             style={[styles.shell, !shellOwnsRoute && styles.inactiveShell]}
+            {...({ dataSet: {
+              utilityKind: state.utility?.kind ?? "",
+              utilityWorkspace: state.utility?.workspace ?? "",
+            } } as object)}
             accessibilityElementsHidden={!shellOwnsRoute}
             importantForAccessibility={shellOwnsRoute ? "auto" : "no-hide-descendants"}
           >
@@ -345,7 +353,6 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
                 <MessagesWorkspace
                   active={shellOwnsRoute && activeWorkspace === "messages"}
                   wide
-                  utilityPane={shellOwnsRoute && activeWorkspace === "messages" ? utilityPane : null}
                 />
               </View>
               <View
@@ -353,12 +360,10 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
                 accessibilityElementsHidden={activeWorkspace !== "contacts"}
                 importantForAccessibility={activeWorkspace === "contacts" ? "auto" : "no-hide-descendants"}
               >
-                <ContactsWorkspace
-                  wide
-                  utilityPane={shellOwnsRoute && activeWorkspace === "contacts" ? utilityPane : null}
-                />
+                <ContactsWorkspace wide />
               </View>
             </View>
+            {utilityPane}
             <OverlayShell
               visible={routeOverlay !== null}
               onClose={closeRouteSurface}

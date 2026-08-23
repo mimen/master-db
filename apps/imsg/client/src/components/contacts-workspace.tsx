@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 import { View } from "react-native";
 
 import { ContactsListPane } from "@/components/contacts-list-pane";
@@ -10,13 +10,7 @@ import { PersonContent } from "@/components/person-content";
 import { useTheme } from "@/hooks/use-theme";
 import { primaryHandle } from "@/lib/identity";
 
-export function ContactsWorkspace({
-  wide,
-  utilityPane = null,
-}: {
-  readonly wide: boolean;
-  readonly utilityPane?: ReactNode;
-}): JSX.Element {
+export function ContactsWorkspace({ wide }: { readonly wide: boolean }): JSX.Element {
   const theme = useTheme();
   const shell = useDesktopShellContext();
   const selection = shell.state.contacts.selection;
@@ -64,8 +58,6 @@ export function ContactsWorkspace({
           <EmptyState icon="person-circle-outline" message="Select a contact" />
         )
       }
-    >
-      {utilityPane}
-    </DesktopSplit>
+    />
   );
 }
