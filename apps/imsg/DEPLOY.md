@@ -1,3 +1,11 @@
+---
+deployment_status: verified
+deployment_production_trigger: merge to main affecting apps/imsg/** or bun.lock
+deployment_branch_command: bun run deploy:branch
+deployment_verify_command: bun run deploy:verify
+deployment_last_assessed: 2026-08-23
+---
+
 # Comma deployment
 
 Comma is the desktop/web product in `apps/imsg`. Its delivery chain is:
