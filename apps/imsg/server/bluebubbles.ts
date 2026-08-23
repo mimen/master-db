@@ -157,16 +157,38 @@ export class BlueBubblesClient implements BlueBubbles {
     return `${this.baseUrl}${path}?${qs.toString()}`;
   }
 
-  private async get<T>(path: string, params: Record<string, string> = {}): Promise<Result<T>> {
-    return this.unwrap<T>(await fetch(this.url(path, params)));
+  private async request(
+    url: string,
+    init: RequestInit = {},
+    retryTransport = false,
+  ): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      if (!retryTransport) throw error;
+      const headers = new Headers(init.headers);
+      // Bun can retain a poisoned pooled connection after BlueBubbles restarts.
+      // Retry idempotent reads once on a fresh connection instead of requiring
+      // the long-lived Comma server itself to be restarted.
+      headers.set("Connection", "close");
+      return fetch(url, { ...init, headers });
+    }
   }
 
-  private async post<T>(path: string, body: unknown): Promise<Result<T>> {
-    const res = await fetch(this.url(path), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: body === null ? undefined : JSON.stringify(body),
-    });
+  private async get<T>(path: string, params: Record<string, string> = {}): Promise<Result<T>> {
+    return this.unwrap<T>(await this.request(this.url(path, params), {}, true));
+  }
+
+  private async post<T>(path: string, body: unknown, retryTransport = false): Promise<Result<T>> {
+    const res = await this.request(
+      this.url(path),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body === null ? undefined : JSON.stringify(body),
+      },
+      retryTransport,
+    );
     return this.unwrap<T>(res);
   }
 
@@ -220,7 +242,7 @@ export class BlueBubblesClient implements BlueBubbles {
       offset: 0,
       with: ["lastMessage", "sms"],
       sort: "lastmessage",
-    });
+    }, true);
   }
 
   chatMessages(
@@ -256,7 +278,7 @@ export class BlueBubblesClient implements BlueBubbles {
             ],
           }
         : {}),
-    });
+    }, true);
   }
 
   async messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>> {
@@ -276,7 +298,7 @@ export class BlueBubblesClient implements BlueBubbles {
             args: { guid: messageGuid, partGuid: `%/${messageGuid}` },
           },
         ],
-      }),
+      }, true),
     ]);
     if (!message.ok) return message;
     if (!reactions.ok) return reactions;
