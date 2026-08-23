@@ -197,6 +197,10 @@ export function ThreadView({
   // scrollTop (toward older messages).
   const [listMounted, setListMounted] = useState(false);
   const [paneW, setPaneW] = useState(0);
+  const onPaneLayout = useCallback((width: number): void => {
+    const next = Math.round(width);
+    setPaneW((current) => (current === next ? current : next));
+  }, []);
   useEffect(() => {
     if (Platform.OS !== "web" || !listMounted) return;
     const node = (
@@ -502,7 +506,7 @@ export function ThreadView({
 
   return (
     <View
-      onLayout={(e) => setPaneW(e.nativeEvent.layout.width)}
+      onLayout={(e) => onPaneLayout(e.nativeEvent.layout.width)}
       style={{ flex: 1, backgroundColor: theme.background, paddingBottom: bottomInset }}
     >
       {headerChat && (

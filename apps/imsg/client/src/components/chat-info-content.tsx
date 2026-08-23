@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -63,6 +64,10 @@ export function ChatInfoContent({
   } | null>(null);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [gridWidth, setGridWidth] = useState(0);
+  const onGridLayout = useCallback((width: number): void => {
+    const next = Math.round(width);
+    setGridWidth((current) => (current === next ? current : next));
+  }, []);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
   const aiStatus = useAiStatus();
@@ -161,7 +166,13 @@ export function ChatInfoContent({
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {header}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+      <ScrollView
+        style={[
+          { flex: 1 },
+          Platform.OS === "web" ? ({ scrollbarGutter: "stable" } as object) : null,
+        ]}
+        contentContainerStyle={{ padding: 16 }}
+      >
         {summary && (
           <View style={styles.quickRow}>
             {([
@@ -442,7 +453,7 @@ export function ChatInfoContent({
             <Text style={[styles.section, { color: theme.textSecondary }]}>Photos & Videos</Text>
             {/* Fixed-pixel square tiles from the measured width — aspectRatio +
                 percentage widths stagger under RN-web, so size them explicitly. */}
-            <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+            <View style={styles.grid} onLayout={(e) => onGridLayout(e.nativeEvent.layout.width)}>
               {gallery.map((item, index) => {
                 const tileSize = gridWidth > 0 ? (gridWidth - 2 * GRID_GAP) / 3 : 0;
                 return (
