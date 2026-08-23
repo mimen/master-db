@@ -9,7 +9,6 @@ import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
 import type { PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
-import { TriageNavigationRail } from "./triage-navigation-rail";
 import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
 
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
@@ -311,22 +310,10 @@ export function ConversationListPane({
       />
     </SidebarFrame>
   );
-  if (!wide) return pane;
-  return (
-    <View style={styles.desktopDesk}>
-      <TriageNavigationRail
-        state={filters.state}
-        counts={counts}
-        onStateChange={(state) => search.applyFilters({ ...filters, state })}
-      />
-      <View style={styles.desktopList}>{pane}</View>
-    </View>
-  );
+  return pane;
 }
 
 const styles = StyleSheet.create({
-  desktopDesk: { flex: 1, flexDirection: "row" },
-  desktopList: { flex: 1, minWidth: 0 },
   footerContent: { flex: 1 },
   quietLinks: { alignItems: "center", flexDirection: "row", gap: 16, minHeight: 31, paddingHorizontal: 6 },
   quietLinkButton: { alignItems: "center", flexDirection: "row", gap: 5 },

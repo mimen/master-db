@@ -28,8 +28,11 @@ lib/inbox-model.ts             pure derivation: filters/search/navigationEntries
 lib/conversation-search.ts     pure search reducer (query-tagged deep results)
 ```
 
-Floating desktop cards and the pane split are screen-level layout
-(`app/(tabs)/*.tsx`) — never sidebar internals.
+Floating desktop cards remain workspace layout. The persistent wide shell owns
+the single navigation rail and keeps both `MessagesWorkspace` and
+`ContactsWorkspace` mounted above the still-mounted root Stack; each active
+workspace owns its `DesktopSplit`. Compact route adapters remain under
+`app/(tabs)/*.tsx` and render no wide duplicate.
 
 ## 1. Platform and module-graph rules
 
@@ -40,7 +43,8 @@ Floating desktop cards and the pane split are screen-level layout
 - Sidebar modules imported by native must touch no browser globals at
   module scope.
 - The keyboard dispatcher is capture-phase (RNW TextInput stops keydown
-  bubbling) and installed exactly once.
+  bubbling) and installed exactly once by the active Messages workspace. The
+  persistent inactive workspace must not install a second dispatcher.
 - E2E readiness never waits on `networkidle` — the SSE stream never
   settles. Wait on `/api/health` + semantic locators.
 
@@ -116,11 +120,18 @@ Floating desktop cards and the pane split are screen-level layout
 
 ## 6. Chrome and parity rules
 
-- Both panes compose `SidebarFrame`/`SidebarChrome`/`SidebarSearchField` —
+- Both list panes compose `SidebarFrame`/`SidebarChrome`/`SidebarSearchField` —
   parity is structural, not hand-maintained.
-- The glass bar is the ONLY fixed chrome; content scrolls behind it.
-- The Contacts filter icon is intentionally inert (bar parity) — kept by
-  explicit decision.
+- Wide list panes never render navigation rails. `DesktopShellProvider` owns
+  exactly one `TriageNavigationRail`, using `DESKTOP_RAIL_WIDTH` as the
+  canonical width; sidebar width and resize math exclude the rail.
+- The shell owns one utility surface for Details, Contact, Scheduled, and
+  Settings. Workspace changes close it plus transient and shadow surfaces;
+  inactive workspaces cannot retain a visible modal.
+- The glass bar is the ONLY fixed list chrome; content scrolls behind it.
+- Mobile Tabs remain eager (`lazy: false`) and retain their route structure;
+  persistent shell projection applies only to the wide `/` and `/contacts`
+  workspace paths. Unsupported wide routes stay on the Stack fallback.
 
 ## 7. Release gate
 

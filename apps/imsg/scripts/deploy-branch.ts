@@ -128,7 +128,7 @@ if (backendMode === "production-proxy") {
     "rsync", "-a", "--delete",
     "--exclude", ".env",
     "--exclude", ".cache",
-    "--exclude", "node_modules",
+    "--exclude", "/node_modules",
     "--exclude", "*.db",
     "--exclude", "*.db-*",
     `${localSource}/`, incomingSpec("source/"),
@@ -237,11 +237,10 @@ async function startRemotePreview(): Promise<void> {
       ]
     : [
         'cd "$dir/source"',
-        `set -a; source ${shellQuote(`${remoteHome}/Programming/Repos/master-db/apps/imsg/.env`)}; set +a`,
         `export HOST=127.0.0.1 PORT=${port} DB_PATH="$dir/state/imsg.db" COMMA_BRANCH_MANIFEST_PATH="$dir/manifest.json"`,
         `test "$DB_PATH" != ${shellQuote(`${remoteHome}/Programming/Repos/master-db/apps/imsg/imsg.db`)}`,
         "bun install --frozen-lockfile",
-        `nohup zsh -lc ${shellQuote(`exec -a ${shellQuote(processIdentity)} bun server/index.ts`)} >"$dir/logs/preview.log" 2>&1 &`,
+        `nohup zsh -lc ${shellQuote(`exec -a ${shellQuote(processIdentity)} bun --env-file=${shellQuote(`${remoteHome}/Programming/Repos/master-db/apps/imsg/.env`)} server/index.ts`)} >"$dir/logs/preview.log" 2>&1 &`,
       ];
   const probe = [
     "ready=0",

@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { Platform, StyleSheet, useWindowDimensions, View } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
-import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
+import { calculatePaneAdmission } from "@/lib/desktop-coordinator/pane-admission";
 import { AUX_PANE_WIDTH, desktopFrame, type DesktopFrameStyles } from "@/lib/desktop-frame";
 import { useSidebarWidth } from "@/lib/sidebar-width";
 
@@ -25,21 +25,18 @@ export interface DesktopSplitProps {
   readonly list: ReactNode;
   readonly detail: ReactNode;
   readonly children?: ReactNode;
-  /** Fixed chrome placed inside the resizable list pane, such as the triage rail. */
-  readonly listInset?: number;
 }
 
-/** Shared Messages/Contacts desktop shell: list | drag | thread, optional extra panes. */
-export function DesktopSplit({ list, detail, children, listInset = 0 }: DesktopSplitProps): React.JSX.Element {
+/** Shared Messages/Contacts workspace split: list | drag | detail, optional extra panes. */
+export function DesktopSplit({ list, detail, children }: DesktopSplitProps): JSX.Element {
   const { frame, listWidth, setListWidth } = useDesktopFrame();
   const visual = useTriageTheme();
-  const renderedListWidth = listWidth + listInset;
   const deskGround = Platform.OS === "web" ? ({ backgroundImage: visual.deskGradient } as object) : { backgroundColor: visual.desk };
   return (
     <View style={[frame.split, deskGround]}>
-      <View style={[frame.pane, frame.listPane, { flexBasis: renderedListWidth, width: renderedListWidth }]}>
+      <View style={[frame.pane, frame.listPane, { flexBasis: listWidth, width: listWidth }]}>
         {list}
-        <SidebarResizeHandle width={renderedListWidth} onResize={(next) => setListWidth(next - listInset)} />
+        <SidebarResizeHandle width={listWidth} onResize={setListWidth} />
       </View>
       <View style={[frame.pane, frame.detailPane]}>{detail}</View>
       {children}
@@ -56,7 +53,7 @@ export function DesktopAuxPane({
 }: {
   readonly open: boolean;
   readonly children: ReactNode;
-}): React.JSX.Element | null {
+}): JSX.Element | null {
   const visual = useTriageTheme();
   const [mounted, setMounted] = useState(open);
   const held = useRef(children);
@@ -115,13 +112,19 @@ export function DesktopUtilityPane({
   readonly open: boolean;
   readonly onClose: () => void;
   readonly children: ReactNode;
-}): React.JSX.Element {
-  const { canShadow } = useLayoutMode();
+}): JSX.Element {
+  const { width: windowWidth } = useWindowDimensions();
+  const [sidebarWidth] = useSidebarWidth();
   const visual = useTriageTheme();
-  const auxPresentation = useRef(canShadow);
+  const panePresentation = calculatePaneAdmission({
+    windowWidth,
+    sidebarWidth,
+    sidePaneWidth: AUX_PANE_WIDTH,
+  }).sidePane === "pane";
+  const auxPresentation = useRef(panePresentation);
   const wasOpen = useRef(open);
   const held = useRef(children);
-  if (open && !wasOpen.current) auxPresentation.current = canShadow;
+  if (open && !wasOpen.current) auxPresentation.current = panePresentation;
   if (open && children != null) held.current = children;
   wasOpen.current = open;
 

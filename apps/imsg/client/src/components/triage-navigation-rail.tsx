@@ -1,24 +1,23 @@
 import type { StateCounts, StateFilter } from "@shared/types";
 import { router } from "expo-router";
+import { useEffect, useState, type JSX } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
-import { useEffect, useState } from "react";
 import Svg, { Path } from "react-native-svg";
+
 import { useTriageTheme } from "@/hooks/use-triage-theme";
+import { DESKTOP_RAIL_WIDTH } from "@/lib/desktop-coordinator/pane-admission";
 import {
   isDesktopShell,
   NATIVE_TITLEBAR_INSET,
   watchDesktopFullscreen,
 } from "@/lib/desktop-shell";
-import { requestInboxFilter } from "@/lib/inbox-filter";
-import { openScheduledPane } from "@/lib/scheduled-pane";
-import { openSettingsPane } from "@/lib/settings-pane";
 
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
 
 type RailIconName = "inbox" | "waiting" | "messages" | "contacts" | "scheduled" | "settings";
 
-function RailIcon({ name, color }: { name: RailIconName; color: string }): React.JSX.Element {
+function RailIcon({ name, color }: { name: RailIconName; color: string }): JSX.Element {
   const paths: readonly string[] = (() => {
     switch (name) {
       case "inbox":
@@ -51,7 +50,7 @@ function RailIcon({ name, color }: { name: RailIconName; color: string }): React
   );
 }
 
-function Item({ icon, label, active = false, count, onPress }: { icon: RailIconName; label: string; active?: boolean; count?: number; onPress: () => void }): React.JSX.Element {
+function Item({ icon, label, active = false, count, onPress }: { icon: RailIconName; label: string; active?: boolean; count?: number; onPress: () => void }): JSX.Element {
   const [hovered, setHovered] = useState(false);
   const color = active ? "#FFFFFF" : "rgba(255,255,255,0.65)";
   return (
@@ -70,10 +69,9 @@ function Item({ icon, label, active = false, count, onPress }: { icon: RailIconN
 }
 
 /**
- * The desktop rail — the app's primary navigation, rendered by BOTH sidebars
- * so the shell is identical on Messages and Contacts. Contacts has no local
- * filter state, so its inbox items publish through the inbox-filter bus and
- * then navigate to Messages (both tabs stay mounted, so the listener is live).
+ * The desktop shell's one primary-navigation rail. Workspace list panes never
+ * render their own copy; inbox actions publish to the still-mounted Messages
+ * workspace before the pathname switches back to it.
  */
 export function TriageNavigationRail({
   state,
@@ -85,7 +83,7 @@ export function TriageNavigationRail({
   counts?: StateCounts | null;
   onStateChange?: (state: StateFilter) => void;
   destination?: "messages" | "contacts";
-}): React.JSX.Element {
+}): JSX.Element {
   const visual = useTriageTheme();
   const shell = isDesktopShell();
   const [fullscreen, setFullscreen] = useState(false);
@@ -97,8 +95,8 @@ export function TriageNavigationRail({
       onStateChange?.(next);
       return;
     }
-    requestInboxFilter(next);
-    router.push("/");
+    onStateChange?.(next);
+    router.replace("/");
   };
   const glass = Platform.OS === "web" ? ({
     backgroundColor: visual.rail,
@@ -112,12 +110,20 @@ export function TriageNavigationRail({
           <Item icon="inbox" label="Needs reply" count={counts?.unresponded} active={onMessages && state === "unresponded"} onPress={() => goToState("unresponded")} />
           <Item icon="waiting" label="Waiting" active={onMessages && state === "waiting"} onPress={() => goToState("waiting")} />
           <Item icon="messages" label="All messages" active={onMessages && state === "all"} onPress={() => goToState("all")} />
-          <Item icon="contacts" label="Contacts" active={!onMessages} onPress={() => router.push("/(tabs)/contacts")} />
-          <Item icon="scheduled" label="Scheduled" onPress={() => { if (!openScheduledPane()) router.push("/scheduled"); }} />
+          <Item icon="contacts" label="Contacts" active={!onMessages} onPress={() => router.replace("/contacts")} />
+          <Item
+            icon="scheduled"
+            label="Scheduled"
+            onPress={() => router.push({ pathname: "/scheduled", params: { workspace: destination } })}
+          />
         </View>
       </View>
       <View style={styles.utility}>
-        <Item icon="settings" label="Settings" onPress={() => { if (!openSettingsPane()) router.push("/settings"); }} />
+        <Item
+          icon="settings"
+          label="Settings"
+          onPress={() => router.push({ pathname: "/settings", params: { workspace: destination } })}
+        />
       </View>
     </View>
   );
@@ -128,7 +134,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingBottom: 16,
     paddingTop: 16,
-    width: 64,
+    width: DESKTOP_RAIL_WIDTH,
   },
   top: {
     alignItems: "center",

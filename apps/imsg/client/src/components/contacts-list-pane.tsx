@@ -22,7 +22,6 @@ import { DeskHeader, DESK_HEADER_HEIGHT } from "./desk-header";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
-import { TriageNavigationRail } from "./triage-navigation-rail";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
@@ -64,6 +63,8 @@ function buildRows(people: ContactListRow[], nameOrder: ReturnType<typeof useNam
 export interface ContactsListPaneProps {
   wide: boolean;
   selectedId?: string;
+  /** A deep-linked person can be selected before their directory row/id is known. */
+  hasSelection?: boolean;
   onSelectPerson: (person: ContactListRow) => void;
 }
 
@@ -74,7 +75,7 @@ export interface ContactsListPaneProps {
  * independent (name filter + Airtable lookup — no inbox lenses, no deep
  * message search). Plain FlatList by design.
  */
-export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsListPaneProps) {
+export function ContactsListPane({ wide, selectedId, hasSelection = false, onSelectPerson }: ContactsListPaneProps) {
   const theme = useTheme();
   const visual = useTriageTheme();
   const nameOrder = useNameOrder();
@@ -100,9 +101,9 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
   }, [people, needle]);
 
   useEffect(() => {
-    if (!wide || selectedId || !filtered?.[0]) return;
+    if (!wide || hasSelection || selectedId || !filtered?.[0]) return;
     onSelectPerson(filtered[0]);
-  }, [filtered, onSelectPerson, selectedId, wide]);
+  }, [filtered, hasSelection, onSelectPerson, selectedId, wide]);
 
   const rows = useMemo(() => {
     const base = filtered ? buildRows(filtered, nameOrder) : [];
@@ -267,13 +268,7 @@ export function ContactsListPane({ wide, selectedId, onSelectPerson }: ContactsL
     </SidebarFrame>
   );
 
-  if (!wide) return pane;
-  return (
-    <View style={styles.desktopDesk}>
-      <TriageNavigationRail destination="contacts" />
-      <View style={styles.desktopList}>{pane}</View>
-    </View>
-  );
+  return pane;
 }
 
 /** Floating card wrapper — the same geometry ChatRow uses on the desk, so
@@ -308,8 +303,6 @@ function ContactCard({
 }
 
 const styles = StyleSheet.create({
-  desktopDesk: { flex: 1, flexDirection: "row" },
-  desktopList: { flex: 1, minWidth: 0 },
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
   card: {
     borderRadius: TriageGeometry.rowRadius,

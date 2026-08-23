@@ -195,6 +195,102 @@ test("Scheduled uses the same responsive pane on Messages and Contacts", async (
   }
 });
 
+test("persistent desktop workspaces keep one rail, selections, and independent searches", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "light");
+  const page = desk.page;
+
+  await expect(page.getByTestId("triage-rail")).toHaveCount(1);
+  const messageSearch = page.getByLabel("Search conversations and messages");
+  await messageSearch.fill("Alex");
+  await page.getByTestId("conversation-row").first().click();
+  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+
+  await page.getByRole("button", { name: "Contacts" }).click();
+  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect(page.getByTestId("triage-rail")).toHaveCount(1);
+  const contactSearch = page.getByLabel("Search contacts");
+  await contactSearch.fill("Jordan");
+  await page.getByText("Jordan Lee", { exact: true }).first().click();
+
+  await page.getByRole("button", { name: /^Needs reply/ }).click();
+  await expect(messageSearch).toHaveValue("Alex");
+  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-persistent-messages.png", animations: "disabled" });
+
+  await page.getByRole("button", { name: "Contacts" }).click();
+  await expect(contactSearch).toHaveValue("Jordan");
+  await expect.poll(() => page.getByText("Jordan Lee", { exact: true }).filter({ visible: true }).count()).toBeGreaterThanOrEqual(2);
+  await page.screenshot({ path: "/tmp/comma-persistent-workspaces.png", animations: "disabled" });
+});
+
+test("Scheduled and Settings share one utility owner and close on workspace change", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  const visiblePane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
+
+  await page.getByRole("button", { name: "Scheduled" }).click();
+  await expect(visiblePane).toHaveCount(1);
+  await page.getByLabel("Close scheduled").click();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(visiblePane).toHaveCount(1);
+  await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
+
+  await page.getByRole("button", { name: "Contacts" }).click();
+  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect(visiblePane).toHaveCount(0);
+  await expect(page.getByText("Settings", { exact: true })).toHaveCount(0);
+});
+
+test("compact tabs keep their eager route structure", async ({ desk }) => {
+  await desk.page.setViewportSize({ width: 390, height: 844 });
+  await desk.page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(desk.page.getByTestId("triage-rail")).toHaveCount(0);
+  await expect(desk.page.getByRole("tab", { name: "Messages" })).toBeVisible();
+  await desk.page.getByRole("tab", { name: "Contacts" }).click();
+  await expect(desk.page.getByLabel("Search contacts")).toBeVisible();
+  await expect(desk.page).toHaveURL(/\/contacts$/);
+  await desk.page.getByRole("tab", { name: "Messages" }).click();
+  await expect(desk.page.getByLabel("Search conversations and messages")).toBeVisible();
+});
+
+test("wide cold routes project into the persistent desktop shell", async ({ desk }) => {
+  const page = desk.page;
+  await desk.request.post("/__fixture/reset");
+  await page.setViewportSize({ width: 1300, height: 820 });
+
+  await page.goto("/settings?workspace=contacts", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("triage-rail")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
+
+  await page.goto("/scheduled?workspace=messages", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: /Needs reply|Waiting|All messages/ })).toBeVisible();
+  await expect(page.getByText("Scheduled", { exact: true }).last()).toBeVisible();
+
+  await page.goto("/person?address=%2B16195550102&name=Jordan%20Lee", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect.poll(() => page.getByText("Jordan Lee", { exact: true }).filter({ visible: true }).count()).toBeGreaterThanOrEqual(2);
+
+  await page.goto(`/chat/${encodeURIComponent(desk.chats.needs)}?name=Alex%20Rivera`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+
+  await page.goto(`/chat-info?guid=${encodeURIComponent(desk.chats.needs)}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Details", { exact: true }).last()).toBeVisible();
+
+  await page.goto("/search?query=Alex", { waitUntil: "domcontentloaded" });
+  await expect(page.getByPlaceholder("Search contacts and messages…")).toHaveValue("Alex");
+
+  await page.goto("/new-chat", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("To:", { exact: true })).toBeVisible();
+
+  await page.goto("/forward", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Nothing to forward", { exact: true })).toBeVisible();
+
+  const unknownApi = await desk.request.get("/api/not-real");
+  expect(unknownApi.status()).toBe(404);
+  expect(unknownApi.headers()["content-type"]).toContain("application/json");
+});
+
 test("Scheduled edit state survives crossing the utility-pane breakpoint", async ({ desk }) => {
   for (const [startWidth, endWidth] of [[1039, 1040], [1040, 1039]] as const) {
     await resetAndOpen(desk, startWidth, "dark");
@@ -239,6 +335,54 @@ test("an inactive tab cannot surface a retained utility modal after resize", asy
 
   await expect(visiblePane).toHaveCount(0);
   await expect(page.getByText("Scheduled", { exact: true })).toHaveCount(0);
+});
+
+test("global command palette applies Messages views from Contacts", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  await page.getByRole("button", { name: "Contacts" }).click();
+  await page.keyboard.press("Meta+k");
+  const paletteSearch = page.getByPlaceholder("Search or jump to…");
+  await paletteSearch.fill("Waiting");
+  await page.getByText("Waiting", { exact: true }).last().click();
+
+  await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("Cmd+W clears the shell and route selection atomically", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  await page.getByTestId("conversation-row").first().click();
+  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+
+  await page.keyboard.press("Meta+w");
+  await expect(page.getByText("Select a conversation", { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("Cmd+W closes a route-owned utility and its URL", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  await page.getByRole("button", { name: "Scheduled" }).click();
+  await expect(page).toHaveURL(/\/scheduled/);
+  await page.keyboard.press("Meta+w");
+
+  await expect(page.locator('[data-testid="desktop-utility-pane-content"]:visible')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/(?:\?|$)/);
+});
+
+test("Escape clears list search before closing the shell utility", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  const search = page.getByLabel("Search conversations and messages");
+  await page.getByRole("button", { name: "Scheduled" }).click();
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
+  await search.fill("Alex");
+
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
 });
 
 test("every visible control remains stable and usable on hover", async ({ desk }) => {
@@ -317,11 +461,11 @@ test("messages send through the real UI and fixture replies arrive over SSE", as
   const outbound = "Fixture outbound: doors confirmed at eight.";
   await composer.fill(outbound);
   await composer.press("Enter");
-  await expect(page.getByText(outbound, { exact: true }).last()).toBeVisible();
+  await expect(page.getByText(outbound, { exact: true }).filter({ visible: true })).toHaveCount(1);
 
   const inbound = "Fixture inbound: perfect, see you there.";
   await desk.receive(desk.chats.needs, inbound, "+16195550101");
-  await expect(page.getByText(inbound, { exact: true }).last()).toBeVisible();
+  await expect(page.getByText(inbound, { exact: true }).filter({ visible: true })).toHaveCount(1);
   await page.screenshot({ path: "/tmp/comma-send-receive-fixture.png", animations: "disabled" });
 });
 

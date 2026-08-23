@@ -1070,6 +1070,10 @@ app.get("/events", (c) => {
 
 deps.configureFixtureRoutes?.(app, { broadcast, directory });
 
+// Unknown API paths must remain API 404s instead of falling through to the
+// SPA shell, which would turn a client typo into a misleading 200 HTML reply.
+app.get("/api/*", (c) => c.json({ error: "Not found" }, 404));
+
 // -------------------------------------------------------------- static app
 // The universal Expo web export. Expo static output has one HTML file per
 // route, so dynamic segments need explicit rewrites.
@@ -1086,7 +1090,8 @@ app.use(
 app.get(
   "*",
   serveStatic({
-    path: `${staticRoot}/index.html`,
+    root: staticRoot,
+    rewriteRequestPath: () => "/index.html",
     onFound: (_path, c) => {
       c.header("Cache-Control", "no-store");
     },

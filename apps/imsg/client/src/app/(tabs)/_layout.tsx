@@ -7,9 +7,8 @@ import { useTheme } from "@/hooks/use-theme";
 
 /**
  * Real bottom tab bar on mobile: Messages and Contacts are equal primary
- * destinations, not one hidden behind the other. Hidden on wide/desktop
- * layouts, which use NavSwitcher (a segmented control) inside each screen
- * instead — a native-style tab bar reads oddly on a desktop-width web page.
+ * destinations, not one hidden behind the other. The persistent root desktop
+ * shell owns wide navigation, so this native tab bar is hidden there.
  */
 export default function TabsLayout() {
   const { wide } = useLayoutMode();

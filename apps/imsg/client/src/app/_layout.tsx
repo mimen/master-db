@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { DesktopShellProvider } from "@/components/desktop-shell-provider";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
@@ -58,8 +59,9 @@ export default function RootLayout() {
               {/* freezeOnBlur: without it the conversation list keeps
                   re-rendering on every inbound event while it sits invisible
                   behind an open thread. */}
-              <Stack screenOptions={{ freezeOnBlur: true }}>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <DesktopShellProvider>
+                <Stack screenOptions={{ freezeOnBlur: true }}>
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 {/* Chevron only. A headerBackTitle ("Messages") renders INSIDE
                     the circular glass back button on iOS 26 and gets clipped
                     to "lessag" — the native "shrink the label when it doesn't
@@ -77,8 +79,9 @@ export default function RootLayout() {
                 <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
                 <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
                 <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
-                <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
-              </Stack>
+                  <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
+                </Stack>
+              </DesktopShellProvider>
               <ReleaseUpdateBanners />
               <ToastHost />
               <StatusBar style="auto" />

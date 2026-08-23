@@ -3,6 +3,7 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar, GroupPhotoAvatar } from "@/components/avatar";
 import { ThreadView } from "@/components/thread-view";
@@ -55,7 +56,7 @@ const headerStyles = StyleSheet.create({
   },
 });
 
-export default function ChatScreen() {
+export default function ChatScreen(): React.JSX.Element | null {
   const params = useLocalSearchParams<{
     guid: string;
     name?: string;
@@ -66,11 +67,13 @@ export default function ChatScreen() {
   }>();
   const headerHeight = useHeaderHeight();
   const theme = useTheme();
+  const { wide } = useLayoutMode();
   const isGroup = params.isGroup === "1" || params.guid.includes(";+;");
   const jumpTarget: JumpTarget | null =
     params.targetGuid && params.targetDate
       ? { guid: params.targetGuid, dateCreated: Number(params.targetDate) }
       : null;
+  if (wide) return null;
 
   return (
     <>
