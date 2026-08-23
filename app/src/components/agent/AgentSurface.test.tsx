@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 
 const META = {
   entity_id: "abc",
@@ -77,10 +77,20 @@ import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
 
 describe("AgentSurface", () => {
   beforeEach(() => {
+    // META's due/deadline are fixed calendar dates, and formatSmartDate renders
+    // relative to "now" — pin the clock ahead of them so the chip assertions
+    // stay deterministic instead of flipping to "overdue" once the real date
+    // passes. shouldAdvanceTime keeps React Testing Library's timers alive.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date("2026-05-20T12:00:00"))
     queryResult = META
     completeTaskMock.mockClear()
     reopenTaskMock.mockClear()
     genericActionMock.mockClear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   test("renders the real task title, the thread id, and project from meta", () => {
@@ -183,6 +193,23 @@ describe("AgentSurface", () => {
         <AgentSurface entity_ref="todoist:task:abc" />
       </AgentComposerProvider>,
     )
+    expect(screen.getByText("urgent")).toBeInTheDocument()
+  })
+
+  test("hides the routine label chip while keeping the others", () => {
+    queryResult = {
+      ...META,
+      labels: [
+        { name: "routine", color: "charcoal" },
+        { name: "urgent", color: "red" },
+      ],
+    }
+    render(
+      <AgentComposerProvider>
+        <AgentSurface entity_ref="todoist:task:abc" />
+      </AgentComposerProvider>,
+    )
+    expect(screen.queryByText("routine")).not.toBeInTheDocument()
     expect(screen.getByText("urgent")).toBeInTheDocument()
   })
 
