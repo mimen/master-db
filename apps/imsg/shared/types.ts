@@ -238,22 +238,62 @@ export type TranscriptState =
 // ------------------------------------------------------------------------ AI
 
 /** Reported by /api/ai/status so the client can hide surfaces it cannot use. */
+export type SuggestionModel = "opus" | "terra";
+export type SuggestionStrategy =
+  | "answer"
+  | "clarify"
+  | "advance"
+  | "defer"
+  | "decline"
+  | "close"
+  | "react";
+export type SuggestionVibe = "curious" | "affirmative" | "cautious" | "boundary" | "playful";
+export type TapbackType = "love" | "like" | "dislike" | "laugh" | "emphasize" | "question";
+
 export interface AiStatus {
-  /** Fast lane reachable — gateway key present. */
+  /** Direct suggestion lane reachable — gateway key present. */
   suggestions: boolean;
+  /** Whether this BlueBubbles server supports outbound tapbacks. */
+  reactionSuggestions: boolean;
   /** Harness lane reachable — ccs present with automation provenance. */
   shadow: boolean;
   /** Human-readable reason when `shadow` is false. */
   shadowDetail: string | null;
 }
 
+export interface ReplySuggestion {
+  id: string;
+  kind: "text" | "reaction";
+  strategy: SuggestionStrategy;
+  vibe: SuggestionVibe;
+  text: string;
+  reaction: TapbackType | null;
+  targetMessageGuid: string | null;
+  targetMessagePreview: string | null;
+  targetPartIndex: number | null;
+}
+
 export interface ReplySuggestions {
-  suggestions: string[];
+  suggestions: ReplySuggestion[];
+  recipeVersion: number;
+  selectedModel: SuggestionModel;
+  servedModel: SuggestionModel;
+  fallback: boolean;
+  noReply: boolean;
   /** Guid of the last message when these were generated. */
   basedOnMessageGuid: string | null;
   /** True when newer messages have arrived since generation. */
   stale: boolean;
   generatedAt: number;
+}
+
+export interface SuggestionFeedbackRequest {
+  suggestion: ReplySuggestion;
+  selectedModel: SuggestionModel;
+  servedModel: SuggestionModel;
+  recipeVersion: number;
+  selectedAt: number;
+  finalText: string;
 }
 
 export interface ContactSuggestion {

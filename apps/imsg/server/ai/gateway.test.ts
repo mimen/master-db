@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { extractText, parseJsonBlock } from "./gateway";
+import { extractText, Gateway, parseJsonBlock } from "./gateway";
+import type { AiConfig } from "../config";
 
 describe("extractText", () => {
   test("concatenates text blocks", () => {
@@ -22,6 +23,49 @@ describe("extractText", () => {
   test("returns empty string for missing or empty content", () => {
     expect(extractText({})).toBe("");
     expect(extractText({ content: [] })).toBe("");
+  });
+});
+
+const config: AiConfig = {
+  gatewayUrl: "http://127.0.0.1:8317", gatewayKey: "key", fastModel: "gpt-5.6-luna(low)",
+  vaultPath: "", creatorRef: "test", ccsBin: "ccs", shadowSeat: "imsg-shadow", shadowCwd: "/tmp",
+};
+
+describe("structured output capability", () => {
+  test("malformed output does not disable structured mode", async () => {
+    const gateway = new Gateway(config);
+    const structuredCalls: boolean[] = [];
+    (gateway as unknown as { requestStructured: unknown }).requestStructured = async (
+      _prompt: string,
+      _schema: object,
+      _options: object,
+      structured: boolean,
+    ) => {
+      structuredCalls.push(structured);
+      return { ok: false, error: { kind: "invalid-output", message: "bad json", status: null, retryAfterMs: null } };
+    };
+    await gateway.completeStructured("x", {}, { model: "claude-opus-5", maxTokens: 10, timeoutMs: 100 });
+    await gateway.completeStructured("x", {}, { model: "claude-opus-5", maxTokens: 10, timeoutMs: 100 });
+    expect(structuredCalls).toEqual([true, true]);
+  });
+
+  test("a schema rejection retries once and remembers capability", async () => {
+    const gateway = new Gateway(config);
+    const structuredCalls: boolean[] = [];
+    (gateway as unknown as { requestStructured: unknown }).requestStructured = async (
+      _prompt: string,
+      _schema: object,
+      _options: object,
+      structured: boolean,
+    ) => {
+      structuredCalls.push(structured);
+      return structured
+        ? { ok: false, error: { kind: "schema-unsupported", message: "unsupported", status: 400, retryAfterMs: null } }
+        : { ok: true, value: { ok: true } };
+    };
+    await gateway.completeStructured("x", {}, { model: "gpt-5.6-terra(medium)", maxTokens: 10, timeoutMs: 100 });
+    await gateway.completeStructured("x", {}, { model: "gpt-5.6-terra(medium)", maxTokens: 10, timeoutMs: 100 });
+    expect(structuredCalls).toEqual([true, false, false]);
   });
 });
 

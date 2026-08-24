@@ -1,15 +1,24 @@
-/**
- * Stack-aware signal bus for dropping text into the active composer. Overlay
- * composers (Sweep) temporarily sit above the underlying thread; removing the
- * overlay restores the previous listener instead of disconnecting all fills.
- * Suggestions always fill visible text for editing and never send.
- */
-type Listener = (text: string) => void;
+import type { ReplySuggestion, SuggestionModel } from "@shared/types";
 
+export interface SuggestionAttribution {
+  suggestion: ReplySuggestion;
+  selectedModel: SuggestionModel;
+  servedModel: SuggestionModel;
+  recipeVersion: number;
+  selectedAt: number;
+}
+
+export interface ComposerFill {
+  text: string;
+  attribution: SuggestionAttribution | null;
+}
+
+type Listener = (fill: ComposerFill) => void;
 const listeners: Listener[] = [];
 
-export function fillComposer(text: string): void {
-  listeners[listeners.length - 1]?.(text);
+/** Fill the active composer. Supplying attribution enables local edit learning. */
+export function fillComposer(text: string, attribution: SuggestionAttribution | null = null): void {
+  listeners[listeners.length - 1]?.({ text, attribution });
 }
 
 export function onFillComposer(cb: Listener): () => void {

@@ -109,6 +109,11 @@ export function ThreadView({
     }
     return false;
   }, [messages]);
+  const reactionPreview = useCallback((messageGuid: string): string => {
+    const message = messagesRef.current.find((item) => item.guid === messageGuid);
+    const preview = message?.text.trim() || "this message";
+    return preview.length > 72 ? `${preview.slice(0, 69)}…` : preview;
+  }, []);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
@@ -764,6 +769,8 @@ export function ThreadView({
         chatGuid={chatGuid}
         enabled={aiStatus?.suggestions === true && !editing}
         awaitingReply={awaitingReply}
+        reactionSuggestions={aiStatus?.reactionSuggestions === true}
+        reactionPreview={reactionPreview}
       />
       <Composer
         chatGuid={chatGuid}

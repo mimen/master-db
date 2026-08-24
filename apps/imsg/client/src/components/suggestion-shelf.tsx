@@ -5,89 +5,136 @@ import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
-import { useSuggestionMode } from "@/lib/settings";
+import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
+import { useActionSheet } from "@/lib/action-sheet";
+import { showToast } from "@/lib/toast";
 import { chromeControlFill } from "./sidebar/chrome-control-fill";
+import { TAPBACK_EMOJI } from "./bubble";
+import type { ReplySuggestion, ReplySuggestions, SuggestionVibe } from "@shared/types";
 
-/**
- * Reply-suggestion shelf, above the composer on desktop.
- *
- * Trigger policy is a user setting (settings.ts):
- *   - off:       never shown.
- *   - on-demand: shows a "Suggest a reply" button; nothing is generated until tapped.
- *   - auto:      generates once when the chat opens, then serves cache.
- * A new inbound message marks the shelf stale rather than regenerating, so a
- * burst costs nothing until Milad taps refresh. Tapping a suggestion fills the
- * composer for editing; it is never sent.
- */
 interface SuggestionShelfProps {
   chatGuid: string;
   enabled: boolean;
-  /** Only suggest when the last message is theirs — i.e. Milad owes a reply. */
   awaitingReply: boolean;
+  reactionSuggestions: boolean;
+  reactionPreview: (messageGuid: string) => string;
 }
 
-export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: SuggestionShelfProps) {
+export function SuggestionShelf({
+  chatGuid,
+  enabled,
+  awaitingReply,
+  reactionSuggestions,
+  reactionPreview,
+}: SuggestionShelfProps) {
   const theme = useTheme();
   const mode = useSuggestionMode();
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const selectedModel = useSuggestionModel();
+  const showSheet = useActionSheet();
+  const [result, setResult] = useState<ReplySuggestions | null>(null);
   const [loading, setLoading] = useState(false);
   const [stale, setStale] = useState(false);
   const [failed, setFailed] = useState(false);
-  // Guards against a slow response for a previous chat landing in a new one.
-  const activeGuid = useRef(chatGuid);
+  const [resolved, setResolved] = useState(false);
+  const activeRequest = useRef(0);
+  const messageEpoch = useRef(0);
 
   const load = useCallback(
     async (refresh: boolean) => {
-      activeGuid.current = chatGuid;
+      const requestId = ++activeRequest.current;
+      const startedAtMessageEpoch = messageEpoch.current;
       setLoading(true);
       setFailed(false);
       try {
-        const result = await api.aiSuggestions(chatGuid, refresh);
-        if (activeGuid.current !== chatGuid) return;
-        setSuggestions(result.suggestions);
-        setStale(result.stale);
+        const next = await api.aiSuggestions(chatGuid, selectedModel, refresh);
+        if (activeRequest.current !== requestId) return;
+        setResult(next);
+        setResolved(true);
+        setStale(next.stale || messageEpoch.current !== startedAtMessageEpoch);
       } catch {
-        if (activeGuid.current === chatGuid) setFailed(true);
+        if (activeRequest.current === requestId) setFailed(true);
       } finally {
-        if (activeGuid.current === chatGuid) setLoading(false);
+        if (activeRequest.current === requestId) setLoading(false);
       }
     },
-    [chatGuid],
+    [chatGuid, selectedModel],
   );
 
-  // Reset per chat. In auto mode, generate immediately when Milad owes a reply;
-  // in on-demand mode, wait for the button. Opening a thread he has already
-  // answered shows nothing either way.
   useEffect(() => {
-    setSuggestions([]);
+    activeRequest.current++;
+    messageEpoch.current = 0;
+    setResult(null);
+    setResolved(false);
     setStale(false);
     setFailed(false);
     if (!enabled || !awaitingReply || mode !== "auto") return;
     void load(false);
-  }, [chatGuid, enabled, awaitingReply, mode, load]);
+  }, [chatGuid, enabled, awaitingReply, mode, selectedModel, load]);
 
-  // A new message for this chat marks the shelf stale — no automatic refetch.
   useServerEvents(
     useCallback(
       (event) => {
-        if (event.kind === "new-message" && event.chatGuid === chatGuid) setStale(true);
+        if (event.kind === "new-message" && event.chatGuid === chatGuid) {
+          messageEpoch.current++;
+          setStale(true);
+        }
       },
       [chatGuid],
     ),
   );
 
-  if (!enabled || !awaitingReply || mode === "off") return null;
+  const applyTextSuggestion = (suggestion: ReplySuggestion): void => {
+    if (!result || stale) return;
+    fillComposer(suggestion.text, {
+      suggestion,
+      selectedModel: result.selectedModel,
+      servedModel: result.servedModel,
+      recipeVersion: result.recipeVersion,
+      selectedAt: Date.now(),
+    });
+  };
 
-  // On-demand, nothing generated yet: offer the button instead of the shelf.
-  if (mode === "on-demand" && suggestions.length === 0 && !loading && !failed) {
+  const confirmReaction = (suggestion: ReplySuggestion): void => {
+    if (!result || stale || !reactionSuggestions || !suggestion.reaction || !suggestion.targetMessageGuid) return;
+    const emoji = TAPBACK_EMOJI.get(suggestion.reaction) ?? suggestion.reaction;
+    const loadedPreview = reactionPreview(suggestion.targetMessageGuid);
+    const target = loadedPreview === "this message"
+      ? (suggestion.targetMessagePreview ?? loadedPreview)
+      : loadedPreview;
+    showSheet({
+      title: `${emoji}  ${target}`,
+      actions: [{
+        label: `React ${emoji}`,
+        onPress: () => {
+          void api.react(suggestion.targetMessageGuid!, {
+            chatGuid,
+            reaction: suggestion.reaction!,
+            partIndex: suggestion.targetPartIndex ?? 0,
+            suggested: true,
+          }).then(() => {
+            void api.recordSuggestionFeedback(chatGuid, {
+              suggestion,
+              selectedModel: result.selectedModel,
+              servedModel: result.servedModel,
+              recipeVersion: result.recipeVersion,
+              selectedAt: Date.now(),
+              finalText: suggestion.text,
+            }).catch(() => undefined);
+          }).catch(() => showToast("Reaction failed"));
+        },
+      }],
+    });
+  };
+
+  if (!enabled || !awaitingReply || mode === "off") return null;
+  const suggestions = result?.suggestions ?? [];
+  if (mode === "on-demand" && !resolved && suggestions.length === 0 && !loading && !failed) {
     return (
       <View style={[styles.container, styles.demandRow, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
         <DemandButton onPress={() => void load(true)} />
       </View>
     );
   }
-
-  // Nothing to show yet and nothing wrong: stay out of the way until first load.
   if (!loading && !failed && suggestions.length === 0) return null;
 
   return (
@@ -97,12 +144,13 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
         <Text style={[styles.label, { color: theme.textSecondary }]}>
           {failed ? "Suggestions unavailable" : stale ? "New message — refresh" : "Suggestions"}
         </Text>
+        {result && (
+          <Text style={[styles.model, { color: theme.textSecondary }]}>
+            {result.servedModel === "opus" ? "Opus" : "Terra"}{result.fallback ? " · fallback" : ""}
+          </Text>
+        )}
         <Pressable onPress={() => void load(true)} disabled={loading} hitSlop={8} style={styles.refresh}>
-          <Ionicons
-            name="refresh"
-            size={15}
-            color={loading ? theme.textSecondary : theme.accent}
-          />
+          <Ionicons name="refresh" size={15} color={loading ? theme.textSecondary : theme.accent} />
         </Pressable>
       </View>
 
@@ -113,33 +161,46 @@ export function SuggestionShelf({ chatGuid, enabled, awaitingReply }: Suggestion
         </View>
       ) : (
         <View style={styles.pillRow}>
-          {suggestions.map((text, i) => (
-            <Pressable
-              key={`${i}-${text.slice(0, 12)}`}
-              onPress={() => fillComposer(text)}
-              style={[
-                styles.pill,
-                {
-                  borderColor: "rgba(0,122,255,0.35)",
-                  opacity: stale ? 0.55 : 1,
-                },
-              ]}
-            >
-              <Text
-                numberOfLines={2}
+          {suggestions.map((suggestion) => {
+            const colors = vibeColors(suggestion.vibe);
+            const emoji = suggestion.reaction ? TAPBACK_EMOJI.get(suggestion.reaction) : null;
+            return (
+              <Pressable
+                key={suggestion.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${suggestion.strategy}, ${suggestion.vibe}: ${suggestion.text}`}
+                disabled={stale}
+                onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
                 style={[
-                  styles.pillText,
-                  { color: theme.accent, fontSize: 13, lineHeight: 16 },
+                  styles.pill,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    opacity: stale ? 0.55 : 1,
+                  },
                 ]}
               >
-                {text}
-              </Text>
-            </Pressable>
-          ))}
+                {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
+                <Text numberOfLines={3} style={[styles.pillText, { color: theme.text }]}>
+                  {suggestion.text}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </View>
   );
+}
+
+function vibeColors(vibe: SuggestionVibe): { background: string; border: string } {
+  switch (vibe) {
+    case "curious": return { background: "rgba(120,174,248,0.13)", border: "rgba(120,174,248,0.38)" };
+    case "affirmative": return { background: "rgba(114,213,163,0.13)", border: "rgba(114,213,163,0.38)" };
+    case "cautious": return { background: "rgba(239,191,104,0.13)", border: "rgba(239,191,104,0.38)" };
+    case "boundary": return { background: "rgba(238,133,133,0.13)", border: "rgba(238,133,133,0.38)" };
+    case "playful": return { background: "rgba(189,153,242,0.13)", border: "rgba(189,153,242,0.38)" };
+  }
 }
 
 function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
@@ -159,79 +220,23 @@ function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
       ]}
     >
       <Ionicons name="sparkles-outline" size={15} color={theme.accent} />
-      <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500", lineHeight: 16 }}>
-        Suggest a reply
-      </Text>
+      <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500", lineHeight: 16 }}>Suggest a reply</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  demandRow: {
-    justifyContent: "center",
-    minHeight: 44,
-    paddingBottom: 8,
-    paddingTop: 8,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 6,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    flex: 1,
-  },
-  refresh: {
-    padding: 2,
-  },
-  demandButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 4,
-    paddingBottom: 8,
-  },
-  loadingText: {
-    fontSize: 13,
-  },
-  pillRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    paddingBottom: 6,
-  },
-  pill: {
-    alignItems: "center",
-    borderRadius: 15,
-    borderWidth: 1,
-    justifyContent: "center",
-    maxWidth: "100%",
-    minHeight: 30,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  pillText: {
-    fontSize: 13,
-    lineHeight: 16,
-  },
+  container: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  demandRow: { justifyContent: "center", minHeight: 44, paddingBottom: 8, paddingTop: 8 },
+  header: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+  label: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4, flex: 1 },
+  model: { fontSize: 10, fontWeight: "500" },
+  refresh: { padding: 2 },
+  demandButton: { alignItems: "center", alignSelf: "flex-start", borderRadius: 8, flexDirection: "row", gap: 6, paddingHorizontal: 8, paddingVertical: 7 },
+  loadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, paddingBottom: 8 },
+  loadingText: { fontSize: 13 },
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 6 },
+  pill: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
+  pillText: { fontSize: 13, lineHeight: 17, flexShrink: 1 },
+  reactionEmoji: { fontSize: 16 },
 });

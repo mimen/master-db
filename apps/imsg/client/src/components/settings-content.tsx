@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { displayReleaseSha } from "@shared/release-identity";
+import type { SuggestionModel } from "@shared/types";
 import { useSyncExternalStore, type JSX } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -9,11 +10,16 @@ import { Fonts, Radii, Spacing } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useTheme } from "@/hooks/use-theme";
 import { releaseStatus } from "@/lib/release-status";
+import { api } from "@/lib/api";
+import { useActionSheet } from "@/lib/action-sheet";
+import { showToast } from "@/lib/toast";
 import {
   setNameOrder,
   setSuggestionMode,
+  setSuggestionModel,
   useNameOrder,
   useSuggestionMode,
+  useSuggestionModel,
   type NameOrder,
   type SuggestionMode,
 } from "@/lib/settings";
@@ -36,6 +42,11 @@ const SUGGESTION_MODE_OPTIONS: ReadonlyArray<{ value: SuggestionMode; label: str
   { value: "off", label: "Off" },
   { value: "on-demand", label: "On demand" },
   { value: "auto", label: "Automatic" },
+];
+
+const SUGGESTION_MODEL_OPTIONS: ReadonlyArray<{ value: SuggestionModel; label: string; detail: string }> = [
+  { value: "opus", label: "Opus", detail: "Claude · taste first" },
+  { value: "terra", label: "Terra", detail: "ChatGPT · preserves Claude quota" },
 ];
 
 function ReleaseIdentityFooter(): JSX.Element {
@@ -85,7 +96,9 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   const theme = useTheme();
   const nameOrder = useNameOrder();
   const suggestionMode = useSuggestionMode();
+  const suggestionModel = useSuggestionModel();
   const aiStatus = useAiStatus();
+  const showSheet = useActionSheet();
 
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
@@ -162,6 +175,45 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
               How reply suggestions appear in a conversation.
             </Text>
+
+            <Text style={[styles.subsectionLabel, { color: theme.textSecondary }]}>Model</Text>
+            <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+              {SUGGESTION_MODEL_OPTIONS.map((opt, i) => (
+                <ListRow
+                  key={opt.value}
+                  title={opt.label}
+                  subtitle={opt.detail}
+                  titleWeight="400"
+                  onPress={() => setSuggestionModel(opt.value)}
+                  trailing={suggestionModel === opt.value ? <Ionicons name="checkmark" size={18} color={theme.accent} /> : undefined}
+                  style={i < SUGGESTION_MODEL_OPTIONS.length - 1 && {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.divider,
+                  }}
+                />
+              ))}
+            </View>
+            <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
+              If the selected route fails, Comma tries the other model and labels the shelf fallback.
+            </Text>
+
+            <View style={[styles.fieldGroup, styles.clearGroup, { backgroundColor: theme.backgroundElement }]}>
+              <ListRow
+                title={<Text style={{ color: "#ff453a", fontSize: 15 }}>Clear suggestion learning</Text>}
+                titleWeight="400"
+                onPress={() => showSheet({
+                  title: "Clear suggestion learning?",
+                  actions: [{
+                    label: "Clear learning",
+                    destructive: true,
+                    onPress: () => void api.clearSuggestionLearning().then(
+                      () => showToast("Suggestion learning cleared"),
+                      () => showToast("Could not clear suggestion learning"),
+                    ),
+                  }],
+                })}
+              />
+            </View>
           </View>
         )}
         <ReleaseIdentityFooter />
@@ -184,7 +236,9 @@ const styles = StyleSheet.create({
   container: { padding: Spacing.three, paddingTop: Spacing.four },
   section: { width: "100%", marginBottom: Spacing.four },
   sectionLabel: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", marginBottom: 8 },
+  subsectionLabel: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", marginBottom: 8, marginTop: 18, paddingHorizontal: 6 },
   fieldGroup: { width: "100%", borderRadius: Radii.input, overflow: "hidden" },
+  clearGroup: { marginTop: 18 },
   fieldCaption: { fontSize: 12, marginTop: 6, paddingHorizontal: 6 },
   releaseFooter: {
     borderTopWidth: StyleSheet.hairlineWidth,

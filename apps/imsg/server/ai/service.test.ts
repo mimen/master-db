@@ -47,18 +47,40 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
   };
 }
 
-/** A Gateway whose network call is replaced by a canned completion. */
-function fakeGateway(reply: string): Gateway {
+/** A Gateway whose network calls are replaced by canned completions. */
+function fakeGateway(reply: string, structured: object = suggestionSet("what time works?")): Gateway {
   const gateway = new Gateway(makeConfig());
   (gateway as unknown as { complete: unknown }).complete = async () => ({ ok: true, value: reply });
+  (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => ({ ok: true, value: structured });
   return gateway;
+}
+
+function suggestionSet(text: string, overrides: Record<string, object | string | boolean | number | string[]> = {}): object {
+  return {
+    noReply: false,
+    suggestions: [{
+      kind: "text",
+      strategy: "clarify",
+      vibe: "curious",
+      text,
+      reaction: "none",
+      targetMessageGuid: "",
+      targetPartIndex: 0,
+      basisMessageGuids: [],
+      decisionOption: false,
+      introducesCommitment: false,
+      ...overrides,
+    }],
+  };
 }
 
 function makeService(options: {
   messages?: Message[];
   reply?: string;
+  structured?: object;
   db?: OverlayDb;
   shadowReply?: string;
+  fetchError?: string;
 }) {
   const db = options.db ?? new OverlayDb(":memory:");
   const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => ({
@@ -69,9 +91,17 @@ function makeService(options: {
   const service = new AiService({
     config: makeConfig(),
     db,
-    gateway: fakeGateway(options.reply ?? "[]"),
+    gateway: fakeGateway(options.reply ?? "[]", options.structured),
     shadow,
-    fetchMessages: async () => options.messages ?? [],
+    fetchMessages: async () => options.fetchError
+      ? { ok: false, error: options.fetchError }
+      : { ok: true, value: options.messages ?? [] },
+    fetchMessageWithReactions: async (_chatGuid, messageGuid) => {
+      const message = options.messages?.find((item) => item.guid === messageGuid);
+      return message ? { ok: true, value: message } : { ok: false, error: "not found" };
+    },
+    recentOutboundText: () => [],
+    reactionSuggestions: () => true,
     searchVault: async () => [],
   });
   return { service, db };
@@ -92,149 +122,113 @@ describe("isStale", () => {
 });
 
 describe("replySuggestions", () => {
-  test("generates through the harness lane, caps at three, and caches", async () => {
+  test("generates a structured shelf and caches it by selected model", async () => {
     const { service, db } = makeService({
-      messages: [makeMessage({ guid: "m5" })],
-      shadowReply: 'Two variations:\n```json\n["a","b","c","d"]\n```',
+      messages: [makeMessage({ guid: "m5", text: "when works?" })],
+      structured: suggestionSet("what time works?"),
     });
-    const result = await service.replySuggestions("chat-1", "Sarah", false);
+    const result = await service.replySuggestions("chat-1", "Sarah", false, "opus");
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.suggestions).toEqual(["a", "b"]);
-      expect(result.value.stale).toBe(false);
+      expect(result.value.suggestions[0]?.text).toBe("what time works?");
+      expect(result.value.selectedModel).toBe("opus");
       expect(result.value.basedOnMessageGuid).toBe("m5");
     }
-    expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBe("m5");
+    expect(db.getSuggestionCache("chat-1", "opus")?.anchor_guid).toBe("m5");
   });
 
-  test("deduplicates concurrent generation for the same chat and message", async () => {
-    const { service } = makeService({ messages: [makeMessage({ guid: "m5" })] });
+  test("deduplicates concurrent generation by full route identity", async () => {
+    const { service } = makeService({ messages: [makeMessage({ guid: "m5", text: "when works?" })] });
     let calls = 0;
-    (service as unknown as { deps: { shadow: { turn: (prompt: string) => Promise<{ ok: true; value: string }> } } }).deps.shadow.turn = async () => {
+    const gateway = (service as unknown as { deps: { gateway: Gateway } }).deps.gateway;
+    (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
       calls++;
       await new Promise((resolve) => setTimeout(resolve, 5));
-      return { ok: true, value: '["fresh"]' };
+      return { ok: true, value: suggestionSet("what time works?") };
     };
     const [first, second] = await Promise.all([
-      service.replySuggestions("chat-1", null, true),
-      service.replySuggestions("chat-1", null, true),
+      service.replySuggestions("chat-1", null, true, "opus"),
+      service.replySuggestions("chat-1", null, true, "opus"),
     ]);
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
     expect(calls).toBe(1);
   });
 
-  test("limits concurrent harness suggestion generation", async () => {
-    const { service } = makeService({ messages: [makeMessage({ guid: "m5" })] });
-    let active = 0;
-    let peak = 0;
-    (service as unknown as { deps: { shadow: { turn: (prompt: string) => Promise<{ ok: true; value: string }> } } }).deps.shadow.turn = async () => {
-      active++;
-      peak = Math.max(peak, active);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      active--;
-      return { ok: true, value: '["fresh"]' };
-    };
-    await Promise.all([
-      service.replySuggestions("chat-1", null, true),
-      service.replySuggestions("chat-2", null, true),
-      service.replySuggestions("chat-3", null, true),
-      service.replySuggestions("chat-4", null, true),
-    ]);
-    expect(peak).toBe(2);
-  });
-
-  test("accepts a bare JSON array with narration around it", async () => {
-    const { service } = makeService({
-      messages: [makeMessage({ guid: "m5" })],
-      shadowReply: 'The thread is light. ["one","two"] — pick any.',
-    });
-    const result = await service.replySuggestions("chat-1", null, false);
-    if (result.ok) expect(result.value.suggestions).toEqual(["one", "two"]);
-  });
-
-  test("serves cache without regenerating", async () => {
+  test("regenerates route-specific cache when the anchor changes", async () => {
     const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", serializeSuggestionCache(["cached"]));
-    const { service } = makeService({
-      messages: [makeMessage({ guid: "m5" })],
-      db,
-      shadowReply: '["fresh"]',
+    db.setSuggestionCache({
+      chat_guid: "chat-1",
+      selected_model: "opus",
+      anchor_guid: "m5",
+      recipe_version: 3,
+      voice_revision: 2166136261,
+      edit_revision: 1947613349,
+      payload: serializeSuggestionCache({
+        recipeVersion: 3,
+        selectedModel: "opus",
+        servedModel: "opus",
+        fallback: false,
+        noReply: false,
+        suggestions: [],
+      }),
     });
-    const result = await service.replySuggestions("chat-1", null, false);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.suggestions).toEqual(["cached"]);
-  });
-
-  test("marks the shelf stale when a newer message arrived", async () => {
-    const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", serializeSuggestionCache(["cached"]));
     const { service } = makeService({ messages: [makeMessage({ guid: "m6" })], db });
-    const result = await service.replySuggestions("chat-1", null, false);
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.stale).toBe(true);
-  });
-
-  test("force regenerates and refreshes the anchor", async () => {
-    const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", serializeSuggestionCache(["cached"]));
-    const { service } = makeService({
-      messages: [makeMessage({ guid: "m6" })],
-      db,
-      shadowReply: '["fresh"]',
-    });
-    const result = await service.replySuggestions("chat-1", null, true);
+    const result = await service.replySuggestions("chat-1", null, false, "opus");
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.suggestions).toEqual(["fresh"]);
       expect(result.value.stale).toBe(false);
+      expect(result.value.basedOnMessageGuid).toBe("m6");
     }
-    expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBe("m6");
   });
 
-  test("drops non-string entries the model may emit", async () => {
-    const { service } = makeService({
-      messages: [makeMessage()],
-      shadowReply: '["ok", 42, null]',
-    });
-    const result = await service.replySuggestions("chat-1", null, true);
-    if (result.ok) expect(result.value.suggestions).toEqual(["ok"]);
+  test("propagates message-read failures instead of caching silence", async () => {
+    const { service, db } = makeService({ fetchError: "bluebubbles unavailable" });
+    const result = await service.replySuggestions("chat-1", null, false, "opus");
+    expect(result).toEqual({ ok: false, error: "bluebubbles unavailable" });
+    expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
   });
 
-  test("fails cleanly when the harness reply contains no array", async () => {
-    const { service } = makeService({
-      messages: [makeMessage()],
-      shadowReply: "I thought about it and here is what I would say…",
-    });
-    const result = await service.replySuggestions("chat-1", null, true);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("no suggestion array");
-  });
-
-  test("regenerates a corrupt cache payload", async () => {
-    const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", "not json");
-    const { service } = makeService({
-      messages: [makeMessage({ guid: "m5" })],
-      db,
-      shadowReply: '["fresh one", "fresh two"]',
-    });
-    const result = await service.replySuggestions("chat-1", null, false);
+  test("returns no reply without calling a model when Milad sent last", async () => {
+    const { service } = makeService({ messages: [makeMessage({ guid: "m5", isFromMe: true })] });
+    const result = await service.replySuggestions("chat-1", null, false, "terra");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.suggestions).toEqual(["fresh one", "fresh two"]);
+    if (result.ok) {
+      expect(result.value.noReply).toBe(true);
+      expect(result.value.suggestions).toEqual([]);
+    }
   });
 
-  test("regenerates legacy array caches after the prompt contract changes", async () => {
-    const db = new OverlayDb(":memory:");
-    db.setSuggestionCache("chat-1", "m5", '["obsolete"]');
-    const { service } = makeService({
-      messages: [makeMessage({ guid: "m5" })],
-      db,
-      shadowReply: '["current one", "current two"]',
-    });
-    const result = await service.replySuggestions("chat-1", null, false);
+  test("falls back to Terra on an Opus provider failure", async () => {
+    const { service } = makeService({ messages: [makeMessage({ text: "when works?" })] });
+    const gateway = (service as unknown as { deps: { gateway: Gateway } }).deps.gateway;
+    let calls = 0;
+    (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
+      calls++;
+      return calls === 1
+        ? { ok: false, error: { kind: "provider", message: "quota", status: 429, retryAfterMs: 60_000 } }
+        : { ok: true, value: suggestionSet("what time works?") };
+    };
+    const result = await service.replySuggestions("chat-1", null, true, "opus");
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.suggestions).toEqual(["current one", "current two"]);
+    if (result.ok) {
+      expect(result.value.servedModel).toBe("terra");
+      expect(result.value.fallback).toBe(true);
+    }
+    expect(calls).toBe(2);
+  });
+
+  test("does not retry a shared gateway failure", async () => {
+    const { service } = makeService({ messages: [makeMessage({ text: "when works?" })] });
+    const gateway = (service as unknown as { deps: { gateway: Gateway } }).deps.gateway;
+    let calls = 0;
+    (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
+      calls++;
+      return { ok: false, error: { kind: "shared", message: "gateway down", status: 503, retryAfterMs: null } };
+    };
+    const result = await service.replySuggestions("chat-1", null, true, "opus");
+    expect(result).toEqual({ ok: false, error: "gateway down" });
+    expect(calls).toBe(1);
   });
 });
 
@@ -266,7 +260,10 @@ describe("shadowEnqueue", () => {
       db,
       gateway: fakeGateway("[]"),
       shadow,
-      fetchMessages: async () => [],
+      fetchMessages: async () => ({ ok: true, value: [] }),
+      fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
+      recentOutboundText: () => [],
+      reactionSuggestions: () => false,
       searchVault: async () => [],
     });
 
@@ -293,7 +290,10 @@ describe("shadowEnqueue", () => {
       db,
       gateway: fakeGateway("[]"),
       shadow,
-      fetchMessages: async () => [],
+      fetchMessages: async () => ({ ok: true, value: [] }),
+      fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
+      recentOutboundText: () => [],
+      reactionSuggestions: () => false,
       searchVault: async () => [],
     });
 

@@ -5,6 +5,8 @@ import type {
   ContactSuggestion,
   ReplySuggestions,
   ShadowBrief,
+  SuggestionFeedbackRequest,
+  SuggestionModel,
   SmartCloser,
 } from "../../shared/types";
 import { FIXTURE_NOW } from "./world";
@@ -18,21 +20,40 @@ export class FixtureAi implements AiServiceLike {
     return Promise.resolve({ ok: true, value: ["Launch Crew", "Show Team", "Run of Show"] });
   }
 
-  replySuggestions(chatGuid: string, peerName: string | null, _force: boolean): Promise<Result<ReplySuggestions>> {
+  replySuggestions(
+    chatGuid: string,
+    _peerName: string | null,
+    _force: boolean,
+    selectedModel: SuggestionModel,
+  ): Promise<Result<ReplySuggestions>> {
+    const target = chatGuid.includes("50101") ? "needs-2" : "fixture-inbound";
     return Promise.resolve({
       ok: true,
       value: {
+        recipeVersion: 3,
+        selectedModel,
+        servedModel: selectedModel === "opus" ? "terra" : "terra",
+        fallback: selectedModel === "opus",
+        noReply: false,
         suggestions: [
-          `Yes${peerName ? `, ${peerName.split(" ")[0]}` : ""} — I’ll send the final timing shortly.`,
-          "Confirmed. I’ll follow up with the exact arrival window.",
-          "I have it. Give me a few minutes to verify the schedule.",
+          { id: "fixture-curious", kind: "text", strategy: "clarify", vibe: "curious", text: "what time do you need the final answer by?", reaction: null, targetMessageGuid: null, targetMessagePreview: null, targetPartIndex: null },
+          { id: "fixture-boundary", kind: "text", strategy: "decline", vibe: "boundary", text: "that turnaround is too tight on my end", reaction: null, targetMessageGuid: null, targetMessagePreview: null, targetPartIndex: null },
+          { id: "fixture-reaction", kind: "reaction", strategy: "react", vibe: "playful", text: "thumbs up", reaction: "like", targetMessageGuid: target, targetMessagePreview: "Can you send the final arrival time?", targetPartIndex: 0 },
         ],
-        basedOnMessageGuid: chatGuid.includes("50101") ? "needs-2" : null,
+        basedOnMessageGuid: target,
         stale: false,
         generatedAt: FIXTURE_NOW,
       },
     });
   }
+
+  recordSuggestionFeedback(_chatGuid: string, _request: SuggestionFeedbackRequest): Result<true> {
+    return { ok: true, value: true };
+  }
+
+  recordReactionFeedback(_chatGuid: string, _request: Omit<SuggestionFeedbackRequest, "finalText">): void {}
+
+  clearSuggestionLearning(): void {}
 
   identify(_chatGuid: string, _address: string, knownName: string | null): Promise<Result<ContactSuggestion>> {
     return Promise.resolve({

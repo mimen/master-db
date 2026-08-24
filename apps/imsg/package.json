@@ -22,6 +22,7 @@
     "start": "bun server/index.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "hono": "^4.12.30",
     "socket.io-client": "^4.8.3"
   },
