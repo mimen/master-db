@@ -1,6 +1,6 @@
 import type { ChatSummary, StateCounts, TriageProgressStats } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 
@@ -30,6 +30,12 @@ import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
+
+// FlashList 2 RecyclerView commitLayout increments internal state until
+// measured item sizes settle. On RN-web they don't (fractional flex + chrome
+// header) — that's React #185 in commitLayout, stack pointing at FlashList
+// inside ConversationListPane. Contacts already uses FlatList for this reason.
+const ConversationScrollList = Platform.OS === "web" ? FlatList : FlashList;
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -236,14 +242,16 @@ export function ConversationListPane({
     >
       {/* Filters and the labeled shelf ride the list header, passing
           behind the glass top bar. Wide search is sticky chrome. */}
-      <FlashList
+      <ConversationScrollList
           testID="conversation-list-scroll"
-          ref={viewport.listRef}
+          // FlashListRef and FlatList's ref don't overlap; callers only use
+          // scrollToOffset / scrollToIndex (ConversationListHandle).
+          ref={viewport.listRef as never}
           data={deskModel.listChats}
           keyExtractor={(chat) => chat.guid}
-          // Default iOS draw distance is 250px — barely three rows here, so a fast
-          // flick outruns it and shows blanks.
-          drawDistance={1500}
+          // Native-only: FlatList has no drawDistance, and FlashList's is what
+          // keeps a fast iOS flick from showing blanks (default is 250px).
+          {...(Platform.OS === "web" ? {} : { drawDistance: 1500 })}
           keyboardShouldPersistTaps="handled"
           // Native-only: RNW's on-drag treats ANY scroll event as a drag and
           // BLURS the focused input — our scroll-to-top on keystroke was

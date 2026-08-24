@@ -83,10 +83,12 @@ export function useSyntheticScrollMetrics(args: {
     thumb: { visible, top: chromeHeight, height, translateY },
     viewportHeight: () => viewportHRef.current,
     onViewportHeight(h) {
+      if (Math.abs(h - viewportHRef.current) <= 1) return;
       viewportHRef.current = h;
       setViewportH(h);
     },
     onContentHeight(h) {
+      if (Math.abs(h - contentHRef.current) <= 1) return;
       contentHRef.current = h;
       setContentH(h);
     },

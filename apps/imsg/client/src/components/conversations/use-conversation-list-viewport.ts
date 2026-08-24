@@ -1,4 +1,3 @@
-import type { FlashListRef } from "@shopify/flash-list";
 import { useEffect, useRef } from "react";
 import { Platform, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import type { ViewToken } from "react-native";
@@ -12,8 +11,14 @@ import {
 
 import type { InboxNavigationEntry } from "@/lib/inbox-model";
 
+/** Imperative surface shared by FlashList (native) and FlatList (web). */
+export type ConversationListHandle = {
+  scrollToOffset(params: { offset: number; animated?: boolean }): void;
+  scrollToIndex(params: { index: number; viewPosition?: number; animated?: boolean }): void;
+};
+
 export interface ConversationListViewport {
-  readonly listRef: React.RefObject<FlashListRef<ChatSummary> | null>;
+  readonly listRef: React.RefObject<ConversationListHandle | null>;
   readonly thumb: SyntheticThumbState;
   /** Wire these straight onto the FlashList. */
   readonly viewabilityConfig: { itemVisiblePercentThreshold: number };
@@ -28,7 +33,7 @@ export interface ConversationListViewport {
 }
 
 /**
- * THE owner of the conversation FlashList's imperative scrolling — no other
+ * THE owner of the conversation list's imperative scrolling — no other
  * module may call its scroll methods. Bundles: nullable fully-visible range,
  * glide edge-pinning, new-view scroll-to-top, web reorder restoration, and
  * the shared synthetic-thumb metrics.
@@ -43,7 +48,7 @@ export function useConversationListViewport(args: {
   readonly viewKey: string;
 }): ConversationListViewport {
   const { renderedChats, chromeHeight, footerHeight = 0, viewKey } = args;
-  const listRef = useRef<FlashListRef<ChatSummary>>(null);
+  const listRef = useRef<ConversationListHandle>(null);
   const scrollOffset = useRef(0);
   // Nullable: null = "no measurement for the current view yet". Reset when
   // the rendered view changes so a stale range never suppresses a reveal.
