@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { SuggestionModel } from "@shared/types";
 
 /**
  * App-wide user preferences. Same shape as drafts.ts — an in-memory value
@@ -17,12 +18,14 @@ export type NameOrder = "first-last" | "last-first";
 export interface Settings {
   /** How reply suggestions appear: never, on a tap, or automatically on open. */
   suggestionMode: SuggestionMode;
+  /** Preferred reply-suggestion model; server may fall back when this route fails. */
+  suggestionModel: SuggestionModel;
   /** Contacts list name ordering — see NameOrder above. */
   nameOrder: NameOrder;
 }
 
 const KEY = "imsg.settings.v2";
-const DEFAULT: Settings = { suggestionMode: "auto", nameOrder: "first-last" };
+const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last" };
 
 let state: Settings = { ...DEFAULT };
 let hydrated = false;
@@ -34,6 +37,10 @@ function emit(): void {
 
 function isMode(value: unknown): value is SuggestionMode {
   return value === "off" || value === "on-demand" || value === "auto";
+}
+
+function isSuggestionModel(value: unknown): value is SuggestionModel {
+  return value === "opus" || value === "terra";
 }
 
 function isNameOrder(value: unknown): value is NameOrder {
@@ -50,6 +57,10 @@ export async function hydrateSettings(): Promise<void> {
     let changed = false;
     if (isMode(parsed.suggestionMode)) {
       state = { ...state, suggestionMode: parsed.suggestionMode };
+      changed = true;
+    }
+    if (isSuggestionModel(parsed.suggestionModel)) {
+      state = { ...state, suggestionModel: parsed.suggestionModel };
       changed = true;
     }
     if (isNameOrder(parsed.nameOrder)) {
@@ -73,6 +84,13 @@ export function setSuggestionMode(mode: SuggestionMode): void {
   persist();
 }
 
+export function setSuggestionModel(model: SuggestionModel): void {
+  if (state.suggestionModel === model) return;
+  state = { ...state, suggestionModel: model };
+  emit();
+  persist();
+}
+
 export function setNameOrder(order: NameOrder): void {
   if (state.nameOrder === order) return;
   state = { ...state, nameOrder: order };
@@ -90,6 +108,14 @@ export function useSuggestionMode(): SuggestionMode {
     subscribe,
     () => state.suggestionMode,
     () => state.suggestionMode,
+  );
+}
+
+export function useSuggestionModel(): SuggestionModel {
+  return useSyncExternalStore(
+    subscribe,
+    () => state.suggestionModel,
+    () => state.suggestionModel,
   );
 }
 

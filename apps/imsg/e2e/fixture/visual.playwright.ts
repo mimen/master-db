@@ -138,6 +138,40 @@ test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", a
   }
 });
 
+test("reply suggestions show vibe, fallback model, reaction confirmation, and model settings", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "dark");
+  const page = desk.page;
+  await page.getByTestId("conversation-row").first().click();
+
+  await expect(page.getByText("Suggestions", { exact: true })).toBeVisible();
+  await expect(page.getByText("Terra · fallback", { exact: true })).toBeVisible();
+  await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
+  await expect(page.getByText("that turnaround is too tight on my end", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-suggestion-vibes.png", animations: "disabled" });
+
+  await page.getByRole("button", { name: "react, playful: thumbs up" }).click();
+  await expect(page.getByText("React 👍", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-suggestion-reaction-confirm.png", animations: "disabled" });
+  await page.getByText("React 👍", { exact: true }).click();
+  await expect(page.getByText("React 👍", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByText("Opus", { exact: true })).toBeVisible();
+  await expect(page.getByText("Terra", { exact: true })).toBeVisible();
+  await expect(page.getByText("Claude · taste first", { exact: true })).toBeVisible();
+  await expect(page.getByText("ChatGPT · preserves Claude quota", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-suggestion-settings.png", animations: "disabled" });
+
+  await desk.request.post("/__fixture/reset");
+  await page.setViewportSize({ width: 390, height: 820 });
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await page.goto("/?visual=dark-390", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("radio", { name: /All, 15 conversations/ })).toBeVisible();
+  await page.getByText("Alex Rivera", { exact: true }).first().click();
+  await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "/tmp/comma-suggestion-narrow.png", animations: "disabled" });
+});
+
 test("native window chrome reserves space only while AppKit controls are visible", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const rail = desk.page.getByTestId("triage-rail").first();

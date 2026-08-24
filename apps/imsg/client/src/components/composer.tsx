@@ -25,7 +25,7 @@ import { getDraft, setDraft } from "@/lib/drafts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
-import { onFillComposer } from "@/lib/composer-fill";
+import { onFillComposer, type SuggestionAttribution } from "@/lib/composer-fill";
 import type { Contact, Message, Participant } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
@@ -243,6 +243,7 @@ export function Composer({
   const [mentions, setMentions] = useState<MentionAnnotation[]>([]);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const pendingRef = useRef<PendingAttachment[]>([]);
+  const suggestionAttribution = useRef<SuggestionAttribution | null>(null);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [customScheduleOpen, setCustomScheduleOpen] = useState(false);
   const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
@@ -286,6 +287,7 @@ export function Composer({
     setText(draft);
     setSelection({ start: draft.length, end: draft.length });
     setMentions([]);
+    suggestionAttribution.current = null;
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
     for (const attachment of pendingRef.current) cleanupPendingAttachment(attachment);
     replacePending([]);
@@ -293,6 +295,7 @@ export function Composer({
 
   useEffect(() => {
     if (editing) {
+      suggestionAttribution.current = null;
       setText(editing.text);
       setSelection({ start: editing.text.length, end: editing.text.length });
       setMentions([]);
@@ -302,11 +305,12 @@ export function Composer({
   // Suggestion shelf drops text in here for editing; never auto-sends.
   useEffect(
     () =>
-      onFillComposer((suggestion) => {
-        setText(suggestion);
-        setSelection({ start: suggestion.length, end: suggestion.length });
+      onFillComposer((fill) => {
+        setText(fill.text);
+        setSelection({ start: fill.text.length, end: fill.text.length });
         setMentions([]);
-        setDraft(chatGuid, suggestion);
+        suggestionAttribution.current = fill.attribution;
+        setDraft(chatGuid, fill.text);
         inputRef.current?.focus();
       }),
     [chatGuid],
@@ -361,6 +365,7 @@ export function Composer({
   const onChangeText = (value: string) => {
     setMentions((current) => reconcileMentionAnnotations(text, value, current));
     setText(value);
+    if (value.trim().length === 0) suggestionAttribution.current = null;
     if (!editing) {
       setDraft(chatGuid, value);
       setTyping(value.length > 0);
@@ -386,6 +391,7 @@ export function Composer({
     setText("");
     setSelection({ start: 0, end: 0 });
     setMentions([]);
+    suggestionAttribution.current = null;
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   };
 
@@ -472,6 +478,7 @@ export function Composer({
       return;
     }
 
+    const attribution = suggestionAttribution.current;
     const temp = tempMessage(chatGuid, trimmed, replyTo, outgoingMentions);
     const reply = replyTo;
     clearText();
@@ -493,6 +500,12 @@ export function Composer({
       // BlueBubbles can echo a freshly-sent SMS back as "iMessage" before it
       // reclassifies — pin the service so the green bubble never flashes blue.
       onSettled(temp.guid, isSMS ? { ...withMentions, service: "SMS" } : withMentions);
+      if (attribution) {
+        void api.recordSuggestionFeedback(chatGuid, {
+          ...attribution,
+          finalText: trimmed,
+        }).catch(() => undefined);
+      }
     } catch {
       hapticFailure();
       onSettled(temp.guid, { ...temp, pending: false, failed: true });

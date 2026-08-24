@@ -56,6 +56,28 @@ export class ChatDb {
     return this.open() !== null;
   }
 
+  /** Recent sent text for deriving aggregate style; raw rows never enter another thread prompt. */
+  recentOutboundText(limit = 200): string[] {
+    const db = this.open();
+    if (!db) return [];
+    const safeLimit = Math.min(Math.max(limit, 1), 500);
+    try {
+      const rows = db
+        .query(
+          `SELECT text, attributedBody AS attributed
+           FROM message
+           WHERE is_from_me = 1 AND (text IS NOT NULL OR attributedBody IS NOT NULL)
+           ORDER BY date DESC LIMIT ${safeLimit}`,
+        )
+        .all() as Array<{ text: string | null; attributed: Uint8Array | null }>;
+      return rows
+        .map((row) => (row.text ?? decodeAttributedBody(row.attributed) ?? "").trim())
+        .filter((text) => text.length >= 2 && text.length <= 500);
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Substring search. `chatGuid` scopes to one conversation (in-thread search);
    * omit for global. Newest first.

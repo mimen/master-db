@@ -27,9 +27,29 @@ export interface SmartCloserCacheRow {
 
 export interface SuggestionCacheRow {
   chat_guid: string;
-  last_message_guid: string | null;
+  selected_model: string;
+  anchor_guid: string;
+  recipe_version: number;
+  voice_revision: number;
+  edit_revision: number;
   payload: string;
   created_at: number;
+}
+
+export interface SuggestionFeedbackRow {
+  id: string;
+  chat_guid: string;
+  suggestion_id: string;
+  kind: string;
+  strategy: string;
+  vibe: string;
+  selected_model: string;
+  served_model: string;
+  recipe_version: number;
+  suggested_text: string;
+  final_text: string;
+  selected_at: number;
+  sent_at: number;
 }
 
 export class OverlayDb {
@@ -92,14 +112,44 @@ export class OverlayDb {
     `);
     // Suggestion shelf cache. Keyed by the last message guid seen when it was
     // generated, which is what makes the staleness check a string compare.
+    // Versioned suggestion results. The selected route participates in the key,
+    // so web and Expo clients with different preferences never share a shelf.
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS suggestion_cache (
-        chat_guid TEXT PRIMARY KEY,
-        last_message_guid TEXT,
+      CREATE TABLE IF NOT EXISTS suggestion_result_cache (
+        chat_guid TEXT NOT NULL,
+        selected_model TEXT NOT NULL,
+        anchor_guid TEXT NOT NULL,
+        recipe_version INTEGER NOT NULL,
+        voice_revision INTEGER NOT NULL,
+        edit_revision INTEGER NOT NULL,
         payload TEXT NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (chat_guid, selected_model)
       );
     `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS suggestion_feedback (
+        id TEXT PRIMARY KEY,
+        chat_guid TEXT NOT NULL,
+        suggestion_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        strategy TEXT NOT NULL,
+        vibe TEXT NOT NULL,
+        selected_model TEXT NOT NULL,
+        served_model TEXT NOT NULL,
+        recipe_version INTEGER NOT NULL,
+        suggested_text TEXT NOT NULL,
+        final_text TEXT NOT NULL,
+        selected_at INTEGER NOT NULL,
+        sent_at INTEGER NOT NULL
+      );
+    `);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_suggestion_feedback_sent ON suggestion_feedback(sent_at DESC);",
+    );
+    // Version 3 invalidates the old string-array cache and removes its private text.
+    this.db.exec("DROP TABLE IF EXISTS suggestion_cache;");
+    this.pruneSuggestionFeedback();
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS smart_closer_cache (
         chat_guid TEXT PRIMARY KEY,
@@ -179,27 +229,106 @@ export class OverlayDb {
     this.db.query("DELETE FROM shadow_message WHERE chat_guid = ?").run(chatGuid);
   }
 
-  getSuggestionCache(chatGuid: string): SuggestionCacheRow | null {
+  getSuggestionCache(chatGuid: string, selectedModel: string): SuggestionCacheRow | null {
     return (
       (this.db
         .query(
-          "SELECT chat_guid, last_message_guid, payload, created_at FROM suggestion_cache WHERE chat_guid = ?",
+          `SELECT chat_guid, selected_model, anchor_guid, recipe_version,
+                  voice_revision, edit_revision, payload, created_at
+           FROM suggestion_result_cache
+           WHERE chat_guid = ? AND selected_model = ?`,
         )
-        .get(chatGuid) as SuggestionCacheRow | undefined) ?? null
+        .get(chatGuid, selectedModel) as SuggestionCacheRow | undefined) ?? null
     );
   }
 
-  setSuggestionCache(chatGuid: string, lastMessageGuid: string | null, payload: string): void {
+  setSuggestionCache(row: Omit<SuggestionCacheRow, "created_at">): void {
     this.db
       .query(
-        `INSERT INTO suggestion_cache (chat_guid, last_message_guid, payload, created_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(chat_guid) DO UPDATE SET
-           last_message_guid = excluded.last_message_guid,
+        `INSERT INTO suggestion_result_cache (
+           chat_guid, selected_model, anchor_guid, recipe_version,
+           voice_revision, edit_revision, payload, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chat_guid, selected_model) DO UPDATE SET
+           anchor_guid = excluded.anchor_guid,
+           recipe_version = excluded.recipe_version,
+           voice_revision = excluded.voice_revision,
+           edit_revision = excluded.edit_revision,
            payload = excluded.payload,
            created_at = excluded.created_at`,
       )
-      .run(chatGuid, lastMessageGuid, payload, Date.now());
+      .run(
+        row.chat_guid,
+        row.selected_model,
+        row.anchor_guid,
+        row.recipe_version,
+        row.voice_revision,
+        row.edit_revision,
+        row.payload,
+        Date.now(),
+      );
+  }
+
+  addSuggestionFeedback(row: SuggestionFeedbackRow): void {
+    this.db
+      .query(
+        `INSERT INTO suggestion_feedback (
+           id, chat_guid, suggestion_id, kind, strategy, vibe,
+           selected_model, served_model, recipe_version, suggested_text,
+           final_text, selected_at, sent_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        row.id,
+        row.chat_guid,
+        row.suggestion_id,
+        row.kind,
+        row.strategy,
+        row.vibe,
+        row.selected_model,
+        row.served_model,
+        row.recipe_version,
+        row.suggested_text,
+        row.final_text,
+        row.selected_at,
+        row.sent_at,
+      );
+    this.pruneSuggestionFeedback();
+  }
+
+  pruneSuggestionFeedback(now = Date.now()): void {
+    const cutoff = now - 90 * 24 * 60 * 60_000;
+    this.db.query("DELETE FROM suggestion_feedback WHERE sent_at < ?").run(cutoff);
+    this.db.exec(`
+      DELETE FROM suggestion_feedback
+      WHERE id NOT IN (
+        SELECT id FROM suggestion_feedback ORDER BY sent_at DESC, rowid DESC LIMIT 200
+      );
+    `);
+  }
+
+  listSuggestionFeedback(limit = 20): SuggestionFeedbackRow[] {
+    return this.db
+      .query(
+        `SELECT id, chat_guid, suggestion_id, kind, strategy, vibe,
+                selected_model, served_model, recipe_version, suggested_text,
+                final_text, selected_at, sent_at
+         FROM suggestion_feedback
+         ORDER BY sent_at DESC, rowid DESC LIMIT ?`,
+      )
+      .all(Math.min(Math.max(limit, 1), 200)) as SuggestionFeedbackRow[];
+  }
+
+  deleteSuggestionFeedbackForChat(chatGuid: string): void {
+    this.db.query("DELETE FROM suggestion_feedback WHERE chat_guid = ?").run(chatGuid);
+    this.db.query("DELETE FROM suggestion_result_cache WHERE chat_guid = ?").run(chatGuid);
+  }
+
+  clearSuggestionLearning(): void {
+    this.db.exec("DELETE FROM suggestion_feedback; DELETE FROM suggestion_result_cache; DROP TABLE IF EXISTS suggestion_cache;");
+    for (const key of ["suggestion_voice_profile_v1", "suggestion_edit_rules_v1"]) {
+      this.db.query("DELETE FROM ai_meta WHERE key = ?").run(key);
+    }
   }
 
   getShadowBriefCache(chatGuid: string): AiMessageCacheRow | null {

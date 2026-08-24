@@ -73,28 +73,45 @@ describe("shadow_message", () => {
   });
 });
 
-describe("suggestion_cache", () => {
-  test("returns null when absent", () => {
-    expect(db.getSuggestionCache("chat-1")).toBeNull();
+describe("suggestion cache and feedback", () => {
+  const cache = (anchor: string, payload: string) => ({
+    chat_guid: "chat-1",
+    selected_model: "opus",
+    anchor_guid: anchor,
+    recipe_version: 3,
+    voice_revision: 1,
+    edit_revision: 2,
+    payload,
   });
 
-  test("round-trips a payload with its anchor guid", () => {
-    db.setSuggestionCache("chat-1", "msg-9", '["a","b"]');
-    const row = db.getSuggestionCache("chat-1");
-    expect(row?.payload).toBe('["a","b"]');
-    expect(row?.last_message_guid).toBe("msg-9");
+  test("keys cache rows by chat and selected model", () => {
+    expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
+    db.setSuggestionCache(cache("msg-9", '{"a":1}'));
+    db.setSuggestionCache({ ...cache("msg-10", '{"a":2}'), selected_model: "terra" });
+    expect(db.getSuggestionCache("chat-1", "opus")?.anchor_guid).toBe("msg-9");
+    expect(db.getSuggestionCache("chat-1", "terra")?.anchor_guid).toBe("msg-10");
   });
 
-  test("upserts on repeat generation", () => {
-    db.setSuggestionCache("chat-1", "msg-9", '["old"]');
-    db.setSuggestionCache("chat-1", "msg-10", '["new"]');
-    expect(db.getSuggestionCache("chat-1")?.payload).toBe('["new"]');
-    expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBe("msg-10");
+  test("prunes expired raw feedback immediately", () => {
+    db.addSuggestionFeedback({
+      id: "expired", chat_guid: "chat-1", suggestion_id: "s0", kind: "text",
+      strategy: "clarify", vibe: "curious", selected_model: "opus", served_model: "opus",
+      recipe_version: 3, suggested_text: "old", final_text: "old", selected_at: 0, sent_at: 0,
+    });
+    expect(db.listSuggestionFeedback()).toEqual([]);
   });
 
-  test("tolerates a null last-message guid for an empty chat", () => {
-    db.setSuggestionCache("chat-1", null, "[]");
-    expect(db.getSuggestionCache("chat-1")?.last_message_guid).toBeNull();
+  test("stores feedback and deletes it with the chat", () => {
+    db.addSuggestionFeedback({
+      id: "f1", chat_guid: "chat-1", suggestion_id: "s1", kind: "text",
+      strategy: "clarify", vibe: "curious", selected_model: "opus", served_model: "terra",
+      recipe_version: 3, suggested_text: "what time?", final_text: "what time works?",
+      selected_at: 10, sent_at: Date.now(),
+    });
+    expect(db.listSuggestionFeedback()).toHaveLength(1);
+    db.deleteSuggestionFeedbackForChat("chat-1");
+    expect(db.listSuggestionFeedback()).toEqual([]);
+    expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
   });
 });
 

@@ -4,8 +4,8 @@ import { fillComposer, onFillComposer } from "./composer-fill";
 describe("composer fill stack", () => {
   test("restores the underlying composer after an overlay unmounts", () => {
     const heard: string[] = [];
-    const removeBase = onFillComposer((text) => heard.push(`base:${text}`));
-    const removeOverlay = onFillComposer((text) => heard.push(`overlay:${text}`));
+    const removeBase = onFillComposer((fill) => heard.push(`base:${fill.text}`));
+    const removeOverlay = onFillComposer((fill) => heard.push(`overlay:${fill.text}`));
 
     fillComposer("one");
     removeOverlay();

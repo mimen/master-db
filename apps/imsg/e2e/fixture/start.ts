@@ -56,19 +56,37 @@ function seedOverlay(): void {
   db.setMarkedUnread(CHAT_GUIDS.unreadGroup, true);
   db.setArchived(CHAT_GUIDS.archived, true);
   const seed = fixtureSeed();
-  const contactNames = new Map(
-    seed.contacts.flatMap((contact) => contact.phoneNumbers.map((phone) => [phone.address, contact.displayName] as const)),
-  );
   for (const chat of seed.chats) {
     const last = chat.messages.at(-1);
     if (!last || last.isFromMe) continue;
-    const address = chat.participants[0]?.address;
-    const firstName = address ? contactNames.get(address)?.split(" ")[0] : undefined;
-    db.setSuggestionCache(
-      chat.guid,
-      last.guid,
-      JSON.stringify([`Yes${firstName ? `, ${firstName}` : ""} — I’ll send the final timing shortly.`]),
-    );
+    for (const selectedModel of ["opus", "terra"] as const) {
+      db.setSuggestionCache({
+        chat_guid: chat.guid,
+        selected_model: selectedModel,
+        anchor_guid: last.guid,
+        recipe_version: 3,
+        voice_revision: 0,
+        edit_revision: 0,
+        payload: JSON.stringify({
+          recipeVersion: 3,
+          selectedModel,
+          servedModel: selectedModel,
+          fallback: false,
+          noReply: false,
+          suggestions: [{
+            id: `fixture-${selectedModel}-${last.guid}`,
+            kind: "text",
+            strategy: "clarify",
+            vibe: "curious",
+            text: "what time works?",
+            reaction: null,
+            targetMessageGuid: null,
+            targetMessagePreview: null,
+            targetPartIndex: null,
+          }],
+        }),
+      });
+    }
   }
 }
 
@@ -79,7 +97,8 @@ function resetOverlay(): void {
     "attachment_transcript",
     "shadow_message",
     "ai_meta",
-    "suggestion_cache",
+    "suggestion_result_cache",
+    "suggestion_feedback",
     "smart_closer_cache",
     "shadow_brief_cache",
     "triage_clear_event",

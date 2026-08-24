@@ -13,6 +13,8 @@ import type {
   ShadowMessage,
   SmartCloser,
   StateCounts,
+  SuggestionFeedbackRequest,
+  SuggestionModel,
   StateFilter,
   TranscriptState,
   TriageProgressStats,
@@ -120,7 +122,7 @@ export const api = {
   },
   react(
     messageGuid: string,
-    body: { chatGuid: string; reaction: string; remove?: boolean },
+    body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean },
   ): Promise<{ ok: boolean }> {
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/react`, {
       method: "POST",
@@ -244,12 +246,19 @@ export const api = {
   aiGroupNames(chatGuid: string): Promise<{ names: string[] }> {
     return request(`/api/ai/group-name/${encodeURIComponent(chatGuid)}`, { method: "POST" });
   },
-  cachedAiSuggestions(chatGuid: string): Promise<ReplySuggestions> {
-    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}/cached`);
+  aiSuggestions(chatGuid: string, model: SuggestionModel, refresh = false): Promise<ReplySuggestions> {
+    const params = new URLSearchParams({ model });
+    if (refresh) params.set("refresh", "1");
+    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}?${params.toString()}`);
   },
-  aiSuggestions(chatGuid: string, refresh = false): Promise<ReplySuggestions> {
-    const qs = refresh ? "?refresh=1" : "";
-    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}${qs}`);
+  recordSuggestionFeedback(chatGuid: string, body: SuggestionFeedbackRequest): Promise<{ ok: boolean }> {
+    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}/feedback`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  clearSuggestionLearning(): Promise<{ ok: boolean }> {
+    return request("/api/ai/suggestions/learning", { method: "DELETE" });
   },
   aiIdentify(chatGuid: string): Promise<ContactSuggestion> {
     return request(`/api/ai/identify/${encodeURIComponent(chatGuid)}`);

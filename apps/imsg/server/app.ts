@@ -13,6 +13,7 @@ import { GroupPhotos } from "./group-photos";
 import { IdentityMirror } from "./identity-mirror";
 import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
+import { ChatDb } from "./chatdb";
 import {
   createdChatError,
   messageBelongsToAnyChat,
@@ -33,11 +34,18 @@ import { WhisperService } from "./whisper";
 import { createAndSendFaceTimeLink } from "./facetime";
 import { parseByteRange } from "./byte-range";
 import { staticCacheControl } from "./static-cache";
-import { AiService, parseSuggestionCache } from "./ai/service";
+import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
 import { makeVaultSearch } from "./ai/vault";
-import type { Contact, ServerEvent, StateFilter, TypeFilter } from "../shared/types";
+import type {
+  Contact,
+  ServerEvent,
+  StateFilter,
+  SuggestionFeedbackRequest,
+  SuggestionModel,
+  TypeFilter,
+} from "../shared/types";
 import type { NameSource } from "./name-resolver";
 
 export interface FixtureRouteControls {
@@ -62,6 +70,9 @@ export type AiServiceLike = Pick<
   | "shadowBrief"
   | "shadowPending"
   | "shadowEnqueue"
+  | "recordSuggestionFeedback"
+  | "recordReactionFeedback"
+  | "clearSuggestionLearning"
 >;
 
 export interface AppDependencies {
@@ -102,6 +113,7 @@ if (!identity) throw new Error("identity directory unavailable");
 const names = deps.names ?? new NameResolver(productionIdentity ?? new IdentityMirror(config), contacts);
 const directory = new ChatDirectory(bb, db, contacts, now, names);
 const search = new MessageSearch(bb, names);
+const chatDb = new ChatDb();
 const photos = new GroupPhotos(bb);
 const identitySync = new IdentitySync(bb, config, () => void identity.refresh());
 const whisper = new WhisperService(config.whisper, bb, db);
@@ -132,9 +144,18 @@ const ai = deps.ai ?? new AiService({
   shadowStatus,
   fetchMessages: async (chatGuid) => {
     const result = await bb.chatMessages(chatGuid, { limit: 60, sort: "DESC" });
-    if (!result.ok) return [];
-    return buildThread(result.value, chatGuid, names);
+    return result.ok
+      ? { ok: true, value: buildThread(result.value, chatGuid, names) }
+      : result;
   },
+  fetchMessageWithReactions: async (chatGuid, messageGuid) => {
+    const result = await bb.messageWithReactions(messageGuid);
+    if (!result.ok) return result;
+    const message = buildThread(result.value, chatGuid, names).find((item) => item.guid === messageGuid);
+    return message ? { ok: true, value: message } : { ok: false, error: "reaction target not found" };
+  },
+  recentOutboundText: () => chatDb.recentOutboundText(200),
+  reactionSuggestions: () => bb.hasPrivateApi,
   searchVault: makeVaultSearch(config.ai.vaultPath),
 });
 
@@ -529,10 +550,29 @@ app.post("/api/messages/:guid/react", async (c) => {
     reaction: string;
     remove?: boolean;
     partIndex?: number;
+    suggested?: boolean;
   };
   if (!bb.hasPrivateApi) return c.json({ error: "private API disabled on BlueBubbles" }, 501);
+  const partIndex = body.partIndex ?? 0;
+  if (partIndex !== 0) return c.json({ error: "message part is not reactable" }, 400);
+  const current = await bb.messageWithReactions(messageGuid);
+  if (!current.ok) return c.json({ error: current.error }, 502);
+  const rawTarget = current.value.find((message) => message.guid === messageGuid);
+  const allowedChats = directory.siblingGuids(body.chatGuid);
+  if (!rawTarget || !messageBelongsToAnyChat(rawTarget, allowedChats)) {
+    return c.json({ error: "reaction target is not valid in this chat" }, 400);
+  }
+  const target = buildThread(current.value, body.chatGuid, names).find((message) => message.guid === messageGuid);
+  if (!target || (body.suggested && target.isFromMe)) {
+    return c.json({ error: "reaction target is not valid in this chat" }, 400);
+  }
+  const alreadyActive = target.reactions.some((reaction) => reaction.isFromMe && reaction.type === body.reaction);
+  // Desired-state idempotence closes the BlueBubbles write→read race without
+  // turning a duplicate suggestion into a removal or flashing a false failure.
+  if (!body.remove && alreadyActive) return c.json({ ok: true });
+  if (body.remove && !alreadyActive) return c.json({ ok: true });
   const reaction = body.remove ? `-${body.reaction}` : body.reaction;
-  const result = await bb.react(body.chatGuid, messageGuid, reaction, body.partIndex ?? 0);
+  const result = await bb.react(body.chatGuid, messageGuid, reaction, partIndex);
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json({ ok: true });
 });
@@ -741,8 +781,10 @@ app.post("/api/chats/:guid/leave", async (c) => {
 });
 
 app.post("/api/chats/:guid/delete", async (c) => {
-  const result = await bb.deleteChat(c.req.param("guid"));
+  const chatGuid = c.req.param("guid");
+  const result = await bb.deleteChat(chatGuid);
   if (!result.ok) return c.json({ error: result.error }, 502);
+  db.deleteSuggestionFeedbackForChat(chatGuid);
   directory.invalidate();
   broadcast({ kind: "chats-changed" });
   return c.json({ ok: true });
@@ -917,19 +959,15 @@ app.get("/api/attachments/:guid", async (c) => {
 });
 
 // ------------------------------------------------------------------- ai
-// Desktop-only surfaces. Every model call originates here so the gateway key
-// never reaches the client.
-
-// Probed above, before AiService — the shelf rides the harness lane too.
+// Every model call originates here so the gateway key never reaches a client.
 console.log(
-  `AI: harness lane ${shadowStatus.available ? "on" : `off (${shadowStatus.detail})`}, fast lane ${ai.available ? "on" : "off"}`,
+  `AI: harness lane ${shadowStatus.available ? "on" : `off (${shadowStatus.detail})`}, direct lane ${ai.available ? "on" : "off"}`,
 );
 
 app.get("/api/ai/status", async (c) => {
   return c.json({
-    // The shelf generates through the harness lane now; group-name and
-    // identify still use the fast lane but nothing gates on them client-side.
-    suggestions: ai.available && shadowStatus.available,
+    suggestions: ai.available,
+    reactionSuggestions: bb.hasPrivateApi,
     shadow: shadowStatus.available,
     shadowDetail: shadowStatus.detail,
   });
@@ -948,38 +986,29 @@ app.post("/api/ai/group-name/:guid", async (c) => {
   return c.json({ names: result.value.filter((n) => typeof n === "string").slice(0, 5) });
 });
 
-app.get("/api/ai/suggestions/:guid/cached", (c) => {
-  const cached = db.getSuggestionCache(c.req.param("guid"));
-  if (!cached) {
-    return c.json({ suggestions: [], basedOnMessageGuid: null, stale: false, generatedAt: 0 });
-  }
-  const suggestions = parseSuggestionCache(cached.payload);
-  if (!suggestions) {
-    return c.json({ suggestions: [], basedOnMessageGuid: null, stale: false, generatedAt: 0 });
-  }
-  return c.json({
-    suggestions,
-    basedOnMessageGuid: cached.last_message_guid,
-    stale: false,
-    generatedAt: cached.created_at,
-  });
-});
-
 app.get("/api/ai/suggestions/:guid", async (c) => {
+  const chatGuid = c.req.param("guid");
   const result = await ai.replySuggestions(
-    c.req.param("guid"),
-    await peerNameOf(c.req.param("guid")),
+    chatGuid,
+    await peerNameOf(chatGuid),
     c.req.query("refresh") === "1",
+    parseSuggestionModel(c.req.query("model")),
   );
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(result.value);
 });
 
-app.post("/api/ai/suggestions/:guid", async (c) => {
-  const chatGuid = c.req.param("guid");
-  const result = await ai.replySuggestions(chatGuid, await peerNameOf(chatGuid), true);
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(result.value);
+app.post("/api/ai/suggestions/:guid/feedback", async (c) => {
+  const request = await c.req.json<SuggestionFeedbackRequest>();
+  const result = request.suggestion.kind === "reaction"
+    ? (ai.recordReactionFeedback(c.req.param("guid"), request), { ok: true as const, value: true })
+    : ai.recordSuggestionFeedback(c.req.param("guid"), request);
+  return result.ok ? c.json({ ok: true }) : c.json({ error: result.error }, 400);
+});
+
+app.delete("/api/ai/suggestions/learning", (c) => {
+  ai.clearSuggestionLearning();
+  return c.json({ ok: true });
 });
 
 app.get("/api/ai/identify/:guid", async (c) => {
@@ -1037,6 +1066,10 @@ app.delete("/api/ai/shadow/:guid", async (c) => {
   db.clearShadowMessages(c.req.param("guid"));
   return c.json({ ok: true });
 });
+
+function parseSuggestionModel(value: string | undefined): SuggestionModel {
+  return value === "terra" ? "terra" : "opus";
+}
 
 /** Display name for a DM's counterpart, used to address suggestions properly. */
 async function peerNameOf(chatGuid: string): Promise<string | null> {

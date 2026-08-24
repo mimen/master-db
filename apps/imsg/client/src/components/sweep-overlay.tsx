@@ -1,4 +1,4 @@
-import type { ChatSummary } from "@shared/types";
+import type { ChatSummary, ReplySuggestion, ReplySuggestions } from "@shared/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { finishTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
+import { useSuggestionModel } from "@/lib/settings";
 import { ChatAvatar } from "./avatar";
 import { HoverFillButton } from "./hover-fill-button";
 
@@ -22,13 +23,15 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
   const theme = useTheme();
   const visual = useTriageTheme();
   const showSheet = useActionSheet();
+  const suggestionModel = useSuggestionModel();
   const chatsRef = useRef(chats);
   chatsRef.current = chats;
   const [queue, setQueue] = useState<ChatSummary[]>([]);
   const [index, setIndex] = useState(0);
   const [history, setHistory] = useState<SweepStep[]>([]);
   const [cleared, setCleared] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<ReplySuggestion[]>([]);
+  const [suggestionResult, setSuggestionResult] = useState<ReplySuggestions | null>(null);
   const [selectedOption, setSelectedOption] = useState(0);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
@@ -68,11 +71,25 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     const text = draft.trim();
     if (!chat || !text || sending) return;
     setSending(true);
+    const selected = selectedOption < suggestions.length ? suggestions[selectedOption] ?? null : null;
     void api.sendText(chat.guid, { text }).then(
-      (message) => { patchChatWithMessage(chat.guid, message); advance(`${chat.displayName} · replied`); },
+      (message) => {
+        patchChatWithMessage(chat.guid, message);
+        if (selected && suggestionResult) {
+          void api.recordSuggestionFeedback(chat.guid, {
+            suggestion: selected,
+            selectedModel: suggestionResult.selectedModel,
+            servedModel: suggestionResult.servedModel,
+            recipeVersion: suggestionResult.recipeVersion,
+            selectedAt: Date.now(),
+            finalText: text,
+          }).catch(() => undefined);
+        }
+        advance(`${chat.displayName} · replied`);
+      },
       () => undefined,
     ).finally(() => setSending(false));
-  }, [advance, chat, draft, sending]);
+  }, [advance, chat, draft, selectedOption, sending, suggestionResult, suggestions]);
 
   const undo = useCallback(() => {
     const historyIndex = history.findLastIndex((step) => step.undoable);
@@ -103,18 +120,21 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     if (!visible || !chat) { setSuggestions([]); return; }
     let cancelled = false;
     setLoading(true);
-    void api.aiSuggestions(chat.guid).then(
+    void api.aiSuggestions(chat.guid, suggestionModel).then(
       (result) => {
         if (cancelled) return;
-        const next = result.suggestions.slice(0, 2);
+        const next = result.stale
+          ? []
+          : result.suggestions.filter((suggestion) => suggestion.kind === "text").slice(0, 2);
+        setSuggestionResult(result.stale ? null : result);
         setSuggestions(next);
         setSelectedOption(0);
-        setDraft(next[0] ?? "");
+        setDraft(next[0]?.text ?? "");
       },
-      () => { if (!cancelled) setSuggestions([]); },
+      () => { if (!cancelled) { setSuggestionResult(null); setSuggestions([]); } },
     ).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [chat, visible]);
+  }, [chat, suggestionModel, visible]);
 
   useEffect(() => {
     if (!visible || Platform.OS !== "web") return;
@@ -133,7 +153,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
       if (option >= 0 && option <= 2) {
         event.preventDefault();
         setSelectedOption(option);
-        setDraft(option < suggestions.length ? suggestions[option] ?? "" : "");
+        setDraft(option < suggestions.length ? suggestions[option]?.text ?? "" : "");
       }
     };
     window.addEventListener("keydown", keydown, true);
@@ -190,12 +210,12 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                 <View style={styles.options}>
                   {loading ? <ActivityIndicator color={theme.accent} /> : suggestions.map((suggestion, option) => (
                     <Pressable
-                      key={`${option}-${suggestion}`}
-                      onPress={() => { setSelectedOption(option); setDraft(suggestion); }}
+                      key={suggestion.id}
+                      onPress={() => { setSelectedOption(option); setDraft(suggestion.text); }}
                       style={[styles.option, { backgroundColor: visual.card, borderColor: selectedOption === option ? "rgba(0,122,255,0.35)" : visual.hairlineStrong }]}
                     >
                       <Text style={[styles.optionKey, { color: visual.meta, borderColor: visual.hairlineStrong }]}>{option + 1}</Text>
-                      <Text numberOfLines={2} style={[styles.optionText, { color: visual.text }]}>{suggestion}</Text>
+                      <Text numberOfLines={2} style={[styles.optionText, { color: visual.text }]}>{suggestion.text}</Text>
                       {selectedOption === option ? <Pressable accessibilityLabel="Send selected reply" disabled={sending} onPress={send}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : <Ionicons name="paper-plane-outline" size={15} color={visual.muted} />}
                     </Pressable>
                   ))}

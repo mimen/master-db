@@ -1,14 +1,31 @@
 import type { Result } from "../bluebubbles";
 import type { AiConfig } from "../config";
 import type { OverlayDb } from "../db";
-import type { ContactSuggestion, Message, ReplySuggestions, ShadowBrief, SmartCloser } from "../../shared/types";
-import { loadProfile, renderTranscript } from "./context";
-import { Gateway } from "./gateway";
+import type {
+  ContactSuggestion,
+  Message,
+  ReplySuggestions,
+  ShadowBrief,
+  SmartCloser,
+  SuggestionFeedbackRequest,
+  SuggestionModel,
+} from "../../shared/types";
+import { loadProfile, renderSuggestionContext, renderTranscript } from "./context";
+import { Gateway, type GatewayFailure } from "./gateway";
 import { contactCandidate, mergeCandidates, vaultCandidates } from "./identify";
-import { groupNamePrompt, identifyPrompt, replySuggestionPrompt, shadowBriefPrompt, smartCloserPrompt } from "./prompts";
+import { groupNamePrompt, identifyPrompt, shadowBriefPrompt, smartCloserPrompt } from "./prompts";
 import { ShadowRunner, type ShadowAvailability } from "./shadow";
 import { deterministicSmartCloser, parseSmartCloser, parseSmartCloserJson, type JsonValue } from "./smart-closer";
 import { parseShadowBriefContent, parseShadowBriefJson } from "./shadow-brief";
+import {
+  SUGGESTION_MODELS,
+  SUGGESTION_RECIPE_VERSION,
+  SUGGESTION_SCHEMA,
+  suggestionPrompt,
+  suggestionTargetGuids,
+  validateSuggestionSet,
+} from "./suggestions";
+import { loadVoiceState } from "./voice";
 
 /**
  * Orchestration for both AI lanes. Everything the routes need lives here so
@@ -25,8 +42,14 @@ export interface AiDeps {
    * the shadow panel both ride that lane, so both surfaces gate on it.
    */
   shadowStatus?: ShadowAvailability;
-  /** Newest-last messages for a chat. */
-  fetchMessages: (chatGuid: string) => Promise<Message[]>;
+  /** Newest-last messages for a chat; read errors must remain distinguishable from an empty chat. */
+  fetchMessages: (chatGuid: string) => Promise<Result<Message[]>>;
+  /** One message enriched with current tapbacks for reaction validation. */
+  fetchMessageWithReactions: (chatGuid: string, messageGuid: string) => Promise<Result<Message>>;
+  /** Recent global outbound text, reduced locally into aggregate style. */
+  recentOutboundText: () => string[];
+  /** BlueBubbles Private API supports outbound tapbacks. */
+  reactionSuggestions: () => boolean;
   /** Vault grep, injected so tests never touch the filesystem. */
   searchVault: (pattern: string) => Promise<Array<{ path: string; line: string }>>;
 }
@@ -44,26 +67,32 @@ function lastGuid(messages: Message[]): string | null {
   return messages[messages.length - 1]?.guid ?? null;
 }
 
-const SUGGESTION_CACHE_VERSION = 2;
+interface SuggestionCachePayload {
+  recipeVersion: number;
+  selectedModel: SuggestionModel;
+  servedModel: SuggestionModel;
+  fallback: boolean;
+  noReply: boolean;
+  suggestions: ReplySuggestions["suggestions"];
+}
 
-export function serializeSuggestionCache(suggestions: string[]): string {
-  return JSON.stringify({ version: SUGGESTION_CACHE_VERSION, suggestions });
+export function serializeSuggestionCache(payload: SuggestionCachePayload): string {
+  return JSON.stringify(payload);
 }
 
 /** null means corrupt or from an older prompt/context contract. */
-export function parseSuggestionCache(payload: string): string[] | null {
+export function parseSuggestionCache(payload: string): SuggestionCachePayload | null {
   try {
-    const parsed = JSON.parse(payload) as JsonValue;
+    const parsed = JSON.parse(payload) as SuggestionCachePayload;
     if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed) ||
-      parsed.version !== SUGGESTION_CACHE_VERSION ||
+      parsed.recipeVersion !== SUGGESTION_RECIPE_VERSION ||
+      (parsed.selectedModel !== "opus" && parsed.selectedModel !== "terra") ||
+      (parsed.servedModel !== "opus" && parsed.servedModel !== "terra") ||
+      typeof parsed.fallback !== "boolean" ||
+      typeof parsed.noReply !== "boolean" ||
       !Array.isArray(parsed.suggestions)
     ) return null;
-    return parsed.suggestions.filter(
-      (item): item is string => typeof item === "string" && item.trim().length > 0,
-    ).slice(0, 2);
+    return parsed;
   } catch {
     return null;
   }
@@ -84,51 +113,81 @@ export class AiService {
     return this.deps.gateway.available;
   }
 
-  /**
-   * Whether the harness lane (ccs delegate) can run. The shelf rides it too,
-   * so the client gates both surfaces on this rather than the gateway key.
-   */
+  /** Whether the harness lane (ccs delegate) can run for the shadow panel. */
   get shadowAvailable(): boolean {
     return this.deps.shadowStatus?.available ?? false;
   }
 
   async groupNames(chatGuid: string, participants: string[]): Promise<Result<string[]>> {
     const messages = await this.deps.fetchMessages(chatGuid);
-    const transcript = renderTranscript(messages, { limit: 30 });
+    if (!messages.ok) return messages;
+    const transcript = renderTranscript(messages.value, { limit: 30 });
     return this.completeJsonLimited<string[]>(groupNamePrompt(transcript, participants), {
       maxTokens: 300,
     });
   }
 
-  /** Returns the cached shelf unless it is missing, or `force` is set. */
+  /** Returns the selected route's cached shelf unless it is missing, or `force` is set. */
   async replySuggestions(
     chatGuid: string,
     peerName: string | null,
     force: boolean,
+    selectedModel: SuggestionModel,
   ): Promise<Result<ReplySuggestions>> {
-    const messages = await this.deps.fetchMessages(chatGuid);
+    const fetched = await this.deps.fetchMessages(chatGuid);
+    if (!fetched.ok) return fetched;
+    const messages = fetched.value;
     const currentGuid = lastGuid(messages);
-    const cached = this.deps.db.getSuggestionCache(chatGuid);
+    if (!currentGuid) return { ok: false, error: "chat has no messages" };
+    if (messages[messages.length - 1]?.isFromMe) {
+      return {
+        ok: true,
+        value: emptySuggestions(selectedModel, currentGuid),
+      };
+    }
+    const voice = loadVoiceState(this.deps.db, this.deps.recentOutboundText());
+    const cached = this.deps.db.getSuggestionCache(chatGuid, selectedModel);
 
-    if (cached && !force) {
-      const suggestions = parseSuggestionCache(cached.payload);
-      if (suggestions) {
+    if (
+      cached &&
+      !force &&
+      cached.anchor_guid === currentGuid &&
+      cached.recipe_version === SUGGESTION_RECIPE_VERSION &&
+      cached.voice_revision === voice.voiceRevision &&
+      cached.edit_revision === voice.editRevision
+    ) {
+      const parsed = parseSuggestionCache(cached.payload);
+      if (parsed) {
         return {
           ok: true,
           value: {
-            suggestions,
-            basedOnMessageGuid: cached.last_message_guid,
-            stale: isStale(cached.last_message_guid, currentGuid),
+            ...parsed,
+            basedOnMessageGuid: cached.anchor_guid,
+            stale: isStale(cached.anchor_guid, currentGuid),
             generatedAt: cached.created_at,
           },
         };
       }
     }
 
-    const key = `${chatGuid}:${currentGuid ?? "empty"}`;
+    const key = [
+      chatGuid,
+      currentGuid,
+      selectedModel,
+      SUGGESTION_RECIPE_VERSION,
+      voice.voiceRevision,
+      voice.editRevision,
+    ].join(":");
     const existing = this.suggestionInFlight.get(key);
     if (existing) return existing;
-    const pending = this.generateReplySuggestions(chatGuid, peerName, messages, currentGuid);
+    const pending = this.generateReplySuggestions(
+      chatGuid,
+      peerName,
+      messages,
+      currentGuid,
+      selectedModel,
+      voice,
+    );
     this.suggestionInFlight.set(key, pending);
     try {
       return await pending;
@@ -141,37 +200,178 @@ export class AiService {
     chatGuid: string,
     peerName: string | null,
     messages: Message[],
-    currentGuid: string | null,
+    currentGuid: string,
+    selectedModel: SuggestionModel,
+    voice: ReturnType<typeof loadVoiceState>,
   ): Promise<Result<ReplySuggestions>> {
-    const profile = await loadProfile(this.deps.config.vaultPath);
-    const transcript = renderTranscript(messages, { limit: 40, peerName });
-    const generated = await this.shadowTurnLimited(replySuggestionPrompt(transcript, profile, peerName));
-    if (!generated.ok) return generated;
+    const [profile, context] = await Promise.all([
+      loadProfile(this.deps.config.vaultPath),
+      Promise.resolve(renderSuggestionContext(messages, { limit: 60, peerName })),
+    ]);
+    const prompt = suggestionPrompt({
+      context,
+      peerName,
+      profile,
+      globalStyle: context.outboundExamples.length < 4 ? voice.globalStyle : "",
+      editRules: voice.editRules,
+      reactionSuggestions: this.deps.reactionSuggestions(),
+    });
+    const generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
+    if (!generated.ok) return { ok: false, error: generated.error.message };
 
-    const parsed = parseSuggestionArray(generated.value);
-    if (!parsed.ok) return parsed;
-    this.deps.db.setSuggestionCache(chatGuid, currentGuid, serializeSuggestionCache(parsed.value));
+    const enriched = [...messages];
+    const verifiedReactionGuids = new Set<string>();
+    for (const targetGuid of suggestionTargetGuids(generated.value.value)) {
+      const reactionMessage = await this.deps.fetchMessageWithReactions(chatGuid, targetGuid);
+      if (!reactionMessage.ok) continue;
+      const index = enriched.findIndex((message) => message.guid === targetGuid);
+      if (index >= 0) enriched[index] = reactionMessage.value;
+      verifiedReactionGuids.add(targetGuid);
+    }
+    const validated = validateSuggestionSet(generated.value.value, {
+      messages: enriched,
+      renderedGuids: context.renderedGuids,
+      reactionSuggestions: this.deps.reactionSuggestions(),
+      verifiedReactionGuids,
+    });
+    if (!validated.ok) return validated;
+
+    const payload: SuggestionCachePayload = {
+      recipeVersion: SUGGESTION_RECIPE_VERSION,
+      selectedModel,
+      servedModel: generated.value.servedModel,
+      fallback: generated.value.servedModel !== selectedModel,
+      noReply: validated.value.noReply,
+      suggestions: validated.value.suggestions,
+    };
+    this.deps.db.setSuggestionCache({
+      chat_guid: chatGuid,
+      selected_model: selectedModel,
+      anchor_guid: currentGuid,
+      recipe_version: SUGGESTION_RECIPE_VERSION,
+      voice_revision: voice.voiceRevision,
+      edit_revision: voice.editRevision,
+      payload: serializeSuggestionCache(payload),
+    });
     return {
       ok: true,
-      value: { suggestions: parsed.value, basedOnMessageGuid: currentGuid, stale: false, generatedAt: Date.now() },
+      value: {
+        ...payload,
+        basedOnMessageGuid: currentGuid,
+        stale: false,
+        generatedAt: Date.now(),
+      },
     };
   }
 
-  private async shadowTurnLimited(prompt: string): Promise<Result<string>> {
-    if (this.aiActive >= this.aiConcurrency) {
-      await new Promise<void>((resolve) => this.aiWaiters.push(resolve));
+  private async completeSuggestionWithFallback(
+    prompt: string,
+    selectedModel: SuggestionModel,
+  ): Promise<
+    | { ok: true; value: { value: object; servedModel: SuggestionModel } }
+    | { ok: false; error: GatewayFailure }
+  > {
+    const alternate = otherModel(selectedModel);
+    const cooldowns = this.routeCooldowns();
+    const now = Date.now();
+    const first = (cooldowns[selectedModel] ?? 0) > now ? alternate : selectedModel;
+    const firstResult = await this.completeSuggestionRoute(prompt, first);
+    if (firstResult.ok) return { ok: true, value: { value: firstResult.value, servedModel: first } };
+    if (firstResult.error.kind !== "provider") return firstResult;
+
+    this.setRouteCooldown(first, firstResult.error.retryAfterMs);
+    const fallback = otherModel(first);
+    if ((cooldowns[fallback] ?? 0) > now) return firstResult;
+    const fallbackResult = await this.completeSuggestionRoute(prompt, fallback);
+    if (!fallbackResult.ok) {
+      if (fallbackResult.error.kind === "provider") {
+        this.setRouteCooldown(fallback, fallbackResult.error.retryAfterMs);
+      }
+      return fallbackResult;
     }
-    this.aiActive++;
+    return { ok: true, value: { value: fallbackResult.value, servedModel: fallback } };
+  }
+
+  private completeSuggestionRoute(prompt: string, model: SuggestionModel) {
+    return this.deps.gateway.completeStructured<object>(prompt, SUGGESTION_SCHEMA, {
+      model: SUGGESTION_MODELS[model],
+      maxTokens: 1200,
+      timeoutMs: model === "opus" ? 9_000 : 11_000,
+      ...(model === "opus" ? { effort: "low" as const } : {}),
+    });
+  }
+
+  private routeCooldowns(): Partial<Record<SuggestionModel, number>> {
     try {
-      return await this.deps.shadow.turn(prompt);
-    } finally {
-      this.aiActive--;
-      this.aiWaiters.shift()?.();
+      const raw = this.deps.db.getAiMeta("suggestion_route_cooldowns_v1");
+      return raw ? JSON.parse(raw) as Partial<Record<SuggestionModel, number>> : {};
+    } catch {
+      return {};
     }
   }
 
+  private setRouteCooldown(model: SuggestionModel, retryAfterMs: number | null): void {
+    const duration = retryAfterMs === null
+      ? 15 * 60_000
+      : Math.min(Math.max(retryAfterMs, 0), 6 * 60 * 60_000);
+    this.deps.db.setAiMeta(
+      "suggestion_route_cooldowns_v1",
+      JSON.stringify({ ...this.routeCooldowns(), [model]: Date.now() + duration }),
+    );
+  }
+
+  recordSuggestionFeedback(chatGuid: string, request: SuggestionFeedbackRequest): Result<true> {
+    if (request.suggestion.kind !== "text") return { ok: false, error: "reaction feedback is recorded at send" };
+    if (!hasFeedbackLineage(request.suggestion.text, request.finalText)) {
+      return { ok: false, error: "suggestion attribution was abandoned" };
+    }
+    this.deps.db.addSuggestionFeedback({
+      id: newId(),
+      chat_guid: chatGuid,
+      suggestion_id: request.suggestion.id,
+      kind: request.suggestion.kind,
+      strategy: request.suggestion.strategy,
+      vibe: request.suggestion.vibe,
+      selected_model: request.selectedModel,
+      served_model: request.servedModel,
+      recipe_version: request.recipeVersion,
+      suggested_text: request.suggestion.text,
+      final_text: request.finalText,
+      selected_at: request.selectedAt,
+      sent_at: Date.now(),
+    });
+    return { ok: true, value: true };
+  }
+
+  recordReactionFeedback(
+    chatGuid: string,
+    request: Omit<SuggestionFeedbackRequest, "finalText">,
+  ): void {
+    this.deps.db.addSuggestionFeedback({
+      id: newId(),
+      chat_guid: chatGuid,
+      suggestion_id: request.suggestion.id,
+      kind: request.suggestion.kind,
+      strategy: request.suggestion.strategy,
+      vibe: request.suggestion.vibe,
+      selected_model: request.selectedModel,
+      served_model: request.servedModel,
+      recipe_version: request.recipeVersion,
+      suggested_text: request.suggestion.text,
+      final_text: request.suggestion.text,
+      selected_at: request.selectedAt,
+      sent_at: Date.now(),
+    });
+  }
+
+  clearSuggestionLearning(): void {
+    this.deps.db.clearSuggestionLearning();
+  }
+
   async smartCloser(chatGuid: string): Promise<Result<SmartCloser>> {
-    const messages = await this.deps.fetchMessages(chatGuid);
+    const fetched = await this.deps.fetchMessages(chatGuid);
+    if (!fetched.ok) return fetched;
+    const messages = fetched.value;
     const inbound = [...messages].reverse().find((message) => !message.isFromMe);
     if (!inbound) return { ok: true, value: { kind: "done", label: "Done" } };
 
@@ -215,7 +415,9 @@ export class AiService {
   }
 
   async shadowBrief(chatGuid: string, force: boolean): Promise<Result<ShadowBrief>> {
-    const messages = await this.deps.fetchMessages(chatGuid);
+    const fetched = await this.deps.fetchMessages(chatGuid);
+    if (!fetched.ok) return fetched;
+    const messages = fetched.value;
     const messageGuid = lastGuid(messages);
     if (!messageGuid) return { ok: false, error: "chat has no messages" };
     const cached = this.deps.db.getShadowBriefCache(chatGuid);
@@ -281,8 +483,9 @@ export class AiService {
       this.deps.fetchMessages(chatGuid),
       vaultCandidates(address, { search: this.deps.searchVault }),
     ]);
+    if (!messages.ok) return messages;
     const candidates = mergeCandidates([contactCandidate(knownName), vault]);
-    const transcript = renderTranscript(messages, { limit: 25 });
+    const transcript = renderTranscript(messages.value, { limit: 25 });
     return this.completeJsonLimited<ContactSuggestion>(
       identifyPrompt(address, transcript, candidates),
       { maxTokens: 400 },
@@ -322,6 +525,10 @@ export class AiService {
       this.deps.fetchMessages(chatGuid),
       loadProfile(this.deps.config.vaultPath),
     ]);
+    if (!messages.ok) {
+      this.deps.db.addShadowMessage(newId(), chatGuid, "assistant", `⚠️ ${messages.error}`);
+      return;
+    }
     const history = this.deps.db
       .listShadowMessages(chatGuid)
       .map((row) => `${row.role === "user" ? "Milad" : "You"}: ${row.text}`)
@@ -334,7 +541,7 @@ export class AiService {
       "",
       profile ? `About Milad:\n${profile}\n` : "",
       `The iMessage conversation${peerName ? ` with ${peerName}` : ""}:`,
-      renderTranscript(messages, { limit: 40, peerName }),
+      renderTranscript(messages.value, { limit: 40, peerName }),
       "",
       "Your conversation with Milad so far:",
       history,
@@ -350,31 +557,34 @@ export class AiService {
   }
 }
 
-/**
- * The harness lane returns prose, not a guaranteed JSON document. Models wrap
- * arrays in code fences or narrate around them, so find the array instead of
- * demanding the whole reply be one.
- */
-export function parseSuggestionArray(reply: string): Result<string[]> {
-  // Prefer a fenced ```json block when present; otherwise the first [...] run.
-  const fenced = reply.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidates = [fenced?.[1], reply].filter((text): text is string => typeof text === "string");
-  for (const candidate of candidates) {
-    const start = candidate.indexOf("[");
-    const end = candidate.lastIndexOf("]");
-    if (start === -1 || end <= start) continue;
-    try {
-      const parsed = JSON.parse(candidate.slice(start, end + 1)) as JsonValue;
-      if (!Array.isArray(parsed)) continue;
-      const strings = parsed.filter(
-        (item): item is string => typeof item === "string" && item.trim().length > 0,
-      );
-      if (strings.length > 0) return { ok: true, value: strings.slice(0, 2) };
-    } catch {
-      // fall through to the next candidate
-    }
-  }
-  return { ok: false, error: "no suggestion array in harness reply" };
+function emptySuggestions(selectedModel: SuggestionModel, currentGuid: string): ReplySuggestions {
+  return {
+    suggestions: [],
+    recipeVersion: SUGGESTION_RECIPE_VERSION,
+    selectedModel,
+    servedModel: selectedModel,
+    fallback: false,
+    noReply: true,
+    basedOnMessageGuid: currentGuid,
+    stale: false,
+    generatedAt: Date.now(),
+  };
+}
+
+function otherModel(model: SuggestionModel): SuggestionModel {
+  return model === "opus" ? "terra" : "opus";
+}
+
+function hasFeedbackLineage(suggested: string, finalText: string): boolean {
+  const source = new Set(normalizedWords(suggested));
+  const final = normalizedWords(finalText);
+  if (source.size === 0 || final.length === 0) return false;
+  const shared = final.filter((word) => source.has(word)).length;
+  return shared / Math.max(source.size, final.length) >= 0.15;
+}
+
+function normalizedWords(text: string): string[] {
+  return text.toLowerCase().match(/[a-z0-9']+/g) ?? [];
 }
 
 function newId(): string {
