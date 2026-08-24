@@ -53,6 +53,17 @@ export function useConversationListViewport(args: {
   // Nullable: null = "no measurement for the current view yet". Reset when
   // the rendered view changes so a stale range never suppresses a reveal.
   const viewableRange = useRef<{ first: number; last: number } | null>(null);
+  // FlatList (web) throws if these identities change after mount. FlashList
+  // did not — swapping the inbox to FlatList made that invariant fire on load.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 100 }).current;
+  const onViewableItemsChanged = useRef((info: { viewableItems: ViewToken[] }): void => {
+    const indices = info.viewableItems
+      .map((v) => v.index)
+      .filter((i): i is number => typeof i === "number");
+    if (indices.length > 0) {
+      viewableRange.current = { first: Math.min(...indices), last: Math.max(...indices) };
+    }
+  }).current;
 
   const metrics = useSyntheticScrollMetrics({
     chromeHeight,
@@ -87,15 +98,8 @@ export function useConversationListViewport(args: {
   return {
     listRef,
     thumb: metrics.thumb,
-    viewabilityConfig: { itemVisiblePercentThreshold: 100 },
-    onViewableItemsChanged({ viewableItems }) {
-      const indices = viewableItems
-        .map((v) => v.index)
-        .filter((i): i is number => typeof i === "number");
-      if (indices.length > 0) {
-        viewableRange.current = { first: Math.min(...indices), last: Math.max(...indices) };
-      }
-    },
+    viewabilityConfig,
+    onViewableItemsChanged,
     onLayout(height) {
       metrics.onViewportHeight(height);
     },
