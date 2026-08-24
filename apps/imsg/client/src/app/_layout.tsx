@@ -4,8 +4,9 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { DesktopShellProvider } from "@/components/desktop-shell-provider";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";

@@ -34,6 +34,26 @@ async function resetAndOpen(
   await expect(desk.page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
 }
 
+test("live system theme changes update every mounted desktop surface", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "light");
+  const page = desk.page;
+  await page.getByTestId("conversation-row").first().click();
+
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  expect(await page.evaluate(() => window.matchMedia("(prefers-color-scheme: dark)").matches)).toBe(true);
+
+  const header = page.getByTestId("triage-queue-header");
+  const rows = page.getByTestId("conversation-row");
+  await expect(header).toHaveCSS("background-color", "rgba(26, 26, 30, 0.78)");
+  expect(await rows.count()).toBeGreaterThan(0);
+  const darkRowColors = new Set(["rgb(35, 35, 38)", "rgb(44, 44, 46)"]);
+  for (const row of await rows.all()) {
+    expect(darkRowColors.has(await row.evaluate((element) => getComputedStyle(element).backgroundColor))).toBe(true);
+  }
+  await expect(page.getByTestId("thread-view")).toHaveCSS("background-color", "rgb(26, 26, 28)");
+  await page.screenshot({ path: "/tmp/comma-live-theme-dark-after.png", animations: "disabled" });
+});
+
 test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }, testInfo) => {
   test.setTimeout(180_000);
   for (const scheme of SCHEMES) {

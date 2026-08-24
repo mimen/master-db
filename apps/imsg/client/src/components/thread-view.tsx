@@ -510,6 +510,7 @@ export function ThreadView({
 
   return (
     <View
+      testID="thread-view"
       onLayout={(e) => onPaneLayout(e.nativeEvent.layout.width)}
       style={{ flex: 1, backgroundColor: theme.background, paddingBottom: bottomInset }}
     >
