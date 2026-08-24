@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Reanimated, { FadeInUp } from "react-native-reanimated";
 import {
   FlatList,
@@ -195,14 +195,18 @@ export function ThreadView({
   // Web: RNW's inverted-list wheel handling is broken (reversed / inert), so
   // drive the scroll ourselves. Inverted container ⇒ wheel-up must increase
   // scrollTop (toward older messages).
-  const [listMounted, setListMounted] = useState(false);
   const [paneW, setPaneW] = useState(0);
   const onPaneLayout = useCallback((width: number): void => {
     const next = Math.round(width);
     setPaneW((current) => (current === next ? current : next));
   }, []);
-  useEffect(() => {
-    if (Platform.OS !== "web" || !listMounted) return;
+  // Stable: an inline ref that setStates is React 19 #185 (nested updates
+  // during commit attach). Wheel binding waits for layout, when the node exists.
+  const assignListRef = useCallback((node: FlatList<Row> | null): void => {
+    (listRef as React.MutableRefObject<FlatList<Row> | null>).current = node;
+  }, []);
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web") return;
     const node = (
       listRef.current as unknown as { getScrollableNode?: () => HTMLElement } | null
     )?.getScrollableNode?.();
@@ -219,7 +223,7 @@ export function ThreadView({
     };
     node.addEventListener("wheel", onWheel, { passive: false, capture: true });
     return () => node.removeEventListener("wheel", onWheel, { capture: true });
-  }, [beginDayChipScroll, endDayChipScroll, listMounted]);
+  }, [beginDayChipScroll, chatGuid, endDayChipScroll, messages.length]);
 
   useServerEvents(
     useCallback(
@@ -645,10 +649,7 @@ export function ThreadView({
         <CenteredSpinner />
       ) : (
         <FlatList
-          ref={(ref) => {
-            (listRef as React.MutableRefObject<FlatList<Row> | null>).current = ref;
-            if (ref && !listMounted) setListMounted(true);
-          }}
+          ref={assignListRef}
           data={rows}
           inverted
           keyExtractor={(row) => row.message.guid}
