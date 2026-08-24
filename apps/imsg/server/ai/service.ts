@@ -216,25 +216,49 @@ export class AiService {
       editRules: voice.editRules,
       reactionSuggestions: this.deps.reactionSuggestions(),
     });
-    const generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
+    let generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
     if (!generated.ok) return { ok: false, error: generated.error.message };
 
-    const enriched = [...messages];
-    const verifiedReactionGuids = new Set<string>();
-    for (const targetGuid of suggestionTargetGuids(generated.value.value)) {
-      const reactionMessage = await this.deps.fetchMessageWithReactions(chatGuid, targetGuid);
-      if (!reactionMessage.ok) continue;
-      const index = enriched.findIndex((message) => message.guid === targetGuid);
-      if (index >= 0) enriched[index] = reactionMessage.value;
-      verifiedReactionGuids.add(targetGuid);
+    let validated = await this.validateGeneratedSuggestions(
+      chatGuid,
+      generated.value.value,
+      messages,
+      context.renderedGuids,
+    );
+    if (!validated.ok) {
+      const repairPrompt = [
+        prompt,
+        "",
+        `REPAIR: The previous candidates were rejected by local safety checks (${validated.error}).`,
+        "Generate a fresh conservative set. Ask for missing information instead of adding any date, number, person, place, status, or commitment not explicitly present in the conversation.",
+      ].join("\n");
+      const repaired = await this.completeSuggestionWithFallback(repairPrompt, selectedModel);
+      if (repaired.ok) {
+        generated = repaired;
+        validated = await this.validateGeneratedSuggestions(
+          chatGuid,
+          repaired.value.value,
+          messages,
+          context.renderedGuids,
+        );
+      }
     }
-    const validated = validateSuggestionSet(generated.value.value, {
-      messages: enriched,
-      renderedGuids: context.renderedGuids,
-      reactionSuggestions: this.deps.reactionSuggestions(),
-      verifiedReactionGuids,
-    });
-    if (!validated.ok) return validated;
+    if (!validated.ok) {
+      return {
+        ok: true,
+        value: {
+          suggestions: [],
+          recipeVersion: SUGGESTION_RECIPE_VERSION,
+          selectedModel,
+          servedModel: generated.value.servedModel,
+          fallback: generated.value.servedModel !== selectedModel,
+          noReply: false,
+          basedOnMessageGuid: currentGuid,
+          stale: false,
+          generatedAt: Date.now(),
+        },
+      };
+    }
 
     const payload: SuggestionCachePayload = {
       recipeVersion: SUGGESTION_RECIPE_VERSION,
@@ -262,6 +286,29 @@ export class AiService {
         generatedAt: Date.now(),
       },
     };
+  }
+
+  private async validateGeneratedSuggestions(
+    chatGuid: string,
+    value: object,
+    messages: Message[],
+    renderedGuids: Set<string>,
+  ) {
+    const enriched = [...messages];
+    const verifiedReactionGuids = new Set<string>();
+    for (const targetGuid of suggestionTargetGuids(value)) {
+      const reactionMessage = await this.deps.fetchMessageWithReactions(chatGuid, targetGuid);
+      if (!reactionMessage.ok) continue;
+      const index = enriched.findIndex((message) => message.guid === targetGuid);
+      if (index >= 0) enriched[index] = reactionMessage.value;
+      verifiedReactionGuids.add(targetGuid);
+    }
+    return validateSuggestionSet(value, {
+      messages: enriched,
+      renderedGuids,
+      reactionSuggestions: this.deps.reactionSuggestions(),
+      verifiedReactionGuids,
+    });
   }
 
   private async completeSuggestionWithFallback(

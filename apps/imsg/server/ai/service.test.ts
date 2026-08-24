@@ -182,6 +182,39 @@ describe("replySuggestions", () => {
     }
   });
 
+  test("repairs a fully filtered candidate set instead of surfacing unavailable", async () => {
+    const { service } = makeService({ messages: [makeMessage({ text: "would love to get on a call early this week" })] });
+    const gateway = (service as unknown as { deps: { gateway: Gateway } }).deps.gateway;
+    let calls = 0;
+    (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
+      calls++;
+      return {
+        ok: true,
+        value: calls === 1 ? suggestionSet("does monday work?") : suggestionSet("what day works best?"),
+      };
+    };
+    const result = await service.replySuggestions("chat-1", null, true, "terra");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.suggestions[0]?.text).toBe("what day works best?");
+    expect(calls).toBe(2);
+  });
+
+  test("returns an empty shelf when both safety-filtered attempts fail", async () => {
+    const { service, db } = makeService({ messages: [makeMessage({ text: "would love to get on a call early this week" })] });
+    const gateway = (service as unknown as { deps: { gateway: Gateway } }).deps.gateway;
+    (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => ({
+      ok: true,
+      value: suggestionSet("does monday work?"),
+    });
+    const result = await service.replySuggestions("chat-1", null, true, "terra");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.noReply).toBe(false);
+      expect(result.value.suggestions).toEqual([]);
+    }
+    expect(db.getSuggestionCache("chat-1", "terra")).toBeNull();
+  });
+
   test("propagates message-read failures instead of caching silence", async () => {
     const { service, db } = makeService({ fetchError: "bluebubbles unavailable" });
     const result = await service.replySuggestions("chat-1", null, false, "opus");
