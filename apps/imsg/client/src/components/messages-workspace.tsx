@@ -68,6 +68,32 @@ export function MessagesWorkspace({
   const [sweep, setSweep] = useState<{ chats: ChatSummary[]; startGuid?: string } | null>(null);
   const { chats, allChats, counts, loading, refresh } = useChats(state, type, !wide);
 
+  // Wide selection has one synchronous write path. Previously local state and
+  // DesktopShell mirrored each other in opposing effects; clicking B while A
+  // was selected made both effects publish their stale side and swap A/B every
+  // commit. That is the recorded row flicker and the blank, never-settling
+  // thread. Route-originated shell state still hydrates local state below.
+  const commitChatSelection = useCallback((
+    chat: ChatSummary,
+    intent: "reply" | "preview",
+    target: JumpTarget | null = null,
+  ): void => {
+    setJumpTarget(target);
+    setSelectionIntent(intent);
+    setSelected(chat);
+    shell.dispatch({
+      type: "messages/chat-selected",
+      selection: {
+        guid: chat.guid,
+        name: chat.displayName,
+        isGroup: chat.isGroup,
+        participantCount: chat.participants.length,
+        jumpTarget: target ?? undefined,
+        intent,
+      },
+    });
+  }, [shell.dispatch]);
+
   const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
   useServerEvents(
     useCallback(
@@ -95,28 +121,26 @@ export function MessagesWorkspace({
     if (!wide) return;
     return onSelectChat((selection) => {
       const known = chats.find((chat) => chat.guid === selection.guid);
-      setJumpTarget(selection.jumpTarget ?? null);
-      setSelected(
-        known ?? {
-          guid: selection.guid,
-          displayName: selection.name ?? selection.guid,
-          isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
-          known: true,
-          isSpam: false,
-          participants: [],
-          lastMessage: null,
-          unreadCount: 0,
-          laterUntil: null,
-          flags: {
-            archived: false,
-            unresponded: false,
-            waiting: false,
-            unread: false,
-            mutedUnresponded: false,
-            pinned: false,
-          },
+      const chat = known ?? {
+        guid: selection.guid,
+        displayName: selection.name ?? selection.guid,
+        isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
+        known: true,
+        isSpam: false,
+        participants: [],
+        lastMessage: null,
+        unreadCount: 0,
+        laterUntil: null,
+        flags: {
+          archived: false,
+          unresponded: false,
+          waiting: false,
+          unread: false,
+          mutedUnresponded: false,
+          pinned: false,
         },
-      );
+      } satisfies ChatSummary;
+      commitChatSelection(chat, "reply", selection.jumpTarget ?? null);
       router.replace({
         pathname: "/chat/[guid]",
         params: {
@@ -131,7 +155,7 @@ export function MessagesWorkspace({
         },
       });
     });
-  }, [wide, chats]);
+  }, [chats, commitChatSelection, wide]);
 
   useEffect(() => {
     if (!wide) return;
@@ -181,29 +205,13 @@ export function MessagesWorkspace({
         router.replace("/");
       },
       openChat: (chat) => {
-        setJumpTarget(null);
-        setSelectionIntent("reply");
-        setSelected(chat);
+        commitChatSelection(chat, "reply");
         router.replace({ pathname: "/chat/[guid]", params: { guid: chat.guid, name: chat.displayName } });
       },
       refresh,
     });
     return () => shell.registerMessagesActions(null);
-  }, [refresh, shell.registerMessagesActions, wide]);
-  useEffect(() => {
-    if (!wide || !selected) return;
-    shell.dispatch({
-      type: "messages/chat-selected",
-      selection: {
-        guid: selected.guid,
-        name: selected.displayName,
-        isGroup: selected.isGroup,
-        participantCount: selected.participants.length,
-        jumpTarget: jumpTarget ?? undefined,
-        intent: selectionIntent,
-      },
-    });
-  }, [jumpTarget, selected, selectionIntent, shell.dispatch, wide]);
+  }, [commitChatSelection, refresh, shell.registerMessagesActions, wide]);
   useEffect(() => {
     if (!wide || active) return;
     setShadowOpen(false);
@@ -225,9 +233,7 @@ export function MessagesWorkspace({
       if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
     };
     if (wide) {
-      setJumpTarget(null);
-      setSelectionIntent("reply");
-      setSelected(chat);
+      commitChatSelection(chat, "reply");
       router.replace({
         pathname: "/chat/[guid]",
         params: {
@@ -256,9 +262,7 @@ export function MessagesWorkspace({
 
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
   const previewChat = (chat: ChatSummary): void => {
-    setJumpTarget(null);
-    setSelectionIntent("preview");
-    setSelected(chat);
+    commitChatSelection(chat, "preview");
   };
 
   const openNewMessage = (): void => {
