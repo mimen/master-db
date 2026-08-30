@@ -276,9 +276,7 @@ export class ChatDirectory {
       this.rescheduleLaterExpiry();
     }
     if (!this.summaryCache) {
-      if (!m.isFromMe && this.db.getAll().get(chatGuid)?.mutedUnresponded !== 1) {
-        this.db.setOpenTriageItem(chatGuid, m.guid, m.dateCreated);
-      }
+      if (!m.isFromMe) this.db.setOpenTriageItem(chatGuid, m.guid, m.dateCreated);
       return;
     }
     const result = applyMessageToSummaries(this.summaryCache.chats, chatGuid, m);
@@ -499,11 +497,6 @@ export class ChatDirectory {
 
   setPinned(guid: string, pinned: boolean): void {
     this.db.setPinned(guid, pinned);
-    this.invalidate();
-  }
-
-  setMutedUnresponded(guid: string, muted: boolean): void {
-    this.db.setMutedUnresponded(guid, muted);
     this.invalidate();
   }
 

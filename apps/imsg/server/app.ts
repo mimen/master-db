@@ -538,12 +538,6 @@ app.post("/api/chats/:guid/pin", async (c) => {
   return c.json({ ok: true });
 });
 
-app.post("/api/chats/:guid/mute", async (c) => {
-  const body = (await c.req.json()) as { muted: boolean };
-  directory.setMutedUnresponded(c.req.param("guid"), body.muted);
-  return c.json({ ok: true });
-});
-
 app.post("/api/messages/:guid/react", async (c) => {
   const messageGuid = c.req.param("guid");
   const body = (await c.req.json()) as {

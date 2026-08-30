@@ -96,7 +96,7 @@ describe("desktop shell reducer", () => {
       utility: { kind: "chat-info", workspace: "messages", guid: "chat-1" },
     });
     state = reduceDesktopShell(state, { type: "shadow/toggled", chatGuid: "chat-1" });
-    state = reduceDesktopShell(state, { type: "messages/chat-cleared" });
+    state = reduceDesktopShell(state, { type: "messages/chat-settled" });
 
     expect(state.messages.selection).toBeNull();
     expect(state.utility).toBeNull();

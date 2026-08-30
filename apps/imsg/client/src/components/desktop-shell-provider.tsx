@@ -209,7 +209,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       moveSelection: () => undefined,
       activateSelection: () => undefined,
       findInConversation: () => undefined,
-      archiveSelected: () => undefined,
+      settleSelected: () => undefined,
       laterSelected: () => undefined,
       markUnreadSelected: () => undefined,
       toggleDetails: () => undefined,

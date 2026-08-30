@@ -17,7 +17,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { calculatePaneAdmission } from "@/lib/desktop-coordinator/pane-admission";
 import { AUX_PANE_WIDTH } from "@/lib/desktop-frame";
 import { useSidebarWidth } from "@/lib/sidebar-width";
-import { finishTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
+import { settleTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
@@ -201,7 +201,7 @@ export function MessagesWorkspace({
       applyType: setType,
       clearSelection: () => {
         setSelected(null);
-        shell.dispatch({ type: "messages/chat-cleared" });
+        shell.dispatch({ type: "messages/chat-settled" });
         router.replace("/");
       },
       openChat: (chat) => {
@@ -281,9 +281,11 @@ export function MessagesWorkspace({
   // React Compiler bail on this entire screen, and the readers are all keyboard
   // handlers that run well after commit.
   const selectedRef = useRef(selected);
+  const stateRef = useRef(state);
   const overlaysRef = useRef({ shadowOpen, utilityOpen });
   useEffect(() => {
     selectedRef.current = selected;
+    stateRef.current = state;
     overlaysRef.current = { shadowOpen, utilityOpen };
   });
   useEffect(() => {
@@ -300,16 +302,26 @@ export function MessagesWorkspace({
       findInConversation: () => {
         if (selectedRef.current) openThreadSearch();
       },
-      archiveSelected: () => {
+      settleSelected: () => {
         const sel = selectedRef.current;
-        if (!sel) return;
-        finishTriageChat(sel);
-        showToast("Done — Z to undo");
+        const queueState = stateRef.current;
+        const canSettle = queueState === "unresponded"
+          ? sel?.flags.unresponded === true
+          : queueState === "waiting" && sel?.flags.waiting === true;
+        if (!sel || !canSettle) return;
+        const queueName = sel.flags.unresponded && sel.flags.waiting
+          ? "Needs Reply and Waiting"
+          : queueState === "unresponded" ? "Needs Reply" : "Waiting";
+        void settleTriageChat(sel).then(() => showToast(`Settled from ${queueName} — Z to undo`), () => undefined);
         getListAdapter()?.selectNeighborOf(sel.guid);
       },
       laterSelected: () => {
         const sel = selectedRef.current;
-        if (!sel) return;
+        const queueState = stateRef.current;
+        const canMoveLater = queueState === "unresponded"
+          ? sel?.flags.unresponded === true
+          : queueState === "waiting" && sel?.flags.waiting === true;
+        if (!sel || !canMoveLater) return;
         showSheet({
           title: `Later · ${sel.displayName}`,
           actions: laterOptions().map((option) => ({
@@ -324,8 +336,7 @@ export function MessagesWorkspace({
       markUnreadSelected: () => {
         const sel = selectedRef.current;
         if (!sel) return;
-        markChatUnread(sel);
-        showToast("Marked unread — Z to undo");
+        markChatUnread(sel, () => showToast("Marked unread — Z to undo"));
       },
       toggleDetails: () => {
         const sel = selectedRef.current;
@@ -336,7 +347,7 @@ export function MessagesWorkspace({
         });
       },
       focusListSearch: () => getListAdapter()?.focusSearch(),
-      undoLast: () => showToast(undoLastTriageAction() || undoLastAction() ? "Undone" : "Nothing to undo"),
+      undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
       // Esc precedence ladder — first applicable step only.
       escape: () => {
         if (shell.closeTopSurface()) return;
@@ -367,7 +378,7 @@ export function MessagesWorkspace({
         }
         if (selectedRef.current) {
           setSelected(null);
-          shell.dispatch({ type: "messages/chat-cleared" });
+          shell.dispatch({ type: "messages/chat-settled" });
           router.replace("/");
           return true;
         }
@@ -417,6 +428,7 @@ export function MessagesWorkspace({
             jumpTarget={jumpTarget}
             headerChat={selected}
             previewOnly={selectionIntent === "preview"}
+            triageShortcutsEnabled={(state === "unresponded" && selected.flags.unresponded) || (state === "waiting" && selected.flags.waiting)}
             onToggleShadow={canShadow ? () => setShadowOpen((v) => !v) : undefined}
             shadowOpen={shadowOpen}
           />

@@ -161,7 +161,7 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
       rt.findInConversation();
       return true;
     case "conversation.archive":
-      rt.archiveSelected();
+      rt.settleSelected();
       return true;
     case "conversation.later":
       rt.laterSelected();

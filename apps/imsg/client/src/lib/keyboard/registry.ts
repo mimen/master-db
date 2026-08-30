@@ -8,7 +8,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "conversation.previous", title: "Previous conversation", group: "Navigation" },
   { id: "conversation.activate", title: "Reply to selected", group: "Navigation" },
   { id: "composer.focus", title: "Reply (focus composer)", group: "Navigation" },
-  { id: "conversation.archive", title: "Done (clear from queue)", group: "Conversation" },
+  { id: "conversation.archive", title: "Settle conversation", group: "Conversation" },
   { id: "conversation.later", title: "Later", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },

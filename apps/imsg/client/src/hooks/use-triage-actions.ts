@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChatSummary, SmartCloser } from "@shared/types";
+import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
 import { api } from "@/lib/api";
 import { patchChatFlags, revertChatFlags } from "@/lib/chat-store";
 import { showToast } from "@/lib/toast";
@@ -22,13 +23,8 @@ function emit(listeners: Set<TriageListener>, chatGuid: string): void {
   for (const listener of listeners) listener(chatGuid);
 }
 
-let undoTriage: (() => void) | null = null;
 export function undoLastTriageAction(): boolean {
-  const undo = undoTriage;
-  if (!undo) return false;
-  undoTriage = null;
-  undo();
-  return true;
+  return runLatestUndo();
 }
 
 export function laterOptions(): Array<{ label: string; until: number }> {
@@ -52,64 +48,39 @@ async function dismissOne(chat: ChatSummary, kind: "unresponded" | "waiting"): P
   } catch (error) {
     revertChatFlags(chat.guid, kind === "unresponded" ? { unresponded: true } : { waiting: true });
     const message = error instanceof Error ? error.message : "";
-    showToast(message.startsWith("409:") ? "Conversation changed. Review the newest message." : "Could not mark conversation done");
+    showToast(message.startsWith("409:") ? "Conversation changed. Review the newest message." : "Could not settle conversation");
     throw error;
   }
 }
 
-export async function finishTriageChat(chat: ChatSummary): Promise<void> {
+export async function settleTriageChat(chat: ChatSummary): Promise<void> {
   const kinds: Array<"unresponded" | "waiting"> = [];
   if (chat.flags.unresponded) kinds.push("unresponded");
   if (chat.flags.waiting) kinds.push("waiting");
   if (kinds.length === 0) return;
 
+  const undoToken = beginUndoAction();
   await Promise.all(kinds.map((kind) => dismissOne(chat, kind)));
   emit(resolvedListeners, chat.guid);
-  undoTriage = () => {
+  commitUndoAction(undoToken, () => {
     for (const kind of kinds) {
       patchChatFlags(chat.guid, kind === "unresponded" ? { unresponded: true } : { waiting: true });
     }
     void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
       .then(() => emit(undoListeners, chat.guid))
-      .catch(() => showToast("Could not undo Done"));
-  };
+      .catch(() => showToast("Could not undo Settle"));
+  });
 }
 
 export async function setTriageLater(chat: ChatSummary, until: number | null): Promise<void> {
+  const undoToken = beginUndoAction();
   await api.setChatLater(chat.guid, until);
   emit(resolvedListeners, chat.guid);
-  undoTriage = () => {
+  commitUndoAction(undoToken, () => {
     void api.setChatLater(chat.guid, null)
       .then(() => emit(undoListeners, chat.guid))
       .catch(() => showToast("Could not undo Later"));
-  };
-}
-
-/**
- * The smart closer is authoritative for sidebar actions. A reply classification
- * exposes its one decisive draft when the user opens the row's Reply or Nudge
- * action, without rendering the draft in the conversation list.
- */
-export function useRowDraft(
-  chatGuid: string,
-  enabled: boolean,
-): { draft: string | null; loading: boolean } {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    if (!enabled) { setDraft(null); setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
-    void api.getSmartCloser(chatGuid).then((closer) => {
-      if (cancelled) return;
-      const reply = closer.kind === "reply" ? closer.draft?.trim() : null;
-      setDraft(reply || null);
-    }, () => { if (!cancelled) setDraft(null); }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [chatGuid, enabled]);
-  return { draft, loading };
+  });
 }
 
 export function useSmartCloser(chatGuid: string, enabled: boolean): { closer: SmartCloser | null; loading: boolean } {

@@ -67,7 +67,6 @@ export function computeFlags(
     last !== null &&
     !last.isFromMe &&
     state?.dismissedUnrespondedGuid !== last.guid &&
-    state?.mutedUnresponded !== 1 &&
     !laterActive;
   const waiting =
     last !== null && last.isFromMe && state?.dismissedWaitingGuid !== last.guid && !laterActive;
@@ -76,7 +75,7 @@ export function computeFlags(
     unresponded,
     waiting,
     unread: unreadCount > 0 || state?.markedUnread === 1,
-    mutedUnresponded: state?.mutedUnresponded === 1,
+    mutedUnresponded: false,
     pinned: state?.pinned === 1,
   };
 }
@@ -219,7 +218,7 @@ export function applyMessage(
     laterUntil: message.isFromMe ? chat.laterUntil : null,
     flags: {
       ...chat.flags,
-      unresponded: message.isFromMe ? false : !chat.flags.mutedUnresponded,
+      unresponded: !message.isFromMe,
       waiting: message.isFromMe,
       unread: message.isFromMe ? chat.flags.unread : true,
       archived: message.isFromMe ? chat.flags.archived : false,

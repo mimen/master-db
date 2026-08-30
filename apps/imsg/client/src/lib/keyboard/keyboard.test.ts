@@ -112,8 +112,8 @@ describe("registry", () => {
     const entries = helpEntries();
     const next = entries.find((e) => e.title === "Next conversation");
     expect(next?.keys).toEqual(["J", "↓"]);
-    const done = entries.find((e) => e.title === "Done (clear from queue)");
-    expect(done?.keys).toEqual(["E"]);
+    const settle = entries.find((e) => e.title === "Settle conversation");
+    expect(settle?.keys).toEqual(["E"]);
     const later = entries.find((e) => e.title === "Later");
     expect(later?.keys).toEqual(["H"]);
     const nw = entries.find((e) => e.title === "New message");

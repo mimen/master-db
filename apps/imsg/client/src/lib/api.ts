@@ -114,12 +114,6 @@ export const api = {
       body: JSON.stringify({ pinned }),
     });
   },
-  setMuted(chatGuid: string, muted: boolean): Promise<{ ok: boolean }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/mute`, {
-      method: "POST",
-      body: JSON.stringify({ muted }),
-    });
-  },
   react(
     messageGuid: string,
     body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean },

@@ -171,7 +171,7 @@ playwrightTest?.("search and Triage Desk lenses supersede each other", async ({ 
   await expectButtonAppearance(waiting, selectedAppearance);
 });
 
-playwrightTest?.("conversation rows stay constant-height while actions swap in", async ({ sidebar }) => {
+playwrightTest?.("conversation rows stay constant-height while hover actions appear", async ({ sidebar }) => {
   const row = sidebar.page.getByTestId("conversation-row").nth(1);
   await expect(row).toBeVisible();
   const before = await row.boundingBox();
@@ -179,10 +179,10 @@ playwrightTest?.("conversation rows stay constant-height while actions swap in",
   if (!before) throw new Error("Conversation row has no bounding box");
   expect(before.height).toBeCloseTo(68, 1);
 
-  await row.click();
-  await expect(row.getByText("Reply", { exact: true })).toBeVisible();
-  await expect(row.getByText("Done", { exact: true })).toBeVisible();
-  await expect(row.getByText("Later", { exact: true })).toBeVisible();
+  await row.hover();
+  await expect(row.getByText("Settle", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: /More actions for/ })).toBeVisible();
+  await expect(row.getByText("Reply", { exact: true })).toHaveCount(0);
   const after = await row.boundingBox();
   expect(after).not.toBeNull();
   if (!after) throw new Error("Conversation row disappeared after hover");

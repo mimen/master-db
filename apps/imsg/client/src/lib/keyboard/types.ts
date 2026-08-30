@@ -60,7 +60,7 @@ export interface KeyboardRuntime {
   moveSelection(delta: -1 | 1): void;
   activateSelection(): void;
   findInConversation(): void;
-  archiveSelected(): void;
+  settleSelected(): void;
   laterSelected(): void;
   markUnreadSelected(): void;
   toggleDetails(): void;

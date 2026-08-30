@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { archiveChat, markChatUnread, muteChat, pinChat } from "@/lib/chat-actions";
+import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
@@ -193,24 +193,15 @@ export function ChatInfoContent({
                   onClose();
                 },
               },
-              info.isGroup
-                ? {
-                    icon: (summary.flags.mutedUnresponded ? "eye-outline" : "eye-off-outline") as keyof typeof Ionicons.glyphMap,
-                    label: summary.flags.mutedUnresponded ? "Show" : "Quiet",
-                    onPress: () => {
-                      muteChat(summary, !summary.flags.mutedUnresponded);
-                      showToast(summary.flags.mutedUnresponded ? "Returned to Needs reply" : "Hidden from Needs reply");
-                    },
-                  }
-                : {
-                    icon: (summary.flags.archived ? "arrow-undo-outline" : "archive-outline") as keyof typeof Ionicons.glyphMap,
-                    label: summary.flags.archived ? "Unarchive" : "Archive",
-                    onPress: () => {
-                      archiveChat(summary, !summary.flags.archived);
-                      showToast(summary.flags.archived ? "Unarchived" : "Archived");
-                      onClose();
-                    },
-                  },
+              {
+                icon: (summary.flags.archived ? "arrow-undo-outline" : "archive-outline") as keyof typeof Ionicons.glyphMap,
+                label: summary.flags.archived ? "Unarchive" : "Archive",
+                onPress: () => {
+                  archiveChat(summary, !summary.flags.archived);
+                  showToast(summary.flags.archived ? "Unarchived" : "Archived");
+                  onClose();
+                },
+              },
             ] as const).map((a) => (
               <Pressable key={a.label} style={styles.quickAction} onPress={a.onPress}>
                 <View style={[styles.quickIcon, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>

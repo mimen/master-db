@@ -123,7 +123,7 @@ export function reduceDesktopShell(
             ? state.shadow
             : null,
       };
-    case "messages/chat-cleared":
+    case "messages/chat-settled":
       return {
         ...state,
         messages: { ...state.messages, selection: null },

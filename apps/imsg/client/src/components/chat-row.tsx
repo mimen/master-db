@@ -15,7 +15,6 @@ import Reanimated, {
 } from "react-native-reanimated";
 
 import { useChatActions } from "@/hooks/use-chat-actions";
-import { laterOptions, useRowDraft } from "@/hooks/use-triage-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { prefetchThread } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -31,8 +30,6 @@ import {
   unreadLabel,
 } from "@/lib/row-signal";
 import { hapticCommit } from "@/lib/haptics";
-import { fillComposer } from "@/lib/composer-fill";
-import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
@@ -133,33 +130,25 @@ function ChatRowInner({
   selected,
   keyboardFocused = false,
   onPress,
-  onDone,
-  onLater,
+  settleAvailable = false,
+  onSettle,
 }: {
   chat: ChatSummary;
   selected: boolean;
   /** Glide-mode cursor: accent edge on the selected row while navigating. */
   keyboardFocused?: boolean;
+  settleAvailable?: boolean;
   onPress: () => void;
-  onDone?: () => void;
-  onLater?: (until: number) => void;
+  onSettle?: () => void;
 }) {
   const theme = useTheme();
   const visual = useTriageTheme();
   const type = useType();
-  const { openMenu } = useChatActions();
-  const showSheet = useActionSheet();
   const { width: winW, wide: compact } = useLayoutMode();
+  const { openMenu } = useChatActions(compact);
   const [hovered, setHovered] = useState(false);
-  const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
-  const rowDraftState = useRowDraft(
-    chat.guid,
-    compact && (chat.flags.unresponded || chat.flags.waiting),
-  );
-  const rowDraft = rowDraftState.draft;
-  // The third lane shows row state until selection reveals its actions. The
-  // message preview above it remains stable throughout the transition.
-  const actionsVisible = compact && selected;
+  const [focusedWithin, setFocusedWithin] = useState(false);
+  const actionsVisible = compact && (hovered || focusedWithin || keyboardFocused);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
   const snippet = last
@@ -170,8 +159,8 @@ function ChatRowInner({
 
   const contextRef = useWebContextMenu<typeof Pressable>((anchor) => openMenu(chat, anchor));
 
-  // Hover via DOM mouseenter/mouseleave: unlike RNW's hover events these do
-  // not fire when the pointer moves onto a child (the archive button).
+  // DOM hover and focus-within keep the trailing actions present while the
+  // pointer or keyboard moves from the row into one of its child buttons.
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const node = contextRef.current as unknown as HTMLElement | null;
@@ -181,11 +170,21 @@ function ChatRowInner({
       prefetchThread(chat.guid);
     };
     const leave = () => setHovered(false);
+    const focusIn = () => setFocusedWithin(true);
+    const focusOut = (event: FocusEvent) => {
+      if (!(event.relatedTarget instanceof Node) || !node.contains(event.relatedTarget)) {
+        setFocusedWithin(false);
+      }
+    };
     node.addEventListener("mouseenter", enter);
     node.addEventListener("mouseleave", leave);
+    node.addEventListener("focusin", focusIn);
+    node.addEventListener("focusout", focusOut);
     return () => {
       node.removeEventListener("mouseenter", enter);
       node.removeEventListener("mouseleave", leave);
+      node.removeEventListener("focusin", focusIn);
+      node.removeEventListener("focusout", focusOut);
     };
   }, [chat.guid, contextRef]);
 
@@ -248,7 +247,7 @@ function ChatRowInner({
           { height: compact ? 68 : undefined, minHeight: compact ? 68 : 92 },
           compact
             ? {
-                backgroundColor: selected ? visual.cardSelected : hovered || pressed ? visual.cardHover : "transparent",
+                backgroundColor: selected ? visual.cardSelected : hovered || focusedWithin || keyboardFocused || pressed ? visual.cardHover : "transparent",
               }
             : {
                 backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background,
@@ -296,30 +295,40 @@ function ChatRowInner({
             )}
           </View>
           <View style={styles.messageRow}>
-            {compact && actionsVisible ? (
-              <View style={styles.inlineActions}>
-                {waitingOnly ? (
-                  <>
-                    <HoverFillButton accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></HoverFillButton>
-                    <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></HoverFillButton>
-                  </>
-                ) : (
-                  <>
-                    <HoverFillButton accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></HoverFillButton>
-                    <HoverFillButton accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></HoverFillButton>
-                    <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></HoverFillButton>
-                  </>
-                )}
-                <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>
-              </View>
-            ) : (
-              <>
-                <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-                <RowSignal chat={chat} />
-              </>
-            )}
+            <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
+            <RowSignal chat={chat} />
           </View>
         </View>
+        {compact && actionsVisible ? (
+          <View
+            style={[
+              styles.hoverActions,
+              { backgroundColor: selected ? visual.cardSelected : visual.cardHover },
+            ]}
+          >
+            {settleAvailable ? (
+              <HoverFillButton
+                accessibilityLabel={`Settle ${chat.displayName}`}
+                onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
+                restFill={visual.controlFill}
+                hoverFill={visual.controlFillHover}
+                style={styles.settleAction}
+              >
+                <Ionicons name="checkmark" size={14} color={theme.accent} />
+                <Text style={[styles.settleActionText, { color: visual.text }]}>Settle</Text>
+              </HoverFillButton>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`More actions for ${chat.displayName}`}
+              onPress={(event) => { event.stopPropagation(); openMenu(chat); }}
+              hitSlop={6}
+              style={styles.moreAction}
+            >
+              <Ionicons name="ellipsis-horizontal" size={16} color={visual.muted} />
+            </Pressable>
+          </View>
+        ) : null}
         {!compact && (
           <Pressable
             accessibilityRole="button"
@@ -419,30 +428,36 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  inlineActions: {
+  hoverActions: {
     alignItems: "center",
-    flex: 1,
+    bottom: 0,
     flexDirection: "row",
     gap: 5,
+    paddingLeft: 28,
+    position: "absolute",
+    right: 10,
+    top: 0,
+    zIndex: 3,
   },
-  inlineAction: {
+  settleAction: {
     alignItems: "center",
-    borderRadius: 7,
+    borderRadius: 8,
     flexDirection: "row",
-    gap: 3,
-    height: 24,
+    gap: 4,
+    height: 28,
     justifyContent: "center",
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
   },
-  inlineActionText: {
-    fontSize: 11,
+  settleActionText: {
+    fontSize: 12,
     fontWeight: "600",
   },
   moreAction: {
     alignItems: "center",
-    height: 24,
+    borderRadius: 8,
+    height: 30,
     justifyContent: "center",
-    width: 24,
+    width: 30,
   },
   signal: {
     alignItems: "center",

@@ -24,7 +24,7 @@ export function TriageSummary({
     <View style={styles.wrap}>
       <View style={styles.copy}>
         <Text accessibilityRole="header" numberOfLines={1} style={[styles.title, { color: visual.text }]}>{title}</Text>
-        <Text numberOfLines={1} style={[styles.meta, { color: visual.meta }]}>{completed} cleared today · {queueAgeLabel(oldestAt)}</Text>
+        <Text numberOfLines={1} style={[styles.meta, { color: visual.meta }]}>{completed} settled today · {queueAgeLabel(oldestAt)}</Text>
       </View>
       <Text style={[styles.count, { color: visual.text }]}>{remaining}</Text>
       {onSweep ? (

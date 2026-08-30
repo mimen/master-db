@@ -536,10 +536,6 @@ export class OverlayDb {
     );
   }
 
-  setMutedUnresponded(chatGuid: string, muted: boolean): void {
-    this.upsert(chatGuid, "muted_unresponded", muted ? 1 : 0);
-  }
-
   setMarkedUnread(chatGuid: string, unread: boolean): void {
     this.upsert(chatGuid, "marked_unread", unread ? 1 : 0);
   }

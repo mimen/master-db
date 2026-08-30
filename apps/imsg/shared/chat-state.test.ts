@@ -182,10 +182,10 @@ describe("computeFlags", () => {
     expect(flags.waiting).toBe(true);
   });
 
-  test("mutedUnresponded suppresses unresponded and sets the flag", () => {
+  test("legacy mutedUnresponded values no longer suppress inbound triage", () => {
     const flags = computeFlags(makeState({ mutedUnresponded: 1 }), makeLast({ isFromMe: false }), 0);
-    expect(flags.unresponded).toBe(false);
-    expect(flags.mutedUnresponded).toBe(true);
+    expect(flags.unresponded).toBe(true);
+    expect(flags.mutedUnresponded).toBe(false);
   });
 
   test("markedUnread sets unread even with zero unread count", () => {
@@ -507,10 +507,10 @@ describe("applyMessage", () => {
     expect(matchesFilters(next[0]!, "all", "unknown")).toBe(true);
   });
 
-  test("inbound message on a muted chat does not set unresponded", () => {
+  test("inbound message ignores legacy mutedUnresponded flags", () => {
     const chats = [makeChat({ guid: "chat-1", flags: makeFlags({ mutedUnresponded: true }) })];
     const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: false, dateCreated: 6000 }))!;
-    expect(next[0]!.flags.unresponded).toBe(false);
+    expect(next[0]!.flags.unresponded).toBe(true);
   });
 
   test("qualifying inbound messages preserve the earliest unread timestamp", () => {

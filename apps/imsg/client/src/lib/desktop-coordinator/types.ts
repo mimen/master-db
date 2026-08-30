@@ -165,7 +165,7 @@ export type DesktopShellAction =
       readonly type: "messages/chat-selected";
       readonly selection: DesktopChatSelection;
     }
-  | { readonly type: "messages/chat-cleared" }
+  | { readonly type: "messages/chat-settled" }
   | {
       readonly type: "contacts/person-selected";
       readonly selection: DesktopPersonSelection;

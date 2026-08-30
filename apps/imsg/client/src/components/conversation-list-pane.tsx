@@ -22,12 +22,13 @@ import { useConversationListKeyboard } from "./conversations/use-conversation-li
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
 
-import { finishTriageChat, setTriageLater } from "@/hooks/use-triage-actions";
+import { onTriageResolved, onTriageUndo, settleTriageChat } from "@/hooks/use-triage-actions";
 import { api } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
+import { showToast } from "@/lib/toast";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -83,6 +84,18 @@ export function ConversationListPane({
     void api.getTriageStats().then(setStats, () => undefined);
   }, [wide]);
   useEffect(() => { refreshStats(); }, [refreshStats, chats]);
+  useEffect(() => {
+    const refreshTriage = (): void => {
+      onRefresh();
+      refreshStats();
+    };
+    const stopResolved = onTriageResolved(refreshTriage);
+    const stopUndo = onTriageUndo(refreshTriage);
+    return () => {
+      stopResolved();
+      stopUndo();
+    };
+  }, [onRefresh, refreshStats]);
   const topBarH = wide ? TRIAGE_QUEUE_HEADER_HEIGHT : sidebarChromeHeight(false);
   const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
@@ -166,11 +179,18 @@ export function ConversationListPane({
         selected={wide && selectedGuid === item.guid}
         keyboardFocused={wide && glide && selectedGuid === item.guid}
         onPress={() => onOpenChat(item)}
-        onDone={wide ? () => { void finishTriageChat(item).then(refreshStats, () => undefined); } : undefined}
-        onLater={wide ? (until) => { void setTriageLater(item, until).then(() => { onRefresh(); refreshStats(); }, onRefresh); } : undefined}
+        settleAvailable={wide && (filters.state === "unresponded" || filters.state === "waiting")}
+        onSettle={wide ? () => {
+          const queueName = item.flags.unresponded && item.flags.waiting
+            ? "Needs Reply and Waiting"
+            : item.flags.unresponded ? "Needs Reply" : "Waiting";
+          void settleTriageChat(item).then(() => {
+            showToast(`Settled from ${queueName} — Z to undo`);
+          }, () => undefined);
+        } : undefined}
       />
     ),
-    [wide, glide, selectedGuid, onOpenChat, onRefresh, refreshStats],
+    [wide, glide, selectedGuid, filters.state, onOpenChat],
   );
 
   const shelfRef = useRef<PriorityShelfHandle>(null);
@@ -234,7 +254,7 @@ export function ConversationListPane({
               <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}><Ionicons name="archive-outline" size={14} color={theme.textSecondary} /><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
               <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}><Ionicons name="ban-outline" size={14} color={theme.textSecondary} /><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
             </View>
-            <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting auto-clears when they reply" : "Replying clears the queue"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
+            <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
           </View>
         </SidebarFooter>
       ) : undefined}

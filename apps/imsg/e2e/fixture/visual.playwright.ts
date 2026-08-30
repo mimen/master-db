@@ -98,14 +98,15 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
 
       const actionRow = rows.nth(1);
       const rowBefore = await actionRow.boundingBox();
-      await actionRow.click();
-      await expect(actionRow.getByText("Reply", { exact: true })).toBeVisible();
-      await expect(actionRow.getByText("Done", { exact: true })).toBeVisible();
-      await expect(actionRow.getByText("Later", { exact: true })).toBeVisible();
+      await actionRow.hover();
+      await expect(actionRow.getByText("Settle", { exact: true })).toBeVisible();
+      await expect(actionRow.getByRole("button", { name: /More actions for/ })).toBeVisible();
+      await expect(actionRow.getByText("Reply", { exact: true })).toHaveCount(0);
       const rowAfter = await actionRow.boundingBox();
       expect(rowBefore?.height).toBeCloseTo(68, 1);
       expect(rowAfter).toEqual(rowBefore);
       expect(await actionRow.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("0px");
+      await page.screenshot({ path: `/tmp/comma-row-hover-${scheme}-${width}.png`, animations: "disabled" });
 
       for (const button of await rail.getByRole("button").all()) {
         if (!(await button.isEnabled())) continue;
@@ -121,14 +122,63 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
   await testInfo.attach("matrix-note", { body: Buffer.from("Screenshots: /tmp/comma-matrix-{light,dark}-{820,900,1039,1040,1280,1300,1440,1512}.png"), contentType: "text/plain" });
 });
 
+test("row actions follow the active queue lens and keep More minimal", async ({ desk }) => {
+  await resetAndOpen(desk, 1300, "light");
+  const page = desk.page;
+
+  let row = page.getByTestId("conversation-row").first();
+  await row.hover();
+  await expect(row.getByText("Settle", { exact: true })).toBeVisible();
+  await page.getByRole("heading", { name: "Needs reply" }).hover();
+  await row.focus();
+  await expect(row.getByText("Settle", { exact: true })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(row.getByRole("button", { name: /^Settle / })).toBeFocused();
+  await row.click();
+  await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).toContainText("E");
+
+  await page.getByRole("button", { name: /^All messages/ }).click();
+  await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
+  await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).not.toContainText(" E");
+  await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Move conversation to Later" })).not.toContainText(" H");
+  row = page.getByTestId("conversation-row").first();
+  await row.hover();
+  await expect(row.getByText("Settle", { exact: true })).toHaveCount(0);
+  const waitingBefore = await desk.request.get("/api/chats?state=waiting&type=all");
+  const waitingCountBefore = ((await waitingBefore.json()) as readonly unknown[]).length;
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("e");
+  await page.waitForTimeout(100);
+  const waitingAfter = await desk.request.get("/api/chats?state=waiting&type=all");
+  expect(((await waitingAfter.json()) as readonly unknown[]).length).toBe(waitingCountBefore);
+  await page.keyboard.press("h");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await row.hover();
+  await row.getByRole("button", { name: /More actions for/ }).click();
+  const menu = page.getByRole("dialog");
+  await expect(menu.getByText(/^Mark as (?:read|unread)$/)).toBeVisible();
+  await expect(menu.getByText("Pin", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Later…", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Archive", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Details", { exact: true })).toBeVisible();
+  await expect(menu.getByText("No reply needed", { exact: true })).toHaveCount(0);
+  await expect(menu.getByText("Not waiting on this", { exact: true })).toHaveCount(0);
+  await expect(menu.getByText("Hide from Unresponded", { exact: true })).toHaveCount(0);
+});
+
 test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", async ({ desk }) => {
   test.setTimeout(60_000);
   for (const width of [900, 1039, 1040, 1300]) {
     await resetAndOpen(desk, width, "light");
     const page = desk.page;
     await page.getByTestId("conversation-row").first().click();
-    await expect(page.getByTestId("resolve-strip")).toBeVisible();
-    const stripBox = await page.getByTestId("resolve-strip").boundingBox();
+    const resolveStrip = page.getByTestId("resolve-strip");
+    await expect(resolveStrip).toBeVisible();
+    await expect(resolveStrip.getByRole("button", { name: "Settle conversation" })).toBeVisible();
+    await expect(resolveStrip.getByRole("button", { name: "Move conversation to Later" })).toBeVisible();
+    await expect(resolveStrip.getByText("Done", { exact: true })).toHaveCount(0);
+    await expect(resolveStrip.getByText("Let go", { exact: true })).toHaveCount(0);
+    const stripBox = await resolveStrip.boundingBox();
     expect(stripBox?.height).toBeGreaterThanOrEqual(40);
 
     await page.keyboard.press("Meta+i");
@@ -529,17 +579,17 @@ test("messages send through the real UI and fixture replies arrive over SSE", as
   await page.screenshot({ path: "/tmp/comma-send-receive-fixture.png", animations: "disabled" });
 });
 
-test("Sweep shows a cleared-item trail and real undo", async ({ desk }) => {
+test("Sweep shows a settled-item trail and real undo", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const page = desk.page;
   await page.getByRole("button", { name: /Start sweep/ }).click();
   const card = page.getByTestId("sweep-card");
-  await card.getByRole("button", { name: "Mark current conversation done" }).click();
-  await expect(card.getByText(/Alex Rivera · cleared/)).toBeVisible();
+  await card.getByRole("button", { name: "Settle current conversation" }).click();
+  await expect(card.getByText(/Alex Rivera · settled/)).toBeVisible();
   await card.getByText("skip ⇢", { exact: true }).click();
   await expect(card.getByText("Avery Brooks", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-sweep-cleared-trail.png", animations: "disabled" });
-  await card.getByText("Z undoes the last clear", { exact: true }).click();
-  await expect(card.getByText(/Alex Rivera · cleared/)).toBeHidden();
+  await card.getByText("Z undoes the last settle", { exact: true }).click();
+  await expect(card.getByText(/Alex Rivera · settled/)).toBeHidden();
   await expect(card.getByText("Alex Rivera", { exact: true })).toBeVisible();
 });

@@ -32,7 +32,7 @@ import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { finishTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
+import { settleTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
@@ -76,6 +76,8 @@ interface ThreadViewProps {
   /** When provided (desktop split-pane with AI shadow available), show the toggle. */
   onToggleShadow?: () => void;
   shadowOpen?: boolean;
+  /** Whether the current list lens enables the E/H triage shortcuts. */
+  triageShortcutsEnabled?: boolean;
   /** Sweep mode advances only after a real send settles successfully. */
   onMessageSent?: () => void;
 }
@@ -88,6 +90,7 @@ export function ThreadView({
   previewOnly = false,
   onToggleShadow,
   shadowOpen = false,
+  triageShortcutsEnabled = false,
   onMessageSent,
 }: ThreadViewProps) {
   const theme = useTheme();
@@ -592,17 +595,16 @@ export function ThreadView({
           <Ionicons name={headerChat.flags.unresponded ? "flag" : "hourglass-outline"} size={16} color={headerChat.flags.unresponded ? theme.accent : theme.textSecondary} />
           <Text numberOfLines={1} style={[styles.resolveCopy, { color: theme.text }]}>
             {headerChat.flags.unresponded
-              ? "In your queue. Replying clears it automatically."
-              : "You're waiting on them. Nudge below, or let go."}
+              ? "In Needs Reply. Sending a reply settles it automatically."
+              : "In Waiting. Settle it when you no longer need a response."}
           </Text>
-          {headerChat.flags.unresponded ? (
-            <>
-              <HoverFillButton accessibilityLabel="Mark conversation done" onPress={() => { void finishTriageChat(headerChat); }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Done <Text style={{ color: theme.textSecondary }}>E</Text></Text></HoverFillButton>
-              <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => showSheet({ title: `Later · ${headerChat.displayName}`, anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later <Text style={{ color: theme.textSecondary }}>H</Text></Text></HoverFillButton>
-            </>
-          ) : (
-            <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={() => { void finishTriageChat(headerChat); }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Let go <Text style={{ color: theme.textSecondary }}>E</Text></Text></HoverFillButton>
-          )}
+          <HoverFillButton accessibilityLabel="Settle conversation" onPress={() => {
+            const queueName = headerChat.flags.unresponded && headerChat.flags.waiting
+              ? "Needs Reply and Waiting"
+              : headerChat.flags.unresponded ? "Needs Reply" : "Waiting";
+            void settleTriageChat(headerChat).then(() => showToast(`Settled from ${queueName} — Z to undo`), () => undefined);
+          }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Settle{triageShortcutsEnabled ? <Text style={{ color: theme.textSecondary }}> E</Text> : null}</Text></HoverFillButton>
+          <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => showSheet({ title: `Later · ${headerChat.displayName}`, anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later{triageShortcutsEnabled ? <Text style={{ color: theme.textSecondary }}> H</Text> : null}</Text></HoverFillButton>
         </View>
       )}
 
