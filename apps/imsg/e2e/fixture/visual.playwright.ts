@@ -46,7 +46,7 @@ test("live system theme changes update every mounted desktop surface", async ({ 
   const rows = page.getByTestId("conversation-row");
   await expect(header).toHaveCSS("background-color", "rgba(26, 26, 30, 0.78)");
   expect(await rows.count()).toBeGreaterThan(0);
-  const darkRowColors = new Set(["rgb(35, 35, 38)", "rgb(44, 44, 46)"]);
+  const darkRowColors = new Set(["rgba(0, 0, 0, 0)", "rgb(44, 44, 46)"]);
   for (const row of await rows.all()) {
     expect(darkRowColors.has(await row.evaluate((element) => getComputedStyle(element).backgroundColor))).toBe(true);
   }
@@ -103,9 +103,9 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       await expect(actionRow.getByText("Done", { exact: true })).toBeVisible();
       await expect(actionRow.getByText("Later", { exact: true })).toBeVisible();
       const rowAfter = await actionRow.boundingBox();
-      expect(rowBefore?.height).toBeCloseTo(82, 1);
+      expect(rowBefore?.height).toBeCloseTo(68, 1);
       expect(rowAfter).toEqual(rowBefore);
-      expect(await actionRow.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("11px");
+      expect(await actionRow.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("0px");
 
       for (const button of await rail.getByRole("button").all()) {
         if (!(await button.isEnabled())) continue;

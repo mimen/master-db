@@ -262,7 +262,7 @@ export function ConversationListPane({
           contentContainerStyle={{
             paddingTop: Platform.OS === "web" ? 0 : topBarH + 8,
             paddingBottom: footerH + 12,
-            paddingHorizontal: wide ? 10 : 0,
+            paddingHorizontal: 0,
           }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
           automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}

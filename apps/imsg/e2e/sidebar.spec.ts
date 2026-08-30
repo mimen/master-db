@@ -177,7 +177,7 @@ playwrightTest?.("conversation rows stay constant-height while actions swap in",
   const before = await row.boundingBox();
   expect(before).not.toBeNull();
   if (!before) throw new Error("Conversation row has no bounding box");
-  expect(before.height).toBeCloseTo(82, 1);
+  expect(before.height).toBeCloseTo(68, 1);
 
   await row.click();
   await expect(row.getByText("Reply", { exact: true })).toBeVisible();

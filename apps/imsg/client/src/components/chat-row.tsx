@@ -199,7 +199,7 @@ function ChatRowInner({
   return (
     <ReanimatedSwipeable
       ref={swipeRef}
-      containerStyle={compact ? styles.desktopCardWrap : undefined}
+      containerStyle={compact ? styles.desktopRowWrap : undefined}
       friction={1}
       leftThreshold={commit}
       rightThreshold={commit}
@@ -244,13 +244,12 @@ function ChatRowInner({
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,
-          compact && styles.desktopCard,
-          { height: compact ? 82 : undefined, minHeight: compact ? 82 : 92 },
+          compact && styles.desktopRow,
+          { height: compact ? 68 : undefined, minHeight: compact ? 68 : 92 },
           compact
-            ? ({
-                backgroundColor: selected ? visual.cardSelected : hovered || pressed ? visual.cardHover : visual.card,
-                boxShadow: `0 1px 3px ${visual.cardShadow}`,
-              } as object)
+            ? {
+                backgroundColor: selected ? visual.cardSelected : hovered || pressed ? visual.cardHover : "transparent",
+              }
             : {
                 backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background,
               },
@@ -268,7 +267,7 @@ function ChatRowInner({
             {
               backgroundColor: theme.divider,
               left: 16 + (compact ? 40 : 52) + 11,
-              opacity: compact ? 0 : 1,
+              opacity: 1,
             },
           ]}
         />
@@ -297,35 +296,29 @@ function ChatRowInner({
             )}
           </View>
           <View style={styles.messageRow}>
-            <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-            {!compact ? <RowSignal chat={chat} /> : null}
+            {compact && actionsVisible ? (
+              <View style={styles.inlineActions}>
+                {waitingOnly ? (
+                  <>
+                    <HoverFillButton accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></HoverFillButton>
+                    <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></HoverFillButton>
+                  </>
+                ) : (
+                  <>
+                    <HoverFillButton accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></HoverFillButton>
+                    <HoverFillButton accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></HoverFillButton>
+                    <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></HoverFillButton>
+                  </>
+                )}
+                <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>
+              </View>
+            ) : (
+              <>
+                <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
+                <RowSignal chat={chat} />
+              </>
+            )}
           </View>
-          {compact ? <View style={styles.previewLine}>
-            <View
-              pointerEvents="none"
-              style={[styles.previewLayer, { justifyContent: "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
-            >
-              <RowSignal chat={chat} />
-            </View>
-            <View
-              pointerEvents={actionsVisible ? "auto" : "none"}
-              style={[styles.actionLayer, { opacity: actionsVisible ? 1 : 0 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "visible" : "hidden", transitionDelay: actionsVisible ? "60ms,0ms" : "0ms,60ms" } as object] : null]}
-            >
-              {waitingOnly ? (
-                <>
-                  <HoverFillButton accessibilityLabel="Nudge this conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Nudge</Text></HoverFillButton>
-                  <HoverFillButton accessibilityLabel="Stop waiting on this conversation" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Let go</Text></HoverFillButton>
-                </>
-              ) : (
-                <>
-                  <HoverFillButton accessibilityLabel="Reply to conversation" onPress={(event) => { event.stopPropagation(); onPress(); if (rowDraft) requestAnimationFrame(() => fillComposer(rowDraft)); }} restFill={theme.accent} hoverFill="#0066D6" style={styles.inlineAction}><Ionicons name="arrow-undo-outline" size={13} color={theme.onAccent} /><Text style={[styles.inlineActionText, { color: theme.onAccent }]}>Reply</Text></HoverFillButton>
-                  <HoverFillButton accessibilityLabel="Mark conversation done" onPress={(event) => { event.stopPropagation(); onDone?.(); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="checkmark" size={13} color={theme.accent} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Done</Text></HoverFillButton>
-                  <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => { event.stopPropagation(); showSheet({ title: "Later", anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => onLater?.(option.until) })) }); }} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.inlineAction}><Ionicons name="time-outline" size={13} color={visual.muted} /><Text style={[styles.inlineActionText, { color: visual.text }]}>Later</Text></HoverFillButton>
-                </>
-              )}
-              <Pressable accessibilityLabel="More conversation actions" onPress={(event) => { event.stopPropagation(); openMenu(chat); }} style={styles.moreAction}><Ionicons name="ellipsis-horizontal" size={15} color={visual.muted} /></Pressable>
-            </View>
-          </View> : null}
         </View>
         {!compact && (
           <Pressable
@@ -363,9 +356,7 @@ function ChatRowInner({
 export const ChatRow = memo(ChatRowInner);
 
 const styles = StyleSheet.create({
-  desktopCardWrap: {
-    borderRadius: 11,
-    marginBottom: 6,
+  desktopRowWrap: {
     overflow: "visible",
   },
   row: {
@@ -376,9 +367,8 @@ const styles = StyleSheet.create({
     paddingRight: 16,
     paddingVertical: 14,
   },
-  desktopCard: {
-    borderRadius: 11,
-    paddingHorizontal: 12,
+  desktopRow: {
+    paddingHorizontal: 16,
     paddingVertical: 8,
   },
   separator: {
@@ -429,40 +419,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  previewLine: {
-    height: 24,
-    marginTop: 3,
-    position: "relative",
-  },
-  previewLayer: {
-    alignItems: "center",
-    bottom: 0,
-    flexDirection: "row",
-    gap: 7,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  actionLayer: {
-    alignItems: "center",
-    bottom: 0,
-    flexDirection: "row",
-    gap: 5,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    top: 0,
-  },
-  // Web-only CSS transition properties — cast like desktop-split.tsx's
-  // backdrop-filter escape; RN-web passes them through, TS can't see them.
-  opacityTransition: Platform.OS === "web"
-    ? ({
-        transitionDuration: "60ms, 0ms",
-        transitionProperty: "opacity, visibility",
-        transitionTimingFunction: "cubic-bezier(0.2,0,0,1)",
-      } as object)
-    : {},
   inlineActions: {
     alignItems: "center",
     flex: 1,
