@@ -17,8 +17,9 @@ interface ScrollGeometry {
 }
 
 function lensButton(page: Page, label: "Needs" | "Waiting" | "All"): Locator {
+  const accessibleLabel = label === "Needs" ? "Needs reply" : label === "All" ? "All messages" : "Waiting";
   return page.getByRole("button", {
-    name: label === "Needs" ? /^Needs reply, \d+/ : label === "All" ? "All messages" : label,
+    name: new RegExp(`^${accessibleLabel}, \\d+ conversations$`),
   });
 }
 
@@ -121,6 +122,16 @@ playwrightTest?.("web wheel and query-reset scrolling retain search focus", asyn
   await expect(search).toHaveValue(QUERY_RESET_TEXT);
   await expect.poll(() => scroll.evaluate((element) => element.scrollTop)).toBeLessThan(2);
   await expect(search).toBeFocused();
+});
+
+playwrightTest?.("navigation rail shows conversation counts for every inbox group", async ({ sidebar }) => {
+  const { page } = sidebar;
+
+  for (const label of ["Needs", "Waiting", "All"] as const) {
+    const button = lensButton(page, label);
+    await expect(button).toBeVisible();
+    await expect(button.getByText(/^\d+(?:\+)?$/)).toBeVisible();
+  }
 });
 
 playwrightTest?.("search and Triage Desk lenses supersede each other", async ({ sidebar }) => {

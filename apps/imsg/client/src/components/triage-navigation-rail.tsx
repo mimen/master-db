@@ -1,11 +1,12 @@
 import type { StateCounts, StateFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useEffect, useState, type JSX } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { DESKTOP_RAIL_WIDTH } from "@/lib/desktop-coordinator/pane-admission";
+import { RowSignalColor, unreadLabel } from "@/lib/row-signal";
 import {
   isDesktopShell,
   NATIVE_TITLEBAR_INSET,
@@ -50,13 +51,13 @@ function RailIcon({ name, color }: { name: RailIconName; color: string }): JSX.E
   );
 }
 
-function Item({ icon, label, active = false, count, onPress }: { icon: RailIconName; label: string; active?: boolean; count?: number; onPress: () => void }): JSX.Element {
+function Item({ icon, label, active = false, count, urgent = false, onPress }: { icon: RailIconName; label: string; active?: boolean; count?: number; urgent?: boolean; onPress: () => void }): JSX.Element {
   const [hovered, setHovered] = useState(false);
   const color = active ? "#FFFFFF" : "rgba(255,255,255,0.65)";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={count === undefined ? label : `${label}, ${count}`}
+      accessibilityLabel={count === undefined ? label : `${label}, ${count} conversations`}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onPress={onPress}
@@ -64,6 +65,17 @@ function Item({ icon, label, active = false, count, onPress }: { icon: RailIconN
       {...NO_DRAG}
     >
       <RailIcon name={icon} color={color} />
+      {count !== undefined ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[styles.countBadge, urgent ? styles.countBadgeUrgent : styles.countBadgeNeutral]}
+        >
+          <Text style={[styles.countBadgeText, urgent ? styles.countBadgeTextUrgent : styles.countBadgeTextNeutral]}>
+            {unreadLabel(count)}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -107,9 +119,9 @@ export function TriageNavigationRail({
     <View testID="triage-rail" style={[styles.rail, glass]} {...DRAG}>
       <View style={styles.top}>
         <View style={[styles.primary, { marginTop: titlebarInset }]}>
-          <Item icon="inbox" label="Needs reply" count={counts?.unresponded} active={onMessages && state === "unresponded"} onPress={() => goToState("unresponded")} />
-          <Item icon="waiting" label="Waiting" active={onMessages && state === "waiting"} onPress={() => goToState("waiting")} />
-          <Item icon="messages" label="All messages" active={onMessages && state === "all"} onPress={() => goToState("all")} />
+          <Item icon="inbox" label="Needs reply" count={counts?.unresponded} urgent active={onMessages && state === "unresponded"} onPress={() => goToState("unresponded")} />
+          <Item icon="waiting" label="Waiting" count={counts?.waiting} active={onMessages && state === "waiting"} onPress={() => goToState("waiting")} />
+          <Item icon="messages" label="All messages" count={counts?.all} active={onMessages && state === "all"} onPress={() => goToState("all")} />
           <Item icon="contacts" label="Contacts" active={!onMessages} onPress={() => router.replace("/contacts")} />
           <Item
             icon="scheduled"
@@ -158,5 +170,34 @@ const styles = StyleSheet.create({
   },
   itemPressed: {
     transform: [{ scale: 0.96 }],
+  },
+  countBadge: {
+    alignItems: "center",
+    borderRadius: 8,
+    height: 15,
+    justifyContent: "center",
+    minWidth: 15,
+    paddingHorizontal: 4,
+    position: "absolute",
+    right: 0,
+    top: 1,
+  },
+  countBadgeUrgent: {
+    backgroundColor: RowSignalColor.unresponded,
+  },
+  countBadgeNeutral: {
+    backgroundColor: "rgba(255,255,255,0.14)",
+  },
+  countBadgeText: {
+    fontSize: 10,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "700",
+    lineHeight: 12,
+  },
+  countBadgeTextUrgent: {
+    color: RowSignalColor.unrespondedGlyph,
+  },
+  countBadgeTextNeutral: {
+    color: "rgba(255,255,255,0.85)",
   },
 });
