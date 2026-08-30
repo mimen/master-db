@@ -315,7 +315,10 @@ export class AiService {
     };
   }
 
-  /** Everyone on the other side of the thread with a known contact email. */
+  /**
+   * Everyone on the other side of the thread with a known contact email —
+   * first listed email per contact, so one human gets one invitation.
+   */
   private inviteEmails(messages: Message[]): string[] {
     const addresses = new Set<string>();
     for (const message of messages) {
@@ -323,7 +326,8 @@ export class AiService {
     }
     const emails = new Set<string>();
     for (const address of addresses) {
-      for (const email of this.deps.contactEmails(address)) emails.add(email.toLowerCase());
+      const first = this.deps.contactEmails(address)[0];
+      if (first) emails.add(first.toLowerCase());
     }
     return [...emails].slice(0, 10);
   }
