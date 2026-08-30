@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
+import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
@@ -169,7 +170,7 @@ export function SuggestionShelf({
               accessibilityRole="button"
               accessibilityLabel={`Add to calendar: ${event.title}, ${eventShelfLabel(event)}`}
               disabled={stale}
-              onPress={() => void Linking.openURL(eventUrl)}
+              onPress={() => void openExternalUrl(eventUrl)}
               style={[styles.pill, styles.eventPill, { opacity: stale ? 0.55 : 1 }]}
             >
               <Ionicons name="calendar-outline" size={15} color={theme.accent} />

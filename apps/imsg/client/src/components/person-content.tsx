@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { openExternalUrl } from "@/lib/external-link";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
@@ -295,7 +295,7 @@ export function PersonContent({
         <PersonConversationsList chats={sortedChats} onOpenChat={openChat} />
 
         {airtableId && (
-          <Pressable style={styles.footerLink} onPress={() => Linking.openURL(airtableRecordUrl(airtableId))}>
+          <Pressable style={styles.footerLink} onPress={() => void openExternalUrl(airtableRecordUrl(airtableId))}>
             <Text style={{ color: theme.accent, fontSize: 14, fontWeight: "600" }}>View in Airtable</Text>
           </Pressable>
         )}

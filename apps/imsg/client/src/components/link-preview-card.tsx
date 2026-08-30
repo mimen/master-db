@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { BASE_URL } from "@/lib/config";
 import { useTheme } from "@/hooks/use-theme";
@@ -52,7 +53,7 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 
   return (
     <Pressable
-      onPress={() => void Linking.openURL(url)}
+      onPress={() => void openExternalUrl(url)}
       style={[
         styles.card,
         { backgroundColor: mine ? "rgba(255,255,255,0.14)" : theme.backgroundElement },

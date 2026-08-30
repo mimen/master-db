@@ -15,6 +15,8 @@ export class ContactBook {
   private byDigitSuffix = new Map<string, string>();
   private avatarByExact = new Map<string, string>();
   private avatarByDigitSuffix = new Map<string, string>();
+  private emailsByExact = new Map<string, string[]>();
+  private emailsByDigitSuffix = new Map<string, string[]>();
   private all: Contact[] = [];
   private lastRefresh = 0;
   private loaded = false;
@@ -58,15 +60,21 @@ export class ContactBook {
     this.byDigitSuffix.clear();
     this.avatarByExact.clear();
     this.avatarByDigitSuffix.clear();
+    this.emailsByExact.clear();
+    this.emailsByDigitSuffix.clear();
     const flat: Contact[] = [];
     for (const contact of result.value) {
       const name = contactName(contact);
       if (!name) continue;
       const avatar = contact.avatar?.trim() || null;
+      const contactEmails = (contact.emails ?? [])
+        .map((email) => email.address?.trim() ?? "")
+        .filter(Boolean);
       for (const email of contact.emails ?? []) {
         if (!email.address) continue;
         this.byExact.set(email.address.toLowerCase(), name);
         if (avatar) this.avatarByExact.set(email.address.toLowerCase(), avatar);
+        if (contactEmails.length > 0) this.emailsByExact.set(email.address.toLowerCase(), contactEmails);
         flat.push({ address: email.address, name });
       }
       for (const phone of contact.phoneNumbers ?? []) {
@@ -77,6 +85,10 @@ export class ContactBook {
         if (avatar) {
           this.avatarByExact.set(phone.address, avatar);
           if (key) this.avatarByDigitSuffix.set(key, avatar);
+        }
+        if (contactEmails.length > 0) {
+          this.emailsByExact.set(phone.address, contactEmails);
+          if (key) this.emailsByDigitSuffix.set(key, contactEmails);
         }
         flat.push({ address: phone.address, name });
       }
@@ -92,6 +104,15 @@ export class ContactBook {
     if (exact) return exact;
     const key = phoneMatchKey(address);
     return key ? (this.avatarByDigitSuffix.get(key) ?? null) : null;
+  }
+
+  /** Email addresses of the contact this address belongs to, [] when unknown. */
+  emails(address: string): string[] {
+    const exact =
+      this.emailsByExact.get(address) ?? this.emailsByExact.get(address.toLowerCase());
+    if (exact) return exact;
+    const key = phoneMatchKey(address);
+    return key ? (this.emailsByDigitSuffix.get(key) ?? []) : [];
   }
 
   lookup(address: string): string | null {

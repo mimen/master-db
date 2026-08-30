@@ -156,6 +156,7 @@ const ai = deps.ai ?? new AiService({
   },
   recentOutboundText: () => chatDb.recentOutboundText(200),
   reactionSuggestions: () => bb.hasPrivateApi,
+  contactEmails: (address) => contacts.emails(address),
   searchVault: makeVaultSearch(config.ai.vaultPath),
 });
 

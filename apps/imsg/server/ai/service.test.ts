@@ -81,6 +81,7 @@ function makeService(options: {
   db?: OverlayDb;
   shadowReply?: string;
   fetchError?: string;
+  contactEmails?: (address: string) => string[];
 }) {
   const db = options.db ?? new OverlayDb(":memory:");
   const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => ({
@@ -102,6 +103,7 @@ function makeService(options: {
     },
     recentOutboundText: () => [],
     reactionSuggestions: () => true,
+    contactEmails: options.contactEmails ?? (() => []),
     searchVault: async () => [],
   });
   return { service, db };
@@ -216,6 +218,36 @@ describe("replySuggestions", () => {
     expect(db.getSuggestionCache("chat-1", "terra")).toBeNull();
   });
 
+  test("a detected event carries the counterparty's contact email", async () => {
+    // The service grounds the event against real time, so aim a week out.
+    const soon = new Date(Date.now() + 7 * 24 * 60 * 60_000);
+    const pad = (value: number): string => String(value).padStart(2, "0");
+    const start = `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}T20:00`;
+    const { service } = makeService({
+      messages: [
+        makeMessage({ guid: "m1", text: "8pm works any day this week" }),
+        makeMessage({ guid: "m2", text: "sunday sounds good to me!" }),
+      ],
+      structured: {
+        noReply: true,
+        suggestions: [],
+        event: { found: true, title: "Call with Sarah", start, durationMinutes: 60, location: "" },
+      },
+      contactEmails: (address) => (address === "+15551234567" ? ["sarah@example.com"] : []),
+    });
+    const result = await service.replySuggestions("chat-1", "Sarah", true, "opus");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.event).toEqual({
+        title: "Call with Sarah",
+        start,
+        durationMinutes: 60,
+        location: null,
+        inviteEmails: ["sarah@example.com"],
+      });
+    }
+  });
+
   test("propagates message-read failures instead of caching silence", async () => {
     const { service, db } = makeService({ fetchError: "bluebubbles unavailable" });
     const result = await service.replySuggestions("chat-1", null, false, "opus");
@@ -298,6 +330,7 @@ describe("shadowEnqueue", () => {
       fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
       recentOutboundText: () => [],
       reactionSuggestions: () => false,
+      contactEmails: () => [],
       searchVault: async () => [],
     });
 
@@ -328,6 +361,7 @@ describe("shadowEnqueue", () => {
       fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
       recentOutboundText: () => [],
       reactionSuggestions: () => false,
+      contactEmails: () => [],
       searchVault: async () => [],
     });
 

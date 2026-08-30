@@ -181,7 +181,7 @@ export function extractEventSuggestion(
   value: object,
   messages: Message[],
   now: Date,
-): EventSuggestion | null {
+): Omit<EventSuggestion, "inviteEmails"> | null {
   if (!isRecord(value) || !isRecord(value.event as object)) return null;
   const raw = value.event as JsonRecord;
   if (raw.found !== true) return null;

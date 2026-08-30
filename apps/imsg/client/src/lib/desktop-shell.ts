@@ -58,6 +58,25 @@ function closeDesktopWindow(win: DesktopShellWindow | undefined = defaultWindow(
 }
 
 /**
+ * Tauri's WebView drops `window.open`, so the shell must hand external URLs
+ * to the OS via the opener plugin. True when the shell took the URL; false
+ * means the caller should fall back to the browser path.
+ */
+export async function openUrlViaShell(
+  url: string,
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): Promise<boolean> {
+  const invoke = tauriGlobal(win)?.core?.invoke;
+  if (!invoke) return false;
+  try {
+    await invoke<null>("plugin:opener|open_url", { url });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Mirrors AppKit fullscreen state so web content only reserves titlebar space
  * while the overlay controls are visible. Resize is the Tauri v2 event emitted
  * by native fullscreen transitions.

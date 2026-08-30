@@ -284,6 +284,8 @@ export interface EventSuggestion {
   start: string;
   durationMinutes: number;
   location: string | null;
+  /** Contact emails of the other side(s), prefilled as guests. */
+  inviteEmails: string[];
 }
 
 export interface ReplySuggestions {

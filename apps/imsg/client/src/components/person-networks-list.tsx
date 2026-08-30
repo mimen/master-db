@@ -1,4 +1,5 @@
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { openExternalUrl } from "@/lib/external-link";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import type { IdentityRow } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
@@ -56,7 +57,7 @@ export function PersonNetworksList({ identities, airtableId }: PersonNetworksLis
             key={`${i.source}:${i.value}`}
             style={styles.infoRow}
             disabled={!isAirtable}
-            onPress={isAirtable ? () => Linking.openURL(airtableRecordUrl(airtableId as string)) : undefined}
+            onPress={isAirtable ? () => void openExternalUrl(airtableRecordUrl(airtableId as string)) : undefined}
           >
             <View style={[styles.infoIconBox, { backgroundColor: theme.backgroundElement }]}>
               <NetworkIconView icon={meta.icon} color={meta.color} size={17} />

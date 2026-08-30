@@ -1,5 +1,6 @@
 import { memo, useState, type ReactNode } from "react";
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
@@ -46,7 +47,7 @@ function linkifyText(text: string, color: string, keyPrefix = "text"): ReactNode
       <Text
         key={`${keyPrefix}-${start}-${raw}`}
         style={{ color, textDecorationLine: "underline" }}
-        onPress={() => void Linking.openURL(href)}
+        onPress={() => void openExternalUrl(href)}
         suppressHighlighting
       >
         {raw}
@@ -188,7 +189,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           );
         }
         return (
-          <Pressable key={att.guid} onPress={() => void Linking.openURL(url)}>
+          <Pressable key={att.guid} onPress={() => void openExternalUrl(url)}>
             <Text style={[styles.attachmentLink, { color: theme.accent }]}>{att.filename ?? "Attachment"}</Text>
           </Pressable>
         );

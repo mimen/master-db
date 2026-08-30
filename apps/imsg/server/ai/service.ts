@@ -53,6 +53,8 @@ export interface AiDeps {
   recentOutboundText: () => string[];
   /** BlueBubbles Private API supports outbound tapbacks. */
   reactionSuggestions: () => boolean;
+  /** Contact emails for an iMessage address, [] when unknown. */
+  contactEmails: (address: string) => string[];
   /** Vault grep, injected so tests never touch the filesystem. */
   searchVault: (pattern: string) => Promise<Array<{ path: string; line: string }>>;
 }
@@ -110,7 +112,9 @@ function isValidCachedEvent(event: SuggestionCachePayload["event"]): boolean {
     typeof event.title === "string" &&
     typeof event.start === "string" &&
     typeof event.durationMinutes === "number" &&
-    (event.location === null || typeof event.location === "string")
+    (event.location === null || typeof event.location === "string") &&
+    Array.isArray(event.inviteEmails) &&
+    event.inviteEmails.every((email) => typeof email === "string")
   );
 }
 
@@ -262,7 +266,8 @@ export class AiService {
     }
     // The event rides the same generation but validates independently, so a
     // rejected reply set still surfaces a grounded scheduling agreement.
-    const event = extractEventSuggestion(generated.value.value, messages, new Date());
+    const detected = extractEventSuggestion(generated.value.value, messages, new Date());
+    const event = detected ? { ...detected, inviteEmails: this.inviteEmails(messages) } : null;
     if (!validated.ok) {
       return {
         ok: true,
@@ -308,6 +313,19 @@ export class AiService {
         generatedAt: Date.now(),
       },
     };
+  }
+
+  /** Everyone on the other side of the thread with a known contact email. */
+  private inviteEmails(messages: Message[]): string[] {
+    const addresses = new Set<string>();
+    for (const message of messages) {
+      if (!message.isFromMe && message.sender?.address) addresses.add(message.sender.address);
+    }
+    const emails = new Set<string>();
+    for (const address of addresses) {
+      for (const email of this.deps.contactEmails(address)) emails.add(email.toLowerCase());
+    }
+    return [...emails].slice(0, 10);
   }
 
   private async validateGeneratedSuggestions(

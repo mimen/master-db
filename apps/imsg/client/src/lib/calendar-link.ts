@@ -27,8 +27,12 @@ export function calendarTemplateUrl(event: EventSuggestion): string | null {
     action: "TEMPLATE",
     text: event.title,
     dates: `${compact(start)}/${compact(end)}`,
+    // Default every detected plan to a Google Meet link; trivially removable
+    // in the template UI when it is an in-person hang.
+    vcon: "meet",
   });
   if (event.location) params.set("location", event.location);
+  if (event.inviteEmails.length > 0) params.set("add", event.inviteEmails.join(","));
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
