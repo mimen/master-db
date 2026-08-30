@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
@@ -128,6 +129,8 @@ export function SuggestionShelf({
 
   if (!enabled || !awaitingReply || mode === "off") return null;
   const suggestions = result?.suggestions ?? [];
+  const event = result?.event ?? null;
+  const eventUrl = event ? calendarTemplateUrl(event) : null;
   if (mode === "on-demand" && !resolved && suggestions.length === 0 && !loading && !failed) {
     return (
       <View style={[styles.container, styles.demandRow, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
@@ -135,7 +138,7 @@ export function SuggestionShelf({
       </View>
     );
   }
-  if (!loading && !failed && suggestions.length === 0) return null;
+  if (!loading && !failed && suggestions.length === 0 && !eventUrl) return null;
 
   return (
     <View style={[styles.container, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
@@ -161,6 +164,21 @@ export function SuggestionShelf({
         </View>
       ) : (
         <View style={styles.pillRow}>
+          {event && eventUrl && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add to calendar: ${event.title}, ${eventShelfLabel(event)}`}
+              disabled={stale}
+              onPress={() => void Linking.openURL(eventUrl)}
+              style={[styles.pill, styles.eventPill, { opacity: stale ? 0.55 : 1 }]}
+            >
+              <Ionicons name="calendar-outline" size={15} color={theme.accent} />
+              <Text numberOfLines={2} style={[styles.pillText, { color: theme.text }]}>
+                <Text style={styles.eventTitle}>{event.title}</Text>
+                {`  ·  ${eventShelfLabel(event)}`}
+              </Text>
+            </Pressable>
+          )}
           {suggestions.map((suggestion) => {
             const colors = vibeColors(suggestion.vibe);
             const emoji = suggestion.reaction ? TAPBACK_EMOJI.get(suggestion.reaction) : null;
@@ -237,6 +255,8 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 13 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 6 },
   pill: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
+  eventPill: { backgroundColor: "rgba(94,199,221,0.13)", borderColor: "rgba(94,199,221,0.38)" },
+  eventTitle: { fontWeight: "600" },
   pillText: { fontSize: 13, lineHeight: 17, flexShrink: 1 },
   reactionEmoji: { fontSize: 16 },
 });

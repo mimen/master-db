@@ -1,4 +1,5 @@
 import type {
+  EventSuggestion,
   Message,
   ReplySuggestion,
   SuggestionModel,
@@ -9,7 +10,7 @@ import type {
 import type { Result } from "../bluebubbles";
 import { UNTRUSTED_NOTICE, type SuggestionContext } from "./context";
 
-export const SUGGESTION_RECIPE_VERSION = 3;
+export const SUGGESTION_RECIPE_VERSION = 4;
 export const SUGGESTION_MODELS: Record<SuggestionModel, string> = {
   opus: "claude-opus-5",
   terra: "gpt-5.6-terra(medium)",
@@ -62,8 +63,20 @@ export const SUGGESTION_SCHEMA = {
         additionalProperties: false,
       },
     },
+    event: {
+      type: "object",
+      properties: {
+        found: { type: "boolean" },
+        title: { type: "string" },
+        start: { type: "string" },
+        durationMinutes: { type: "integer" },
+        location: { type: "string" },
+      },
+      required: ["found", "title", "start", "durationMinutes", "location"],
+      additionalProperties: false,
+    },
   },
-  required: ["noReply", "suggestions"],
+  required: ["noReply", "suggestions", "event"],
   additionalProperties: false,
 };
 
@@ -92,6 +105,8 @@ export interface SuggestionPromptInput {
   globalStyle: string;
   editRules: string[];
   reactionSuggestions: boolean;
+  /** Rendered local date/time, weekday included — lets the model resolve "Sunday 6pm". */
+  now: string;
 }
 
 export function suggestionPrompt(input: SuggestionPromptInput): string {
@@ -116,10 +131,18 @@ export function suggestionPrompt(input: SuggestionPromptInput): string {
     `Thread-specific examples of Milad's voice${input.peerName ? ` with ${input.peerName}` : ""}:`,
     examples,
     "",
+    `Current local date and time: ${input.now}.`,
+    "",
     "Conversation (message IDs are data used only for grounding):",
     input.context.transcript || "(no messages)",
     "",
     UNTRUSTED_NOTICE,
+    "",
+    "Calendar detection, independent of the reply suggestions:",
+    "- When the conversation has settled on a concrete upcoming day AND time for something (a call, a meetup, an event), fill `event`: found=true, a short specific title" + (input.peerName ? ` that names ${input.peerName}` : "") + ", start as local \"YYYY-MM-DDTHH:mm\" resolved against the current date above, durationMinutes (60 when unstated), and location ('' when none was mentioned).",
+    "- Both the day and the time must be explicit or unambiguous in the conversation. A vague \"soon\" or \"this week\" with no agreed time is found=false.",
+    "- If the plan was later moved, use the final agreement. If it already happened, found=false.",
+    "- found=false requires empty strings and durationMinutes=0.",
     "",
     "For each suggestion:",
     "- basisMessageGuids contains only IDs from the conversation that support factual wording.",
@@ -130,6 +153,66 @@ export function suggestionPrompt(input: SuggestionPromptInput): string {
     "- noReply=true requires suggestions=[].",
     "Return only the requested JSON object.",
   ].filter(Boolean).join("\n");
+}
+
+export function formatPromptNow(now: Date): string {
+  return now.toLocaleString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+const EVENT_START_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+/** An explicit clock time somewhere in the thread — "6pm", "18:30", "noon". */
+const TIME_SIGNAL_RE = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|\b(?:noon|midnight)\b/i;
+/** An explicit day somewhere in the thread — a weekday, "tomorrow", a date. */
+const DAY_SIGNAL_RE = /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|tonight|weekend)\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\/\d{1,2}\b/i;
+
+/**
+ * The model's event claim is only surfaced when the thread itself contains an
+ * explicit day and clock time and the start parses to a near-future moment —
+ * a fabricated agreement fails these checks and silently yields no pill.
+ */
+export function extractEventSuggestion(
+  value: object,
+  messages: Message[],
+  now: Date,
+): EventSuggestion | null {
+  if (!isRecord(value) || !isRecord(value.event as object)) return null;
+  const raw = value.event as JsonRecord;
+  if (raw.found !== true) return null;
+  if (typeof raw.title !== "string" || typeof raw.start !== "string") return null;
+
+  const title = raw.title.trim().slice(0, 80);
+  if (!title) return null;
+
+  const match = raw.start.match(EVENT_START_RE);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const start = new Date(year!, month! - 1, day!, hour!, minute!);
+  if (Number.isNaN(start.getTime())) return null;
+  if (start.getTime() <= now.getTime()) return null;
+  if (start.getTime() > now.getTime() + 370 * 24 * 60 * 60_000) return null;
+
+  const corpus = messages.map((message) => message.text).join(" ");
+  if (!TIME_SIGNAL_RE.test(corpus) || !DAY_SIGNAL_RE.test(corpus)) return null;
+
+  const durationMinutes =
+    typeof raw.durationMinutes === "number" &&
+    Number.isInteger(raw.durationMinutes) &&
+    raw.durationMinutes >= 15 &&
+    raw.durationMinutes <= 480
+      ? raw.durationMinutes
+      : 60;
+  const location = typeof raw.location === "string" && raw.location.trim()
+    ? raw.location.trim().slice(0, 120)
+    : null;
+
+  return { title, start: raw.start, durationMinutes, location };
 }
 
 export interface ValidateSuggestionOptions {

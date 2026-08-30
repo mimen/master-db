@@ -171,6 +171,7 @@ describe("replySuggestions", () => {
         fallback: false,
         noReply: false,
         suggestions: [],
+        event: null,
       }),
     });
     const { service } = makeService({ messages: [makeMessage({ guid: "m6" })], db });

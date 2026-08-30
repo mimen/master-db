@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "../../shared/types";
-import { passesEchoGate, validateSuggestionSet } from "./suggestions";
+import { extractEventSuggestion, passesEchoGate, validateSuggestionSet } from "./suggestions";
 
 function message(overrides: Partial<Message> = {}): Message {
   return {
@@ -97,5 +97,69 @@ describe("semantic suggestion validation", () => {
       basisMessageGuids: [target.guid], decisionOption: false, introducesCommitment: false,
     }] }, options([target]));
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("extractEventSuggestion", () => {
+  const now = new Date(2026, 7, 29, 12, 0);
+  const agreed = [
+    message({ guid: "in-2", text: "i work all week until 6:30 so like 8pm works any day this week" }),
+    message({ guid: "out-2", isFromMe: true, text: "we can do sunday!", sender: null }),
+    message({ guid: "in-3", text: "yeah sounds good to me!" }),
+  ];
+  const found = (overrides: Record<string, string | number | boolean> = {}): object => ({
+    noReply: true,
+    suggestions: [],
+    event: {
+      found: true, title: "Production call with Meghan", start: "2026-08-30T18:00",
+      durationMinutes: 60, location: "", ...overrides,
+    },
+  });
+
+  test("surfaces a grounded upcoming agreement", () => {
+    const event = extractEventSuggestion(found(), agreed, now);
+    expect(event).toEqual({
+      title: "Production call with Meghan",
+      start: "2026-08-30T18:00",
+      durationMinutes: 60,
+      location: null,
+    });
+  });
+
+  test("found=false yields nothing", () => {
+    expect(extractEventSuggestion(found({ found: false }), agreed, now)).toBeNull();
+  });
+
+  test("a missing event object yields nothing", () => {
+    expect(extractEventSuggestion({ noReply: true, suggestions: [] }, agreed, now)).toBeNull();
+  });
+
+  test("drops an event when the thread never names a clock time", () => {
+    const vague = [message({ text: "sunday works, see you then" })];
+    expect(extractEventSuggestion(found(), vague, now)).toBeNull();
+  });
+
+  test("drops an event when the thread never names a day", () => {
+    const vague = [message({ text: "8pm works whenever" })];
+    expect(extractEventSuggestion(found(), vague, now)).toBeNull();
+  });
+
+  test("drops a start in the past or with a malformed shape", () => {
+    expect(extractEventSuggestion(found({ start: "2026-08-28T18:00" }), agreed, now)).toBeNull();
+    expect(extractEventSuggestion(found({ start: "sunday 6pm" }), agreed, now)).toBeNull();
+  });
+
+  test("coerces an out-of-range duration to an hour", () => {
+    const event = extractEventSuggestion(found({ durationMinutes: 0 }), agreed, now);
+    expect(event?.durationMinutes).toBe(60);
+  });
+
+  test("keeps a stated location", () => {
+    const located = [
+      ...agreed,
+      message({ guid: "in-4", text: "come to the studio downtown" }),
+    ];
+    const event = extractEventSuggestion(found({ location: "the studio downtown" }), located, now);
+    expect(event?.location).toBe("the studio downtown");
   });
 });

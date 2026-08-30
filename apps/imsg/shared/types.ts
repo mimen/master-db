@@ -273,8 +273,22 @@ export interface ReplySuggestion {
   targetPartIndex: number | null;
 }
 
+/**
+ * A concrete scheduling agreement detected in the thread — "Sunday 6pm works",
+ * not a vague "let's hang soon". Rendered as an add-to-calendar affordance;
+ * creating the event stays a user tap in Google Calendar's own UI.
+ */
+export interface EventSuggestion {
+  title: string;
+  /** Local wall-clock start, "YYYY-MM-DDTHH:mm" — no timezone. */
+  start: string;
+  durationMinutes: number;
+  location: string | null;
+}
+
 export interface ReplySuggestions {
   suggestions: ReplySuggestion[];
+  event: EventSuggestion | null;
   recipeVersion: number;
   selectedModel: SuggestionModel;
   servedModel: SuggestionModel;

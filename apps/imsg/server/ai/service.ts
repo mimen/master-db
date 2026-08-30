@@ -3,6 +3,7 @@ import type { AiConfig } from "../config";
 import type { OverlayDb } from "../db";
 import type {
   ContactSuggestion,
+  EventSuggestion,
   Message,
   ReplySuggestions,
   ShadowBrief,
@@ -21,6 +22,8 @@ import {
   SUGGESTION_MODELS,
   SUGGESTION_RECIPE_VERSION,
   SUGGESTION_SCHEMA,
+  extractEventSuggestion,
+  formatPromptNow,
   suggestionPrompt,
   suggestionTargetGuids,
   validateSuggestionSet,
@@ -74,6 +77,7 @@ interface SuggestionCachePayload {
   fallback: boolean;
   noReply: boolean;
   suggestions: ReplySuggestions["suggestions"];
+  event: EventSuggestion | null;
 }
 
 export function serializeSuggestionCache(payload: SuggestionCachePayload): string {
@@ -90,12 +94,24 @@ export function parseSuggestionCache(payload: string): SuggestionCachePayload | 
       (parsed.servedModel !== "opus" && parsed.servedModel !== "terra") ||
       typeof parsed.fallback !== "boolean" ||
       typeof parsed.noReply !== "boolean" ||
-      !Array.isArray(parsed.suggestions)
+      !Array.isArray(parsed.suggestions) ||
+      !isValidCachedEvent(parsed.event)
     ) return null;
     return parsed;
   } catch {
     return null;
   }
+}
+
+function isValidCachedEvent(event: SuggestionCachePayload["event"]): boolean {
+  if (event === null) return true;
+  return (
+    typeof event === "object" &&
+    typeof event.title === "string" &&
+    typeof event.start === "string" &&
+    typeof event.durationMinutes === "number" &&
+    (event.location === null || typeof event.location === "string")
+  );
 }
 
 export class AiService {
@@ -215,6 +231,7 @@ export class AiService {
       globalStyle: context.outboundExamples.length < 4 ? voice.globalStyle : "",
       editRules: voice.editRules,
       reactionSuggestions: this.deps.reactionSuggestions(),
+      now: formatPromptNow(new Date()),
     });
     let generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
     if (!generated.ok) return { ok: false, error: generated.error.message };
@@ -243,11 +260,15 @@ export class AiService {
         );
       }
     }
+    // The event rides the same generation but validates independently, so a
+    // rejected reply set still surfaces a grounded scheduling agreement.
+    const event = extractEventSuggestion(generated.value.value, messages, new Date());
     if (!validated.ok) {
       return {
         ok: true,
         value: {
           suggestions: [],
+          event,
           recipeVersion: SUGGESTION_RECIPE_VERSION,
           selectedModel,
           servedModel: generated.value.servedModel,
@@ -267,6 +288,7 @@ export class AiService {
       fallback: generated.value.servedModel !== selectedModel,
       noReply: validated.value.noReply,
       suggestions: validated.value.suggestions,
+      event,
     };
     this.deps.db.setSuggestionCache({
       chat_guid: chatGuid,
@@ -607,6 +629,7 @@ export class AiService {
 function emptySuggestions(selectedModel: SuggestionModel, currentGuid: string): ReplySuggestions {
   return {
     suggestions: [],
+    event: null,
     recipeVersion: SUGGESTION_RECIPE_VERSION,
     selectedModel,
     servedModel: selectedModel,
