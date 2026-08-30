@@ -93,14 +93,8 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       expect(needsReplyBox?.y).toBeGreaterThanOrEqual(38);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-      const closerRow = rows.first();
-      const closer = closerRow.getByRole("button", { name: "Fill AI draft" });
-      const closerBefore = await closer.boundingBox();
-      const closerRowBefore = await closerRow.boundingBox();
-      await closer.hover();
-      await expect(closer).toBeVisible();
-      expect(await closer.boundingBox()).toEqual(closerBefore);
-      expect(await closerRow.boundingBox()).toEqual(closerRowBefore);
+      await expect(rows.getByRole("button", { name: "Fill AI draft" })).toHaveCount(0);
+      await expect(rows.first()).not.toContainText("Doors are at 8");
 
       const actionRow = rows.nth(1);
       const rowBefore = await actionRow.boundingBox();

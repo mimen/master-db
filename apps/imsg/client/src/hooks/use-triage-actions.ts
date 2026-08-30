@@ -86,10 +86,9 @@ export async function setTriageLater(chat: ChatSummary, until: number | null): P
 }
 
 /**
- * The smart closer is authoritative for sidebar rows. A reply classification
- * exposes its one decisive draft. Every other classification means no message
- * should be suggested, so rows never fall back to shelf text and accidentally
- * reopen a request the closer recognized as complete.
+ * The smart closer is authoritative for sidebar actions. A reply classification
+ * exposes its one decisive draft when the user opens the row's Reply or Nudge
+ * action, without rendering the draft in the conversation list.
  */
 export function useRowDraft(
   chatGuid: string,

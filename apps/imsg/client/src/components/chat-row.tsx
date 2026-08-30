@@ -151,17 +151,14 @@ function ChatRowInner({
   const showSheet = useActionSheet();
   const { width: winW, wide: compact } = useLayoutMode();
   const [hovered, setHovered] = useState(false);
-  const [draftHovered, setDraftHovered] = useState(false);
   const waitingOnly = chat.flags.waiting && !chat.flags.unresponded;
   const rowDraftState = useRowDraft(
     chat.guid,
     compact && (chat.flags.unresponded || chat.flags.waiting),
   );
   const rowDraft = rowDraftState.draft;
-  // The third lane is always the AI draft, or selected-row actions. The message
-  // preview above it never disappears. Actions are selection-only: hover used
-  // to swap them in exactly when no draft existed, covering the Generate
-  // draft button it was supposed to accompany.
+  // The third lane shows row state until selection reveals its actions. The
+  // message preview above it remains stable throughout the transition.
   const actionsVisible = compact && selected;
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
@@ -305,10 +302,10 @@ function ChatRowInner({
           </View>
           {compact ? <View style={styles.previewLine}>
             <View
-              pointerEvents={actionsVisible ? "none" : "auto"}
-              style={[styles.previewLayer, { justifyContent: rowDraft ? "flex-start" : "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
+              pointerEvents="none"
+              style={[styles.previewLayer, { justifyContent: "flex-end", opacity: actionsVisible ? 0 : 1 }, Platform.OS === "web" ? [styles.opacityTransition, { visibility: actionsVisible ? "hidden" : "visible", transitionDelay: actionsVisible ? "0ms,60ms" : "60ms,0ms" } as object] : null]}
             >
-              {rowDraft ? <Pressable accessibilityRole="button" accessibilityLabel="Fill AI draft" onPress={(event) => { event.stopPropagation(); onPress(); requestAnimationFrame(() => fillComposer(rowDraft)); }} onHoverIn={() => setDraftHovered(true)} onHoverOut={() => setDraftHovered(false)} style={[styles.closer, { borderColor: "rgba(0,122,255,0.4)", backgroundColor: draftHovered ? visual.controlFillHover : "transparent" }]}><Ionicons name="create-outline" size={13} color={theme.accent} /><Text numberOfLines={1} style={[styles.closerText, { color: theme.accent }]}>{rowDraft}</Text></Pressable> : <RowSignal chat={chat} />}
+              <RowSignal chat={chat} />
             </View>
             <View
               pointerEvents={actionsVisible ? "auto" : "none"}
@@ -490,22 +487,6 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: "center",
     width: 24,
-  },
-  closer: {
-    alignItems: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    flexShrink: 1,
-    gap: 3,
-    maxWidth: "100%",
-    height: 24,
-    justifyContent: "center",
-    paddingHorizontal: 9,
-  },
-  closerText: {
-    flex: 1,
-    fontSize: 11,
   },
   signal: {
     alignItems: "center",
