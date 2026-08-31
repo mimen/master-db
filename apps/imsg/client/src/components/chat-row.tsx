@@ -148,6 +148,7 @@ function ChatRowInner({
   const [hovered, setHovered] = useState(false);
   const [focusedWithin, setFocusedWithin] = useState(false);
   const [settleHovered, setSettleHovered] = useState(false);
+  const [moreHovered, setMoreHovered] = useState(false);
   const actionsVisible = compact && (hovered || focusedWithin || keyboardFocused);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
@@ -272,22 +273,22 @@ function ChatRowInner({
         />
         <View style={styles.content}>
           <View style={styles.topLine}>
-            <Text numberOfLines={1} style={[styles.name, { color: compact ? visual.text : theme.text, fontSize: compact ? 13 : type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
-              {chat.displayName}
-            </Text>
-            {/* Private CRM layer (favorite/priority) — mirrors the star shown
-                on favorited rows in contacts-list-pane.tsx. Priority is kept
-                subtle: only P1/P2 (the top two of five levels) get a dot, so
-                the row doesn't turn into a dashboard. */}
-            {chat.crm?.is_favorite && (
-              <Ionicons
-                name="star"
-                size={13}
-                color={FAVORITE_GOLD}
-                accessibilityLabel="Favorite"
-                style={styles.favoriteStar}
-              />
-            )}
+            <View style={styles.nameGroup}>
+              <Text numberOfLines={1} style={[styles.name, { color: compact ? visual.text : theme.text, fontSize: compact ? 13 : type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
+                {chat.displayName}
+              </Text>
+              {/* Private CRM layer (favorite/priority) — mirrors the star shown
+                  on favorited rows in contacts-list-pane.tsx. */}
+              {chat.crm?.is_favorite && (
+                <Ionicons
+                  name="star"
+                  size={13}
+                  color={FAVORITE_GOLD}
+                  accessibilityLabel="Favorite"
+                  style={styles.favoriteStar}
+                />
+              )}
+            </View>
             {compact ? (
               <View style={styles.timeSlot}>
                 {actionsVisible && settleAvailable ? (
@@ -322,13 +323,17 @@ function ChatRowInner({
                 accessibilityRole="button"
                 accessibilityLabel={`More actions for ${chat.displayName}`}
                 onPress={(event) => { event.stopPropagation(); openMenu(chat); }}
+                onHoverIn={() => setMoreHovered(true)}
+                onHoverOut={() => setMoreHovered(false)}
                 hitSlop={6}
                 style={styles.inlineMore}
               >
-                <Ionicons name="ellipsis-horizontal" size={16} color={visual.muted} />
+                <Ionicons name="ellipsis-horizontal" size={16} color={moreHovered ? "#ffffff" : visual.muted} />
               </Pressable>
             ) : (
-              <RowSignal chat={chat} />
+              <View style={styles.messageSignal}>
+                <RowSignal chat={chat} />
+              </View>
             )}
           </View>
         </View>
@@ -408,8 +413,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  name: {
+  nameGroup: {
+    alignItems: "center",
     flex: 1,
+    flexDirection: "row",
+    gap: 5,
+    minWidth: 0,
+  },
+  name: {
+    flexShrink: 1,
     fontSize: 17,
     letterSpacing: -0.2,
     minWidth: 0,
@@ -422,10 +434,14 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   messageRow: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
     gap: 7,
     marginTop: 1,
+    minHeight: 30,
+  },
+  messageSignal: {
+    alignSelf: "center",
   },
   messagePreview: {
     flex: 1,
@@ -451,6 +467,7 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   inlineMore: {
+    alignSelf: "center",
     alignItems: "center",
     flexShrink: 0,
     height: ROW_SIGNAL_SIZE,
