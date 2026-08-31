@@ -124,7 +124,13 @@ export function ChatInfoContent({
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
       <Text style={[styles.paneHeaderTitle, { color: theme.text, fontSize: type.title }]}>Details</Text>
-      <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close details">
+      <Pressable
+        accessibilityRole="button"
+        onPress={onClose}
+        hitSlop={8}
+        accessibilityLabel="Close details"
+        style={({ hovered, pressed }) => [styles.headerIcon, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+      >
         {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
       </Pressable>
     </View>
@@ -225,7 +231,12 @@ export function ChatInfoContent({
                   placeholderTextColor={theme.textSecondary}
                   style={[styles.renameInput, { color: theme.text, borderColor: theme.divider }]}
                 />
-                <Pressable onPress={saveName}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Save name"
+                  onPress={saveName}
+                  style={({ hovered, pressed }) => [styles.inlineTextAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+                >
                   {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: Type.body, fontWeight: "600" }}>Save</Text>}
                 </Pressable>
               </View>
@@ -284,7 +295,7 @@ export function ChatInfoContent({
                       <Text style={{ color: theme.text, fontSize: 11 }}>{idea}</Text>
                     </Pressable>
                   ))}
-                  <Pressable onPress={() => setNamesDismissed(true)} hitSlop={6}>{({ hovered, pressed }) => <Ionicons name="close" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Dismiss name ideas" onPress={() => setNamesDismissed(true)} hitSlop={6} style={({ hovered, pressed }) => [styles.inlineIconAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}>{({ hovered, pressed }) => <Ionicons name="close" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
                 </View>
               )}
             </View>
@@ -373,7 +384,7 @@ export function ChatInfoContent({
                 placeholderTextColor={theme.textSecondary}
                 style={[styles.addPersonInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
               />
-              <Pressable onPress={() => setAddingParticipant(false)}>{({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancel adding person" onPress={() => setAddingParticipant(false)} style={({ hovered, pressed }) => [styles.inlineIconAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}>{({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
             </View>
           ) : (
             <Pressable onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
@@ -547,6 +558,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   paneHeaderTitle: { fontWeight: "600" },
+  headerIcon: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 28 },
+  inlineTextAction: { borderRadius: 6, marginHorizontal: -5, marginVertical: -3, paddingHorizontal: 5, paddingVertical: 3 },
+  inlineIconAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", margin: -3, padding: 3 },
   quickRow: { flexDirection: "row", justifyContent: "center", gap: 24, marginBottom: 8 },
   quickAction: { alignItems: "center", gap: 6 },
   quickIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },

@@ -70,7 +70,11 @@ export function FaceTimeButton({
       accessibilityLabel="FaceTime actions"
       onPress={openActions}
       hitSlop={8}
-      style={compact ? styles.compact : undefined}
+      style={({ hovered, pressed }) => [
+        compact ? styles.compact : styles.chip,
+        hovered && !pressed && { backgroundColor: theme.backgroundElement },
+        pressed && { backgroundColor: theme.backgroundSelected },
+      ]}
     >
       {({ hovered, pressed }) => (
         <HugeiconsIcon icon={Video01Icon} size={compact ? 21 : 22} color={hovered || pressed ? theme.text : color} strokeWidth={1.8} />
@@ -81,4 +85,5 @@ export function FaceTimeButton({
 
 const styles = StyleSheet.create({
   compact: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 32 },
+  chip: { alignItems: "center", borderRadius: 7, height: 30, justifyContent: "center", width: 34 },
 });

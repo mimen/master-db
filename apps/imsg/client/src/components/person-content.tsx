@@ -83,15 +83,29 @@ export function PersonContent({
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
       {onBack ? (
-        <Pressable onPress={onBack} hitSlop={8} accessibilityLabel={backLabel} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={20} color={theme.accent} />
-          <Text style={{ color: theme.accent, fontSize: 15 }}>{backLabel}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onBack}
+          hitSlop={8}
+          accessibilityLabel={backLabel}
+          style={({ hovered, pressed }) => [styles.backBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+        >
+          {({ hovered, pressed }) => <>
+            <Ionicons name="chevron-back" size={20} color={hovered || pressed ? theme.text : theme.accent} />
+            <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: 15 }}>{backLabel}</Text>
+          </>}
         </Pressable>
       ) : (
         <Text style={[styles.paneHeaderTitle, { color: theme.textSecondary }]}>Profile</Text>
       )}
       {onClose && !onBack && (
-        <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close contact">
+        <Pressable
+          accessibilityRole="button"
+          onPress={onClose}
+          hitSlop={8}
+          accessibilityLabel="Close contact"
+          style={({ hovered, pressed }) => [styles.headerIcon, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+        >
           {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
         </Pressable>
       )}
@@ -365,6 +379,7 @@ function NameFormFields({
 }
 
 const styles = StyleSheet.create({
+  headerIcon: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 28 },
   paneHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -374,7 +389,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   paneHeaderTitle: { fontSize: 16, fontWeight: "600" },
-  backBtn: { flexDirection: "row", alignItems: "center", gap: 1, marginLeft: -4 },
+  backBtn: { flexDirection: "row", alignItems: "center", borderRadius: 7, gap: 1, marginLeft: -4, paddingHorizontal: 4, paddingVertical: 3 },
   container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32 },
   avatarWrap: { marginBottom: 14 },
   title: { fontSize: 22, fontWeight: "700", marginBottom: 4, textAlign: "center" },

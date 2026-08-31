@@ -27,7 +27,7 @@ import { useMessages, type JumpTarget } from "@/hooks/use-messages";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { CardShadow, Radii } from "@/constants/theme";
+import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
@@ -568,11 +568,23 @@ export function ThreadView({
                 patchChatWithMessage(chatGuid, message);
               }}
             />
-            <Pressable onPress={() => setSearchOpen(true)} hitSlop={8} style={styles.headerIconButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search conversation"
+              onPress={() => setSearchOpen(true)}
+              hitSlop={8}
+              style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+            >
               {({ hovered, pressed }) => <Ionicons name="search" size={21} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
             {onToggleShadow && (
-              <Pressable onPress={onToggleShadow} hitSlop={8} style={styles.headerIconButton}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Toggle shadow panel"
+                onPress={onToggleShadow}
+                hitSlop={8}
+                style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+              >
                 {({ hovered, pressed }) => <Ionicons
                   name={shadowOpen ? "sparkles" : "sparkles-outline"}
                   size={21}
@@ -581,9 +593,11 @@ export function ThreadView({
               </Pressable>
             )}
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Conversation info"
               onPress={() => openChatInfo(chatGuid)}
               hitSlop={8}
-              style={styles.headerIconButton}
+              style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
             >
               {({ hovered, pressed }) => <Ionicons name="information-circle-outline" size={24} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
@@ -627,29 +641,35 @@ export function ThreadView({
             )}
           </View>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous match"
             disabled={searchMatches.length === 0}
             onPress={() => setMatchIndex((i) => (i + 1) % searchMatches.length)}
             hitSlop={6}
-            style={styles.searchShelfAction}
+            style={({ hovered, pressed }) => [styles.searchShelfAction, (hovered || pressed) && { backgroundColor: theme.backgroundSelected }, pressed && { opacity: HOVER_DIM }]}
           >
             {({ hovered, pressed }) => <Ionicons name="chevron-up" size={22} color={searchMatches.length ? hovered || pressed ? theme.text : theme.accent : theme.textSecondary} />}
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next match"
             disabled={searchMatches.length === 0}
             onPress={() => setMatchIndex((i) => (i - 1 + searchMatches.length) % searchMatches.length)}
             hitSlop={6}
-            style={styles.searchShelfAction}
+            style={({ hovered, pressed }) => [styles.searchShelfAction, (hovered || pressed) && { backgroundColor: theme.backgroundSelected }, pressed && { opacity: HOVER_DIM }]}
           >
             {({ hovered, pressed }) => <Ionicons name="chevron-down" size={22} color={searchMatches.length ? hovered || pressed ? theme.text : theme.accent : theme.textSecondary} />}
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close search"
             onPress={() => {
               setSearchOpen(false);
               setSearchText("");
               setHighlightGuid(null);
             }}
             hitSlop={6}
-            style={styles.searchShelfAction}
+            style={({ hovered, pressed }) => [styles.searchShelfAction, (hovered || pressed) && { backgroundColor: theme.backgroundSelected }, pressed && { opacity: HOVER_DIM }]}
           >
             {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: 15 }}>Done</Text>}
           </Pressable>
@@ -832,7 +852,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
-  searchShelfAction: { minWidth: 22 },
+  searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },
   resolveStrip: {
     alignItems: "center",
     borderBottomWidth: 0.5,

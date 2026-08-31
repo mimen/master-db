@@ -947,7 +947,13 @@ ${url}` : url;
           <Text numberOfLines={1} style={[styles.bannerText, { color: theme.textSecondary }]}>
             Replying to: {replyTo.text.slice(0, 80) || "attachment"}
           </Text>
-          <Pressable onPress={onClearReply} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear reply"
+            onPress={onClearReply}
+            hitSlop={8}
+            style={({ hovered, pressed }) => [styles.bannerClear, hovered && !pressed && { backgroundColor: theme.backgroundSelected }, pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM }]}
+          >
             {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary }}>✕</Text>}
           </Pressable>
         </View>
@@ -958,11 +964,14 @@ ${url}` : url;
             Editing message
           </Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel editing"
             onPress={() => {
               clearText();
               onClearEditing();
             }}
             hitSlop={8}
+            style={({ hovered, pressed }) => [styles.bannerClear, hovered && !pressed && { backgroundColor: theme.backgroundSelected }, pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM }]}
           >
             {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary }}>✕</Text>}
           </Pressable>
@@ -974,7 +983,7 @@ ${url}` : url;
             <Pressable
               key={participant.address}
               onPress={() => selectMention(participant)}
-              style={({ hovered, pressed }) => [styles.mentionRow, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+              style={({ hovered, pressed }) => [styles.mentionRow, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
             >
               <PersonAvatar
                 address={participant.address}
@@ -1025,10 +1034,12 @@ ${url}` : url;
         <View style={styles.actionCol}>
           <Pressable
             ref={attachBtnRef}
+            accessibilityRole="button"
+            accessibilityLabel="Add attachment"
             onPress={openAttachSheet}
             disabled={busy || recording}
             hitSlop={8}
-            style={[styles.sendButton, { backgroundColor: theme.backgroundElement }]}
+            style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]}
           >
             {({ hovered, pressed }) => <Ionicons name="add" size={22} color={hovered || pressed ? theme.text : theme.textSecondary} />}
           </Pressable>
@@ -1087,7 +1098,7 @@ ${url}` : url;
               onPress={openScheduleSheet}
               disabled={busy}
               hitSlop={6}
-              style={({ pressed }) => [styles.scheduleCaret, pressed && { opacity: 0.5 }]}
+              style={({ hovered, pressed }) => [styles.scheduleCaret, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
             >
               {({ hovered, pressed }) => <Ionicons name="chevron-up" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
@@ -1202,6 +1213,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
+  bannerClear: { borderRadius: 6, margin: -3, padding: 3 },
   banner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1298,6 +1310,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 34,
     alignItems: "center",
+    borderRadius: 7,
     justifyContent: "center",
   },
   sendButton: {

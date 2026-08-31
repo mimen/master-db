@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { fillComposer } from "@/lib/composer-fill";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import type { ShadowBrief, ShadowMessage } from "@shared/types";
 
@@ -160,12 +161,24 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
         <Ionicons name="sparkles" size={15} color={theme.accent} />
         <Text style={[styles.headerTitle, { color: theme.text }]}>Assistant</Text>
         {rows.length > 0 && (
-          <Pressable onPress={clear} hitSlop={6}>
-            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Clear</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear assistant conversation"
+            onPress={clear}
+            hitSlop={6}
+            style={({ hovered, pressed }) => [styles.headerAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+          >
+            {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary, fontSize: 13 }}>Clear</Text>}
           </Pressable>
         )}
-        <Pressable onPress={onClose} hitSlop={6}>
-          <Ionicons name="close" size={20} color={theme.textSecondary} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close assistant"
+          onPress={onClose}
+          hitSlop={6}
+          style={({ hovered, pressed }) => [styles.headerAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+        >
+          {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
         </Pressable>
       </View>
 
@@ -227,11 +240,15 @@ export function ShadowPanel({ chatGuid, onClose }: ShadowPanelProps) {
           style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
         />
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send to assistant"
           onPress={() => void send()}
           disabled={!text.trim() || pending}
-          style={[
+          style={({ hovered, pressed }) => [
             styles.sendButton,
             { backgroundColor: text.trim() && !pending ? theme.accent : theme.backgroundElement },
+            text.trim() && !pending && hovered && !pressed && { opacity: HOVER_DIM },
+            text.trim() && !pending && pressed && { opacity: PRESS_DIM },
           ]}
         >
           <Ionicons name="arrow-up" size={18} color={text.trim() && !pending ? theme.onAccent : theme.textSecondary} />
@@ -258,11 +275,18 @@ function ShadowBriefCard({
         <>
           <View style={styles.briefHeading}>
             <Text style={[styles.briefLabel, { color: theme.textSecondary }]}>Context</Text>
-            <Pressable onPress={onRegenerate} disabled={loading} hitSlop={6}>
-              {loading ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Regenerate context"
+              onPress={onRegenerate}
+              disabled={loading}
+              hitSlop={6}
+              style={({ hovered, pressed }) => [styles.headerAction, hovered && !pressed && { backgroundColor: theme.backgroundSelected }, pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM }]}
+            >
+              {({ hovered, pressed }) => loading ? (
                 <ActivityIndicator size="small" color={theme.textSecondary} />
               ) : (
-                <Ionicons name="refresh" size={15} color={theme.textSecondary} />
+                <Ionicons name="refresh" size={15} color={hovered || pressed ? theme.text : theme.textSecondary} />
               )}
             </Pressable>
           </View>
@@ -282,9 +306,16 @@ function ShadowBriefCard({
             <View style={styles.briefSection}>
               <Text style={[styles.briefLabel, { color: theme.textSecondary }]}>Draft</Text>
               <Text style={[styles.briefDraft, { color: theme.text }]}>{brief.draft}</Text>
-              <Pressable onPress={() => fillComposer(brief.draft)} style={styles.briefInsert}>
-                <Ionicons name="arrow-forward" size={14} color={theme.accent} />
-                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: "600" }}>Insert into composer</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Insert draft into composer"
+                onPress={() => fillComposer(brief.draft)}
+                style={({ hovered, pressed }) => [styles.briefInsert, hovered && !pressed && { backgroundColor: theme.backgroundSelected }, pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM }]}
+              >
+                {({ hovered, pressed }) => <>
+                  <Ionicons name="arrow-forward" size={14} color={hovered || pressed ? theme.text : theme.accent} />
+                  <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: 12, fontWeight: "600" }}>Insert into composer</Text>
+                </>}
               </Pressable>
             </View>
           ) : null}
@@ -327,9 +358,17 @@ function ShadowRow({ row }: { row: Row }) {
       </View>
       {!mine && !errored && row.text.length > 0 && (
         // Push an assistant line into the iMessage composer for editing.
-        <Pressable onPress={() => fillComposer(row.text)} hitSlop={6} style={styles.useButton}>
-          <Ionicons name="arrow-redo-outline" size={13} color={theme.textSecondary} />
-          <Text style={{ color: theme.textSecondary, fontSize: 11 }}>Use as message</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Use as message"
+          onPress={() => fillComposer(row.text)}
+          hitSlop={6}
+          style={({ hovered, pressed }) => [styles.useButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+        >
+          {({ hovered, pressed }) => <>
+            <Ionicons name="arrow-redo-outline" size={13} color={hovered || pressed ? theme.text : theme.textSecondary} />
+            <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary, fontSize: 11 }}>Use as message</Text>
+          </>}
         </Pressable>
       )}
     </View>
@@ -395,9 +434,13 @@ const styles = StyleSheet.create({
   briefInsert: {
     alignItems: "center",
     alignSelf: "flex-start",
+    borderRadius: 6,
     flexDirection: "row",
     gap: 4,
+    margin: -3,
+    padding: 3,
   },
+  headerAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", margin: -3, padding: 3 },
   briefLoading: {
     alignItems: "center",
     flexDirection: "row",
@@ -441,6 +484,7 @@ const styles = StyleSheet.create({
   useButton: {
     flexDirection: "row",
     alignItems: "center",
+    borderRadius: 6,
     gap: 4,
     paddingTop: 4,
     paddingHorizontal: 4,

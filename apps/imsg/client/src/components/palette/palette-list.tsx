@@ -89,8 +89,11 @@ export function PaletteListRow({
     <Pressable
       // RNW renders dataSet as data-* attributes; RN's types don't know it.
       {...({ dataSet: { paletteKey } } as object)}
+      accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
+      // Hover moves the palette cursor; the selection fill IS the hover
+      // feedback, so no separate hover fill here.
       onHoverIn={onHover}
       style={[paletteStyles.row, selected && { backgroundColor: visual.cardSelected }]}
     >

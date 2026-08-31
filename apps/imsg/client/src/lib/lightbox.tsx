@@ -68,19 +68,33 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
             ))}
           {/* Full-screen media viewer over a fixed near-black backdrop — every
               control below is theme-invariant by design, not app-theme-driven. */}
-          <Pressable style={styles.close} onPress={close} hitSlop={10}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close viewer"
+            style={({ hovered, pressed }) => [styles.close, hovered && !pressed && { backgroundColor: "rgba(255,255,255,0.14)" }, pressed && { backgroundColor: "rgba(255,255,255,0.22)" }]}
+            onPress={close}
+            hitSlop={10}
+          >
             <Ionicons name="close" size={30} color="#fff" />
           </Pressable>
           {items.length > 1 && (
             <>
               {index > 0 && (
-                <Pressable style={[styles.nav, { left: 8 }]} onPress={() => go(-1)} hitSlop={10}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Previous media"
+                  style={({ hovered, pressed }) => [styles.nav, { left: 8 }, hovered && !pressed && { backgroundColor: "rgba(255,255,255,0.2)" }, pressed && { backgroundColor: "rgba(255,255,255,0.28)" }]}
+                  onPress={() => go(-1)}
+                  hitSlop={10}
+                >
                   <Ionicons name="chevron-back" size={34} color="#fff" />
                 </Pressable>
               )}
               {index < items.length - 1 && (
                 <Pressable
-                  style={[styles.nav, { right: 8, left: undefined }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Next media"
+                  style={({ hovered, pressed }) => [styles.nav, { right: 8, left: undefined }, hovered && !pressed && { backgroundColor: "rgba(255,255,255,0.2)" }, pressed && { backgroundColor: "rgba(255,255,255,0.28)" }]}
                   onPress={() => go(1)}
                   hitSlop={10}
                 >
@@ -115,6 +129,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 44,
     right: 20,
+    alignItems: "center",
+    borderRadius: 19,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
   },
   nav: {
     position: "absolute",

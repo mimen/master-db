@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import { useTheme } from "@/hooks/use-theme";
+import { HOVER_DIM } from "@/constants/theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { settleTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
 import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
@@ -180,8 +181,13 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
             </View>
             <View style={styles.headerActions}>
               <Text style={[styles.progressText, { color: visual.meta }]}>{Math.min(index + 1, total)} of {total}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close sweep" onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close" size={18} color={visual.muted} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close sweep"
+                onPress={onClose}
+                style={({ hovered, pressed }) => [styles.closeButton, hovered && !pressed && { backgroundColor: visual.controlFill }, pressed && { backgroundColor: visual.controlFillHover }]}
+              >
+                {({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? visual.text : visual.muted} />}
               </Pressable>
             </View>
           </View>
@@ -195,28 +201,38 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                     <Text style={[styles.personName, { color: visual.text }]}>{chat.displayName}</Text>
                     <Text style={[styles.waiting, { color: visual.muted }]}>waiting since {chat.lastMessage ? new Date(chat.lastMessage.dateCreated).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "now"}</Text>
                   </View>
-                  <Pressable onPress={() => advance()} style={styles.skip}>
-                    <Text style={[styles.skipText, { color: visual.muted }]}>skip ⇢</Text><Text style={[styles.keycap, { color: visual.muted, borderColor: visual.hairlineStrong }]}>S</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip conversation"
+                    onPress={() => advance()}
+                    style={({ hovered, pressed }) => [styles.skip, hovered && !pressed && { backgroundColor: visual.controlFill }, pressed && { backgroundColor: visual.controlFillHover }]}
+                  >
+                    {({ hovered, pressed }) => <>
+                      <Text style={[styles.skipText, { color: hovered || pressed ? visual.text : visual.muted }]}>skip ⇢</Text>
+                      <Text style={[styles.keycap, { color: hovered || pressed ? visual.text : visual.muted, borderColor: visual.hairlineStrong }]}>S</Text>
+                    </>}
                   </Pressable>
                 </View>
 
                 <View style={[styles.contextBubble, { backgroundColor: visual.controlFill }]}>
                   <Text style={[styles.contextText, { color: visual.text }]}>{chat.lastMessage?.text || "Attachment"}</Text>
                 </View>
-                <Pressable onPress={() => onOpenFullThread(chat)}>
-                  <Text style={[styles.openThread, { color: visual.muted }]}>…earlier messages · <Text style={{ color: theme.accent, fontWeight: "600" }}>open full thread ↵</Text></Text>
+                <Pressable accessibilityRole="link" accessibilityLabel="Open full thread" onPress={() => onOpenFullThread(chat)}>
+                  <Text style={[styles.openThread, { color: visual.muted }]}>…earlier messages · <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={{ color: theme.accent, fontWeight: "600" }}>open full thread ↵</Text></Text>
                 </Pressable>
 
                 <View style={styles.options}>
                   {loading ? <ActivityIndicator color={theme.accent} /> : suggestions.map((suggestion, option) => (
                     <Pressable
                       key={suggestion.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select reply option ${option + 1}`}
                       onPress={() => { setSelectedOption(option); setDraft(suggestion.text); }}
-                      style={[styles.option, { backgroundColor: visual.card, borderColor: selectedOption === option ? "rgba(0,122,255,0.35)" : visual.hairlineStrong }]}
+                      style={({ hovered, pressed }) => [styles.option, { backgroundColor: hovered || pressed ? visual.cardHover : visual.card, borderColor: selectedOption === option ? "rgba(0,122,255,0.35)" : visual.hairlineStrong }]}
                     >
                       <Text style={[styles.optionKey, { color: visual.meta, borderColor: visual.hairlineStrong }]}>{option + 1}</Text>
                       <Text numberOfLines={2} style={[styles.optionText, { color: visual.text }]}>{suggestion.text}</Text>
-                      {selectedOption === option ? <Pressable accessibilityLabel="Send selected reply" disabled={sending} onPress={send}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : <Ionicons name="paper-plane-outline" size={15} color={visual.muted} />}
+                      {selectedOption === option ? <Pressable accessibilityRole="button" accessibilityLabel="Send selected reply" disabled={sending} onPress={send} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : <Ionicons name="paper-plane-outline" size={15} color={visual.muted} />}
                     </Pressable>
                   ))}
                   <View style={[styles.option, { backgroundColor: visual.card, borderColor: selectedOption === 2 ? "rgba(0,122,255,0.35)" : visual.hairlineStrong }]}>
@@ -230,7 +246,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                       placeholderTextColor={visual.hint}
                       style={[styles.customInput, { color: visual.text }]}
                     />
-                    {selectedOption === 2 && draft.trim() ? <Pressable accessibilityLabel="Send custom reply" disabled={sending} onPress={send}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : null}
+                    {selectedOption === 2 && draft.trim() ? <Pressable accessibilityRole="button" accessibilityLabel="Send custom reply" disabled={sending} onPress={send} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}><Ionicons name="paper-plane-outline" size={16} color={theme.accent} /></Pressable> : null}
                   </View>
                 </View>
 
@@ -242,11 +258,11 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
               </View>
               <View style={[styles.footer, { borderTopColor: visual.hairline }]}>
                 <View style={styles.clearedLog}>{cleared.slice(-3).map((entry) => <View key={entry} style={styles.clearedItem}><Ionicons name="checkmark-circle-outline" size={14} color="#28A745" /><Text style={[styles.clearedText, { color: visual.meta }]}>{entry}</Text></View>)}</View>
-                <Pressable onPress={undo} disabled={!history.some((step) => step.undoable)}><Text style={[styles.undoText, { color: history.some((step) => step.undoable) ? visual.hint : visual.hairlineStrong }]}>Z undoes the last settle</Text></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Undo last settle" onPress={undo} disabled={!history.some((step) => step.undoable)}>{({ hovered, pressed }) => <Text style={[styles.undoText, { color: history.some((step) => step.undoable) ? (hovered || pressed ? visual.text : visual.hint) : visual.hairlineStrong }]}>Z undoes the last settle</Text>}</Pressable>
               </View>
             </>
           ) : (
-            <View style={styles.complete}><Ionicons name="checkmark-circle" size={42} color="#28A745" /><Text style={[styles.completeTitle, { color: visual.text }]}>Sweep complete</Text><Pressable onPress={onClose}><Text style={{ color: theme.accent, fontWeight: "600" }}>Return to desk</Text></Pressable></View>
+            <View style={styles.complete}><Ionicons name="checkmark-circle" size={42} color="#28A745" /><Text style={[styles.completeTitle, { color: visual.text }]}>Sweep complete</Text><Pressable accessibilityRole="button" accessibilityLabel="Return to desk" onPress={onClose}><Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={{ color: theme.accent, fontWeight: "600" }}>Return to desk</Text></Pressable></View>
           )}
         </View>
       </View>
@@ -262,13 +278,13 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, fontWeight: "700" },
   headerActions: { alignItems: "center", flexDirection: "row", gap: 10 },
   progressText: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "600" },
-  closeButton: { alignItems: "center", height: 28, justifyContent: "center", width: 28 },
+  closeButton: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 28 },
   body: { paddingHorizontal: 22, paddingVertical: 20 },
   personRow: { alignItems: "center", flexDirection: "row" },
   personCopy: { flex: 1, marginLeft: 10 },
   personName: { fontSize: 14, fontWeight: "700" },
   waiting: { fontSize: 11, marginTop: 2 },
-  skip: { alignItems: "center", flexDirection: "row", gap: 5 },
+  skip: { alignItems: "center", borderRadius: 6, flexDirection: "row", gap: 5, margin: -4, padding: 4 },
   skipText: { fontSize: 11 },
   keycap: { borderRadius: 4, borderWidth: 0.5, fontSize: 11, fontWeight: "700", paddingHorizontal: 5, paddingVertical: 1 },
   contextBubble: { alignSelf: "flex-start", borderRadius: 18, marginTop: 18, maxWidth: "80%", paddingHorizontal: 13, paddingVertical: 9 },

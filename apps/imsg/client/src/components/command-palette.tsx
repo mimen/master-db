@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { api } from "@/lib/api";
 import { formatListTimestamp, initials } from "@/lib/format";
 import {
@@ -245,7 +246,7 @@ function PaletteRoot({
         />
         {query.length > 0 && (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" onPress={() => setQuery("")} hitSlop={8}>
-            <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
+            {({ hovered, pressed }) => <Ionicons name="close-circle" size={17} color={hovered || pressed ? theme.text : theme.textSecondary} />}
           </Pressable>
         )}
       </View>
@@ -527,7 +528,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
               accessibilityRole="button"
               accessibilityLabel={`Remove ${contact.name}`}
               onPress={() => setRecipients((cur) => cur.filter((c) => c.address !== contact.address))}
-              style={[styles.chip, { backgroundColor: theme.accent }]}
+              style={({ hovered, pressed }) => [styles.chip, { backgroundColor: theme.accent }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
             >
               <Text style={{ color: theme.onAccent, fontSize: 13 }}>{contact.name}</Text>
               <Ionicons name="close" size={13} color={theme.onAccent} />
@@ -618,7 +619,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           accessibilityLabel="Send"
           disabled={!canSend}
           onPress={send}
-          style={[styles.sendButton, { backgroundColor: canSend ? theme.accent : theme.backgroundElement }]}
+          style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? theme.accent : theme.backgroundElement }, canSend && hovered && !pressed && { opacity: HOVER_DIM }, canSend && pressed && { opacity: PRESS_DIM }]}
         >
           <Ionicons name="arrow-up" size={17} color={canSend ? theme.onAccent : theme.textSecondary} />
         </Pressable>
