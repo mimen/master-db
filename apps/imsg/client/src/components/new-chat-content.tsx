@@ -17,6 +17,7 @@ import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { Contact } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { type AirtableHumanRow } from "@/lib/identity";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { PersonAvatar } from "./avatar";
@@ -115,8 +116,10 @@ export function NewChatContent({
           {selected.map((contact) => (
             <Pressable
               key={contact.address}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${contact.name}`}
               onPress={() => setSelected((cur) => cur.filter((c) => c.address !== contact.address))}
-              style={[styles.chip, { backgroundColor: theme.accent }]}
+              style={({ hovered, pressed }) => [styles.chip, { backgroundColor: theme.accent }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
             >
               <Text style={{ color: theme.onAccent, fontSize: 14 }}>{contact.name}</Text>
               <Ionicons name="close" size={14} color={theme.onAccent} />
@@ -191,9 +194,11 @@ export function NewChatContent({
           style={[styles.msgInput, { color: theme.text, borderColor: theme.divider }]}
         />
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send"
           onPress={() => void create()}
           disabled={!canSend || sending}
-          style={[styles.sendButton, { backgroundColor: canSend ? theme.bubbleMine : theme.backgroundElement }]}
+          style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? theme.bubbleMine : theme.backgroundElement }, canSend && !sending && hovered && !pressed && { opacity: HOVER_DIM }, canSend && !sending && pressed && { opacity: PRESS_DIM }]}
         >
           {sending ? (
             <ActivityIndicator color={theme.onAccent} size="small" />

@@ -55,7 +55,8 @@ export function PersonNetworksList({ identities, airtableId }: PersonNetworksLis
         return (
           <Pressable
             key={`${i.source}:${i.value}`}
-            style={styles.infoRow}
+            accessibilityRole={isAirtable ? "link" : undefined}
+            style={({ hovered, pressed }) => [styles.infoRow, isAirtable && hovered && !pressed && { backgroundColor: theme.backgroundElement }, isAirtable && pressed && { backgroundColor: theme.backgroundSelected }]}
             disabled={!isAirtable}
             onPress={isAirtable ? () => void openExternalUrl(airtableRecordUrl(airtableId as string)) : undefined}
           >
@@ -82,7 +83,10 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
+    borderRadius: 8,
     gap: 12,
+    marginHorizontal: -6,
+    paddingHorizontal: 6,
     paddingVertical: 8,
   },
   infoIconBox: {

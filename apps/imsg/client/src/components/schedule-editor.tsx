@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "@/hooks/use-theme";
 import { parseScheduleInput, scheduleInputParts } from "@/lib/scheduled";
-import { Radii } from "@/constants/theme";
+import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import { OverlayShell } from "./overlay-shell";
 
 interface ScheduleEditorProps {
@@ -111,13 +111,21 @@ export function ScheduleEditor({
       </View>
       {error && <Text style={{ color: theme.destructive, fontSize: 13 }}>{error}</Text>}
       <View style={styles.actions}>
-        <Pressable onPress={onClose} disabled={busy} style={styles.button}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+          onPress={onClose}
+          disabled={busy}
+          style={({ hovered, pressed }) => [styles.button, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+        >
           <Text style={{ color: theme.accent, fontSize: 15 }}>Cancel</Text>
         </Pressable>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save schedule"
           onPress={() => void submit()}
           disabled={busy}
-          style={[styles.button, styles.primary, { backgroundColor: theme.accent }, busy && { opacity: 0.55 }]}
+          style={({ hovered, pressed }) => [styles.button, styles.primary, { backgroundColor: theme.accent }, !busy && hovered && !pressed && { opacity: HOVER_DIM }, !busy && pressed && { opacity: PRESS_DIM }, busy && { opacity: 0.55 }]}
         >
           <Text style={{ color: theme.onAccent, fontSize: 15, fontWeight: "600" }}>
             {busy ? "Saving…" : "Save"}

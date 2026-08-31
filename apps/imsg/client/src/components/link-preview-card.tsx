@@ -4,7 +4,7 @@ import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { BASE_URL } from "@/lib/config";
 import { useTheme } from "@/hooks/use-theme";
-import { Radii, Type } from "@/constants/theme";
+import { HOVER_DIM, Radii, Type } from "@/constants/theme";
 
 interface LinkPreviewData {
   url: string;
@@ -53,10 +53,13 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 
   return (
     <Pressable
+      accessibilityRole="link"
       onPress={() => void openExternalUrl(url)}
-      style={[
+      style={({ hovered, pressed }) => [
         styles.card,
         { backgroundColor: mine ? "rgba(255,255,255,0.14)" : theme.backgroundElement },
+        hovered && !pressed && { backgroundColor: mine ? "rgba(255,255,255,0.22)" : theme.backgroundSelected },
+        pressed && { backgroundColor: mine ? "rgba(255,255,255,0.28)" : theme.backgroundSelected, opacity: HOVER_DIM },
       ]}
     >
       {preview.image && (

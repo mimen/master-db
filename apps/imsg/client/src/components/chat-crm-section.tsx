@@ -12,7 +12,7 @@ import {
   useUnlinkEvent,
 } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";
-import { Radii, Type } from "@/constants/theme";
+import { HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { CrmEventsEditor } from "./crm-events-editor";
 import { FAVORITE_GOLD } from "./person-crm-section";
@@ -88,7 +88,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
           accessibilityState={{ selected: isFavorite }}
           hitSlop={8}
           onPress={toggleFavorite}
-          style={styles.favoriteBtn}
+          style={({ hovered, pressed }) => [styles.favoriteBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
         >
           <Ionicons
             name={isFavorite ? "star" : "star-outline"}
@@ -115,7 +115,11 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
                 accessibilityLabel={`${opt.label} priority`}
                 accessibilityState={{ checked: selected }}
                 onPress={() => choosePriority(opt.value)}
-                style={[styles.priorityPill, { backgroundColor: selected ? theme.text : theme.backgroundElement }]}
+                style={({ hovered, pressed }) => [
+                  styles.priorityPill,
+                  { backgroundColor: selected ? theme.text : hovered || pressed ? theme.backgroundSelected : theme.backgroundElement },
+                  selected && (hovered || pressed) && { opacity: pressed ? PRESS_DIM : HOVER_DIM },
+                ]}
               >
                 <Text
                   style={[styles.priorityLabel, { color: selected ? theme.background : theme.textSecondary }]}
@@ -138,7 +142,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
               hitSlop={6}
               onPress={() => removeTag({ chatGuid, tag }).catch(() => showToast("Failed to remove tag"))}
             >
-              <Ionicons name="close" size={12} color={theme.textSecondary} />
+              {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
           </View>
         ))}
@@ -156,7 +160,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
             <ActivityIndicator size="small" />
           ) : (
             tagInput.trim().length > 0 && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Add tag" hitSlop={6} onPress={submitTag}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Add tag" hitSlop={6} onPress={submitTag} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
                 <Ionicons name="add-circle" size={16} color={theme.accent} />
               </Pressable>
             )
@@ -178,7 +182,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
 const styles = StyleSheet.create({
   section: { width: "100%", marginTop: 20, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  favoriteBtn: { flexDirection: "row", alignItems: "center", gap: 6 },
+  favoriteBtn: { flexDirection: "row", alignItems: "center", borderRadius: 6, gap: 6, margin: -4, padding: 4 },
   favoriteLabel: { fontSize: Type.secondary, fontWeight: "600" },
   priorityGroup: { flexDirection: "row", gap: 6 },
   priorityPill: { borderRadius: Radii.chip, paddingHorizontal: 10, paddingVertical: 5 },

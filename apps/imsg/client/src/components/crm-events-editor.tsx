@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { AirtableEventRow, EventLink } from "@/lib/identity";
 import { useSearchEvents } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";
-import { Radii, Type } from "@/constants/theme";
+import { HOVER_DIM, Radii, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 
 export interface CrmEventsEditorProps {
@@ -71,7 +71,7 @@ export function CrmEventsEditor({ events, onLink, onUnlink }: CrmEventsEditorPro
                 hitSlop={6}
                 onPress={() => onUnlink(e.linkId)}
               >
-                <Ionicons name="close" size={12} color={theme.textSecondary} />
+                {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textSecondary} />}
               </Pressable>
             </View>
           ))}
@@ -95,9 +95,11 @@ export function CrmEventsEditor({ events, onLink, onUnlink }: CrmEventsEditorPro
             .map((r) => (
               <Pressable
                 key={r.record_id}
+                accessibilityRole="button"
+                accessibilityLabel={`Link event ${r.name}`}
                 disabled={linkingId === r.record_id}
                 onPress={() => link(r)}
-                style={styles.resultRow}
+                style={({ hovered, pressed }) => [styles.resultRow, hovered && !pressed && { backgroundColor: theme.backgroundSelected }, pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM }]}
               >
                 <Text style={{ color: theme.text, fontSize: Type.secondary }} numberOfLines={1}>
                   {r.name}

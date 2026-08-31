@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { CardShadow, PRESS_DIM, Radii, Type } from "@/constants/theme";
+import { CardShadow, HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
 
 export interface SheetAction {
   label: string;
@@ -143,7 +143,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                             setRequest(null);
                             t.onPress();
                           }}
-                          style={[styles.tapback, styles.tapbackSmall, t.active && { backgroundColor: theme.accent }]}
+                          style={({ hovered, pressed }) => [styles.tapback, styles.tapbackSmall, (hovered || pressed) && { backgroundColor: theme.backgroundSelected }, t.active && { backgroundColor: theme.accent }, t.active && (hovered || pressed) && { opacity: HOVER_DIM }]}
                         >
                           <Text style={{ fontSize: 20 }}>{t.emoji}</Text>
                         </Pressable>

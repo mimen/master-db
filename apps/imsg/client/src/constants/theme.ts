@@ -121,12 +121,7 @@ export const Breakpoints = {
   shadow: 1040,
 } as const;
 
-// The app-wide hover language for filled/accent surfaces (send buttons, chips,
-// banner actions): hover dims to HOVER_DIM, pressed steps one further to
-// PRESS_DIM. Fill-based controls (rows, icon buttons) step through
-// backgroundElement → backgroundSelected instead and never use opacity.
-export const HOVER_DIM = 0.82;
-export const PRESS_DIM = 0.72;
+export { HOVER_DIM, PRESS_DIM } from "./interaction";
 
 // The one piece of the card-shadow recipe that's genuinely identical everywhere
 // it's used — shadowOffset/shadowOpacity/shadowRadius vary per surface and are

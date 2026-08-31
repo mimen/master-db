@@ -143,9 +143,10 @@ export function SearchContent({
           const m = item.message;
           return (
             <Pressable
-              style={({ pressed }) => [
+              style={({ hovered, pressed }) => [
                 styles.row,
-                pressed && { backgroundColor: theme.backgroundElement },
+                hovered && !pressed && { backgroundColor: theme.backgroundElement },
+                pressed && { backgroundColor: theme.backgroundSelected },
               ]}
               onPress={() => openMessage(m)}
             >

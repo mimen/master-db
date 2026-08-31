@@ -1,4 +1,4 @@
-import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/interaction";
 
 export interface ChromeFillTheme {
   readonly backgroundElement: string;

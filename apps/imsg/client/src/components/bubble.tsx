@@ -12,7 +12,7 @@ import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { CardShadow, Radii, Type } from "@/constants/theme";
+import { CardShadow, HOVER_DIM, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble } from "./media";
 import { PersonAvatar } from "./avatar";
 import { useLightbox } from "@/lib/lightbox";
@@ -46,6 +46,10 @@ function linkifyText(text: string, color: string, keyPrefix = "text"): ReactNode
     parts.push(
       <Text
         key={`${keyPrefix}-${start}-${raw}`}
+        // In-bubble links stay underlined at rest; hover dims via the shared
+        // CSS utility (works on both bubble colors, no per-scheme color swap).
+        {...({ dataSet: { hoverDim: "true" } } as object)}
+        accessibilityRole="link"
         style={{ color, textDecorationLine: "underline" }}
         onPress={() => void openExternalUrl(href)}
         suppressHighlighting
@@ -189,8 +193,8 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           );
         }
         return (
-          <Pressable key={att.guid} onPress={() => void openExternalUrl(url)}>
-            <Text style={[styles.attachmentLink, { color: theme.accent }]}>{att.filename ?? "Attachment"}</Text>
+          <Pressable key={att.guid} accessibilityRole="link" onPress={() => void openExternalUrl(url)}>
+            <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.attachmentLink, { color: theme.accent }]}>{att.filename ?? "Attachment"}</Text>
           </Pressable>
         );
       })}
@@ -391,7 +395,7 @@ export const Bubble = memo(function Bubble({
           </View>
 
           {notDelivered ? (
-            <Pressable onPress={() => onRetry(message)}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Retry sending" onPress={() => onRetry(message)} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
               <Text style={[styles.failed, { color: theme.destructive }]}>Not Delivered — tap to retry</Text>
             </Pressable>
           ) : message.pending ? (

@@ -251,8 +251,8 @@ export function ConversationListPane({
         <SidebarFooter>
           <View style={styles.footerContent}>
             <View style={styles.quietLinks}>
-              <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}>{({ hovered, pressed }) => <><Ionicons name="archive-outline" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} /><Text style={[styles.quietLink, { color: hovered || pressed ? theme.text : theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></>}</Pressable>
-              <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}>{({ hovered, pressed }) => <><Ionicons name="ban-outline" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} /><Text style={[styles.quietLink, { color: hovered || pressed ? theme.text : theme.textSecondary }]}>Unknown</Text></>}</Pressable>
+              <Pressable accessibilityRole="link" onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}><Ionicons name="archive-outline" size={14} color={theme.textSecondary} /><Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
+              <Pressable accessibilityRole="link" onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}><Ionicons name="ban-outline" size={14} color={theme.textSecondary} /><Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
             </View>
             <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
           </View>

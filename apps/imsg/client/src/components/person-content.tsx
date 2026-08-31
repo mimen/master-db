@@ -16,7 +16,7 @@ import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
 import { usePersonView } from "@/hooks/use-person-view";
 import { useTheme } from "@/hooks/use-theme";
-import { Spacing, Type } from "@/constants/theme";
+import { HOVER_DIM, Spacing, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
 import { CenteredSpinner } from "./empty-state";
@@ -140,8 +140,9 @@ export function PersonContent({
             theme={theme}
           />
           <Pressable
+            accessibilityRole="button"
             disabled={creating}
-            style={[styles.addButton, { backgroundColor: theme.backgroundElement }]}
+            style={({ hovered, pressed }) => [styles.addButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]}
             onPress={async () => {
               setCreating(true);
               try {
@@ -240,20 +241,24 @@ export function PersonContent({
             />
             <View style={styles.editNameActions}>
               <Pressable
+                accessibilityRole="button"
                 disabled={saving}
                 hitSlop={8}
                 accessibilityLabel="Cancel"
-                style={styles.editNameActionBtn}
+                style={({ hovered, pressed }) => [styles.editNameActionBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
                 onPress={() => setEditingName(false)}
               >
-                <Ionicons name="close" size={18} color={theme.textSecondary} />
-                <Text style={{ color: theme.textSecondary, fontSize: 15 }}>Cancel</Text>
+                {({ hovered, pressed }) => <>
+                  <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />
+                  <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary, fontSize: 15 }}>Cancel</Text>
+                </>}
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 disabled={saving}
                 hitSlop={8}
                 accessibilityLabel="Save name"
-                style={styles.editNameActionBtn}
+                style={({ hovered, pressed }) => [styles.editNameActionBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
                 onPress={handleSaveName}
               >
                 {saving ? (
@@ -269,9 +274,11 @@ export function PersonContent({
           </View>
         ) : (
           <>
-            <Pressable style={styles.titleRow} onPress={startEditingName}>
-              <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
-              <Ionicons name="pencil" size={14} color={theme.textSecondary} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Edit name" style={styles.titleRow} onPress={startEditingName}>
+              {({ hovered, pressed }) => <>
+                <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
+                <Ionicons name="pencil" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} />
+              </>}
             </Pressable>
             {person.organization && (
               <Text style={[styles.orgLine, { color: theme.textSecondary }]}>{person.organization}</Text>
@@ -283,12 +290,13 @@ export function PersonContent({
         </Text>
 
         <View style={styles.actionRow}>
-          <Pressable style={[styles.actionButton, { backgroundColor: theme.backgroundElement }]} onPress={handleMessage}>
+          <Pressable accessibilityRole="button" style={({ hovered, pressed }) => [styles.actionButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]} onPress={handleMessage}>
             <Ionicons name="chatbubble-ellipses" size={16} color={theme.text} />
             <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>Message</Text>
           </Pressable>
           <Pressable
-            style={[styles.actionButton, { backgroundColor: theme.backgroundElement, opacity: canCall ? 1 : 0.4 }]}
+            accessibilityRole="button"
+            style={({ hovered, pressed }) => [styles.actionButton, { backgroundColor: canCall && (hovered || pressed) ? theme.backgroundSelected : theme.backgroundElement, opacity: canCall ? (pressed ? HOVER_DIM : 1) : 0.4 }]}
             disabled={!canCall}
             onPress={handleCall}
           >
@@ -309,8 +317,8 @@ export function PersonContent({
         <PersonConversationsList chats={sortedChats} onOpenChat={openChat} />
 
         {airtableId && (
-          <Pressable style={styles.footerLink} onPress={() => void openExternalUrl(airtableRecordUrl(airtableId))}>
-            <Text style={{ color: theme.accent, fontSize: 14, fontWeight: "600" }}>View in Airtable</Text>
+          <Pressable accessibilityRole="link" style={styles.footerLink} onPress={() => void openExternalUrl(airtableRecordUrl(airtableId))}>
+            <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={{ color: theme.accent, fontSize: 14, fontWeight: "600" }}>View in Airtable</Text>
           </Pressable>
         )}
       </ScrollView>
@@ -430,7 +438,7 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
     marginTop: -2,
   },
-  editNameActionBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6 },
+  editNameActionBtn: { flexDirection: "row", alignItems: "center", borderRadius: 6, gap: 4, paddingHorizontal: 6, paddingVertical: 6 },
   addButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,

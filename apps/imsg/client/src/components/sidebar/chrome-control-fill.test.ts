@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { chromeControlFill, filterChipFill } from "./chrome-control-fill";
-import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/interaction";
 
 const theme = {
   backgroundElement: "#F0F0F3",

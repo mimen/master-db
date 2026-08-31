@@ -186,7 +186,7 @@ export function SuggestionShelf({
                 !stale && pressed && { backgroundColor: EVENT_TINT.backgroundPress },
               ]}
             >
-              {({ hovered, pressed }) => <>
+              {() => <>
                 <Ionicons name="calendar-outline" size={15} color={theme.accent} />
                 <Text numberOfLines={2} style={[styles.pillText, { color: theme.text }]}>
                   <Text style={styles.eventTitle}>{event.title}</Text>
@@ -212,7 +212,7 @@ export function SuggestionShelf({
                   !stale && pressed && { backgroundColor: colors.backgroundPress },
                 ]}
               >
-                {({ hovered, pressed }) => <>
+                {() => <>
                   {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
                   <Text numberOfLines={3} style={[styles.pillText, { color: theme.text }]}>
                     {suggestion.text}
