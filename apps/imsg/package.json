@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:server": "bun --watch server/index.ts",
+    "dev:web": "bun scripts/dev-web.ts",
     "dev:desktop": "bun scripts/dev-desktop.ts",
     "deploy:branch": "bun scripts/deploy-branch.ts",
     "deploy:cleanup": "bun scripts/deploy-cleanup.ts",

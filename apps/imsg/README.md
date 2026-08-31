@@ -37,8 +37,17 @@ bun run build                        # exports the Expo web app to client/dist/
 bun start                            # serves app + API on 127.0.0.1:8377
 ```
 
-Dev: `bun run dev:server` for the API; `cd client && bun run start` for the Expo dev server
-(native builds reach the Mini over the tailnet; the web app is re-exported with `bun run build`).
+For browser UX iteration with Fast Refresh and the Mini's real API/SSE data:
+
+```sh
+bun run dev:web -- --data=real
+```
+
+The command is intentionally explicit because sends and conversation actions write to production. It derives and reserves a worktree-specific loopback port, verifies Metro is not reachable over LAN or tailnet, opens the browser, and keeps component state across most source edits. A fresh worktree must have `client/.env`; when it is missing, the launcher prints the exact command needed to copy the canonical file.
+
+Branches with undeployed `server/` or `shared/` changes are rejected because the browser and production API could disagree. Use the scratch branch-preview path for server iteration. When the mismatch is understood and only UX behavior is under review, opt in explicitly with `bun run dev:web -- --data=real --allow-server-drift`.
+
+Use `bun run dev:server` only for local API development. Native builds reach the Mini over the tailnet.
 
 ## Env
 
