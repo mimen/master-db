@@ -62,14 +62,14 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       const page = desk.page;
       const rail = page.getByTestId("triage-rail").first();
       const header = page.getByTestId("triage-queue-header");
-      const needsReply = rail.getByRole("button", { name: /^Needs reply/ });
+      const messagesItem = rail.getByRole("button", { name: "Messages" });
       const rows = page.getByTestId("conversation-row");
 
       await expect(rail).toBeVisible();
       await expect(header).toBeVisible();
       await expect(page.getByTestId("window-controls")).toHaveCount(0);
       expect(await rail.getAttribute("data-tauri-drag-region")).toBe("");
-      await expect(rail.locator("svg")).toHaveCount(6);
+      await expect(rail.locator("svg")).toHaveCount(4);
       for (const control of await rail.getByRole("button").all()) {
         expect(await control.getAttribute("data-tauri-drag-region")).toBe("false");
         const icon = control.locator("svg");
@@ -84,13 +84,13 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
         );
         expect(strokes.every((stroke) => stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")).toBe(true);
       }
-      await expect(needsReply.locator("svg")).toBeVisible();
+      await expect(messagesItem.locator("svg")).toBeVisible();
       const railBox = await rail.boundingBox();
       const headerBox = await header.boundingBox();
-      const needsReplyBox = await needsReply.boundingBox();
+      const messagesBox = await messagesItem.boundingBox();
       expect(railBox?.width).toBeCloseTo(64, 1);
       expect(headerBox?.height).toBeCloseTo(112, 1);
-      expect(needsReplyBox?.y).toBeGreaterThanOrEqual(38);
+      expect(messagesBox?.y).toBeGreaterThanOrEqual(38);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
       await expect(rows.getByRole("button", { name: "Fill AI draft" })).toHaveCount(0);
@@ -142,7 +142,7 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
   await row.click();
   await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).toContainText("E");
 
-  await page.getByRole("button", { name: /^All messages/ }).click();
+  await page.getByRole("radio", { name: /^All,/ }).click();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).not.toContainText(" E");
   await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Move conversation to Later" })).not.toContainText(" H");
@@ -244,11 +244,11 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
 test("native window chrome reserves space only while AppKit controls are visible", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const rail = desk.page.getByTestId("triage-rail").first();
-  const needsReply = rail.getByRole("button", { name: /^Needs reply/ });
+  const messagesItem = rail.getByRole("button", { name: "Messages" });
 
   await expect(desk.page.getByTestId("window-controls")).toHaveCount(0);
-  await expect(needsReply.locator("svg")).toBeVisible();
-  const windowedBox = await needsReply.boundingBox();
+  await expect(messagesItem.locator("svg")).toBeVisible();
+  const windowedBox = await messagesItem.boundingBox();
   expect(windowedBox?.y).toBeGreaterThanOrEqual(38);
   await expect
     .poll(() => desk.page.evaluate(() =>
@@ -260,14 +260,14 @@ test("native window chrome reserves space only while AppKit controls are visible
     (window as Window & { __fixtureSetFullscreen?: (value: boolean) => void }).__fixtureSetFullscreen?.(true);
   });
   await expect
-    .poll(async () => (await needsReply.boundingBox())?.y)
+    .poll(async () => (await messagesItem.boundingBox())?.y)
     .toBeLessThanOrEqual(18);
 
   await desk.page.evaluate(() => {
     (window as Window & { __fixtureSetFullscreen?: (value: boolean) => void }).__fixtureSetFullscreen?.(false);
   });
   await expect
-    .poll(async () => (await needsReply.boundingBox())?.y)
+    .poll(async () => (await messagesItem.boundingBox())?.y)
     .toBeGreaterThanOrEqual(38);
 });
 
@@ -315,7 +315,7 @@ test("persistent desktop workspaces keep one rail, selections, and independent s
   await contactSearch.fill("Jordan");
   await page.getByText("Jordan Lee", { exact: true }).first().click();
 
-  await page.getByRole("button", { name: /^Needs reply/ }).click();
+  await page.getByTestId("triage-rail").getByRole("button", { name: "Messages" }).click();
   await expect(messageSearch).toHaveValue("Alex");
   await expect(page.getByTestId("resolve-strip")).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-persistent-messages.png", animations: "disabled" });
@@ -341,11 +341,11 @@ test("Scheduled and Settings remain open across every rail destination", async (
   await expect(page.getByTestId("desktop-shell")).toHaveAttribute("data-utility-workspace", "contacts");
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
-  await page.getByRole("button", { name: /^Needs reply/ }).click();
+  await page.getByTestId("triage-rail").getByRole("button", { name: "Messages" }).click();
   await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
-  await page.getByRole("button", { name: "Waiting" }).click();
+  await page.getByRole("radio", { name: /^Waiting/ }).click();
   await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
@@ -476,15 +476,19 @@ test("Cmd+W clears the shell and route selection atomically", async ({ desk }) =
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("Cmd+W closes a route-owned utility and its URL", async ({ desk }) => {
+test("Cmd+W closes the scheduled pane without touching the URL", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "dark");
   const page = desk.page;
+  const urlBefore = page.url();
   await page.getByRole("button", { name: "Scheduled" }).click();
-  await expect(page).toHaveURL(/\/scheduled/);
+  await expect(page.getByLabel("Close scheduled")).toBeVisible();
+  // Desktop scheduled is pane-first: openScheduledPane() short-circuits the
+  // /scheduled route, so the URL must not change in either direction.
+  expect(page.url()).toBe(urlBefore);
   await page.keyboard.press("Meta+w");
 
   await expect(page.locator('[data-testid="desktop-utility-pane-content"]:visible')).toHaveCount(0);
-  await expect(page).toHaveURL(/\/(?:\?|$)/);
+  expect(page.url()).toBe(urlBefore);
 });
 
 test("Escape clears list search before closing the shell utility", async ({ desk }) => {
