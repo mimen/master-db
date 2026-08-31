@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
@@ -152,7 +152,16 @@ export function SuggestionShelf({
             {result.servedModel === "opus" ? "Opus" : "Terra"}{result.fallback ? " · fallback" : ""}
           </Text>
         )}
-        <Pressable onPress={() => void load(true)} disabled={loading} hitSlop={8} style={styles.refresh}>
+        <Pressable
+          onPress={() => void load(true)}
+          disabled={loading}
+          hitSlop={8}
+          style={({ hovered, pressed }) => [
+            styles.refresh,
+            hovered && !pressed && { backgroundColor: theme.backgroundElement },
+            pressed && { backgroundColor: theme.backgroundSelected },
+          ]}
+        >
           {({ hovered, pressed }) => <Ionicons name="refresh" size={15} color={loading ? theme.textSecondary : hovered || pressed ? theme.text : theme.accent} />}
         </Pressable>
       </View>
@@ -172,9 +181,9 @@ export function SuggestionShelf({
               onPress={() => void openExternalUrl(eventUrl)}
               style={({ hovered, pressed }) => [
                 styles.pill,
-                styles.eventPill,
-                { opacity: stale ? 0.55 : 1 },
-                !stale && (hovered || pressed) && styles.pillHover,
+                { backgroundColor: EVENT_TINT.background, borderColor: EVENT_TINT.border, opacity: stale ? 0.55 : 1 },
+                !stale && hovered && !pressed && { backgroundColor: EVENT_TINT.backgroundHover },
+                !stale && pressed && { backgroundColor: EVENT_TINT.backgroundPress },
               ]}
             >
               {({ hovered, pressed }) => <>
@@ -199,7 +208,8 @@ export function SuggestionShelf({
                 style={({ hovered, pressed }) => [
                   styles.pill,
                   { backgroundColor: colors.background, borderColor: colors.border, opacity: stale ? 0.55 : 1 },
-                  !stale && (hovered || pressed) && styles.pillHover,
+                  !stale && hovered && !pressed && { backgroundColor: colors.backgroundHover },
+                  !stale && pressed && { backgroundColor: colors.backgroundPress },
                 ]}
               >
                 {({ hovered, pressed }) => <>
@@ -217,17 +227,30 @@ export function SuggestionShelf({
   );
 }
 
-type SuggestionColors = { background: string; border: string };
+type SuggestionColors = { background: string; backgroundHover: string; backgroundPress: string; border: string };
+
+// Translucent fills step alpha on hover/press (opacity-dimming a 0.13-alpha
+// chip just fades it) — same ladder shape as controlFill → controlFillHover.
+function tintLadder(rgb: string): SuggestionColors {
+  return {
+    background: `rgba(${rgb},0.13)`,
+    backgroundHover: `rgba(${rgb},0.24)`,
+    backgroundPress: `rgba(${rgb},0.32)`,
+    border: `rgba(${rgb},0.38)`,
+  };
+}
 
 function vibeColors(vibe: SuggestionVibe): SuggestionColors {
   switch (vibe) {
-    case "curious": return { background: "rgba(120,174,248,0.13)", border: "rgba(120,174,248,0.38)" };
-    case "affirmative": return { background: "rgba(114,213,163,0.13)", border: "rgba(114,213,163,0.38)" };
-    case "cautious": return { background: "rgba(239,191,104,0.13)", border: "rgba(239,191,104,0.38)" };
-    case "boundary": return { background: "rgba(238,133,133,0.13)", border: "rgba(238,133,133,0.38)" };
-    case "playful": return { background: "rgba(189,153,242,0.13)", border: "rgba(189,153,242,0.38)" };
+    case "curious": return tintLadder("120,174,248");
+    case "affirmative": return tintLadder("114,213,163");
+    case "cautious": return tintLadder("239,191,104");
+    case "boundary": return tintLadder("238,133,133");
+    case "playful": return tintLadder("189,153,242");
   }
 }
+
+const EVENT_TINT = tintLadder("94,199,221");
 
 function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
   const theme = useTheme();
@@ -241,8 +264,8 @@ function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
       onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.demandButton,
-        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
-        pressed && { opacity: 0.72 },
+        hovered && !pressed && { backgroundColor: theme.backgroundElement },
+        pressed && { backgroundColor: theme.backgroundSelected },
       ]}
     >
       <Ionicons name="sparkles-outline" size={15} color={hovered ? theme.text : theme.accent} />
@@ -257,14 +280,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
   label: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4, flex: 1 },
   model: { fontSize: 10, fontWeight: "500" },
-  refresh: { padding: 2 },
+  refresh: { borderRadius: 6, margin: -2, padding: 4 },
   demandButton: { alignItems: "center", alignSelf: "flex-start", borderRadius: 8, flexDirection: "row", gap: 6, paddingHorizontal: 8, paddingVertical: 7 },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, paddingBottom: 8 },
   loadingText: { fontSize: 13 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 6 },
   pill: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
-  pillHover: Platform.OS === "web" ? ({ filter: "brightness(1.32)" } as object) : {},
-  eventPill: { backgroundColor: "rgba(94,199,221,0.13)", borderColor: "rgba(94,199,221,0.38)" },
   eventTitle: { fontWeight: "600" },
   pillText: { fontSize: 13, lineHeight: 17, flexShrink: 1 },
   reactionEmoji: { fontSize: 16 },

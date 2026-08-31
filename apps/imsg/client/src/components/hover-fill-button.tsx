@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Pressable, type GestureResponderEvent, type Insets, type StyleProp, type ViewStyle } from "react-native";
 
+import { HOVER_DIM } from "@/constants/theme";
+
 /** Button whose hover/press language is the fill, not the icon. */
 export function HoverFillButton({
   accessibilityLabel,
@@ -34,7 +36,7 @@ export function HoverFillButton({
       style={({ pressed }) => [
         style,
         { backgroundColor: hovered || pressed ? hoverFill : restFill },
-        pressed && { opacity: 0.82 },
+        pressed && { opacity: HOVER_DIM },
       ]}
     >
       {children}

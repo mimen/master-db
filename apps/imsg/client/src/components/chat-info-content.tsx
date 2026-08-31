@@ -23,7 +23,7 @@ import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
-import { Type } from "@/constants/theme";
+import { HOVER_DIM, PRESS_DIM, Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { PersonAvatar } from "./avatar";
 import { ChatCrmSection } from "./chat-crm-section";
@@ -203,7 +203,7 @@ export function ChatInfoContent({
                 },
               },
             ] as const).map((a) => (
-              <Pressable key={a.label} style={({ hovered, pressed }) => [styles.quickAction, (hovered || pressed) && styles.quickActionHover]} onPress={a.onPress}>
+              <Pressable key={a.label} style={({ hovered, pressed }) => [styles.quickAction, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]} onPress={a.onPress}>
                 <View style={[styles.quickIcon, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
                   <Ionicons name={a.icon} size={22} color={theme.text} />
                 </View>
@@ -255,7 +255,8 @@ export function ChatInfoContent({
                           style={({ hovered, pressed }) => [
                             styles.ideaPill,
                             { backgroundColor: theme.backgroundElement, borderColor: theme.divider },
-                            (hovered || pressed) && { opacity: 0.72 },
+                            hovered && !pressed && { opacity: HOVER_DIM },
+                            pressed && { opacity: PRESS_DIM },
                           ]}
                         >
                           <Text style={{ color: theme.text, fontSize: 13 }}>{idea}</Text>
@@ -279,7 +280,7 @@ export function ChatInfoContent({
                   <Ionicons name="sparkles-outline" size={13} color={theme.accent} />
                   <Text style={[styles.nameIdeasLabel, { color: theme.textSecondary }]}>Name ideas:</Text>
                   {suggesting && nameIdeas.length === 0 ? <ActivityIndicator size="small" /> : nameIdeas.slice(0, 3).map((idea, i) => (
-                    <Pressable key={`${i}-${idea}`} onPress={() => applyName(idea)} style={({ hovered, pressed }) => [styles.nameIdeaChip, { backgroundColor: visual.card, borderColor: visual.hairlineStrong }, (hovered || pressed) && { opacity: 0.72 }]}>
+                    <Pressable key={`${i}-${idea}`} onPress={() => applyName(idea)} style={({ hovered, pressed }) => [styles.nameIdeaChip, { backgroundColor: visual.card, borderColor: visual.hairlineStrong }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}>
                       <Text style={{ color: theme.text, fontSize: 11 }}>{idea}</Text>
                     </Pressable>
                   ))}
@@ -397,7 +398,7 @@ export function ChatInfoContent({
           {info.isGroup && (
             <>
               <Pressable
-                style={({ pressed }) => [styles.dangerRow, pressed && { opacity: 0.72 }]}
+                style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
                 onPress={() =>
                   showSheet({
                     title: "Leave this conversation?",
@@ -418,7 +419,7 @@ export function ChatInfoContent({
             </>
           )}
           <Pressable
-            style={({ pressed }) => [styles.dangerRow, pressed && { opacity: 0.72 }]}
+            style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
             onPress={() =>
               showSheet({
                 title: "Delete this conversation? This cannot be undone.",
@@ -548,7 +549,6 @@ const styles = StyleSheet.create({
   paneHeaderTitle: { fontWeight: "600" },
   quickRow: { flexDirection: "row", justifyContent: "center", gap: 24, marginBottom: 8 },
   quickAction: { alignItems: "center", gap: 6 },
-  quickActionHover: { opacity: 0.72 },
   quickIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontWeight: "600" },

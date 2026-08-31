@@ -288,10 +288,14 @@ function ChatRowInner({
                     onHoverIn={() => setSettleHovered(true)}
                     onHoverOut={() => setSettleHovered(false)}
                     hitSlop={5}
-                    style={styles.inlineSettle}
+                    style={({ pressed }) => [
+                      styles.inlineSettle,
+                      settleHovered && !pressed && { backgroundColor: visual.controlFill },
+                      pressed && { backgroundColor: visual.controlFillHover },
+                    ]}
                   >
-                    <Ionicons name="checkmark" size={13} color={settleHovered ? "#ffffff" : visual.muted} />
-                    <Text style={[styles.inlineSettleText, { color: settleHovered ? "#ffffff" : visual.muted }]}>Settle</Text>
+                    <Ionicons name="checkmark" size={13} color={settleHovered ? visual.text : visual.muted} />
+                    <Text style={[styles.inlineSettleText, { color: settleHovered ? visual.text : visual.muted }]}>Settle</Text>
                   </Pressable>
                 ) : last ? (
                   <Text style={[styles.time, { color: visual.muted, fontSize: 11 }]}>
@@ -318,9 +322,13 @@ function ChatRowInner({
                 onHoverIn={() => setMoreHovered(true)}
                 onHoverOut={() => setMoreHovered(false)}
                 hitSlop={6}
-                style={styles.inlineMore}
+                style={({ pressed }) => [
+                  styles.inlineMore,
+                  moreHovered && !pressed && { backgroundColor: visual.controlFill },
+                  pressed && { backgroundColor: visual.controlFillHover },
+                ]}
               >
-                <Ionicons name="ellipsis-horizontal" size={16} color={moreHovered ? "#ffffff" : visual.muted} />
+                <Ionicons name="ellipsis-horizontal" size={16} color={moreHovered ? visual.text : visual.muted} />
               </Pressable>
             ) : (
               <View style={styles.messageSignal}>
@@ -447,11 +455,16 @@ const styles = StyleSheet.create({
   },
   inlineSettle: {
     alignItems: "center",
+    borderRadius: 6,
     flexDirection: "row",
     gap: 3,
-    height: 13,
     justifyContent: "center",
-    paddingHorizontal: 0,
+    // Chip bleeds past the 13px text box via negative margins so the hover
+    // fill has breathing room without shifting row spacing.
+    marginHorizontal: -5,
+    marginVertical: -3,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
   },
   inlineSettleText: {
     fontSize: 11,
@@ -461,6 +474,7 @@ const styles = StyleSheet.create({
   inlineMore: {
     alignSelf: "center",
     alignItems: "center",
+    borderRadius: ROW_SIGNAL_SIZE / 2,
     flexShrink: 0,
     height: ROW_SIGNAL_SIZE,
     justifyContent: "center",

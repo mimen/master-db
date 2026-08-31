@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { chromeControlFill, filterChipFill } from "./chrome-control-fill";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 
 const theme = {
   backgroundElement: "#F0F0F3",
@@ -33,7 +34,8 @@ describe("filterChipFill", () => {
       backgroundColor: "#000000",
       opacity: 1,
     });
-    expect(filterChipFill(chipTheme, { selected: true, hovered: true, pressed: false }).opacity).toBe(0.88);
+    expect(filterChipFill(chipTheme, { selected: true, hovered: true, pressed: false }).opacity).toBe(HOVER_DIM);
+    expect(filterChipFill(chipTheme, { selected: true, hovered: true, pressed: true }).opacity).toBe(PRESS_DIM);
   });
 
   test("unselected hover uses the selected-chip fill", () => {

@@ -31,7 +31,7 @@ import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { Radii } from "@/constants/theme";
+import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import {
   browserFilesToAttachments,
   MAX_PENDING_ATTACHMENTS,
@@ -1010,7 +1010,7 @@ ${url}` : url;
               )}
               <Pressable
                 onPress={() => removePending(i)}
-                style={({ hovered, pressed }) => [styles.pendingRemove, (hovered || pressed) && { opacity: 0.72 }]}
+                style={({ hovered, pressed }) => [styles.pendingRemove, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
                 hitSlop={6}
               >
                 {/* Remove badge sits on a fixed dark scrim over an attachment thumbnail —
@@ -1097,7 +1097,7 @@ ${url}` : url;
               onPress={() => void send()}
               onLongPress={canSchedule ? openScheduleSheet : undefined}
               disabled={busy}
-              style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: sendColor }, (hovered || pressed) && { opacity: 0.78 }]}
+              style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: sendColor }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
             >
               <Ionicons name="arrow-up" size={20} color={theme.onAccent} />
             </Pressable>

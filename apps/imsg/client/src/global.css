@@ -7,3 +7,27 @@
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
+/* Hover language for text links. RNW renders dataSet as data-* attributes, so
+   inline Text links opt in without hover state or wrappers. Guarded to real
+   pointers so touch devices never get sticky hover. Values mirror
+   HOVER_DIM/PRESS_DIM in constants/theme.ts. */
+[data-hover-underline],
+[data-hover-dim] {
+  cursor: pointer;
+}
+@media (hover: hover) {
+  [data-hover-underline]:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  [data-hover-dim] {
+    transition: opacity 0.12s;
+  }
+  [data-hover-dim]:hover {
+    opacity: 0.82;
+  }
+  [data-hover-dim]:active {
+    opacity: 0.72;
+  }
+}

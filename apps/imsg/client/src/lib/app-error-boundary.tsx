@@ -2,6 +2,8 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import * as Clipboard from "expo-clipboard";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
+
 type Props = { children: ReactNode };
 
 type State = { error: Error | null; componentStack: string | null; copied: boolean };
@@ -77,11 +79,21 @@ export class AppErrorBoundary extends Component<Props, State> {
           </ScrollView>
         )}
         <View style={styles.actions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Copy error details" onPress={() => { void this.copyError(); }} style={styles.copyButton}>
-            {({ hovered, pressed }) => <Text style={[styles.copyLabel, (hovered || pressed) && styles.copyLabelHover]}>{copied ? "Copied" : "Copy error"}</Text>}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Copy error details"
+            onPress={() => { void this.copyError(); }}
+            style={({ hovered, pressed }) => [styles.copyButton, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
+          >
+            <Text style={styles.copyLabel}>{copied ? "Copied" : "Copy error"}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Reload app" onPress={this.reload} style={styles.reloadButton}>
-            {({ hovered, pressed }) => <Text style={[styles.reload, (hovered || pressed) && styles.reloadHover]}>Reload</Text>}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reload app"
+            onPress={this.reload}
+            style={({ hovered, pressed }) => [styles.reloadButton, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
+          >
+            <Text style={styles.reload}>Reload</Text>
           </Pressable>
         </View>
       </View>
@@ -111,8 +123,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: 8 },
   copyButton: { backgroundColor: "#f4f4f5", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   copyLabel: { color: "#27272a", fontSize: 14, fontWeight: "600" },
-  copyLabelHover: { color: "#000000" },
   reloadButton: { paddingHorizontal: 12, paddingVertical: 8 },
   reload: { fontSize: 14, fontWeight: "600", color: "#0a84ff" },
-  reloadHover: { color: "#0066cc" },
 });

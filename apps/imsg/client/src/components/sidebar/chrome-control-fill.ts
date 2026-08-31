@@ -1,3 +1,5 @@
+import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
+
 export interface ChromeFillTheme {
   readonly backgroundElement: string;
   readonly backgroundSelected: string;
@@ -32,7 +34,7 @@ export function filterChipFill(
   state: FilterChipState,
 ): { backgroundColor: string; opacity?: number } {
   if (state.selected) {
-    return { backgroundColor: theme.text, opacity: state.hovered || state.pressed ? 0.88 : 1 };
+    return { backgroundColor: theme.text, opacity: state.pressed ? PRESS_DIM : state.hovered ? HOVER_DIM : 1 };
   }
   if (state.pressed || state.hovered) return { backgroundColor: theme.backgroundSelected };
   return { backgroundColor: theme.backgroundElement };

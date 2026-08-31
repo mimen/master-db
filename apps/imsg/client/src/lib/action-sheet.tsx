@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { CardShadow, Radii, Type } from "@/constants/theme";
+import { CardShadow, PRESS_DIM, Radii, Type } from "@/constants/theme";
 
 export interface SheetAction {
   label: string;
@@ -156,7 +156,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       style={({ pressed, hovered }) => [
                         styles.popoverAction,
                         hovered && { backgroundColor: theme.backgroundSelected },
-                        pressed && { opacity: 0.72 },
+                        pressed && { opacity: PRESS_DIM },
                       ]}
                       onPress={() => {
                         setRequest(null);
