@@ -28,6 +28,13 @@ export const STATE_FILTERS = [
   { value: "archived", label: "Archived" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
+/** The desktop triage control keeps the day-to-day queue states close at hand. */
+const COMPACT_STATE_FILTERS = [
+  { value: "unresponded", label: "Needs reply" },
+  { value: "waiting", label: "Waiting" },
+  { value: "all", label: "All" },
+] as const satisfies readonly FilterOption<StateFilter>[];
+
 export const TYPE_FILTERS = [
   { value: "all", label: "Everyone" },
   { value: "dm", label: "DMs" },
@@ -133,18 +140,16 @@ export function ConversationFilters({
         contentContainerStyle={[styles.railContent, compact && styles.railContentCompact]}
         accessibilityLabel="Conversation filters"
       >
-        {!compact ? <View
+        <View
           accessibilityRole="radiogroup"
           accessibilityLabel="Conversation state"
-          style={styles.filterGroup}
+          style={[styles.filterGroup, compact && styles.filterGroupCompact]}
         >
-          {STATE_FILTERS.map((filter) => (
-            <FilterPill key={filter.value} label={filter.label} count={counts?.[filter.value]} selected={filters.state === filter.value} selection={{ kind: "state", value: filter.value }} onSelect={select} />
+          {(compact ? COMPACT_STATE_FILTERS : STATE_FILTERS).map((filter) => (
+            <FilterPill key={filter.value} compact={compact} label={filter.label} count={counts?.[filter.value]} selected={filters.state === filter.value} selection={{ kind: "state", value: filter.value }} onSelect={select} />
           ))}
-        </View> : null}
-        {compact ? null : (
-          <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
-        )}
+        </View>
+        <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
         <View
           accessibilityRole="radiogroup"
           accessibilityLabel="Conversation type"

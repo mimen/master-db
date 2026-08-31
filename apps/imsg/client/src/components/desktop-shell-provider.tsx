@@ -334,15 +334,6 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
           >
             <TriageNavigationRail
               destination={activeWorkspace}
-              state={messagesRail.state}
-              counts={messagesRail.counts}
-              onStateChange={(next) => {
-                messagesActions.current?.applyState(next);
-                dispatch({
-                  type: "messages/filters-changed",
-                  filters: { state: next, type: messagesRail.type },
-                });
-              }}
             />
             <View style={styles.workspaceHost}>
               <View

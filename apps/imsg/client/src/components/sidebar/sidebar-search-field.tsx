@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -36,6 +37,7 @@ export function SidebarSearchField({
   const visual = useTriageTheme();
   const type = useType();
   const { wide } = useLayoutMode();
+  const [clearHovered, setClearHovered] = useState(false);
   return (
     <View
       style={[
@@ -67,8 +69,10 @@ export function SidebarSearchField({
           accessibilityLabel="Clear search"
           onPress={onClear}
           hitSlop={8}
+          onHoverIn={() => setClearHovered(true)}
+          onHoverOut={() => setClearHovered(false)}
         >
-          <Ionicons name="close-circle" size={17} color={theme.textSecondary} />
+          <Ionicons name="close-circle" size={17} color={clearHovered ? theme.text : theme.textSecondary} />
         </Pressable>
       )}
     </View>

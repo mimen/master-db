@@ -948,7 +948,7 @@ ${url}` : url;
             Replying to: {replyTo.text.slice(0, 80) || "attachment"}
           </Text>
           <Pressable onPress={onClearReply} hitSlop={8}>
-            <Text style={{ color: theme.textSecondary }}>✕</Text>
+            {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary }}>✕</Text>}
           </Pressable>
         </View>
       )}
@@ -964,7 +964,7 @@ ${url}` : url;
             }}
             hitSlop={8}
           >
-            <Text style={{ color: theme.textSecondary }}>✕</Text>
+            {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary }}>✕</Text>}
           </Pressable>
         </View>
       )}
@@ -974,7 +974,7 @@ ${url}` : url;
             <Pressable
               key={participant.address}
               onPress={() => selectMention(participant)}
-              style={({ pressed }) => [styles.mentionRow, pressed && { backgroundColor: theme.backgroundElement }]}
+              style={({ hovered, pressed }) => [styles.mentionRow, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
             >
               <PersonAvatar
                 address={participant.address}
@@ -1010,7 +1010,7 @@ ${url}` : url;
               )}
               <Pressable
                 onPress={() => removePending(i)}
-                style={styles.pendingRemove}
+                style={({ hovered, pressed }) => [styles.pendingRemove, (hovered || pressed) && { opacity: 0.72 }]}
                 hitSlop={6}
               >
                 {/* Remove badge sits on a fixed dark scrim over an attachment thumbnail —
@@ -1030,7 +1030,7 @@ ${url}` : url;
             hitSlop={8}
             style={[styles.sendButton, { backgroundColor: theme.backgroundElement }]}
           >
-            <Ionicons name="add" size={22} color={theme.textSecondary} />
+            {({ hovered, pressed }) => <Ionicons name="add" size={22} color={hovered || pressed ? theme.text : theme.textSecondary} />}
           </Pressable>
         </View>
         {recording ? (
@@ -1089,7 +1089,7 @@ ${url}` : url;
               hitSlop={6}
               style={({ pressed }) => [styles.scheduleCaret, pressed && { opacity: 0.5 }]}
             >
-              <Ionicons name="chevron-up" size={18} color={theme.textSecondary} />
+              {({ hovered, pressed }) => <Ionicons name="chevron-up" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
           )}
           {canSend && !recording ? (
@@ -1097,7 +1097,7 @@ ${url}` : url;
               onPress={() => void send()}
               onLongPress={canSchedule ? openScheduleSheet : undefined}
               disabled={busy}
-              style={[styles.sendButton, { backgroundColor: sendColor }]}
+              style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: sendColor }, (hovered || pressed) && { opacity: 0.78 }]}
             >
               <Ionicons name="arrow-up" size={20} color={theme.onAccent} />
             </Pressable>
@@ -1106,13 +1106,14 @@ ${url}` : url;
               onPressIn={editing ? undefined : startRecording}
               onPressOut={recording ? () => void stopRecordingAndSend() : undefined}
               disabled={busy || Boolean(editing)}
-              style={[
+              style={({ hovered, pressed }) => [
                 styles.sendButton,
                 // Intentionally NOT theme.destructive: this literal is the
                 // iOS system-red LIGHT variant, already correct in light mode.
                 // Theming it would flip dark mode to #FF453A — an unauthorized
                 // visual change outside this sweep's two approved exceptions.
                 { backgroundColor: recording ? "#FF3B30" : theme.backgroundElement },
+                !recording && (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
               ]}
             >
               <Ionicons name={recording ? "stop" : "mic"} size={19} color={recording ? theme.onAccent : theme.textSecondary} />

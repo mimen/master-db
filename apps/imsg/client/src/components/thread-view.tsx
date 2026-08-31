@@ -569,15 +569,15 @@ export function ThreadView({
               }}
             />
             <Pressable onPress={() => setSearchOpen(true)} hitSlop={8} style={styles.headerIconButton}>
-              <Ionicons name="search" size={21} color={theme.textSecondary} />
+              {({ hovered, pressed }) => <Ionicons name="search" size={21} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
             {onToggleShadow && (
               <Pressable onPress={onToggleShadow} hitSlop={8} style={styles.headerIconButton}>
-                <Ionicons
+                {({ hovered, pressed }) => <Ionicons
                   name={shadowOpen ? "sparkles" : "sparkles-outline"}
                   size={21}
-                  color={shadowOpen ? theme.accent : theme.textSecondary}
-                />
+                  color={shadowOpen || hovered || pressed ? theme.text : theme.textSecondary}
+                />}
               </Pressable>
             )}
             <Pressable
@@ -585,7 +585,7 @@ export function ThreadView({
               hitSlop={8}
               style={styles.headerIconButton}
             >
-              <Ionicons name="information-circle-outline" size={24} color={theme.textSecondary} />
+              {({ hovered, pressed }) => <Ionicons name="information-circle-outline" size={24} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
           </View>
         </View>
@@ -630,15 +630,17 @@ export function ThreadView({
             disabled={searchMatches.length === 0}
             onPress={() => setMatchIndex((i) => (i + 1) % searchMatches.length)}
             hitSlop={6}
+            style={styles.searchShelfAction}
           >
-            <Ionicons name="chevron-up" size={22} color={searchMatches.length ? theme.accent : theme.textSecondary} />
+            {({ hovered, pressed }) => <Ionicons name="chevron-up" size={22} color={searchMatches.length ? hovered || pressed ? theme.text : theme.accent : theme.textSecondary} />}
           </Pressable>
           <Pressable
             disabled={searchMatches.length === 0}
             onPress={() => setMatchIndex((i) => (i - 1 + searchMatches.length) % searchMatches.length)}
             hitSlop={6}
+            style={styles.searchShelfAction}
           >
-            <Ionicons name="chevron-down" size={22} color={searchMatches.length ? theme.accent : theme.textSecondary} />
+            {({ hovered, pressed }) => <Ionicons name="chevron-down" size={22} color={searchMatches.length ? hovered || pressed ? theme.text : theme.accent : theme.textSecondary} />}
           </Pressable>
           <Pressable
             onPress={() => {
@@ -647,8 +649,9 @@ export function ThreadView({
               setHighlightGuid(null);
             }}
             hitSlop={6}
+            style={styles.searchShelfAction}
           >
-            <Text style={{ color: theme.accent, fontSize: 15 }}>Done</Text>
+            {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: 15 }}>Done</Text>}
           </Pressable>
         </View>
       )}
@@ -829,6 +832,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
+  searchShelfAction: { minWidth: 22 },
   resolveStrip: {
     alignItems: "center",
     borderBottomWidth: 0.5,

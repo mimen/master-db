@@ -109,14 +109,16 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
           size={size * 0.58}
         />
       </View>
-      <Image
-        source={{ uri: groupPhotoUrl(chat.guid) }}
-        style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
-        contentFit="cover"
-        transition={80}
-        recyclingKey={chat.guid}
-        cachePolicy="memory-disk"
-      />
+      {chat.hasGroupPhoto === true && (
+        <Image
+          source={{ uri: groupPhotoUrl(chat.guid) }}
+          style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
+          contentFit="cover"
+          transition={80}
+          recyclingKey={chat.guid}
+          cachePolicy="memory-disk"
+        />
+      )}
     </View>
   );
 }
@@ -173,10 +175,12 @@ export function GroupPhotoAvatar({
   guid,
   size,
   iconSize,
+  hasPhoto = false,
 }: {
   guid: string;
   size: number;
   iconSize?: number;
+  hasPhoto?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -187,14 +191,16 @@ export function GroupPhotoAvatar({
       ]}
     >
       <Ionicons name="people" size={iconSize ?? size * 0.47} color={theme.textSecondary} />
-      <Image
-        source={{ uri: groupPhotoUrl(guid) }}
-        style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
-        contentFit="cover"
-        transition={80}
-        recyclingKey={guid}
-        cachePolicy="memory-disk"
-      />
+      {hasPhoto && (
+        <Image
+          source={{ uri: groupPhotoUrl(guid) }}
+          style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
+          contentFit="cover"
+          transition={80}
+          recyclingKey={guid}
+          cachePolicy="memory-disk"
+        />
+      )}
     </View>
   );
 }

@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { Platform } from "react-native";
 import type { ChatSummary } from "@shared/types";
 
-import { useActionSheet } from "@/lib/action-sheet";
+import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
 import {
   archiveChat,
   markChatRead,
@@ -15,7 +15,7 @@ import { showToast } from "@/lib/toast";
 import { laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
 
 interface ChatActions {
-  openMenu: (chat: ChatSummary, anchor?: { x: number; y: number }) => void;
+  openMenu: (chat: ChatSummary, anchor?: PopoverAnchor) => void;
 }
 
 /**
@@ -25,7 +25,7 @@ interface ChatActions {
  */
 export function useChatActions(detailsInPane: boolean): ChatActions {
   const showSheet = useActionSheet();
-  const openMenu = (chat: ChatSummary, anchor?: { x: number; y: number }): void => {
+  const openMenu = (chat: ChatSummary, anchor?: PopoverAnchor): void => {
     const openLater = (): void => {
       showSheet({
         title: `Later · ${chat.displayName}`,

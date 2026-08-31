@@ -12,6 +12,7 @@ import { SkeletonList } from "./skeleton-list";
 import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
 
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
+import { SquarePenIcon } from "@hugeicons/core-free-icons";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFooter } from "./sidebar/sidebar-footer";
@@ -219,7 +220,6 @@ export function ConversationListPane({
   const chrome = wide ? (
     <TriageQueueHeader
       title={deskTitle}
-      remaining={deskModel.listChats.length}
       completed={stats?.clearedToday ?? 0}
       sweepCount={sweepableChats.length}
       oldestAt={stats?.oldestQueueAt ?? deskModel.listChats.reduce<number | null>((oldest, chat) => {
@@ -227,7 +227,7 @@ export function ConversationListPane({
         return at === null ? oldest : oldest === null ? at : Math.min(oldest, at);
       }, null)}
       search={searchField}
-      action={<ChromeIconButton icon="create-outline" accessibilityLabel="New message" onPress={onNewMessage} />}
+      action={<ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} />}
       onSweep={filters.state === "unresponded" ? () => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); } : undefined}
     />
   ) : (
@@ -237,7 +237,7 @@ export function ConversationListPane({
         <>
           <SettingsButton />
           <ChromeIconButton ref={filterBtnRef} icon="options-outline" accessibilityLabel="Filter conversations" onPress={openFilters} />
-          <ChromeIconButton icon="create-outline" accessibilityLabel="New message" onPress={onNewMessage} />
+          <ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} />
         </>
       }
     />
@@ -251,8 +251,8 @@ export function ConversationListPane({
         <SidebarFooter>
           <View style={styles.footerContent}>
             <View style={styles.quietLinks}>
-              <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}><Ionicons name="archive-outline" size={14} color={theme.textSecondary} /><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
-              <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}><Ionicons name="ban-outline" size={14} color={theme.textSecondary} /><Text style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
+              <Pressable onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}>{({ hovered, pressed }) => <><Ionicons name="archive-outline" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} /><Text style={[styles.quietLink, { color: hovered || pressed ? theme.text : theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></>}</Pressable>
+              <Pressable onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}>{({ hovered, pressed }) => <><Ionicons name="ban-outline" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} /><Text style={[styles.quietLink, { color: hovered || pressed ? theme.text : theme.textSecondary }]}>Unknown</Text></>}</Pressable>
             </View>
             <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
           </View>

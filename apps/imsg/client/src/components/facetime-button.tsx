@@ -1,12 +1,14 @@
 import type { ReactElement } from "react";
 import { Pressable, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { Video01Icon } from "@hugeicons/core-free-icons";
 import * as Linking from "expo-linking";
 import type { Message } from "@shared/types";
 import { api } from "@/lib/api";
 import { faceTimeTargetUrl, type FaceTimeKind } from "@/lib/message-actions";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
+import { useTheme } from "@/hooks/use-theme";
 
 interface FaceTimeButtonProps {
   chatGuid: string;
@@ -26,6 +28,7 @@ export function FaceTimeButton({
   compact = false,
 }: FaceTimeButtonProps): ReactElement {
   const showSheet = useActionSheet();
+  const theme = useTheme();
 
   const openDirect = async (kind: FaceTimeKind): Promise<void> => {
     if (!address) {
@@ -69,7 +72,9 @@ export function FaceTimeButton({
       hitSlop={8}
       style={compact ? styles.compact : undefined}
     >
-      <Ionicons name="videocam-outline" size={compact ? 21 : 22} color={color} />
+      {({ hovered, pressed }) => (
+        <HugeiconsIcon icon={Video01Icon} size={compact ? 21 : 22} color={hovered || pressed ? theme.text : color} strokeWidth={1.8} />
+      )}
     </Pressable>
   );
 }

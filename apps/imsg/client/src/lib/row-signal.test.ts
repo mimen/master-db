@@ -14,14 +14,14 @@ describe("rowSignal", () => {
     ).toBe("unread");
   });
 
-  test("unresponded wins over archived when nothing is unread", () => {
+  test("unresponded and archived do not create row badges", () => {
     expect(
       rowSignal({ unreadCount: 0, flags: { unresponded: true, archived: true } }),
-    ).toBe("unresponded");
+    ).toBeNull();
   });
 
-  test("archived shows when it is the only flag", () => {
-    expect(rowSignal({ unreadCount: 0, flags: { ...flags, archived: true } })).toBe("archived");
+  test("archived does not create a row badge", () => {
+    expect(rowSignal({ unreadCount: 0, flags: { ...flags, archived: true } })).toBeNull();
   });
 
   test("empty when no signal applies", () => {

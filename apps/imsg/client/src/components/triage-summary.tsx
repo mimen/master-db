@@ -6,14 +6,12 @@ import { queueAgeLabel } from "@/lib/queue-age";
 
 export function TriageSummary({
   title,
-  remaining,
   sweepCount,
   completed,
   oldestAt,
   onSweep,
 }: {
   title: string;
-  remaining: number;
   sweepCount: number;
   completed: number;
   oldestAt: number | null;
@@ -26,7 +24,6 @@ export function TriageSummary({
         <Text accessibilityRole="header" numberOfLines={1} style={[styles.title, { color: visual.text }]}>{title}</Text>
         <Text numberOfLines={1} style={[styles.meta, { color: visual.meta }]}>{completed} settled today · {queueAgeLabel(oldestAt)}</Text>
       </View>
-      <Text style={[styles.count, { color: visual.text }]}>{remaining}</Text>
       {onSweep ? (
         <HoverFillButton
           accessibilityLabel={`Start sweep, ${sweepCount} conversations`}
@@ -64,12 +61,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 2,
-  },
-  count: {
-    fontSize: 18,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-    letterSpacing: -0.4,
   },
   sweep: {
     alignItems: "center",

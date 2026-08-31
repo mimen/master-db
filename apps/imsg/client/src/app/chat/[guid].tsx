@@ -16,18 +16,20 @@ function HeaderTitle({
   name,
   isGroup,
   memberCount,
+  hasGroupPhoto,
 }: {
   guid: string;
   name: string;
   isGroup: boolean;
   memberCount?: number;
+  hasGroupPhoto?: boolean;
 }) {
   const theme = useTheme();
   const dmAddress = !isGroup ? (guid.split(";").pop() ?? null) : null;
   return (
     <View style={headerStyles.container}>
       {isGroup ? (
-        <GroupPhotoAvatar guid={guid} size={32} iconSize={15} />
+        <GroupPhotoAvatar guid={guid} size={32} iconSize={15} hasPhoto={hasGroupPhoto} />
       ) : (
         <PersonAvatar address={dmAddress} name={name} size={32} />
       )}
@@ -62,6 +64,7 @@ export default function ChatScreen(): React.JSX.Element | null {
     name?: string;
     isGroup?: string;
     count?: string;
+    hasGroupPhoto?: string;
     targetGuid?: string;
     targetDate?: string;
   }>();
@@ -86,6 +89,7 @@ export default function ChatScreen(): React.JSX.Element | null {
               name={params.name ?? (params.guid.split(";").pop() ?? params.guid)}
               isGroup={isGroup}
               memberCount={params.count ? Number(params.count) : undefined}
+              hasGroupPhoto={params.hasGroupPhoto === "1"}
             />
           ),
           headerRight: () => (

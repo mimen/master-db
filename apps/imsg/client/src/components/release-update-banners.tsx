@@ -45,7 +45,7 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
             onPress={() => reloadWebClient()}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <Text style={[styles.actionText, { color: theme.accent }]}>Reload</Text>
+            {({ hovered, pressed }) => <Text style={[styles.actionText, { color: hovered || pressed ? theme.text : theme.accent }]}>Reload</Text>}
           </Pressable>
         </View>
       )}
@@ -77,9 +77,9 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
             }}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <Text style={[styles.actionText, { color: theme.accent }]}>
+            {({ hovered, pressed }) => <Text style={[styles.actionText, { color: hovered || pressed ? theme.text : theme.accent }]}>
               {restarting ? "Restarting…" : restartFailed ? "Retry" : "Restart"}
-            </Text>
+            </Text>}
           </Pressable>
         </View>
       )}

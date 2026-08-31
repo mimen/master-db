@@ -93,6 +93,8 @@ export interface ChatSummary {
   guid: string;
   displayName: string;
   isGroup: boolean;
+  /** Whether BlueBubbles reports an uploaded group photo for this chat. */
+  hasGroupPhoto?: boolean;
   /** True when at least one participant matches a contact. */
   known: boolean;
   /** False when contact classification is temporarily unavailable; absent means available. */

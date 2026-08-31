@@ -1,12 +1,17 @@
-import type { StateCounts, StateFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useEffect, useState, type JSX } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import Svg, { Path } from "react-native-svg";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import {
+  MessageSquareIcon,
+  SentIcon,
+  Settings01Icon,
+  UserGroupIcon,
+} from "@hugeicons/core-free-icons";
 
 import { useTriageTheme } from "@/hooks/use-triage-theme";
+import { openScheduledPane } from "@/lib/scheduled-pane";
 import { DESKTOP_RAIL_WIDTH } from "@/lib/desktop-coordinator/pane-admission";
-import { RowSignalColor, unreadLabel } from "@/lib/row-signal";
 import {
   isDesktopShell,
   NATIVE_TITLEBAR_INSET,
@@ -16,48 +21,27 @@ import {
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
 
-type RailIconName = "inbox" | "waiting" | "messages" | "contacts" | "scheduled" | "settings";
+type RailIconName = "messages" | "contacts" | "scheduled" | "settings";
 
 function RailIcon({ name, color }: { name: RailIconName; color: string }): JSX.Element {
-  const paths: readonly string[] = (() => {
+  const icon = (() => {
     switch (name) {
-      case "inbox":
-        return ["M4.5 5.5h15l-1.8 12h-11.4l-1.8-12Z", "M5.4 12.5h4.1l1.4 2h2.2l1.4-2h4.1"];
-      case "waiting":
-        return ["M6 3.5h12M6 20.5h12", "M7.5 3.5v3c0 2.1 1.6 3.5 3.2 5.5-1.6 2-3.2 3.4-3.2 5.5v3", "M16.5 3.5v3c0 2.1-1.6 3.5-3.2 5.5 1.6 2 3.2 3.4 3.2 5.5v3"];
-      case "messages":
-        return ["M5.5 6.5h9a4 4 0 0 1 4 4v2a4 4 0 0 1-4 4H10l-3.8 2.5.8-2.9a4 4 0 0 1-1.5-3.1v-2.5a4 4 0 0 1 4-4Z", "M7 5a4 4 0 0 1 3.5-2h5a4 4 0 0 1 4 4v2.5c0 .9-.3 1.8-.8 2.5"];
-      case "contacts":
-        return ["M8.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "M16.5 10a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z", "M3.5 19v-1.5a4.5 4.5 0 0 1 9 0V19h-9Z", "M13.5 14.2a4 4 0 0 1 7 2.6V19h-6"];
-      case "scheduled":
-        return ["M4 4.5 20 12 4 19.5l2-6 8-1.5-8-1.5-2-6Z"];
-      case "settings":
-        return ["M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.6a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.6a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"];
+      case "messages": return MessageSquareIcon;
+      case "contacts": return UserGroupIcon;
+      case "scheduled": return SentIcon;
+      case "settings": return Settings01Icon;
     }
   })();
-  return (
-    <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
-      {paths.map((path) => (
-        <Path
-          key={path}
-          d={path}
-          stroke={color}
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
-    </Svg>
-  );
+  return <HugeiconsIcon icon={icon} size={21} color={color} strokeWidth={1.8} />;
 }
 
-function Item({ icon, label, active = false, count, urgent = false, onPress }: { icon: RailIconName; label: string; active?: boolean; count?: number; urgent?: boolean; onPress: () => void }): JSX.Element {
+function Item({ icon, label, active = false, onPress }: { icon: RailIconName; label: string; active?: boolean; onPress: () => void }): JSX.Element {
   const [hovered, setHovered] = useState(false);
   const color = active ? "#FFFFFF" : "rgba(255,255,255,0.65)";
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={count === undefined ? label : `${label}, ${count} conversations`}
+      accessibilityLabel={label}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onPress={onPress}
@@ -65,35 +49,14 @@ function Item({ icon, label, active = false, count, urgent = false, onPress }: {
       {...NO_DRAG}
     >
       <RailIcon name={icon} color={color} />
-      {count !== undefined ? (
-        <View
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          style={[styles.countBadge, urgent ? styles.countBadgeUrgent : styles.countBadgeNeutral]}
-        >
-          <Text style={[styles.countBadgeText, urgent ? styles.countBadgeTextUrgent : styles.countBadgeTextNeutral]}>
-            {unreadLabel(count)}
-          </Text>
-        </View>
-      ) : null}
     </Pressable>
   );
 }
 
-/**
- * The desktop shell's one primary-navigation rail. Workspace list panes never
- * render their own copy; inbox actions publish to the still-mounted Messages
- * workspace before the pathname switches back to it.
- */
+/** The desktop shell's primary workspace navigation rail. */
 export function TriageNavigationRail({
-  state,
-  counts,
-  onStateChange,
   destination = "messages",
 }: {
-  state?: StateFilter;
-  counts?: StateCounts | null;
-  onStateChange?: (state: StateFilter) => void;
   destination?: "messages" | "contacts";
 }): JSX.Element {
   const visual = useTriageTheme();
@@ -102,14 +65,6 @@ export function TriageNavigationRail({
   useEffect(() => watchDesktopFullscreen(setFullscreen), []);
   const titlebarInset = shell && !fullscreen ? NATIVE_TITLEBAR_INSET : 0;
   const onMessages = destination === "messages";
-  const goToState = (next: StateFilter): void => {
-    if (onMessages) {
-      onStateChange?.(next);
-      return;
-    }
-    onStateChange?.(next);
-    router.replace("/");
-  };
   const glass = Platform.OS === "web" ? ({
     backgroundColor: visual.rail,
     backdropFilter: "blur(40px) saturate(1.6)",
@@ -119,23 +74,16 @@ export function TriageNavigationRail({
     <View testID="triage-rail" style={[styles.rail, glass]} {...DRAG}>
       <View style={styles.top}>
         <View style={[styles.primary, { marginTop: titlebarInset }]}>
-          <Item icon="inbox" label="Needs reply" count={counts?.unresponded} urgent active={onMessages && state === "unresponded"} onPress={() => goToState("unresponded")} />
-          <Item icon="waiting" label="Waiting" count={counts?.waiting} active={onMessages && state === "waiting"} onPress={() => goToState("waiting")} />
-          <Item icon="messages" label="All messages" count={counts?.all} active={onMessages && state === "all"} onPress={() => goToState("all")} />
+          <Item icon="messages" label="Messages" active={onMessages} onPress={() => { if (!onMessages) router.replace("/"); }} />
           <Item icon="contacts" label="Contacts" active={!onMessages} onPress={() => router.replace("/contacts")} />
-          <Item
-            icon="scheduled"
-            label="Scheduled"
-            onPress={() => router.push({ pathname: "/scheduled", params: { workspace: destination } })}
-          />
+          <Item icon="scheduled" label="Scheduled" onPress={() => {
+            if (openScheduledPane()) return;
+            router.push({ pathname: "/scheduled", params: { workspace: destination } });
+          }} />
         </View>
       </View>
       <View style={styles.utility}>
-        <Item
-          icon="settings"
-          label="Settings"
-          onPress={() => router.push({ pathname: "/settings", params: { workspace: destination } })}
-        />
+        <Item icon="settings" label="Settings" onPress={() => router.push({ pathname: "/settings", params: { workspace: destination } })} />
       </View>
     </View>
   );
@@ -148,15 +96,9 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     width: DESKTOP_RAIL_WIDTH,
   },
-  top: {
-    alignItems: "center",
-  },
-  primary: {
-    gap: 6,
-  },
-  utility: {
-    alignItems: "center",
-  },
+  top: { alignItems: "center" },
+  primary: { gap: 6 },
+  utility: { alignItems: "center" },
   item: {
     alignItems: "center",
     borderRadius: 10,
@@ -165,39 +107,6 @@ const styles = StyleSheet.create({
     position: "relative",
     width: 40,
   },
-  itemActive: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-  },
-  itemPressed: {
-    transform: [{ scale: 0.96 }],
-  },
-  countBadge: {
-    alignItems: "center",
-    borderRadius: 8,
-    height: 15,
-    justifyContent: "center",
-    minWidth: 15,
-    paddingHorizontal: 4,
-    position: "absolute",
-    right: 0,
-    top: 1,
-  },
-  countBadgeUrgent: {
-    backgroundColor: RowSignalColor.unresponded,
-  },
-  countBadgeNeutral: {
-    backgroundColor: "rgba(255,255,255,0.14)",
-  },
-  countBadgeText: {
-    fontSize: 10,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
-    lineHeight: 12,
-  },
-  countBadgeTextUrgent: {
-    color: RowSignalColor.unrespondedGlyph,
-  },
-  countBadgeTextNeutral: {
-    color: "rgba(255,255,255,0.85)",
-  },
+  itemActive: { backgroundColor: "rgba(255,255,255,0.18)" },
+  itemPressed: { transform: [{ scale: 0.96 }] },
 });

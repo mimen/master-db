@@ -27,13 +27,20 @@ export interface SheetTapback {
   onPress: () => void;
 }
 
+export interface PopoverAnchor {
+  x: number;
+  y: number;
+  /** Align the popover's trailing edge to the invoking control. */
+  align?: "start" | "end";
+}
+
 interface SheetRequest {
   title?: string;
   actions: SheetAction[];
   /** Optional horizontal reaction pill rendered above the actions. */
   tapbacks?: SheetTapback[];
   /** Desktop right-click: viewport coords to anchor a compact popover at. */
-  anchor?: { x: number; y: number };
+  anchor?: PopoverAnchor;
 }
 
 type ShowSheet = (request: SheetRequest) => void;
@@ -45,7 +52,7 @@ export function useActionSheet(): ShowSheet {
 }
 
 /** Viewport point of a press, for desktop popovers that should sit on the button. */
-export function pressAnchor(event: GestureResponderEvent): { x: number; y: number } {
+export function pressAnchor(event: GestureResponderEvent): PopoverAnchor {
   return { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
 }
 
@@ -109,8 +116,11 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
         {variant === "popover" && rendered?.anchor ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setRequest(null)}>
             {(() => {
-              const POP_W = 232;
-              const left = Math.max(8, Math.min(rendered.anchor.x, winW - POP_W - 8));
+              const POP_W = 208;
+              const requestedLeft = rendered.anchor.align === "end"
+                ? rendered.anchor.x - POP_W + 18
+                : rendered.anchor.x;
+              const left = Math.max(8, Math.min(requestedLeft, winW - POP_W - 8));
               // Anchors near the bottom (composer attach) open upward.
               const openUp = rendered.anchor.y > winH - 300;
               const place = openUp
@@ -143,9 +153,10 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                   {rendered.actions.map((action) => (
                     <Pressable
                       key={action.label}
-                      style={({ pressed }) => [
+                      style={({ pressed, hovered }) => [
                         styles.popoverAction,
-                        pressed && { backgroundColor: theme.backgroundSelected },
+                        hovered && { backgroundColor: theme.backgroundSelected },
+                        pressed && { opacity: 0.72 },
                       ]}
                       onPress={() => {
                         setRequest(null);
@@ -280,20 +291,23 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
 const styles = StyleSheet.create({
   popover: {
     position: "absolute",
-    borderRadius: Radii.input,
+    borderRadius: Radii.card,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 5,
+    paddingVertical: 4,
     ...CardShadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
   },
   popoverAction: {
-    paddingVertical: 9,
-    paddingHorizontal: 14,
+    minHeight: 34,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   popoverLabel: {
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: "500",
   },
   tapbackSmall: {
     width: 34,

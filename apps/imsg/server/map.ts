@@ -357,6 +357,7 @@ export function mapChat(
     guid: chat.guid,
     displayName: chatDisplayName(chat, contacts),
     isGroup,
+    hasGroupPhoto: isGroup && Boolean(chat.properties?.[0]?.groupPhotoGuid),
     known: mappedParticipants.some((p) => p.name !== null),
     contactsAvailable: contacts.available,
     isSpam: last?.isSpam === true,

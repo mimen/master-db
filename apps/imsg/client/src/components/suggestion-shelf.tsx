@@ -10,7 +10,6 @@ import { useTheme } from "@/hooks/use-theme";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
-import { chromeControlFill } from "./sidebar/chrome-control-fill";
 import { TAPBACK_EMOJI } from "./bubble";
 import type { ReplySuggestion, ReplySuggestions, SuggestionVibe } from "@shared/types";
 
@@ -154,7 +153,7 @@ export function SuggestionShelf({
           </Text>
         )}
         <Pressable onPress={() => void load(true)} disabled={loading} hitSlop={8} style={styles.refresh}>
-          <Ionicons name="refresh" size={15} color={loading ? theme.textSecondary : theme.accent} />
+          {({ hovered, pressed }) => <Ionicons name="refresh" size={15} color={loading ? theme.textSecondary : hovered || pressed ? theme.text : theme.accent} />}
         </Pressable>
       </View>
 
@@ -171,13 +170,20 @@ export function SuggestionShelf({
               accessibilityLabel={`Add to calendar: ${event.title}, ${eventShelfLabel(event)}`}
               disabled={stale}
               onPress={() => void openExternalUrl(eventUrl)}
-              style={[styles.pill, styles.eventPill, { opacity: stale ? 0.55 : 1 }]}
+              style={({ hovered, pressed }) => [
+                styles.pill,
+                styles.eventPill,
+                { opacity: stale ? 0.55 : 1 },
+                !stale && (hovered || pressed) && styles.pillHover,
+              ]}
             >
-              <Ionicons name="calendar-outline" size={15} color={theme.accent} />
-              <Text numberOfLines={2} style={[styles.pillText, { color: theme.text }]}>
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                {`  ·  ${eventShelfLabel(event)}`}
-              </Text>
+              {({ hovered, pressed }) => <>
+                <Ionicons name="calendar-outline" size={15} color={theme.accent} />
+                <Text numberOfLines={2} style={[styles.pillText, { color: theme.text }]}>
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  {`  ·  ${eventShelfLabel(event)}`}
+                </Text>
+              </>}
             </Pressable>
           )}
           {suggestions.map((suggestion) => {
@@ -190,19 +196,18 @@ export function SuggestionShelf({
                 accessibilityLabel={`${suggestion.strategy}, ${suggestion.vibe}: ${suggestion.text}`}
                 disabled={stale}
                 onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
-                style={[
+                style={({ hovered, pressed }) => [
                   styles.pill,
-                  {
-                    backgroundColor: colors.background,
-                    borderColor: colors.border,
-                    opacity: stale ? 0.55 : 1,
-                  },
+                  { backgroundColor: colors.background, borderColor: colors.border, opacity: stale ? 0.55 : 1 },
+                  !stale && (hovered || pressed) && styles.pillHover,
                 ]}
               >
-                {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
-                <Text numberOfLines={3} style={[styles.pillText, { color: theme.text }]}>
-                  {suggestion.text}
-                </Text>
+                {({ hovered, pressed }) => <>
+                  {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
+                  <Text numberOfLines={3} style={[styles.pillText, { color: theme.text }]}>
+                    {suggestion.text}
+                  </Text>
+                </>}
               </Pressable>
             );
           })}
@@ -212,7 +217,9 @@ export function SuggestionShelf({
   );
 }
 
-function vibeColors(vibe: SuggestionVibe): { background: string; border: string } {
+type SuggestionColors = { background: string; border: string };
+
+function vibeColors(vibe: SuggestionVibe): SuggestionColors {
   switch (vibe) {
     case "curious": return { background: "rgba(120,174,248,0.13)", border: "rgba(120,174,248,0.38)" };
     case "affirmative": return { background: "rgba(114,213,163,0.13)", border: "rgba(114,213,163,0.38)" };
@@ -234,12 +241,12 @@ function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
       onHoverOut={() => setHovered(false)}
       style={({ pressed }) => [
         styles.demandButton,
-        chromeControlFill(theme, { hovered, pressed }),
         Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
+        pressed && { opacity: 0.72 },
       ]}
     >
-      <Ionicons name="sparkles-outline" size={15} color={theme.accent} />
-      <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500", lineHeight: 16 }}>Suggest a reply</Text>
+      <Ionicons name="sparkles-outline" size={15} color={hovered ? theme.text : theme.accent} />
+      <Text style={{ color: hovered ? theme.text : theme.accent, fontSize: 13, fontWeight: "500", lineHeight: 16 }}>Suggest a reply</Text>
     </Pressable>
   );
 }
@@ -256,6 +263,7 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 13 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 6 },
   pill: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
+  pillHover: Platform.OS === "web" ? ({ filter: "brightness(1.32)" } as object) : {},
   eventPill: { backgroundColor: "rgba(94,199,221,0.13)", borderColor: "rgba(94,199,221,0.38)" },
   eventTitle: { fontWeight: "600" },
   pillText: { fontSize: 13, lineHeight: 17, flexShrink: 1 },

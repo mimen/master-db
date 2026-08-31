@@ -125,7 +125,7 @@ export function ChatInfoContent({
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
       <Text style={[styles.paneHeaderTitle, { color: theme.text, fontSize: type.title }]}>Details</Text>
       <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close details">
-        <Ionicons name="close" size={20} color={theme.textSecondary} />
+        {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
       </Pressable>
     </View>
   ) : null;
@@ -203,7 +203,7 @@ export function ChatInfoContent({
                 },
               },
             ] as const).map((a) => (
-              <Pressable key={a.label} style={styles.quickAction} onPress={a.onPress}>
+              <Pressable key={a.label} style={({ hovered, pressed }) => [styles.quickAction, (hovered || pressed) && styles.quickActionHover]} onPress={a.onPress}>
                 <View style={[styles.quickIcon, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
                   <Ionicons name={a.icon} size={22} color={theme.text} />
                 </View>
@@ -226,7 +226,7 @@ export function ChatInfoContent({
                   style={[styles.renameInput, { color: theme.text, borderColor: theme.divider }]}
                 />
                 <Pressable onPress={saveName}>
-                  <Text style={{ color: theme.accent, fontSize: Type.body, fontWeight: "600" }}>Save</Text>
+                  {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: Type.body, fontWeight: "600" }}>Save</Text>}
                 </Pressable>
               </View>
               {aiStatus?.suggestions && (
@@ -252,9 +252,10 @@ export function ChatInfoContent({
                         <Pressable
                           key={`${i}-${idea}`}
                           onPress={() => setName(idea)}
-                          style={[
+                          style={({ hovered, pressed }) => [
                             styles.ideaPill,
                             { backgroundColor: theme.backgroundElement, borderColor: theme.divider },
+                            (hovered || pressed) && { opacity: 0.72 },
                           ]}
                         >
                           <Text style={{ color: theme.text, fontSize: 13 }}>{idea}</Text>
@@ -278,11 +279,11 @@ export function ChatInfoContent({
                   <Ionicons name="sparkles-outline" size={13} color={theme.accent} />
                   <Text style={[styles.nameIdeasLabel, { color: theme.textSecondary }]}>Name ideas:</Text>
                   {suggesting && nameIdeas.length === 0 ? <ActivityIndicator size="small" /> : nameIdeas.slice(0, 3).map((idea, i) => (
-                    <Pressable key={`${i}-${idea}`} onPress={() => applyName(idea)} style={[styles.nameIdeaChip, { backgroundColor: visual.card, borderColor: visual.hairlineStrong }]}>
+                    <Pressable key={`${i}-${idea}`} onPress={() => applyName(idea)} style={({ hovered, pressed }) => [styles.nameIdeaChip, { backgroundColor: visual.card, borderColor: visual.hairlineStrong }, (hovered || pressed) && { opacity: 0.72 }]}>
                       <Text style={{ color: theme.text, fontSize: 11 }}>{idea}</Text>
                     </Pressable>
                   ))}
-                  <Pressable onPress={() => setNamesDismissed(true)} hitSlop={6}><Ionicons name="close" size={14} color={theme.textSecondary} /></Pressable>
+                  <Pressable onPress={() => setNamesDismissed(true)} hitSlop={6}>{({ hovered, pressed }) => <Ionicons name="close" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
                 </View>
               )}
             </View>
@@ -371,7 +372,7 @@ export function ChatInfoContent({
                 placeholderTextColor={theme.textSecondary}
                 style={[styles.addPersonInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
               />
-              <Pressable onPress={() => setAddingParticipant(false)}><Ionicons name="close" size={18} color={theme.textSecondary} /></Pressable>
+              <Pressable onPress={() => setAddingParticipant(false)}>{({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
             </View>
           ) : (
             <Pressable onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
@@ -396,7 +397,7 @@ export function ChatInfoContent({
           {info.isGroup && (
             <>
               <Pressable
-                style={styles.dangerRow}
+                style={({ pressed }) => [styles.dangerRow, pressed && { opacity: 0.72 }]}
                 onPress={() =>
                   showSheet({
                     title: "Leave this conversation?",
@@ -417,7 +418,7 @@ export function ChatInfoContent({
             </>
           )}
           <Pressable
-            style={styles.dangerRow}
+            style={({ pressed }) => [styles.dangerRow, pressed && { opacity: 0.72 }]}
             onPress={() =>
               showSheet({
                 title: "Delete this conversation? This cannot be undone.",
@@ -547,6 +548,7 @@ const styles = StyleSheet.create({
   paneHeaderTitle: { fontWeight: "600" },
   quickRow: { flexDirection: "row", justifyContent: "center", gap: 24, marginBottom: 8 },
   quickAction: { alignItems: "center", gap: 6 },
+  quickActionHover: { opacity: 0.72 },
   quickIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontWeight: "600" },

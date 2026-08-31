@@ -22,6 +22,7 @@ import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
 import { Colors, Type } from "@/constants/theme";
 import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
+import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
 import {
   ROW_SIGNAL_SIZE,
@@ -43,27 +44,15 @@ function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element 
     <View
       accessibilityElementsHidden={kind === null}
       accessibilityLabel={
-        kind === "unread"
-          ? `${unreadLabel(chat.unreadCount)} unread`
-          : kind === "unresponded"
-            ? "Unresponded"
-            : kind === "archived"
-              ? "Archived"
-              : undefined
+        kind === "unread" ? `${unreadLabel(chat.unreadCount)} unread` : undefined
       }
       style={[
         styles.signal,
         kind === "unread" && { backgroundColor: RowSignalColor.unread },
-        kind === "unresponded" && { backgroundColor: RowSignalColor.unresponded },
-        kind === "archived" && { backgroundColor: RowSignalColor.archived },
       ]}
     >
       {kind === "unread" ? (
         <Text style={styles.signalCount}>{unreadLabel(chat.unreadCount)}</Text>
-      ) : kind === "unresponded" ? (
-        <Ionicons name="arrow-undo-outline" size={11} color={RowSignalColor.unrespondedGlyph} />
-      ) : kind === "archived" ? (
-        <Ionicons name="archive-outline" size={11} color={RowSignalColor.onFill} />
       ) : null}
     </View>
   );
@@ -322,7 +311,10 @@ function ChatRowInner({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`More actions for ${chat.displayName}`}
-                onPress={(event) => { event.stopPropagation(); openMenu(chat); }}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  openMenu(chat, { ...pressAnchor(event), align: "end" });
+                }}
                 onHoverIn={() => setMoreHovered(true)}
                 onHoverOut={() => setMoreHovered(false)}
                 hitSlop={6}

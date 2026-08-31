@@ -23,6 +23,7 @@ import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
+import { SquarePenIcon } from "@hugeicons/core-free-icons";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
@@ -140,7 +141,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
 
   const composeButton = (
     <ChromeIconButton
-      icon="create-outline"
+      hugeIcon={SquarePenIcon}
       accessibilityLabel="New message"
       onPress={() => router.push("/new-chat")}
     />

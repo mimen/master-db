@@ -6,7 +6,6 @@ export const TRIAGE_QUEUE_HEADER_HEIGHT = DESK_HEADER_HEIGHT;
 /** Messages' desk header — the shared DeskHeader shell with triage progress. */
 export function TriageQueueHeader({
   title,
-  remaining,
   completed,
   sweepCount,
   oldestAt,
@@ -15,7 +14,6 @@ export function TriageQueueHeader({
   onSweep,
 }: {
   title: string;
-  remaining: number;
   completed: number;
   sweepCount: number;
   oldestAt: number | null;
@@ -29,7 +27,6 @@ export function TriageQueueHeader({
       summary={
         <TriageSummary
           title={title}
-          remaining={remaining}
           sweepCount={sweepCount}
           completed={completed}
           oldestAt={oldestAt}

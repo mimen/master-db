@@ -1,11 +1,11 @@
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { Platform, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
-import { DesktopAuxPane, DesktopSplit } from "@/components/desktop-split";
+import { DesktopSplit, DesktopUtilityPane } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
 import { ShadowPanel } from "@/components/shadow-panel";
 import { SweepOverlay } from "@/components/sweep-overlay";
@@ -14,9 +14,6 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { calculatePaneAdmission } from "@/lib/desktop-coordinator/pane-admission";
-import { AUX_PANE_WIDTH } from "@/lib/desktop-frame";
-import { useSidebarWidth } from "@/lib/sidebar-width";
 import { settleTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useActionSheet } from "@/lib/action-sheet";
@@ -47,17 +44,20 @@ export function MessagesWorkspace({
   const shell = useDesktopShellContext();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
-  const { width: windowWidth } = useWindowDimensions();
-  const [sidebarWidth] = useSidebarWidth();
   const utilityOpen = shell.state.utility?.workspace === "messages";
-  const canShadow =
-    calculatePaneAdmission({ windowWidth, sidebarWidth, sidePaneWidth: AUX_PANE_WIDTH }).sidePane === "pane" &&
-    !utilityOpen &&
-    aiStatus?.shadow === true;
+  const shadowEnabled = aiStatus?.shadow === true;
   const [shadowOpen, setShadowOpen] = useState(false);
   useEffect(() => {
-    if (shadowOpen && !canShadow) setShadowOpen(false);
-  }, [canShadow, shadowOpen]);
+    if (shadowOpen && !shadowEnabled) setShadowOpen(false);
+  }, [shadowEnabled, shadowOpen]);
+  const toggleShadow = useCallback(() => {
+    if (shadowOpen) {
+      setShadowOpen(false);
+      return;
+    }
+    if (utilityOpen) shell.closeUtility();
+    setShadowOpen(true);
+  }, [shadowOpen, shell, utilityOpen]);
   // Unresponded is the working view — the inbox opens on what needs a reply.
   const [state, setState] = useState<StateFilter>("unresponded");
   const [type, setType] = useState<TypeFilter>("all");
@@ -241,6 +241,7 @@ export function MessagesWorkspace({
           name: chat.displayName,
           isGroup: chat.isGroup ? "1" : "0",
           count: String(chat.participants.length),
+          hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
         },
       });
       setListMode(false);
@@ -255,6 +256,7 @@ export function MessagesWorkspace({
         name: chat.displayName,
         isGroup: chat.isGroup ? "1" : "0",
         count: String(chat.participants.length),
+        hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
       },
     });
     globalThis.requestAnimationFrame(clearUnread);
@@ -429,7 +431,7 @@ export function MessagesWorkspace({
             headerChat={selected}
             previewOnly={selectionIntent === "preview"}
             triageShortcutsEnabled={(state === "unresponded" && selected.flags.unresponded) || (state === "waiting" && selected.flags.waiting)}
-            onToggleShadow={canShadow ? () => setShadowOpen((v) => !v) : undefined}
+            onToggleShadow={shadowEnabled ? toggleShadow : undefined}
             shadowOpen={shadowOpen}
           />
         ) : (
@@ -443,12 +445,12 @@ export function MessagesWorkspace({
         )
       }
     >
-      {canShadow ? (
-        <DesktopAuxPane open={shadowOpen && selected !== null}>
+      {shadowEnabled ? (
+        <DesktopUtilityPane open={shadowOpen && selected !== null} onClose={() => setShadowOpen(false)}>
           {selected ? (
             <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
           ) : null}
-        </DesktopAuxPane>
+        </DesktopUtilityPane>
       ) : null}
       <SweepOverlay
         visible={sweep !== null}

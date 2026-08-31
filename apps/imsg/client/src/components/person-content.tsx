@@ -92,7 +92,7 @@ export function PersonContent({
       )}
       {onClose && !onBack && (
         <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close contact">
-          <Ionicons name="close" size={20} color={theme.textSecondary} />
+          {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
         </Pressable>
       )}
     </View>

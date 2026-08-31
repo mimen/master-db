@@ -1,9 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type Props = { children: ReactNode };
 
-type State = { error: Error | null; componentStack: string | null };
+type State = { error: Error | null; componentStack: string | null; copied: boolean };
 
 const LAST_CRASH_KEY = "imsg.lastCrash";
 
@@ -35,7 +36,7 @@ function persistCrash(error: Error, info: ErrorInfo): void {
  * shown on this screen and written to localStorage (`imsg.lastCrash`).
  */
 export class AppErrorBoundary extends Component<Props, State> {
-  state: State = { error: null, componentStack: null };
+  state: State = { error: null, componentStack: null, copied: false };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
@@ -49,11 +50,19 @@ export class AppErrorBoundary extends Component<Props, State> {
   private reload = (): void => {
     if (Platform.OS === "web" && typeof globalThis.window !== "undefined") {
       globalThis.window.location.reload();
-    } else this.setState({ error: null, componentStack: null });
+    } else this.setState({ error: null, componentStack: null, copied: false });
+  };
+
+  private copyError = async (): Promise<void> => {
+    const { error, componentStack } = this.state;
+    if (!error) return;
+    const report = [error.message, error.stack, componentStack].filter(Boolean).join("\n\n");
+    await Clipboard.setStringAsync(report);
+    this.setState({ copied: true });
   };
 
   render(): ReactNode {
-    const { error, componentStack } = this.state;
+    const { error, componentStack, copied } = this.state;
     if (!error) return this.props.children;
     const stack = [error.stack, componentStack].filter(Boolean).join("\n\n");
     return (
@@ -67,9 +76,14 @@ export class AppErrorBoundary extends Component<Props, State> {
             </Text>
           </ScrollView>
         )}
-        <Text onPress={this.reload} style={styles.reload}>
-          Reload
-        </Text>
+        <View style={styles.actions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Copy error details" onPress={() => { void this.copyError(); }} style={styles.copyButton}>
+            {({ hovered, pressed }) => <Text style={[styles.copyLabel, (hovered || pressed) && styles.copyLabelHover]}>{copied ? "Copied" : "Copy error"}</Text>}
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Reload app" onPress={this.reload} style={styles.reloadButton}>
+            {({ hovered, pressed }) => <Text style={[styles.reload, (hovered || pressed) && styles.reloadHover]}>Reload</Text>}
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -94,5 +108,11 @@ const styles = StyleSheet.create({
   },
   stackContent: { padding: 12 },
   stack: { fontSize: 11, fontFamily: Platform.select({ web: "ui-monospace, Menlo, monospace", default: "monospace" }), opacity: 0.8 },
-  reload: { fontSize: 15, fontWeight: "600", color: "#0a84ff", padding: 8 },
+  actions: { flexDirection: "row", gap: 8 },
+  copyButton: { backgroundColor: "#f4f4f5", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  copyLabel: { color: "#27272a", fontSize: 14, fontWeight: "600" },
+  copyLabelHover: { color: "#000000" },
+  reloadButton: { paddingHorizontal: 12, paddingVertical: 8 },
+  reload: { fontSize: 14, fontWeight: "600", color: "#0a84ff" },
+  reloadHover: { color: "#0066cc" },
 });

@@ -112,7 +112,7 @@ export function AudioBubble({ guid, url, mine }: { guid: string; url: string; mi
   return (
     <View style={styles.audioStack}>
       <View style={[styles.audio, { backgroundColor: mine ? "rgba(255,255,255,0.15)" : theme.backgroundElement }]}>
-        <Pressable onPress={toggle} hitSlop={8} style={[styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.background }]}>
+        <Pressable onPress={toggle} hitSlop={8} style={({ hovered, pressed }) => [styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.background }, (hovered || pressed) && styles.mediaControlHover]}>
           {/* mine's play button sits on a near-white translucent circle regardless
               of theme — black icon is deliberate, not a theme.text substitute. */}
           <Ionicons name={playing ? "pause" : "play"} size={16} color={mine ? "#000" : theme.text} />
@@ -136,13 +136,13 @@ export function AudioBubble({ guid, url, mine }: { guid: string; url: string; mi
             : formatSeconds(status.duration)}
         </Text>
         {active && (
-          <Pressable onPress={cycleRate} style={[styles.rateChip, { borderColor: dimTint }]}>
+          <Pressable onPress={cycleRate} style={({ hovered, pressed }) => [styles.rateChip, { borderColor: dimTint }, (hovered || pressed) && styles.mediaControlHover]}>
             <Text style={[styles.rateText, { color: tint }]}>{RATES[rateIndex]}x</Text>
           </Pressable>
         )}
       </View>
       {transcript.state === "not-requested" && (
-        <Pressable onPress={() => void requestTranscript()} hitSlop={6}>
+        <Pressable onPress={() => void requestTranscript()} hitSlop={6} style={({ hovered, pressed }) => (hovered || pressed) && styles.transcriptActionHover}>
           <Text style={[styles.transcriptAction, { color: mine ? theme.onAccent : theme.accent }]}>Transcribe</Text>
         </Pressable>
       )}
@@ -160,7 +160,7 @@ export function AudioBubble({ guid, url, mine }: { guid: string; url: string; mi
       {transcript.state === "failed" && (
         <View style={{ gap: 3 }}>
           <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>{transcript.error}</Text>
-          <Pressable onPress={() => void requestTranscript()} hitSlop={6}>
+          <Pressable onPress={() => void requestTranscript()} hitSlop={6} style={({ hovered, pressed }) => (hovered || pressed) && styles.transcriptActionHover}>
             <Text style={[styles.transcriptAction, { color: mine ? theme.onAccent : theme.accent }]}>Retry transcription</Text>
           </Pressable>
         </View>
@@ -281,6 +281,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginHorizontal: 8,
   },
+  mediaControlHover: { opacity: 0.72 },
+  transcriptActionHover: { opacity: 0.72 },
   transcriptMeta: {
     fontSize: Type.caption,
     lineHeight: 16,
