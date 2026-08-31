@@ -295,7 +295,7 @@ function ChatRowInner({
             )}
           </View>
           <View style={styles.messageRow}>
-            <Text numberOfLines={1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
+            <Text numberOfLines={compact ? 2 : 1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
             <RowSignal chat={chat} />
           </View>
         </View>
