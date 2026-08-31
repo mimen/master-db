@@ -33,7 +33,6 @@ import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
-import { HoverFillButton } from "./hover-fill-button";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
@@ -288,47 +287,48 @@ function ChatRowInner({
                 style={styles.favoriteStar}
               />
             )}
-            {last && (
-              <Text style={[styles.time, { color: compact ? visual.muted : theme.textSecondary, fontSize: compact ? 11 : type.secondary }]}>
+            {compact ? (
+              <View style={styles.timeSlot}>
+                {actionsVisible && settleAvailable ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Settle ${chat.displayName}`}
+                    onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
+                    hitSlop={5}
+                    style={({ pressed }) => [styles.inlineSettle, pressed && { opacity: 0.6 }]}
+                  >
+                    <Ionicons name="checkmark" size={13} color={theme.accent} />
+                    <Text style={[styles.inlineSettleText, { color: visual.text }]}>Settle</Text>
+                  </Pressable>
+                ) : last ? (
+                  <Text style={[styles.time, { color: visual.muted, fontSize: 11 }]}>
+                    {formatListTimestamp(last.dateCreated)}
+                  </Text>
+                ) : null}
+              </View>
+            ) : last ? (
+              <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
                 {formatListTimestamp(last.dateCreated)}
               </Text>
-            )}
+            ) : null}
           </View>
           <View style={styles.messageRow}>
             <Text numberOfLines={compact ? 2 : 1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-            <RowSignal chat={chat} />
+            {compact && actionsVisible ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`More actions for ${chat.displayName}`}
+                onPress={(event) => { event.stopPropagation(); openMenu(chat); }}
+                hitSlop={6}
+                style={styles.inlineMore}
+              >
+                <Ionicons name="ellipsis-horizontal" size={16} color={visual.muted} />
+              </Pressable>
+            ) : (
+              <RowSignal chat={chat} />
+            )}
           </View>
         </View>
-        {compact && actionsVisible ? (
-          <View
-            style={[
-              styles.hoverActions,
-              { backgroundColor: selected ? visual.cardSelected : visual.cardHover },
-            ]}
-          >
-            {settleAvailable ? (
-              <HoverFillButton
-                accessibilityLabel={`Settle ${chat.displayName}`}
-                onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
-                restFill={visual.controlFill}
-                hoverFill={visual.controlFillHover}
-                style={styles.settleAction}
-              >
-                <Ionicons name="checkmark" size={14} color={theme.accent} />
-                <Text style={[styles.settleActionText, { color: visual.text }]}>Settle</Text>
-              </HoverFillButton>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`More actions for ${chat.displayName}`}
-              onPress={(event) => { event.stopPropagation(); openMenu(chat); }}
-              hitSlop={6}
-              style={styles.moreAction}
-            >
-              <Ionicons name="ellipsis-horizontal" size={16} color={visual.muted} />
-            </Pressable>
-          </View>
-        ) : null}
         {!compact && (
           <Pressable
             accessibilityRole="button"
@@ -428,36 +428,29 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  hoverActions: {
-    alignItems: "center",
-    bottom: 0,
-    flexDirection: "row",
-    gap: 5,
-    paddingLeft: 28,
-    position: "absolute",
-    right: 10,
-    top: 0,
-    zIndex: 3,
-  },
-  settleAction: {
-    alignItems: "center",
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 4,
-    height: 28,
+  timeSlot: {
+    alignItems: "flex-end",
+    flexShrink: 0,
     justifyContent: "center",
-    paddingHorizontal: 10,
+    width: 62,
   },
-  settleActionText: {
-    fontSize: 12,
+  inlineSettle: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 3,
+    height: 22,
+    justifyContent: "flex-end",
+  },
+  inlineSettleText: {
+    fontSize: 11,
     fontWeight: "600",
   },
-  moreAction: {
+  inlineMore: {
     alignItems: "center",
-    borderRadius: 8,
-    height: 30,
+    flexShrink: 0,
+    height: ROW_SIGNAL_SIZE,
     justifyContent: "center",
-    width: 30,
+    width: ROW_SIGNAL_SIZE,
   },
   signal: {
     alignItems: "center",
