@@ -140,6 +140,17 @@ export function SuggestionShelf({
   }
   if (!loading && !failed && suggestions.length === 0 && !eventUrl) return null;
 
+  // While the first batch is in flight there is nothing to interact with, so
+  // the shelf stays a single thin line instead of header + spinner rows.
+  if (loading && suggestions.length === 0) {
+    return (
+      <View style={[styles.container, styles.thinkingRow, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
+        <ActivityIndicator size="small" />
+        <Text style={[styles.thinkingText, { color: theme.textSecondary }]}>Thinking…</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
       <View style={styles.header}>
@@ -166,13 +177,7 @@ export function SuggestionShelf({
         </Pressable>
       </View>
 
-      {loading && suggestions.length === 0 ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Thinking…</Text>
-        </View>
-      ) : (
-        <View style={styles.pillRow}>
+      <View style={styles.pillRow}>
           {event && eventUrl && (
             <Pressable
               accessibilityRole="button"
@@ -221,8 +226,7 @@ export function SuggestionShelf({
               </Pressable>
             );
           })}
-        </View>
-      )}
+      </View>
     </View>
   );
 }
@@ -282,8 +286,8 @@ const styles = StyleSheet.create({
   model: { fontSize: 10, fontWeight: "500" },
   refresh: { borderRadius: 6, margin: -2, padding: 4 },
   demandButton: { alignItems: "center", alignSelf: "flex-start", borderRadius: 8, flexDirection: "row", gap: 6, paddingHorizontal: 8, paddingVertical: 7 },
-  loadingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4, paddingBottom: 8 },
-  loadingText: { fontSize: 13 },
+  thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 2, paddingTop: 2 },
+  thinkingText: { fontSize: 12 },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 6 },
   pill: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
   eventTitle: { fontWeight: "600" },
