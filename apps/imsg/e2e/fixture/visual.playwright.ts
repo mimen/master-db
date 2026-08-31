@@ -128,7 +128,12 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
 
   let row = page.getByTestId("conversation-row").first();
   await row.hover();
-  await expect(row.getByText("Settle", { exact: true })).toBeVisible();
+  const settle = row.getByRole("button", { name: /^Settle / });
+  await expect(settle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(settle.getByText("Settle", { exact: true })).toHaveCSS("color", "rgb(138, 138, 144)");
+  await settle.hover();
+  await expect(settle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(settle.getByText("Settle", { exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
   await page.getByRole("heading", { name: "Needs reply" }).hover();
   await row.focus();
   await expect(row.getByText("Settle", { exact: true })).toBeVisible();

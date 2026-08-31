@@ -147,6 +147,7 @@ function ChatRowInner({
   const { openMenu } = useChatActions(compact);
   const [hovered, setHovered] = useState(false);
   const [focusedWithin, setFocusedWithin] = useState(false);
+  const [settleHovered, setSettleHovered] = useState(false);
   const actionsVisible = compact && (hovered || focusedWithin || keyboardFocused);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
@@ -294,11 +295,13 @@ function ChatRowInner({
                     accessibilityRole="button"
                     accessibilityLabel={`Settle ${chat.displayName}`}
                     onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
+                    onHoverIn={() => setSettleHovered(true)}
+                    onHoverOut={() => setSettleHovered(false)}
                     hitSlop={5}
-                    style={({ pressed }) => [styles.inlineSettle, pressed && { opacity: 0.6 }]}
+                    style={styles.inlineSettle}
                   >
-                    <Ionicons name="checkmark" size={13} color={theme.accent} />
-                    <Text style={[styles.inlineSettleText, { color: visual.text }]}>Settle</Text>
+                    <Ionicons name="checkmark" size={13} color={settleHovered ? theme.accent : visual.muted} />
+                    <Text style={[styles.inlineSettleText, { color: settleHovered ? "#ffffff" : visual.muted }]}>Settle</Text>
                   </Pressable>
                 ) : last ? (
                   <Text style={[styles.time, { color: visual.muted, fontSize: 11 }]}>
@@ -436,10 +439,12 @@ const styles = StyleSheet.create({
   },
   inlineSettle: {
     alignItems: "center",
+    borderRadius: 6,
     flexDirection: "row",
     gap: 3,
     height: 22,
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    paddingHorizontal: 5,
   },
   inlineSettleText: {
     fontSize: 11,
