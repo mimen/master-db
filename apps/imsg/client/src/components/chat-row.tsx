@@ -441,13 +441,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 3,
-    height: 22,
+    height: 13,
     justifyContent: "center",
     paddingHorizontal: 0,
   },
   inlineSettleText: {
     fontSize: 11,
     fontWeight: "600",
+    lineHeight: 13,
   },
   inlineMore: {
     alignItems: "center",
