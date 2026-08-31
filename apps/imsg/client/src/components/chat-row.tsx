@@ -300,7 +300,7 @@ function ChatRowInner({
                     hitSlop={5}
                     style={styles.inlineSettle}
                   >
-                    <Ionicons name="checkmark" size={13} color={settleHovered ? theme.accent : visual.muted} />
+                    <Ionicons name="checkmark" size={13} color={settleHovered ? "#ffffff" : visual.muted} />
                     <Text style={[styles.inlineSettleText, { color: settleHovered ? "#ffffff" : visual.muted }]}>Settle</Text>
                   </Pressable>
                 ) : last ? (
@@ -439,12 +439,11 @@ const styles = StyleSheet.create({
   },
   inlineSettle: {
     alignItems: "center",
-    borderRadius: 6,
     flexDirection: "row",
     gap: 3,
     height: 22,
     justifyContent: "center",
-    paddingHorizontal: 5,
+    paddingHorizontal: 0,
   },
   inlineSettleText: {
     fontSize: 11,
