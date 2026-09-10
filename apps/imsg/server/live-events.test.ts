@@ -23,6 +23,7 @@ function seed(): FakeChatSeed[] {
 async function setup(): Promise<{
   bb: FakeBlueBubbles;
   directory: ChatDirectory;
+  db: OverlayDb;
   broadcasts: ServerEvent[];
   invalidations: () => number;
 }> {
@@ -36,7 +37,7 @@ async function setup(): Promise<{
   const broadcasts: ServerEvent[] = [];
   wireLiveEvents(bb, directory, contacts, (event) => broadcasts.push(event));
   await directory.summaries(); // prime cache + sibling map like a booted server
-  return { bb, directory, broadcasts, invalidations: () => invalidated };
+  return { bb, db, directory, broadcasts, invalidations: () => invalidated };
 }
 
 describe("wireLiveEvents", () => {
@@ -56,6 +57,16 @@ describe("wireLiveEvents", () => {
     bb.emit({ kind: "stream-connected" });
     expect(broadcasts).toEqual([]);
     expect(invalidations()).toBe(invalidatedBefore);
+  });
+
+  test("reconnect persists a missed inbound unarchive without a GET", async () => {
+    const { bb, db } = await setup();
+    bb.emit({ kind: "stream-connected" });
+    db.setArchived(CHAT, true);
+    bb.appendMessage(CHAT, { guid: "missed", text: "hello again", dateCreated: Date.now() + 1000, isFromMe: false });
+    bb.emit({ kind: "stream-connected" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(db.getAll().get(CHAT)?.archivedAt).toBeNull();
   });
 
   test("a reconnect rebuilds the directory and tells clients to resync", async () => {

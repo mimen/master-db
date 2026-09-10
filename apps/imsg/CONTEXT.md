@@ -30,8 +30,9 @@ A chat whose last message is yours — you're waiting on them. Dismissable until
 next message flips the state.
 
 **Archived**:
-Overlay-only flag; lazily self-clearing — a new inbound message newer than the archive
-timestamp auto-unarchives.
+Overlay-only flag. A new inbound message newer than the archive timestamp auto-unarchives.
+Message events persist the clear. Startup and reconnect reconciliation recover missed events;
+reads never persist archive changes.
 
 **BlueBubbles seam**:
 The single interface to BlueBubbles — REST operations plus the inbound event stream.

@@ -178,6 +178,7 @@ console.log(
     : `Whisper transcription unavailable: ${whisperStatus.detail}`,
 );
 await contacts.refresh(true);
+await directory.reconcileState();
 
 let reconnectTimer: ReturnType<typeof setInterval> | null = null;
 if (deps.backgroundServices !== false) {

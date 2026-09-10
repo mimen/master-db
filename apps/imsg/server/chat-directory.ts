@@ -2,7 +2,7 @@ import type { BBHandle, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
-import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
+import { applyMessage as applyMessageToSummaries, isArchived, isLaterActive } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
 import type { ChatSummary, Message, TriageProgressStats } from "../shared/types";
@@ -59,7 +59,7 @@ function mergeKey(chat: ChatSummary): string | null {
 }
 
 export class ChatDirectory {
-  private summaryCache: { at: number; chats: ChatSummary[] } | null = null;
+  private summaryCache: { at: number; chats: ChatSummary[]; sourceChats: ChatSummary[] } | null = null;
   /** Any sibling guid → its merged-conversation identity. */
   private siblingMap = new Map<string, { primary: string; all: string[] }>();
   /** Raw chat participants retain handle ROWIDs for sender fallback. */
@@ -261,15 +261,14 @@ export class ChatDirectory {
       this.db.recordTriageClear(chatGuid, replyAnchor, "reply", this.now());
       this.db.clearOpenTriageItem(chatGuid);
     }
-    // An INBOUND message is the event that auto-unarchives a chat, so persist
-    // the clear here rather than only when summaries rebuild. Waiting for the
-    // rebuild loses the race against a fast reply: once your outbound message
-    // is the last one, isArchived() derives "archived" again and the rebuild
-    // never sees the condition that would have cleared it.
+    const overlay = this.db.getAll();
+    const archivedAt = overlay.get(chatGuid)?.archivedAt;
+    const inbound = m.isFromMe ? prior?.lastMessage : m;
+    // A missed inbound may exist only in the rebuilt summary before its reply arrives.
+    if (archivedAt && inbound && !inbound.isFromMe && inbound.dateCreated > archivedAt) {
+      this.db.setArchived(chatGuid, false);
+    }
     if (!m.isFromMe) {
-      const overlay = this.db.getAll();
-      const archivedAt = overlay.get(chatGuid)?.archivedAt;
-      if (archivedAt && m.dateCreated > archivedAt) this.db.setArchived(chatGuid, false);
       for (const sibling of this.siblingGuids(chatGuid)) {
         if (overlay.get(sibling)?.laterUntil) this.db.setLater(sibling, null, null);
       }
@@ -291,7 +290,7 @@ export class ChatDirectory {
     } else {
       this.db.clearOpenTriageItem(chatGuid);
     }
-    this.summaryCache = { at: this.summaryCache.at, chats: result };
+    this.summaryCache = { ...this.summaryCache, chats: result };
   }
 
   async summaries(): Promise<{ ok: true; chats: ChatSummary[] } | { ok: false; error: string }> {
@@ -310,19 +309,6 @@ export class ChatDirectory {
       .map((chat) => {
         const state = overlay.get(chat.guid);
         const summary = mapChat(chat, state, this.names, unread.get(chat.guid), this.now());
-        // Materialize a lazy auto-unarchive. isArchived() only *derives*
-        // "an inbound message arrived after you archived this" — it never
-        // cleared archived_at, so the moment you REPLIED the last message
-        // became yours, the derivation flipped back to true, and the chat
-        // (plus your reply) vanished into Archived again. Persisting the
-        // clear the first time we see it makes the transition one-way, which
-        // is what "lazily self-clearing" was always meant to be.
-        if (state?.archivedAt && !summary.flags.archived) {
-          this.db.setArchived(chat.guid, false);
-        }
-        if (state?.laterUntil && summary.laterUntil === null) {
-          this.db.setLater(chat.guid, null, null);
-        }
         // Mark-read override: trust our own mark-read over BB's lagging DB.
         // Persisted (overlay) readAt survives restarts — Apple never back-fills
         // dateRead on old group messages, so without it the scan resurrects
@@ -337,18 +323,34 @@ export class ChatDirectory {
       })
       .filter((chat) => chat.lastMessage !== null)
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
-    this.rescheduleLaterExpiry();
+    const sourceChats = chats;
     chats = this.applyRealtimeSpam(chats);
     chats = this.mergeServiceSiblings(chats);
-    for (const chat of chats) {
+    this.summaryCache = { at: this.now(), chats, sourceChats };
+    return { ok: true, chats };
+  }
+
+  async reconcileState(): Promise<void> {
+    const result = await this.summaries();
+    if (!result.ok || !this.summaryCache) return;
+    const overlay = this.db.getAll();
+    for (const chat of this.summaryCache.sourceChats) {
+      const state = overlay.get(chat.guid);
+      if (state?.archivedAt && !isArchived(state, chat.lastMessage)) {
+        this.db.setArchived(chat.guid, false);
+      }
+      if (state?.laterUntil && !isLaterActive(state, chat.lastMessage, this.now())) {
+        this.db.setLater(chat.guid, null, null);
+      }
+    }
+    for (const chat of result.chats) {
       if (chat.flags.unresponded && chat.lastMessage) {
         this.db.setOpenTriageItem(chat.guid, chat.lastMessage.guid, chat.lastMessage.dateCreated);
       } else {
         this.db.clearOpenTriageItem(chat.guid);
       }
     }
-    this.summaryCache = { at: this.now(), chats };
-    return { ok: true, chats };
+    this.rescheduleLaterExpiry();
   }
 
   /**

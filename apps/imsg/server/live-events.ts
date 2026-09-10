@@ -77,6 +77,7 @@ export function wireLiveEvents(
           return;
         }
         directory.invalidate(true);
+        void directory.reconcileState().catch((error: Error) => console.error("Directory reconciliation failed", error));
         broadcast({ kind: "resync" });
         return;
     }

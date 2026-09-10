@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { BBContact, BBMessage } from "./bb-types";
 import { FakeBlueBubbles, type FakeChatSeed } from "./bluebubbles-fake";
 import { ChatDirectory } from "./chat-directory";
@@ -88,6 +88,59 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 // ---------------------------------------------------------------- summaries
 
 describe("ChatDirectory.summaries", () => {
+  test("rebuilds without writing overlay or triage state", async () => {
+    let now = Date.now();
+    const { db, directory } = await setup([{ guid: CHAT_A, messages: [inbound("a1", now + 1000)] }], () => now);
+    db.setArchived(CHAT_A, true);
+    db.setLater(CHAT_A, now + 1500, "a1");
+    now += 3000;
+    const before = db.getAll();
+    const archived = spyOn(db, "setArchived");
+    const later = spyOn(db, "setLater");
+    const expiry = spyOn(db, "clearExpiredLater");
+    const open = spyOn(db, "setOpenTriageItem");
+    const clear = spyOn(db, "clearOpenTriageItem");
+    try {
+      const result = await directory.summaries();
+      if (!result.ok) throw new Error(result.error);
+      expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+      expect(find(result.chats, CHAT_A).laterUntil).toBeNull();
+      expect(db.getAll()).toEqual(before);
+      for (const write of [archived, later, expiry, open, clear]) expect(write).not.toHaveBeenCalled();
+    } finally {
+      for (const write of [archived, later, expiry, open, clear]) write.mockRestore();
+    }
+  });
+
+  test("a reply persists the unarchive derived from a missed inbound", async () => {
+    const { bb, db, directory, contacts } = await setup();
+    db.setArchived(CHAT_A, true);
+    const archivedAt = db.getAll().get(CHAT_A)?.archivedAt;
+    const inboundAt = Date.now() + 1000;
+    bb.appendMessage(CHAT_A, inbound("missed", inboundAt));
+    await directory.summaries();
+    expect(db.getAll().get(CHAT_A)?.archivedAt).toBe(archivedAt);
+    const reply: BBMessage = { guid: "reply", text: "yes", dateCreated: inboundAt + 1000, isFromMe: true };
+    bb.appendMessage(CHAT_A, reply);
+    directory.applyKnownMessage(CHAT_A, mapMessage(reply, CHAT_A, contacts));
+    expect(db.getAll().get(CHAT_A)?.archivedAt).toBeNull();
+    directory.invalidate();
+    const result = await directory.summaries();
+    if (!result.ok) throw new Error(result.error);
+    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+  });
+
+  test("explicit reconciliation persists clears for unmerged service rows", async () => {
+    const now = Date.now();
+    const { db, directory } = await setup([
+      { guid: CHAT_A, participants: [{ address: "+15550001111" }], messages: [inbound("missed", now + 2000)] },
+      { guid: "SMS;-;+15550001111", participants: [{ address: "+15550001111" }], messages: [{ guid: "reply", dateCreated: now + 3000, isFromMe: true }] },
+    ]);
+    db.setArchived(CHAT_A, true);
+    await directory.reconcileState();
+    expect(db.getAll().get(CHAT_A)?.archivedAt).toBeNull();
+  });
+
   test("builds a flag-annotated list from the seeded chats", async () => {
     const { directory } = await setup();
     const result = await directory.summaries();
