@@ -10,7 +10,8 @@ describe("parsePreviewUrl", () => {
     "http://[::1]/", "http://[::]/", "http://[fe80::1]/", "http://[febf::1]/", "http://[fd00::1]/",
     "http://[::ffff:127.0.0.1]/", "http://[::ffff:192.168.1.1]/", "http://100.126.205.128/",
     "https://milads-mac-mini.taild31e9a.ts.net:8447/", "https://MILADS-MAC-MINI.taild31e9a.ts.net./",
-    "http://milads-mac-mini/",
+    "http://milads-mac-mini/", "http://198.18.0.1/", "http://224.0.0.1/",
+    "http://240.0.0.1/", "http://[ff02::1]/",
   ])("rejects %s", async (url) => {
     expect(await parsePreviewUrl(url)).toBeNull();
   });

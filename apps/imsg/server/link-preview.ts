@@ -50,10 +50,14 @@ export async function parsePreviewUrl(rawUrl: string): Promise<URL | null> {
     blocked.addSubnet("172.16.0.0", 12);
     blocked.addSubnet("192.168.0.0", 16);
     blocked.addSubnet("100.64.0.0", 10);
+    blocked.addSubnet("198.18.0.0", 15);
+    blocked.addSubnet("224.0.0.0", 4);
+    blocked.addSubnet("240.0.0.0", 4);
     blocked.addAddress("::", "ipv6");
     blocked.addAddress("::1", "ipv6");
     blocked.addSubnet("fe80::", 10, "ipv6");
     blocked.addSubnet("fc00::", 7, "ipv6");
+    blocked.addSubnet("ff00::", 8, "ipv6");
     const family = isIP(host);
     const addresses = family ? [{ address: host, family }] : await lookup(host, { all: true });
     return addresses.length > 0 && addresses.every(({ address, family }) => !blocked.check(address, family === 6 ? "ipv6" : "ipv4"))

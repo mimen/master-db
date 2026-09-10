@@ -250,7 +250,8 @@ export class ChatDirectory {
    */
   private patchSummaries(chatGuid: string, m: Message): void {
     this.rememberRealtimeSpam(chatGuid, m);
-    const prior = this.summaryCache?.chats.find((chat) => chat.guid === chatGuid);
+    const prior = this.summaryCache?.chats.find((chat) => chat.guid === chatGuid)
+      ?? this.summaryCache?.sourceChats.find((chat) => chat.guid === chatGuid);
     const open = this.db.getOpenTriageItem(chatGuid);
     const replyAnchor =
       open?.messageGuid ??

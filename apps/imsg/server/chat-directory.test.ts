@@ -130,6 +130,24 @@ describe("ChatDirectory.summaries", () => {
     expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
   });
 
+  test("a reply to a non-primary service sibling persists its unarchive", async () => {
+    const now = Date.now();
+    const smsGuid = "SMS;-;+15550001111";
+    const { bb, db, directory, contacts } = await setup([
+      { guid: CHAT_A, participants: [{ address: "+15550001111" }], messages: [inbound("primary", now + 2000)] },
+      { guid: smsGuid, participants: [{ address: "+15550001111" }], messages: [inbound("missed", now + 1000)] },
+    ]);
+    db.setArchived(smsGuid, true);
+    await directory.summaries();
+    const reply: BBMessage = { guid: "reply-sms", text: "yes", dateCreated: now + 3000, isFromMe: true };
+    bb.appendMessage(smsGuid, reply);
+    directory.applyKnownMessage(smsGuid, mapMessage(reply, smsGuid, contacts));
+    expect(db.getAll().get(smsGuid)?.archivedAt).toBeNull();
+    const result = await directory.summaries();
+    if (!result.ok) throw new Error(result.error);
+    expect(find(result.chats, smsGuid).flags.archived).toBe(false);
+  });
+
   test("explicit reconciliation persists clears for unmerged service rows", async () => {
     const now = Date.now();
     const { db, directory } = await setup([
