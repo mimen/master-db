@@ -90,7 +90,7 @@ comma:preview@<ref>
 comma:desktop-dev@<ref>
 ```
 
-The production Mini plists are rendered from `scripts/launchagents/` and installed or updated by `scripts/install-mini-launchagents.sh`; the production deploy runs that installer before its service restarts. To repair them directly on the Mini, run `bash apps/imsg/scripts/install-mini-launchagents.sh --repo "$HOME/Programming/Repos/master-db"` from the canonical checkout. Each update retains the immediately prior definitions under `~/Library/Application Support/imsg-deploy/launchagents/` and restores every changed service if the migration fails. The installer keeps Bun as the final executable and adds only argv identity through `zsh` `exec`; after the first install, smoke-test full-history search because Messages `chat.db` access still depends on the Mini's Full Disk Access grant.
+The production Mini plists are rendered from `scripts/launchagents/` and installed or updated by `scripts/install-mini-launchagents.sh`; the production deploy runs that installer before its service restarts. To repair them directly on the Mini, run `bash apps/imsg/scripts/install-mini-launchagents.sh --repo "$HOME/Programming/Repos/master-db"` from the canonical checkout. Each update retains the immediately prior definitions under `~/Library/Application Support/imsg-deploy/launchagents/` and restores every changed service if the migration fails. The installer keeps Bun as the final executable and adds only argv identity through `zsh` `exec`. After the first install, smoke-test full-history search through BlueBubbles.
 
 Do not kill processes by executable name alone. Read the full argv identity and branch manifest first.
 

@@ -14,7 +14,7 @@ Runs on the Mac Mini. The Bun server binds to loopback, and Tailscale Serve expo
   clears a chat from either until the next message flips its state
 - Archive is app-local (SQLite overlay), auto-unarchives on new inbound
 - Realtime via BlueBubbles socket.io → SSE fanout
-- Global message search (scans recent history server-side)
+- Full-history substring message search through BlueBubbles
 
 ## Architecture
 

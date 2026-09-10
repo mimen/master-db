@@ -7,7 +7,7 @@ import type {
   BBScheduledMessage,
   BBServerInfo,
 } from "./bb-types";
-import type { BBEvent, BlueBubbles, Result } from "./bluebubbles";
+import type { BBEvent, BlueBubbles, MessageQueryOptions, Result } from "./bluebubbles";
 
 /** Chat metadata plus its message history, newest-derived lastMessage computed on read. */
 export interface FakeChatSeed {
@@ -181,15 +181,13 @@ export class FakeBlueBubbles implements BlueBubbles {
     return Promise.resolve({ ok: true, value: windowed });
   }
 
-  queryMessages(options: {
-    limit: number;
-    offset: number;
-    unreadInboundOnly?: boolean;
-  }): Promise<Result<BBMessage[]>> {
+  queryMessages(options: MessageQueryOptions): Promise<Result<BBMessage[]>> {
     this.calls.queryMessages++;
-    const messages = options.unreadInboundOnly
-      ? this.allMessages().filter((message) => message.isFromMe !== true && !message.dateRead)
-      : this.allMessages();
+    const messages = this.allMessages()
+      .filter((message) => !options.unreadInboundOnly || (message.isFromMe !== true && !message.dateRead))
+      .filter((message) => !options.from || (message.isFromMe === true) === (options.from === "me"))
+      .filter((message) => !options.chatGuid || message.chats?.some((chat) => chat.guid === options.chatGuid))
+      .filter((message) => !options.text || (message.text ?? "").toLowerCase().includes(options.text.toLowerCase()));
     const value = messages.slice(options.offset, options.offset + options.limit);
     return Promise.resolve({ ok: true, value });
   }

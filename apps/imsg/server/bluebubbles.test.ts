@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
 import { BlueBubblesClient } from "./bluebubbles";
 
@@ -40,5 +40,31 @@ describe("BlueBubblesClient transport recovery", () => {
       "The socket connection was closed unexpectedly",
     );
     expect(calls).toBe(1);
+  });
+});
+
+describe("BlueBubblesClient message queries", () => {
+  test("combines literal text, sender, and chat filters", async () => {
+    const transport = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ status: 200, data: [] })));
+    try {
+      const client = new BlueBubblesClient("http://127.0.0.1:1234", "test-password");
+      await client.queryMessages({ limit: 50, offset: 0, text: "BURRITO_50%", from: "them", chatGuid: "RCS;-;+15550001111" });
+      expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toEqual({
+        limit: 50,
+        offset: 0,
+        sort: "DESC",
+        with: ["chat", "handle", "message.attributedBody"],
+        chatGuid: "RCS;-;+15550001111",
+        where: [
+          {
+            statement: "(message.text LIKE :t ESCAPE '\\' OR instr(lower(CAST(message.attributedBody AS TEXT)), :n) > 0)",
+            args: { t: "%burrito\\_50\\%%", n: "burrito_50%" },
+          },
+          { statement: "message.is_from_me = :me", args: { me: 0 } },
+        ],
+      });
+    } finally {
+      transport.mockRestore();
+    }
   });
 });

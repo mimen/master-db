@@ -50,7 +50,7 @@ export interface AiDeps {
   /** One message enriched with current tapbacks for reaction validation. */
   fetchMessageWithReactions: (chatGuid: string, messageGuid: string) => Promise<Result<Message>>;
   /** Recent global outbound text, reduced locally into aggregate style. */
-  recentOutboundText: () => string[];
+  recentOutboundText: () => Promise<string[]>;
   /** BlueBubbles Private API supports outbound tapbacks. */
   reactionSuggestions: () => boolean;
   /** Contact emails for an iMessage address, [] when unknown. */
@@ -165,7 +165,7 @@ export class AiService {
         value: emptySuggestions(selectedModel, currentGuid),
       };
     }
-    const voice = loadVoiceState(this.deps.db, this.deps.recentOutboundText());
+    const voice = loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
     const cached = this.deps.db.getSuggestionCache(chatGuid, selectedModel);
 
     if (

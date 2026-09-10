@@ -8,7 +8,7 @@ import type {
   BBServerInfo,
 } from "../../server/bb-types";
 import { FakeBlueBubbles, type FakeSeed } from "../../server/bluebubbles-fake";
-import type { BBEvent, BlueBubbles, Result } from "../../server/bluebubbles";
+import type { BBEvent, BlueBubbles, MessageQueryOptions, Result } from "../../server/bluebubbles";
 
 export type FaultableMethod = Exclude<keyof BlueBubbles, "hasPrivateApi" | "onEvent">;
 
@@ -75,11 +75,7 @@ export class FixtureBlueBubbles implements BlueBubbles {
     );
   }
 
-  queryMessages(options: {
-    limit: number;
-    offset: number;
-    unreadInboundOnly?: boolean;
-  }): Promise<Result<BBMessage[]>> {
+  queryMessages(options: MessageQueryOptions): Promise<Result<BBMessage[]>> {
     return Promise.resolve(this.failure<BBMessage[]>("queryMessages") ?? this.fake.queryMessages(options));
   }
 

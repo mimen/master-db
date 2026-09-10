@@ -32,6 +32,15 @@ export type BBEvent =
   /** The socket (re)connected; events may have been missed while it was down. */
   | { kind: "stream-connected" };
 
+export interface MessageQueryOptions {
+  limit: number;
+  offset: number;
+  unreadInboundOnly?: boolean;
+  text?: string;
+  from?: "me" | "them";
+  chatGuid?: string;
+}
+
 /**
  * The BlueBubbles seam: the single interface to BlueBubbles — REST operations
  * plus the inbound event stream. Two adapters implement it: the HTTP/socket.io
@@ -45,11 +54,7 @@ export interface BlueBubbles {
     chatGuid: string,
     options?: { limit?: number; before?: number; after?: number; sort?: "ASC" | "DESC" },
   ): Promise<Result<BBMessage[]>>;
-  queryMessages(options: {
-    limit: number;
-    offset: number;
-    unreadInboundOnly?: boolean;
-  }): Promise<Result<BBMessage[]>>;
+  queryMessages(options: MessageQueryOptions): Promise<Result<BBMessage[]>>;
   messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>>;
   sendText(
     chatGuid: string,
@@ -260,24 +265,31 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.get<BBMessage[]>(`/api/v1/chat/${chatGuid}/message`, params);
   }
 
-  queryMessages(options: {
-    limit: number;
-    offset: number;
-    unreadInboundOnly?: boolean;
-  }): Promise<Result<BBMessage[]>> {
+  queryMessages(options: MessageQueryOptions): Promise<Result<BBMessage[]>> {
+    const where: { statement: string; args: Record<string, string | number> }[] = [];
+    if (options.text) {
+      const needle = options.text.toLowerCase();
+      where.push({
+        statement: "(message.text LIKE :t ESCAPE '\\' OR instr(lower(CAST(message.attributedBody AS TEXT)), :n) > 0)",
+        args: { t: `%${needle.replace(/[%_\\]/g, "\\$&")}%`, n: needle },
+      });
+    }
+    if (options.from) {
+      where.push({ statement: "message.is_from_me = :me", args: { me: options.from === "me" ? 1 : 0 } });
+    }
+    if (options.unreadInboundOnly) {
+      where.push(
+        { statement: "message.is_from_me = :inbound", args: { inbound: 0 } },
+        { statement: "message.dateRead IS NULL", args: {} },
+      );
+    }
     return this.post<BBMessage[]>("/api/v1/message/query", {
       limit: options.limit,
       offset: options.offset,
       sort: "DESC",
       with: ["chat", "handle", "message.attributedBody"],
-      ...(options.unreadInboundOnly
-        ? {
-            where: [
-              { statement: "message.isFromMe = :isFromMe", args: { isFromMe: 0 } },
-              { statement: "message.dateRead IS NULL", args: {} },
-            ],
-          }
-        : {}),
+      ...(options.chatGuid ? { chatGuid: options.chatGuid } : {}),
+      where,
     }, true);
   }
 

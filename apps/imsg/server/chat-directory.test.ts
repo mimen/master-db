@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { BBContact, BBMessage } from "./bb-types";
 import { FakeBlueBubbles, type FakeChatSeed } from "./bluebubbles-fake";
 import { ChatDirectory } from "./chat-directory";
@@ -748,11 +748,6 @@ describe("ChatDirectory reactive fast path", () => {
 // ---------------------------------------------------------------- search
 
 describe("MessageSearch", () => {
-  // Force the BlueBubbles fallback path: no local chat.db in the test env.
-  beforeAll(() => {
-    process.env.CHATDB_PATH = "/nonexistent/chat.db";
-  });
-
   test("finds messages by substring", async () => {
     const bb = new FakeBlueBubbles({
       chats: [
@@ -772,6 +767,27 @@ describe("MessageSearch", () => {
     const results = await search.search("burrito");
     expect(results.length).toBe(1);
     expect(results[0]?.text).toContain("burrito");
+  });
+
+  test("filters matches by sender", async () => {
+    const { bb, contacts } = await setup([{
+      guid: CHAT_A,
+      messages: [inbound("in", 1000, "burrito"), { guid: "out", dateCreated: 2000, text: "burrito", isFromMe: true }],
+    }]);
+    const search = new MessageSearch(bb, contacts);
+    expect((await search.search("BURRITO", { from: "them" })).map((message) => message.guid)).toEqual(["in"]);
+    expect((await search.search("burrito", { from: "me" })).map((message) => message.guid)).toEqual(["out"]);
+  });
+
+  test("scopes matches to one chat and preserves SMS service", async () => {
+    const smsGuid = "RCS;-;+15550002222";
+    const { bb, contacts } = await setup([
+      { guid: CHAT_A, messages: [inbound("other", 2000, "burrito")] },
+      { guid: smsGuid, messages: [inbound("scoped", 1000, "burrito")] },
+    ]);
+    const results = await new MessageSearch(bb, contacts).search("burrito", { chatGuid: smsGuid });
+    expect(results.map((message) => ({ guid: message.guid, chatGuid: message.chatGuid, service: message.service })))
+      .toEqual([{ guid: "scoped", chatGuid: smsGuid, service: "SMS" }]);
   });
 
   test("returns nothing for queries shorter than two characters", async () => {

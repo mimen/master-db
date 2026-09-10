@@ -101,7 +101,7 @@ function makeService(options: {
       const message = options.messages?.find((item) => item.guid === messageGuid);
       return message ? { ok: true, value: message } : { ok: false, error: "not found" };
     },
-    recentOutboundText: () => [],
+    recentOutboundText: async () => [],
     reactionSuggestions: () => true,
     contactEmails: options.contactEmails ?? (() => []),
     searchVault: async () => [],
@@ -328,7 +328,7 @@ describe("shadowEnqueue", () => {
       shadow,
       fetchMessages: async () => ({ ok: true, value: [] }),
       fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
-      recentOutboundText: () => [],
+      recentOutboundText: async () => [],
       reactionSuggestions: () => false,
       contactEmails: () => [],
       searchVault: async () => [],
@@ -359,7 +359,7 @@ describe("shadowEnqueue", () => {
       shadow,
       fetchMessages: async () => ({ ok: true, value: [] }),
       fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
-      recentOutboundText: () => [],
+      recentOutboundText: async () => [],
       reactionSuggestions: () => false,
       contactEmails: () => [],
       searchVault: async () => [],

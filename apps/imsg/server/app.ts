@@ -13,7 +13,6 @@ import { GroupPhotos } from "./group-photos";
 import { IdentityMirror } from "./identity-mirror";
 import { IdentitySync } from "./identity-sync";
 import { MessageSearch } from "./message-search";
-import { ChatDb } from "./chatdb";
 import {
   createdChatError,
   messageBelongsToAnyChat,
@@ -113,7 +112,6 @@ if (!identity) throw new Error("identity directory unavailable");
 const names = deps.names ?? new NameResolver(productionIdentity ?? new IdentityMirror(config), contacts);
 const directory = new ChatDirectory(bb, db, contacts, now, names);
 const search = new MessageSearch(bb, names);
-const chatDb = new ChatDb();
 const photos = new GroupPhotos(bb);
 const identitySync = new IdentitySync(bb, config, () => void identity.refresh());
 const whisper = new WhisperService(config.whisper, bb, db);
@@ -154,7 +152,12 @@ const ai = deps.ai ?? new AiService({
     const message = buildThread(result.value, chatGuid, names).find((item) => item.guid === messageGuid);
     return message ? { ok: true, value: message } : { ok: false, error: "reaction target not found" };
   },
-  recentOutboundText: () => chatDb.recentOutboundText(200),
+  recentOutboundText: async () => {
+    const result = await bb.queryMessages({ limit: 200, offset: 0, from: "me" });
+    return result.ok
+      ? result.value.map((message) => (message.text ?? "").trim()).filter((text) => text.length >= 2 && text.length <= 500)
+      : [];
+  },
   reactionSuggestions: () => bb.hasPrivateApi,
   contactEmails: (address) => contacts.emails(address),
   searchVault: makeVaultSearch(config.ai.vaultPath),
