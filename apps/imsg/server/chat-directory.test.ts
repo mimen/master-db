@@ -894,6 +894,36 @@ describe("ChatDirectory.findByAddress", () => {
     });
   });
 
+  test("SMS preference selects RCS even when iMessage is primary and SMS is newer", async () => {
+    const address = "+15550001111";
+    const { directory } = await setup([
+      { guid: CHAT_A, participants: [{ address }], messages: [inbound("blue", 3000)] },
+      { guid: `SMS;-;${address}`, participants: [{ address }], messages: [inbound("sms", 2000)] },
+      { guid: `RCS;-;${address}`, participants: [{ address }], messages: [inbound("rcs", 1000)] },
+    ]);
+    expect(await directory.findByAddress(address, "SMS")).toEqual({
+      chatGuid: `RCS;-;${address}`,
+      service: "SMS",
+      isGroup: false,
+      participants: [address],
+    });
+    expect((await directory.findByAddress(address))?.chatGuid).toBe(CHAT_A);
+  });
+
+  test("SMS preference returns null for an iMessage-only conversation", async () => {
+    const { directory } = await setup();
+    expect(await directory.findByAddress("+15550001111", "SMS")).toBeNull();
+  });
+
+  test("SMS preference selects SMS when no RCS sibling exists", async () => {
+    const address = "+15550001111";
+    const { directory } = await setup([
+      { guid: CHAT_A, participants: [{ address }], messages: [inbound("blue", 3000)] },
+      { guid: `SMS;-;${address}`, participants: [{ address }], messages: [inbound("sms", 2000)] },
+    ]);
+    expect((await directory.findByAddress(address, "SMS"))?.chatGuid).toBe(`SMS;-;${address}`);
+  });
+
   test("returns null when no iMessage sibling exists", async () => {
     const address = "+15550001111";
     const smsGuid = `SMS;-;${address}`;

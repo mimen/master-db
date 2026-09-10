@@ -21,7 +21,7 @@ import {
 } from "./message-verification";
 import { NameResolver } from "./name-resolver";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
-import { fetchLinkPreview } from "./link-preview";
+import { fetchLinkPreview, parsePreviewUrl } from "./link-preview";
 import { buildThread, mapMessage } from "./map";
 import { wireLiveEvents } from "./live-events";
 import type { MentionAnnotation } from "../shared/mentions";
@@ -387,7 +387,9 @@ app.get("/api/chats/:guid/photo", async (c) => {
 app.get("/api/link-preview", async (c) => {
   const url = c.req.query("url");
   if (!url) return c.json({ error: "url required" }, 400);
-  return c.json(await fetchLinkPreview(url));
+  const parsed = await parsePreviewUrl(url);
+  if (!parsed) return c.json({ error: "url must target a public HTTP(S) host" }, 400);
+  return c.json(await fetchLinkPreview(parsed));
 });
 
 app.post("/api/chats/:guid/send", async (c) => {
@@ -580,8 +582,8 @@ app.get("/api/chats/find", async (c) => {
   const address = c.req.query("address") ?? "";
   const service = c.req.query("service");
   if (!address) return c.json({ error: "address required" }, 400);
-  if (service && service !== "iMessage") return c.json({ error: "unsupported service" }, 400);
-  const preferredService = service === "iMessage" ? "iMessage" : undefined;
+  if (service && service !== "iMessage" && service !== "SMS") return c.json({ error: "unsupported service" }, 400);
+  const preferredService = service === "iMessage" || service === "SMS" ? service : undefined;
   const summaries = await directory.summaries();
   if (!summaries.ok) return c.json({ error: summaries.error }, 502);
   const chat = await directory.findByAddress(address, preferredService);

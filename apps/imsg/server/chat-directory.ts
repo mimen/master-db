@@ -264,7 +264,6 @@ export class ChatDirectory {
     const overlay = this.db.getAll();
     const archivedAt = overlay.get(chatGuid)?.archivedAt;
     const inbound = m.isFromMe ? prior?.lastMessage : m;
-    // A missed inbound may exist only in the rebuilt summary before its reply arrives.
     if (archivedAt && inbound && !inbound.isFromMe && inbound.dateCreated > archivedAt) {
       this.db.setArchived(chatGuid, false);
     }
@@ -562,7 +561,7 @@ export class ChatDirectory {
 
   async findByAddress(
     address: string,
-    preferredService?: "iMessage",
+    preferredService?: "iMessage" | "SMS",
   ): Promise<ChatLookup | null> {
     const result = await this.summaries();
     if (!result.ok) return null;
@@ -575,9 +574,10 @@ export class ChatDirectory {
     const participant = chat?.participants[0]?.address;
     if (!chat || !participant) return null;
     const chatGuid = preferredService
-      ? this.siblingGuids(chat.guid).find((guid) => {
+      ? this.siblingGuids(chat.guid).toSorted((a, b) => Number(/^RCS;-;/i.test(b)) - Number(/^RCS;-;/i.test(a))).find((guid) => {
           const handles = this.participantHandlesFor(guid);
-          return /^iMessage;-;/i.test(guid) &&
+          const matchesService = preferredService === "iMessage" ? /^iMessage;-;/i.test(guid) : /^(SMS|RCS);-;/i.test(guid);
+          return matchesService &&
             handles.length === 1 &&
             sameSendAddress(handles[0]?.address ?? "", address);
         })

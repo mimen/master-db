@@ -1,3 +1,6 @@
+import { lookup } from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
+
 export interface LinkPreview {
   url: string;
   title: string | null;
@@ -32,31 +35,43 @@ function decodeEntities(text: string): string {
     .replaceAll("&#x27;", "'");
 }
 
-function isFetchable(url: URL): boolean {
-  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-  const host = url.hostname;
-  if (/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[::1\])/.test(host)) {
-    return false;
-  }
-  return true;
-}
-
-export async function fetchLinkPreview(rawUrl: string): Promise<LinkPreview | null> {
-  let url: URL;
+export async function parsePreviewUrl(rawUrl: string): Promise<URL | null> {
   try {
-    url = new URL(rawUrl);
+    const url = new URL(rawUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    const host = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
+    if (host === "localhost" || host.endsWith(".localhost") ||
+        host === "milads-mac-mini" || host === "milads-mac-mini.taild31e9a.ts.net") return null;
+    const blocked = new BlockList();
+    blocked.addSubnet("0.0.0.0", 8);
+    blocked.addSubnet("10.0.0.0", 8);
+    blocked.addSubnet("127.0.0.0", 8);
+    blocked.addSubnet("169.254.0.0", 16);
+    blocked.addSubnet("172.16.0.0", 12);
+    blocked.addSubnet("192.168.0.0", 16);
+    blocked.addSubnet("100.64.0.0", 10);
+    blocked.addAddress("::", "ipv6");
+    blocked.addAddress("::1", "ipv6");
+    blocked.addSubnet("fe80::", 10, "ipv6");
+    blocked.addSubnet("fc00::", 7, "ipv6");
+    const family = isIP(host);
+    const addresses = family ? [{ address: host, family }] : await lookup(host, { all: true });
+    return addresses.length > 0 && addresses.every(({ address, family }) => !blocked.check(address, family === 6 ? "ipv6" : "ipv4"))
+      ? url
+      : null;
   } catch {
     return null;
   }
-  if (!isFetchable(url)) return null;
+}
 
+export async function fetchLinkPreview(url: URL): Promise<LinkPreview | null> {
   const cached = cache.get(url.href);
   if (cached && Date.now() - cached.at < TTL_MS) return cached.preview;
 
   let preview: LinkPreview | null = null;
   try {
     const res = await fetch(url.href, {
-      redirect: "follow",
+      redirect: "error",
       signal: AbortSignal.timeout(6000),
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
