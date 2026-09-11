@@ -27,7 +27,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveBeeperUrl } from "./beeper-config";
+import { beeperSyncAccountError, resolveBeeperUrl } from "./beeper-config";
 import {
   beeperFetch,
   CONVEX_REQUEST_TIMEOUT_MS,
@@ -433,6 +433,8 @@ async function main(): Promise<void> {
 
   // 1) account
   const account = await fetchAccount(ARGS.account);
+  const refusal = beeperSyncAccountError(account);
+  if (refusal) die(refusal);
   console.log(
     `\n[1/3] account: ${account.network} (${account.accountID}) ${account.user?.phoneNumber ?? ""}`,
   );
