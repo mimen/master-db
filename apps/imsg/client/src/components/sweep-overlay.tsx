@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { undoDepth } from "@/lib/action-undo";
 import { api } from "@/lib/api";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import { useTheme } from "@/hooks/use-theme";
@@ -39,10 +40,10 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
 
   const advance = useCallback((label?: string, undoable = false) => {
     if (label) setCleared((current) => [...current, label]);
-    setHistory((current) => [
-      ...current.map((step) => undoable && step.undoable ? { ...step, undoable: false } : step),
-      { index, label, undoable },
-    ]);
+    // Every settled step stays undoable. The demotion that used to live here
+    // existed because the shared undo slot held exactly one entry, so only the
+    // most recent settle could ever be replayed. The stack holds ten.
+    setHistory((current) => [...current, { index, label, undoable }]);
     setIndex((current) => Math.min(current + 1, queue.length));
     setDraft("");
     setSelectedOption(0);
@@ -51,7 +52,12 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
   const settle = useCallback(() => {
     if (!chat || sending) return;
     if (!chat.flags.unresponded && !chat.flags.waiting) { advance(); return; }
-    void settleTriageChat(chat).then(() => advance(`${chat.displayName} · settled`, true), () => undefined);
+    // The queue is a frozen snapshot, so a second press reads the same unsettled
+    // flags and would settle the row twice. Advance only on the write that ran.
+    void settleTriageChat(chat).then(
+      (outcome) => { if (outcome === "done") advance(`${chat.displayName} · settled`, true); },
+      () => undefined,
+    );
   }, [advance, chat, sending]);
 
   const send = useCallback(() => {
@@ -148,6 +154,9 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
 
   if (!visible) return null;
   const total = queue.length;
+  // Both halves have to hold. A sweep longer than the stack's depth keeps
+  // local steps whose shared entry has already been evicted.
+  const canUndo = undoDepth() > 0 && history.some((step) => step.undoable);
   const glass = Platform.OS === "web" ? ({
     backgroundColor: visual.overlay,
     backdropFilter: "blur(40px) saturate(1.5)",
@@ -242,7 +251,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
               </View>
               <View style={[styles.footer, { borderTopColor: visual.hairline }]}>
                 <View style={styles.clearedLog}>{cleared.slice(-3).map((entry) => <View key={entry} style={styles.clearedItem}><Ionicons name="checkmark-circle-outline" size={14} color="#28A745" /><Text style={[styles.clearedText, { color: visual.meta }]}>{entry}</Text></View>)}</View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Undo last settle" onPress={undo} disabled={!history.some((step) => step.undoable)}>{({ hovered, pressed }) => <Text style={[styles.undoText, { color: history.some((step) => step.undoable) ? (hovered || pressed ? visual.text : visual.hint) : visual.hairlineStrong }]}>Z undoes the last settle</Text>}</Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Undo last settle" onPress={undo} disabled={!canUndo}>{({ hovered, pressed }) => <Text style={[styles.undoText, { color: canUndo ? (hovered || pressed ? visual.text : visual.hint) : visual.hairlineStrong }]}>Z undoes the last settle</Text>}</Pressable>
               </View>
             </>
           ) : (

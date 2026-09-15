@@ -4,6 +4,7 @@ import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-u
 import { api } from "@/lib/api";
 import { patchChatFlags, revertChatFlags } from "@/lib/chat-store";
 import { showToast } from "@/lib/toast";
+import { runExclusiveTriageWrite, type TriageWriteOutcome } from "@/lib/triage-writes";
 
 type TriageListener = (chatGuid: string) => void;
 const resolvedListeners = new Set<TriageListener>();
@@ -43,21 +44,31 @@ async function dismissOne(chat: ChatSummary, kind: TriageKind): Promise<void> {
   }
 }
 
-/** Forward triage: clear whichever triage flags the conversation carries. */
-export async function settleTriageChat(chat: ChatSummary): Promise<void> {
-  const kinds = TRIAGE_KINDS.filter((kind) => chat.flags[kind]);
-  if (kinds.length === 0) return;
+/**
+ * Forward triage: clear whichever triage flags the conversation carries.
+ *
+ * Answers "busy" when this conversation already has a triage write outstanding,
+ * so the sweep overlay holds its cursor rather than advancing past a settle that
+ * never happened.
+ */
+export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
+  return runExclusiveTriageWrite(chat.guid, async () => {
+    const kinds = TRIAGE_KINDS.filter((kind) => chat.flags[kind]);
+    if (kinds.length === 0) return;
 
-  const undoToken = beginUndoAction();
-  await Promise.all(kinds.map((kind) => dismissOne(chat, kind)));
-  emit(resolvedListeners, chat.guid);
-  commitUndoAction(undoToken, () => {
-    for (const kind of kinds) {
-      patchChatFlags(chat.guid, kind === "unresponded" ? { unresponded: true } : { waiting: true });
-    }
-    void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
-      .then(() => emit(undoListeners, chat.guid))
-      .catch(() => showToast("Could not undo Settle"));
+    const undoToken = beginUndoAction();
+    await Promise.all(kinds.map((kind) => dismissOne(chat, kind)));
+    emit(resolvedListeners, chat.guid);
+    // The entry runs long after this write released the conversation, and it
+    // takes no exclusion of its own. Undo must never be refused as busy.
+    commitUndoAction(undoToken, () => {
+      for (const kind of kinds) {
+        patchChatFlags(chat.guid, kind === "unresponded" ? { unresponded: true } : { waiting: true });
+      }
+      void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
+        .then(() => emit(undoListeners, chat.guid))
+        .catch(() => showToast("Could not undo Settle"));
+    });
   });
 }
 
@@ -71,20 +82,22 @@ export async function settleTriageChat(chat: ChatSummary): Promise<void> {
  * hide a message the user has not seen; an un-settle that landed on the undo
  * stack would break that.
  */
-async function unsettleTriageChat(chat: ChatSummary): Promise<void> {
-  const last = chat.lastMessage;
-  if (!last) return;
-  // Un-settling returns the conversation to the queue its last message implies,
-  // which is exactly what computeFlags derives once the anchors are cleared.
-  patchChatFlags(chat.guid, { unresponded: !last.isFromMe, waiting: last.isFromMe });
-  try {
-    await Promise.all(TRIAGE_KINDS.map((kind) => api.undismiss(chat.guid, kind)));
-  } catch (error) {
-    revertChatFlags(chat.guid, { unresponded: false, waiting: false });
-    showToast("Could not un-settle conversation");
-    throw error;
-  }
-  emit(undoListeners, chat.guid);
+function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
+  return runExclusiveTriageWrite(chat.guid, async () => {
+    const last = chat.lastMessage;
+    if (!last) return;
+    // Un-settling returns the conversation to the queue its last message implies,
+    // which is exactly what computeFlags derives once the anchors are cleared.
+    patchChatFlags(chat.guid, { unresponded: !last.isFromMe, waiting: last.isFromMe });
+    try {
+      await Promise.all(TRIAGE_KINDS.map((kind) => api.undismiss(chat.guid, kind)));
+    } catch (error) {
+      revertChatFlags(chat.guid, { unresponded: false, waiting: false });
+      showToast("Could not un-settle conversation");
+      throw error;
+    }
+    emit(undoListeners, chat.guid);
+  });
 }
 
 /**
@@ -100,11 +113,17 @@ export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
     return;
   }
   try {
-    if (action === "settle") {
-      await settleTriageChat(chat);
+    // The action above was read off flags that a still-outstanding write may
+    // already have patched, so a second press inside that window would compute
+    // the opposite action. Rejected there, and it has to say so. A press that
+    // does nothing and reports nothing is the defect this gesture replaced.
+    const outcome =
+      action === "settle" ? await settleTriageChat(chat) : await unsettleTriageChat(chat);
+    if (outcome === "busy") {
+      showToast("Still saving that change — try again in a moment");
+    } else if (action === "settle") {
       showToast("Settled — ⌘⇧Z to undo");
     } else {
-      await unsettleTriageChat(chat);
       showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs Reply");
     }
   } catch {
