@@ -69,3 +69,12 @@ and Restart banners.
 - Test shared UI/business behavior in the browser fixture. Use Expo Go for iOS seams and
   `bun run dev:desktop` for native shell seams. Production clients expose explicit update
   banners instead of relying on cache-clearing rituals.
+- **A fresh worktree typechecks dirty until Expo's generated types exist.** `client/tsconfig.json`
+  includes `expo-env.d.ts` and `.expo/types/**`, both gitignored, so a new checkout has neither.
+  Without them `bun run typecheck:imsg` reports ~109 phantom
+  `TS2339: Property 'hovered' does not exist on type 'PressableStateCallbackType'` errors in
+  components you never touched. The fix is the two-line stub, a `/// <reference types="expo/types" />`
+  line in `client/expo-env.d.ts`, or any Expo CLI command that regenerates it. Do not chase those
+  errors in component code, and do not conclude react-native-web is missing types.
+- Run `bun install` at the **repo root as well as** `apps/imsg` and `apps/imsg/client`. The root
+  install supplies hoisted dependencies the other two do not.
