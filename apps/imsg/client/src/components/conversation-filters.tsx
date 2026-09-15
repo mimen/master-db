@@ -28,11 +28,19 @@ export const STATE_FILTERS = [
   { value: "settled", label: "Settled" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
-/** The desktop triage control keeps the day-to-day queue states close at hand. */
+/**
+ * The desktop triage control. This rail is the ONLY state-lens affordance on
+ * desktop: openFilters has a wide branch, but the button holding filterBtnRef
+ * renders inside the narrow SidebarChrome, so the popover has no desktop entry
+ * point. A lens left off this list is unreachable there, which is why Settled
+ * is on it. Settled is the recovery surface for the one triage gesture, and a
+ * recovery surface you cannot open is not one.
+ */
 const COMPACT_STATE_FILTERS = [
   { value: "unresponded", label: "Needs reply" },
   { value: "waiting", label: "Waiting" },
   { value: "all", label: "All" },
+  { value: "settled", label: "Settled" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
 export const TYPE_FILTERS = [
