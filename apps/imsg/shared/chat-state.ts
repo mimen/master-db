@@ -70,13 +70,54 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
       return chat.flags.unresponded;
     case "waiting":
       return chat.flags.waiting;
-    // The client never sees a dismissal GUID, so "settled" is read off the
-    // derived flags instead. Equivalent by construction: for a chat with a
-    // last message, unresponded is false only when that message is outbound
-    // or its anchor was dismissed, and waiting is false only when it is
-    // inbound or its anchor was dismissed.
     case "settled":
-      return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting;
+      return isSettled(chat);
+  }
+}
+
+/**
+ * Settled: a conversation with a last message and neither triage flag.
+ *
+ * The client never sees a dismissal GUID, so settled is read off the derived
+ * flags instead. Equivalent by construction: for a chat with a last message,
+ * unresponded is false only when that message is outbound or its anchor was
+ * dismissed, and waiting is false only when it is inbound or its anchor was
+ * dismissed.
+ */
+export function isSettled(chat: ChatSummary): boolean {
+  return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting;
+}
+
+/** What the one triage gesture does to a conversation in its current state. */
+export type SettleAction = "settle" | "unsettle" | "none";
+
+/**
+ * Settle is one toggle keyed to conversation state, never to the lens: a
+ * conversation carrying either triage flag settles, a settled one un-settles.
+ * "none" is only ever a conversation with no messages, where there is no
+ * triage state to move in either direction.
+ */
+export function settleActionFor(chat: ChatSummary): SettleAction {
+  if (chat.flags.unresponded || chat.flags.waiting) return "settle";
+  return isSettled(chat) ? "unsettle" : "none";
+}
+
+/**
+ * Does the gesture drop the row out of the lens the user is looking at? Only
+ * then should the keyboard cursor glide onto a neighbor — settling from All
+ * or Unread leaves the row exactly where it was. No default arm, so a new
+ * lens has to answer this question before it compiles.
+ */
+export function settleLeavesLens(action: SettleAction, state: StateFilter): boolean {
+  switch (state) {
+    case "all":
+    case "unread":
+      return false;
+    case "unresponded":
+    case "waiting":
+      return action === "settle";
+    case "settled":
+      return action === "unsettle";
   }
 }
 

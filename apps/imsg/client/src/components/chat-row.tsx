@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
 import { memo, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -37,6 +38,8 @@ import { ChatAvatar } from "./avatar";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
+/** The settled green the sweep overlay already uses for a cleared conversation. */
+const SETTLE_COLOR = "#28A745";
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const kind = rowSignal(chat);
@@ -118,15 +121,14 @@ function ChatRowInner({
   selected,
   keyboardFocused = false,
   onPress,
-  settleAvailable = false,
   onSettle,
 }: {
   chat: ChatSummary;
   selected: boolean;
   /** Glide-mode cursor: accent edge on the selected row while navigating. */
   keyboardFocused?: boolean;
-  settleAvailable?: boolean;
   onPress: () => void;
+  /** Runs the one triage gesture. Absent on surfaces that don't triage. */
   onSettle?: () => void;
 }) {
   const theme = useTheme();
@@ -141,6 +143,11 @@ function ChatRowInner({
   const actionsVisible = compact && (hovered || focusedWithin || keyboardFocused);
   const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
+  // One rule for the chip and the swipe alike: the row offers Settle exactly
+  // when the toggle has something to do, whatever lens the list is showing.
+  const settleAction = settleActionFor(chat);
+  const settleOffered = onSettle !== undefined && settleAction !== "none";
+  const settleLabel = settleAction === "unsettle" ? "Un-settle" : "Settle";
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
         last.text || (last.hasAttachments ? "Attachment" : "")
@@ -191,6 +198,7 @@ function ChatRowInner({
       containerStyle={compact ? styles.desktopRowWrap : undefined}
       friction={1}
       leftThreshold={commit}
+      rightThreshold={commit}
       renderLeftActions={(_progress, translation) => (
         <SwipeAction
           translation={translation}
@@ -201,8 +209,23 @@ function ChatRowInner({
           commit={commit}
         />
       )}
-      onSwipeableOpen={() => {
-        if (chat.flags.unread) markChatRead(chat);
+      renderRightActions={settleOffered ? (_progress, translation) => (
+        <SwipeAction
+          translation={translation}
+          icon={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark-circle-outline"}
+          label={settleLabel}
+          color={SETTLE_COLOR}
+          side="right"
+          commit={commit}
+        />
+      ) : undefined}
+      onSwipeableOpen={(direction) => {
+        // `direction` is the swipe direction, not the pane side: swiping LEFT
+        // reveals the right-hand (Settle) pane, swiping RIGHT reveals the
+        // left-hand (Read/Unread) pane. Phones have no keyboard, so this is
+        // the primary triage gesture there.
+        if (direction === "left") onSettle?.();
+        else if (chat.flags.unread) markChatRead(chat);
         else markChatUnread(chat);
         swipeRef.current?.close();
       }}
@@ -262,10 +285,10 @@ function ChatRowInner({
             </View>
             {compact ? (
               <View style={styles.timeSlot}>
-                {actionsVisible && settleAvailable ? (
+                {actionsVisible && settleOffered ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Settle ${chat.displayName}`}
+                    accessibilityLabel={`${settleLabel} ${chat.displayName}`}
                     onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
                     onHoverIn={() => setSettleHovered(true)}
                     onHoverOut={() => setSettleHovered(false)}
@@ -276,8 +299,8 @@ function ChatRowInner({
                       pressed && { backgroundColor: visual.controlFillHover },
                     ]}
                   >
-                    <Ionicons name="checkmark" size={13} color={settleHovered ? visual.text : visual.muted} />
-                    <Text style={[styles.inlineSettleText, { color: settleHovered ? visual.text : visual.muted }]}>Settle</Text>
+                    <Ionicons name={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark"} size={13} color={settleHovered ? visual.text : visual.muted} />
+                    <Text numberOfLines={1} style={[styles.inlineSettleText, { color: settleHovered ? visual.text : visual.muted }]}>{settleLabel}</Text>
                   </Pressable>
                 ) : last ? (
                   <Text style={[styles.time, { color: visual.muted, fontSize: 11 }]}>
@@ -411,7 +434,9 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     flexShrink: 0,
     justifyContent: "center",
-    width: 62,
+    // Wide enough for the longest chip label ("Un-settle") on one line; the
+    // chip also bleeds 5px each side, so this has slack over the tightest fit.
+    width: 78,
   },
   inlineSettle: {
     alignItems: "center",

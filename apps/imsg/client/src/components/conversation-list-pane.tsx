@@ -23,13 +23,12 @@ import { useConversationListKeyboard } from "./conversations/use-conversation-li
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
 
-import { onTriageResolved, onTriageUndo, settleTriageChat } from "@/hooks/use-triage-actions";
+import { onTriageResolved, onTriageUndo, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { api } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
 import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
-import { showToast } from "@/lib/toast";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -181,18 +180,13 @@ export function ConversationListPane({
         selected={wide && selectedGuid === item.guid}
         keyboardFocused={wide && glide && selectedGuid === item.guid}
         onPress={() => onOpenChat(item)}
-        settleAvailable={wide && (filters.state === "unresponded" || filters.state === "waiting")}
-        onSettle={wide ? () => {
-          const queueName = item.flags.unresponded && item.flags.waiting
-            ? "Needs Reply and Waiting"
-            : item.flags.unresponded ? "Needs Reply" : "Waiting";
-          void settleTriageChat(item).then(() => {
-            showToast(`Settled from ${queueName} — Z to undo`);
-          }, () => undefined);
-        } : undefined}
+        // Offered on every lens and every width. The row reads the
+        // conversation's own state to decide settle vs un-settle, and the
+        // gesture toasts whatever it did.
+        onSettle={() => { void toggleSettleChat(item); }}
       />
     ),
-    [wide, glide, selectedGuid, filters.state, onOpenChat],
+    [wide, glide, selectedGuid, onOpenChat],
   );
 
   const shelfRef = useRef<PriorityShelfHandle>(null);

@@ -4,8 +4,11 @@ import {
   applyMessage,
   computeCounts,
   computeFlags,
+  isSettled,
   matchesFilters,
   partitionPriorityShelf,
+  settleActionFor,
+  settleLeavesLens,
 } from "./chat-state";
 import type { ChatFlags, ChatSummary, Message } from "./types";
 
@@ -265,6 +268,70 @@ describe("matchesFilters — state lenses", () => {
     expect(matchesFilters(open, "settled", "all")).toBe(false);
     expect(matchesFilters(settled, "waiting", "all")).toBe(false);
     expect(matchesFilters(settled, "settled", "all")).toBe(true);
+  });
+});
+
+// ------------------------------------------------- the one triage gesture
+
+describe("settleActionFor", () => {
+  test("a conversation carrying either triage flag settles", () => {
+    expect(settleActionFor(makeChat({ flags: makeFlags({ unresponded: true }) }))).toBe("settle");
+    expect(settleActionFor(makeChat({ flags: makeFlags({ waiting: true }) }))).toBe("settle");
+    expect(settleActionFor(makeChat({ flags: makeFlags({ unresponded: true, waiting: true }) }))).toBe("settle");
+  });
+
+  test("a settled conversation un-settles — the same control, keyed to its state", () => {
+    expect(settleActionFor(makeChat({ flags: makeFlags() }))).toBe("unsettle");
+  });
+
+  test("unread and pinned are not triage state, so they don't change the action", () => {
+    expect(settleActionFor(makeChat({ flags: makeFlags({ unread: true, pinned: true }) }))).toBe("unsettle");
+    expect(settleActionFor(makeChat({ flags: makeFlags({ unread: true, waiting: true }) }))).toBe("settle");
+  });
+
+  test("a conversation with no messages has nothing to toggle either way", () => {
+    expect(settleActionFor(makeChat({ lastMessage: null, flags: makeFlags() }))).toBe("none");
+  });
+
+  test("the gesture and the Settled lens read the same predicate", () => {
+    const chats = [
+      makeChat({ flags: makeFlags({ unresponded: true }) }),
+      makeChat({ flags: makeFlags({ waiting: true }) }),
+      makeChat({ flags: makeFlags() }),
+      makeChat({ lastMessage: null, flags: makeFlags() }),
+    ];
+
+    for (const chat of chats) {
+      const inSettledLens = matchesFilters(chat, "settled", "all");
+      expect(isSettled(chat)).toBe(inSettledLens);
+      expect(settleActionFor(chat) === "unsettle").toBe(inSettledLens);
+    }
+  });
+});
+
+describe("settleLeavesLens — whether the row drops out from under the cursor", () => {
+  test("settling clears the flags that define Needs reply and Waiting", () => {
+    expect(settleLeavesLens("settle", "unresponded")).toBe(true);
+    expect(settleLeavesLens("settle", "waiting")).toBe(true);
+  });
+
+  test("settling from All, Unread or Settled leaves the row exactly where it was", () => {
+    expect(settleLeavesLens("settle", "all")).toBe(false);
+    expect(settleLeavesLens("settle", "unread")).toBe(false);
+    expect(settleLeavesLens("settle", "settled")).toBe(false);
+  });
+
+  test("un-settling only ever removes the row from the Settled lens", () => {
+    expect(settleLeavesLens("unsettle", "settled")).toBe(true);
+    for (const lens of ["all", "unread", "unresponded", "waiting"] as const) {
+      expect(settleLeavesLens("unsettle", lens)).toBe(false);
+    }
+  });
+
+  test("a gesture that does nothing never moves the cursor", () => {
+    for (const lens of ["all", "unread", "unresponded", "waiting", "settled"] as const) {
+      expect(settleLeavesLens("none", lens)).toBe(false);
+    }
   });
 });
 

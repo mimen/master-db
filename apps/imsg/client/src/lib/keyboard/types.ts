@@ -13,7 +13,7 @@ export type CommandId =
   | "conversation.activate"
   | "composer.focus"
   | "conversation.find"
-  | "conversation.archive"
+  | "conversation.settle"
   | "conversation.markUnread"
   | "conversation.details"
   | "list.focusSearch"
@@ -82,7 +82,7 @@ export interface ListAdapter {
    * the Esc ladder consumes the keypress in that case. Optional so in-flight
    * pane work isn't broken; wired by the search-mode redesign. */
   clearSearch(): boolean;
-  /** After an action removes `guid` from the list (archive), glide onto its
-   * neighbor (next, else previous) instead of leaving the cursor dangling. */
+  /** After an action removes `guid` from the current lens (settle), glide onto
+   * its neighbor (next, else previous) instead of leaving the cursor dangling. */
   selectNeighborOf(guid: string): void;
 }

@@ -1,3 +1,4 @@
+import { settleActionFor, settleLeavesLens } from "@shared/chat-state";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
@@ -14,7 +15,7 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { settleTriageChat } from "@/hooks/use-triage-actions";
+import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
@@ -300,21 +301,25 @@ export function MessagesWorkspace({
       },
       settleSelected: () => {
         const sel = selectedRef.current;
-        const queueState = stateRef.current;
-        const canSettle = queueState === "unresponded"
-          ? sel?.flags.unresponded === true
-          : queueState === "waiting" && sel?.flags.waiting === true;
-        if (!sel || !canSettle) return;
-        const queueName = sel.flags.unresponded && sel.flags.waiting
-          ? "Needs Reply and Waiting"
-          : queueState === "unresponded" ? "Needs Reply" : "Waiting";
-        void settleTriageChat(sel).then(() => showToast(`Settled from ${queueName} — Z to undo`), () => undefined);
-        getListAdapter()?.selectNeighborOf(sel.guid);
+        if (!sel) {
+          showToast("Select a conversation first");
+          return;
+        }
+        // No lens gate. The gesture acts on the selected conversation from any
+        // lens, and toggleSettleChat answers every press with a toast.
+        const action = settleActionFor(sel);
+        void toggleSettleChat(sel);
+        // Only glide off the row when the action actually drops it out of the
+        // lens on screen — settling from All or Unread leaves it in place.
+        if (settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.guid);
       },
       markUnreadSelected: () => {
         const sel = selectedRef.current;
-        if (!sel) return;
-        markChatUnread(sel, () => showToast("Marked unread — Z to undo"));
+        if (!sel) {
+          showToast("Select a conversation first");
+          return;
+        }
+        markChatUnread(sel, () => showToast("Marked unread — ⌘⇧Z to undo"));
       },
       toggleDetails: () => {
         const sel = selectedRef.current;
@@ -406,7 +411,6 @@ export function MessagesWorkspace({
             jumpTarget={jumpTarget}
             headerChat={selected}
             previewOnly={selectionIntent === "preview"}
-            triageShortcutsEnabled={(state === "unresponded" && selected.flags.unresponded) || (state === "waiting" && selected.flags.waiting)}
             onToggleShadow={shadowEnabled ? toggleShadow : undefined}
             shadowOpen={shadowOpen}
           />

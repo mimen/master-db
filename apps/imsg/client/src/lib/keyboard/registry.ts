@@ -8,7 +8,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "conversation.previous", title: "Previous conversation", group: "Navigation" },
   { id: "conversation.activate", title: "Reply to selected", group: "Navigation" },
   { id: "composer.focus", title: "Reply (focus composer)", group: "Navigation" },
-  { id: "conversation.archive", title: "Settle conversation", group: "Conversation" },
+  { id: "conversation.settle", title: "Settle / un-settle conversation", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },
   { id: "conversation.new", title: "New message", group: "Conversation" },
@@ -20,10 +20,14 @@ export const COMMANDS: readonly CommandDefinition[] = [
 ] as const;
 
 /**
- * Bindings per docs/keyboard-design.md (Slice 2): compose-first with an
- * Esc-entered list-navigation ("glide") mode where single keys act. list-scope
- * bindings never fire while a text field has focus (fail-closed) and only when
- * glide mode is active.
+ * Bindings per docs/keyboard-design.md: compose-first, with an Esc-entered
+ * list-navigation ("glide") mode.
+ *
+ * Triage is a global chord, not a glide key. Opening a conversation leaves
+ * glide and focuses the composer, so a list-scope letter reached the user as
+ * typed text rather than as a command — the triage shortcut was unreachable in
+ * the one state the user is in most of the time. Chords carry a modifier, so
+ * they can be editable-safe and fire from the composer.
  */
 export const BINDINGS: readonly KeyBinding[] = [
   // Global chords — safe while typing.
@@ -34,9 +38,19 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "help.open", combo: "mod+/", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
   // Search the conversation LIST from anywhere (⌘F is find-in-conversation).
   { commandId: "list.focusSearch", combo: "mod+shift+f", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
-  // Browser-reserved; fires only under the future Tauri shell's native menu.
+  // The browser keeps ⌘N and ⌘W for itself, so these two only ever land in the
+  // desktop shell — where the Tauri native menu dispatches the same command ids
+  // (desktop/src-tauri/src/lib.rs). Hidden from help because the menu already
+  // advertises them, and in a plain browser tab they do not fire at all.
   { commandId: "conversation.new", combo: "mod+n", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
   { commandId: "navigation.close", combo: "mod+w", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true, hidden: true },
+
+  // Triage. Editable-safe on purpose: the composer is where the user lives.
+  { commandId: "conversation.settle", combo: "mod+e", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
+  { commandId: "conversation.markUnread", combo: "mod+u", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
+  // ⌘⇧Z, not ⌘Z. The dispatcher listens on the capture phase, so binding ⌘Z
+  // would take text undo away from the composer entirely rather than share it.
+  { commandId: "action.undo", combo: "mod+shift+z", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
 
   // Navigation glides from anywhere (app load included) whenever focus is NOT
   // in a text field — j/k and the arrows are identical. While typing, arrows
@@ -53,12 +67,6 @@ export const BINDINGS: readonly KeyBinding[] = [
   // must stay ahead of this one — in glide, Enter activates the selected row;
   // everywhere else (e.g. straight after ⌘K opens a chat) it starts a reply.
   { commandId: "composer.focus", combo: "enter", scope: "global", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "conversation.archive", combo: "e", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "conversation.markUnread", combo: "u", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "action.undo", combo: "z", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "conversation.new", combo: "c", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "list.focusSearch", combo: "/", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "help.open", combo: "shift+?", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
 ] as const;
 
 const KEY_SYMBOLS: Record<string, string> = {
@@ -75,7 +83,6 @@ const KEY_SYMBOLS: Record<string, string> = {
 
 /** "mod+shift+e" → "⌘⇧E" for the help view. */
 export function formatCombo(combo: string): string {
-  if (combo === "shift+?") return "?";
   return combo
     .split("+")
     .map((part) => KEY_SYMBOLS[part] ?? part.toUpperCase())

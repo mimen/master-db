@@ -3,6 +3,12 @@
 Status: agreed design, pending Milad sign-off. Supersedes `keyboard-design-draft.md`.
 Sol's full review: session task output 2026-07-22 (findings folded in here).
 
+Revised 2026-09-15 by the one-triage-gesture change: Later and Archive are gone,
+Settle is the only triage gesture, and triage moved from bare glide letters to
+global chords. The bindings tables below describe the current registry. The
+implementation-slice notes near the end are kept as a record of the original
+plan, not as a description of what is bound today.
+
 ## The model: compose-first with an explicit list-navigation mode
 
 A messaging app's dominant act is replying, so the composer stays the default
@@ -18,7 +24,8 @@ Superhuman-style single keys work. Best of both:
 - Printable characters in list mode do **nothing** (no type-anywhere — it cannot
   coexist with single-key commands; IME/dead-key/emoji input made the manual
   append wrong anyway).
-- Triage chains work: `Esc, j, e, j, u, Enter`.
+- Triage chains work: `Esc, j, ⌘E, j, ⌘U, Enter` — and the chords also fire
+  without leaving the composer, which is where triage actually happens.
 
 **Selection intent is explicit** — `selectConversation(chat, "reply" | "preview")`:
 - `"reply"`: focus composer, mark read.
@@ -37,22 +44,35 @@ Global (work everywhere, incl. composer):
 |---|---|
 | ⌘K | Command palette (commands + jump-to-conversation, roving ↑/↓ + Enter) |
 | ⌘F | Find in conversation (browser CAN yield this via preventDefault) |
+| ⌘⇧F | Search the conversation list |
 | ⌘I | Toggle details pane |
+| ⌘E | Settle / un-settle the selected conversation |
+| ⌘U | Mark unread (not a toggle; activation already marks read) |
+| ⌘⇧Z | Undo the last settle or mark-unread |
+| ⌘/ | Shortcut reference |
 | Esc | Stepwise (see ladder below) |
-| ⌘N | Tauri shell only; in PWA: palette or list-mode `c` |
+| ⌘N, ⌘W | Tauri shell only — the browser keeps both, and the native menu dispatches the same command ids |
 
-List-navigation mode (single keys — safe because focus is not in a text field):
+Triage is a chord, not a glide letter. A bare `e` fired only in glide mode with
+focus outside a text field, and opening a conversation leaves glide and focuses
+the composer — so in the state the user is in most of the time, `e` typed the
+letter e and the shortcut was unreachable. A chord carries a modifier, so it can
+be editable-safe and fire from the composer. ⌘⇧Z rather than ⌘Z: the dispatcher
+listens on the capture phase, so a global ⌘Z would take text undo away from the
+composer entirely rather than share it.
+
+Outside a text field, no mode needed:
 | Key | Action |
 |---|---|
 | j / ↓ | Next conversation (follows the RENDERED order: priority shelf + filtered list) |
 | k / ↑ | Previous conversation |
-| e | Archive (unarchive in Archived view) — the Gmail/Superhuman standard |
-| u | Mark unread (not a toggle; activation already marks read) |
-| c | New message |
-| / | Focus list search (scrolls the header into view first) |
-| Enter | Activate selection → composer |
-| z | Undo last archive/unread action (Gmail precedent; single-slot, no expiry) |
-| ? | Shortcut reference (optional) |
+| Enter | Focus the composer of the open conversation |
+
+List-navigation mode (glide) adds exactly one binding, and it is the only
+list-scope binding left:
+| Key | Action |
+|---|---|
+| Enter | Activate the selected row → composer |
 
 Composer:
 | Key | Action |
@@ -60,14 +80,24 @@ Composer:
 | Enter / ⇧Enter | Send / newline (+ composition & repeat guards; in-flight send ref) |
 | ↑ (empty composer) | Later: edit last outgoing (Slack/Discord), only with full eligibility guards |
 
-Removed / never advertise: `⌘⇧E`, `⌘⇧U` (encoded implementation failures),
-`⌘↑/⌘↓` (macOS text-system commands), `⌥↑/⌥↓` (deferred per Sol — Esc+glide
-covers it), bare `i` (use ⌘I), `p` pin (palette-only), `⌘/` (palette subsumes
-it once shipped).
+Retired, and still retired: `⌘⇧E` and `⌘⇧U`, shifted chords that encoded an
+implementation failure rather than an intent. The `⌘E` and `⌘U` above are not
+those chords coming back — the shifted forms are still bound to nothing. They
+are the replacements for the bare glide letters, chosen for the reason in the
+paragraph above. Also retired: `⌘↑/⌘↓` (macOS text-system commands), `⌥↑/⌥↓`
+(deferred per Sol — Esc+glide covers it), bare `i` (use ⌘I), `p` pin
+(palette-only).
 
-**Undo:** archive/unread actions record a single-slot last-action; the action
-toast gains an Undo button, and `z` in list mode reverts it. (Milad request,
-2026-07-22.)
+Deleted as bare keys by the one-triage-gesture change: `e` `u` `z` `c` `/` `?`,
+and `h` with Later. Deleting `c` costs nothing because ⌘N reaches the app
+through the Tauri native menu (`desktop/src-tauri/src/lib.rs`), which advertises
+the shortcut itself. `⌘/` is bound and shown in help; the palette never
+subsumed it.
+
+**Undo:** settle and mark-unread record an undoable last action, and ⌘⇧Z reverts
+it. Undo only ever restores a flag, never clears one, so it cannot hide a
+message the user has not seen — which is also why un-settle is not itself
+undoable. (Milad request, 2026-07-22.)
 
 ## Architecture (build in-house; no cmdk/kbar/react-hotkeys-hook)
 

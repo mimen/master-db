@@ -160,7 +160,7 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
     case "conversation.find":
       rt.findInConversation();
       return true;
-    case "conversation.archive":
+    case "conversation.settle":
       rt.settleSelected();
       return true;
     case "conversation.markUnread":

@@ -32,7 +32,7 @@ import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { settleTriageChat } from "@/hooks/use-triage-actions";
+import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
@@ -76,8 +76,6 @@ interface ThreadViewProps {
   /** When provided (desktop split-pane with AI shadow available), show the toggle. */
   onToggleShadow?: () => void;
   shadowOpen?: boolean;
-  /** Whether the current list lens enables the E/H triage shortcuts. */
-  triageShortcutsEnabled?: boolean;
   /** Sweep mode advances only after a real send settles successfully. */
   onMessageSent?: () => void;
 }
@@ -90,7 +88,6 @@ export function ThreadView({
   previewOnly = false,
   onToggleShadow,
   shadowOpen = false,
-  triageShortcutsEnabled = false,
   onMessageSent,
 }: ThreadViewProps) {
   const theme = useTheme();
@@ -612,12 +609,7 @@ export function ThreadView({
               ? "In Needs Reply. Sending a reply settles it automatically."
               : "In Waiting. Settle it when you no longer need a response."}
           </Text>
-          <HoverFillButton accessibilityLabel="Settle conversation" onPress={() => {
-            const queueName = headerChat.flags.unresponded && headerChat.flags.waiting
-              ? "Needs Reply and Waiting"
-              : headerChat.flags.unresponded ? "Needs Reply" : "Waiting";
-            void settleTriageChat(headerChat).then(() => showToast(`Settled from ${queueName} — Z to undo`), () => undefined);
-          }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Settle{triageShortcutsEnabled ? <Text style={{ color: theme.textSecondary }}> E</Text> : null}</Text></HoverFillButton>
+          <HoverFillButton accessibilityLabel="Settle conversation" onPress={() => { void toggleSettleChat(headerChat); }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Settle<Text style={{ color: theme.textSecondary }}> ⌘E</Text></Text></HoverFillButton>
         </View>
       )}
 
