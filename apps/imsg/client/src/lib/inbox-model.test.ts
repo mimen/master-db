@@ -9,7 +9,7 @@ import {
   selectInboxFilter,
 } from "./inbox-model";
 
-const states: StateFilter[] = ["all", "unread", "unresponded", "waiting"];
+const states: StateFilter[] = ["all", "unread", "unresponded", "waiting", "settled"];
 const types: TypeFilter[] = ["all", "dm", "group", "unknown"];
 
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
@@ -158,6 +158,36 @@ describe("deriveInboxModel", () => {
     expect(model.navigationEntries.map((e) => e.location.kind)).toEqual(["list", "list", "list"]);
     expect(model.sectionLabel).toBe("Search Results");
     expect(model.sectionCount).toBe(3);
+  });
+
+  test("the settled lens lists only conversations with neither triage flag", () => {
+    const settled = makeChat({ guid: "settled" });
+    const needsReply = makeChat({
+      guid: "needs-reply",
+      flags: { ...makeChat().flags, unresponded: true },
+    });
+    const waiting = makeChat({ guid: "waiting", flags: { ...makeChat().flags, waiting: true } });
+    const empty = makeChat({ guid: "empty", lastMessage: null });
+
+    const model = deriveInboxModel(
+      [settled, needsReply, waiting, empty],
+      { state: "settled", type: "all" },
+      "",
+    );
+
+    expect(model.listChats).toEqual([settled]);
+    expect(model.showPriorityShelf).toBe(false);
+    expect(model.sectionLabel).toBe("Settled");
+    expect(model.sectionCount).toBe(1);
+  });
+
+  test("labels the settled lens beside a type lens", () => {
+    const group = makeChat({ guid: "group", isGroup: true });
+
+    const model = deriveInboxModel([group], { state: "settled", type: "group" }, "");
+
+    expect(model.listChats).toEqual([group]);
+    expect(model.sectionLabel).toBe("Settled · Groups");
   });
 
   test("keeps pinned conversations first in filtered views", () => {

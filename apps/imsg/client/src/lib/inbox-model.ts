@@ -43,6 +43,7 @@ const STATE_LABELS: Record<StateFilter, string> = {
   unread: "Unread",
   unresponded: "Unresponded",
   waiting: "Waiting",
+  settled: "Settled",
 };
 
 const TYPE_LABELS: Record<TypeFilter, string> = {

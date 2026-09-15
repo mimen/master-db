@@ -25,6 +25,7 @@ export const STATE_FILTERS = [
   { value: "unread", label: "Unread" },
   { value: "unresponded", label: "Unresponded" },
   { value: "waiting", label: "Waiting" },
+  { value: "settled", label: "Settled" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
 /** The desktop triage control keeps the day-to-day queue states close at hand. */

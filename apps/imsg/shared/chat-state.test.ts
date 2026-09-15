@@ -196,6 +196,76 @@ describe("matchesFilters — state lenses", () => {
     expect(matchesFilters(makeChat({ flags: makeFlags({ waiting: true }) }), "waiting", "all")).toBe(true);
     expect(matchesFilters(makeChat({ flags: makeFlags() }), "waiting", "all")).toBe(false);
   });
+
+  test("settled requires a last message with neither triage flag", () => {
+    expect(matchesFilters(makeChat({ flags: makeFlags() }), "settled", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ flags: makeFlags({ unresponded: true }) }), "settled", "all")).toBe(false);
+    expect(matchesFilters(makeChat({ flags: makeFlags({ waiting: true }) }), "settled", "all")).toBe(false);
+  });
+
+  test("settled ignores unread and pinned, which are not triage state", () => {
+    expect(matchesFilters(makeChat({ flags: makeFlags({ unread: true }) }), "settled", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ flags: makeFlags({ pinned: true }) }), "settled", "all")).toBe(true);
+  });
+
+  test("a conversation with no last message never settles", () => {
+    const empty = makeChat({ lastMessage: null, flags: makeFlags() });
+
+    expect(matchesFilters(empty, "settled", "all")).toBe(false);
+    expect(matchesFilters(empty, "all", "all")).toBe(true);
+  });
+
+  test("dismissing the inbound anchor moves a conversation from unresponded to settled", () => {
+    const lastMessage = {
+      guid: "m9",
+      text: "hi",
+      dateCreated: 1000,
+      isFromMe: false,
+      senderName: "Alice",
+      hasAttachments: false,
+    };
+    const open = makeChat({
+      lastMessage,
+      flags: computeFlags(makeState(), makeLast({ guid: "m9" }), 0),
+    });
+    const settled = makeChat({
+      lastMessage,
+      flags: computeFlags(makeState({ dismissedUnrespondedGuid: "m9" }), makeLast({ guid: "m9" }), 0),
+    });
+
+    expect(matchesFilters(open, "unresponded", "all")).toBe(true);
+    expect(matchesFilters(open, "settled", "all")).toBe(false);
+    expect(matchesFilters(settled, "unresponded", "all")).toBe(false);
+    expect(matchesFilters(settled, "settled", "all")).toBe(true);
+  });
+
+  test("dismissing the outbound anchor moves a conversation from waiting to settled", () => {
+    const lastMessage = {
+      guid: "m9",
+      text: "sent",
+      dateCreated: 1000,
+      isFromMe: true,
+      senderName: null,
+      hasAttachments: false,
+    };
+    const open = makeChat({
+      lastMessage,
+      flags: computeFlags(makeState(), makeLast({ guid: "m9", isFromMe: true }), 0),
+    });
+    const settled = makeChat({
+      lastMessage,
+      flags: computeFlags(
+        makeState({ dismissedWaitingGuid: "m9" }),
+        makeLast({ guid: "m9", isFromMe: true }),
+        0,
+      ),
+    });
+
+    expect(matchesFilters(open, "waiting", "all")).toBe(true);
+    expect(matchesFilters(open, "settled", "all")).toBe(false);
+    expect(matchesFilters(settled, "waiting", "all")).toBe(false);
+    expect(matchesFilters(settled, "settled", "all")).toBe(true);
+  });
 });
 
 describe("matchesFilters — type lenses", () => {
@@ -239,8 +309,10 @@ describe("matchesFilters — screened conversation exclusion", () => {
     for (const type of ["all", "dm", "group"] as const) {
       expect(matchesFilters(unknown, "all", type)).toBe(false);
       expect(matchesFilters(unknown, "unread", type)).toBe(false);
+      expect(matchesFilters(unknown, "settled", type)).toBe(false);
       expect(matchesFilters(spam, "all", type)).toBe(false);
       expect(matchesFilters(spam, "unread", type)).toBe(false);
+      expect(matchesFilters(spam, "settled", type)).toBe(false);
     }
   });
 
@@ -269,6 +341,20 @@ describe("computeCounts", () => {
     expect(counts.unread).toBe(1);
     expect(counts.unresponded).toBe(1);
     expect(counts.waiting).toBe(1);
+    expect(counts.settled).toBe(1); // only "c", which carries no triage flag
+  });
+
+  test("counts a settled conversation with no last message as neither settled nor waiting", () => {
+    const chats = [
+      makeChat({ guid: "empty", lastMessage: null, flags: makeFlags() }),
+      makeChat({ guid: "settled", flags: makeFlags() }),
+    ];
+    const counts = computeCounts(chats, "all");
+
+    expect(counts.all).toBe(2);
+    expect(counts.settled).toBe(1);
+    expect(counts.unresponded).toBe(0);
+    expect(counts.waiting).toBe(0);
   });
 });
 

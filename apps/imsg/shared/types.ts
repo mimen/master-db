@@ -1,6 +1,6 @@
 import type { MentionAnnotation } from "./mentions";
 
-export type StateFilter = "all" | "unread" | "unresponded" | "waiting";
+export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "settled";
 export type TypeFilter = "all" | "dm" | "group" | "unknown";
 
 export interface Participant {

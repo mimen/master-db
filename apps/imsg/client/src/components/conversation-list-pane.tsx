@@ -101,7 +101,7 @@ export function ConversationListPane({
   const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
   const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
-  const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "unread" ? "Unread" : "All messages";
+  const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "unread" ? "Unread" : filters.state === "settled" ? "Settled" : "All messages";
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   // useCallback, not a bare arrow: the compiler can't prove a render-scope

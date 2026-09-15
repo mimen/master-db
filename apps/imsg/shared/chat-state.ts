@@ -70,10 +70,17 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
       return chat.flags.unresponded;
     case "waiting":
       return chat.flags.waiting;
+    // The client never sees a dismissal GUID, so "settled" is read off the
+    // derived flags instead. Equivalent by construction: for a chat with a
+    // last message, unresponded is false only when that message is outbound
+    // or its anchor was dismissed, and waiting is false only when it is
+    // inbound or its anchor was dismissed.
+    case "settled":
+      return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting;
   }
 }
 
-const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting"];
+const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "settled"];
 
 export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCounts {
   return Object.fromEntries(
