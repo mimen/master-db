@@ -5,21 +5,35 @@
  *
  * Runs on the Mini after the migration, read-only:
  *
- *   bun scripts/verify-one-triage-gesture.ts --expect-rows 318 --expect-clear-events 830
+ *   bun scripts/verify-one-triage-gesture.ts --db <path> \
+ *     --expect-rows N --expect-dismissals N --expect-reason-rows N --expect-clear-events N
  *
- * Exits non-zero on the first failed assertion. The counts come from the
- * pre-change baseline, so this reads as old value versus new value rather than
- * as a bare pass.
+ * RECAPTURE THE EXPECTED COUNTS IMMEDIATELY BEFORE MIGRATING. They are exact
+ * comparisons, and the overlay is written by a live app, so numbers taken hours
+ * earlier will fail a migration that actually succeeded. Take them in the same
+ * sitting as the dry run:
+ *
+ *   sqlite3 -readonly <db> "SELECT
+ *     (SELECT COUNT(*) FROM chat_state),
+ *     (SELECT COUNT(*) FROM chat_state WHERE dismissed_unresponded_guid IS NOT NULL
+ *                                         OR dismissed_waiting_guid IS NOT NULL),
+ *     (SELECT COUNT(*) FROM triage_clear_event WHERE reason = 'dismiss'),
+ *     (SELECT COUNT(*) FROM triage_clear_event);"
+ *
+ * Exits non-zero on the first failed assertion.
  */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
 
 import { DROP_COLUMNS, DROP_TABLES } from "./migrate-one-triage-gesture";
 
 export interface VerifyOptions {
   db: string;
   expectRows?: number;
+  /** Exact count of rows carrying either dismissal anchor. */
+  expectDismissals?: number;
+  /** Exact count of triage_clear_event rows whose reason is 'dismiss'. */
+  expectReasonRows?: number;
   expectClearEventsAtLeast?: number;
 }
 
@@ -76,20 +90,28 @@ export function verify(options: VerifyOptions): Check[] {
     // cannot be distinguished from a checker that is broken.
     const hasDismissalColumns =
       columns.includes("dismissed_unresponded_guid") && columns.includes("dismissed_waiting_guid");
-    checks.push(
-      hasDismissalColumns
-        ? (() => {
-            const n = (
-              db
-                .query(
-                  "SELECT COUNT(*) AS n FROM chat_state WHERE dismissed_unresponded_guid IS NOT NULL OR dismissed_waiting_guid IS NOT NULL",
-                )
-                .get() as { n: number }
-            ).n;
-            return { name: "dismissals survived", ok: n > 0, detail: `${n} rows carry a dismissal` };
-          })()
-        : { name: "dismissals survived", ok: false, detail: "dismissal columns missing, cannot count" },
-    );
+    if (!hasDismissalColumns) {
+      checks.push({ name: "dismissals survived", ok: false, detail: "dismissal columns missing, cannot count" });
+    } else {
+      const n = (
+        db
+          .query(
+            "SELECT COUNT(*) AS n FROM chat_state WHERE dismissed_unresponded_guid IS NOT NULL OR dismissed_waiting_guid IS NOT NULL",
+          )
+          .get() as { n: number }
+      ).n;
+      // Exact, not greater-than-zero. A near-total wipe leaving one row would
+      // otherwise pass the very check written to catch a wipe.
+      checks.push(
+        options.expectDismissals === undefined
+          ? { name: "dismissals survived", ok: n > 0, detail: `${n} rows carry a dismissal, no expected count given` }
+          : {
+              name: "dismissals survived",
+              ok: n === options.expectDismissals,
+              detail: `${n} rows carry a dismissal, expected ${options.expectDismissals}`,
+            },
+      );
+    }
 
     const hasClearEvents = tables.includes("triage_clear_event");
     const events = hasClearEvents
@@ -108,11 +130,21 @@ export function verify(options: VerifyOptions): Check[] {
     const legacyReasons = hasClearEvents
       ? (db.query("SELECT COUNT(*) AS n FROM triage_clear_event WHERE reason = 'dismiss'").get() as { n: number }).n
       : 0;
-    checks.push({
-      name: "stored reason values left alone",
-      ok: legacyReasons > 0,
-      detail: hasClearEvents ? `${legacyReasons} rows still read 'dismiss'` : "table missing",
-    });
+    checks.push(
+      options.expectReasonRows === undefined
+        ? {
+            name: "stored reason values left alone",
+            ok: legacyReasons > 0,
+            detail: hasClearEvents ? `${legacyReasons} rows read 'dismiss', no expected count given` : "table missing",
+          }
+        : {
+            name: "stored reason values left alone",
+            ok: legacyReasons === options.expectReasonRows,
+            detail: hasClearEvents
+              ? `${legacyReasons} rows read 'dismiss', expected ${options.expectReasonRows}`
+              : "table missing",
+          },
+    );
 
     return checks;
   } finally {
@@ -127,9 +159,15 @@ if (import.meta.main) {
     return i === -1 ? undefined : Number(argv[i + 1]);
   };
   const dbFlag = argv.indexOf("--db");
+  if (dbFlag === -1) {
+    console.error("--db is required. This script does not read .env, so it cannot guess the server's DB_PATH.");
+    process.exit(2);
+  }
   const checks = verify({
-    db: dbFlag === -1 ? join(dirname(import.meta.dir), "imsg.db") : (argv[dbFlag + 1] ?? ""),
+    db: argv[dbFlag + 1] ?? "",
     expectRows: flag("--expect-rows"),
+    expectDismissals: flag("--expect-dismissals"),
+    expectReasonRows: flag("--expect-reason-rows"),
     expectClearEventsAtLeast: flag("--expect-clear-events"),
   });
   for (const check of checks) console.log(`${check.ok ? "ok  " : "FAIL"} ${check.name}: ${check.detail}`);

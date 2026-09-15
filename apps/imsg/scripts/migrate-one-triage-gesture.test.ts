@@ -141,6 +141,29 @@ describe("one-triage-gesture migration", () => {
 
     expect(result.alreadyMigrated).toBe(false);
     expect(result.columnsDropped).toEqual([]);
+    expect(result.rowsPreserved).toBe(5);
+    expect(columns(path)).toContain("archived_at");
+    expect(tables(path)).toContain("smart_closer_cache");
+  });
+
+  // No test that a dry run survives a held EXCLUSIVE lock. An exclusive lock
+  // blocks readers too, so nothing can read under one. That is SQLite, not a
+  // property of this script. The narrower true claim, that a dry run never
+  // writes, is covered by the dry-run test above.
+
+  test("refuses to migrate while another connection holds the database", () => {
+    const path = fixture();
+    const holder = new Database(path);
+    holder.exec("BEGIN EXCLUSIVE");
+
+    try {
+      expect(() => migrate({ db: path, snapshot: false, log: silent })).toThrow("exclusive lock");
+    } finally {
+      holder.exec("ROLLBACK");
+      holder.close();
+    }
+
+    // Nothing was dropped, so a refused run leaves the database exactly as found.
     expect(columns(path)).toContain("archived_at");
     expect(tables(path)).toContain("smart_closer_cache");
   });
@@ -151,9 +174,25 @@ describe("one-triage-gesture migration", () => {
     const result = migrate({ db: path, log: silent });
 
     expect(result.snapshotPath).not.toBeNull();
+    expect(result.snapshotReused).toBe(false);
     expect(existsSync(result.snapshotPath!)).toBe(true);
     expect(columns(result.snapshotPath!)).toContain("archived_at");
     expect(columns(path)).not.toContain("archived_at");
+  });
+
+  test("a retry reuses the first snapshot instead of capturing a half-migrated one", () => {
+    const path = fixture();
+    const existing = `${path}.pre-one-triage-gesture.2020-01-01T00-00-00-000Z`;
+    const source = new Database(path);
+    source.exec(`VACUUM INTO '${existing}'`);
+    source.close();
+
+    const result = migrate({ db: path, log: silent });
+
+    expect(result.snapshotReused).toBe(true);
+    expect(result.snapshotPath).toBe(existing);
+    // The reused image is still pre-migration, which is the whole point.
+    expect(columns(existing)).toContain("archived_at");
   });
 
   test("refuses a database that is not there", () => {
