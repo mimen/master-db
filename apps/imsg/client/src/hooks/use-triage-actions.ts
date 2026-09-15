@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import type { ChatSummary, SmartCloser } from "@shared/types";
+import type { ChatSummary } from "@shared/types";
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
 import { api } from "@/lib/api";
 import { patchChatFlags, revertChatFlags } from "@/lib/chat-store";
@@ -81,17 +80,4 @@ export async function setTriageLater(chat: ChatSummary, until: number | null): P
       .then(() => emit(undoListeners, chat.guid))
       .catch(() => showToast("Could not undo Later"));
   });
-}
-
-export function useSmartCloser(chatGuid: string, enabled: boolean): { closer: SmartCloser | null; loading: boolean } {
-  const [closer, setCloser] = useState<SmartCloser | null>(null);
-  const [loading, setLoading] = useState(false);
-  useEffect(() => {
-    if (!enabled) { setCloser(null); return; }
-    let cancelled = false;
-    setLoading(true);
-    void api.getSmartCloser(chatGuid).then((result) => { if (!cancelled) setCloser(result); }, () => { if (!cancelled) setCloser(null); }).finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [chatGuid, enabled]);
-  return { closer, loading };
 }

@@ -147,14 +147,6 @@ export interface ChatSummary {
   };
 }
 
-export type SmartCloser =
-  | { kind: "reply"; label: string; draft?: string }
-  | { kind: "done"; label: string }
-  | { kind: "later"; label: string }
-  | { kind: "call"; label: string }
-  | { kind: "react_done"; label: string; reaction?: string }
-  | { kind: "archive"; label: string };
-
 export interface ShadowBrief {
   context: string;
   actionItems: string[];

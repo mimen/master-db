@@ -65,7 +65,6 @@ export type AiServiceLike = Pick<
   | "groupNames"
   | "replySuggestions"
   | "identify"
-  | "smartCloser"
   | "shadowBrief"
   | "shadowPending"
   | "shadowEnqueue"
@@ -1020,12 +1019,6 @@ app.get("/api/ai/identify/:guid", async (c) => {
   if (!address) return c.json({ error: "no participant address" }, 400);
   await contacts.refresh();
   const result = await ai.identify(chatGuid, address, names.lookup(address));
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(result.value);
-});
-
-app.get("/api/chats/:guid/smart-closer", async (c) => {
-  const result = await ai.smartCloser(c.req.param("guid"));
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(result.value);
 });

@@ -7,7 +7,6 @@ import type {
   ShadowBrief,
   SuggestionFeedbackRequest,
   SuggestionModel,
-  SmartCloser,
 } from "../../shared/types";
 import { FIXTURE_NOW } from "./world";
 
@@ -60,23 +59,6 @@ export class FixtureAi implements AiServiceLike {
       ok: true,
       value: { name: knownName, confidence: knownName ? "high" : "low", reasoning: "Deterministic fixture identity." },
     });
-  }
-
-  smartCloser(chatGuid: string): Promise<Result<SmartCloser>> {
-    if (chatGuid.includes("50101")) {
-      return Promise.resolve({ ok: true, value: { kind: "reply", label: "Send arrival time", draft: "Doors are at 8. I’ll be there by 7:15." } });
-    }
-    if (chatGuid.includes("fixture-crew")) {
-      return Promise.resolve({ ok: true, value: { kind: "react_done", label: "👍 & done", reaction: "👍" } });
-    }
-    const finalDigit = Number(chatGuid.at(-1) ?? "0");
-    const variants: SmartCloser[] = [
-      { kind: "reply", label: "Send confirmation", draft: "Yes — confirmed. I’ll send the final details shortly." },
-      { kind: "call", label: "Call them" },
-      { kind: "react_done", label: "👍 & done", reaction: "👍" },
-      { kind: "later", label: "Later today" },
-    ];
-    return Promise.resolve({ ok: true, value: variants[finalDigit % variants.length] ?? variants[0]! });
   }
 
   shadowBrief(_chatGuid: string, _force: boolean): Promise<Result<ShadowBrief>> {

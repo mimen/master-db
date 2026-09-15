@@ -7,17 +7,15 @@ import type {
   Message,
   ReplySuggestions,
   ShadowBrief,
-  SmartCloser,
   SuggestionFeedbackRequest,
   SuggestionModel,
 } from "../../shared/types";
 import { loadProfile, renderSuggestionContext, renderTranscript } from "./context";
 import { Gateway, type GatewayFailure } from "./gateway";
 import { contactCandidate, mergeCandidates, vaultCandidates } from "./identify";
-import { groupNamePrompt, identifyPrompt, shadowBriefPrompt, smartCloserPrompt } from "./prompts";
+import { groupNamePrompt, identifyPrompt, shadowBriefPrompt } from "./prompts";
 import { ShadowRunner, type ShadowAvailability } from "./shadow";
-import { deterministicSmartCloser, parseSmartCloser, parseSmartCloserJson, type JsonValue } from "./smart-closer";
-import { parseShadowBriefContent, parseShadowBriefJson } from "./shadow-brief";
+import { parseShadowBriefContent, parseShadowBriefJson, type JsonValue } from "./shadow-brief";
 import {
   SUGGESTION_MODELS,
   SUGGESTION_RECIPE_VERSION,
@@ -122,7 +120,7 @@ export class AiService {
   /** Per-chat serialization of shadow turns; also the "is a turn pending" set. */
   private shadowQueues = new Map<string, Promise<void>>();
   private suggestionInFlight = new Map<string, Promise<Result<ReplySuggestions>>>();
-  private structuredInFlight = new Map<string, Promise<SmartCloser | ShadowBrief>>();
+  private structuredInFlight = new Map<string, Promise<ShadowBrief>>();
   private aiActive = 0;
   private aiWaiters: Array<() => void> = [];
   private readonly aiConcurrency = 2;
@@ -459,52 +457,6 @@ export class AiService {
     this.deps.db.clearSuggestionLearning();
   }
 
-  async smartCloser(chatGuid: string): Promise<Result<SmartCloser>> {
-    const fetched = await this.deps.fetchMessages(chatGuid);
-    if (!fetched.ok) return fetched;
-    const messages = fetched.value;
-    const inbound = [...messages].reverse().find((message) => !message.isFromMe);
-    if (!inbound) return { ok: true, value: { kind: "done", label: "Done" } };
-
-    const cached = this.deps.db.getSmartCloserCache(chatGuid);
-    if (cached?.inbound_message_guid === inbound.guid) {
-      const parsed = parseSmartCloserJson(cached.payload);
-      if (parsed.ok) return parsed;
-    }
-
-    const key = `closer:${chatGuid}:${inbound.guid}`;
-    const existing = this.structuredInFlight.get(key);
-    if (existing) return { ok: true, value: (await existing) as SmartCloser };
-    const pending = this.generateSmartCloser(chatGuid, inbound.guid, inbound.text, messages);
-    this.structuredInFlight.set(key, pending);
-    try {
-      return { ok: true, value: await pending };
-    } finally {
-      if (this.structuredInFlight.get(key) === pending) this.structuredInFlight.delete(key);
-    }
-  }
-
-  private async generateSmartCloser(
-    chatGuid: string,
-    inboundGuid: string,
-    inboundText: string,
-    messages: Message[],
-  ): Promise<SmartCloser> {
-    let closer = deterministicSmartCloser(inboundText);
-    if (this.available) {
-      const generated = await this.completeJsonLimited<JsonValue>(
-        smartCloserPrompt(renderTranscript(messages, { limit: 30 })),
-        { maxTokens: 240 },
-      );
-      if (generated.ok) {
-        const parsed = parseSmartCloser(generated.value);
-        if (parsed.ok) closer = parsed.value;
-      }
-    }
-    this.deps.db.setSmartCloserCache(chatGuid, inboundGuid, JSON.stringify(closer));
-    return closer;
-  }
-
   async shadowBrief(chatGuid: string, force: boolean): Promise<Result<ShadowBrief>> {
     const fetched = await this.deps.fetchMessages(chatGuid);
     if (!fetched.ok) return fetched;
@@ -519,7 +471,7 @@ export class AiService {
 
     const key = `brief:${chatGuid}:${messageGuid}`;
     const existing = this.structuredInFlight.get(key);
-    if (existing) return { ok: true, value: (await existing) as ShadowBrief };
+    if (existing) return { ok: true, value: await existing };
     const pending = this.generateShadowBrief(chatGuid, messageGuid, messages);
     this.structuredInFlight.set(key, pending);
     try {

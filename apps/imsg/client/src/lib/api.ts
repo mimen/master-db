@@ -11,7 +11,6 @@ import type {
   SendTextRequest,
   ShadowBrief,
   ShadowMessage,
-  SmartCloser,
   StateCounts,
   SuggestionFeedbackRequest,
   SuggestionModel,
@@ -100,9 +99,6 @@ export const api = {
   },
   getTriageStats(): Promise<TriageProgressStats> {
     return request("/api/triage/stats");
-  },
-  getSmartCloser(chatGuid: string): Promise<SmartCloser> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/smart-closer`);
   },
   getShadowBrief(chatGuid: string, regenerate = false): Promise<ShadowBrief> {
     const query = regenerate ? "?regenerate=1" : "";

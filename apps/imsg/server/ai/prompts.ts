@@ -102,28 +102,6 @@ export function identifyPrompt(
   ].join("\n");
 }
 
-
-export function smartCloserPrompt(transcript: string): string {
-  return [
-    VOICE,
-    "",
-    "Classify the best non-automatic triage action for the latest inbound message.",
-    "Resolve the current state across the whole transcript first. Attachments are delivered work, and later reactions or praise may close an earlier request. Never draft a reply to a request the subsequent messages show is already completed.",
-    "This path only recommends. It never sends, reacts, archives, or changes state.",
-    "",
-    "Conversation:",
-    transcript || "(no messages)",
-    "",
-    UNTRUSTED_NOTICE,
-    "",
-    "Choose exactly one kind: reply, done, later, call, react_done, archive.",
-    "label is a short human button label.",
-    "When the right action is a reply, always include a draft: one concrete message he could send as-is, decisive and specific, not filler.",
-    "reply may include a draft. react_done may include a reaction. No other fields are allowed.",
-    `Reply with ONLY JSON, e.g. {"kind":"reply","label":"Reply","draft":"sounds good"}.`,
-  ].join("\n");
-}
-
 export function shadowBriefPrompt(transcript: string): string {
   return [
     VOICE,

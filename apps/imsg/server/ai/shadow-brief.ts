@@ -1,6 +1,7 @@
 import type { Result } from "../bluebubbles";
 import type { ShadowBrief } from "../../shared/types";
-import type { JsonValue } from "./smart-closer";
+
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 function isRecord(value: JsonValue): value is { [key: string]: JsonValue } {
   return value !== null && !Array.isArray(value) && typeof value === "object";

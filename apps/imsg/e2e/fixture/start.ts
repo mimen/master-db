@@ -99,7 +99,6 @@ function resetOverlay(): void {
     "ai_meta",
     "suggestion_result_cache",
     "suggestion_feedback",
-    "smart_closer_cache",
     "shadow_brief_cache",
     "triage_clear_event",
     "triage_open_item",

@@ -18,13 +18,6 @@ export interface AiMessageCacheRow {
   created_at: number;
 }
 
-export interface SmartCloserCacheRow {
-  chat_guid: string;
-  inbound_message_guid: string;
-  payload: string;
-  created_at: number;
-}
-
 export interface SuggestionCacheRow {
   chat_guid: string;
   selected_model: string;
@@ -150,14 +143,6 @@ export class OverlayDb {
     // Version 3 invalidates the old string-array cache and removes its private text.
     this.db.exec("DROP TABLE IF EXISTS suggestion_cache;");
     this.pruneSuggestionFeedback();
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS smart_closer_cache (
-        chat_guid TEXT PRIMARY KEY,
-        inbound_message_guid TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-    `);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS shadow_brief_cache (
         chat_guid TEXT PRIMARY KEY,
@@ -353,30 +338,6 @@ export class OverlayDb {
            created_at = excluded.created_at`,
       )
       .run(chatGuid, messageGuid, payload, Date.now());
-  }
-
-  getSmartCloserCache(chatGuid: string): SmartCloserCacheRow | null {
-    return (
-      (this.db
-        .query(
-          `SELECT chat_guid, inbound_message_guid, payload, created_at
-           FROM smart_closer_cache WHERE chat_guid = ?`,
-        )
-        .get(chatGuid) as SmartCloserCacheRow | undefined) ?? null
-    );
-  }
-
-  setSmartCloserCache(chatGuid: string, inboundMessageGuid: string, payload: string): void {
-    this.db
-      .query(
-        `INSERT INTO smart_closer_cache (chat_guid, inbound_message_guid, payload, created_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(chat_guid) DO UPDATE SET
-           inbound_message_guid = excluded.inbound_message_guid,
-           payload = excluded.payload,
-           created_at = excluded.created_at`,
-      )
-      .run(chatGuid, inboundMessageGuid, payload, Date.now());
   }
 
   setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {

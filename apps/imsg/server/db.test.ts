@@ -149,9 +149,7 @@ describe("triage overlay", () => {
     expect(db.countTriageClearsSince(10_500)).toBe(1);
   });
 
-  test("round-trips smart closer and shadow brief caches", () => {
-    db.setSmartCloserCache("chat-1", "in-1", '{"kind":"done","label":"Done"}');
-    expect(db.getSmartCloserCache("chat-1")?.inbound_message_guid).toBe("in-1");
+  test("round-trips the shadow brief cache", () => {
     db.setShadowBriefCache("chat-1", "m9", '{"context":"x","actionItems":[],"draft":""}');
     expect(db.getShadowBriefCache("chat-1")?.message_guid).toBe("m9");
   });
