@@ -150,7 +150,7 @@ export function ConversationListPane({
     navigationEntries: deskChats.map((chat, index) => ({ chat, location: { kind: "list" as const, index } })),
   }) : model, [model, deskChats, wide]);
   const sweepableChats = useMemo(() => deskModel.listChats.filter((chat) =>
-    !chat.flags.archived && chat.laterUntil === null && chat.flags.unresponded,
+    !chat.flags.archived && chat.flags.unresponded,
   ), [deskModel.listChats]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 

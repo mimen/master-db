@@ -50,8 +50,8 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   }, [refresh]);
 
   // Passive review lenses may freeze membership so an item does not jump while
-  // being inspected. The active triage queues must not: replying, Settle, and
-  // Later are defined to clear Needs reply / Waiting immediately.
+  // being inspected. The active triage queues must not: replying and Settle are
+  // defined to clear Needs reply / Waiting immediately.
   const frozenRef = useRef<{ state: StateFilter; guids: Set<string> }>({
     state,
     guids: new Set(),

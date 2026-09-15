@@ -145,7 +145,6 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
   await page.getByRole("radio", { name: /^All,/ }).click();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).not.toContainText(" E");
-  await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Move conversation to Later" })).not.toContainText(" H");
   row = page.getByTestId("conversation-row").first();
   await row.hover();
   await expect(row.getByText("Settle", { exact: true })).toHaveCount(0);
@@ -156,14 +155,11 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
   await page.waitForTimeout(100);
   const waitingAfter = await desk.request.get("/api/chats?state=waiting&type=all");
   expect(((await waitingAfter.json()) as readonly unknown[]).length).toBe(waitingCountBefore);
-  await page.keyboard.press("h");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
   await row.hover();
   await row.getByRole("button", { name: /More actions for/ }).click();
   const menu = page.getByRole("dialog");
   await expect(menu.getByText(/^Mark as (?:read|unread)$/)).toBeVisible();
   await expect(menu.getByText("Pin", { exact: true })).toBeVisible();
-  await expect(menu.getByText("Later…", { exact: true })).toBeVisible();
   await expect(menu.getByText("Archive", { exact: true })).toBeVisible();
   await expect(menu.getByText("Details", { exact: true })).toBeVisible();
   await expect(menu.getByText("No reply needed", { exact: true })).toHaveCount(0);
@@ -180,7 +176,6 @@ test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", a
     const resolveStrip = page.getByTestId("resolve-strip");
     await expect(resolveStrip).toBeVisible();
     await expect(resolveStrip.getByRole("button", { name: "Settle conversation" })).toBeVisible();
-    await expect(resolveStrip.getByRole("button", { name: "Move conversation to Later" })).toBeVisible();
     await expect(resolveStrip.getByText("Done", { exact: true })).toHaveCount(0);
     await expect(resolveStrip.getByText("Let go", { exact: true })).toHaveCount(0);
     const stripBox = await resolveStrip.boundingBox();

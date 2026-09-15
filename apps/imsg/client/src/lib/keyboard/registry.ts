@@ -9,7 +9,6 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "conversation.activate", title: "Reply to selected", group: "Navigation" },
   { id: "composer.focus", title: "Reply (focus composer)", group: "Navigation" },
   { id: "conversation.archive", title: "Settle conversation", group: "Conversation" },
-  { id: "conversation.later", title: "Later", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },
   { id: "conversation.new", title: "New message", group: "Conversation" },
@@ -55,7 +54,6 @@ export const BINDINGS: readonly KeyBinding[] = [
   // everywhere else (e.g. straight after ⌘K opens a chat) it starts a reply.
   { commandId: "composer.focus", combo: "enter", scope: "global", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.archive", combo: "e", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
-  { commandId: "conversation.later", combo: "h", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.markUnread", combo: "u", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "action.undo", combo: "z", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.new", combo: "c", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },

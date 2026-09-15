@@ -519,18 +519,6 @@ app.post("/api/chats/:guid/undismiss", async (c) => {
   return c.json({ ok: true });
 });
 
-app.post("/api/chats/:guid/later", async (c) => {
-  const body = (await c.req.json()) as { until?: number | null };
-  if (body.until !== null && (typeof body.until !== "number" || !Number.isFinite(body.until))) {
-    return c.json({ error: "until must be an epoch-ms number or null" }, 400);
-  }
-  const until = body.until ?? null;
-  if (until !== null && until <= Date.now()) return c.json({ error: "until must be in the future" }, 400);
-  const result = await directory.setLater(c.req.param("guid"), until);
-  if (!result.ok) return c.json({ error: result.error }, result.status ?? 502);
-  return c.json({ ok: true });
-});
-
 app.get("/api/triage/stats", async (c) => {
   const result = await directory.triageStats();
   if (!result.ok) return c.json({ error: result.error }, 502);

@@ -92,23 +92,19 @@ describe("ChatDirectory.summaries", () => {
     let now = Date.now();
     const { db, directory } = await setup([{ guid: CHAT_A, messages: [inbound("a1", now + 1000)] }], () => now);
     db.setArchived(CHAT_A, true);
-    db.setLater(CHAT_A, now + 1500, "a1");
     now += 3000;
     const before = db.getAll();
     const archived = spyOn(db, "setArchived");
-    const later = spyOn(db, "setLater");
-    const expiry = spyOn(db, "clearExpiredLater");
     const open = spyOn(db, "setOpenTriageItem");
     const clear = spyOn(db, "clearOpenTriageItem");
     try {
       const result = await directory.summaries();
       if (!result.ok) throw new Error(result.error);
       expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
-      expect(find(result.chats, CHAT_A).laterUntil).toBeNull();
       expect(db.getAll()).toEqual(before);
-      for (const write of [archived, later, expiry, open, clear]) expect(write).not.toHaveBeenCalled();
+      for (const write of [archived, open, clear]) expect(write).not.toHaveBeenCalled();
     } finally {
-      for (const write of [archived, later, expiry, open, clear]) write.mockRestore();
+      for (const write of [archived, open, clear]) write.mockRestore();
     }
   });
 
@@ -994,31 +990,6 @@ describe("ChatDirectory.findByAddress", () => {
 });
 
 describe("Triage Desk state", () => {
-  test("Later hides queue flags, expires, and wakes on a new inbound", async () => {
-    let now = 5_000;
-    const { bb, db, directory } = await setup(twoChatSeed(), () => now);
-    expect((await directory.setLater(CHAT_A, 10_000)).ok).toBe(true);
-    let result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).laterUntil).toBe(10_000);
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(false);
-
-    bb.receiveMessage(CHAT_A, "wake up");
-    result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).laterUntil).toBeNull();
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
-    expect(db.getAll().get(CHAT_A)?.laterUntil).toBeNull();
-
-    expect((await directory.setLater(CHAT_A, 10_000)).ok).toBe(true);
-    now = 10_001;
-    directory.invalidate();
-    result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).laterUntil).toBeNull();
-    expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
-  });
-
   test("rejects stale Done anchors and supports durable undismiss", async () => {
     const { db, directory } = await setup();
     const stale = await directory.dismiss(CHAT_A, "unresponded", "old-guid");

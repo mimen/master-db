@@ -64,8 +64,6 @@ export class OverlayDb {
       "ALTER TABLE chat_state ADD COLUMN marked_unread INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE chat_state ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;",
       "ALTER TABLE chat_state ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0;",
-      "ALTER TABLE chat_state ADD COLUMN later_until INTEGER;",
-      "ALTER TABLE chat_state ADD COLUMN later_anchor_guid TEXT;",
     ]) {
       try {
         this.db.exec(ddl);
@@ -412,8 +410,7 @@ export class OverlayDb {
     const rows = this.db
       .query(
         `SELECT chat_guid, archived_at, dismissed_unresponded_guid,
-                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at,
-                later_until, later_anchor_guid
+                dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at
          FROM chat_state`,
       )
       .all() as Array<{
@@ -425,8 +422,6 @@ export class OverlayDb {
       marked_unread: number;
       pinned: number;
       read_at: number;
-      later_until: number | null;
-      later_anchor_guid: string | null;
     }>;
     const map = new Map<string, ChatState>();
     for (const row of rows) {
@@ -439,8 +434,6 @@ export class OverlayDb {
         markedUnread: row.marked_unread,
         pinned: row.pinned,
         readAt: row.read_at,
-        laterUntil: row.later_until,
-        laterAnchorGuid: row.later_anchor_guid,
       });
     }
     return map;
@@ -453,28 +446,6 @@ export class OverlayDb {
          ON CONFLICT(chat_guid) DO UPDATE SET ${column} = excluded.${column}`,
       )
       .run(chatGuid, value);
-  }
-
-  clearExpiredLater(now: number): string[] {
-    const rows = this.db
-      .query("SELECT chat_guid FROM chat_state WHERE later_until IS NOT NULL AND later_until <= ?")
-      .all(now) as Array<{ chat_guid: string }>;
-    if (rows.length > 0) {
-      this.db
-        .query(
-          `UPDATE chat_state SET later_until = NULL, later_anchor_guid = NULL
-           WHERE later_until IS NOT NULL AND later_until <= ?`,
-        )
-        .run(now);
-    }
-    return rows.map((row) => row.chat_guid);
-  }
-
-  setLater(chatGuid: string, until: number | null, anchorGuid: string | null): void {
-    this.db.transaction(() => {
-      this.upsert(chatGuid, "later_until", until);
-      this.upsert(chatGuid, "later_anchor_guid", until === null ? null : anchorGuid);
-    })();
   }
 
   setArchived(chatGuid: string, archived: boolean): void {

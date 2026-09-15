@@ -25,9 +25,6 @@ export interface ChatState {
   readAt?: number;
   /** Manually marked unread; cleared on next mark-read. */
   markedUnread: number;
-  /** Active Later deadline and the last-message GUID it was anchored to. */
-  laterUntil?: number | null;
-  laterAnchorGuid?: string | null;
 }
 
 interface LastMessageLike {
@@ -46,30 +43,15 @@ export function isArchived(state: ChatState | undefined, last: LastMessageLike |
   return true;
 }
 
-export function isLaterActive(
-  state: ChatState | undefined,
-  last: LastMessageLike | null,
-  now: number = Date.now(),
-): boolean {
-  if (!state?.laterUntil || state.laterUntil <= now) return false;
-  return last !== null && last.guid === state.laterAnchorGuid;
-}
-
 export function computeFlags(
   state: ChatState | undefined,
   last: LastMessageLike | null,
   unreadCount: number,
-  now: number = Date.now(),
 ): ChatFlags {
   const archived = isArchived(state, last);
-  const laterActive = isLaterActive(state, last, now);
   const unresponded =
-    last !== null &&
-    !last.isFromMe &&
-    state?.dismissedUnrespondedGuid !== last.guid &&
-    !laterActive;
-  const waiting =
-    last !== null && last.isFromMe && state?.dismissedWaitingGuid !== last.guid && !laterActive;
+    last !== null && !last.isFromMe && state?.dismissedUnrespondedGuid !== last.guid;
+  const waiting = last !== null && last.isFromMe && state?.dismissedWaitingGuid !== last.guid;
   return {
     archived,
     unresponded,
@@ -215,7 +197,6 @@ export function applyMessage(
       senderName: message.sender?.name ?? message.sender?.address ?? null,
       hasAttachments: message.attachments.length > 0,
     },
-    laterUntil: message.isFromMe ? chat.laterUntil : null,
     flags: {
       ...chat.flags,
       unresponded: !message.isFromMe,

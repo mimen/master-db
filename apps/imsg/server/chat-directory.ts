@@ -2,7 +2,7 @@ import type { BBHandle, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
-import { applyMessage as applyMessageToSummaries, isArchived, isLaterActive } from "../shared/chat-state";
+import { applyMessage as applyMessageToSummaries, isArchived } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
 import type { ChatSummary, Message, TriageProgressStats } from "../shared/types";
@@ -74,7 +74,6 @@ export class ChatDirectory {
   // Chats we've marked read, ahead of BlueBubbles' DB reflecting it.
   private localReadAt = new Map<string, number>();
   private listeners = new Set<(event: DirectoryEvent) => void>();
-  private laterExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * The name source used for participant/display-name resolution. Defaults
@@ -94,25 +93,6 @@ export class ChatDirectory {
   ) {
     this.names = names ?? contacts;
     this.contacts.onAvailabilityChange(() => this.invalidate());
-    this.rescheduleLaterExpiry();
-  }
-
-  private rescheduleLaterExpiry(): void {
-    if (this.laterExpiryTimer) clearTimeout(this.laterExpiryTimer);
-    this.laterExpiryTimer = null;
-    const now = this.now();
-    const cleared = this.db.clearExpiredLater(now);
-    if (cleared.length > 0) this.invalidate();
-    const deadlines = [...this.db.getAll().values()]
-      .map((state) => state.laterUntil)
-      .filter((until): until is number => typeof until === "number" && until > now);
-    if (deadlines.length === 0) return;
-    const nearest = Math.min(...deadlines);
-    this.laterExpiryTimer = setTimeout(() => {
-      this.laterExpiryTimer = null;
-      this.rescheduleLaterExpiry();
-    }, Math.max(1, nearest - now));
-    this.laterExpiryTimer.unref?.();
   }
 
   onEvent(cb: (event: DirectoryEvent) => void): () => void {
@@ -268,12 +248,6 @@ export class ChatDirectory {
     if (archivedAt && inbound && !inbound.isFromMe && inbound.dateCreated > archivedAt) {
       this.db.setArchived(chatGuid, false);
     }
-    if (!m.isFromMe) {
-      for (const sibling of this.siblingGuids(chatGuid)) {
-        if (overlay.get(sibling)?.laterUntil) this.db.setLater(sibling, null, null);
-      }
-      this.rescheduleLaterExpiry();
-    }
     if (!this.summaryCache) {
       if (!m.isFromMe) this.db.setOpenTriageItem(chatGuid, m.guid, m.dateCreated);
       return;
@@ -308,7 +282,7 @@ export class ChatDirectory {
     let chats = result.value
       .map((chat) => {
         const state = overlay.get(chat.guid);
-        const summary = mapChat(chat, state, this.names, unread.get(chat.guid), this.now());
+        const summary = mapChat(chat, state, this.names, unread.get(chat.guid));
         // Mark-read override: trust our own mark-read over BB's lagging DB.
         // Persisted (overlay) readAt survives restarts — Apple never back-fills
         // dateRead on old group messages, so without it the scan resurrects
@@ -339,9 +313,6 @@ export class ChatDirectory {
       if (state?.archivedAt && !isArchived(state, chat.lastMessage)) {
         this.db.setArchived(chat.guid, false);
       }
-      if (state?.laterUntil && !isLaterActive(state, chat.lastMessage, this.now())) {
-        this.db.setLater(chat.guid, null, null);
-      }
     }
     for (const chat of result.chats) {
       if (chat.flags.unresponded && chat.lastMessage) {
@@ -350,7 +321,6 @@ export class ChatDirectory {
         this.db.clearOpenTriageItem(chat.guid);
       }
     }
-    this.rescheduleLaterExpiry();
   }
 
   /**
@@ -475,21 +445,6 @@ export class ChatDirectory {
     // BlueBubbles' lagging unread rows became genuinely unread again.
     this.clearCache();
     this.emitChanged();
-  }
-
-  async setLater(
-    guid: string,
-    until: number | null,
-  ): Promise<{ ok: boolean; error?: string; status?: 404 | 502 }> {
-    const result = await this.summaries();
-    if (!result.ok) return { ok: false, error: result.error, status: 502 };
-    const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
-    const anchor = chat?.lastMessage?.guid;
-    if (until !== null && !anchor) return { ok: false, error: "chat has no last message", status: 404 };
-    for (const sibling of this.siblingGuids(guid)) this.db.setLater(sibling, until, anchor ?? null);
-    this.rescheduleLaterExpiry();
-    this.invalidate();
-    return { ok: true };
   }
 
   setArchived(guid: string, archived: boolean): void {

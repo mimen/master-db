@@ -133,15 +133,6 @@ describe("attachment_transcript", () => {
 });
 
 describe("triage overlay", () => {
-  test("stores Later with its anchor and clears expired rows", () => {
-    db.setLater("chat-1", 2_000, "m1");
-    expect(db.getAll().get("chat-1")?.laterUntil).toBe(2_000);
-    expect(db.getAll().get("chat-1")?.laterAnchorGuid).toBe("m1");
-    expect(db.clearExpiredLater(1_999)).toEqual([]);
-    expect(db.clearExpiredLater(2_000)).toEqual(["chat-1"]);
-    expect(db.getAll().get("chat-1")?.laterUntil).toBeNull();
-  });
-
   test("deduplicates clear events by chat and message", () => {
     expect(db.recordTriageClear("chat-1", "m1", "dismiss", 10_000)).toBe(true);
     expect(db.recordTriageClear("chat-1", "m1", "reply", 11_000)).toBe(false);

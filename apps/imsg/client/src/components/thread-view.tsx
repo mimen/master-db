@@ -17,7 +17,7 @@ import { api } from "@/lib/api";
 import { formatDayDivider, sameDay } from "@/lib/format";
 import { hapticSelect } from "@/lib/haptics";
 import { useServerEvents } from "@/lib/sse";
-import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
+import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { openChatInfo } from "@/lib/chat-info";
@@ -32,7 +32,7 @@ import { showToast } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { settleTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
+import { settleTriageChat } from "@/hooks/use-triage-actions";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
@@ -618,7 +618,6 @@ export function ThreadView({
               : headerChat.flags.unresponded ? "Needs Reply" : "Waiting";
             void settleTriageChat(headerChat).then(() => showToast(`Settled from ${queueName} — Z to undo`), () => undefined);
           }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Settle{triageShortcutsEnabled ? <Text style={{ color: theme.textSecondary }}> E</Text> : null}</Text></HoverFillButton>
-          <HoverFillButton accessibilityLabel="Move conversation to Later" onPress={(event) => showSheet({ title: `Later · ${headerChat.displayName}`, anchor: pressAnchor(event), actions: laterOptions().map((option) => ({ label: option.label, onPress: () => { void setTriageLater(headerChat, option.until); } })) })} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="time-outline" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Later{triageShortcutsEnabled ? <Text style={{ color: theme.textSecondary }}> H</Text> : null}</Text></HoverFillButton>
         </View>
       )}
 

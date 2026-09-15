@@ -14,9 +14,8 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import type { JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { settleTriageChat, laterOptions, setTriageLater } from "@/hooks/use-triage-actions";
+import { settleTriageChat } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import {
@@ -43,7 +42,6 @@ export function MessagesWorkspace({
   const visual = useTriageTheme();
   const shell = useDesktopShellContext();
   const aiStatus = useAiStatus();
-  const showSheet = useActionSheet();
   const utilityOpen = shell.state.utility?.workspace === "messages";
   const shadowEnabled = aiStatus?.shadow === true;
   const [shadowOpen, setShadowOpen] = useState(false);
@@ -130,7 +128,6 @@ export function MessagesWorkspace({
         participants: [],
         lastMessage: null,
         unreadCount: 0,
-        laterUntil: null,
         flags: {
           archived: false,
           unresponded: false,
@@ -174,7 +171,6 @@ export function MessagesWorkspace({
         participants: [],
         lastMessage: null,
         unreadCount: 0,
-        laterUntil: null,
         flags: {
           archived: false,
           unresponded: false,
@@ -317,24 +313,6 @@ export function MessagesWorkspace({
         void settleTriageChat(sel).then(() => showToast(`Settled from ${queueName} — Z to undo`), () => undefined);
         getListAdapter()?.selectNeighborOf(sel.guid);
       },
-      laterSelected: () => {
-        const sel = selectedRef.current;
-        const queueState = stateRef.current;
-        const canMoveLater = queueState === "unresponded"
-          ? sel?.flags.unresponded === true
-          : queueState === "waiting" && sel?.flags.waiting === true;
-        if (!sel || !canMoveLater) return;
-        showSheet({
-          title: `Later · ${sel.displayName}`,
-          actions: laterOptions().map((option) => ({
-            label: option.label,
-            onPress: () => {
-              void setTriageLater(sel, option.until).then(refresh, () => showToast("Could not move conversation to Later"));
-              getListAdapter()?.selectNeighborOf(sel.guid);
-            },
-          })),
-        });
-      },
       markUnreadSelected: () => {
         const sel = selectedRef.current;
         if (!sel) return;
@@ -391,7 +369,7 @@ export function MessagesWorkspace({
       setKeyboardRuntime(null);
       setListMode(false);
     };
-  }, [active, wide, showSheet, refresh, shell.closeTopSurface, shell.closeUtility, shell.dispatch, shell.openHelp, shell.openPalette]);
+  }, [active, wide, refresh, shell.closeTopSurface, shell.closeUtility, shell.dispatch, shell.openHelp, shell.openPalette]);
 
   const list = (
     <ConversationListPane

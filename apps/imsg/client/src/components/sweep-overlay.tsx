@@ -8,8 +8,7 @@ import { patchChatWithMessage } from "@/lib/chat-store";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM } from "@/constants/theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { settleTriageChat, laterOptions, setTriageLater, undoLastTriageAction } from "@/hooks/use-triage-actions";
-import { pressAnchor, useActionSheet } from "@/lib/action-sheet";
+import { settleTriageChat, undoLastTriageAction } from "@/hooks/use-triage-actions";
 import { useSuggestionModel } from "@/lib/settings";
 import { ChatAvatar } from "./avatar";
 import { HoverFillButton } from "./hover-fill-button";
@@ -23,7 +22,6 @@ interface SweepStep {
 export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onClose }: { visible: boolean; chats: ChatSummary[]; startGuid?: string; onOpenFullThread: (chat: ChatSummary) => void; onClose: () => void }): React.JSX.Element | null {
   const theme = useTheme();
   const visual = useTriageTheme();
-  const showSheet = useActionSheet();
   const suggestionModel = useSuggestionModel();
   const chatsRef = useRef(chats);
   chatsRef.current = chats;
@@ -55,18 +53,6 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     if (!chat.flags.unresponded && !chat.flags.waiting) { advance(); return; }
     void settleTriageChat(chat).then(() => advance(`${chat.displayName} · settled`, true), () => undefined);
   }, [advance, chat, sending]);
-
-  const later = useCallback((anchor?: { x: number; y: number }) => {
-    if (!chat || sending) return;
-    showSheet({
-      title: `Later · ${chat.displayName}`,
-      anchor,
-      actions: laterOptions().map((option) => ({
-        label: option.label,
-        onPress: () => { void setTriageLater(chat, option.until).then(() => advance(`${chat.displayName} · later`, true), () => undefined); },
-      })),
-    });
-  }, [advance, chat, sending, showSheet]);
 
   const send = useCallback(() => {
     const text = draft.trim();
@@ -148,7 +134,6 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
       if (editable) return;
       if (key === "s") { event.preventDefault(); advance(); return; }
       if (key === "e") { event.preventDefault(); settle(); return; }
-      if (key === "h") { event.preventDefault(); later(); return; }
       if (key === "z") { event.preventDefault(); undo(); return; }
       const option = Number(event.key) - 1;
       if (option >= 0 && option <= 2) {
@@ -159,7 +144,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     };
     window.addEventListener("keydown", keydown, true);
     return () => window.removeEventListener("keydown", keydown, true);
-  }, [advance, later, onClose, settle, suggestions, undo, visible]);
+  }, [advance, onClose, settle, suggestions, undo, visible]);
 
   if (!visible) return null;
   const total = queue.length;
@@ -252,7 +237,6 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
 
                 <View style={styles.actionsRow}>
                   <HoverFillButton accessibilityLabel="Settle current conversation" onPress={settle} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.actionChip}><Ionicons name="checkmark" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Settle <Text style={{ color: visual.hint }}>E</Text></Text></HoverFillButton>
-                  <HoverFillButton accessibilityLabel="Move current conversation to Later" onPress={(event) => later(pressAnchor(event))} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.actionChip}><Ionicons name="time-outline" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Later <Text style={{ color: visual.hint }}>H</Text></Text></HoverFillButton>
                   <Text style={[styles.autoAdvance, { color: visual.hint }]}>sent replies auto-advance to the next</Text>
                 </View>
               </View>

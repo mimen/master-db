@@ -22,7 +22,6 @@ const chat = (over: Partial<ChatSummary>): ChatSummary => ({
     pinned: false,
   },
   ...over,
-  laterUntil: over.laterUntil ?? null,
 });
 
 const msg = (guid: string, text: string): Message =>

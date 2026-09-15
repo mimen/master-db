@@ -114,8 +114,6 @@ export interface ChatSummary {
   /** Epoch ms of the oldest genuine unread inbound message, or null when unavailable. */
   firstUnreadAt?: number | null;
   flags: ChatFlags;
-  /** Active Later/snooze deadline in epoch ms, or null when not snoozed. */
-  laterUntil: number | null;
   /**
    * Deduped, lowercased name terms (display, first, last, nickname,
    * organization…) drawn from every participant's Identity Mirror record —

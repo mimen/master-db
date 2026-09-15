@@ -91,12 +91,6 @@ export const api = {
       body: JSON.stringify({ kind }),
     });
   },
-  setChatLater(chatGuid: string, until: number | null): Promise<{ ok: boolean }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/later`, {
-      method: "POST",
-      body: JSON.stringify({ until }),
-    });
-  },
   getTriageStats(): Promise<TriageProgressStats> {
     return request("/api/triage/stats");
   },

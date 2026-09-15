@@ -26,19 +26,6 @@ export function undoLastTriageAction(): boolean {
   return runLatestUndo();
 }
 
-export function laterOptions(): Array<{ label: string; until: number }> {
-  const now = new Date();
-  const tonight = new Date(now); tonight.setHours(18, 0, 0, 0);
-  const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0);
-  const monday = new Date(now); monday.setDate(monday.getDate() + ((8 - monday.getDay()) % 7 || 7)); monday.setHours(9, 0, 0, 0);
-  return [
-    { label: "In 1 hour", until: now.getTime() + 3_600_000 },
-    { label: "Later today", until: Math.max(tonight.getTime(), now.getTime() + 3_600_000) },
-    { label: "Tomorrow morning", until: tomorrow.getTime() },
-    { label: "Next Monday", until: monday.getTime() },
-  ];
-}
-
 async function dismissOne(chat: ChatSummary, kind: "unresponded" | "waiting"): Promise<void> {
   const patch = kind === "unresponded" ? { unresponded: false } : { waiting: false };
   patchChatFlags(chat.guid, patch);
@@ -68,16 +55,5 @@ export async function settleTriageChat(chat: ChatSummary): Promise<void> {
     void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
       .then(() => emit(undoListeners, chat.guid))
       .catch(() => showToast("Could not undo Settle"));
-  });
-}
-
-export async function setTriageLater(chat: ChatSummary, until: number | null): Promise<void> {
-  const undoToken = beginUndoAction();
-  await api.setChatLater(chat.guid, until);
-  emit(resolvedListeners, chat.guid);
-  commitUndoAction(undoToken, () => {
-    void api.setChatLater(chat.guid, null)
-      .then(() => emit(undoListeners, chat.guid))
-      .catch(() => showToast("Could not undo Later"));
   });
 }

@@ -114,8 +114,6 @@ describe("registry", () => {
     expect(next?.keys).toEqual(["J", "↓"]);
     const settle = entries.find((e) => e.title === "Settle conversation");
     expect(settle?.keys).toEqual(["E"]);
-    const later = entries.find((e) => e.title === "Later");
-    expect(later?.keys).toEqual(["H"]);
     const nw = entries.find((e) => e.title === "New message");
     expect(nw?.keys).toEqual(["C"]);
     expect(entries.find((e) => e.title === "Close panel / window")).toBeUndefined();
