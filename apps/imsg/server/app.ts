@@ -234,7 +234,7 @@ app.get("/api/chats", async (c) => {
   const type = (c.req.query("type") ?? "all") as TypeFilter;
   const result = await directory.summaries();
   if (!result.ok) return c.json({ error: result.error }, 502);
-  // "any" returns the raw list (archived included) for clients that filter locally.
+  // "any" returns the raw, unfiltered list for clients that filter locally.
   if (stateQ === "any") return c.json(result.chats);
   return c.json(result.chats.filter((chat) => matchesFilters(chat, stateQ as StateFilter, type)));
 });
@@ -483,12 +483,6 @@ app.post("/api/chats/:guid/typing", async (c) => {
 
 app.post("/api/chats/:guid/unread", async (c) => {
   directory.markUnread(c.req.param("guid"));
-  return c.json({ ok: true });
-});
-
-app.post("/api/chats/:guid/archive", async (c) => {
-  const body = (await c.req.json()) as { archived: boolean };
-  directory.setArchived(c.req.param("guid"), body.archived);
   return c.json({ ok: true });
 });
 

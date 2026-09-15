@@ -69,7 +69,7 @@ workspace owns its `DesktopSplit`. Compact route adapters remain under
 ## 3. Search-state rules
 
 - Search is a MODE: a nonblank query wipes both lenses to All (visibly)
-  and spans the FULL universe — archived, unknown, DMs, groups.
+  and spans the FULL universe — unknown, DMs, groups.
 - Blank-query browsing selects from `useChats`' FROZEN triage membership
   (`browseGuids`) — live filters are never reapplied on top, so rows don't
   vanish mid-triage.

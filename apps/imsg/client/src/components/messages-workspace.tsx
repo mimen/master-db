@@ -129,7 +129,6 @@ export function MessagesWorkspace({
         lastMessage: null,
         unreadCount: 0,
         flags: {
-          archived: false,
           unresponded: false,
           waiting: false,
           unread: false,
@@ -172,7 +171,6 @@ export function MessagesWorkspace({
         lastMessage: null,
         unreadCount: 0,
         flags: {
-          archived: false,
           unresponded: false,
           waiting: false,
           unread: false,

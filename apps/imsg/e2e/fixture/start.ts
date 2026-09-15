@@ -54,7 +54,6 @@ const identity = new FixtureIdentity();
 function seedOverlay(): void {
   db.setPinned(CHAT_GUIDS.needs, true);
   db.setMarkedUnread(CHAT_GUIDS.unreadGroup, true);
-  db.setArchived(CHAT_GUIDS.archived, true);
   const seed = fixtureSeed();
   for (const chat of seed.chats) {
     const last = chat.messages.at(-1);

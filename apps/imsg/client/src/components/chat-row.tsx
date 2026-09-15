@@ -21,7 +21,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
 import { Colors, Type } from "@/constants/theme";
-import { archiveChat, markChatRead, markChatUnread } from "@/lib/chat-actions";
+import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
 import {
@@ -191,7 +191,6 @@ function ChatRowInner({
       containerStyle={compact ? styles.desktopRowWrap : undefined}
       friction={1}
       leftThreshold={commit}
-      rightThreshold={commit}
       renderLeftActions={(_progress, translation) => (
         <SwipeAction
           translation={translation}
@@ -202,26 +201,9 @@ function ChatRowInner({
           commit={commit}
         />
       )}
-      renderRightActions={(_progress, translation) => (
-        <SwipeAction
-          translation={translation}
-          icon={chat.flags.archived ? "arrow-undo-outline" : "archive-outline"}
-          label={chat.flags.archived ? "Unarchive" : "Archive"}
-          color="#F0A500"
-          side="right"
-          commit={commit}
-        />
-      )}
-      onSwipeableOpen={(direction) => {
-        // `direction` is the swipe direction, not the pane side: swiping LEFT
-        // reveals the right-hand (Archive) pane, swiping RIGHT reveals the
-        // left-hand (Read/Unread) pane. Fire the optimistic action then close.
-        if (direction === "left") {
-          archiveChat(chat, !chat.flags.archived);
-        } else {
-          if (chat.flags.unread) markChatRead(chat);
-          else markChatUnread(chat);
-        }
+      onSwipeableOpen={() => {
+        if (chat.flags.unread) markChatRead(chat);
+        else markChatUnread(chat);
         swipeRef.current?.close();
       }}
     >
@@ -337,28 +319,6 @@ function ChatRowInner({
             )}
           </View>
         </View>
-        {!compact && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={chat.flags.archived ? "Unarchive conversation" : "Archive conversation"}
-            onPress={(e) => {
-              e.stopPropagation();
-              archiveChat(chat, !chat.flags.archived);
-            }}
-            hitSlop={6}
-            pointerEvents={hovered ? "auto" : "none"}
-            style={[
-              styles.hoverArchive,
-              { backgroundColor: theme.backgroundSelected, opacity: hovered ? 1 : 0 },
-            ]}
-          >
-            <Ionicons
-              name={chat.flags.archived ? "arrow-undo-outline" : "archive-outline"}
-              size={15}
-              color={theme.text}
-            />
-          </Pressable>
-        )}
       </Pressable>
     </ReanimatedSwipeable>
   );
@@ -493,18 +453,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontVariant: ["tabular-nums"],
     fontWeight: "700",
-  },
-  hoverArchive: {
-    alignItems: "center",
-    borderRadius: 14,
-    height: 28,
-    justifyContent: "center",
-    marginTop: -14,
-    position: "absolute",
-    right: 10,
-    top: "50%",
-    width: 28,
-    zIndex: 2,
   },
   swipeAction: {
     width: ACTION_WIDTH,

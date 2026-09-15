@@ -2,16 +2,14 @@ import type { ChatFlags, ChatSummary, Message, StateCounts, StateFilter, TypeFil
 
 /**
  * Chat State — the pure rules for a chat's flags: how Unresponded / Waiting /
- * Unread / Archived derive from the Overlay + last message, how a new message
- * flips them (the SSE fast path), and which lens a chat matches. The single
- * implementation shared by the server and the client.
+ * Unread derive from the Overlay + last message, how a new message flips them
+ * (the SSE fast path), and which lens a chat matches. The single implementation
+ * shared by the server and the client.
  */
 
 /** Per-chat Overlay row: app-local state BlueBubbles knows nothing about. */
 export interface ChatState {
   chatGuid: string;
-  /** Epoch ms when the chat was archived; null = not archived. */
-  archivedAt: number | null;
   /** Last-message GUID at the moment "unresponded" was dismissed. */
   dismissedUnrespondedGuid: string | null;
   /** Last-message GUID at the moment "waiting on them" was dismissed. */
@@ -33,27 +31,15 @@ interface LastMessageLike {
   isFromMe: boolean;
 }
 
-/**
- * Archive is lazily self-clearing: a chat counts as archived only while no
- * inbound message is newer than the archive timestamp (auto-unarchive).
- */
-export function isArchived(state: ChatState | undefined, last: LastMessageLike | null): boolean {
-  if (!state?.archivedAt) return false;
-  if (last && !last.isFromMe && last.dateCreated > state.archivedAt) return false;
-  return true;
-}
-
 export function computeFlags(
   state: ChatState | undefined,
   last: LastMessageLike | null,
   unreadCount: number,
 ): ChatFlags {
-  const archived = isArchived(state, last);
   const unresponded =
     last !== null && !last.isFromMe && state?.dismissedUnrespondedGuid !== last.guid;
   const waiting = last !== null && last.isFromMe && state?.dismissedWaitingGuid !== last.guid;
   return {
-    archived,
     unresponded,
     waiting,
     unread: unreadCount > 0 || state?.markedUnread === 1,
@@ -77,19 +63,17 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
   }
   switch (state) {
     case "all":
-      return !chat.flags.archived;
+      return true;
     case "unread":
-      return chat.flags.unread && !chat.flags.archived;
+      return chat.flags.unread;
     case "unresponded":
-      return chat.flags.unresponded && !chat.flags.archived;
+      return chat.flags.unresponded;
     case "waiting":
-      return chat.flags.waiting && !chat.flags.archived;
-    case "archived":
-      return chat.flags.archived;
+      return chat.flags.waiting;
   }
 }
 
-const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "archived"];
+const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting"];
 
 export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCounts {
   return Object.fromEntries(
@@ -159,8 +143,7 @@ export function partitionPriorityShelf(chats: ChatSummary[]): PriorityShelfParti
 /**
  * The SSE fast path: applies a message we already know about directly to a
  * summary list, ahead of a full rebuild — new last message, flag flips
- * (inbound clears Archived and starts Unresponded; outbound starts Waiting),
- * chat moved to the top.
+ * (inbound starts Unresponded; outbound starts Waiting), chat moved to the top.
  *
  * Returns the input array unchanged when the message is stale (older than the
  * chat's last message), or null when the chat isn't in the list — the caller
@@ -202,7 +185,6 @@ export function applyMessage(
       unresponded: !message.isFromMe,
       waiting: message.isFromMe,
       unread: message.isFromMe ? chat.flags.unread : true,
-      archived: message.isFromMe ? chat.flags.archived : false,
     },
   };
   const next = [...chats];

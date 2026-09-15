@@ -91,68 +91,21 @@ describe("ChatDirectory.summaries", () => {
   test("rebuilds without writing overlay or triage state", async () => {
     let now = Date.now();
     const { db, directory } = await setup([{ guid: CHAT_A, messages: [inbound("a1", now + 1000)] }], () => now);
-    db.setArchived(CHAT_A, true);
+    db.setPinned(CHAT_A, true);
     now += 3000;
     const before = db.getAll();
-    const archived = spyOn(db, "setArchived");
+    const pinned = spyOn(db, "setPinned");
     const open = spyOn(db, "setOpenTriageItem");
     const clear = spyOn(db, "clearOpenTriageItem");
     try {
       const result = await directory.summaries();
       if (!result.ok) throw new Error(result.error);
-      expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+      expect(find(result.chats, CHAT_A).flags.pinned).toBe(true);
       expect(db.getAll()).toEqual(before);
-      for (const write of [archived, open, clear]) expect(write).not.toHaveBeenCalled();
+      for (const write of [pinned, open, clear]) expect(write).not.toHaveBeenCalled();
     } finally {
-      for (const write of [archived, open, clear]) write.mockRestore();
+      for (const write of [pinned, open, clear]) write.mockRestore();
     }
-  });
-
-  test("a reply persists the unarchive derived from a missed inbound", async () => {
-    const { bb, db, directory, contacts } = await setup();
-    db.setArchived(CHAT_A, true);
-    const archivedAt = db.getAll().get(CHAT_A)?.archivedAt;
-    const inboundAt = Date.now() + 1000;
-    bb.appendMessage(CHAT_A, inbound("missed", inboundAt));
-    await directory.summaries();
-    expect(db.getAll().get(CHAT_A)?.archivedAt).toBe(archivedAt);
-    const reply: BBMessage = { guid: "reply", text: "yes", dateCreated: inboundAt + 1000, isFromMe: true };
-    bb.appendMessage(CHAT_A, reply);
-    directory.applyKnownMessage(CHAT_A, mapMessage(reply, CHAT_A, contacts));
-    expect(db.getAll().get(CHAT_A)?.archivedAt).toBeNull();
-    directory.invalidate();
-    const result = await directory.summaries();
-    if (!result.ok) throw new Error(result.error);
-    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
-  });
-
-  test("a reply to a non-primary service sibling persists its unarchive", async () => {
-    const now = Date.now();
-    const smsGuid = "SMS;-;+15550001111";
-    const { bb, db, directory, contacts } = await setup([
-      { guid: CHAT_A, participants: [{ address: "+15550001111" }], messages: [inbound("primary", now + 2000)] },
-      { guid: smsGuid, participants: [{ address: "+15550001111" }], messages: [inbound("missed", now + 1000)] },
-    ]);
-    db.setArchived(smsGuid, true);
-    await directory.summaries();
-    const reply: BBMessage = { guid: "reply-sms", text: "yes", dateCreated: now + 3000, isFromMe: true };
-    bb.appendMessage(smsGuid, reply);
-    directory.applyKnownMessage(smsGuid, mapMessage(reply, smsGuid, contacts));
-    expect(db.getAll().get(smsGuid)?.archivedAt).toBeNull();
-    const result = await directory.summaries();
-    if (!result.ok) throw new Error(result.error);
-    expect(find(result.chats, smsGuid).flags.archived).toBe(false);
-  });
-
-  test("explicit reconciliation persists clears for unmerged service rows", async () => {
-    const now = Date.now();
-    const { db, directory } = await setup([
-      { guid: CHAT_A, participants: [{ address: "+15550001111" }], messages: [inbound("missed", now + 2000)] },
-      { guid: "SMS;-;+15550001111", participants: [{ address: "+15550001111" }], messages: [{ guid: "reply", dateCreated: now + 3000, isFromMe: true }] },
-    ]);
-    db.setArchived(CHAT_A, true);
-    await directory.reconcileState();
-    expect(db.getAll().get(CHAT_A)?.archivedAt).toBeNull();
   });
 
   test("builds a flag-annotated list from the seeded chats", async () => {
@@ -599,7 +552,7 @@ describe("ChatDirectory reactive fast path", () => {
     expect(matchesFilters(a, "all", "all")).toBe(true);
   });
 
-  test("junk override preserves local read and archive state", async () => {
+  test("junk override preserves local read and pin state", async () => {
     const { directory } = await setup();
     await directory.summaries();
     directory.applyMessage(CHAT_A, {
@@ -607,7 +560,7 @@ describe("ChatDirectory reactive fast path", () => {
       isSpam: true,
     });
     expect(await directory.markRead(CHAT_A)).toBe(true);
-    directory.setArchived(CHAT_A, true);
+    directory.setPinned(CHAT_A, true);
 
     const result = await directory.summaries();
     expect(result.ok).toBe(true);
@@ -615,7 +568,7 @@ describe("ChatDirectory reactive fast path", () => {
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
     expect(a.flags.unread).toBe(false);
-    expect(a.flags.archived).toBe(true);
+    expect(a.flags.pinned).toBe(true);
   });
 
   test("updated messages invalidate summaries for authoritative reconciliation", async () => {
@@ -724,52 +677,18 @@ describe("ChatDirectory reactive fast path", () => {
     expect(chat.firstUnreadAt).toBeNull();
   });
 
-  test("archive excludes from the all lens; a new inbound auto-unarchives", async () => {
-    const { bb, directory } = await setup();
-    directory.setArchived(CHAT_A, true);
-
-    let result = await directory.summaries();
-    if (!result.ok) return;
-    const visible = result.chats.filter((c) => matchesFilters(c, "all", "all"));
-    expect(visible.find((c) => c.guid === CHAT_A)).toBeUndefined();
-    expect(find(result.chats, CHAT_A).flags.archived).toBe(true);
-
-    bb.receiveMessage(CHAT_A, "you around?");
-
-    result = await directory.summaries();
-    if (!result.ok) return;
-    const visibleAfter = result.chats.filter((c) => matchesFilters(c, "all", "all"));
-    expect(visibleAfter.find((c) => c.guid === CHAT_A)).toBeDefined();
-    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
-  });
-
-  test("replying to an auto-unarchived chat does not re-archive it", async () => {
-    // Regression: auto-unarchive used to be derived-only (isArchived compared
-    // the last message against archivedAt) and never persisted. Replying made
-    // the last message outbound, the derivation flipped back to "archived",
-    // and the chat plus the reply vanished into Archived again.
-    const { bb, directory, contacts } = await setup();
-    directory.setArchived(CHAT_A, true);
+  test("a settled conversation stays in the all lens", async () => {
+    const { directory } = await setup();
     await directory.summaries();
 
-    bb.receiveMessage(CHAT_A, "you around?");
-    let result = await directory.summaries();
-    if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+    const dismissed = await directory.dismiss(CHAT_A, "unresponded");
+    expect(dismissed.ok).toBe(true);
 
-    // Now reply, exactly as the send route does.
-    const reply: BBMessage = {
-      guid: "reply-1",
-      text: "yep",
-      dateCreated: Date.now() + 1000,
-      isFromMe: true,
-      handle: { address: "+15550001111" },
-    };
-    directory.applyKnownMessage(CHAT_A, mapMessage(reply, CHAT_A, contacts));
-
-    result = await directory.summaries();
+    const result = await directory.summaries();
     if (!result.ok) return;
-    expect(find(result.chats, CHAT_A).flags.archived).toBe(false);
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.flags.unresponded).toBe(false);
+    expect(chat.flags.waiting).toBe(false);
     const visible = result.chats.filter((c) => matchesFilters(c, "all", "all"));
     expect(visible.find((c) => c.guid === CHAT_A)).toBeDefined();
   });
@@ -805,7 +724,7 @@ describe("ChatDirectory reactive fast path", () => {
     bb.receiveMessage(CHAT_A, "quiet patch"); // fast path — no changed event
     expect(changed).toBe(0);
 
-    directory.setArchived(CHAT_A, true);
+    directory.setPinned(CHAT_A, true);
     await directory.markRead(CHAT_A);
     await directory.dismiss(CHAT_A, "unresponded");
     expect(changed).toBe(3);

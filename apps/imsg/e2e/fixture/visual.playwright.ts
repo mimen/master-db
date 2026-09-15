@@ -160,8 +160,8 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
   const menu = page.getByRole("dialog");
   await expect(menu.getByText(/^Mark as (?:read|unread)$/)).toBeVisible();
   await expect(menu.getByText("Pin", { exact: true })).toBeVisible();
-  await expect(menu.getByText("Archive", { exact: true })).toBeVisible();
   await expect(menu.getByText("Details", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Archive", { exact: true })).toHaveCount(0);
   await expect(menu.getByText("No reply needed", { exact: true })).toHaveCount(0);
   await expect(menu.getByText("Not waiting on this", { exact: true })).toHaveCount(0);
   await expect(menu.getByText("Hide from Unresponded", { exact: true })).toHaveCount(0);

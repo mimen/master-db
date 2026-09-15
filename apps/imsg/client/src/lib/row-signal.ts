@@ -12,7 +12,7 @@ export type RowSignalKind = "unread";
 
 export function rowSignal(chat: {
   readonly unreadCount: number;
-  readonly flags: { readonly unresponded: boolean; readonly archived: boolean };
+  readonly flags: { readonly unresponded: boolean };
 }): RowSignalKind | null {
   if (chat.unreadCount > 0) return "unread";
   return null;

@@ -2,26 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import { ROW_SIGNAL_SIZE, rowSignal, unreadLabel } from "./row-signal";
 
-const flags = { unresponded: false, archived: false };
+const flags = { unresponded: false };
 
 describe("rowSignal", () => {
-  test("unread wins over unresponded and archived", () => {
-    expect(
-      rowSignal({
-        unreadCount: 2,
-        flags: { unresponded: true, archived: true },
-      }),
-    ).toBe("unread");
+  test("unread wins over unresponded", () => {
+    expect(rowSignal({ unreadCount: 2, flags: { unresponded: true } })).toBe("unread");
   });
 
-  test("unresponded and archived do not create row badges", () => {
-    expect(
-      rowSignal({ unreadCount: 0, flags: { unresponded: true, archived: true } }),
-    ).toBeNull();
-  });
-
-  test("archived does not create a row badge", () => {
-    expect(rowSignal({ unreadCount: 0, flags: { ...flags, archived: true } })).toBeNull();
+  test("unresponded does not create a row badge", () => {
+    expect(rowSignal({ unreadCount: 0, flags: { unresponded: true } })).toBeNull();
   });
 
   test("empty when no signal applies", () => {

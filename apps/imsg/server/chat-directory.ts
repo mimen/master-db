@@ -2,7 +2,7 @@ import type { BBHandle, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
-import { applyMessage as applyMessageToSummaries, isArchived } from "../shared/chat-state";
+import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
 import type { ChatSummary, Message, TriageProgressStats } from "../shared/types";
@@ -242,12 +242,6 @@ export class ChatDirectory {
       this.db.recordTriageClear(chatGuid, replyAnchor, "reply", this.now());
       this.db.clearOpenTriageItem(chatGuid);
     }
-    const overlay = this.db.getAll();
-    const archivedAt = overlay.get(chatGuid)?.archivedAt;
-    const inbound = m.isFromMe ? prior?.lastMessage : m;
-    if (archivedAt && inbound && !inbound.isFromMe && inbound.dateCreated > archivedAt) {
-      this.db.setArchived(chatGuid, false);
-    }
     if (!this.summaryCache) {
       if (!m.isFromMe) this.db.setOpenTriageItem(chatGuid, m.guid, m.dateCreated);
       return;
@@ -306,14 +300,7 @@ export class ChatDirectory {
 
   async reconcileState(): Promise<void> {
     const result = await this.summaries();
-    if (!result.ok || !this.summaryCache) return;
-    const overlay = this.db.getAll();
-    for (const chat of this.summaryCache.sourceChats) {
-      const state = overlay.get(chat.guid);
-      if (state?.archivedAt && !isArchived(state, chat.lastMessage)) {
-        this.db.setArchived(chat.guid, false);
-      }
-    }
+    if (!result.ok) return;
     for (const chat of result.chats) {
       if (chat.flags.unresponded && chat.lastMessage) {
         this.db.setOpenTriageItem(chat.guid, chat.lastMessage.guid, chat.lastMessage.dateCreated);
@@ -445,11 +432,6 @@ export class ChatDirectory {
     // BlueBubbles' lagging unread rows became genuinely unread again.
     this.clearCache();
     this.emitChanged();
-  }
-
-  setArchived(guid: string, archived: boolean): void {
-    this.db.setArchived(guid, archived);
-    this.invalidate();
   }
 
   setPinned(guid: string, pinned: boolean): void {

@@ -31,7 +31,6 @@ function chat(guid: string, unreadCount = 0): ChatSummary {
     firstUnreadAt: null,
     flags: {
       unread: unreadCount > 0,
-      archived: false,
       pinned: false,
       unresponded: false,
       waiting: false,
@@ -113,36 +112,36 @@ describe("setChats identity reconciliation", () => {
   });
 });
 
-describe("optimistic archive vs stale refetch", () => {
+describe("optimistic flag patch vs stale refetch", () => {
   beforeEach(() => {
     resetChatStore();
     setChats([chat("a")]);
   });
 
-  test("a refetch that started before archive cannot resurrect the row", () => {
+  test("a refetch that started before the patch cannot revert it", () => {
     const epochBefore = mutationEpochNow();
-    patchChatFlags("a", { archived: true });
-    expect(getChats()?.[0]?.flags.archived).toBe(true);
+    patchChatFlags("a", { unread: true });
+    expect(getChats()?.[0]?.flags.unread).toBe(true);
 
     const stale = refetched([chat("a")]);
-    stale[0]!.flags.archived = false;
+    stale[0]!.flags.unread = false;
     setChats(stale, epochBefore);
 
-    expect(getChats()?.[0]?.flags.archived).toBe(true);
+    expect(getChats()?.[0]?.flags.unread).toBe(true);
   });
 
-  test("a refetch that started after archive settled can confirm it", () => {
-    patchChatFlags("a", { archived: true });
+  test("a refetch that started after the patch settled can confirm it", () => {
+    patchChatFlags("a", { unread: true });
     settlePendingFlags("a");
     const epoch = mutationEpochNow();
     const confirmed = refetched([chat("a")]);
-    confirmed[0]!.flags.archived = true;
+    confirmed[0]!.flags.unread = true;
     setChats(confirmed, epoch);
-    expect(getChats()?.[0]?.flags.archived).toBe(true);
+    expect(getChats()?.[0]?.flags.unread).toBe(true);
 
     const later = refetched([chat("a")]);
-    later[0]!.flags.archived = false;
+    later[0]!.flags.unread = false;
     setChats(later, epoch);
-    expect(getChats()?.[0]?.flags.archived).toBe(false);
+    expect(getChats()?.[0]?.flags.unread).toBe(false);
   });
 });

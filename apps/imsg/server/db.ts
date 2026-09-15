@@ -54,7 +54,6 @@ export class OverlayDb {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS chat_state (
         chat_guid TEXT PRIMARY KEY,
-        archived_at INTEGER,
         dismissed_unresponded_guid TEXT,
         dismissed_waiting_guid TEXT,
         muted_unresponded INTEGER NOT NULL DEFAULT 0
@@ -409,13 +408,12 @@ export class OverlayDb {
   getAll(): Map<string, ChatState> {
     const rows = this.db
       .query(
-        `SELECT chat_guid, archived_at, dismissed_unresponded_guid,
+        `SELECT chat_guid, dismissed_unresponded_guid,
                 dismissed_waiting_guid, muted_unresponded, marked_unread, pinned, read_at
          FROM chat_state`,
       )
       .all() as Array<{
       chat_guid: string;
-      archived_at: number | null;
       dismissed_unresponded_guid: string | null;
       dismissed_waiting_guid: string | null;
       muted_unresponded: number;
@@ -427,7 +425,6 @@ export class OverlayDb {
     for (const row of rows) {
       map.set(row.chat_guid, {
         chatGuid: row.chat_guid,
-        archivedAt: row.archived_at,
         dismissedUnrespondedGuid: row.dismissed_unresponded_guid,
         dismissedWaitingGuid: row.dismissed_waiting_guid,
         mutedUnresponded: row.muted_unresponded,
@@ -446,10 +443,6 @@ export class OverlayDb {
          ON CONFLICT(chat_guid) DO UPDATE SET ${column} = excluded.${column}`,
       )
       .run(chatGuid, value);
-  }
-
-  setArchived(chatGuid: string, archived: boolean): void {
-    this.upsert(chatGuid, "archived_at", archived ? Date.now() : null);
   }
 
   dismissUnresponded(chatGuid: string, lastMessageGuid: string): void {

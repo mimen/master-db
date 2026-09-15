@@ -11,7 +11,7 @@ export const CHAT_GUIDS = {
   needs: "iMessage;-;+16195550101",
   waiting: "iMessage;-;+16195550102",
   unreadGroup: "iMessage;+;fixture-crew",
-  archived: "SMS;-;+16195550103",
+  coldSms: "SMS;-;+16195550103",
   unknown: "SMS;-;+16195550999",
 } as const;
 
@@ -113,9 +113,9 @@ export function fixtureSeed(): FakeSeed {
         };
       }),
       {
-        guid: CHAT_GUIDS.archived,
+        guid: CHAT_GUIDS.coldSms,
         participants: [{ address: "+16195550103", service: "SMS" }],
-        messages: [message("archived-1", CHAT_GUIDS.archived, "Old SMS receipt", 1_440, true)],
+        messages: [message("cold-sms-1", CHAT_GUIDS.coldSms, "Old SMS receipt", 1_440, true)],
       },
       {
         guid: CHAT_GUIDS.unknown,

@@ -36,7 +36,7 @@ export const api = {
   chats(state: StateFilter, type: TypeFilter): Promise<ChatSummary[]> {
     return request(`/api/chats?state=${state}&type=${type}`);
   },
-  /** Raw list including archived — for clients that filter locally. */
+  /** Raw, unfiltered list — for clients that filter locally. */
   allChats(): Promise<ChatSummary[]> {
     return request(`/api/chats?state=any`);
   },
@@ -68,12 +68,6 @@ export const api = {
   },
   markUnread(chatGuid: string): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/unread`, { method: "POST" });
-  },
-  setArchived(chatGuid: string, archived: boolean): Promise<{ ok: boolean }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/archive`, {
-      method: "POST",
-      body: JSON.stringify({ archived }),
-    });
   },
   dismiss(
     chatGuid: string,

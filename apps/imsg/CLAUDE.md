@@ -61,8 +61,8 @@ and Restart banners.
 - **`.env` is NOT in the checkout** (gitignored). Local server runs need
   `BB_URL/BB_PASSWORD/HOST/PORT/DB_PATH`; keep `HOST=127.0.0.1`. The Mini's
   `apps/imsg/.env` has them. BlueBubbles supplies all message history.
-- **Overlay DB (`imsg.db`) and `.cache/avatars/`** hold pins/archives/dismissals and
-  contact photos — carry them on any checkout move; never commit them.
+- **Overlay DB (`imsg.db`) and `.cache/avatars/`** hold pins, dismissals, mark-unread state
+  and contact photos. Carry them on any checkout move and never commit them.
 - Contact avatars: run `bun scripts/export-avatars.ts` **on the Mini**
   after contact-photo changes; BlueBubbles itself returns no avatars.
 - master-db `bun.lock` churns across sessions — `git checkout -- **/bun.lock` before pull.

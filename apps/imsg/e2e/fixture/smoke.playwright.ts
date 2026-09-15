@@ -16,7 +16,7 @@ test("isolated desk serves chats, sends, receives, and fans out SSE", async ({ d
     crm: { is_favorite: true, priority: 1 },
   });
   expect(chats.find((chat) => chat.guid === desk.chats.waiting)?.flags.waiting).toBe(true);
-  expect(chats.find((chat) => chat.guid === desk.chats.archived)?.flags.archived).toBe(true);
+  expect(chats.find((chat) => chat.guid === desk.chats.coldSms)?.flags.waiting).toBe(true);
   expect(chats.find((chat) => chat.guid === desk.chats.unknown)).toMatchObject({
     known: false,
     participants: [{ address: "+16195550999" }],

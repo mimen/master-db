@@ -2,7 +2,7 @@
 
 Self-hosted iMessage web client: an Expo/React-Native-Web app talking to a Bun/Hono
 server that fronts a BlueBubbles instance, with an app-local SQLite overlay for state
-Apple doesn't track (archive, dismissals, pins).
+Apple doesn't track (dismissals, pins).
 
 ## Language
 
@@ -12,13 +12,13 @@ data merged with the Overlay, unread counts, and the mark-read override.
 _Avoid_: chat list cache, summaries cache
 
 **Chat State**:
-The pure rules for a chat's flags — how Unresponded/Waiting/Unread/Archived are derived
+The pure rules for a chat's flags — how Unresponded/Waiting/Unread are derived
 and how a new message flips them. Shared verbatim by server and client.
 _Avoid_: filter logic, flag logic
 
 **Overlay**:
 App-local per-chat state stored in SQLite that BlueBubbles knows nothing about:
-archived-at, dismissal GUIDs, mute, pin, marked-unread.
+dismissal GUIDs, mute, pin, marked-unread.
 _Avoid_: overlay DB rows (when meaning the concept), local state
 
 **Unresponded**:
@@ -28,11 +28,6 @@ inbound message; mutable per chat.
 **Waiting**:
 A chat whose last message is yours — you're waiting on them. Dismissable until the
 next message flips the state.
-
-**Archived**:
-Overlay-only flag. A new inbound message newer than the archive timestamp auto-unarchives.
-Message events persist the clear. Startup and reconnect reconciliation recover missed events;
-reads never persist archive changes.
 
 **BlueBubbles seam**:
 The single interface to BlueBubbles — REST operations plus the inbound event stream.

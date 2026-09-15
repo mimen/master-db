@@ -2,12 +2,7 @@ import { router } from "expo-router";
 import type { ChatSummary } from "@shared/types";
 
 import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
-import {
-  archiveChat,
-  markChatRead,
-  markChatUnread,
-  pinChat,
-} from "@/lib/chat-actions";
+import { markChatRead, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { openChatInfo } from "@/lib/chat-info";
 
 interface ChatActions {
@@ -29,9 +24,6 @@ export function useChatActions(detailsInPane: boolean): ChatActions {
       chat.flags.pinned
         ? { label: "Unpin", onPress: () => pinChat(chat, false) }
         : { label: "Pin", onPress: () => pinChat(chat, true) },
-      chat.flags.archived
-        ? { label: "Unarchive", onPress: () => archiveChat(chat, false) }
-        : { label: "Archive", destructive: true, onPress: () => archiveChat(chat, true) },
       {
         label: "Details",
         onPress: () => {

@@ -43,7 +43,6 @@ const STATE_LABELS: Record<StateFilter, string> = {
   unread: "Unread",
   unresponded: "Unresponded",
   waiting: "Waiting",
-  archived: "Archived",
 };
 
 const TYPE_LABELS: Record<TypeFilter, string> = {
@@ -102,7 +101,7 @@ export function nextNavigationTarget(
   return entries[Math.max(0, Math.min(entries.length - 1, idx + delta))] ?? null;
 }
 
-/** After `guid` leaves the view (archive), the neighbor to glide onto:
+/** After `guid` leaves the view, the neighbor to glide onto:
  * the next entry, else the previous, else nothing. */
 export function neighborAfterRemoval(
   entries: readonly InboxNavigationEntry[],
@@ -144,7 +143,7 @@ export function deriveInboxModel(
     ) ||
     Boolean(deepMatchGuids?.has(chat.guid));
   // Search is a MODE that supersedes the badge lenses entirely — a query
-  // matches across every state and type (archived included).
+  // matches across every state and type.
   const searchedChats = chats.filter((chat) =>
     needle.length === 0
       ? browseGuids

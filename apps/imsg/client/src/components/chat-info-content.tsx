@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { archiveChat, markChatUnread, pinChat } from "@/lib/chat-actions";
+import { markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
@@ -196,15 +196,6 @@ export function ChatInfoContent({
                 onPress: () => {
                   markChatUnread(summary);
                   showToast("Marked unread");
-                  onClose();
-                },
-              },
-              {
-                icon: (summary.flags.archived ? "arrow-undo-outline" : "archive-outline") as keyof typeof Ionicons.glyphMap,
-                label: summary.flags.archived ? "Unarchive" : "Archive",
-                onPress: () => {
-                  archiveChat(summary, !summary.flags.archived);
-                  showToast(summary.flags.archived ? "Unarchived" : "Archived");
                   onClose();
                 },
               },

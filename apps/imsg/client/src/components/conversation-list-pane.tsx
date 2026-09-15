@@ -41,7 +41,7 @@ const ConversationScrollList = Platform.OS === "web" ? FlatList : FlashList;
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
-  /** Unfiltered universe (archived included) — what search mode searches. */
+  /** Unfiltered universe — what search mode searches. */
   allChats: ChatSummary[];
   counts: StateCounts | null;
   filters: InboxFilters;
@@ -101,7 +101,7 @@ export function ConversationListPane({
   const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
   const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
-  const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "all" ? "All messages" : filters.state === "unread" ? "Unread" : "Archived";
+  const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "unread" ? "Unread" : "All messages";
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   // useCallback, not a bare arrow: the compiler can't prove a render-scope
@@ -117,8 +117,8 @@ export function ConversationListPane({
       setFilterOpen(true);
     }
   }, [wide]);
-  // Search is a MODE, not a compound filter: typing searches the FULL universe
-  // (archived included), superseding the badge filters; clearing the query
+  // Search is a MODE, not a compound filter: typing searches the FULL
+  // universe, superseding the badge filters; clearing the query
   // restores the badge view untouched (docs: Gmail/Superhuman convention).
   // Policy (lens wipe, deep-search tagging, clear paths) lives in
   // useConversationSearch; this pane only renders and scrolls.
@@ -149,9 +149,10 @@ export function ConversationListPane({
     listChats: deskChats,
     navigationEntries: deskChats.map((chat, index) => ({ chat, location: { kind: "list" as const, index } })),
   }) : model, [model, deskChats, wide]);
-  const sweepableChats = useMemo(() => deskModel.listChats.filter((chat) =>
-    !chat.flags.archived && chat.flags.unresponded,
-  ), [deskModel.listChats]);
+  const sweepableChats = useMemo(
+    () => deskModel.listChats.filter((chat) => chat.flags.unresponded),
+    [deskModel.listChats],
+  );
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -251,7 +252,6 @@ export function ConversationListPane({
         <SidebarFooter>
           <View style={styles.footerContent}>
             <View style={styles.quietLinks}>
-              <Pressable accessibilityRole="link" onPress={() => onFiltersChange({ state: "archived", type: "all" })} style={styles.quietLinkButton}><Ionicons name="archive-outline" size={14} color={theme.textSecondary} /><Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.quietLink, { color: theme.textSecondary }]}>Archived {counts?.archived ?? 0}</Text></Pressable>
               <Pressable accessibilityRole="link" onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}><Ionicons name="ban-outline" size={14} color={theme.textSecondary} /><Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
             </View>
             <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>

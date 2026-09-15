@@ -12,7 +12,7 @@ const listeners = new Set<(chats: ChatSummary[]) => void>();
 export type FlagPatch = Partial<ChatFlags> & { unreadCount?: number };
 
 /** Bumped on every optimistic flag patch. A fetch that started at an older
- * epoch must not revert those flags — that's the archive bounce. */
+ * epoch must not revert those flags. */
 let mutationEpoch = 0;
 const pending = new Map<string, { epoch: number; patch: FlagPatch; inFlight: boolean }>();
 
@@ -64,7 +64,7 @@ function overlayPending(incoming: ChatSummary, fetchEpoch: number): ChatSummary 
     return incoming;
   }
   if (fetchEpoch >= hold.epoch) {
-    // Mutation settled and this snapshot started after it — auto-unarchive, etc.
+    // Mutation settled and this snapshot started after it: the server wins.
     pending.delete(incoming.guid);
     return incoming;
   }
@@ -79,7 +79,7 @@ function overlayPending(incoming: ChatSummary, fetchEpoch: number): ChatSummary 
  * that did not change, including a new image source for each avatar.
  *
  * `fetchEpoch` is `mutationEpochNow()` captured when the request started. A
- * snapshot from before an optimistic archive must not resurrect the row.
+ * snapshot from before an optimistic patch must not revert it.
  */
 export function setChats(next: ChatSummary[], fetchEpoch = mutationEpoch): void {
   const overlaid = next.map((incoming) => overlayPending(incoming, fetchEpoch));

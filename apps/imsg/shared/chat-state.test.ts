@@ -4,7 +4,6 @@ import {
   applyMessage,
   computeCounts,
   computeFlags,
-  isArchived,
   matchesFilters,
   partitionPriorityShelf,
 } from "./chat-state";
@@ -15,7 +14,6 @@ import type { ChatFlags, ChatSummary, Message } from "./types";
 function makeState(overrides: Partial<ChatState> = {}): ChatState {
   return {
     chatGuid: "chat-1",
-    archivedAt: null,
     dismissedUnrespondedGuid: null,
     dismissedWaitingGuid: null,
     mutedUnresponded: 0,
@@ -37,7 +35,6 @@ function makeLast(overrides: Partial<LastMessageLike> = {}): LastMessageLike {
 
 function makeFlags(overrides: Partial<ChatFlags> = {}): ChatFlags {
   return {
-    archived: false,
     unresponded: false,
     waiting: false,
     unread: false,
@@ -95,34 +92,6 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
     ...overrides,
   };
 }
-
-// ---------------------------------------------------------------- isArchived
-
-describe("isArchived", () => {
-  test("no state is not archived", () => {
-    expect(isArchived(undefined, makeLast())).toBe(false);
-  });
-
-  test("null archivedAt is not archived", () => {
-    expect(isArchived(makeState({ archivedAt: null }), makeLast())).toBe(false);
-  });
-
-  test("archived with no last message stays archived", () => {
-    expect(isArchived(makeState({ archivedAt: 500 }), null)).toBe(true);
-  });
-
-  test("inbound newer than archivedAt auto-unarchives", () => {
-    expect(isArchived(makeState({ archivedAt: 500 }), makeLast({ dateCreated: 600, isFromMe: false }))).toBe(false);
-  });
-
-  test("outbound newer than archivedAt does not unarchive", () => {
-    expect(isArchived(makeState({ archivedAt: 500 }), makeLast({ dateCreated: 600, isFromMe: true }))).toBe(true);
-  });
-
-  test("inbound older than archivedAt stays archived", () => {
-    expect(isArchived(makeState({ archivedAt: 500 }), makeLast({ dateCreated: 400, isFromMe: false }))).toBe(true);
-  });
-});
 
 // ---------------------------------------------------------------- computeFlags
 
@@ -202,63 +171,30 @@ describe("computeFlags", () => {
     expect(flags.pinned).toBe(true);
   });
 
-  test("inbound newer than archivedAt reports not archived", () => {
-    const flags = computeFlags(
-      makeState({ archivedAt: 500 }),
-      makeLast({ dateCreated: 600, isFromMe: false }),
-      0,
-    );
-    expect(flags.archived).toBe(false);
-  });
-
-  test("outbound newer than archivedAt stays archived", () => {
-    const flags = computeFlags(
-      makeState({ archivedAt: 500 }),
-      makeLast({ dateCreated: 600, isFromMe: true }),
-      0,
-    );
-    expect(flags.archived).toBe(true);
-  });
-
-  test("inbound older than archivedAt stays archived", () => {
-    const flags = computeFlags(
-      makeState({ archivedAt: 500 }),
-      makeLast({ dateCreated: 400, isFromMe: false }),
-      0,
-    );
-    expect(flags.archived).toBe(true);
-  });
 });
 
 // ---------------------------------------------------------------- matchesFilters
 
 describe("matchesFilters — state lenses", () => {
-  test("all excludes archived, includes the rest", () => {
+  test("all hides nothing that passes the type lens", () => {
     expect(matchesFilters(makeChat({ flags: makeFlags() }), "all", "all")).toBe(true);
-    expect(matchesFilters(makeChat({ flags: makeFlags({ archived: true }) }), "all", "all")).toBe(false);
+    expect(matchesFilters(makeChat({ flags: makeFlags({ unread: true }) }), "all", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ flags: makeFlags({ waiting: true }) }), "all", "all")).toBe(true);
   });
 
-  test("unread requires unread and not archived", () => {
+  test("unread requires unread", () => {
     expect(matchesFilters(makeChat({ flags: makeFlags({ unread: true }) }), "unread", "all")).toBe(true);
     expect(matchesFilters(makeChat({ flags: makeFlags() }), "unread", "all")).toBe(false);
-    expect(
-      matchesFilters(makeChat({ flags: makeFlags({ unread: true, archived: true }) }), "unread", "all"),
-    ).toBe(false);
   });
 
-  test("unresponded requires unresponded and not archived", () => {
+  test("unresponded requires unresponded", () => {
     expect(matchesFilters(makeChat({ flags: makeFlags({ unresponded: true }) }), "unresponded", "all")).toBe(true);
     expect(matchesFilters(makeChat({ flags: makeFlags() }), "unresponded", "all")).toBe(false);
   });
 
-  test("waiting requires waiting and not archived", () => {
+  test("waiting requires waiting", () => {
     expect(matchesFilters(makeChat({ flags: makeFlags({ waiting: true }) }), "waiting", "all")).toBe(true);
     expect(matchesFilters(makeChat({ flags: makeFlags() }), "waiting", "all")).toBe(false);
-  });
-
-  test("archived requires archived", () => {
-    expect(matchesFilters(makeChat({ flags: makeFlags({ archived: true }) }), "archived", "all")).toBe(true);
-    expect(matchesFilters(makeChat({ flags: makeFlags() }), "archived", "all")).toBe(false);
   });
 });
 
@@ -299,27 +235,23 @@ describe("matchesFilters — screened conversation exclusion", () => {
   test("unknown and spam conversations are hidden from every standard lens", () => {
     const unknown = makeChat({ known: false, flags: makeFlags({ unread: true }) });
     const spam = makeChat({ isSpam: true, flags: makeFlags({ unread: true }) });
-    const archivedUnknown = makeChat({ known: false, flags: makeFlags({ archived: true }) });
-    const archivedSpam = makeChat({ isSpam: true, flags: makeFlags({ archived: true }) });
 
     for (const type of ["all", "dm", "group"] as const) {
       expect(matchesFilters(unknown, "all", type)).toBe(false);
       expect(matchesFilters(unknown, "unread", type)).toBe(false);
-      expect(matchesFilters(archivedUnknown, "archived", type)).toBe(false);
       expect(matchesFilters(spam, "all", type)).toBe(false);
       expect(matchesFilters(spam, "unread", type)).toBe(false);
-      expect(matchesFilters(archivedSpam, "archived", type)).toBe(false);
     }
   });
 
   test("unknown lens preserves state filtering for screened conversations", () => {
     const unknownUnread = makeChat({ known: false, flags: makeFlags({ unread: true }) });
-    const archivedSpam = makeChat({ isSpam: true, flags: makeFlags({ archived: true }) });
+    const spamWaiting = makeChat({ isSpam: true, flags: makeFlags({ waiting: true }) });
 
     expect(matchesFilters(unknownUnread, "unread", "unknown")).toBe(true);
-    expect(matchesFilters(unknownUnread, "archived", "unknown")).toBe(false);
-    expect(matchesFilters(archivedSpam, "all", "unknown")).toBe(false);
-    expect(matchesFilters(archivedSpam, "archived", "unknown")).toBe(true);
+    expect(matchesFilters(unknownUnread, "waiting", "unknown")).toBe(false);
+    expect(matchesFilters(spamWaiting, "unread", "unknown")).toBe(false);
+    expect(matchesFilters(spamWaiting, "waiting", "unknown")).toBe(true);
   });
 });
 
@@ -330,14 +262,13 @@ describe("computeCounts", () => {
     const chats = [
       makeChat({ guid: "a", flags: makeFlags({ unread: true, unresponded: true }) }),
       makeChat({ guid: "b", flags: makeFlags({ waiting: true }) }),
-      makeChat({ guid: "c", flags: makeFlags({ archived: true }) }),
+      makeChat({ guid: "c", flags: makeFlags() }),
     ];
     const counts = computeCounts(chats, "all");
-    expect(counts.all).toBe(2); // a and b, not the archived c
+    expect(counts.all).toBe(3); // every chat, nothing is hidden from All
     expect(counts.unread).toBe(1);
     expect(counts.unresponded).toBe(1);
     expect(counts.waiting).toBe(1);
-    expect(counts.archived).toBe(1);
   });
 });
 
@@ -480,10 +411,10 @@ describe("partitionPriorityShelf", () => {
 // ---------------------------------------------------------------- applyMessage
 
 describe("applyMessage", () => {
-  test("inbound message sets unresponded/unread, clears archived, moves to top", () => {
+  test("inbound message sets unresponded/unread and moves to top", () => {
     const chats = [
       makeChat({ guid: "other", lastMessage: { ...makeChat().lastMessage!, dateCreated: 5000 } }),
-      makeChat({ guid: "chat-1", flags: makeFlags({ archived: true }) }),
+      makeChat({ guid: "chat-1", flags: makeFlags() }),
     ];
     const result = applyMessage(chats, "chat-1", makeMessage({ isFromMe: false, dateCreated: 6000 }));
     expect(result).not.toBeNull();
@@ -492,7 +423,6 @@ describe("applyMessage", () => {
     expect(next[0]!.flags.unresponded).toBe(true);
     expect(next[0]!.flags.waiting).toBe(false);
     expect(next[0]!.flags.unread).toBe(true);
-    expect(next[0]!.flags.archived).toBe(false);
     expect(next[0]!.firstUnreadAt).toBe(6000);
     expect(next[0]!.unreadCount).toBe(1);
   });
@@ -534,19 +464,18 @@ describe("applyMessage", () => {
     }
   });
 
-  test("outbound message sets waiting, clears unresponded, preserves unread and archived", () => {
+  test("outbound message sets waiting, clears unresponded, preserves unread", () => {
     const chats = [
       makeChat({
         guid: "chat-1",
         firstUnreadAt: 4000,
-        flags: makeFlags({ unresponded: true, unread: true, archived: true }),
+        flags: makeFlags({ unresponded: true, unread: true }),
       }),
     ];
     const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
     expect(next[0]!.flags.waiting).toBe(true);
     expect(next[0]!.flags.unresponded).toBe(false);
     expect(next[0]!.flags.unread).toBe(true);
-    expect(next[0]!.flags.archived).toBe(true);
     expect(next[0]!.firstUnreadAt).toBe(4000);
   });
 

@@ -39,7 +39,7 @@ const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export interface CommandPaletteProps {
-  /** Recency-ordered universe (archived included). */
+  /** Recency-ordered universe. */
   chats: ChatSummary[];
   /** "compose" opens straight into the new-message flow (⌘N / compose button). */
   initialMode?: "root" | "compose";
@@ -320,9 +320,6 @@ function PaletteRowContent({ item }: { item: PaletteItem }) {
               </Text>
             )}
           </View>
-          {chat.flags.archived && (
-            <Ionicons name="archive-outline" size={14} color={theme.textSecondary} />
-          )}
         </>
       );
     }

@@ -7,7 +7,7 @@ import type { ChatSummary } from "@shared/types";
 /**
  * Optimistic conversation actions: patch the shared store immediately so every
  * surface updates at once, then fire the API and roll back on failure. This is
- * the single path for archive/pin/read/dismiss/mute across the whole app.
+ * the single path for pin/read/dismiss/mute across the whole app.
  */
 
 function run(chatGuid: string, patch: Parameters<typeof patchChatFlags>[1], call: Promise<unknown>, failMsg: string, rollback: Parameters<typeof patchChatFlags>[1], onSuccess?: () => void): void {
@@ -26,19 +26,6 @@ function run(chatGuid: string, patch: Parameters<typeof patchChatFlags>[1], call
 
 export function undoLastAction(): boolean {
   return runLatestUndo();
-}
-
-export function archiveChat(chat: ChatSummary, archived: boolean): void {
-  const prev = chat.flags.archived;
-  const undoToken = beginUndoAction();
-  run(
-    chat.guid,
-    { archived },
-    api.setArchived(chat.guid, archived),
-    archived ? "Archive failed" : "Unarchive failed",
-    { archived: prev },
-    () => commitUndoAction(undoToken, () => archiveChat({ ...chat, flags: { ...chat.flags, archived } }, prev)),
-  );
 }
 
 export function pinChat(chat: ChatSummary, pinned: boolean): void {

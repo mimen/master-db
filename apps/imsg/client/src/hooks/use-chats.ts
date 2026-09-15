@@ -7,7 +7,7 @@ import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/
 
 interface UseChatsResult {
   chats: ChatSummary[];
-  /** The unfiltered universe (archived included) — search-mode input. */
+  /** The unfiltered universe — search-mode input. */
   allChats: ChatSummary[];
   counts: StateCounts | null;
   loading: boolean;

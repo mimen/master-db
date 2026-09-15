@@ -59,14 +59,14 @@ describe("wireLiveEvents", () => {
     expect(invalidations()).toBe(invalidatedBefore);
   });
 
-  test("reconnect persists a missed inbound unarchive without a GET", async () => {
+  test("reconnect persists a missed inbound's open triage item", async () => {
     const { bb, db } = await setup();
     bb.emit({ kind: "stream-connected" });
-    db.setArchived(CHAT, true);
+    expect(db.getOpenTriageItem(CHAT)).toBeNull();
     bb.appendMessage(CHAT, { guid: "missed", text: "hello again", dateCreated: Date.now() + 1000, isFromMe: false });
     bb.emit({ kind: "stream-connected" });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(db.getAll().get(CHAT)?.archivedAt).toBeNull();
+    expect(db.getOpenTriageItem(CHAT)?.messageGuid).toBe("missed");
   });
 
   test("a reconnect rebuilds the directory and tells clients to resync", async () => {

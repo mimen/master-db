@@ -1,6 +1,6 @@
 import type { MentionAnnotation } from "./mentions";
 
-export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "archived";
+export type StateFilter = "all" | "unread" | "unresponded" | "waiting";
 export type TypeFilter = "all" | "dm" | "group" | "unknown";
 
 export interface Participant {
@@ -81,7 +81,6 @@ export interface LinkPreviewData {
 }
 
 export interface ChatFlags {
-  archived: boolean;
   unresponded: boolean;
   waiting: boolean;
   unread: boolean;

@@ -8,7 +8,7 @@ import type { ChatSummary, Contact, Message } from "@shared/types";
  */
 
 export type PaletteCommandId =
-  | { kind: "state"; value: "all" | "unread" | "unresponded" | "waiting" | "archived" }
+  | { kind: "state"; value: "all" | "unread" | "unresponded" | "waiting" }
   | { kind: "type"; value: "dm" | "group" | "unknown" }
   | { kind: "tab"; value: "messages" | "contacts" }
   | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" };
@@ -27,7 +27,6 @@ export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   { id: { kind: "state", value: "unread" }, title: "Unread", keywords: ["view", "filter"], hint: "View" },
   { id: { kind: "state", value: "unresponded" }, title: "Unresponded", keywords: ["view", "filter", "needs reply"], hint: "View" },
   { id: { kind: "state", value: "waiting" }, title: "Waiting", keywords: ["view", "filter", "awaiting reply"], hint: "View" },
-  { id: { kind: "state", value: "archived" }, title: "Archived", keywords: ["view", "filter"], hint: "View" },
   { id: { kind: "type", value: "dm" }, title: "DMs", keywords: ["view", "filter", "direct messages"], hint: "View" },
   { id: { kind: "type", value: "group" }, title: "Groups", keywords: ["view", "filter", "group chats"], hint: "View" },
   { id: { kind: "type", value: "unknown" }, title: "Unknown Senders", keywords: ["view", "filter", "spam", "numbers"], hint: "View" },
@@ -91,7 +90,7 @@ function commandKey(id: PaletteCommandId): string {
 
 export interface PaletteInput {
   query: string;
-  /** Recency-ordered universe (archived included) — search spans everything. */
+  /** Recency-ordered universe — search spans everything. */
   chats: readonly ChatSummary[];
   /** Server message hits for the CURRENT query (already filtered); [] while pending. */
   messages: readonly Message[];
@@ -116,7 +115,6 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
       })),
     });
     const recents = input.chats
-      .filter((chat) => !chat.flags.archived)
       .slice(0, 6)
       .map((chat): PaletteItem => ({ kind: "conversation", key: `chat-${chat.guid}`, chat }));
     if (recents.length > 0) sections.push({ title: "Recent", items: recents });

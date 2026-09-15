@@ -14,7 +14,6 @@ const chat = (over: Partial<ChatSummary>): ChatSummary => ({
   lastMessage: null,
   unreadCount: 0,
   flags: {
-    archived: false,
     unresponded: false,
     waiting: false,
     unread: false,
@@ -53,11 +52,10 @@ describe("buildPaletteSections", () => {
   const namedGroup = chat({ guid: "grp2", displayName: "Tyson Planning", isGroup: true, participants: [] });
   const other = chat({ guid: "other", displayName: "Karely" });
 
-  test("blank query lists every command then recent non-archived chats", () => {
-    const archived = chat({ guid: "arch", displayName: "Old", flags: { ...tysonDm.flags, archived: true } });
+  test("blank query lists every command then recent chats", () => {
     const sections = buildPaletteSections({
       query: "  ",
-      chats: [tysonDm, archived, other],
+      chats: [tysonDm, other],
       messages: [],
       contacts: [],
     });
@@ -113,17 +111,6 @@ describe("buildPaletteSections", () => {
         (i) => i.kind === "command" && i.command.title === "Keyboard Shortcuts",
       ),
     ).toBe(true);
-  });
-
-  test("archived chats are searchable (search spans everything)", () => {
-    const archived = chat({
-      guid: "arch",
-      displayName: "Tyson Old",
-      flags: { ...tysonDm.flags, archived: true },
-    });
-    const sections = buildPaletteSections({ query: "tyson", chats: [archived], messages: [], contacts: [] });
-
-    expect(sections.find((s) => s.title === "Conversations")?.items.length).toBe(1);
   });
 
   test("a renamed DM surfaces via searchNames when neither displayName nor participant.name match", () => {

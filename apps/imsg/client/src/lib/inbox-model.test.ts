@@ -9,7 +9,7 @@ import {
   selectInboxFilter,
 } from "./inbox-model";
 
-const states: StateFilter[] = ["all", "unread", "unresponded", "waiting", "archived"];
+const states: StateFilter[] = ["all", "unread", "unresponded", "waiting"];
 const types: TypeFilter[] = ["all", "dm", "group", "unknown"];
 
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
@@ -31,7 +31,6 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
     unreadCount: 0,
     firstUnreadAt: null,
     flags: {
-      archived: false,
       unresponded: false,
       waiting: false,
       unread: false,
@@ -78,7 +77,7 @@ describe("inbox filter defaults", () => {
     expect(activeInboxFilterCount({ state: "all", type: "all" })).toBe(0);
     expect(activeInboxFilterCount({ state: "unread", type: "all" })).toBe(1);
     expect(activeInboxFilterCount({ state: "all", type: "group" })).toBe(1);
-    expect(activeInboxFilterCount({ state: "archived", type: "unknown" })).toBe(2);
+    expect(activeInboxFilterCount({ state: "waiting", type: "unknown" })).toBe(2);
   });
 });
 
