@@ -1,4 +1,4 @@
-import type { ChatSummary, Contact, Message } from "@shared/types";
+import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 
 /**
  * Headless ⌘K palette engine — pure derivation, no React, no platform code.
@@ -8,8 +8,8 @@ import type { ChatSummary, Contact, Message } from "@shared/types";
  */
 
 export type PaletteCommandId =
-  | { kind: "state"; value: "all" | "unread" | "unresponded" | "waiting" }
-  | { kind: "type"; value: "dm" | "group" | "unknown" }
+  | { kind: "state"; value: StateFilter }
+  | { kind: "type"; value: TypeFilter }
   | { kind: "tab"; value: "messages" | "contacts" }
   | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" };
 
@@ -22,14 +22,52 @@ export interface PaletteCommand {
   hint: string;
 }
 
+interface LensCommand {
+  title: string;
+  keywords: readonly string[];
+}
+
+/**
+ * Keyed by the filter unions, not listed by hand, so a new lens cannot ship
+ * without a palette entry: a missing key is a type error here.
+ *
+ * The previous hand-written union lost Settled, Everyone and Known as those
+ * lenses landed, and nothing caught it — a narrower union is still assignable
+ * to the StateFilter/TypeFilter the handlers take, so the omission type-checks
+ * cleanly. The palette is the only surface that reaches a lens by name, so
+ * each miss meant a lens with no way to ask for it.
+ */
+const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
+  all: { title: "All Conversations", keywords: ["view", "filter", "inbox"] },
+  unread: { title: "Unread", keywords: ["view", "filter"] },
+  unresponded: { title: "Unresponded", keywords: ["view", "filter", "needs reply"] },
+  waiting: { title: "Waiting", keywords: ["view", "filter", "awaiting reply"] },
+  settled: { title: "Settled", keywords: ["view", "filter", "done", "handled", "archive"] },
+};
+
+const TYPE_COMMANDS: Record<TypeFilter, LensCommand> = {
+  all: { title: "Everyone", keywords: ["view", "filter", "all senders", "including unknown"] },
+  known: { title: "Known", keywords: ["view", "filter", "contacts", "saved"] },
+  dm: { title: "DMs", keywords: ["view", "filter", "direct messages"] },
+  group: { title: "Groups", keywords: ["view", "filter", "group chats"] },
+  unknown: { title: "Unknown Senders", keywords: ["view", "filter", "spam", "numbers"] },
+};
+
+function lensEntries<Value extends string>(
+  kind: "state" | "type",
+  table: Record<Value, LensCommand>,
+): PaletteCommand[] {
+  return (Object.entries(table) as [Value, LensCommand][]).map(([value, command]) => ({
+    id: { kind, value } as PaletteCommandId,
+    title: command.title,
+    keywords: command.keywords,
+    hint: "View",
+  }));
+}
+
 export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
-  { id: { kind: "state", value: "all" }, title: "All Conversations", keywords: ["view", "filter", "inbox"], hint: "View" },
-  { id: { kind: "state", value: "unread" }, title: "Unread", keywords: ["view", "filter"], hint: "View" },
-  { id: { kind: "state", value: "unresponded" }, title: "Unresponded", keywords: ["view", "filter", "needs reply"], hint: "View" },
-  { id: { kind: "state", value: "waiting" }, title: "Waiting", keywords: ["view", "filter", "awaiting reply"], hint: "View" },
-  { id: { kind: "type", value: "dm" }, title: "DMs", keywords: ["view", "filter", "direct messages"], hint: "View" },
-  { id: { kind: "type", value: "group" }, title: "Groups", keywords: ["view", "filter", "group chats"], hint: "View" },
-  { id: { kind: "type", value: "unknown" }, title: "Unknown Senders", keywords: ["view", "filter", "spam", "numbers"], hint: "View" },
+  ...lensEntries("state", STATE_COMMANDS),
+  ...lensEntries("type", TYPE_COMMANDS),
   { id: { kind: "tab", value: "messages" }, title: "Go to Messages", keywords: ["tab", "inbox"], hint: "Navigate" },
   { id: { kind: "tab", value: "contacts" }, title: "Go to Contacts", keywords: ["tab", "people"], hint: "Navigate" },
   { id: { kind: "action", value: "new-message" }, title: "New Message", keywords: ["compose", "start", "chat"], hint: "Action" },

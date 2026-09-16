@@ -29,16 +29,17 @@ export const STATE_FILTERS = [
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
 /**
- * The desktop triage control. This rail is the ONLY state-lens affordance on
- * desktop: openFilters has a wide branch, but the button holding filterBtnRef
+ * The desktop triage control, and the only state lens you can reach by
+ * pointer: openFilters has a wide branch, but the button holding filterBtnRef
  * renders inside the narrow SidebarChrome, so the popover has no desktop entry
- * point. A lens left off this list is unreachable there, which is why Settled
- * is on it. Settled is the recovery surface for the one triage gesture, and a
- * recovery surface you cannot open is not one.
+ * point. ⌘K reaches every lens by name, so a lens left off this list is
+ * discoverable-by-typing only, not unreachable. Carry the full axis anyway —
+ * a lens you have to already know about is one most people never find.
  */
 const COMPACT_STATE_FILTERS = [
   { value: "unresponded", label: "Needs reply" },
   { value: "waiting", label: "Waiting" },
+  { value: "unread", label: "Unread" },
   { value: "all", label: "All" },
   { value: "settled", label: "Settled" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
