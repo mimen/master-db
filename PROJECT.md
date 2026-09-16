@@ -18,13 +18,13 @@ consumers.
 
 Five, in five directories. They share a repository and a Convex deployment.
 
-| Component | Path | What it is |
-|---|---|---|
-| Convex backend | `convex/` | Schema, functions, crons, HTTP routes. The center of gravity and the only cloud-deployed thing. Six domains: `todoist`, `routines`, `identity`, `beeper`, `agentic`, `dashboard`. |
-| Todoist web app | `app/` | Vite and React 19 SPA with an agent drawer. Deployed to Heroku via Docker. |
-| imsg | `apps/imsg/` | Bun and Hono server fronting a BlueBubbles instance, plus an Expo RNW client. A self-hosted iMessage client. Runs on the Mac Mini. Its own `bun.lock`, lint config, and CONTEXT. |
-| Agentic Engine | `engine/` | Bun and Hono HTTP service wrapping the Claude Agent SDK for async, durable, multi-entity runs. Runs on the Mac Mini. |
-| Beeper sync CLI | `scripts/` | An operator-run Bun CLI pair that pulls Beeper chats and attachments and POSTs them to a Convex ingest endpoint. Not deployed; run by hand from a trusted machine. |
+| Component | Path | What it is | Surfaces |
+|---|---|---|---|
+| Convex backend | `convex/` | Schema, functions, crons, HTTP routes. The center of gravity and the only cloud-deployed thing. Six domains: `todoist`, `routines`, `identity`, `beeper`, `agentic`, `dashboard`. | backend-data, api |
+| Todoist web app | `app/` | Vite and React 19 SPA with an agent drawer. Deployed to Heroku via Docker. | web |
+| imsg | `apps/imsg/` | Bun and Hono server fronting a BlueBubbles instance, plus an Expo RNW client. A self-hosted iMessage client. Runs on the Mac Mini. Its own `bun.lock`, lint config, and CONTEXT. | api, resident, mobile, web, desktop |
+| Agentic Engine | `engine/` | Bun and Hono HTTP service wrapping the Claude Agent SDK for async, durable, multi-entity runs. Runs on the Mac Mini. | api, resident |
+| Beeper sync CLI | `scripts/` | An operator-run Bun CLI pair that pulls Beeper chats and attachments and POSTs them to a Convex ingest endpoint. Not deployed; run by hand from a trusted machine. | cli-tui |
 
 `test-utils/` is a shared test-support library, not a component. `docs/` is documentation.
 An older inventory recorded four components and omitted the Beeper CLI, which has its own
