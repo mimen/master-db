@@ -1,7 +1,6 @@
 import type { ChatSummary, StateCounts, TriageProgressStats } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 
@@ -27,7 +26,7 @@ import { onTriageResolved, onTriageUndo, toggleSettleChat } from "@/hooks/use-tr
 import { api } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import { deriveInboxModel, desktopInboxTitle, type InboxFilters } from "@/lib/inbox-model";
 import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
@@ -100,7 +99,7 @@ export function ConversationListPane({
   const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
   const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
-  const deskTitle = filters.state === "unresponded" ? "Needs reply" : filters.state === "waiting" ? "Waiting" : filters.state === "unread" ? "Unread" : filters.state === "settled" ? "Settled" : "All messages";
+  const deskTitle = desktopInboxTitle(filters);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   // useCallback, not a bare arrow: the compiler can't prove a render-scope
@@ -244,12 +243,9 @@ export function ConversationListPane({
       chromeHeight={topBarH}
       footer={wide ? (
         <SidebarFooter>
-          <View style={styles.footerContent}>
-            <View style={styles.quietLinks}>
-              <Pressable accessibilityRole="link" onPress={() => onFiltersChange({ state: "all", type: "unknown" })} style={styles.quietLinkButton}><Ionicons name="ban-outline" size={14} color={theme.textSecondary} /><Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.quietLink, { color: theme.textSecondary }]}>Unknown</Text></Pressable>
-            </View>
-            <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
-          </View>
+          {/* Unknown is a chip on the filter rail now, so the footer is hint
+              text only. SidebarFooter centers its single child. */}
+          <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
         </SidebarFooter>
       ) : undefined}
       thumb={<SyntheticScrollThumb state={viewport.thumb} />}
@@ -336,11 +332,9 @@ export function ConversationListPane({
 }
 
 const styles = StyleSheet.create({
-  footerContent: { flex: 1 },
-  quietLinks: { alignItems: "center", flexDirection: "row", gap: 16, minHeight: 31, paddingHorizontal: 6 },
-  quietLinkButton: { alignItems: "center", flexDirection: "row", gap: 5 },
-  quietLink: { fontSize: 12, fontWeight: "500", paddingVertical: 7 },
-  footerHint: { alignItems: "center", borderTopColor: "rgba(118,118,128,0.18)", borderTopWidth: 0.5, flexDirection: "row", justifyContent: "space-between", minHeight: 31, paddingHorizontal: 6 },
+  // No top border. It divided this row from the quiet-links row above it, and
+  // that row is gone. SidebarFooter already draws the hairline over the list.
+  footerHint: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: 31, paddingHorizontal: 6 },
   footerHintText: { fontSize: 11 },
   sectionHeading: {
     alignItems: "baseline",

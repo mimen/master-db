@@ -1,7 +1,9 @@
 import type { MentionAnnotation } from "./mentions";
 
 export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "settled";
-export type TypeFilter = "all" | "dm" | "group" | "unknown";
+/** One axis, ordered as the filter rail renders it. See matchesFilters for what
+ * each lens does with screened conversations. */
+export type TypeFilter = "all" | "known" | "dm" | "group" | "unknown";
 
 export interface Participant {
   address: string;

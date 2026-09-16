@@ -5,12 +5,13 @@ import {
   activeInboxFilterCount,
   DEFAULT_INBOX_FILTERS,
   deriveInboxModel,
+  desktopInboxTitle,
   resetInboxFilters,
   selectInboxFilter,
 } from "./inbox-model";
 
 const states: StateFilter[] = ["all", "unread", "unresponded", "waiting", "settled"];
-const types: TypeFilter[] = ["all", "dm", "group", "unknown"];
+const types: TypeFilter[] = ["all", "known", "dm", "group", "unknown"];
 
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
@@ -66,7 +67,11 @@ describe("selectInboxFilter", () => {
 });
 
 describe("inbox filter defaults", () => {
-  test("returns a fresh all/all selection when reset", () => {
+  test("defaults to the Known lens, not Everyone", () => {
+    expect(DEFAULT_INBOX_FILTERS).toEqual({ state: "all", type: "known" });
+  });
+
+  test("returns a fresh copy of the default selection when reset", () => {
     const reset = resetInboxFilters();
 
     expect(reset).toEqual(DEFAULT_INBOX_FILTERS);
@@ -74,10 +79,31 @@ describe("inbox filter defaults", () => {
   });
 
   test("counts active state and type lenses independently", () => {
-    expect(activeInboxFilterCount({ state: "all", type: "all" })).toBe(0);
-    expect(activeInboxFilterCount({ state: "unread", type: "all" })).toBe(1);
+    expect(activeInboxFilterCount({ state: "all", type: "known" })).toBe(0);
+    expect(activeInboxFilterCount({ state: "unread", type: "known" })).toBe(1);
     expect(activeInboxFilterCount({ state: "all", type: "group" })).toBe(1);
     expect(activeInboxFilterCount({ state: "waiting", type: "unknown" })).toBe(2);
+    // Everyone is now a deliberate widening past the default, so it counts.
+    expect(activeInboxFilterCount({ state: "all", type: "all" })).toBe(1);
+  });
+});
+
+describe("desktopInboxTitle", () => {
+  test("names the state alone while the type lens is at its default", () => {
+    expect(desktopInboxTitle({ state: "all", type: "known" })).toBe("All messages");
+    expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("Needs reply");
+    expect(desktopInboxTitle({ state: "waiting", type: "known" })).toBe("Waiting");
+    expect(desktopInboxTitle({ state: "unread", type: "known" })).toBe("Unread");
+    expect(desktopInboxTitle({ state: "settled", type: "known" })).toBe("Settled");
+  });
+
+  test("appends the type lens whenever it is off its default", () => {
+    // The defect this fixes. The header read "All messages" while the list
+    // showed nothing but strangers.
+    expect(desktopInboxTitle({ state: "all", type: "unknown" })).toBe("All messages · Unknown");
+    expect(desktopInboxTitle({ state: "all", type: "all" })).toBe("All messages · Everyone");
+    expect(desktopInboxTitle({ state: "unresponded", type: "group" })).toBe("Needs reply · Groups");
+    expect(desktopInboxTitle({ state: "settled", type: "dm" })).toBe("Settled · DMs");
   });
 });
 
@@ -113,7 +139,7 @@ describe("deriveInboxModel", () => {
     expect(model.sectionCount).toBe(2);
   });
 
-  test("hides unknown and spam conversations by default but reveals them under Unknown", () => {
+  test("hides unknown and spam by default, reveals them under Unknown and Everyone", () => {
     const known = makeChat({ guid: "known" });
     const unknown = makeChat({ guid: "unknown", known: false });
     const spam = makeChat({ guid: "spam", isSpam: true });
@@ -124,6 +150,26 @@ describe("deriveInboxModel", () => {
     expect(
       deriveInboxModel([known, unknown, spam], { state: "all", type: "unknown" }, "").listChats,
     ).toEqual([unknown, spam]);
+    expect(
+      deriveInboxModel([known, unknown, spam], { state: "all", type: "all" }, "").listChats,
+    ).toEqual([known, unknown, spam]);
+    // Everyone is not the default, so it loses the priority shelf and gets a
+    // heading that names the lens.
+    const everyone = deriveInboxModel([known, unknown, spam], { state: "all", type: "all" }, "");
+    expect(everyone.showPriorityShelf).toBe(false);
+    expect(everyone.sectionLabel).toBe("Everyone");
+  });
+
+  test("the default view keeps its priority shelf and Recent heading", () => {
+    const unread = makeChat({ guid: "unread", firstUnreadAt: 10 });
+    const stranger = makeChat({ guid: "stranger", known: false, firstUnreadAt: 5 });
+
+    const model = deriveInboxModel([unread, stranger], DEFAULT_INBOX_FILTERS, "");
+
+    expect(model.showPriorityShelf).toBe(true);
+    expect(model.priority).toEqual([unread]);
+    expect(model.sectionLabel).toBe("Recent");
+    expect(activeInboxFilterCount(DEFAULT_INBOX_FILTERS)).toBe(0);
   });
 
   test("search supersedes the state/type lenses (matches across everything)", () => {
@@ -171,7 +217,7 @@ describe("deriveInboxModel", () => {
 
     const model = deriveInboxModel(
       [settled, needsReply, waiting, empty],
-      { state: "settled", type: "all" },
+      { state: "settled", type: "known" },
       "",
     );
 
@@ -200,7 +246,7 @@ describe("deriveInboxModel", () => {
       flags: { ...makeChat().flags, unread: true, pinned: true },
     });
 
-    const model = deriveInboxModel([regular, pinned], { state: "unread", type: "all" }, "");
+    const model = deriveInboxModel([regular, pinned], { state: "unread", type: "known" }, "");
 
     expect(model.listChats).toEqual([pinned, regular]);
   });

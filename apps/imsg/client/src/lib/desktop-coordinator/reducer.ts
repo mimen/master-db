@@ -1,3 +1,5 @@
+import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
+
 import type {
   DesktopRouteProjection,
   DesktopShellAction,
@@ -7,7 +9,7 @@ import type {
 
 const DEFAULT_FILTERS = {
   state: "unresponded",
-  type: "all",
+  type: DEFAULT_INBOX_FILTERS.type,
 } as const;
 
 const BASE_DESKTOP_SHELL_STATE: DesktopShellState = {

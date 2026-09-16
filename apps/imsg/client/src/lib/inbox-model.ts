@@ -11,10 +11,28 @@ export type InboxFilterSelection =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter };
 
+/**
+ * The unfiltered view. "Known" is the default rather than "Everyone" because
+ * Everyone now genuinely means everyone, screened conversations included.
+ */
 export const DEFAULT_INBOX_FILTERS: InboxFilters = {
   state: "all",
-  type: "all",
+  type: "known",
 };
+
+/**
+ * Whether a lens sits at its default. Every "is this the unfiltered view"
+ * question routes through these, so the answer can never drift from
+ * DEFAULT_INBOX_FILTERS the way a literal "all" scattered across four call
+ * sites did.
+ */
+export function isDefaultStateLens(state: StateFilter): boolean {
+  return state === DEFAULT_INBOX_FILTERS.state;
+}
+
+export function isDefaultTypeLens(type: TypeFilter): boolean {
+  return type === DEFAULT_INBOX_FILTERS.type;
+}
 
 /**
  * Applies one lens selection without resetting the other lens. State and type
@@ -35,7 +53,7 @@ export function resetInboxFilters(): InboxFilters {
 }
 
 export function activeInboxFilterCount(filters: InboxFilters): number {
-  return Number(filters.state !== "all") + Number(filters.type !== "all");
+  return Number(!isDefaultStateLens(filters.state)) + Number(!isDefaultTypeLens(filters.type));
 }
 
 const STATE_LABELS: Record<StateFilter, string> = {
@@ -46,18 +64,43 @@ const STATE_LABELS: Record<StateFilter, string> = {
   settled: "Settled",
 };
 
-const TYPE_LABELS: Record<TypeFilter, string> = {
+export const TYPE_LABELS: Record<TypeFilter, string> = {
   all: "Everyone",
+  known: "Known",
   dm: "DMs",
   group: "Groups",
   unknown: "Unknown",
 };
 
+/**
+ * The desktop header's own state wording, deliberately wordier than the chip
+ * labels ("Needs reply", not "Unresponded").
+ */
+const DESK_STATE_TITLES: Record<StateFilter, string> = {
+  all: "All messages",
+  unread: "Unread",
+  unresponded: "Needs reply",
+  waiting: "Waiting",
+  settled: "Settled",
+};
+
+/**
+ * The desktop list header. It names the type lens whenever that lens is off
+ * its default, so the header can never read "All messages" while the list is
+ * filtered to strangers.
+ */
+export function desktopInboxTitle(filters: InboxFilters): string {
+  const state = DESK_STATE_TITLES[filters.state];
+  return isDefaultTypeLens(filters.type) ? state : `${state} · ${TYPE_LABELS[filters.type]}`;
+}
+
 function sectionLabel(filters: InboxFilters, hasSearch: boolean): string {
   if (hasSearch) return "Search Results";
-  if (filters.state === "all" && filters.type === "all") return "Recent";
-  if (filters.state === "all") return TYPE_LABELS[filters.type];
-  if (filters.type === "all") return STATE_LABELS[filters.state];
+  const defaultState = isDefaultStateLens(filters.state);
+  const defaultType = isDefaultTypeLens(filters.type);
+  if (defaultState && defaultType) return "Recent";
+  if (defaultState) return TYPE_LABELS[filters.type];
+  if (defaultType) return STATE_LABELS[filters.state];
   return `${STATE_LABELS[filters.state]} · ${TYPE_LABELS[filters.type]}`;
 }
 
@@ -152,7 +195,8 @@ export function deriveInboxModel(
         : matchesFilters(chat, filters.state, filters.type)
       : matchesNeedle(chat),
   );
-  const showPriorityShelf = filters.state === "all" && filters.type === "all" && needle.length === 0;
+  const showPriorityShelf =
+    isDefaultStateLens(filters.state) && isDefaultTypeLens(filters.type) && needle.length === 0;
   const { priority, recent } = partitionPriorityShelf(searchedChats);
   const shelf = showPriorityShelf ? priority : [];
   const listSource = showPriorityShelf ? recent : searchedChats;

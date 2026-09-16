@@ -9,7 +9,12 @@ import {
   usableDeepMatches,
   type DeepSearchState,
 } from "@/lib/conversation-search";
-import type { InboxFilters } from "@/lib/inbox-model";
+import {
+  isDefaultStateLens,
+  isDefaultTypeLens,
+  resetInboxFilters,
+  type InboxFilters,
+} from "@/lib/inbox-model";
 
 export interface ConversationSearchController {
   readonly query: string;
@@ -88,11 +93,15 @@ export function useConversationSearch(args: {
       setQuery(value) {
         dispatch({ type: "set-query", value });
         // Searching wipes the lenses — results span everything, and the
-        // pills visibly reset to All to say so. Firing at most once: after
-        // the wipe the filters ARE all/all, so later keystrokes no-op.
+        // pills visibly reset to the default to say so. Firing at most once:
+        // after the wipe the filters ARE the default, so later keystrokes
+        // no-op. The guard must test "is default", not "is all". Once Known
+        // became the default, a literal "all" here fired on every keystroke
+        // and stranded the user on Everyone when they cleared the query.
         const { filters: f, onFiltersChange: change } = filtersRef.current;
-        if (normalizeSearchQuery(value).length > 0 && (f.state !== "all" || f.type !== "all")) {
-          change({ state: "all", type: "all" });
+        const atDefault = isDefaultStateLens(f.state) && isDefaultTypeLens(f.type);
+        if (normalizeSearchQuery(value).length > 0 && !atDefault) {
+          change(resetInboxFilters());
         }
       },
       clear() {

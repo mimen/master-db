@@ -48,19 +48,46 @@ export function computeFlags(
   };
 }
 
-export function matchesFilters(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {
-  const unknown = chat.contactsAvailable !== false && !chat.known;
-  const screened = chat.isSpam || unknown;
-  // Unknown is the explicit reveal surface for screened conversations. Every
-  // other type lens keeps them out of the inbox, counts, inbox search, and shelf.
-  // Contact failures fail open instead of making the whole inbox disappear.
-  if (type === "unknown") {
-    if (!screened) return false;
-  } else {
-    if (screened) return false;
-    if (type === "dm" && chat.isGroup) return false;
-    if (type === "group" && !chat.isGroup) return false;
+/**
+ * A screened conversation is junk, or from someone no contact matches.
+ * Contact failures fail open instead of making the whole inbox disappear.
+ */
+function isScreened(chat: ChatSummary): boolean {
+  return chat.isSpam || (chat.contactsAvailable !== false && !chat.known);
+}
+
+/**
+ * The type lens is ONE axis over the screening boundary, not two crossed ones:
+ *
+ *   Everyone  every conversation, screened included
+ *   Known     the default inbox, everything except screened
+ *   DMs       known one-on-one conversations
+ *   Groups    known group conversations
+ *   Unknown   screened conversations, and only those
+ *
+ * DMs and Groups stay deliberately known-only. A stranger's one-on-one lives
+ * under Unknown, not under DMs. That conflation is chosen, not incidental.
+ *
+ * No default arm, so a new lens has to answer the screening question before
+ * it compiles.
+ */
+function matchesTypeLens(chat: ChatSummary, type: TypeFilter): boolean {
+  switch (type) {
+    case "all":
+      return true;
+    case "known":
+      return !isScreened(chat);
+    case "dm":
+      return !isScreened(chat) && !chat.isGroup;
+    case "group":
+      return !isScreened(chat) && chat.isGroup;
+    case "unknown":
+      return isScreened(chat);
   }
+}
+
+export function matchesFilters(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {
+  if (!matchesTypeLens(chat, type)) return false;
   switch (state) {
     case "all":
       return true;

@@ -173,7 +173,7 @@ describe("ChatDirectory.summaries", () => {
     let result = await directory.summaries();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(matchesFilters(find(result.chats, unknownGuid), "all", "all")).toBe(false);
+    expect(matchesFilters(find(result.chats, unknownGuid), "all", "known")).toBe(false);
 
     bb.contacts = () => Promise.resolve({ ok: false, error: "contacts unavailable" });
     await contacts.refresh(true);
@@ -189,7 +189,7 @@ describe("ChatDirectory.summaries", () => {
     const unknown = find(result.chats, unknownGuid);
     expect(unknown.known).toBe(false);
     expect(unknown.contactsAvailable).toBe(false);
-    expect(matchesFilters(unknown, "all", "all")).toBe(true);
+    expect(matchesFilters(unknown, "all", "known")).toBe(true);
     expect(matchesFilters(unknown, "all", "unknown")).toBe(false);
   });
 
@@ -456,7 +456,7 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
-    expect(matchesFilters(a, "all", "all")).toBe(false);
+    expect(matchesFilters(a, "all", "known")).toBe(false);
     expect(matchesFilters(a, "all", "unknown")).toBe(true);
   });
 
@@ -478,7 +478,7 @@ describe("ChatDirectory reactive fast path", () => {
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
     expect(a.unreadCount).toBe(2);
-    expect(matchesFilters(a, "all", "all")).toBe(false);
+    expect(matchesFilters(a, "all", "known")).toBe(false);
     expect(matchesFilters(a, "all", "unknown")).toBe(true);
   });
 
@@ -529,7 +529,7 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(true);
-    expect(matchesFilters(a, "all", "all")).toBe(false);
+    expect(matchesFilters(a, "all", "known")).toBe(false);
   });
 
   test("updated junk classification replaces the realtime override", async () => {
@@ -549,7 +549,7 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     const a = find(result.chats, CHAT_A);
     expect(a.isSpam).toBe(false);
-    expect(matchesFilters(a, "all", "all")).toBe(true);
+    expect(matchesFilters(a, "all", "known")).toBe(true);
   });
 
   test("junk override preserves local read and pin state", async () => {
@@ -677,7 +677,7 @@ describe("ChatDirectory reactive fast path", () => {
     expect(chat.firstUnreadAt).toBeNull();
   });
 
-  test("a settled conversation stays in the all lens", async () => {
+  test("a settled conversation stays in the default inbox lens", async () => {
     const { directory } = await setup();
     await directory.summaries();
 
@@ -689,7 +689,7 @@ describe("ChatDirectory reactive fast path", () => {
     const chat = find(result.chats, CHAT_A);
     expect(chat.flags.unresponded).toBe(false);
     expect(chat.flags.waiting).toBe(false);
-    const visible = result.chats.filter((c) => matchesFilters(c, "all", "all"));
+    const visible = result.chats.filter((c) => matchesFilters(c, "all", "known"));
     expect(visible.find((c) => c.guid === CHAT_A)).toBeDefined();
   });
 

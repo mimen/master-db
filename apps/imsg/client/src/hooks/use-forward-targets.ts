@@ -18,7 +18,9 @@ export interface UseForwardTargetsResult {
  * pulling in react-native.
  */
 export function useForwardTargets(): UseForwardTargetsResult {
-  const { chats, loading } = useChats("all", "all");
+  // "known", not "all": forwarding should not offer junk or unrecognised
+  // numbers as targets, and "all" now includes both.
+  const { chats, loading } = useChats("all", "known");
   const [query, setQuery] = useState("");
   const results = useMemo(() => filterForwardTargets(chats, query), [chats, query]);
   return { query, setQuery, results, loading };

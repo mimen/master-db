@@ -360,20 +360,40 @@ describe("matchesFilters — type lenses", () => {
     const unresolved = makeChat({ known: false, contactsAvailable: false });
     const unresolvedSpam = makeChat({ known: false, contactsAvailable: false, isSpam: true });
 
-    expect(matchesFilters(unresolved, "all", "all")).toBe(true);
+    expect(matchesFilters(unresolved, "all", "known")).toBe(true);
     expect(matchesFilters(unresolved, "all", "dm")).toBe(true);
     expect(matchesFilters(unresolved, "all", "unknown")).toBe(false);
-    expect(matchesFilters(unresolvedSpam, "all", "all")).toBe(false);
+    expect(matchesFilters(unresolvedSpam, "all", "known")).toBe(false);
     expect(matchesFilters(unresolvedSpam, "all", "unknown")).toBe(true);
+    // Everyone is the one lens that does not care either way.
+    expect(matchesFilters(unresolved, "all", "all")).toBe(true);
+    expect(matchesFilters(unresolvedSpam, "all", "all")).toBe(true);
+  });
+
+  test("known is the inbox lens: everything except screened", () => {
+    expect(matchesFilters(makeChat(), "all", "known")).toBe(true);
+    expect(matchesFilters(makeChat({ isGroup: true }), "all", "known")).toBe(true);
+    expect(matchesFilters(makeChat({ known: false }), "all", "known")).toBe(false);
+    expect(matchesFilters(makeChat({ isSpam: true }), "all", "known")).toBe(false);
+  });
+
+  test("all is genuinely everything, screened included", () => {
+    expect(matchesFilters(makeChat(), "all", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ isGroup: true }), "all", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ known: false }), "all", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ isSpam: true }), "all", "all")).toBe(true);
+    expect(matchesFilters(makeChat({ known: false, isSpam: true }), "all", "all")).toBe(true);
   });
 });
 
 describe("matchesFilters — screened conversation exclusion", () => {
-  test("unknown and spam conversations are hidden from every standard lens", () => {
+  test("unknown and spam conversations are hidden from every known-only lens", () => {
     const unknown = makeChat({ known: false, flags: makeFlags({ unread: true }) });
     const spam = makeChat({ isSpam: true, flags: makeFlags({ unread: true }) });
 
-    for (const type of ["all", "dm", "group"] as const) {
+    // DMs and Groups stay known-only by decision. A stranger's one-on-one
+    // belongs to Unknown, not to DMs.
+    for (const type of ["known", "dm", "group"] as const) {
       expect(matchesFilters(unknown, "all", type)).toBe(false);
       expect(matchesFilters(unknown, "unread", type)).toBe(false);
       expect(matchesFilters(unknown, "settled", type)).toBe(false);
@@ -381,6 +401,19 @@ describe("matchesFilters — screened conversation exclusion", () => {
       expect(matchesFilters(spam, "unread", type)).toBe(false);
       expect(matchesFilters(spam, "settled", type)).toBe(false);
     }
+  });
+
+  test("everyone shows the same screened conversations, still state-filtered", () => {
+    const unknown = makeChat({ known: false, flags: makeFlags({ unread: true }) });
+    const spam = makeChat({ isSpam: true, flags: makeFlags({ unread: true }) });
+
+    expect(matchesFilters(unknown, "all", "all")).toBe(true);
+    expect(matchesFilters(unknown, "unread", "all")).toBe(true);
+    expect(matchesFilters(spam, "all", "all")).toBe(true);
+    expect(matchesFilters(spam, "unread", "all")).toBe(true);
+    // Widening the type lens does not widen the state lens.
+    expect(matchesFilters(unknown, "waiting", "all")).toBe(false);
+    expect(matchesFilters(spam, "waiting", "all")).toBe(false);
   });
 
   test("unknown lens preserves state filtering for screened conversations", () => {
@@ -422,6 +455,28 @@ describe("computeCounts", () => {
     expect(counts.settled).toBe(1);
     expect(counts.unresponded).toBe(0);
     expect(counts.waiting).toBe(0);
+  });
+
+  test("each type lens counts exactly the conversations its lens shows", () => {
+    const chats = [
+      makeChat({ guid: "friend", flags: makeFlags({ unread: true }) }),
+      makeChat({ guid: "crew", isGroup: true, flags: makeFlags({ unread: true }) }),
+      makeChat({ guid: "stranger", known: false, flags: makeFlags({ unread: true }) }),
+      makeChat({ guid: "junk", isSpam: true, flags: makeFlags({ unread: true }) }),
+    ];
+
+    // Everyone now counts the screened pair too; Known is the old All.
+    expect(computeCounts(chats, "all").all).toBe(4);
+    expect(computeCounts(chats, "all").unread).toBe(4);
+    expect(computeCounts(chats, "known").all).toBe(2);
+    expect(computeCounts(chats, "known").unread).toBe(2);
+    expect(computeCounts(chats, "dm").all).toBe(1);
+    expect(computeCounts(chats, "group").all).toBe(1);
+    expect(computeCounts(chats, "unknown").all).toBe(2);
+    // Known plus Unknown partition Everyone exactly.
+    expect(computeCounts(chats, "known").all + computeCounts(chats, "unknown").all).toBe(
+      computeCounts(chats, "all").all,
+    );
   });
 });
 
@@ -585,8 +640,9 @@ describe("applyMessage", () => {
     const next = applyMessage(chats, "chat-1", makeMessage({ dateCreated: 6000, isSpam: true }))!;
 
     expect(next[0]!.isSpam).toBe(true);
-    expect(matchesFilters(next[0]!, "all", "all")).toBe(false);
+    expect(matchesFilters(next[0]!, "all", "known")).toBe(false);
     expect(matchesFilters(next[0]!, "all", "unknown")).toBe(true);
+    expect(matchesFilters(next[0]!, "all", "all")).toBe(true);
   });
 
   test("inbound message ignores legacy mutedUnresponded flags", () => {

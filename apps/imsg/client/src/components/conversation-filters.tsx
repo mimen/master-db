@@ -43,8 +43,14 @@ const COMPACT_STATE_FILTERS = [
   { value: "settled", label: "Settled" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
+/**
+ * One axis, widest to narrowest, with the screened-only lens last. Every entry
+ * renders at every width. Unknown used to be stripped on desktop and reachable
+ * only through a footer link, which made it a room with no marked exit.
+ */
 export const TYPE_FILTERS = [
   { value: "all", label: "Everyone" },
+  { value: "known", label: "Known" },
   { value: "dm", label: "DMs" },
   { value: "group", label: "Groups" },
   { value: "unknown", label: "Unknown" },
@@ -128,7 +134,17 @@ function FilterPill({
   );
 }
 
-/** A compact, touch-friendly filter rail that stays one horizontal row at every width. */
+/**
+ * The filter rail. Desktop stacks the two axes and wraps; mobile keeps one
+ * swipeable row.
+ *
+ * Desktop cannot use the swipe rail. The sidebar is ~350px and the two groups
+ * need ~710px, so a single row parked every type lens in the 360px past the
+ * edge, behind a hidden scroll indicator. Wrapping drops the width dependency
+ * rather than tuning it, so no sidebar size can hide a lens again. Mobile keeps
+ * scrolling: a horizontal swipe is discoverable by touch, and the filter sheet
+ * is a second way in that desktop does not have.
+ */
 export function ConversationFilters({
   filters,
   counts,
@@ -140,40 +156,59 @@ export function ConversationFilters({
     onFiltersChange(selectInboxFilter(filters, selection));
   };
 
+  const stateGroup = (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel="Conversation state"
+      style={[styles.filterGroup, compact && styles.filterGroupCompact]}
+    >
+      {(compact ? COMPACT_STATE_FILTERS : STATE_FILTERS).map((filter) => (
+        <FilterPill key={filter.value} compact={compact} label={filter.label} count={counts?.[filter.value]} selected={filters.state === filter.value} selection={{ kind: "state", value: filter.value }} onSelect={select} />
+      ))}
+    </View>
+  );
+
+  const typeGroup = (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel="Conversation type"
+      style={[styles.filterGroup, compact && styles.filterGroupCompact]}
+    >
+      {TYPE_FILTERS.map((filter) => (
+        <FilterPill
+          key={filter.value}
+          compact={compact}
+          label={filter.label}
+          selected={filters.type === filter.value}
+          selection={{ kind: "type", value: filter.value }}
+          onSelect={select}
+        />
+      ))}
+    </View>
+  );
+
+  if (compact) {
+    // One row per axis, and each row wraps on its own at the narrowest sidebar.
+    // No divider: the row break already separates the two axes.
+    return (
+      <View accessibilityLabel="Conversation filters" style={styles.railStacked}>
+        {stateGroup}
+        {typeGroup}
+      </View>
+    );
+  }
+
   return (
-    <View style={compact ? styles.railCompact : styles.rail}>
+    <View style={styles.rail}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.railContent, compact && styles.railContentCompact]}
+        contentContainerStyle={styles.railContent}
         accessibilityLabel="Conversation filters"
       >
-        <View
-          accessibilityRole="radiogroup"
-          accessibilityLabel="Conversation state"
-          style={[styles.filterGroup, compact && styles.filterGroupCompact]}
-        >
-          {(compact ? COMPACT_STATE_FILTERS : STATE_FILTERS).map((filter) => (
-            <FilterPill key={filter.value} compact={compact} label={filter.label} count={counts?.[filter.value]} selected={filters.state === filter.value} selection={{ kind: "state", value: filter.value }} onSelect={select} />
-          ))}
-        </View>
+        {stateGroup}
         <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
-        <View
-          accessibilityRole="radiogroup"
-          accessibilityLabel="Conversation type"
-          style={[styles.filterGroup, compact && styles.filterGroupCompact]}
-        >
-          {TYPE_FILTERS.filter((filter) => !compact || filter.value !== "unknown").map((filter) => (
-            <FilterPill
-              key={filter.value}
-              compact={compact}
-              label={filter.label}
-              selected={filters.type === filter.value}
-              selection={{ kind: "type", value: filter.value }}
-              onSelect={select}
-            />
-          ))}
-        </View>
+        {typeGroup}
       </ScrollView>
     </View>
   );
@@ -433,16 +468,18 @@ const styles = StyleSheet.create({
   rail: {
     height: 50,
   },
-  railCompact: {
-    height: 36,
-  },
   railContent: {
     alignItems: "center",
     gap: 12,
     paddingHorizontal: 18,
   },
-  railContentCompact: {
-    gap: 9,
+  // No fixed height: the rows grow when a group wraps at a narrow sidebar.
+  // The insets are tighter than railContent's 18 so that both groups clear the
+  // default 352px sidebar on one row each. They still wrap when dragged narrow.
+  railStacked: {
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
   },
   filterGroup: {
     alignItems: "center",
@@ -450,7 +487,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterGroupCompact: {
-    gap: 5,
+    flexWrap: "wrap",
+    gap: 4,
   },
   divider: {
     height: 22,
@@ -468,7 +506,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
     height: 24,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
   },
   pillLabel: {
     fontSize: 13,

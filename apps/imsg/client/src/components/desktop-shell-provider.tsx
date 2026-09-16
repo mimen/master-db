@@ -25,6 +25,7 @@ import { Type } from "@/constants/theme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { onOpenChatInfo } from "@/lib/chat-info";
+import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 import {
   createInitialDesktopShellState,
   INITIAL_DESKTOP_SHELL_STATE,
@@ -91,7 +92,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     allChats: [],
     counts: null,
     state: "unresponded",
-    type: "all",
+    type: DEFAULT_INBOX_FILTERS.type,
   });
   const messagesActions = useRef<MessagesWorkspaceActions | null>(null);
   const activeWorkspace = projection?.workspace ?? state.activeWorkspace;

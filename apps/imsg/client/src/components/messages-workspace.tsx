@@ -19,6 +19,7 @@ import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
+import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 import {
   getListAdapter,
   isListMode,
@@ -59,7 +60,7 @@ export function MessagesWorkspace({
   }, [shadowOpen, shell, utilityOpen]);
   // Unresponded is the working view — the inbox opens on what needs a reply.
   const [state, setState] = useState<StateFilter>("unresponded");
-  const [type, setType] = useState<TypeFilter>("all");
+  const [type, setType] = useState<TypeFilter>(DEFAULT_INBOX_FILTERS.type);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
