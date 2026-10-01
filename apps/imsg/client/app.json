@@ -41,7 +41,10 @@
         {
           "locationWhenInUsePermission": "Allow Comma to add your current location to a message."
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

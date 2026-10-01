@@ -503,11 +503,11 @@ const styles = StyleSheet.create({
     width: "92%",
   },
   shell: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: "row",
   },
   workspace: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   workspaceHost: {
     flex: 1,

@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   popoverBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   popover: {
     borderRadius: Radii.card,

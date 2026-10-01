@@ -1,6 +1,5 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
-// SDK 54 pin: expo-router still rides react-navigation, so elements is importable.
-import { useHeaderHeight } from "@react-navigation/elements";
+import { useHeaderHeight } from "expo-router/react-navigation";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
