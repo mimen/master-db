@@ -15,7 +15,10 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
   changing server code use the deployment command's scratch DB mode.
 - Client: `client/` (Expo, SDK **57**). Expo Go from the App Store runs exactly one SDK, so
   the client SDK must match the current App Store Expo Go major; when Expo Go moves, the
-  phone shows "project uses SDK N, installed is SDK M" until the client is bumped. Server: `server/`. Shared types/logic: `shared/`
+  phone shows "project uses SDK N, installed is SDK M" until the client is bumped. Expo Go 57+
+  on a physical iPhone also requires a signed manifest: `comma:expo` reads `EXPO_TOKEN` (account
+  `mimen1994`, EAS project in `app.json`) from `~/.config/comma/expo-token` on the Mini, and the
+  phone's Expo Go must be signed in to the same account. Server: `server/`. Shared types/logic: `shared/`
   (imported as `@shared/*`; the client keeps a synced copy at `client/src/lib/types.ts`).
 - Desktop shell: `desktop/` (Tauri v2). Thin remote window — loads the Mini tailnet
   URL with native AppKit chrome and menu. `bun run dev:desktop` is the only supported

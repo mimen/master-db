@@ -19,7 +19,7 @@ Git commit → web and shell artifacts → Mini / laptop → running client → 
 | Surface | Destination | Identity |
 | --- | --- | --- |
 | Production web/API | Mini, `127.0.0.1:8377`, exposed at `https://milads-mac-mini.taild31e9a.ts.net:8447` | `/api/deploy/status` |
-| Expo Go | Mini Metro server, `exp://milads-mac-mini:8081` | pulled source revision on the Mini |
+| Expo Go | Mini Metro server, `exp://milads-mac-mini.taild31e9a.ts.net:8081` | pulled source revision on the Mini |
 | Production desktop | `/Users/mimen/Applications/Comma.app` | bundle ID `com.milad.imsg.desktop`, embedded `CommaSourceSHA` |
 | Branch preview | Branch-specific Mini port and tailnet URL | preview release at `/api/deploy/status`; branch manifest at `/__comma/manifest` |
 | Branch desktop | `Comma Dev — <branch>` | branch-derived bundle ID, title, icon, URL, and SHA |

@@ -7,7 +7,7 @@
   <array>
     <string>/bin/zsh</string>
     <string>-c</string>
-    <string>unset PROCID PROCID_REF PROCID_OFF; exec -a comma:expo __HOME__/.bun/bin/bun node_modules/expo/bin/cli start --port 8081</string>
+    <string>unset PROCID PROCID_REF PROCID_OFF; [ -r __HOME__/.config/comma/expo-token ] &amp;&amp; export EXPO_TOKEN="$(cat __HOME__/.config/comma/expo-token)"; exec -a comma:expo __HOME__/.bun/bin/bun node_modules/expo/bin/cli start --port 8081</string>
   </array>
   <key>WorkingDirectory</key><string>__REPO_DIR__/apps/imsg/client</string>
   <key>EnvironmentVariables</key>

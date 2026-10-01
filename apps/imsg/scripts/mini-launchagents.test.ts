@@ -35,6 +35,7 @@ describe("Mini LaunchAgent installation", () => {
     expect(server).toContain(`${repo}/apps/imsg`);
     expect(expo).toContain("exec -a comma:expo");
     expect(expo).toContain("node_modules/expo/bin/cli start --port 8081");
+    expect(expo).toContain(`export EXPO_TOKEN="$(cat ${home}/.config/comma/expo-token)"`);
     expect(server).not.toContain("__REPO_DIR__");
     expect(expo).not.toContain("__HOME__");
     const backup = join(home, "Library/Application Support/imsg-deploy/launchagents");
