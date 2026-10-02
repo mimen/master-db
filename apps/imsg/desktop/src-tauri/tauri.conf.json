@@ -27,7 +27,8 @@
           "y": 14
         },
         "transparent": false,
-        "shadow": true
+        "shadow": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {

@@ -87,6 +87,7 @@ export function tauriConfig(identity: BranchIdentity, previewUrl: string, iconDi
         trafficLightPosition: { x: 14, y: 14 },
         transparent: false,
         shadow: true,
+        dragDropEnabled: false,
       }],
     },
     bundle: {
