@@ -12,6 +12,7 @@ import {
   previewBuildEnvironment,
   previewPortReleaseScript,
   previewPortReservationScript,
+  previewServerBundleCommand,
   previewWebBuildCommands,
   type OccupiedPreviewPort,
 } from "./deployment/branch-core";
@@ -122,7 +123,8 @@ await assertSourceSha();
 await run(["ssh", sshTarget, `mkdir -p ${shellQuote(remoteDirectory)} && rm -rf ${shellQuote(remoteIncomingDirectory)} && mkdir ${shellQuote(remoteIncomingDirectory)}`]);
 if (backendMode === "production-proxy") {
   await run(["rsync", "-a", "--delete", `${localDist}/`, incomingSpec("dist/")]);
-  await run(["rsync", "-a", resolve(IMSG_ROOT, "scripts/deployment/preview-server.ts"), incomingSpec("preview-server.ts")]);
+  await run(previewServerBundleCommand(resolve(localStage, "preview-server.ts")), { cwd: IMSG_ROOT });
+  await run(["rsync", "-a", resolve(localStage, "preview-server.ts"), incomingSpec("preview-server.ts")]);
 } else {
   await run([
     "rsync", "-a", "--delete",

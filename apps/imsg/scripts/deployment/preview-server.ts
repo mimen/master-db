@@ -1,5 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { resolve } from "node:path";
+import { Hono } from "hono";
+import { precompressedStatic } from "../../server/compression";
 
 export interface PreviewServerOptions {
   readonly staticRoot: string;
@@ -10,6 +12,9 @@ export interface PreviewServerOptions {
 export function createPreviewFetch(options: PreviewServerOptions): (request: Request) => Promise<Response> {
   const root = resolve(options.staticRoot);
   const recordActivity = createActivityRecorder(options.manifestPath);
+  const statics = new Hono();
+  statics.use("/*", precompressedStatic(root));
+  statics.get("*", precompressedStatic(root, true));
   return async (request: Request): Promise<Response> => {
     await recordActivity();
     const url = new URL(request.url);
@@ -32,20 +37,12 @@ export function createPreviewFetch(options: PreviewServerOptions): (request: Req
         body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
         redirect: "manual",
         signal: request.signal,
+        // Bun would gunzip the body yet keep Content-Encoding; relay the upstream bytes as sent.
+        decompress: false,
       });
     }
 
-    const requested = url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname.slice(1));
-    const candidate = resolve(root, requested);
-    const withinRoot = candidate === root || candidate.startsWith(`${root}${sep}`);
-    if (!withinRoot) return new Response("Not found", { status: 404 });
-    const file = Bun.file(candidate);
-    if (await file.exists()) {
-      return new Response(file, { headers: { "cache-control": cacheControl(candidate) } });
-    }
-    return new Response(Bun.file(resolve(root, "index.html")), {
-      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-    });
+    return statics.fetch(request);
   };
 }
 
@@ -88,12 +85,6 @@ export function createActivityRecorder(
       console.error(`Could not record branch preview activity: ${String(error)}`);
     }
   };
-}
-
-function cacheControl(path: string): string {
-  return path.includes(`${sep}_expo${sep}static${sep}`)
-    ? "public, max-age=31536000, immutable"
-    : "no-store";
 }
 
 if (import.meta.main) {

@@ -59,12 +59,14 @@ fi
 [ "$DONE" -eq 1 ] || { cat "$BUILD_LOG"; fail "Expo export did not finish in time"; }
 
 EXPO_PUBLIC_IMSG_WEB_SHA="$SOURCE_SHA" bun scripts/post-export.ts "$STAGING_DIR"
+bun ../scripts/precompress.ts "$STAGING_DIR"
 (
   cd "$STAGING_DIR"
   find _expo/static -type f -print | LC_ALL=C sort > .comma-assets
 )
 [ -s "$STAGING_DIR/.comma-assets" ] || fail "release contains no static entry assets"
 [ -f "$STAGING_DIR/index.html" ] || fail "release contains no index.html"
+[ -f "$STAGING_DIR/index.html.br" ] && [ -f "$STAGING_DIR/index.html.gz" ] || fail "release index is not precompressed"
 /usr/bin/grep -F "<meta name=\"comma-web-sha\" content=\"$SOURCE_SHA\"/>" "$STAGING_DIR/index.html" >/dev/null \
   || fail "release index does not embed source SHA"
 ENTRY_ASSET="$(find "$STAGING_DIR/_expo/static/js/web" -type f -name '*.js' -print -quit)"

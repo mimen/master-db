@@ -53,7 +53,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "build:web": "bun scripts/validate-public-env.ts && expo export --platform web && bun scripts/post-export.ts"
+    "build:web": "bun scripts/validate-public-env.ts && expo export --platform web && bun scripts/post-export.ts && bun ../scripts/precompress.ts dist"
   },
   "private": true
 }

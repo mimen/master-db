@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { precompress } from "../precompress";
 import { createPreviewFetch } from "./preview-server";
 
 const servers: Bun.Server<undefined>[] = [];
@@ -46,6 +47,11 @@ describe("UI-only preview server", () => {
         if (url.pathname === "/events") {
           return new Response("data: one\n\ndata: two\n\n", { headers: { "content-type": "text/event-stream" } });
         }
+        if (url.pathname === "/api/chats") {
+          return new Response(Bun.gzipSync(new TextEncoder().encode('{"chats":[]}')), {
+            headers: { "content-type": "application/json", "content-encoding": "gzip" },
+          });
+        }
         if (url.pathname === "/api/deploy/status") {
           return Response.json({ environment: "production", branch: null, webSha: "f".repeat(40) });
         }
@@ -72,8 +78,45 @@ describe("UI-only preview server", () => {
       branch: "feat/test",
       webSha: "a".repeat(40),
     });
+    const chats = await fetchPreview(new Request("http://preview/api/chats", { headers: { "accept-encoding": "gzip" } }));
+    expect(chats.headers.get("content-encoding")).toBe("gzip");
+    expect(new TextDecoder().decode(Bun.gunzipSync(new Uint8Array(await chats.arrayBuffer())))).toBe('{"chats":[]}');
     const events = await fetchPreview(new Request("http://preview/events"));
     expect(events.headers.get("content-type")).toContain("text/event-stream");
     expect(await events.text()).toBe("data: one\n\ndata: two\n\n");
+  });
+
+  test("serves precompressed siblings by Accept-Encoding with production cache headers", async () => {
+    const files = await fixture();
+    const source = "console.log('branch');\n".repeat(200);
+    await mkdir(resolve(files.root, "_expo/static/js/web"), { recursive: true });
+    await writeFile(resolve(files.root, "_expo/static/js/web/entry-abc.js"), source);
+    await precompress(files.root);
+    const fetchPreview = createPreviewFetch({
+      staticRoot: files.root,
+      upstreamUrl: "http://127.0.0.1:1",
+      manifestPath: files.manifestPath,
+    });
+    const get = (path: string, encoding: string) =>
+      fetchPreview(new Request(`http://preview${path}`, { headers: { "accept-encoding": encoding } }));
+
+    const br = await get("/_expo/static/js/web/entry-abc.js", "gzip, br");
+    expect(br.headers.get("content-encoding")).toBe("br");
+    expect(br.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(br.headers.get("vary")).toBe("Accept-Encoding");
+    expect(Buffer.from(await br.arrayBuffer()))
+      .toEqual(await Bun.file(resolve(files.root, "_expo/static/js/web/entry-abc.js.br")).bytes().then(Buffer.from));
+
+    const gzip = await get("/_expo/static/js/web/entry-abc.js", "gzip");
+    expect(gzip.headers.get("content-encoding")).toBe("gzip");
+    expect(Buffer.from(Bun.gunzipSync(new Uint8Array(await gzip.arrayBuffer()))).toString()).toBe(source);
+
+    const identity = await get("/_expo/static/js/web/entry-abc.js", "identity");
+    expect(identity.headers.get("content-encoding")).toBeNull();
+    expect(await identity.text()).toBe(source);
+
+    const route = await get("/some/client/route", "br");
+    expect(route.headers.get("content-encoding")).toBe("br");
+    expect(route.headers.get("cache-control")).toBe("no-store");
   });
 });

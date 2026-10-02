@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import { endTime, setMetric, startTime, timing } from "hono/timing";
 import type { BBAttributedBody, BBMessage } from "./bb-types";
@@ -33,7 +32,7 @@ import { ScheduledSendNow } from "./scheduled-send-now";
 import { WhisperService } from "./whisper";
 import { createAndSendFaceTimeLink } from "./facetime";
 import { parseByteRange } from "./byte-range";
-import { staticCacheControl } from "./static-cache";
+import { compressJson, precompressedStatic } from "./compression";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
 import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
@@ -207,6 +206,8 @@ wireLiveEvents(bb, directory, names, broadcast);
 // ------------------------------------------------------------------- routes
 
 const app = new Hono();
+app.use("/api/chats", compressJson);
+app.use("/api/chats/:guid/messages", compressJson);
 
 app.onError((err, c) => {
   console.error(`${c.req.method} ${c.req.path}:`, err.message);
@@ -1116,25 +1117,8 @@ app.get("/api/*", (c) => c.json({ error: "Not found" }, 404));
 // The universal Expo web export. Expo static output has one HTML file per
 // route, so dynamic segments need explicit rewrites.
 
-app.use(
-  "/*",
-  serveStatic({
-    root: staticRoot,
-    onFound: (_path, c) => {
-      c.header("Cache-Control", staticCacheControl(c.req.path));
-    },
-  }),
-);
-app.get(
-  "*",
-  serveStatic({
-    root: staticRoot,
-    rewriteRequestPath: () => "/index.html",
-    onFound: (_path, c) => {
-      c.header("Cache-Control", "no-store");
-    },
-  }),
-);
+app.use("/*", precompressedStatic(staticRoot));
+app.get("*", precompressedStatic(staticRoot, true));
 
 return {
   app,

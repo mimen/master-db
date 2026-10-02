@@ -202,7 +202,13 @@ export function previewWebBuildCommands(): readonly (readonly string[])[] {
     ["bun", "scripts/validate-public-env.ts"],
     ["bunx", "expo", "export", "--platform", "web", "--clear"],
     ["bun", "scripts/post-export.ts"],
+    ["bun", "../scripts/precompress.ts", "dist"],
   ];
+}
+
+/** The Mini preview directory has no node_modules, so the server ships as one self-contained file. */
+export function previewServerBundleCommand(outfile: string): readonly string[] {
+  return ["bun", "build", "scripts/deployment/preview-server.ts", "--target", "bun", "--outfile", outfile];
 }
 
 export function desktopBuildCommands(configPath: string): {

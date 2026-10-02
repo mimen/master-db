@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["scripts"]
+  "include": ["scripts", "server/compression.ts", "server/static-cache.ts"]
 }

@@ -12,6 +12,7 @@ import {
   desktopBuildCommands,
   nativeInputsChanged,
   previewBuildEnvironment,
+  previewServerBundleCommand,
   previewWebBuildCommands,
   normalizeIdentitySegment,
   parseBranchManifest,
@@ -108,6 +109,10 @@ describe("branch mode", () => {
       ["bun", "scripts/validate-public-env.ts"],
       ["bunx", "expo", "export", "--platform", "web", "--clear"],
       ["bun", "scripts/post-export.ts"],
+      ["bun", "../scripts/precompress.ts", "dist"],
+    ]);
+    expect(previewServerBundleCommand("/stage/preview-server.ts")).toEqual([
+      "bun", "build", "scripts/deployment/preview-server.ts", "--target", "bun", "--outfile", "/stage/preview-server.ts",
     ]);
   });
 
