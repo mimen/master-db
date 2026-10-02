@@ -16,6 +16,8 @@ export class FixtureBlueBubbles implements BlueBubbles {
   private fake: FakeBlueBubbles;
   private readonly listeners = new Set<(event: BBEvent) => void>();
   private faults = new Map<FaultableMethod, string>();
+  /** sendText's response latency, and whether the event stream echoes the send before it, as BlueBubbles does. */
+  private sendTiming: { delayMs: number; echo: boolean } | null = null;
 
   constructor(seed: FakeSeed) {
     this.fake = new FakeBlueBubbles(seed);
@@ -24,6 +26,11 @@ export class FixtureBlueBubbles implements BlueBubbles {
   reset(seed: FakeSeed): void {
     this.fake = new FakeBlueBubbles(seed);
     this.faults.clear();
+    this.sendTiming = null;
+  }
+
+  setSendTiming(timing: { delayMs: number; echo: boolean } | null): void {
+    this.sendTiming = timing;
   }
 
   setFault(method: FaultableMethod | null, error = "fixture fault"): void {
@@ -85,15 +92,21 @@ export class FixtureBlueBubbles implements BlueBubbles {
     );
   }
 
-  sendText(
+  async sendText(
     chatGuid: string,
     message: string,
     replyTo?: { guid: string; part: number },
     attributedBody?: BBAttributedBody,
   ): Promise<Result<BBMessage>> {
-    return Promise.resolve(
-      this.failure<BBMessage>("sendText") ?? this.fake.sendText(chatGuid, message, replyTo, attributedBody),
-    );
+    const failure = this.failure<BBMessage>("sendText");
+    if (failure) return failure;
+    const sent = await this.fake.sendText(chatGuid, message, replyTo, attributedBody);
+    const timing = this.sendTiming;
+    if (sent.ok && timing) {
+      if (timing.echo) this.emit({ kind: "new-message", message: sent.value });
+      await Bun.sleep(timing.delayMs);
+    }
+    return sent;
   }
 
   sendAttachment(_chatGuid: string, _filename: string, _bytes: Uint8Array): Promise<Result<BBMessage>> {

@@ -182,6 +182,12 @@ const { app, dispose } = await createApp({
       return c.json({ ok: true });
     });
 
+    fixtureApp.post("/__fixture/send-timing", async (c) => {
+      const body = (await c.req.json()) as { delayMs?: number; echo?: boolean };
+      bb.setSendTiming(typeof body.delayMs === "number" ? { delayMs: body.delayMs, echo: body.echo === true } : null);
+      return c.json({ ok: true });
+    });
+
     fixtureApp.post("/__fixture/fault", async (c) => {
       const body = (await c.req.json()) as { method?: string | null; error?: string };
       if (body.method === null || body.method === undefined) {
