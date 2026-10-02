@@ -24,6 +24,7 @@ import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
+import { foldReaction } from "@/lib/message-window";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
@@ -245,19 +246,7 @@ export function ThreadView({
           // Fold the tapback into its target message live — same shape the
           // server produces on reload — instead of rendering a "Loved …" row.
           const target = messagesRef.current.find((m) => m.guid === event.targetGuid);
-          if (target) {
-            const sameSender = (r: (typeof target.reactions)[number]) =>
-              event.reaction.isFromMe
-                ? r.isFromMe
-                : !r.isFromMe && r.senderAddress === event.reaction.senderAddress;
-            const rest = target.reactions.filter(
-              (r) => !(sameSender(r) && r.type === event.reaction.type),
-            );
-            upsert({
-              ...target,
-              reactions: event.remove ? rest : [...rest, event.reaction],
-            });
-          }
+          if (target) upsert(foldReaction(target, event));
         } else if (event.kind === "typing" && event.chatGuid === chatGuid) {
           setPeerTyping(event.display);
           if (typingClear.current) clearTimeout(typingClear.current);

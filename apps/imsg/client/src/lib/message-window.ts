@@ -1,4 +1,4 @@
-import type { Message } from "@shared/types";
+import type { Message, ServerEvent } from "@shared/types";
 
 export function sortByDate(messages: Message[]): Message[] {
   return [...messages].sort((a, b) => a.dateCreated - b.dateCreated);
@@ -72,4 +72,12 @@ export function mergeWindow(current: Message[], batch: Message[]): Message[] {
 export function reconcileWindow(current: Message[], batch: Message[]): Message[] {
   const next = batch.reduce(upsertMessage, current);
   return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+}
+
+/** A live tapback folded into its target, the same shape the server builds on reload. */
+export function foldReaction(target: Message, event: Extract<ServerEvent, { kind: "reaction" }>): Message {
+  const sameSender = (r: Message["reactions"][number]) =>
+    event.reaction.isFromMe ? r.isFromMe : !r.isFromMe && r.senderAddress === event.reaction.senderAddress;
+  const rest = target.reactions.filter((r) => !(sameSender(r) && r.type === event.reaction.type));
+  return { ...target, reactions: event.remove ? rest : [...rest, event.reaction] };
 }

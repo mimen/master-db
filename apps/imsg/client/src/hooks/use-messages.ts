@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
-import { mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
+import { foldReaction, mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
 import { readThreadCache, writeThreadCache, THREAD_CACHE_MAX } from "@/lib/thread-cache";
-import type { Message } from "@shared/types";
+import type { Message, ServerEvent } from "@shared/types";
 
 export interface JumpTarget {
   guid: string;
@@ -40,6 +40,8 @@ const threadCache = webStorage ? readThreadCache(webStorage) : new Map<string, M
 // Newest-window fetches in flight, shared so a press-down prefetch and the
 // open that follows it cost one round trip, not two.
 const inflightNewest = new Map<string, Promise<Message[]>>();
+// Entries started by a live event: newest message only, history not fetched yet.
+const partialThreads = new Set<string>();
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
 function flushThreadCache(): void {
@@ -68,6 +70,28 @@ function cacheThread(guid: string, messages: Message[]): void {
   }
 }
 
+export function cachedThread(guid: string): Message[] | undefined {
+  return threadCache.get(guid);
+}
+
+/**
+ * Fold a live event into its chat's cached thread, open or not, so a message the
+ * sidebar already shows is there the moment the chat opens. A chat with no entry
+ * starts one holding just this message; the open's fetch merges history behind it.
+ */
+export function applyThreadEvent(event: ServerEvent): void {
+  if (event.kind === "new-message" || event.kind === "updated-message") {
+    const cached = threadCache.get(event.chatGuid);
+    if (!cached && (event.kind !== "new-message" || event.message.retracted)) return;
+    if (!cached) partialThreads.add(event.chatGuid);
+    cacheThread(event.chatGuid, upsertMessage(cached ?? [], event.message));
+  } else if (event.kind === "reaction") {
+    const cached = threadCache.get(event.chatGuid);
+    const target = cached?.find((m) => m.guid === event.targetGuid);
+    if (cached && target) cacheThread(event.chatGuid, upsertMessage(cached, foldReaction(target, event)));
+  }
+}
+
 export function fetchNewest(guid: string): Promise<Message[]> {
   let pending = inflightNewest.get(guid);
   if (!pending) {
@@ -91,9 +115,12 @@ export function prefetchThread(guid: string): void {
 }
 
 function warmThread(guid: string): void {
-  if (threadCache.has(guid) || inflightNewest.has(guid)) return;
+  if ((threadCache.has(guid) && !partialThreads.has(guid)) || inflightNewest.has(guid)) return;
   fetchNewest(guid)
-    .then((batch) => cacheThread(guid, sortByDate(batch)))
+    .then((batch) => {
+      partialThreads.delete(guid);
+      cacheThread(guid, mergeWindow(threadCache.get(guid) ?? [], sortByDate(batch)));
+    })
     .catch(() => undefined);
 }
 
@@ -134,7 +161,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
       .then((batch) => {
         if (generation.current !== gen) return;
         const sorted = sortByDate(batch);
-        if (!target) cacheThread(chatGuid, sorted);
+        if (!target) partialThreads.delete(chatGuid);
         setMessages((current) => mergeWindow(current, sorted));
         setHasMore(batch.length >= 40);
         setHasNewer(target !== null);

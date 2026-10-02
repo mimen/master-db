@@ -13,7 +13,7 @@ import { SweepOverlay } from "@/components/sweep-overlay";
 import { ThreadView } from "@/components/thread-view";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
-import type { JumpTarget } from "@/hooks/use-messages";
+import { applyThreadEvent, type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
@@ -104,6 +104,7 @@ export function MessagesWorkspace({
           // unread eligibility, so the delayed refresh reconciles those.
           patchChatWithMessage(event.chatGuid, event.message);
         }
+        applyThreadEvent(event);
         // Typing is pure presence — it changes nothing the sidebar renders, and
         // scheduling a full list refetch for it meant a chatty conversation kept
         // the whole directory reloading (and starved the debounce during bursts).
