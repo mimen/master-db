@@ -207,8 +207,7 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   const page = desk.page;
   await page.getByTestId("conversation-row").first().click();
 
-  await expect(page.getByText("Suggestions", { exact: true })).toBeVisible();
-  await expect(page.getByText("Terra · fallback", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Regenerate suggestions, from Terra (fallback)" })).toBeVisible();
   await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
   await expect(page.getByText("that turnaround is too tight on my end", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-suggestion-vibes.png", animations: "disabled" });
@@ -230,10 +229,75 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   await page.setViewportSize({ width: 390, height: 820 });
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/?visual=dark-390", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("radio", { name: /All, 15 conversations/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /All, 16 conversations/ })).toBeVisible();
   await page.getByText("Alex Rivera", { exact: true }).first().click();
   await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-suggestion-narrow.png", animations: "disabled" });
+});
+
+test("suggestion shelf states hold their footprint and recover quietly", async ({ desk }) => {
+  for (const scheme of SCHEMES) {
+    await resetAndOpen(desk, 1300, scheme);
+    const page = desk.page;
+    let held = true;
+    let fail = false;
+    const waiting: (() => void)[] = [];
+    const release = () => {
+      held = false;
+      waiting.splice(0).forEach((resolve) => resolve());
+    };
+    await page.route("**/api/ai/suggestions/**", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      if (fail) return route.fulfill({ status: 502, json: { error: "gateway down" } });
+      if (held) await new Promise<void>((resolve) => waiting.push(resolve));
+      return route.continue();
+    });
+    await page.getByText("Alex Rivera", { exact: true }).first().click();
+
+    const loading = page.getByRole("status", { name: "Loading reply suggestions" });
+    await expect(loading).toBeVisible();
+    await expect(page.getByText("Thinking…")).toHaveCount(0);
+    const loadingBox = await loading.boundingBox();
+    await page.screenshot({ path: `/tmp/comma-shelf-loading-${scheme}.png`, animations: "disabled" });
+
+    release();
+    const pill = page.getByRole("button", { name: /^clarify, curious:/ });
+    await expect(pill).toBeVisible();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `/tmp/comma-shelf-loaded-${scheme}.png`, animations: "disabled" });
+    const loadedBox = await pill.boundingBox();
+    expect(Math.abs(loadedBox!.y - loadingBox!.y)).toBeLessThanOrEqual(1);
+    await expect(page.getByText("Suggestions unavailable")).toHaveCount(0);
+
+    const regenerated = page.waitForRequest((request) => request.url().includes("/api/ai/suggestions/"));
+    await desk.request.post("/__fixture/receive", {
+      data: { chatGuid: "iMessage;-;+16195550101", text: "Also, is parking validated?", handle: "+16195550101" },
+    });
+    await expect(page.getByRole("button", { name: "New message, refresh suggestions" })).toBeVisible();
+    await page.screenshot({ path: `/tmp/comma-shelf-stale-${scheme}.png`, animations: "disabled" });
+    await regenerated;
+    await expect(page.getByRole("button", { name: /^Regenerate suggestions/ })).toBeVisible();
+
+    fail = true;
+    await page.getByRole("button", { name: /^Regenerate suggestions/ }).click();
+    await expect(page.getByRole("button", { name: "Retry suggestions" })).toBeVisible();
+    await page.screenshot({ path: `/tmp/comma-shelf-failed-${scheme}.png`, animations: "disabled" });
+
+    fail = false;
+    await page.getByRole("button", { name: "Retry suggestions" }).click();
+    await expect(pill).toBeVisible();
+    await page.unroute("**/api/ai/suggestions/**");
+
+    await page.evaluate(() => localStorage.setItem(
+      "imsg.settings.v2",
+      JSON.stringify({ suggestionMode: "on-demand", suggestionModel: "opus", nameOrder: "first-last" }),
+    ));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByText("Alex Rivera", { exact: true }).first().click();
+    await expect(page.getByRole("button", { name: "Suggest replies" })).toBeVisible();
+    await page.screenshot({ path: `/tmp/comma-shelf-on-demand-${scheme}.png`, animations: "disabled" });
+    await page.evaluate(() => localStorage.removeItem("imsg.settings.v2"));
+  }
 });
 
 test("native window chrome reserves space only while AppKit controls are visible", async ({ desk }) => {

@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Reanimated, {
+  FadeIn,
+  FadeInUp,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
@@ -7,11 +17,17 @@ import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
 import { useTheme } from "@/hooks/use-theme";
+import { useType } from "@/hooks/use-type";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { TAPBACK_EMOJI } from "./bubble";
 import type { ReplySuggestion, ReplySuggestions, SuggestionVibe } from "@shared/types";
+
+// BlueBubbles' DB lags the SSE event; regenerating immediately would answer
+// the previous message.
+// ponytail: fixed delay, compare basedOnMessageGuid to the event guid if lag outgrows it.
+const AUTO_REFRESH_DELAY_MS = 1500;
 
 interface SuggestionShelfProps {
   chatGuid: string;
@@ -29,6 +45,7 @@ export function SuggestionShelf({
   reactionPreview,
 }: SuggestionShelfProps) {
   const theme = useTheme();
+  const type = useType();
   const mode = useSuggestionMode();
   const selectedModel = useSuggestionModel();
   const showSheet = useActionSheet();
@@ -39,6 +56,7 @@ export function SuggestionShelf({
   const [resolved, setResolved] = useState(false);
   const activeRequest = useRef(0);
   const messageEpoch = useRef(0);
+  const autoRefresh = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
     async (refresh: boolean) => {
@@ -64,6 +82,7 @@ export function SuggestionShelf({
   useEffect(() => {
     activeRequest.current++;
     messageEpoch.current = 0;
+    if (autoRefresh.current) clearTimeout(autoRefresh.current);
     setResult(null);
     setResolved(false);
     setStale(false);
@@ -72,15 +91,22 @@ export function SuggestionShelf({
     void load(false);
   }, [chatGuid, enabled, awaitingReply, mode, selectedModel, load]);
 
+  useEffect(() => () => {
+    if (autoRefresh.current) clearTimeout(autoRefresh.current);
+  }, []);
+
   useServerEvents(
     useCallback(
       (event) => {
-        if (event.kind === "new-message" && event.chatGuid === chatGuid) {
-          messageEpoch.current++;
-          setStale(true);
-        }
+        if (event.kind !== "new-message" || event.chatGuid !== chatGuid) return;
+        messageEpoch.current++;
+        setStale(true);
+        if (event.message.isFromMe) return;
+        if (mode !== "auto" || !enabled || !awaitingReply) return;
+        if (autoRefresh.current) clearTimeout(autoRefresh.current);
+        autoRefresh.current = setTimeout(() => void load(false), AUTO_REFRESH_DELAY_MS);
       },
-      [chatGuid],
+      [chatGuid, mode, enabled, awaitingReply, load],
     ),
   );
 
@@ -131,102 +157,117 @@ export function SuggestionShelf({
   const suggestions = result?.suggestions ?? [];
   const event = result?.event ?? null;
   const eventUrl = event ? calendarTemplateUrl(event) : null;
-  if (mode === "on-demand" && !resolved && suggestions.length === 0 && !loading && !failed) {
-    return (
-      <View style={[styles.container, styles.demandRow, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
-        <DemandButton onPress={() => void load(true)} />
-      </View>
-    );
-  }
-  if (!loading && !failed && suggestions.length === 0 && !eventUrl) return null;
+  const shelf = { borderTopColor: theme.divider, backgroundColor: theme.background };
+  const pillText = { fontSize: type.secondary, lineHeight: Math.round(type.secondary * 1.3) };
 
-  // While the first batch is in flight there is nothing to interact with, so
-  // the shelf stays a single thin line instead of header + spinner rows.
-  if (loading && suggestions.length === 0) {
+  if (mode === "on-demand" && !resolved && !loading && !failed) {
     return (
-      <View style={[styles.container, styles.thinkingRow, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
-        <ActivityIndicator size="small" />
-        <Text style={[styles.thinkingText, { color: theme.textSecondary }]}>Thinking…</Text>
+      <View style={[styles.container, shelf]}>
+        <GhostPill icon="sparkles" label="Suggest replies" accent onPress={() => void load(true)} />
       </View>
     );
   }
+  if (failed && !loading) {
+    return (
+      <View style={[styles.container, shelf]}>
+        <GhostPill icon="refresh" label="Retry suggestions" onPress={() => void load(true)} />
+      </View>
+    );
+  }
+  if (!loading && suggestions.length === 0 && !eventUrl) return null;
+
+  const modelName = result
+    ? `${result.servedModel === "opus" ? "Opus" : "Terra"}${result.fallback ? " (fallback)" : ""}`
+    : null;
 
   return (
-    <View style={[styles.container, { borderTopColor: theme.divider, backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Ionicons name="sparkles-outline" size={13} color={theme.textSecondary} />
-        <Text style={[styles.label, { color: theme.textSecondary }]}>
-          {failed ? "Suggestions unavailable" : stale ? "New message — refresh" : "Suggestions"}
-        </Text>
-        {result && (
-          <Text style={[styles.model, { color: theme.textSecondary }]}>
-            {result.servedModel === "opus" ? "Opus" : "Terra"}{result.fallback ? " · fallback" : ""}
-          </Text>
-        )}
-        <Pressable
-          onPress={() => void load(true)}
-          disabled={loading}
-          hitSlop={8}
-          style={({ hovered, pressed }) => [
-            styles.refresh,
-            hovered && !pressed && { backgroundColor: theme.backgroundElement },
-            pressed && { backgroundColor: theme.backgroundSelected },
-          ]}
-        >
-          {({ hovered, pressed }) => <Ionicons name="refresh" size={15} color={loading ? theme.textSecondary : hovered || pressed ? theme.text : theme.accent} />}
-        </Pressable>
-      </View>
-
-      <View style={styles.pillRow}>
+    <View style={[styles.container, styles.shelfRow, shelf]}>
+      {loading ? (
+        <SkeletonPills />
+      ) : (
+        <View style={styles.pillRow}>
           {event && eventUrl && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Add to calendar: ${event.title}, ${eventShelfLabel(event)}`}
-              disabled={stale}
-              onPress={() => void openExternalUrl(eventUrl)}
-              style={({ hovered, pressed }) => [
-                styles.pill,
-                { backgroundColor: EVENT_TINT.background, borderColor: EVENT_TINT.border, opacity: stale ? 0.55 : 1 },
-                !stale && hovered && !pressed && { backgroundColor: EVENT_TINT.backgroundHover },
-                !stale && pressed && { backgroundColor: EVENT_TINT.backgroundPress },
-              ]}
-            >
-              {() => <>
-                <Ionicons name="calendar-outline" size={15} color={theme.accent} />
-                <Text numberOfLines={2} style={[styles.pillText, { color: theme.text }]}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  {`  ·  ${eventShelfLabel(event)}`}
-                </Text>
-              </>}
-            </Pressable>
-          )}
-          {suggestions.map((suggestion) => {
-            const colors = vibeColors(suggestion.vibe);
-            const emoji = suggestion.reaction ? TAPBACK_EMOJI.get(suggestion.reaction) : null;
-            return (
+            <Reanimated.View entering={FadeInUp.springify().damping(20)} style={styles.pillWrap}>
               <Pressable
-                key={suggestion.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${suggestion.strategy}, ${suggestion.vibe}: ${suggestion.text}`}
+                accessibilityLabel={`Add to calendar: ${event.title}, ${eventShelfLabel(event)}`}
                 disabled={stale}
-                onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
+                onPress={() => void openExternalUrl(eventUrl)}
                 style={({ hovered, pressed }) => [
                   styles.pill,
-                  { backgroundColor: colors.background, borderColor: colors.border, opacity: stale ? 0.55 : 1 },
-                  !stale && hovered && !pressed && { backgroundColor: colors.backgroundHover },
-                  !stale && pressed && { backgroundColor: colors.backgroundPress },
+                  { backgroundColor: EVENT_TINT.background, borderColor: EVENT_TINT.border, opacity: stale ? 0.5 : 1 },
+                  !stale && hovered && !pressed && { backgroundColor: EVENT_TINT.backgroundHover },
+                  !stale && pressed && { backgroundColor: EVENT_TINT.backgroundPress },
                 ]}
               >
                 {() => <>
-                  {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
-                  <Text numberOfLines={3} style={[styles.pillText, { color: theme.text }]}>
-                    {suggestion.text}
+                  <Ionicons name="calendar-outline" size={15} color={theme.accent} />
+                  <Text numberOfLines={2} style={[styles.pillText, pillText, { color: theme.text }]}>
+                    <Text style={styles.eventTitle}>{event.title}</Text>
+                    {`  ·  ${eventShelfLabel(event)}`}
                   </Text>
                 </>}
               </Pressable>
+            </Reanimated.View>
+          )}
+          {suggestions.map((suggestion, index) => {
+            const colors = vibeColors(suggestion.vibe);
+            const emoji = suggestion.reaction ? TAPBACK_EMOJI.get(suggestion.reaction) : null;
+            return (
+              <Reanimated.View
+                key={suggestion.id}
+                entering={FadeInUp.delay((index + (eventUrl ? 1 : 0)) * 50).springify().damping(20)}
+                style={styles.pillWrap}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${suggestion.strategy}, ${suggestion.vibe}: ${suggestion.text}`}
+                  disabled={stale}
+                  onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
+                  style={({ hovered, pressed }) => [
+                    styles.pill,
+                    { backgroundColor: colors.background, borderColor: colors.border, opacity: stale ? 0.5 : 1 },
+                    !stale && hovered && !pressed && { backgroundColor: colors.backgroundHover },
+                    !stale && pressed && { backgroundColor: colors.backgroundPress },
+                  ]}
+                >
+                  {() => <>
+                    {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
+                    <Text numberOfLines={3} style={[styles.pillText, pillText, { color: theme.text }]}>
+                      {suggestion.text}
+                    </Text>
+                  </>}
+                </Pressable>
+              </Reanimated.View>
             );
           })}
-      </View>
+        </View>
+      )}
+      {!loading && (
+        <Reanimated.View entering={FadeIn.delay(150)}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={stale ? "New message, refresh suggestions" : `Regenerate suggestions${modelName ? `, from ${modelName}` : ""}`}
+            onPress={() => void load(true)}
+            onLongPress={modelName ? () => showToast(`Suggested by ${modelName}`) : undefined}
+            hitSlop={10}
+            style={({ hovered, pressed }) => [
+              styles.refresh,
+              hovered && !pressed && { backgroundColor: theme.backgroundElement },
+              pressed && { backgroundColor: theme.backgroundSelected },
+            ]}
+          >
+            {({ hovered, pressed }) => (
+              <Ionicons
+                name="refresh"
+                size={14}
+                color={stale ? theme.accent : hovered || pressed ? theme.text : theme.textSecondary}
+                style={{ opacity: stale || hovered || pressed ? 1 : 0.55 }}
+              />
+            )}
+          </Pressable>
+        </Reanimated.View>
+      )}
     </View>
   );
 }
@@ -256,41 +297,89 @@ function vibeColors(vibe: SuggestionVibe): SuggestionColors {
 
 const EVENT_TINT = tintLadder("94,199,221");
 
-function DemandButton({ onPress }: { onPress: () => void }): React.JSX.Element {
-  const theme = useTheme();
-  const [hovered, setHovered] = useState(false);
+// Sized like a typical reply set so the real pills land where the
+// placeholders were and the shelf does not change height.
+const SKELETON_WIDTHS = [132, 96, 156] as const;
+
+function SkeletonPills(): React.JSX.Element {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Suggest a reply"
-      onPress={onPress}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      style={({ pressed }) => [
-        styles.demandButton,
-        hovered && !pressed && { backgroundColor: theme.backgroundElement },
-        pressed && { backgroundColor: theme.backgroundSelected },
-      ]}
+    <View
+      accessibilityLabel="Loading reply suggestions"
+      accessibilityLiveRegion="polite"
+      role="status"
+      style={styles.pillRow}
     >
-      <Ionicons name="sparkles-outline" size={15} color={hovered ? theme.text : theme.accent} />
-      <Text style={{ color: hovered ? theme.text : theme.accent, fontSize: 13, fontWeight: "500", lineHeight: 16 }}>Suggest a reply</Text>
-    </Pressable>
+      {SKELETON_WIDTHS.map((width, index) => <SkeletonPill key={width} width={width} index={index} />)}
+    </View>
+  );
+}
+
+function SkeletonPill({ width, index }: { width: number; index: number }): React.JSX.Element {
+  const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const glow = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) return;
+    glow.value = withDelay(index * 160, withRepeat(withTiming(1, { duration: 900 }), -1, true));
+  }, [glow, index, reduceMotion]);
+  const breathe = useAnimatedStyle(() => ({ opacity: 0.45 + glow.value * 0.55 }));
+  return (
+    <Reanimated.View
+      style={[
+        styles.pill,
+        styles.skeleton,
+        { width, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+        breathe,
+      ]}
+    />
+  );
+}
+
+function GhostPill({ icon, label, accent = false, onPress }: {
+  icon: "sparkles" | "refresh";
+  label: string;
+  accent?: boolean;
+  onPress: () => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  const type = useType();
+  const rest = accent ? theme.accent : theme.textSecondary;
+  return (
+    <Reanimated.View entering={FadeIn} style={styles.pillWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        style={({ hovered, pressed }) => [
+          styles.pill,
+          styles.ghost,
+          { borderColor: theme.cardBorder },
+          hovered && !pressed && { backgroundColor: theme.backgroundElement },
+          pressed && { backgroundColor: theme.backgroundSelected },
+        ]}
+      >
+        {({ hovered, pressed }) => <>
+          <Ionicons name={icon} size={14} color={hovered || pressed ? theme.text : rest} />
+          <Text style={[styles.ghostText, { color: hovered || pressed ? theme.text : rest, fontSize: type.secondary }]}>
+            {label}
+          </Text>
+        </>}
+      </Pressable>
+    </Reanimated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
-  demandRow: { justifyContent: "center", minHeight: 44, paddingBottom: 8, paddingTop: 8 },
-  header: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
-  label: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4, flex: 1 },
-  model: { fontSize: 10, fontWeight: "500" },
-  refresh: { borderRadius: 6, margin: -2, padding: 4 },
-  demandButton: { alignItems: "center", alignSelf: "flex-start", borderRadius: 8, flexDirection: "row", gap: 6, paddingHorizontal: 8, paddingVertical: 7 },
-  thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 2, paddingTop: 2 },
-  thinkingText: { fontSize: 12 },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 6 },
-  pill: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
+  container: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
+  shelfRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
+  pillRow: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  pillWrap: { maxWidth: "100%" },
+  pill: { borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, minHeight: 34, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
+  skeleton: { height: 34 },
+  ghost: { alignSelf: "flex-start", gap: 6, paddingHorizontal: 11 },
+  ghostText: { fontWeight: "500" },
+  refresh: { alignItems: "center", borderRadius: 13, height: 26, justifyContent: "center", marginTop: 4, width: 26 },
   eventTitle: { fontWeight: "600" },
-  pillText: { fontSize: 13, lineHeight: 17, flexShrink: 1 },
-  reactionEmoji: { fontSize: 16 },
+  pillText: { flexShrink: 1 },
+  reactionEmoji: { fontSize: 15, lineHeight: 17 },
 });
