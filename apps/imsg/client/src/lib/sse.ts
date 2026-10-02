@@ -11,110 +11,132 @@ import type { ServerEvent } from "@shared/types";
 const STALE_MS = 65_000;
 const CHECK_MS = 15_000;
 
+type Listener = (event: ServerEvent) => void;
 type Source = { close: () => void };
 
+// One connection for the whole app. Each open chat used to mount three
+// subscribers, and each held its own EventSource: a fresh TLS stream plus a
+// server fanout slot per subscriber, opened and torn down on every chat switch.
+const listeners = new Set<Listener>();
+let stop: (() => void) | null = null;
+
+function emit(event: ServerEvent): void {
+  for (const listener of [...listeners]) listener(event);
+}
+
+function start(): () => void {
+  const url = `${BASE_URL}/events`;
+  let source: Source | null = null;
+  let lastBeat = Date.now();
+  let everConnected = false;
+
+  const beat = () => {
+    lastBeat = Date.now();
+  };
+
+  const opened = () => {
+    beat();
+    if (everConnected) emit({ kind: "resync" });
+    everConnected = true;
+  };
+
+  const dispatch = (data: string | null | undefined) => {
+    if (!data) return;
+    beat();
+    let event: ServerEvent;
+    try {
+      event = JSON.parse(data) as ServerEvent;
+    } catch {
+      return;
+    }
+    emit(event);
+  };
+
+  const connect = () => {
+    if (Platform.OS === "web") {
+      const es = new EventSource(url);
+      es.onopen = opened;
+      es.addEventListener("ping", beat);
+      es.onmessage = (msg) => dispatch(msg.data as string);
+      source = es;
+      return;
+    }
+    const es = new EventSourceNative<"ping">(url);
+    es.addEventListener("open", opened);
+    es.addEventListener("ping", beat);
+    es.addEventListener("message", (event) => {
+      if (event.type === "message") dispatch(event.data);
+    });
+    source = {
+      close: () => {
+        es.removeAllEventListeners();
+        es.close();
+      },
+    };
+  };
+
+  const restart = () => {
+    source?.close();
+    beat(); // one restart per stale window, not one per check tick
+    connect();
+  };
+
+  const restartIfStale = () => {
+    if (Date.now() - lastBeat > STALE_MS) restart();
+  };
+
+  connect();
+  const watchdog = setInterval(restartIfStale, CHECK_MS);
+
+  // Waking and coming back online are the moments streams die silently;
+  // check immediately instead of waiting out the watchdog interval.
+  let removeWakeListeners: () => void;
+  if (Platform.OS === "web") {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") restartIfStale();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", restartIfStale);
+    removeWakeListeners = () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", restartIfStale);
+    };
+  } else {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") restartIfStale();
+    });
+    removeWakeListeners = () => sub.remove();
+  }
+
+  return () => {
+    clearInterval(watchdog);
+    removeWakeListeners();
+    source?.close();
+  };
+}
+
 /**
- * Single SSE subscription to the server's event stream, cross-platform.
+ * Subscribe to the server's event stream. All subscribers share one
+ * connection, opened by the first and closed when the last unsubscribes.
  *
- * Delivery is not guaranteed: on any (re)connection after the first, the
- * handler receives a synthetic `{ kind: "resync" }` telling the consumer the
- * stream had a gap and it must refetch whatever it renders. A stale-stream
- * watchdog plus wake/online fast paths turn silent connection death into that
- * same resync signal.
+ * Delivery is not guaranteed: on any reconnection after the first, every
+ * subscriber receives a synthetic `{ kind: "resync" }` telling it the stream
+ * had a gap and it must refetch whatever it renders. A stale-stream watchdog
+ * plus wake/online fast paths turn silent connection death into that same
+ * resync signal.
  */
-export function useServerEvents(onEvent: (event: ServerEvent) => void): void {
+export function subscribeServerEvents(listener: Listener): () => void {
+  listeners.add(listener);
+  stop ??= start();
+  return () => {
+    if (!listeners.delete(listener) || listeners.size > 0) return;
+    stop?.();
+    stop = null;
+  };
+}
+
+export function useServerEvents(onEvent: Listener): void {
   const handler = useRef(onEvent);
   handler.current = onEvent;
-
-  useEffect(() => {
-    const url = `${BASE_URL}/events`;
-    let source: Source | null = null;
-    let lastBeat = Date.now();
-    let everConnected = false;
-    let disposed = false;
-
-    const beat = () => {
-      lastBeat = Date.now();
-    };
-
-    const opened = () => {
-      beat();
-      if (everConnected) handler.current({ kind: "resync" });
-      everConnected = true;
-    };
-
-    const dispatch = (data: string | null | undefined) => {
-      if (!data) return;
-      beat();
-      try {
-        handler.current(JSON.parse(data) as ServerEvent);
-      } catch {
-        // ignore malformed events
-      }
-    };
-
-    const connect = () => {
-      if (disposed) return;
-      if (Platform.OS === "web") {
-        const es = new EventSource(url);
-        es.onopen = opened;
-        es.addEventListener("ping", beat);
-        es.onmessage = (msg) => dispatch(msg.data as string);
-        source = es;
-        return;
-      }
-      const es = new EventSourceNative<"ping">(url);
-      es.addEventListener("open", opened);
-      es.addEventListener("ping", beat);
-      es.addEventListener("message", (event) => {
-        if (event.type === "message") dispatch(event.data);
-      });
-      source = {
-        close: () => {
-          es.removeAllEventListeners();
-          es.close();
-        },
-      };
-    };
-
-    const restart = () => {
-      source?.close();
-      beat(); // one restart per stale window, not one per check tick
-      connect();
-    };
-
-    const restartIfStale = () => {
-      if (Date.now() - lastBeat > STALE_MS) restart();
-    };
-
-    connect();
-    const watchdog = setInterval(restartIfStale, CHECK_MS);
-
-    // Waking and coming back online are the moments streams die silently;
-    // check immediately instead of waiting out the watchdog interval.
-    let removeWakeListeners: () => void;
-    if (Platform.OS === "web") {
-      const onVisible = () => {
-        if (document.visibilityState === "visible") restartIfStale();
-      };
-      document.addEventListener("visibilitychange", onVisible);
-      window.addEventListener("online", restartIfStale);
-      removeWakeListeners = () => {
-        document.removeEventListener("visibilitychange", onVisible);
-        window.removeEventListener("online", restartIfStale);
-      };
-    } else {
-      const sub = AppState.addEventListener("change", (state) => {
-        if (state === "active") restartIfStale();
-      });
-      removeWakeListeners = () => sub.remove();
-    }
-
-    return () => {
-      disposed = true;
-      clearInterval(watchdog);
-      removeWakeListeners();
-      source?.close();
-    };
-  }, []);
+  useEffect(() => subscribeServerEvents((event) => handler.current(event)), []);
 }
