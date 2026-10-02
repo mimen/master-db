@@ -91,8 +91,10 @@ function tempMessage(
   replyTo: Message | null,
   mentions: readonly MentionAnnotation[],
 ): Message {
+  const guid = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   return {
-    guid: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    guid,
+    clientKey: guid,
     chatGuid,
     text,
     dateCreated: Date.now(),

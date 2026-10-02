@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
@@ -216,6 +216,20 @@ interface BubbleProps {
   onShowReactions: (message: Message) => void;
 }
 
+/** iMessage stays silent while a send is quick; only a send still out after this long says so. */
+const SLOW_SEND_MS = 1500;
+
+function useSlowSend(pending: boolean): boolean {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!pending) return;
+    const timer = setTimeout(() => setSlow(true), SLOW_SEND_MS);
+    return () => clearTimeout(timer);
+  }, [pending]);
+  return slow;
+}
+
 export const Bubble = memo(function Bubble({
   message,
   paneWidth = 0,
@@ -233,6 +247,7 @@ export const Bubble = memo(function Bubble({
   const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
+  const slowSend = useSlowSend(message.pending === true);
   const mine = message.isFromMe;
   // SMS (green bubble) vs iMessage (blue).
   const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
@@ -250,8 +265,9 @@ export const Bubble = memo(function Bubble({
   // A persisted non-zero error is Apple's delivery failure (e.g. the iMessage
   // half of a service-split send) — surface it like an optimistic failure.
   const notDelivered = message.failed || (mine && (message.error ?? 0) !== 0);
-  // Tail only on the last text bubble of a group (not on media/pending/failed).
-  const hasTail = groupEnd && !message.pending && !notDelivered && message.text !== "";
+  // Tail only on the last text bubble of a group (not on media/failed). A pending
+  // send already has it, so settling changes nothing about the bubble itself.
+  const hasTail = groupEnd && !notDelivered && message.text !== "";
 
   return (
     <View
@@ -341,7 +357,6 @@ export const Bubble = memo(function Bubble({
                   highlighted && { borderColor: theme.accent },
                   { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
                   hasTail && (mine ? styles.bubbleTailMine : styles.bubbleTailTheirs),
-                  message.pending && { opacity: 0.6 },
                   notDelivered && { backgroundColor: "rgba(255,69,58,0.25)" },
                 ]}
               >
@@ -398,15 +413,15 @@ export const Bubble = memo(function Bubble({
             <Pressable accessibilityRole="button" accessibilityLabel="Retry sending" onPress={() => onRetry(message)} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
               <Text style={[styles.failed, { color: theme.destructive }]}>Not Delivered — tap to retry</Text>
             </Pressable>
-          ) : message.pending ? (
-            <Text style={[styles.meta, { color: theme.textSecondary }]}>Sending…</Text>
           ) : (
             (groupEnd || message.edited || showTime) && (
               <Text style={[styles.meta, { color: theme.textSecondary }]}>
                 {message.edited ? "Edited · " : ""}
                 {groupEnd || showTime ? formatBubbleTime(message.dateCreated) : ""}
                 {mine && isLatestOutgoing
-                  ? message.dateRead
+                  ? message.pending
+                    ? slowSend ? " · Sending…" : ""
+                    : message.dateRead
                     ? ` · Read ${formatBubbleTime(message.dateRead)}`
                     : message.dateDelivered
                       ? " · Delivered"

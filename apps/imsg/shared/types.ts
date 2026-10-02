@@ -72,6 +72,8 @@ export interface Message {
   /** Client-only optimistic-send states; never set by the server. */
   pending?: boolean;
   failed?: boolean;
+  /** Client-only row identity: the temp guid of the optimistic send this message settled from. */
+  clientKey?: string;
 }
 
 export interface LinkPreviewData {

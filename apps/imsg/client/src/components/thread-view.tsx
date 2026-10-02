@@ -151,8 +151,6 @@ export function ThreadView({
   }, []);
   const typingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
-  /** Guids whose entrance already played as a temp bubble; see onSettled. */
-  const settledGuids = useRef(new Set<string>());
 
   /**
    * Follow an outbound message down to the newest row. maintainVisibleContentPosition
@@ -171,7 +169,6 @@ export function ThreadView({
     setEditing(null);
     setSearchOpen(false);
     setSearchText("");
-    settledGuids.current.clear();
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
     if (!previewOnly) void api.markRead(chatGuid);
   }, [chatGuid, previewOnly]);
@@ -365,7 +362,7 @@ export function ThreadView({
   }, [firstUnreadAt, rows, jumpTarget]);
 
   const latestOutgoingGuid = useMemo(
-    () => rows.find((r) => r.message.isFromMe && !r.message.pending && !r.message.failed)?.message.guid ?? null,
+    () => rows.find((r) => r.message.isFromMe && !r.message.failed)?.message.guid ?? null,
     [rows],
   );
 
@@ -375,10 +372,7 @@ export function ThreadView({
       replaceTemp(failed.guid, revived);
       api
         .sendText(chatGuid, { text: failed.text, replyToGuid: failed.replyToGuid ?? undefined })
-        .then((message) => {
-          settledGuids.current.add(message.guid); // same key swap as onSettled
-          replaceTemp(revived.guid, message);
-        })
+        .then((message) => replaceTemp(revived.guid, message))
         .catch(() => replaceTemp(revived.guid, { ...revived, pending: false, failed: true }));
     },
     [chatGuid, replaceTemp],
@@ -677,7 +671,8 @@ export function ThreadView({
           ref={assignListRef}
           data={rows}
           inverted
-          keyExtractor={(row) => row.message.guid}
+          // A sent message keeps its optimistic row's key, so settling never remounts it.
+          keyExtractor={(row) => row.message.clientKey ?? row.message.guid}
           onEndReached={() => {
             if (hasMore && !loading) loadOlder();
           }}
@@ -729,8 +724,7 @@ export function ThreadView({
                 entering={
                   // FadeInUp, not Down: the list is inverted, so each cell carries
                   // scaleY:-1 and a downward animation renders as an upward one.
-                  Date.now() - item.message.dateCreated < 4000 &&
-                  !settledGuids.current.has(item.message.guid)
+                  Date.now() - item.message.dateCreated < 4000
                     ? FadeInUp.springify().damping(22)
                     : undefined
                 }
@@ -807,9 +801,6 @@ export function ThreadView({
           scrollToLatest();
         }}
         onSettled={(tempGuid, message) => {
-          // The settled message carries a new guid, so the row remounts under a
-          // new key — suppress its entrance so the bubble doesn't spring twice.
-          settledGuids.current.add(message.guid);
           replaceTemp(tempGuid, message);
           if (!message.failed) patchChatWithMessage(chatGuid, message);
         }}

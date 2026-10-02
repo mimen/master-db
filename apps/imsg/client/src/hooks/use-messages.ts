@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
+import { mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
 import { readThreadCache, writeThreadCache, THREAD_CACHE_MAX } from "@/lib/thread-cache";
 import type { Message } from "@shared/types";
 
@@ -22,10 +23,6 @@ interface UseMessagesResult {
   remove: (guid: string) => void;
   /** Refetch the newest window and fold it in — for after an event-stream gap. */
   reconcile: () => void;
-}
-
-function sortByDate(messages: Message[]): Message[] {
-  return [...messages].sort((a, b) => a.dateCreated - b.dateCreated);
 }
 
 // ------------------------------------------------------------- thread cache
@@ -123,7 +120,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
         if (generation.current !== gen) return;
         const sorted = sortByDate(batch);
         if (!target) cacheThread(chatGuid, sorted);
-        setMessages(sorted);
+        setMessages((current) => mergeWindow(current, sorted));
         setHasMore(batch.length >= 40);
         setHasNewer(target !== null);
         setLoading(false);
@@ -200,25 +197,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
       .messages(chatGuid)
       .then((batch) => {
         if (generation.current !== gen) return;
-        setMessages((current) => {
-          const byGuid = new Map(current.map((m) => [m.guid, m]));
-          let changed = false;
-          for (const m of batch) {
-            const known = byGuid.get(m.guid);
-            if (m.retracted) {
-              if (known) {
-                byGuid.delete(m.guid);
-                changed = true;
-              }
-              continue;
-            }
-            if (!known || JSON.stringify(known) !== JSON.stringify(m)) {
-              byGuid.set(m.guid, m);
-              changed = true;
-            }
-          }
-          return changed ? sortByDate([...byGuid.values()]) : current;
-        });
+        setMessages((current) => reconcileWindow(current, batch));
       })
       .catch(() => undefined);
   }, [chatGuid, target]);
@@ -228,36 +207,11 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   }, []);
 
   const upsert = useCallback((message: Message) => {
-    setMessages((current) => {
-      if (message.retracted) return current.filter((m) => m.guid !== message.guid);
-      const index = current.findIndex((m) => m.guid === message.guid);
-      if (index >= 0) {
-        const next = [...current];
-        next[index] = message;
-        return next;
-      }
-      let next = [...current, message];
-      if (message.isFromMe) {
-        const tempIndex = current.findIndex(
-          (m) => m.pending && m.guid.startsWith("temp-") && m.text === message.text,
-        );
-        if (tempIndex >= 0) next = next.filter((m) => m.guid !== current[tempIndex]?.guid);
-      }
-      return sortByDate(next);
-    });
+    setMessages((current) => upsertMessage(current, message));
   }, []);
 
   const replaceTemp = useCallback((tempGuid: string, message: Message) => {
-    setMessages((current) => {
-      const withoutTemp = current.filter((m) => m.guid !== tempGuid);
-      const index = withoutTemp.findIndex((m) => m.guid === message.guid);
-      if (index >= 0) {
-        const next = [...withoutTemp];
-        next[index] = message;
-        return sortByDate(next);
-      }
-      return sortByDate([...withoutTemp, message]);
-    });
+    setMessages((current) => settleTemp(current, tempGuid, message));
   }, []);
 
   return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, reconcile };
