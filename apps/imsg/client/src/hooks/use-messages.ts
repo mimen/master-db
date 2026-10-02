@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
 import { mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
+import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
 import { readThreadCache, writeThreadCache, THREAD_CACHE_MAX } from "@/lib/thread-cache";
 import type { Message } from "@shared/types";
 
@@ -36,7 +37,9 @@ const webStorage = (() => {
   }
 })();
 const threadCache = webStorage ? readThreadCache(webStorage) : new Map<string, Message[]>();
-const inflightPrefetch = new Set<string>();
+// Newest-window fetches in flight, shared so a press-down prefetch and the
+// open that follows it cost one round trip, not two.
+const inflightNewest = new Map<string, Promise<Message[]>>();
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
 function flushThreadCache(): void {
@@ -65,22 +68,33 @@ function cacheThread(guid: string, messages: Message[]): void {
   }
 }
 
+export function fetchNewest(guid: string): Promise<Message[]> {
+  let pending = inflightNewest.get(guid);
+  if (!pending) {
+    pending = api.messages(guid).finally(() => inflightNewest.delete(guid));
+    inflightNewest.set(guid, pending);
+  }
+  return pending;
+}
+
 export function scheduleThreadPrefetch(guid: string): () => void {
   const timer = setTimeout(() => {
-    if (inflightPrefetch.size < 2) prefetchThread(guid);
+    if (inflightNewest.size < 2) warmThread(guid);
   }, 150);
   return () => clearTimeout(timer);
 }
 
-/** Warm a thread before it's opened (hover / press-down). */
+/** Press-down on a row: the open is coming, so start its clock and its fetch. */
 export function prefetchThread(guid: string): void {
-  if (threadCache.has(guid) || inflightPrefetch.has(guid)) return;
-  inflightPrefetch.add(guid);
-  api
-    .messages(guid)
+  markOpenStart(guid);
+  warmThread(guid);
+}
+
+function warmThread(guid: string): void {
+  if (threadCache.has(guid) || inflightNewest.has(guid)) return;
+  fetchNewest(guid)
     .then((batch) => cacheThread(guid, sortByDate(batch)))
-    .catch(() => undefined)
-    .finally(() => inflightPrefetch.delete(guid));
+    .catch(() => undefined);
 }
 
 export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
@@ -104,18 +118,19 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
     const gen = ++generation.current;
     pagingOlder.current = false;
     pagingNewer.current = false;
+    markOpenStart(chatGuid);
     const cached = !target ? threadCache.get(chatGuid) : undefined;
     if (cached && cached.length > 0) {
       // Instant render from cache; refresh silently underneath.
       setMessages(cached);
       setHasMore(cached.length >= 40);
       setLoading(false);
+      afterPaint(() => markOpenRendered(chatGuid, false));
     } else {
       setMessages([]);
       setLoading(true);
     }
-    api
-      .messages(chatGuid, target ? { around: target.dateCreated } : undefined)
+    (target ? api.messages(chatGuid, { around: target.dateCreated }) : fetchNewest(chatGuid))
       .then((batch) => {
         if (generation.current !== gen) return;
         const sorted = sortByDate(batch);
@@ -124,6 +139,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
         setHasMore(batch.length >= 40);
         setHasNewer(target !== null);
         setLoading(false);
+        afterPaint(() => markOpenRendered(chatGuid, true));
       })
       .catch(() => {
         if (generation.current === gen) setLoading(false);
