@@ -1,3 +1,18 @@
+/**
+ * Painted while #root is still empty. React's first commit fills #root and the
+ * selector stops matching, so nothing has to remove it. Grounds mirror
+ * Colors.background in src/constants/theme.ts, which pulls react-native and
+ * can't be imported here; post-export.test.ts keeps the two in step.
+ */
+export const LOADING_SHELL_CSS =
+  "body{margin:0}" +
+  "#root:empty{background:#ffffff}" +
+  "#root:empty::before{content:'';margin:auto;width:8px;height:8px;border-radius:50%;background:#8a8a90;" +
+  "animation:comma-boot 1.2s ease-in-out .4s infinite alternate backwards}" +
+  "@keyframes comma-boot{from{opacity:0}to{opacity:.6}}" +
+  "@media (prefers-color-scheme:dark){#root:empty{background:#1a1a1c}#root:empty::before{background:#98989e}}" +
+  "@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}";
+
 /** Injects PWA head tags + a zoom-lock viewport into the exported SPA shell. */
 export async function postExport(outputDirectory: string, webSha: string | undefined): Promise<void> {
 const path = `${outputDirectory.replace(/\/$/, "")}/index.html`;
@@ -41,7 +56,9 @@ const tags = [
     // NOTE: never put scrollbar-gutter on * — overflow:hidden elements count as
     // scroll containers, so every avatar circle reserves a phantom gutter.
     // The thread scroller gets its gutter directly in thread-view.
-    "*{scrollbar-width:thin;scrollbar-color:rgba(140,140,150,0.4) transparent}</style>",
+    "*{scrollbar-width:thin;scrollbar-color:rgba(140,140,150,0.4) transparent}" +
+    LOADING_SHELL_CSS +
+    "</style>",
 ].join("");
 
 if (webSha && !html.includes('name="comma-web-sha"')) {
