@@ -236,7 +236,11 @@ export class AiService {
       now: formatPromptNow(new Date()),
     });
     let generated = await this.completeSuggestionWithFallback(prompt, selectedModel);
-    if (!generated.ok) return { ok: false, error: generated.error.message };
+    if (!generated.ok) {
+      const { kind, status, message } = generated.error;
+      console.warn(`suggestions ${chatGuid} (${selectedModel}): ${kind}${status ? ` ${status}` : ""}: ${message}`);
+      return { ok: false, error: message };
+    }
 
     let validated = await this.validateGeneratedSuggestions(
       chatGuid,

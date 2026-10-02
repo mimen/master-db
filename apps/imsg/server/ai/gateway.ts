@@ -171,7 +171,9 @@ export class Gateway {
         {
           model: options.model,
           max_tokens: options.maxTokens,
-          cache_control: { type: "ephemeral" },
+          // The gateway marks the last block with a 1h TTL on Claude routes; a
+          // top-level marker with any other TTL on that block is a 400.
+          cache_control: { type: "ephemeral", ttl: "1h" },
           ...(options.model === "claude-opus-5"
             ? {
                 thinking: { type: "adaptive" as const },

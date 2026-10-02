@@ -69,6 +69,37 @@ describe("structured output capability", () => {
   });
 });
 
+describe("request shape", () => {
+  function capture(gateway: Gateway): Record<string, unknown>[] {
+    const bodies: Record<string, unknown>[] = [];
+    (gateway as unknown as { client: unknown }).client = {
+      messages: {
+        create: async (body: Record<string, unknown>) => {
+          bodies.push(body);
+          return { stop_reason: "end_turn", content: [{ type: "text", text: '{"ok":true}' }] };
+        },
+      },
+    };
+    return bodies;
+  }
+
+  test("structured requests cache with the gateway's 1h TTL", async () => {
+    const gateway = new Gateway(config);
+    const bodies = capture(gateway);
+    const result = await gateway.completeStructured("x", {}, { model: "claude-opus-5", maxTokens: 10, timeoutMs: 100 });
+    expect(result).toEqual({ ok: true, value: { ok: true } });
+    expect(bodies[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(bodies[0]?.messages).toEqual([{ role: "user", content: "x" }]);
+  });
+
+  test("fast completions send no cache marker", async () => {
+    const gateway = new Gateway(config);
+    const bodies = capture(gateway);
+    await gateway.complete("x");
+    expect(bodies[0]?.cache_control).toBeUndefined();
+  });
+});
+
 describe("parseJsonBlock", () => {
   test("parses a bare array", () => {
     const result = parseJsonBlock<string[]>('["a", "b"]');
