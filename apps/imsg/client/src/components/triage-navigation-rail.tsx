@@ -2,12 +2,10 @@ import { router } from "expo-router";
 import { useEffect, useState, type JSX } from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import {
-  MessageSquareIcon,
-  SentIcon,
-  Settings01Icon,
-  UserGroupIcon,
-} from "@hugeicons/core-free-icons";
+import MessageSquareIcon from "@hugeicons/core-free-icons/MessageSquareIcon";
+import SentIcon from "@hugeicons/core-free-icons/SentIcon";
+import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
+import UserGroupIcon from "@hugeicons/core-free-icons/UserGroupIcon";
 
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { openScheduledPane } from "@/lib/scheduled-pane";

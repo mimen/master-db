@@ -11,7 +11,7 @@ import { SkeletonList } from "./skeleton-list";
 import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
 
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
-import { SquarePenIcon } from "@hugeicons/core-free-icons";
+import SquarePenIcon from "@hugeicons/core-free-icons/SquarePenIcon";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFooter } from "./sidebar/sidebar-footer";

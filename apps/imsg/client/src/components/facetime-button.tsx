@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Pressable, StyleSheet } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { Video01Icon } from "@hugeicons/core-free-icons";
+import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 import * as Linking from "expo-linking";
 import type { Message } from "@shared/types";
 import { api } from "@/lib/api";

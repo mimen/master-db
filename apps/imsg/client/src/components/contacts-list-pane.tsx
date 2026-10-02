@@ -23,7 +23,7 @@ import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
-import { SquarePenIcon } from "@hugeicons/core-free-icons";
+import SquarePenIcon from "@hugeicons/core-free-icons/SquarePenIcon";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
 import { SidebarFrame } from "./sidebar/sidebar-frame";

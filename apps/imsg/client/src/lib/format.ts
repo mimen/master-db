@@ -1,4 +1,8 @@
-import { format, isSameDay, isSameWeek, isToday, isYesterday } from "date-fns";
+import { format } from "date-fns/format";
+import { isSameDay } from "date-fns/isSameDay";
+import { isSameWeek } from "date-fns/isSameWeek";
+import { isToday } from "date-fns/isToday";
+import { isYesterday } from "date-fns/isYesterday";
 
 export function formatListTimestamp(ms: number): string {
   const d = new Date(ms);
