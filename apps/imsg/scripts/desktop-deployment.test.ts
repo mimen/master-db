@@ -91,7 +91,7 @@ afterEach(() => {
 describe("desktop release change detection", () => {
   test("compares against the recorded successful deploy rather than reflog history", () => {
     const root = scratch();
-    git(root, "init", "-b", "main");
+    git(root, "init", "-b", "test/deployment");
     git(root, "config", "user.email", "test@example.com");
     git(root, "config", "user.name", "Test");
     mkdirSync(join(root, "apps/imsg/desktop"), { recursive: true });

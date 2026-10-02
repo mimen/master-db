@@ -62,6 +62,7 @@ export class ChatDirectory {
   private summaryCache: { at: number; chats: ChatSummary[]; sourceChats: ChatSummary[] } | null = null;
   /** Any sibling guid → its merged-conversation identity. */
   private siblingMap = new Map<string, { primary: string; all: string[] }>();
+  private siblingsBuilt = false;
   /** Raw chat participants retain handle ROWIDs for sender fallback. */
   private participantHandles = new Map<string, BBHandle[]>();
   private realtimeSpam = new Map<string, RealtimeSpamOverride>();
@@ -294,6 +295,7 @@ export class ChatDirectory {
     const sourceChats = chats;
     chats = this.applyRealtimeSpam(chats);
     chats = this.mergeServiceSiblings(chats);
+    this.siblingsBuilt = true;
     this.summaryCache = { at: this.now(), chats, sourceChats };
     return { ok: true, chats };
   }
@@ -348,6 +350,10 @@ export class ChatDirectory {
       }
     }
     return out;
+  }
+
+  async ensureSiblings(): Promise<void> {
+    if (!this.siblingsBuilt) await this.summaries();
   }
 
   /** All service-sibling guids for a conversation (self included). */

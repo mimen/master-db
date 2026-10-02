@@ -254,7 +254,7 @@ app.get("/api/chats/:guid/messages", async (c) => {
   // One person, one thread: pull from every service-sibling chat (iMessage/
   // SMS/RCS rows for the same contact) and merge chronologically, like
   // Messages.app does. Ensure the sibling map exists (first hit after boot).
-  await directory.summaries();
+  await directory.ensureSiblings();
   const guids = directory.siblingGuids(chatGuid);
 
   if (around) {

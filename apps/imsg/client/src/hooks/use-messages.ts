@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { api } from "@/lib/api";
+import { readThreadCache, writeThreadCache, THREAD_CACHE_MAX } from "@/lib/thread-cache";
 import type { Message } from "@shared/types";
 
 export interface JumpTarget {
@@ -29,9 +31,29 @@ function sortByDate(messages: Message[]): Message[] {
 // ------------------------------------------------------------- thread cache
 // Stale-while-revalidate: opening a chat renders instantly from the cache
 // while a fresh window loads behind it. Bounded LRU.
-const threadCache = new Map<string, Message[]>();
-const THREAD_CACHE_MAX = 30;
+const webStorage = (() => {
+  try {
+    return Platform.OS === "web" && typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+})();
+const threadCache = webStorage ? readThreadCache(webStorage) : new Map<string, Message[]>();
 const inflightPrefetch = new Set<string>();
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+
+function flushThreadCache(): void {
+  clearTimeout(flushTimer);
+  flushTimer = undefined;
+  if (webStorage) writeThreadCache(webStorage, threadCache);
+}
+
+if (webStorage) {
+  window.addEventListener("pagehide", flushThreadCache);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushThreadCache();
+  });
+}
 
 function cacheThread(guid: string, messages: Message[]): void {
   threadCache.delete(guid);
@@ -40,6 +62,17 @@ function cacheThread(guid: string, messages: Message[]): void {
     const oldest = threadCache.keys().next().value;
     if (oldest !== undefined) threadCache.delete(oldest);
   }
+  if (webStorage) {
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(flushThreadCache, 400);
+  }
+}
+
+export function scheduleThreadPrefetch(guid: string): () => void {
+  const timer = setTimeout(() => {
+    if (inflightPrefetch.size < 2) prefetchThread(guid);
+  }, 150);
+  return () => clearTimeout(timer);
 }
 
 /** Warm a thread before it's opened (hover / press-down). */

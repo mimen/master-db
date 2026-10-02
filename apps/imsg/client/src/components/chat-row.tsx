@@ -17,7 +17,7 @@ import Reanimated, {
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { prefetchThread } from "@/hooks/use-messages";
+import { prefetchThread, scheduleThreadPrefetch } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
@@ -162,11 +162,16 @@ function ChatRowInner({
     if (Platform.OS !== "web") return;
     const node = contextRef.current as unknown as HTMLElement | null;
     if (!node || typeof node.addEventListener !== "function") return;
+    let cancelPrefetch: (() => void) | undefined;
     const enter = () => {
       setHovered(true);
-      prefetchThread(chat.guid);
+      cancelPrefetch?.();
+      cancelPrefetch = scheduleThreadPrefetch(chat.guid);
     };
-    const leave = () => setHovered(false);
+    const leave = () => {
+      setHovered(false);
+      cancelPrefetch?.();
+    };
     const focusIn = () => setFocusedWithin(true);
     const focusOut = (event: FocusEvent) => {
       if (!(event.relatedTarget instanceof Node) || !node.contains(event.relatedTarget)) {
@@ -178,6 +183,7 @@ function ChatRowInner({
     node.addEventListener("focusin", focusIn);
     node.addEventListener("focusout", focusOut);
     return () => {
+      cancelPrefetch?.();
       node.removeEventListener("mouseenter", enter);
       node.removeEventListener("mouseleave", leave);
       node.removeEventListener("focusin", focusIn);
