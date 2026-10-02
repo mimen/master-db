@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
+import { endTime, setMetric, startTime, timing } from "hono/timing";
 import type { BBAttributedBody, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
@@ -212,8 +213,17 @@ app.onError((err, c) => {
   return c.json({ error: err.message }, 500);
 });
 
+for (const path of [
+  "/api/chats/:guid/messages",
+  "/api/attachments/:guid",
+  "/api/link-preview",
+  "/api/ai/suggestions/:guid",
+]) {
+  app.use(path, timing());
+}
+
 app.get("/api/health", async (c) => {
-  return c.json({ ok: true, privateApi: bb.hasPrivateApi });
+  return c.json({ ok: true, privateApi: bb.hasPrivateApi, eventClients: sseClients.size });
 });
 
 // Immutable release identity consumed by the thin desktop shell.
@@ -254,22 +264,37 @@ app.get("/api/chats/:guid/messages", async (c) => {
   // One person, one thread: pull from every service-sibling chat (iMessage/
   // SMS/RCS rows for the same contact) and merge chronologically, like
   // Messages.app does. Ensure the sibling map exists (first hit after boot).
+  startTime(c, "siblings");
   await directory.ensureSiblings();
+  endTime(c, "siblings");
   const guids = directory.siblingGuids(chatGuid);
+  let pageCount = 0;
+  const timedPage = async (guid: string, query: Parameters<BlueBubbles["chatMessages"]>[1]) => {
+    const started = performance.now();
+    const result = await bb.chatMessages(guid, query);
+    setMetric(c, `bb${pageCount++}`, performance.now() - started);
+    return result;
+  };
+  const built = (raw: BBMessage[]) => {
+    startTime(c, "build");
+    const thread = buildThread(raw, chatGuid, names);
+    endTime(c, "build");
+    return c.json(thread);
+  };
 
   if (around) {
     // Jump-to-message: fetch a window on both sides of the target timestamp.
     const target = Number(around);
     const pages = await Promise.all(
       guids.flatMap((g) => [
-        bb.chatMessages(g, { before: target + 1, limit: 40, sort: "DESC" }),
-        bb.chatMessages(g, { after: target, limit: 40, sort: "ASC" }),
+        timedPage(g, { before: target + 1, limit: 40, sort: "DESC" }),
+        timedPage(g, { after: target, limit: 40, sort: "ASC" }),
       ]),
     );
     if (pages.every((p) => !p.ok)) return c.json({ error: "fetch failed" }, 502);
     const merged = new Map<string, BBMessage>();
     for (const page of pages) if (page.ok) for (const m of page.value) merged.set(m.guid, m);
-    return c.json(buildThread([...merged.values()], chatGuid, names));
+    return built([...merged.values()]);
   }
 
   // buildThread drops tapbacks/reactions, so a raw page can filter down to very
@@ -284,7 +309,7 @@ app.get("/api/chats/:guid/messages", async (c) => {
     let cursorBefore = before ? Number(before) : undefined;
     let cursorAfter = after ? Number(after) : undefined;
     for (let page = 0; page < 6; page++) {
-      const result = await bb.chatMessages(guid, {
+      const result = await timedPage(guid, {
         before: cursorBefore,
         after: cursorAfter,
         sort,
@@ -307,7 +332,7 @@ app.get("/api/chats/:guid/messages", async (c) => {
   if (results.every((r) => r === null)) return c.json({ error: "fetch failed" }, 502);
   const merged = new Map<string, BBMessage>();
   for (const r of results) if (r) for (const m of r) merged.set(m.guid, m);
-  return c.json(buildThread([...merged.values()], chatGuid, names));
+  return built([...merged.values()]);
 });
 
 app.get("/api/chats/:guid/messages/:messageGuid", async (c) => {
@@ -913,13 +938,17 @@ async function cachedAttachmentFile(guid: string): Promise<AttachmentFile | null
 app.get("/api/attachments/:guid", async (c) => {
   const guid = c.req.param("guid");
   const rangeHeader = c.req.header("Range") ?? null;
+  startTime(c, "meta");
   const meta = await bb.attachmentMeta(guid);
+  endTime(c, "meta");
   const mimeType = meta.ok ? (meta.value.mimeType ?? null) : null;
   const filename = meta.ok ? (meta.value.transferName ?? null) : null;
 
+  startTime(c, "transcode");
   const transcoded = await transcodeAttachment(guid, mimeType, filename, () =>
     bb.downloadAttachment(guid),
   );
+  endTime(c, "transcode");
   if (transcoded) {
     return attachmentFileResponse(Bun.file(transcoded.path), transcoded.contentType, rangeHeader);
   }

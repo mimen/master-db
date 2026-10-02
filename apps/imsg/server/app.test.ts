@@ -110,3 +110,45 @@ describe("thread sibling lookup", () => {
     }
   });
 });
+
+describe("open-path instrumentation", () => {
+  test("the messages response reports its sibling, page, and build phases", async () => {
+    const { app, dispose } = await setup(seed(), () => 100_000);
+    try {
+      const response = await app.request(`/api/chats/${encodeURIComponent(primary)}/messages`);
+      const phases = (response.headers.get("Server-Timing") ?? "")
+        .split(",")
+        .map((entry) => entry.split(";")[0]);
+      expect(phases).toEqual(["siblings", "bb0", "bb1", "build", "total"]);
+    } finally {
+      dispose();
+    }
+  });
+});
+
+describe("event stream clients", () => {
+  async function eventClients(app: Awaited<ReturnType<typeof createApp>>["app"]) {
+    const response = await app.request("/api/health");
+    return ((await response.json()) as { eventClients: number }).eventClients;
+  }
+
+  test("a closed stream leaves the fanout set", async () => {
+    const { app, dispose } = await setup(seed(), () => 100_000);
+    try {
+      const streams = await Promise.all([app.request("/events"), app.request("/events")]);
+      const readers = streams.map((response) => response.body!.getReader());
+      await Promise.all(readers.map((reader) => reader.read()));
+      expect(await eventClients(app)).toBe(2);
+
+      await readers[0]!.cancel();
+      await Bun.sleep(10);
+      expect(await eventClients(app)).toBe(1);
+
+      await readers[1]!.cancel();
+      await Bun.sleep(10);
+      expect(await eventClients(app)).toBe(0);
+    } finally {
+      dispose();
+    }
+  });
+});
