@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,6 +34,7 @@ import { useType } from "@/hooks/use-type";
 import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import {
   browserFilesToAttachments,
+  filesFromTransfer,
   MAX_PENDING_ATTACHMENTS,
   mergePendingAttachments,
   releaseObjectUrl,
@@ -57,6 +58,9 @@ interface ComposerProps {
   onOptimistic: (message: Message) => void;
   onSettled: (tempGuid: string, message: Message) => void;
   onSent: (message: Message) => void;
+  /** Web: the pane that accepts dropped files into this composer. */
+  dropTargetRef: RefObject<View | null>;
+  onDragActiveChange: (active: boolean) => void;
 }
 
 interface PendingAttachment extends PendingAttachmentAsset {
@@ -231,6 +235,8 @@ export function Composer({
   onOptimistic,
   onSettled,
   onSent,
+  dropTargetRef,
+  onDragActiveChange,
 }: ComposerProps) {
   const theme = useTheme();
   const type = useType();
@@ -247,7 +253,6 @@ export function Composer({
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [customScheduleOpen, setCustomScheduleOpen] = useState(false);
   const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
-  const [dragActive, setDragActive] = useState(false);
   const containerRef = useRef<View>(null);
   const isSMS = chatIsSMS(chatGuid);
 
@@ -558,18 +563,12 @@ export function Composer({
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const node = containerRef.current as never as HTMLElement | null;
-    if (!node || typeof node.addEventListener !== "function") return;
+    const pane = dropTargetRef.current as never as HTMLElement | null;
+    if (!node || !pane || typeof pane.addEventListener !== "function") return;
     let dragDepth = 0;
 
-    const filesFromTransfer = (transfer: DataTransfer | null): File[] => {
-      if (!transfer) return [];
-      const direct = Array.from(transfer.files);
-      if (direct.length > 0) return direct;
-      return Array.from(transfer.items)
-        .filter((item) => item.kind === "file")
-        .map((item) => item.getAsFile())
-        .filter((file): file is File => file !== null);
-    };
+    const carriesFiles = (event: DragEvent): boolean =>
+      event.dataTransfer?.types.includes("Files") === true;
     const stageBrowserFiles = (files: File[]): void => {
       if (files.length === 0) return;
       stage(browserFilesToAttachments(files, (file) => URL.createObjectURL(file)));
@@ -580,41 +579,46 @@ export function Composer({
       event.preventDefault();
       stageBrowserFiles(files);
     };
+    // dragenter/dragleave fire for every child crossed, so only the depth
+    // returning to zero means the pointer left the pane.
     const onDragEnter = (event: DragEvent): void => {
-      if (!event.dataTransfer?.types.includes("Files")) return;
+      if (!carriesFiles(event)) return;
       event.preventDefault();
       dragDepth++;
-      setDragActive(true);
+      onDragActiveChange(true);
     };
     const onDragOver = (event: DragEvent): void => {
-      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+      if (!carriesFiles(event) || !event.dataTransfer) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
     };
-    const onDragLeave = (): void => {
+    const onDragLeave = (event: DragEvent): void => {
+      if (!carriesFiles(event)) return;
       dragDepth = Math.max(0, dragDepth - 1);
-      if (dragDepth === 0) setDragActive(false);
+      if (dragDepth === 0) onDragActiveChange(false);
     };
     const onDrop = (event: DragEvent): void => {
-      const files = filesFromTransfer(event.dataTransfer);
-      dragDepth = 0;
-      setDragActive(false);
-      if (files.length === 0) return;
+      if (!carriesFiles(event)) return;
       event.preventDefault();
-      stageBrowserFiles(files);
+      dragDepth = 0;
+      onDragActiveChange(false);
+      stageBrowserFiles(filesFromTransfer(event.dataTransfer));
     };
 
     node.addEventListener("paste", onPaste);
-    node.addEventListener("dragenter", onDragEnter);
-    node.addEventListener("dragover", onDragOver);
-    node.addEventListener("dragleave", onDragLeave);
-    node.addEventListener("drop", onDrop);
+    pane.addEventListener("dragenter", onDragEnter);
+    pane.addEventListener("dragover", onDragOver);
+    pane.addEventListener("dragleave", onDragLeave);
+    pane.addEventListener("drop", onDrop);
     return () => {
       node.removeEventListener("paste", onPaste);
-      node.removeEventListener("dragenter", onDragEnter);
-      node.removeEventListener("dragover", onDragOver);
-      node.removeEventListener("dragleave", onDragLeave);
-      node.removeEventListener("drop", onDrop);
+      pane.removeEventListener("dragenter", onDragEnter);
+      pane.removeEventListener("dragover", onDragOver);
+      pane.removeEventListener("dragleave", onDragLeave);
+      pane.removeEventListener("drop", onDrop);
+      onDragActiveChange(false);
     };
-  }, [stage]);
+  }, [stage, dropTargetRef, onDragActiveChange]);
 
   const pasteNativeImage = async (): Promise<void> => {
     try {
@@ -908,8 +912,6 @@ ${url}` : url;
       ref={containerRef}
       style={[
         styles.container,
-        dragActive && styles.dropActive,
-        dragActive && { borderColor: theme.accent, backgroundColor: theme.backgroundElement },
         {
           borderTopColor: theme.divider,
           // Keep native controls clear of the keyboard and rounded display
@@ -1194,10 +1196,6 @@ const styles = StyleSheet.create({
     // Vertical padding is set inline (barPadV) — it depends on keyboard state
     // and the safe-area inset, so static values here would only ever be dead
     // props that contradict what actually renders.
-  },
-  dropActive: {
-    borderWidth: 2,
-    borderTopWidth: 2,
   },
   mentionList: {
     borderRadius: Radii.input,

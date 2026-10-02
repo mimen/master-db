@@ -4,6 +4,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -12,6 +13,7 @@ import { DesktopShellProvider } from "@/components/desktop-shell-provider";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
+import { guardWindowFileDrops } from "@/lib/attachments";
 import { fetchDeployedWebRelease, installWebReleaseMonitor } from "@/lib/deploy-reload";
 import { installShellReleaseBridge } from "@/lib/desktop-shell";
 import { hydrateDrafts } from "@/lib/drafts";
@@ -34,6 +36,7 @@ export default function RootLayout() {
     void hydrateSettings();
     void hydrateSidebarWidth();
     const stopShell = installShellReleaseBridge(releaseStatus.setShell);
+    const stopFileDrops = Platform.OS === "web" ? guardWindowFileDrops(globalThis) : () => undefined;
     const stopWeb = typeof globalThis.document === "undefined"
       ? () => undefined
       : installWebReleaseMonitor({
@@ -46,6 +49,7 @@ export default function RootLayout() {
     return () => {
       stopWeb();
       stopShell();
+      stopFileDrops();
     };
   }, []);
   // A render-phase throw anywhere below (a Convex query timing out, a deploy

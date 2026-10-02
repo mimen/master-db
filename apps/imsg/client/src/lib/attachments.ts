@@ -49,3 +49,40 @@ export function releaseObjectUrl(
   revoke(attachment.uri);
   return true;
 }
+
+interface FileTransfer {
+  files: ArrayLike<File>;
+  items: ArrayLike<{ kind: string; getAsFile(): File | null }>;
+}
+
+/** Files carried by a paste or drop; some browsers expose them only as items. */
+export function filesFromTransfer(transfer: FileTransfer | null): File[] {
+  if (!transfer) return [];
+  const direct = Array.from(transfer.files);
+  if (direct.length > 0) return direct;
+  return Array.from(transfer.items)
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+}
+
+/**
+ * Stops a file dropped outside every drop target from navigating the window to
+ * that file. Drops a target already accepted keep their drop effect.
+ */
+export function guardWindowFileDrops(
+  target: Pick<EventTarget, "addEventListener" | "removeEventListener">,
+): () => void {
+  const block = (event: Event): void => {
+    const transfer = (event as DragEvent).dataTransfer;
+    if (event.defaultPrevented || !transfer?.types.includes("Files")) return;
+    event.preventDefault();
+    transfer.dropEffect = "none";
+  };
+  target.addEventListener("dragover", block);
+  target.addEventListener("drop", block);
+  return () => {
+    target.removeEventListener("dragover", block);
+    target.removeEventListener("drop", block);
+  };
+}

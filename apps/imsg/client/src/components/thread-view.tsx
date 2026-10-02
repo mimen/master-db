@@ -95,6 +95,8 @@ export function ThreadView({
   const privateApi = usePrivateApi();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
+  const paneRef = useRef<View>(null);
+  const [fileDragActive, setFileDragActive] = useState(false);
   const messagesRef = useRef<Message[]>([]);
   const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, reconcile } =
     useMessages(chatGuid, jumpTarget);
@@ -515,6 +517,7 @@ export function ThreadView({
 
   return (
     <View
+      ref={paneRef}
       testID="thread-view"
       onLayout={(e) => onPaneLayout(e.nativeEvent.layout.width)}
       style={{ flex: 1, backgroundColor: theme.background, paddingBottom: bottomInset }}
@@ -816,7 +819,22 @@ export function ThreadView({
           scrollToLatest();
           onMessageSent?.();
         }}
+        dropTargetRef={paneRef}
+        onDragActiveChange={setFileDragActive}
       />
+      {fileDragActive && (
+        <View
+          pointerEvents="none"
+          style={[styles.dropOverlay, { borderColor: theme.accent, backgroundColor: theme.backdrop }]}
+        >
+          <View style={[styles.dropLabel, { backgroundColor: theme.backgroundElement }]}>
+            <Ionicons name="attach" size={18} color={theme.accent} />
+            <Text style={{ color: theme.text, fontSize: type.title, fontWeight: "600" }}>
+              Drop to attach
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -901,6 +919,23 @@ const styles = StyleSheet.create({
   paneIdentityText: {
     flex: 1,
     minWidth: 0,
+  },
+  dropOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: "center",
+    borderRadius: Radii.card,
+    borderStyle: "dashed",
+    borderWidth: 2,
+    justifyContent: "center",
+    margin: 8,
+  },
+  dropLabel: {
+    alignItems: "center",
+    borderRadius: Radii.input,
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
   },
   dayChipWrap: {
     position: "absolute",

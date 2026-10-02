@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   browserFilesToAttachments,
+  filesFromTransfer,
+  guardWindowFileDrops,
   MAX_PENDING_ATTACHMENTS,
   mergePendingAttachments,
   releaseObjectUrl,
@@ -50,5 +52,55 @@ describe("browser attachment staging", () => {
     expect(result.items).toHaveLength(MAX_PENDING_ATTACHMENTS);
     expect(result.items.slice(-2)).toEqual(["new-0", "new-1"]);
     expect(result.rejected).toEqual(["new-2", "new-3", "new-4"]);
+  });
+
+  test("reads dropped files from the file list, falling back to file items", () => {
+    const photo = new File(["image"], "photo.png", { type: "image/png" });
+    const clip = new File(["video"], "clip.mov", { type: "video/quicktime" });
+    expect(filesFromTransfer(null)).toEqual([]);
+    expect(filesFromTransfer({ files: [photo], items: [] })).toEqual([photo]);
+    expect(
+      filesFromTransfer({
+        files: [],
+        items: [
+          { kind: "string", getAsFile: () => null },
+          { kind: "file", getAsFile: () => clip },
+          { kind: "file", getAsFile: () => null },
+        ],
+      }),
+    ).toEqual([clip]);
+  });
+});
+
+describe("window file-drop guard", () => {
+  const dragEvent = (type: string, types: string[]) => {
+    const event = new Event(type, { cancelable: true });
+    const dataTransfer = { types, dropEffect: "copy" };
+    Object.assign(event, { dataTransfer });
+    return { event, dataTransfer };
+  };
+
+  test("refuses stray file drops but leaves text drags and accepted drops alone", () => {
+    const target = new EventTarget();
+    const stop = guardWindowFileDrops(target);
+
+    const stray = dragEvent("drop", ["Files"]);
+    target.dispatchEvent(stray.event);
+    expect(stray.event.defaultPrevented).toBe(true);
+    expect(stray.dataTransfer.dropEffect).toBe("none");
+
+    const text = dragEvent("dragover", ["text/plain"]);
+    target.dispatchEvent(text.event);
+    expect(text.event.defaultPrevented).toBe(false);
+
+    const accepted = dragEvent("dragover", ["Files"]);
+    accepted.event.preventDefault();
+    target.dispatchEvent(accepted.event);
+    expect(accepted.dataTransfer.dropEffect).toBe("copy");
+
+    stop();
+    const after = dragEvent("drop", ["Files"]);
+    target.dispatchEvent(after.event);
+    expect(after.event.defaultPrevented).toBe(false);
   });
 });
