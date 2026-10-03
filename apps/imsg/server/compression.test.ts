@@ -24,10 +24,6 @@ const config: Config = {
     gatewayKey: "",
     fastModel: "fixture",
     vaultPath: "/tmp",
-    creatorRef: "imsg-test",
-    ccsBin: "fixture-disabled",
-    shadowSeat: "fixture-disabled",
-    shadowCwd: "/tmp",
   },
 };
 
@@ -67,7 +63,6 @@ beforeAll(async () => {
     db: new OverlayDb(":memory:"),
     now: () => 100_000,
     backgroundServices: false,
-    shadowStatus: { available: false, detail: "fixture" },
     identity: { refresh: async () => {}, start() {}, stop() {}, search: () => [] },
     staticRoot: root,
   }));

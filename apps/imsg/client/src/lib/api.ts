@@ -9,8 +9,6 @@ import type {
   ReplySuggestions,
   ScheduledMessage,
   SendTextRequest,
-  ShadowBrief,
-  ShadowMessage,
   StateCounts,
   SuggestionFeedbackRequest,
   SuggestionModel,
@@ -83,10 +81,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ kind }),
     });
-  },
-  getShadowBrief(chatGuid: string, regenerate = false): Promise<ShadowBrief> {
-    const query = regenerate ? "?regenerate=1" : "";
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/shadow-brief${query}`);
   },
   setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/pin`, {
@@ -217,9 +211,7 @@ export const api = {
   aiStatus(): Promise<AiStatus> {
     return request("/api/ai/status");
   },
-  aiGroupNames(chatGuid: string): Promise<{ names: string[] }> {
-    return request(`/api/ai/group-name/${encodeURIComponent(chatGuid)}`, { method: "POST" });
-  },
+
   aiSuggestions(chatGuid: string, model: SuggestionModel, refresh = false): Promise<ReplySuggestions> {
     const params = new URLSearchParams({ model });
     if (refresh) params.set("refresh", "1");
@@ -237,18 +229,7 @@ export const api = {
   aiIdentify(chatGuid: string): Promise<ContactSuggestion> {
     return request(`/api/ai/identify/${encodeURIComponent(chatGuid)}`);
   },
-  aiShadowHistory(chatGuid: string): Promise<{ messages: ShadowMessage[]; pending: boolean }> {
-    return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`);
-  },
-  aiShadowSend(chatGuid: string, text: string): Promise<{ ok: boolean; pending: boolean }> {
-    return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    });
-  },
-  aiShadowClear(chatGuid: string): Promise<{ ok: boolean }> {
-    return request(`/api/ai/shadow/${encodeURIComponent(chatGuid)}`, { method: "DELETE" });
-  },
+
 };
 
 export function avatarUrl(address: string): string {

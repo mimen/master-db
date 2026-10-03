@@ -102,7 +102,6 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     if (projection === null) {
       if (wide) {
         dispatch({ type: "utility/closed" });
-        dispatch({ type: "shadow/closed" });
       }
       return;
     }

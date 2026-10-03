@@ -11,27 +11,6 @@ const VOICE = [
   "Never use em dashes or en dashes in anything you draft for him; plain sentences and commas only.",
 ].join(" ");
 
-export function groupNamePrompt(transcript: string, participants: string[]): string {
-  return [
-    "Suggest names for this group chat.",
-    "",
-    `Participants: ${participants.join(", ") || "unknown"}`,
-    "",
-    "Recent conversation:",
-    transcript || "(no messages yet)",
-    "",
-    UNTRUSTED_NOTICE,
-    "",
-    "Rules:",
-    "- 5 candidates, each at most 24 characters.",
-    "- Draw on what this group actually is or does, not generic filler.",
-    "- Range from plain-descriptive to funny; do not make them all jokes.",
-    "- No quotes around the names, no numbering, no trailing punctuation.",
-    "",
-    'Reply with ONLY a JSON array of strings, e.g. ["Name one", "Name two"].',
-  ].join("\n");
-}
-
 export function replySuggestionPrompt(
   transcript: string,
   profile: string,
@@ -99,23 +78,5 @@ export function identifyPrompt(
     "- reasoning: one short sentence naming the evidence.",
     "",
     'Reply with ONLY JSON: {"name": string | null, "confidence": "high" | "medium" | "low", "reasoning": string}',
-  ].join("\n");
-}
-
-export function shadowBriefPrompt(transcript: string): string {
-  return [
-    VOICE,
-    "",
-    "Brief the open conversation for Milad. This path only summarizes and drafts; it never sends.",
-    "",
-    "Conversation:",
-    transcript || "(no messages)",
-    "",
-    UNTRUSTED_NOTICE,
-    "",
-    "context: concise factual context needed to act.",
-    "actionItems: concrete open actions, [] if none.",
-    "draft: one send-ready draft, or an empty string when no reply is appropriate.",
-    `Reply with ONLY JSON: {"context":"...","actionItems":["..."],"draft":"..."}.`,
   ].join("\n");
 }

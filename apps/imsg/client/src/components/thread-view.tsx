@@ -74,9 +74,6 @@ interface ThreadViewProps {
   headerChat?: ChatSummary | null;
   /** Glide-mode preview: render without marking the conversation read. */
   previewOnly?: boolean;
-  /** When provided (desktop split-pane with AI shadow available), show the toggle. */
-  onToggleShadow?: () => void;
-  shadowOpen?: boolean;
   /** Sweep mode advances only after a real send settles successfully. */
   onMessageSent?: () => void;
 }
@@ -87,8 +84,6 @@ export function ThreadView({
   jumpTarget = null,
   headerChat = null,
   previewOnly = false,
-  onToggleShadow,
-  shadowOpen = false,
   onMessageSent,
 }: ThreadViewProps) {
   const theme = useTheme();
@@ -560,21 +555,6 @@ export function ThreadView({
             >
               {({ hovered, pressed }) => <Ionicons name="search" size={21} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
-            {onToggleShadow && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Toggle shadow panel"
-                onPress={onToggleShadow}
-                hitSlop={8}
-                style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-              >
-                {({ hovered, pressed }) => <Ionicons
-                  name={shadowOpen ? "sparkles" : "sparkles-outline"}
-                  size={21}
-                  color={shadowOpen || hovered || pressed ? theme.text : theme.textSecondary}
-                />}
-              </Pressable>
-            )}
             {settleActionFor(headerChat) === "settle" && (
               <Pressable
                 ref={(node) => { if (Platform.OS === "web") (node as unknown as HTMLElement | null)?.setAttribute("title", "Settle (⌘E)"); }}

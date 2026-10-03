@@ -39,18 +39,6 @@ export interface AiConfig {
   fastModel: string;
   /** Vault root, read for the profile blob and contact candidates. */
   vaultPath: string;
-  /** Stable automation identity for CCS provenance. */
-  creatorRef: string;
-  /**
-   * How to invoke ccs. launchd hands a process a bare PATH that excludes
-   * ~/.bun/bin, so a plain "ccs" resolves interactively but not under the
-   * service that actually runs this server — hence an overridable absolute path.
-   */
-  ccsBin: string;
-  /** Seat used for shadow-conversation delegate turns. */
-  shadowSeat: string;
-  /** Absolute cwd handed to ccs for delegated turns. */
-  shadowCwd: string;
 }
 
 function loopbackHostname(): string {
@@ -108,10 +96,6 @@ export function loadConfig(): Config {
       gatewayKey: loadGatewayKey(),
       fastModel: Bun.env.AI_FAST_MODEL ?? "gpt-5.6-luna(low)",
       vaultPath: Bun.env.AI_VAULT_PATH ?? `${home}/Documents/milad-vault`,
-      creatorRef: Bun.env.AI_CREATOR_REF ?? "imsg-shadow",
-      ccsBin: Bun.env.AI_CCS_BIN ?? "ccs",
-      shadowSeat: Bun.env.AI_SHADOW_SEAT ?? "imsg-shadow",
-      shadowCwd: Bun.env.AI_SHADOW_CWD ?? process.cwd(),
     },
   };
 }

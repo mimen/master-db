@@ -4,9 +4,7 @@ import { OverlayDb } from "../db";
 import type { Message } from "../../shared/types";
 import { AiService, isStale, serializeSuggestionCache } from "./service";
 import { Gateway } from "./gateway";
-import { ShadowRunner } from "./shadow";
 
-const ANCHOR = "3f1a2b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b";
 
 function makeConfig(): AiConfig {
   return {
@@ -14,10 +12,6 @@ function makeConfig(): AiConfig {
     gatewayKey: "key",
     fastModel: "gpt-5.6-luna(low)",
     vaultPath: "/nonexistent-vault",
-    creatorRef: "imsg-shadow",
-    shadowSeat: "imsg-shadow",
-    shadowCwd: "/repo",
-    ccsBin: "ccs",
   };
 }
 
@@ -79,21 +73,14 @@ function makeService(options: {
   reply?: string;
   structured?: object;
   db?: OverlayDb;
-  shadowReply?: string;
   fetchError?: string;
   contactEmails?: (address: string) => string[];
 }) {
   const db = options.db ?? new OverlayDb(":memory:");
-  const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => ({
-    stdout: options.shadowReply ?? "done",
-    stderr: "",
-    exitCode: 0,
-  }));
   const service = new AiService({
     config: makeConfig(),
     db,
     gateway: fakeGateway(options.reply ?? "[]", options.structured),
-    shadow,
     fetchMessages: async () => options.fetchError
       ? { ok: false, error: options.fetchError }
       : { ok: true, value: options.messages ?? [] },
@@ -298,81 +285,6 @@ describe("replySuggestions", () => {
   });
 });
 
-describe("shadowEnqueue", () => {
-  test("persists the user turn synchronously and the reply when the delegate finishes", async () => {
-    const { service, db } = makeService({ messages: [makeMessage()], shadowReply: "probably Sarah" });
-    const done = service.shadowEnqueue("chat-1", "who is this?", "Sarah");
-
-    // User message is persisted before the turn resolves.
-    expect(db.listShadowMessages("chat-1").map((r) => r.text)).toEqual(["who is this?"]);
-    expect(service.shadowPending("chat-1")).toBe(true);
-
-    await done;
-    const rows = db.listShadowMessages("chat-1");
-    expect(rows.map((r) => r.role)).toEqual(["user", "assistant"]);
-    expect(rows[1]?.text).toBe("probably Sarah");
-    expect(service.shadowPending("chat-1")).toBe(false);
-  });
-
-  test("persists a visible error rather than stranding the user's message", async () => {
-    const db = new OverlayDb(":memory:");
-    const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => ({
-      stdout: "",
-      stderr: "seat missing",
-      exitCode: 1,
-    }));
-    const service = new AiService({
-      config: makeConfig(),
-      db,
-      gateway: fakeGateway("[]"),
-      shadow,
-      fetchMessages: async () => ({ ok: true, value: [] }),
-      fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
-      recentOutboundText: async () => [],
-      reactionSuggestions: () => false,
-      contactEmails: () => [],
-      searchVault: async () => [],
-    });
-
-    await service.shadowEnqueue("chat-1", "hi", null);
-    const rows = db.listShadowMessages("chat-1");
-    expect(rows.map((r) => r.role)).toEqual(["user", "assistant"]);
-    expect(rows[1]?.text).toContain("⚠️");
-    expect(rows[1]?.text).toContain("seat missing");
-  });
-
-  test("serializes concurrent turns for one chat", async () => {
-    const db = new OverlayDb(":memory:");
-    let active = 0;
-    let maxActive = 0;
-    const shadow = new ShadowRunner(makeConfig(), { get: () => ANCHOR, set: () => undefined }, async () => {
-      active++;
-      maxActive = Math.max(maxActive, active);
-      await new Promise((r) => setTimeout(r, 10));
-      active--;
-      return { stdout: "ok", stderr: "", exitCode: 0 };
-    });
-    const service = new AiService({
-      config: makeConfig(),
-      db,
-      gateway: fakeGateway("[]"),
-      shadow,
-      fetchMessages: async () => ({ ok: true, value: [] }),
-      fetchMessageWithReactions: async () => ({ ok: false, error: "not found" }),
-      recentOutboundText: async () => [],
-      reactionSuggestions: () => false,
-      contactEmails: () => [],
-      searchVault: async () => [],
-    });
-
-    const a = service.shadowEnqueue("chat-1", "first", null);
-    const b = service.shadowEnqueue("chat-1", "second", null);
-    await Promise.all([a, b]);
-    expect(maxActive).toBe(1); // never two delegates at once for the same chat
-    expect(db.listShadowMessages("chat-1")).toHaveLength(4); // 2 user + 2 assistant
-  });
-});
-
 describe("identify", () => {
   test("returns the structured identity", async () => {
     const { service } = makeService({
@@ -385,37 +297,5 @@ describe("identify", () => {
       expect(result.value.name).toBe("Sarah Chen");
       expect(result.value.confidence).toBe("medium");
     }
-  });
-});
-
-describe("shadowBrief", () => {
-  test("strictly parses and caches a brief by last message GUID", async () => {
-    const { service, db } = makeService({
-      messages: [makeMessage({ guid: "m12" })],
-      reply: '{"context":"Sarah needs the venue","actionItems":["send venue"],"draft":"sending now"}',
-    });
-    const result = await service.shadowBrief("chat-1", false);
-    expect(result).toEqual({
-      ok: true,
-      value: {
-        context: "Sarah needs the venue",
-        actionItems: ["send venue"],
-        draft: "sending now",
-        basedOnMessageGuid: "m12",
-      },
-    });
-    expect(db.getShadowBriefCache("chat-1")?.message_guid).toBe("m12");
-  });
-
-  test("uses a safe empty brief for malformed generated data", async () => {
-    const { service } = makeService({
-      messages: [makeMessage()],
-      reply: '{"context":"x","actionItems":"not-an-array","draft":"send"}',
-    });
-    const result = await service.shadowBrief("chat-1", true);
-    expect(result).toEqual({
-      ok: true,
-      value: { context: "", actionItems: [], draft: "", basedOnMessageGuid: "m1" },
-    });
   });
 });

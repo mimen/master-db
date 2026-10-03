@@ -6,12 +6,10 @@ import { Platform, Text, View } from "react-native";
 
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
-import { DesktopSplit, DesktopUtilityPane } from "@/components/desktop-split";
+import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
-import { ShadowPanel } from "@/components/shadow-panel";
 import { SweepOverlay } from "@/components/sweep-overlay";
 import { ThreadView } from "@/components/thread-view";
-import { useAiStatus } from "@/hooks/use-ai";
 import { useChats } from "@/hooks/use-chats";
 import { applyThreadEvent, type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
@@ -43,21 +41,7 @@ export function MessagesWorkspace({
   const theme = useTheme();
   const visual = useTriageTheme();
   const shell = useDesktopShellContext();
-  const aiStatus = useAiStatus();
   const utilityOpen = shell.state.utility?.workspace === "messages";
-  const shadowEnabled = aiStatus?.shadow === true;
-  const [shadowOpen, setShadowOpen] = useState(false);
-  useEffect(() => {
-    if (shadowOpen && !shadowEnabled) setShadowOpen(false);
-  }, [shadowEnabled, shadowOpen]);
-  const toggleShadow = useCallback(() => {
-    if (shadowOpen) {
-      setShadowOpen(false);
-      return;
-    }
-    if (utilityOpen) shell.closeUtility();
-    setShadowOpen(true);
-  }, [shadowOpen, shell, utilityOpen]);
   // Unresponded is the working view — the inbox opens on what needs a reply.
   const [state, setState] = useState<StateFilter>("unresponded");
   const [type, setType] = useState<TypeFilter>(DEFAULT_INBOX_FILTERS.type);
@@ -211,7 +195,6 @@ export function MessagesWorkspace({
   }, [commitChatSelection, refresh, shell.registerMessagesActions, wide]);
   useEffect(() => {
     if (!wide || active) return;
-    setShadowOpen(false);
     setSweep(null);
   }, [active, wide]);
 
@@ -281,11 +264,11 @@ export function MessagesWorkspace({
   // handlers that run well after commit.
   const selectedRef = useRef(selected);
   const stateRef = useRef(state);
-  const overlaysRef = useRef({ shadowOpen, utilityOpen });
+  const overlaysRef = useRef({ utilityOpen });
   useEffect(() => {
     selectedRef.current = selected;
     stateRef.current = state;
-    overlaysRef.current = { shadowOpen, utilityOpen };
+    overlaysRef.current = { utilityOpen };
   });
   useEffect(() => {
     if (Platform.OS !== "web" || !wide || !active) return;
@@ -353,10 +336,6 @@ export function MessagesWorkspace({
         if (shell.closeTopSurface()) return true;
         const o = overlaysRef.current;
         if (getListAdapter()?.clearSearch()) return true;
-        if (o.shadowOpen) {
-          setShadowOpen(false);
-          return true;
-        }
         if (o.utilityOpen) {
           shell.closeUtility();
           return true;
@@ -414,8 +393,6 @@ export function MessagesWorkspace({
             jumpTarget={jumpTarget}
             headerChat={selected}
             previewOnly={selectionIntent === "preview"}
-            onToggleShadow={shadowEnabled ? toggleShadow : undefined}
-            shadowOpen={shadowOpen}
           />
         ) : (
           <EmptyState
@@ -428,13 +405,6 @@ export function MessagesWorkspace({
         )
       }
     >
-      {shadowEnabled ? (
-        <DesktopUtilityPane open={shadowOpen && selected !== null} onClose={() => setShadowOpen(false)}>
-          {selected ? (
-            <ShadowPanel key={selected.guid} chatGuid={selected.guid} onClose={() => setShadowOpen(false)} />
-          ) : null}
-        </DesktopUtilityPane>
-      ) : null}
       <SweepOverlay
         visible={sweep !== null}
         chats={sweep?.chats ?? []}

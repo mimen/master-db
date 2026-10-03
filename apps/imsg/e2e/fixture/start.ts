@@ -40,10 +40,6 @@ const config: Config = {
     gatewayKey: "",
     fastModel: "fixture",
     vaultPath: runtimeDirectory,
-    creatorRef: "imsg-visual-fixture",
-    ccsBin: "fixture-disabled",
-    shadowSeat: "fixture-disabled",
-    shadowCwd: runtimeDirectory,
   },
 };
 
@@ -94,11 +90,9 @@ function resetOverlay(): void {
   const tables = [
     "chat_state",
     "attachment_transcript",
-    "shadow_message",
     "ai_meta",
     "suggestion_result_cache",
     "suggestion_feedback",
-    "shadow_brief_cache",
     "triage_clear_event",
     "triage_open_item",
   ];
@@ -152,7 +146,6 @@ const { app, dispose } = await createApp({
   names: identity,
   identity,
   ai: new FixtureAi(db),
-  shadowStatus: { available: true, detail: "deterministic fixture" },
   backgroundServices: false,
   staticRoot: join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {

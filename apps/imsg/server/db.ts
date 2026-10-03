@@ -1,23 +1,6 @@
 import { Database } from "bun:sqlite";
 import type { ChatState } from "../shared/chat-state";
 
-export type ShadowRole = "user" | "assistant";
-
-export interface ShadowMessageRow {
-  id: string;
-  chat_guid: string;
-  role: ShadowRole;
-  text: string;
-  created_at: number;
-}
-
-export interface AiMessageCacheRow {
-  chat_guid: string;
-  message_guid: string;
-  payload: string;
-  created_at: number;
-}
-
 export interface SuggestionCacheRow {
   chat_guid: string;
   selected_model: string;
@@ -76,24 +59,10 @@ export class OverlayDb {
         text TEXT NOT NULL
       );
     `);
-    // Shadow-conversation transcript. The server owns this rather than the
-    // harness: the UI has to render it, and replaying it keeps each delegated
-    // turn stateless.
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS shadow_message (
-        id TEXT PRIMARY KEY,
-        chat_guid TEXT NOT NULL,
-        role TEXT NOT NULL,
-        text TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-    `);
-    this.db.exec(
-      "CREATE INDEX IF NOT EXISTS idx_shadow_message_chat ON shadow_message(chat_guid, created_at);",
-    );
-    // Small key/value store for AI state that is not per-chat — currently the
-    // CCS anchor session uuid, which must survive restarts to keep cost rollup
-    // pointed at one parent.
+    // The shadow panel was removed; its transcript and brief cache go with it.
+    this.db.exec("DROP TABLE IF EXISTS shadow_message; DROP TABLE IF EXISTS shadow_brief_cache;");
+    // Small key/value store for AI state that is not per-chat (voice profile,
+    // route cooldowns).
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS ai_meta (
         key TEXT PRIMARY KEY,
@@ -141,14 +110,6 @@ export class OverlayDb {
     this.db.exec("DROP TABLE IF EXISTS suggestion_cache;");
     this.pruneSuggestionFeedback();
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS shadow_brief_cache (
-        chat_guid TEXT PRIMARY KEY,
-        message_guid TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      );
-    `);
-    this.db.exec(`
       CREATE TABLE IF NOT EXISTS triage_clear_event (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_guid TEXT NOT NULL,
@@ -186,29 +147,6 @@ export class OverlayDb {
          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       )
       .run(key, value);
-  }
-
-  listShadowMessages(chatGuid: string): ShadowMessageRow[] {
-    return this.db
-      .query(
-        `SELECT id, chat_guid, role, text, created_at FROM shadow_message
-         WHERE chat_guid = ? ORDER BY created_at ASC, rowid ASC`,
-      )
-      .all(chatGuid) as ShadowMessageRow[];
-  }
-
-  addShadowMessage(id: string, chatGuid: string, role: ShadowRole, text: string): ShadowMessageRow {
-    const createdAt = Date.now();
-    this.db
-      .query(
-        "INSERT INTO shadow_message (id, chat_guid, role, text, created_at) VALUES (?, ?, ?, ?, ?)",
-      )
-      .run(id, chatGuid, role, text, createdAt);
-    return { id, chat_guid: chatGuid, role, text, created_at: createdAt };
-  }
-
-  clearShadowMessages(chatGuid: string): void {
-    this.db.query("DELETE FROM shadow_message WHERE chat_guid = ?").run(chatGuid);
   }
 
   getSuggestionCache(chatGuid: string, selectedModel: string): SuggestionCacheRow | null {
@@ -311,30 +249,6 @@ export class OverlayDb {
     for (const key of ["suggestion_voice_profile_v1", "suggestion_edit_rules_v1"]) {
       this.db.query("DELETE FROM ai_meta WHERE key = ?").run(key);
     }
-  }
-
-  getShadowBriefCache(chatGuid: string): AiMessageCacheRow | null {
-    return (
-      (this.db
-        .query(
-          `SELECT chat_guid, message_guid, payload, created_at
-           FROM shadow_brief_cache WHERE chat_guid = ?`,
-        )
-        .get(chatGuid) as AiMessageCacheRow | undefined) ?? null
-    );
-  }
-
-  setShadowBriefCache(chatGuid: string, messageGuid: string, payload: string): void {
-    this.db
-      .query(
-        `INSERT INTO shadow_brief_cache (chat_guid, message_guid, payload, created_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(chat_guid) DO UPDATE SET
-           message_guid = excluded.message_guid,
-           payload = excluded.payload,
-           created_at = excluded.created_at`,
-      )
-      .run(chatGuid, messageGuid, payload, Date.now());
   }
 
   setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {

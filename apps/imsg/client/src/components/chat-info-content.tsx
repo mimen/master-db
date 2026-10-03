@@ -22,7 +22,7 @@ import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
-import { HOVER_DIM, PRESS_DIM, Type } from "@/constants/theme";
+import { PRESS_DIM, Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
@@ -72,27 +72,10 @@ export function ChatInfoContent({
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
   const aiStatus = useAiStatus();
-  const [nameIdeas, setNameIdeas] = useState<string[]>([]);
-  const [suggesting, setSuggesting] = useState(false);
-  const [namesDismissed, setNamesDismissed] = useState(false);
   const [identity, setIdentity] = useState<ContactSuggestion | null>(null);
   const [identifying, setIdentifying] = useState(false);
   const [addingParticipant, setAddingParticipant] = useState(false);
   const [participantAddress, setParticipantAddress] = useState("");
-
-  const suggestNames = () => {
-    setSuggesting(true);
-    api
-      .aiGroupNames(guid)
-      .then((r) => setNameIdeas(r.names))
-      .catch(() => showToast("Couldn't suggest names"))
-      .finally(() => setSuggesting(false));
-  };
-
-  const applyName = (newName: string) => {
-    setNamesDismissed(true);
-    api.renameGroup(guid, newName).then(load).catch(() => showToast("Rename failed"));
-  };
 
   const identify = () => {
     setIdentifying(true);
@@ -113,14 +96,6 @@ export function ChatInfoContent({
   }, [guid]);
 
   useEffect(load, [load]);
-
-  // Proactively suggest names once when opening a group's details.
-  useEffect(() => {
-    if (aiStatus?.suggestions && info?.isGroup && nameIdeas.length === 0 && !namesDismissed) {
-      suggestNames();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiStatus?.suggestions, info?.isGroup]);
 
   const header = showHeader ? (
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
@@ -206,64 +181,15 @@ export function ChatInfoContent({
                   {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: Type.body, fontWeight: "600" }}>Save</Text>}
                 </Pressable>
               </View>
-              {aiStatus?.suggestions && (
-                <View style={styles.suggestBlock}>
-                  <Pressable
-                    onPress={suggestNames}
-                    disabled={suggesting}
-                    style={styles.suggestTrigger}
-                    hitSlop={6}
-                  >
-                    {suggesting ? (
-                      <ActivityIndicator size="small" />
-                    ) : (
-                      <Ionicons name="sparkles-outline" size={14} color={theme.accent} />
-                    )}
-                    <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>
-                      {suggesting ? "Thinking…" : "Suggest names"}
-                    </Text>
-                  </Pressable>
-                  {nameIdeas.length > 0 && (
-                    <View style={styles.ideaRow}>
-                      {nameIdeas.map((idea, i) => (
-                        <Pressable
-                          key={`${i}-${idea}`}
-                          onPress={() => setName(idea)}
-                          style={({ hovered, pressed }) => [
-                            styles.ideaPill,
-                            { backgroundColor: theme.backgroundElement, borderColor: theme.divider },
-                            hovered && !pressed && { opacity: HOVER_DIM },
-                            pressed && { opacity: PRESS_DIM },
-                          ]}
-                        >
-                          <Text style={{ color: theme.text, fontSize: 13 }}>{idea}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
             </View>
           ) : (
             <View>
-              <Pressable style={styles.titleRow} onPress={() => setRenaming(true)}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Rename group" style={styles.titleRow} onPress={() => setRenaming(true)}>
                 <Text style={[styles.title, { color: theme.text, fontSize: type.title, fontWeight: "600" }]}>
                   {info.displayName || `${info.participants.length} people`}
                 </Text>
                 <Ionicons name="pencil" size={16} color={theme.textSecondary} />
               </Pressable>
-              {aiStatus?.suggestions && !namesDismissed && (suggesting || nameIdeas.length > 0) && (
-                <View style={styles.nameIdeasInline}>
-                  <Ionicons name="sparkles-outline" size={13} color={theme.accent} />
-                  <Text style={[styles.nameIdeasLabel, { color: theme.textSecondary }]}>Name ideas:</Text>
-                  {suggesting && nameIdeas.length === 0 ? <ActivityIndicator size="small" /> : nameIdeas.slice(0, 3).map((idea, i) => (
-                    <Pressable key={`${i}-${idea}`} onPress={() => applyName(idea)} style={({ hovered, pressed }) => [styles.nameIdeaChip, { backgroundColor: visual.card, borderColor: visual.hairlineStrong }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}>
-                      <Text style={{ color: theme.text, fontSize: 11 }}>{idea}</Text>
-                    </Pressable>
-                  ))}
-                  <Pressable accessibilityRole="button" accessibilityLabel="Dismiss name ideas" onPress={() => setNamesDismissed(true)} hitSlop={6} style={({ hovered, pressed }) => [styles.inlineIconAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}>{({ hovered, pressed }) => <Ionicons name="close" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
-                </View>
-              )}
             </View>
           )
         ) : (
@@ -577,19 +503,7 @@ const styles = StyleSheet.create({
   title: { fontWeight: "600", textAlign: "center" },
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   renameInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 18 },
-  suggestBlock: { marginTop: 10, gap: 8 },
   suggestTrigger: { flexDirection: "row", alignItems: "center", gap: 6 },
-  ideaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  ideaPill: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 7 },
-  nameCard: { marginTop: 10, borderRadius: 12, padding: 12, gap: 4 },
-  nameCardHead: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
-  nameCardLabel: { flex: 1, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4 },
-  nameIdeaRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  saveChip: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5 },
-  nameCardHint: { fontSize: 11, marginTop: 4 },
-  nameIdeasInline: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  nameIdeasLabel: { fontSize: 11 },
-  nameIdeaChip: { borderRadius: 12, borderWidth: 0.5, paddingHorizontal: 9, paddingVertical: 4 },
   addPersonRow: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", gap: 10, minHeight: 46, paddingHorizontal: 12 },
   addPersonIcon: { alignItems: "center", borderRadius: 15, height: 30, justifyContent: "center", width: 30 },
   addPersonEditor: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", gap: 8, minHeight: 50, paddingHorizontal: 10 },

@@ -148,13 +148,6 @@ export interface ChatSummary {
   };
 }
 
-export interface ShadowBrief {
-  context: string;
-  actionItems: string[];
-  draft: string;
-  basedOnMessageGuid: string;
-}
-
 export interface TriageProgressStats {
   /** Explicit dismissals plus successful replies since local midnight. */
   clearedToday: number;
@@ -250,10 +243,6 @@ export interface AiStatus {
   suggestions: boolean;
   /** Whether this BlueBubbles server supports outbound tapbacks. */
   reactionSuggestions: boolean;
-  /** Harness lane reachable — ccs present with automation provenance. */
-  shadow: boolean;
-  /** Human-readable reason when `shadow` is false. */
-  shadowDetail: string | null;
 }
 
 export interface ReplySuggestion {
@@ -311,13 +300,6 @@ export interface ContactSuggestion {
   name: string | null;
   confidence: "high" | "medium" | "low";
   reasoning: string;
-}
-
-export interface ShadowMessage {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  createdAt: number;
 }
 
 export type ServerEvent =

@@ -1,24 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { groupNamePrompt, identifyPrompt, replySuggestionPrompt } from "./prompts";
-
-describe("groupNamePrompt", () => {
-  test("includes participants and transcript", () => {
-    const prompt = groupNamePrompt("Sarah: <message>yo</message>", ["Sarah", "Dan"]);
-    expect(prompt).toContain("Sarah, Dan");
-    expect(prompt).toContain("yo");
-    expect(prompt).toContain("JSON array");
-  });
-
-  test("carries the untrusted-content notice", () => {
-    expect(groupNamePrompt("", [])).toContain("written by other people");
-  });
-
-  test("degrades gracefully with no messages or participants", () => {
-    const prompt = groupNamePrompt("", []);
-    expect(prompt).toContain("(no messages yet)");
-    expect(prompt).toContain("unknown");
-  });
-});
+import { identifyPrompt, replySuggestionPrompt } from "./prompts";
 
 describe("replySuggestionPrompt", () => {
   test("includes the profile when present and omits the header when not", () => {

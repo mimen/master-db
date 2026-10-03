@@ -5,8 +5,6 @@ import type { AiStatus } from "@shared/types";
 const UNREACHABLE: AiStatus = {
   suggestions: false,
   reactionSuggestions: false,
-  shadow: false,
-  shadowDetail: "unreachable",
 };
 
 // Capability is fixed for the server's lifetime; fetch it once per app session,

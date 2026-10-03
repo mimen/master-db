@@ -4,7 +4,6 @@ import type { OverlayDb } from "../../server/db";
 import type {
   ContactSuggestion,
   ReplySuggestions,
-  ShadowBrief,
   SuggestionFeedbackRequest,
   SuggestionModel,
 } from "../../shared/types";
@@ -13,11 +12,7 @@ import { FIXTURE_NOW } from "./world";
 export class FixtureAi implements AiServiceLike {
   readonly available = true;
 
-  constructor(private readonly db: OverlayDb) {}
-
-  groupNames(_chatGuid: string, _participants: string[]): Promise<Result<string[]>> {
-    return Promise.resolve({ ok: true, value: ["Launch Crew", "Show Team", "Run of Show"] });
-  }
+  constructor(_db: OverlayDb) {}
 
   replySuggestions(
     chatGuid: string,
@@ -59,32 +54,5 @@ export class FixtureAi implements AiServiceLike {
       ok: true,
       value: { name: knownName, confidence: knownName ? "high" : "low", reasoning: "Deterministic fixture identity." },
     });
-  }
-
-  shadowBrief(_chatGuid: string, _force: boolean): Promise<Result<ShadowBrief>> {
-    return Promise.resolve({
-      ok: true,
-      value: {
-        context: "Arrival timing is the only open item. The walkthrough is already confirmed.",
-        actionItems: ["Confirm the final arrival window", "Send it to Alex"],
-        draft: "Doors are at 8. I’ll arrive by 7:15 for the final walkthrough.",
-        basedOnMessageGuid: "needs-2",
-      },
-    });
-  }
-
-  shadowPending(_chatGuid: string): boolean {
-    return false;
-  }
-
-  shadowEnqueue(chatGuid: string, text: string, _peerName: string | null): Promise<void> {
-    this.db.addShadowMessage(`fixture-user-${FIXTURE_NOW}`, chatGuid, "user", text);
-    this.db.addShadowMessage(
-      `fixture-assistant-${FIXTURE_NOW}`,
-      chatGuid,
-      "assistant",
-      "The fixture shadow lane is deterministic and does not launch CCS.",
-    );
-    return Promise.resolve();
   }
 }

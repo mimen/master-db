@@ -24,7 +24,6 @@ const BASE_DESKTOP_SHELL_STATE: DesktopShellState = {
   utility: null,
   routeOverlay: null,
   transientOverlay: null,
-  shadow: null,
 };
 
 function sameUtility(left: DesktopUtility, right: DesktopUtility): boolean {
@@ -59,7 +58,6 @@ function commitRoute(
     utility: globalUtility,
     routeOverlay: null,
     transientOverlay: workspaceChanged ? null : state.transientOverlay,
-    shadow: workspaceChanged ? null : state.shadow,
   };
 
   switch (route.kind) {
@@ -69,10 +67,6 @@ function commitRoute(
       return {
         ...base,
         messages: { ...base.messages, selection: route.selection },
-        shadow:
-          base.shadow?.chatGuid === route.selection.guid
-            ? base.shadow
-            : null,
       };
     case "person":
       return {
@@ -86,7 +80,6 @@ function commitRoute(
           ? { ...base.messages, selection: route.chatSelection }
           : base.messages,
         utility: route.utility,
-        shadow: null,
       };
     case "route-overlay":
       return {
@@ -120,10 +113,6 @@ export function reduceDesktopShell(
       return {
         ...state,
         messages: { ...state.messages, selection: action.selection },
-        shadow:
-          state.shadow?.chatGuid === action.selection.guid
-            ? state.shadow
-            : null,
       };
     case "messages/chat-settled":
       return {
@@ -134,7 +123,6 @@ export function reduceDesktopShell(
           (state.utility?.kind === "person" && state.utility.workspace === "messages")
             ? null
             : state.utility,
-        shadow: null,
       };
     case "contacts/person-selected":
       return {
@@ -144,7 +132,7 @@ export function reduceDesktopShell(
     case "utility/toggled":
       return sameUtility(state.utility ?? action.utility, action.utility) && state.utility !== null
         ? { ...state, utility: null }
-        : { ...state, utility: action.utility, shadow: null };
+        : { ...state, utility: action.utility };
     case "utility/closed":
       return state.utility === null ? state : { ...state, utility: null };
     case "route-overlay/closed":
@@ -155,15 +143,5 @@ export function reduceDesktopShell(
       return state.transientOverlay?.kind === action.kind
         ? { ...state, transientOverlay: null }
         : state;
-    case "shadow/toggled":
-      return state.shadow?.chatGuid === action.chatGuid
-        ? { ...state, shadow: null }
-        : {
-            ...state,
-            utility: null,
-            shadow: { chatGuid: action.chatGuid },
-          };
-    case "shadow/closed":
-      return state.shadow === null ? state : { ...state, shadow: null };
   }
 }

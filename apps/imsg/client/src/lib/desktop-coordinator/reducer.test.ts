@@ -54,7 +54,6 @@ describe("desktop shell reducer", () => {
       workspace: "messages",
       guid: "chat-1",
     });
-    expect(state.shadow).toBeNull();
   });
 
   test("preserves each workspace selection and Messages filters across switches", () => {
@@ -95,12 +94,10 @@ describe("desktop shell reducer", () => {
       type: "utility/toggled",
       utility: { kind: "chat-info", workspace: "messages", guid: "chat-1" },
     });
-    state = reduceDesktopShell(state, { type: "shadow/toggled", chatGuid: "chat-1" });
     state = reduceDesktopShell(state, { type: "messages/chat-settled" });
 
     expect(state.messages.selection).toBeNull();
     expect(state.utility).toBeNull();
-    expect(state.shadow).toBeNull();
   });
 
   test("keeps app-global utilities open across every workspace and inbox destination", () => {
@@ -121,7 +118,7 @@ describe("desktop shell reducer", () => {
     expect(state.utility).toEqual({ kind: "scheduled", workspace: "messages" });
   });
 
-  test("closes route overlays, transient overlays, and shadow on workspace switches", () => {
+  test("closes route overlays and transient overlays on workspace switches", () => {
     let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
       type: "utility/toggled",
       utility: { kind: "settings", workspace: "messages" },
@@ -133,26 +130,16 @@ describe("desktop shell reducer", () => {
     state = {
       ...state,
       routeOverlay: { kind: "search", query: "Ada" },
-      shadow: null,
     };
-    state = reduceDesktopShell(state, {
-      type: "shadow/toggled",
-      chatGuid: "chat-1",
-    });
-    expect(state.utility).toBeNull();
-    expect(state.shadow).toEqual({ chatGuid: "chat-1" });
 
     state = dispatchRoute(state, "/contacts");
-    expect(state.utility).toBeNull();
     expect(state.routeOverlay).toBeNull();
     expect(state.transientOverlay).toBeNull();
-    expect(state.shadow).toBeNull();
   });
 
   test("applies route selection and route surface in one transition", () => {
     const before: DesktopShellState = {
       ...INITIAL_DESKTOP_SHELL_STATE,
-      shadow: { chatGuid: "old-chat" },
       transientOverlay: { kind: "command-palette", compose: false },
     };
     const after = dispatchRoute(before, "/chat-info", {
@@ -170,7 +157,6 @@ describe("desktop shell reducer", () => {
       workspace: "messages",
       guid: "chat-2",
     });
-    expect(after.shadow).toBeNull();
   });
 
   test("root workspace commits retain selection while closing route-owned surfaces", () => {
@@ -182,34 +168,6 @@ describe("desktop shell reducer", () => {
     state = dispatchRoute(state, "/");
     expect(state.messages.selection?.guid).toBe("chat-1");
     expect(state.routeOverlay).toBeNull();
-  });
-
-  test("utility and shadow are mutually exclusive and independently toggle", () => {
-    let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
-      type: "shadow/toggled",
-      chatGuid: "chat-1",
-    });
-    expect(state.shadow).toEqual({ chatGuid: "chat-1" });
-
-    state = reduceDesktopShell(state, {
-      type: "utility/toggled",
-      utility: { kind: "scheduled", workspace: "messages" },
-    });
-    expect(state.shadow).toBeNull();
-    expect(state.utility).toEqual({ kind: "scheduled", workspace: "messages" });
-
-    state = reduceDesktopShell(state, {
-      type: "shadow/toggled",
-      chatGuid: "chat-1",
-    });
-    expect(state.utility).toBeNull();
-    expect(state.shadow).toEqual({ chatGuid: "chat-1" });
-
-    state = reduceDesktopShell(state, {
-      type: "shadow/toggled",
-      chatGuid: "chat-1",
-    });
-    expect(state.shadow).toBeNull();
   });
 
   test("toggles only an identical utility and ignores stale overlay closes", () => {

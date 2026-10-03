@@ -20,10 +20,6 @@ const config: Config = {
     gatewayKey: "",
     fastModel: "fixture",
     vaultPath: "/tmp",
-    creatorRef: "imsg-test",
-    ccsBin: "fixture-disabled",
-    shadowSeat: "fixture-disabled",
-    shadowCwd: "/tmp",
   },
 };
 const primary = "iMessage;-;+15550001111";
@@ -46,7 +42,6 @@ async function setup(bb: FakeBlueBubbles, now: () => number) {
     db: new OverlayDb(":memory:"),
     now,
     backgroundServices: false,
-    shadowStatus: { available: false, detail: "fixture" },
     identity: { refresh: async () => {}, start() {}, stop() {}, search: () => [] },
   });
 }

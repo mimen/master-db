@@ -28,7 +28,7 @@ describe("extractText", () => {
 
 const config: AiConfig = {
   gatewayUrl: "http://127.0.0.1:8317", gatewayKey: "key", fastModel: "gpt-5.6-luna(low)",
-  vaultPath: "", creatorRef: "test", ccsBin: "ccs", shadowSeat: "imsg-shadow", shadowCwd: "/tmp",
+  vaultPath: "",
 };
 
 describe("structured output capability", () => {

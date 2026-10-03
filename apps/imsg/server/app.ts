@@ -36,7 +36,6 @@ import { parseByteRange } from "./byte-range";
 import { compressJson, precompressedStatic } from "./compression";
 import { AiService } from "./ai/service";
 import { Gateway } from "./ai/gateway";
-import { ShadowRunner, spawnExec, probeShadow } from "./ai/shadow";
 import { makeVaultSearch } from "./ai/vault";
 import type {
   Contact,
@@ -63,12 +62,8 @@ export interface IdentityDirectory {
 export type AiServiceLike = Pick<
   AiService,
   | "available"
-  | "groupNames"
   | "replySuggestions"
   | "identify"
-  | "shadowBrief"
-  | "shadowPending"
-  | "shadowEnqueue"
   | "recordSuggestionFeedback"
   | "recordReactionFeedback"
   | "clearSuggestionLearning"
@@ -82,7 +77,6 @@ export interface AppDependencies {
   names?: NameSource;
   identity?: IdentityDirectory;
   ai?: AiServiceLike;
-  shadowStatus?: { available: boolean; detail: string };
   backgroundServices?: boolean;
   staticRoot?: string;
   desktopRoot?: string;
@@ -118,28 +112,10 @@ const whisper = new WhisperService(config.whisper, bb, db);
 const scheduledSendNow = new ScheduledSendNow(bb);
 
 const gateway = new Gateway(config.ai);
-// Probed once per app creation: whether the harness lane's dependencies (ccs
-// binary, synced seat) are actually present, not merely whether the key exists.
-const shadowStatus = deps.shadowStatus ?? probeShadow(config.ai, {
-  which: (bin) => Bun.which(bin),
-  seatExists: (dir) => {
-    try {
-      return require("node:fs").statSync(dir).isFile();
-    } catch {
-      return false;
-    }
-  },
-});
 const ai = deps.ai ?? new AiService({
   config: config.ai,
   db,
   gateway,
-  shadow: new ShadowRunner(
-    config.ai,
-    { get: (key) => db.getAiMeta(key), set: (key, value) => db.setAiMeta(key, value) },
-    spawnExec,
-  ),
-  shadowStatus,
   fetchMessages: async (chatGuid) => {
     const result = await bb.chatMessages(chatGuid, { limit: 60, sort: "DESC" });
     return result.ok
@@ -994,30 +970,13 @@ app.get("/api/attachments/:guid", async (c) => {
 
 // ------------------------------------------------------------------- ai
 // Every model call originates here so the gateway key never reaches a client.
-console.log(
-  `AI: harness lane ${shadowStatus.available ? "on" : `off (${shadowStatus.detail})`}, direct lane ${ai.available ? "on" : "off"}`,
-);
+console.log(`AI: ${ai.available ? "on" : "off"}`);
 
 app.get("/api/ai/status", async (c) => {
   return c.json({
     suggestions: ai.available,
     reactionSuggestions: bb.hasPrivateApi,
-    shadow: shadowStatus.available,
-    shadowDetail: shadowStatus.detail,
   });
-});
-
-app.post("/api/ai/group-name/:guid", async (c) => {
-  const chatGuid = c.req.param("guid");
-  const chat = await bb.getChat(chatGuid);
-  if (!chat.ok) return c.json({ error: chat.error }, 502);
-  await contacts.refresh();
-  const participants = (chat.value.participants ?? []).map(
-    (p) => names.lookup(p.address) ?? p.address,
-  );
-  const result = await ai.groupNames(chatGuid, participants);
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json({ names: result.value.filter((n) => typeof n === "string").slice(0, 5) });
 });
 
 app.get("/api/ai/suggestions/:guid", async (c) => {
@@ -1055,44 +1014,6 @@ app.get("/api/ai/identify/:guid", async (c) => {
   const result = await ai.identify(chatGuid, address, names.lookup(address));
   if (!result.ok) return c.json({ error: result.error }, 502);
   return c.json(result.value);
-});
-
-app.get("/api/chats/:guid/shadow-brief", async (c) => {
-  const result = await ai.shadowBrief(c.req.param("guid"), c.req.query("regenerate") === "1");
-  if (!result.ok) return c.json({ error: result.error }, result.error === "chat has no messages" ? 404 : 502);
-  return c.json(result.value);
-});
-
-app.get("/api/ai/shadow/:guid", async (c) => {
-  const chatGuid = c.req.param("guid");
-  return c.json({
-    messages: db.listShadowMessages(chatGuid).map((row) => ({
-      id: row.id,
-      role: row.role,
-      text: row.text,
-      createdAt: row.created_at,
-    })),
-    // The client polls this to know a fired turn is still running server-side,
-    // so the reply lands even if the panel was closed and reopened.
-    pending: ai.shadowPending(chatGuid),
-  });
-});
-
-app.post("/api/ai/shadow/:guid", async (c) => {
-  const chatGuid = c.req.param("guid");
-  const body = (await c.req.json()) as { text?: string };
-  if (!body.text?.trim()) return c.json({ error: "text required" }, 400);
-  // Persist the user turn and kick the delegate before returning, so the very
-  // next poll sees the message and pending=true. The delegate itself runs to
-  // completion server-side regardless of whether the client is still around.
-  const peer = await peerNameOf(chatGuid);
-  ai.shadowEnqueue(chatGuid, body.text.trim(), peer);
-  return c.json({ ok: true, pending: true }, 202);
-});
-
-app.delete("/api/ai/shadow/:guid", async (c) => {
-  db.clearShadowMessages(c.req.param("guid"));
-  return c.json({ ok: true });
 });
 
 function parseSuggestionModel(value: string | undefined): SuggestionModel {

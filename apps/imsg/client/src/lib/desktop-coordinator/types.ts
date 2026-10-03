@@ -149,7 +149,6 @@ export interface DesktopShellState {
   readonly utility: DesktopUtility | null;
   readonly routeOverlay: DesktopRouteOverlay | null;
   readonly transientOverlay: DesktopTransientOverlay | null;
-  readonly shadow: { readonly chatGuid: string } | null;
 }
 
 export type DesktopShellAction =
@@ -185,9 +184,4 @@ export type DesktopShellAction =
   | {
       readonly type: "overlay/closed";
       readonly kind: DesktopTransientOverlay["kind"];
-    }
-  | {
-      readonly type: "shadow/toggled";
-      readonly chatGuid: string;
-    }
-  | { readonly type: "shadow/closed" };
+    };

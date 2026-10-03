@@ -6,16 +6,13 @@ import type {
   EventSuggestion,
   Message,
   ReplySuggestions,
-  ShadowBrief,
   SuggestionFeedbackRequest,
   SuggestionModel,
 } from "../../shared/types";
 import { loadProfile, renderSuggestionContext, renderTranscript } from "./context";
 import { Gateway, type GatewayFailure } from "./gateway";
 import { contactCandidate, mergeCandidates, vaultCandidates } from "./identify";
-import { groupNamePrompt, identifyPrompt, shadowBriefPrompt } from "./prompts";
-import { ShadowRunner, type ShadowAvailability } from "./shadow";
-import { parseShadowBriefContent, parseShadowBriefJson, type JsonValue } from "./shadow-brief";
+import { identifyPrompt } from "./prompts";
 import {
   SUGGESTION_MODELS,
   SUGGESTION_RECIPE_VERSION,
@@ -37,12 +34,6 @@ export interface AiDeps {
   config: AiConfig;
   db: OverlayDb;
   gateway: Gateway;
-  shadow: ShadowRunner;
-  /**
-   * Startup probe of the harness lane, injected by index.ts. The shelf and
-   * the shadow panel both ride that lane, so both surfaces gate on it.
-   */
-  shadowStatus?: ShadowAvailability;
   /** Newest-last messages for a chat; read errors must remain distinguishable from an empty chat. */
   fetchMessages: (chatGuid: string) => Promise<Result<Message[]>>;
   /** One message enriched with current tapbacks for reaction validation. */
@@ -117,10 +108,7 @@ function isValidCachedEvent(event: SuggestionCachePayload["event"]): boolean {
 }
 
 export class AiService {
-  /** Per-chat serialization of shadow turns; also the "is a turn pending" set. */
-  private shadowQueues = new Map<string, Promise<void>>();
   private suggestionInFlight = new Map<string, Promise<Result<ReplySuggestions>>>();
-  private structuredInFlight = new Map<string, Promise<ShadowBrief>>();
   private aiActive = 0;
   private aiWaiters: Array<() => void> = [];
   private readonly aiConcurrency = 2;
@@ -129,20 +117,6 @@ export class AiService {
 
   get available(): boolean {
     return this.deps.gateway.available;
-  }
-
-  /** Whether the harness lane (ccs delegate) can run for the shadow panel. */
-  get shadowAvailable(): boolean {
-    return this.deps.shadowStatus?.available ?? false;
-  }
-
-  async groupNames(chatGuid: string, participants: string[]): Promise<Result<string[]>> {
-    const messages = await this.deps.fetchMessages(chatGuid);
-    if (!messages.ok) return messages;
-    const transcript = renderTranscript(messages.value, { limit: 30 });
-    return this.completeJsonLimited<string[]>(groupNamePrompt(transcript, participants), {
-      maxTokens: 300,
-    });
   }
 
   /** Returns the selected route's cached shelf unless it is missing, or `force` is set. */
@@ -461,50 +435,6 @@ export class AiService {
     this.deps.db.clearSuggestionLearning();
   }
 
-  async shadowBrief(chatGuid: string, force: boolean): Promise<Result<ShadowBrief>> {
-    const fetched = await this.deps.fetchMessages(chatGuid);
-    if (!fetched.ok) return fetched;
-    const messages = fetched.value;
-    const messageGuid = lastGuid(messages);
-    if (!messageGuid) return { ok: false, error: "chat has no messages" };
-    const cached = this.deps.db.getShadowBriefCache(chatGuid);
-    if (!force && cached?.message_guid === messageGuid) {
-      const parsed = parseShadowBriefJson(cached.payload);
-      if (parsed.ok) return { ok: true, value: { ...parsed.value, basedOnMessageGuid: messageGuid } };
-    }
-
-    const key = `brief:${chatGuid}:${messageGuid}`;
-    const existing = this.structuredInFlight.get(key);
-    if (existing) return { ok: true, value: await existing };
-    const pending = this.generateShadowBrief(chatGuid, messageGuid, messages);
-    this.structuredInFlight.set(key, pending);
-    try {
-      return { ok: true, value: await pending };
-    } finally {
-      if (this.structuredInFlight.get(key) === pending) this.structuredInFlight.delete(key);
-    }
-  }
-
-  private async generateShadowBrief(
-    chatGuid: string,
-    messageGuid: string,
-    messages: Message[],
-  ): Promise<ShadowBrief> {
-    let content: Omit<ShadowBrief, "basedOnMessageGuid"> = { context: "", actionItems: [], draft: "" };
-    if (this.available) {
-      const generated = await this.completeJsonLimited<JsonValue>(
-        shadowBriefPrompt(renderTranscript(messages, { limit: 50 })),
-        { maxTokens: 700 },
-      );
-      if (generated.ok) {
-        const parsed = parseShadowBriefContent(generated.value);
-        if (parsed.ok) content = parsed.value;
-      }
-    }
-    this.deps.db.setShadowBriefCache(chatGuid, messageGuid, JSON.stringify(content));
-    return { ...content, basedOnMessageGuid: messageGuid };
-  }
-
   private async completeJsonLimited<T>(
     prompt: string,
     options: { maxTokens?: number } = {},
@@ -537,70 +467,6 @@ export class AiService {
       identifyPrompt(address, transcript, candidates),
       { maxTokens: 400 },
     );
-  }
-
-  /**
-   * Fire a shadow turn without making the caller wait for it. Milad's message
-   * is persisted now; the reply (or a visible error) is persisted when the
-   * delegate finishes — so the result survives closing the panel or moving to
-   * another conversation. Turns for one chat are serialized so a double-send
-   * cannot run two delegates against the same anchor at once.
-   *
-   * Returns the background completion promise, which the route ignores and
-   * tests can await.
-   */
-  shadowEnqueue(chatGuid: string, text: string, peerName: string | null): Promise<void> {
-    this.deps.db.addShadowMessage(newId(), chatGuid, "user", text);
-    const prior = this.shadowQueues.get(chatGuid) ?? Promise.resolve();
-    const next = prior
-      .catch(() => undefined)
-      .then(() => this.runShadowTurn(chatGuid, peerName));
-    this.shadowQueues.set(chatGuid, next);
-    void next.finally(() => {
-      if (this.shadowQueues.get(chatGuid) === next) this.shadowQueues.delete(chatGuid);
-    });
-    return next;
-  }
-
-  /** True while a turn for this chat is running or queued. */
-  shadowPending(chatGuid: string): boolean {
-    return this.shadowQueues.has(chatGuid);
-  }
-
-  private async runShadowTurn(chatGuid: string, peerName: string | null): Promise<void> {
-    const [messages, profile] = await Promise.all([
-      this.deps.fetchMessages(chatGuid),
-      loadProfile(this.deps.config.vaultPath),
-    ]);
-    if (!messages.ok) {
-      this.deps.db.addShadowMessage(newId(), chatGuid, "assistant", `⚠️ ${messages.error}`);
-      return;
-    }
-    const history = this.deps.db
-      .listShadowMessages(chatGuid)
-      .map((row) => `${row.role === "user" ? "Milad" : "You"}: ${row.text}`)
-      .join("\n");
-
-    const prompt = [
-      "You are Milad's assistant, sitting alongside an iMessage conversation he has open.",
-      "You have full tool access. When he asks you to do something, do it.",
-      "Answer briefly and concretely.",
-      "",
-      profile ? `About Milad:\n${profile}\n` : "",
-      `The iMessage conversation${peerName ? ` with ${peerName}` : ""}:`,
-      renderTranscript(messages.value, { limit: 40, peerName }),
-      "",
-      "Your conversation with Milad so far:",
-      history,
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const reply = await this.deps.shadow.turn(prompt);
-    // Persist something either way — a silent failure would strand the user's
-    // message with no reply, which is the one outcome we must never produce.
-    const text = reply.ok ? reply.value : `⚠️ ${reply.error}`;
-    this.deps.db.addShadowMessage(newId(), chatGuid, "assistant", text);
   }
 }
 
@@ -639,4 +505,4 @@ function newId(): string {
   return `sh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export { Gateway, ShadowRunner };
+export { Gateway };

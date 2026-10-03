@@ -19,57 +19,9 @@ describe("ai_meta", () => {
   });
 
   test("upserts rather than duplicating", () => {
-    db.setAiMeta("anchor", "uuid-1");
-    db.setAiMeta("anchor", "uuid-2");
-    expect(db.getAiMeta("anchor")).toBe("uuid-2");
-  });
-});
-
-describe("shadow_message", () => {
-  test("starts empty", () => {
-    expect(db.listShadowMessages("chat-1")).toEqual([]);
-  });
-
-  test("returns messages in insertion order", () => {
-    db.addShadowMessage("s1", "chat-1", "user", "who is this");
-    db.addShadowMessage("s2", "chat-1", "assistant", "probably Sarah");
-    const rows = db.listShadowMessages("chat-1");
-    expect(rows.map((r) => r.text)).toEqual(["who is this", "probably Sarah"]);
-    expect(rows.map((r) => r.role)).toEqual(["user", "assistant"]);
-  });
-
-  test("keeps chats isolated", () => {
-    db.addShadowMessage("s1", "chat-1", "user", "a");
-    db.addShadowMessage("s2", "chat-2", "user", "b");
-    expect(db.listShadowMessages("chat-1")).toHaveLength(1);
-    expect(db.listShadowMessages("chat-2")).toHaveLength(1);
-  });
-
-  test("orders same-millisecond inserts by rowid, not just timestamp", () => {
-    // Rapid turns can share a Date.now(); insertion order must still hold.
-    for (let i = 0; i < 5; i++) db.addShadowMessage(`s${i}`, "chat-1", "user", `m${i}`);
-    expect(db.listShadowMessages("chat-1").map((r) => r.text)).toEqual([
-      "m0",
-      "m1",
-      "m2",
-      "m3",
-      "m4",
-    ]);
-  });
-
-  test("clear removes only the target chat", () => {
-    db.addShadowMessage("s1", "chat-1", "user", "a");
-    db.addShadowMessage("s2", "chat-2", "user", "b");
-    db.clearShadowMessages("chat-1");
-    expect(db.listShadowMessages("chat-1")).toEqual([]);
-    expect(db.listShadowMessages("chat-2")).toHaveLength(1);
-  });
-
-  test("returns the inserted row", () => {
-    const row = db.addShadowMessage("s1", "chat-1", "user", "hi");
-    expect(row.id).toBe("s1");
-    expect(row.role).toBe("user");
-    expect(row.created_at).toBeGreaterThan(0);
+    db.setAiMeta("suggestion_route_cooldowns_v1", "a");
+    db.setAiMeta("suggestion_route_cooldowns_v1", "b");
+    expect(db.getAiMeta("suggestion_route_cooldowns_v1")).toBe("b");
   });
 });
 
@@ -138,10 +90,5 @@ describe("triage overlay", () => {
     expect(db.recordTriageClear("chat-1", "m1", "reply", 11_000)).toBe(false);
     expect(db.recordTriageClear("chat-1", "m2", "reply", 12_000)).toBe(true);
     expect(db.countTriageClearsSince(10_500)).toBe(1);
-  });
-
-  test("round-trips the shadow brief cache", () => {
-    db.setShadowBriefCache("chat-1", "m9", '{"context":"x","actionItems":[],"draft":""}');
-    expect(db.getShadowBriefCache("chat-1")?.message_guid).toBe("m9");
   });
 });
