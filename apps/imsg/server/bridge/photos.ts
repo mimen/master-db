@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Id } from "../../../../convex/_generated/dataModel";
+import type { GenericId as Id } from "convex/values";
 import type { OverlayDb } from "../db";
 import type { ConvexIngest } from "./convex-ingest";
 import { RetryWork } from "./retry";
