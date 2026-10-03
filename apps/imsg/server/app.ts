@@ -82,6 +82,7 @@ export interface AppDependencies {
   backgroundServices?: boolean;
   bridgeIngest?: Pick<ConvexIngest, "post" | "upload">;
   bridgeChatDbPath?: string;
+  bridgeAvatarDirectory?: string;
   staticRoot?: string;
   desktopRoot?: string;
   desktopReleaseRoot?: string;
@@ -185,7 +186,7 @@ directory.onEvent(() => broadcast({ kind: "chats-changed" }));
 const stopLiveEvents = wireLiveEvents(bb, directory, names, broadcast);
 const commands = new ChatCommands(bb, directory, names, () => commaBridge.scheduledChanged());
 const commaBridge = startBridge({ config, bb, db, names, now, commands,
-  backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath });
+  backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath, avatarDirectory: deps.bridgeAvatarDirectory });
 
 // ------------------------------------------------------------------- routes
 

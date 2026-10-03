@@ -24,6 +24,7 @@ export function startBridge(deps: {
   backgroundServices?: boolean;
   ingest?: Pick<ConvexIngest, "post" | "upload">;
   chatDbPath?: string;
+  avatarDirectory?: string;
   now?: () => number;
 }) {
   const enabled = Boolean(deps.config.commaBridgeSecret) && deps.backgroundServices !== false;
@@ -47,7 +48,7 @@ export function startBridge(deps: {
       live = new LiveBridge(writer, deps.now);
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
-      photos = new PhotoMirror(deps.db, ingest);
+      photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
       outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
       media = worker;

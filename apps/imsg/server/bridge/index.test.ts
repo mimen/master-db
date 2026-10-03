@@ -24,7 +24,7 @@ function fixture() {
   const ingest = new FakeIngest();
   const contacts = new ContactBook(bb);
   const commands = new ChatCommands(bb, new ChatDirectory(bb, db, contacts), contacts);
-  return { config, bb, db, ingest, commands, chatDbPath: "/nonexistent/chat.db" };
+  return { config, bb, db, ingest, commands, chatDbPath: "/nonexistent/chat.db", avatarDirectory: "/nonexistent/comma-avatar-fixture" };
 }
 
 test("bridge is off without a secret or with background services disabled", async () => {
@@ -84,7 +84,7 @@ test("bridge failures and misconfiguration cannot throw into startup", async () 
 test("health and schedule edit/create/cancel routes use the bridge without waiting on Convex", async () => {
   const deps = fixture();
   const identity = { refresh: async () => {}, start() {}, stop() {}, search: () => [] };
-  const { app, dispose } = await createApp({ ...deps, identity, bridgeIngest: deps.ingest, bridgeChatDbPath: deps.chatDbPath });
+  const { app, dispose } = await createApp({ ...deps, identity, bridgeIngest: deps.ingest, bridgeChatDbPath: deps.chatDbPath, bridgeAvatarDirectory: deps.avatarDirectory });
   async function settled() {
     for (let i = 0; i < 100; i++) {
       const health = await (await app.request("/api/health")).json() as { commaBridge: { pending: number; enabled: boolean } };
