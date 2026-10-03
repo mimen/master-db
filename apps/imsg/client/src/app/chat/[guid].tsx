@@ -8,6 +8,7 @@ import { PersonAvatar, GroupPhotoAvatar } from "@/components/avatar";
 import { ThreadView } from "@/components/thread-view";
 import { FaceTimeButton } from "@/components/facetime-button";
 import { openThreadSearch } from "@/lib/thread-search";
+import { goBackOrHome } from "@/lib/back-navigation";
 import type { JumpTarget } from "@/hooks/use-messages";
 
 function HeaderTitle({
@@ -48,9 +49,9 @@ const headerStyles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 8,
-    maxWidth: 220,
+    // Leaves room for the back chevron and the three header actions at 390pt.
+    maxWidth: 170,
   },
   identityText: {
     flexShrink: 1,
@@ -81,7 +82,12 @@ export default function ChatScreen(): React.JSX.Element | null {
     <>
       <Stack.Screen
         options={{
-          headerTitleAlign: "center",
+          headerTitleAlign: "left",
+          headerLeft: () => (
+            <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => goBackOrHome(router)} hitSlop={8} style={{ paddingHorizontal: 4 }}>
+              <Ionicons name="chevron-back" size={26} color={theme.accent} />
+            </Pressable>
+          ),
           headerTitle: () => (
             <HeaderTitle
               guid={params.guid}
@@ -99,10 +105,12 @@ export default function ChatScreen(): React.JSX.Element | null {
                 address={isGroup ? null : (params.guid.split(";").pop() ?? null)}
                 color={theme.accent}
               />
-              <Pressable onPress={() => openThreadSearch()} hitSlop={8}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Search conversation" onPress={() => openThreadSearch()} hitSlop={8}>
                 <Ionicons name="search" size={22} color={theme.accent} />
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Details"
                 onPress={() => router.push({ pathname: "/chat-info", params: { guid: params.guid } })}
                 hitSlop={8}
               >
