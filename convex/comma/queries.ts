@@ -7,7 +7,10 @@ import { assertAllowed } from "../_lib/authed";
 import {
   attachmentDoc,
   conversationDoc,
+  draftDoc,
   messageDoc,
+  scheduledDoc,
+  syncStateDoc,
   type CommaConversationDoc,
 } from "../schema/comma/validators";
 
@@ -142,5 +145,35 @@ export const resolveChat = query({
       .unique();
     const conversation = alias ? await ctx.db.get(alias.conversationId) : null;
     return conversation ? await withConversationState(ctx, conversation) : null;
+  },
+});
+
+export const listScheduled = query({
+  args: {},
+  returns: v.array(scheduledDoc),
+  handler: async (ctx) => {
+    await assertAllowed(ctx);
+    return await ctx.db.query("comma_scheduled").withIndex("by_sendAt").order("asc").take(100);
+  },
+});
+
+export const getDraft = query({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.union(draftDoc, v.null()),
+  handler: async (ctx, args) => {
+    await assertAllowed(ctx);
+    return await ctx.db
+      .query("comma_drafts")
+      .withIndex("by_conversationId", (q) => q.eq("conversationId", args.conversationId))
+      .unique();
+  },
+});
+
+export const syncStatus = query({
+  args: {},
+  returns: v.array(syncStateDoc),
+  handler: async (ctx) => {
+    await assertAllowed(ctx);
+    return await ctx.db.query("comma_sync_state").withIndex("by_key").take(100);
   },
 });

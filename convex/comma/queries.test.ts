@@ -146,6 +146,67 @@ describe("Comma read queries", () => {
     expect(await t.query(api.comma.queries.searchMessages, { query: "missing" })).toEqual([]);
   });
 
+  test("draft, scheduled and sync queries reject unauthenticated callers", async () => {
+    const t = convexTest(schema, commaModules);
+    const id = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("one", 1)));
+    await expect(t.query(api.comma.queries.getDraft, { conversationId: id })).rejects.toThrow("Unauthorized");
+    await expect(t.query(api.comma.queries.listScheduled, {})).rejects.toThrow("Unauthorized");
+    await expect(t.query(api.comma.queries.syncStatus, {})).rejects.toThrow("Unauthorized");
+  });
+
+  test("gets only the requested conversation's draft or null", async () => {
+    const t = authed();
+    const seeded = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      const other = await ctx.db.insert("comma_conversations", conversation("other", 1));
+      const draftId = await ctx.db.insert("comma_drafts", { conversationId: id, text: "See you soon", updatedAt: 7 });
+      return { id, other, draftId };
+    });
+    expect(await t.query(api.comma.queries.getDraft, { conversationId: seeded.id })).toMatchObject({
+      _id: seeded.draftId, conversationId: seeded.id, text: "See you soon", updatedAt: 7,
+    });
+    expect(await t.query(api.comma.queries.getDraft, { conversationId: seeded.other })).toBeNull();
+  });
+
+  test("lists scheduled mirror rows in send order including terminal statuses", async () => {
+    const t = authed();
+    expect(await t.query(api.comma.queries.listScheduled, {})).toEqual([]);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("comma_scheduled", { bbId: 2, chatGuid: "SMS;-;one", text: "Later", sendAt: 20, status: "pending", updatedAt: 1 });
+      await ctx.db.insert("comma_scheduled", { bbId: 1, chatGuid: "SMS;-;one", text: "Earlier", sendAt: 10, status: "complete", sentAt: 10, updatedAt: 1 });
+    });
+    const rows = await t.query(api.comma.queries.listScheduled, {});
+    expect(rows.map((row) => ({ bbId: row.bbId, text: row.text, sendAt: row.sendAt, status: row.status }))).toEqual([
+      { bbId: 1, text: "Earlier", sendAt: 10, status: "complete" },
+      { bbId: 2, text: "Later", sendAt: 20, status: "pending" },
+    ]);
+  });
+
+  test("reads sync checkpoints without dropping optional health fields", async () => {
+    const t = authed();
+    expect(await t.query(api.comma.queries.syncStatus, {})).toEqual([]);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("comma_sync_state", { key: "reconcile", lastReconcileAt: 9, counts: { messages: 42 }, updatedAt: 9 });
+      await ctx.db.insert("comma_sync_state", { key: "events", cursor: "cursor-7", lastEventAt: 7, updatedAt: 7 });
+    });
+    const rows = await t.query(api.comma.queries.syncStatus, {});
+    expect(rows.map((row) => row.key)).toEqual(["events", "reconcile"]);
+    expect(rows[0]).toMatchObject({ key: "events", cursor: "cursor-7", lastEventAt: 7, updatedAt: 7 });
+    expect(rows[1]).toMatchObject({ key: "reconcile", lastReconcileAt: 9, counts: { messages: 42 }, updatedAt: 9 });
+  });
+
+  test("a conversation with no messages has no triage flags", async () => {
+    const t = authed();
+    const id = await t.run((ctx) => {
+      const row = conversation("empty", 0);
+      delete row.lastMessage;
+      return ctx.db.insert("comma_conversations", row);
+    });
+    expect((await t.query(api.comma.queries.getConversation, { conversationId: id }))?.flags).toEqual({
+      unresponded: false, waiting: false, unread: false, mutedUnresponded: false, pinned: false,
+    });
+  });
+
   test("resolves an allowed user from the JWT subject", async () => {
     const t = convexTest(schema, commaModules);
     const userId = await t.run((ctx) => ctx.db.insert("users", { email: ALLOWED_EMAIL }));
