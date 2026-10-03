@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
   FadeIn,
   FadeInUp,
@@ -16,13 +16,14 @@ import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
 import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
 import { useServerEvents } from "@/lib/sse";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { TAPBACK_EMOJI } from "./bubble";
-import type { ReplySuggestion, ReplySuggestions, SuggestionVibe } from "@shared/types";
+import type { ReplySuggestion, ReplySuggestions } from "@shared/types";
 
 // BlueBubbles' DB lags the SSE event; regenerating immediately would answer
 // the previous message.
@@ -46,6 +47,7 @@ export function SuggestionShelf({
 }: SuggestionShelfProps) {
   const theme = useTheme();
   const type = useType();
+  const { wide } = useLayoutMode();
   const mode = useSuggestionMode();
   const selectedModel = useSuggestionModel();
   const showSheet = useActionSheet();
@@ -160,6 +162,7 @@ export function SuggestionShelf({
   const shelf = { borderTopColor: theme.divider, backgroundColor: theme.background };
   const pillText = { fontSize: type.secondary, lineHeight: Math.round(type.secondary * 1.3) };
 
+
   if (mode === "on-demand" && !resolved && !loading && !failed) {
     return (
       <View style={[styles.container, shelf]}>
@@ -183,9 +186,9 @@ export function SuggestionShelf({
   return (
     <View style={[styles.container, styles.shelfRow, shelf]}>
       {loading ? (
-        <SkeletonPills />
+        <SkeletonPills wide={wide} />
       ) : (
-        <View style={styles.pillRow}>
+        <PillRow wide={wide}>
           {event && eventUrl && (
             <Reanimated.View entering={FadeInUp.springify().damping(20)} style={styles.pillWrap}>
               <Pressable
@@ -195,14 +198,15 @@ export function SuggestionShelf({
                 onPress={() => void openExternalUrl(eventUrl)}
                 style={({ hovered, pressed }) => [
                   styles.pill,
-                  { backgroundColor: EVENT_TINT.background, borderColor: EVENT_TINT.border, opacity: stale ? 0.5 : 1 },
-                  !stale && hovered && !pressed && { backgroundColor: EVENT_TINT.backgroundHover },
-                  !stale && pressed && { backgroundColor: EVENT_TINT.backgroundPress },
+                  styles.eventPill,
+                  { backgroundColor: theme.background, borderColor: theme.accent, opacity: stale ? 0.5 : 1 },
+                  !stale && hovered && !pressed && { backgroundColor: theme.backgroundElement },
+                  !stale && pressed && { backgroundColor: theme.backgroundSelected },
                 ]}
               >
                 {() => <>
                   <Ionicons name="calendar-outline" size={15} color={theme.accent} />
-                  <Text numberOfLines={2} style={[styles.pillText, pillText, { color: theme.text }]}>
+                  <Text numberOfLines={wide ? 2 : 1} style={[styles.pillText, pillText, { color: theme.text }]}>
                     <Text style={styles.eventTitle}>{event.title}</Text>
                     {`  ·  ${eventShelfLabel(event)}`}
                   </Text>
@@ -211,7 +215,6 @@ export function SuggestionShelf({
             </Reanimated.View>
           )}
           {suggestions.map((suggestion, index) => {
-            const colors = vibeColors(suggestion.vibe);
             const emoji = suggestion.reaction ? TAPBACK_EMOJI.get(suggestion.reaction) : null;
             return (
               <Reanimated.View
@@ -226,14 +229,14 @@ export function SuggestionShelf({
                   onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
                   style={({ hovered, pressed }) => [
                     styles.pill,
-                    { backgroundColor: colors.background, borderColor: colors.border, opacity: stale ? 0.5 : 1 },
-                    !stale && hovered && !pressed && { backgroundColor: colors.backgroundHover },
-                    !stale && pressed && { backgroundColor: colors.backgroundPress },
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder, opacity: stale ? 0.5 : 1 },
+                    !stale && hovered && !pressed && { backgroundColor: theme.backgroundSelected },
+                    !stale && pressed && { backgroundColor: theme.backgroundSelected, opacity: 0.8 },
                   ]}
                 >
                   {() => <>
                     {emoji && <Text style={styles.reactionEmoji}>{emoji}</Text>}
-                    <Text numberOfLines={3} style={[styles.pillText, pillText, { color: theme.text }]}>
+                    <Text numberOfLines={wide ? 3 : 1} style={[styles.pillText, pillText, { color: theme.text }]}>
                       {suggestion.text}
                     </Text>
                   </>}
@@ -241,7 +244,7 @@ export function SuggestionShelf({
               </Reanimated.View>
             );
           })}
-        </View>
+        </PillRow>
       )}
       {!loading && (
         <Reanimated.View entering={FadeIn.delay(150)}>
@@ -272,42 +275,36 @@ export function SuggestionShelf({
   );
 }
 
-type SuggestionColors = { background: string; backgroundHover: string; backgroundPress: string; border: string };
-
-// Translucent fills step alpha on hover/press (opacity-dimming a 0.13-alpha
-// chip just fades it) — same ladder shape as controlFill → controlFillHover.
-function tintLadder(rgb: string): SuggestionColors {
-  return {
-    background: `rgba(${rgb},0.13)`,
-    backgroundHover: `rgba(${rgb},0.24)`,
-    backgroundPress: `rgba(${rgb},0.32)`,
-    border: `rgba(${rgb},0.38)`,
-  };
+function PillRow({ wide, children }: { wide: boolean; children: ReactNode }): React.JSX.Element {
+  return wide ? <View style={styles.pillRow}>{children}</View> : <PillScroller>{children}</PillScroller>;
 }
 
-function vibeColors(vibe: SuggestionVibe): SuggestionColors {
-  switch (vibe) {
-    case "curious": return tintLadder("120,174,248");
-    case "affirmative": return tintLadder("114,213,163");
-    case "cautious": return tintLadder("239,191,104");
-    case "boundary": return tintLadder("238,133,133");
-    case "playful": return tintLadder("189,153,242");
-  }
+// Phone: one row that scrolls sideways instead of stacking three rows tall.
+function PillScroller({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      style={styles.scroller}
+      contentContainerStyle={styles.scrollRow}
+    >
+      {children}
+    </ScrollView>
+  );
 }
-
-const EVENT_TINT = tintLadder("94,199,221");
 
 // Sized like a typical reply set so the real pills land where the
 // placeholders were and the shelf does not change height.
 const SKELETON_WIDTHS = [132, 96, 156] as const;
 
-function SkeletonPills(): React.JSX.Element {
+function SkeletonPills({ wide }: { wide: boolean }): React.JSX.Element {
   return (
     <View
       accessibilityLabel="Loading reply suggestions"
       accessibilityLiveRegion="polite"
       role="status"
-      style={styles.pillRow}
+      style={[styles.pillRow, !wide && styles.noWrap]}
     >
       {SKELETON_WIDTHS.map((width, index) => <SkeletonPill key={width} width={width} index={index} />)}
     </View>
@@ -374,6 +371,10 @@ const styles = StyleSheet.create({
   shelfRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   pillRow: { flex: 1, flexDirection: "row", flexWrap: "wrap", gap: 8 },
   pillWrap: { maxWidth: "100%" },
+  scroller: { flex: 1 },
+  scrollRow: { flexDirection: "row", gap: 8 },
+  noWrap: { flexWrap: "nowrap", overflow: "hidden" },
+  eventPill: { borderWidth: 1 },
   pill: { borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, minHeight: 34, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
   skeleton: { height: 34 },
   ghost: { alignSelf: "flex-start", gap: 6, paddingHorizontal: 11 },
