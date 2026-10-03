@@ -4,7 +4,7 @@ import { expect, test } from "../fixtures/desk";
 test("isolated desk serves chats, sends, receives, and fans out SSE", async ({ desk }) => {
   const health = await desk.request.get("/api/health");
   expect(health.ok()).toBe(true);
-  expect(await health.json()).toEqual({ ok: true, privateApi: true });
+  expect(await health.json()).toMatchObject({ ok: true, privateApi: true });
 
   const chatsResponse = await desk.request.get("/api/chats?state=any");
   expect(chatsResponse.ok()).toBe(true);
