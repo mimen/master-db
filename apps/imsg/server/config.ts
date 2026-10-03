@@ -8,6 +8,8 @@ export interface Config {
   convexSiteUrl: string | null;
   /** Bearer secret for POST /identity/ingest-contacts. Optional — contact sync is skipped if unset. */
   appleContactsIngestSecret: string | null;
+  /** Unset disables the Comma bridge. */
+  commaBridgeSecret: string | null;
   /**
    * Convex .convex.cloud URL (the HTTP query API), used by the identity
    * mirror to pull the name directory. Distinct from convexSiteUrl above —
@@ -86,6 +88,7 @@ export function loadConfig(): Config {
     appleContactsIngestSecret: Bun.env.APPLE_CONTACTS_INGEST_SECRET ?? null,
     convexCloudUrl: Bun.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ?? null,
     identityKey: Bun.env.IMSG_IDENTITY_KEY ?? null,
+    commaBridgeSecret: Bun.env.COMMA_BRIDGE_SECRET?.trim() || null,
     whisper: {
       binaryPath: Bun.env.WHISPER_BINARY_PATH?.trim() || null,
       modelPath: Bun.env.WHISPER_MODEL_PATH?.trim() || null,

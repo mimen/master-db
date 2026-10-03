@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server", "shared"]
+  "include": ["server", "shared", "../../convex/schema/comma/validators.ts", "../../convex/comma/conversationKey.ts", "../../convex/identity/normalize.ts"]
 }
