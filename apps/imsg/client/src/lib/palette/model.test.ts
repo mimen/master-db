@@ -113,6 +113,17 @@ describe("buildPaletteSections", () => {
     ).toBe(true);
   });
 
+  test("commands show their shortcut, not a category word, under no header", () => {
+    const [commands] = buildPaletteSections({ query: "", chats: [], messages: [], contacts: [] });
+    expect(commands?.hideHeader).toBe(true);
+    const shortcuts = Object.fromEntries(
+      commands!.items.map((i) => (i.kind === "command" ? [i.command.title, i.command.shortcut] : ["?", "?"])),
+    );
+    expect(shortcuts["Keyboard Shortcuts"]).toBe("⌘/");
+    expect(shortcuts["Settings"]).toBeUndefined();
+    expect(Object.values(shortcuts)).not.toContain("Action");
+  });
+
   test("a renamed DM surfaces via searchNames when neither displayName nor participant.name match", () => {
     // The Jimmy Sciandra scenario: renamed in-app to "Uncle Jimmy", but the
     // Identity Mirror's full term list (populated onto the chat's

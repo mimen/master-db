@@ -258,7 +258,7 @@ function PaletteRoot({
         )}
         {sections.map((section) => (
           <Fragment key={section.title}>
-            <PaletteSectionHeader title={section.title} />
+            {!section.hideHeader && <PaletteSectionHeader title={section.title} />}
             {section.items.map((item) => {
               flatIndex += 1;
               const index = flatIndex;
@@ -294,8 +294,10 @@ function PaletteRowContent({ item }: { item: PaletteItem }) {
           <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
             <Ionicons name={COMMAND_ICONS[item.command.id.kind]} size={16} color={theme.accent} />
           </View>
-          <Text style={[paletteStyles.title, { color: theme.text }]}>{item.command.title}</Text>
-          <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>{item.command.hint}</Text>
+          <Text style={[paletteStyles.title, { color: theme.text, flex: 1 }]}>{item.command.title}</Text>
+          {item.command.shortcut && (
+            <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>{item.command.shortcut}</Text>
+          )}
         </>
       );
     case "conversation":

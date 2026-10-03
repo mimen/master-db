@@ -111,13 +111,11 @@ export function PaletteSectionHeader({ title }: { title: string }) {
 
 export const paletteStyles = StyleSheet.create({
   sectionHeader: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: "600",
     paddingBottom: 3,
     paddingHorizontal: 16,
     paddingTop: 12,
-    textTransform: "uppercase",
   },
   row: {
     alignItems: "center",

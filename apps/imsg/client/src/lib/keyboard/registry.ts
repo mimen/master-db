@@ -2,12 +2,12 @@ import type { CommandDefinition, CommandId, KeyBinding } from "./types";
 
 /** Single source of truth: every command, once. Help/palette render from this. */
 export const COMMANDS: readonly CommandDefinition[] = [
-  { id: "navigation.escape", title: "Glide mode (from composer) / close", group: "Navigation" },
+  { id: "navigation.escape", title: "Back to list", group: "Navigation" },
   { id: "navigation.close", title: "Close panel / window", group: "Navigation" },
   { id: "conversation.next", title: "Next conversation", group: "Navigation" },
   { id: "conversation.previous", title: "Previous conversation", group: "Navigation" },
-  { id: "conversation.activate", title: "Reply to selected", group: "Navigation" },
-  { id: "composer.focus", title: "Reply (focus composer)", group: "Navigation" },
+  { id: "conversation.activate", title: "Open / reply", group: "Navigation" },
+  { id: "composer.focus", title: "Open / reply", group: "Navigation" },
   { id: "conversation.settle", title: "Settle / un-settle conversation", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },
@@ -98,11 +98,24 @@ export function isCommandId(value: string): value is CommandId {
   return COMMANDS.some((command) => command.id === value);
 }
 
-/** Help entries derived from the registry — cannot drift from behavior. */
+/** First advertised key for a command, for inline hints. */
+export function shortcutFor(id: CommandId): string | undefined {
+  const binding = BINDINGS.find((b) => b.commandId === id && !b.hidden);
+  return binding ? formatCombo(binding.combo) : undefined;
+}
+
+/** Help entries derived from the registry — cannot drift from behavior.
+ * Commands sharing a title (Enter opens in the list, replies elsewhere) read
+ * as one entry, since to the user they are one key doing one job. */
 export function helpEntries(): HelpEntry[] {
-  return COMMANDS.flatMap((command) => {
-    const combos = BINDINGS.filter((b) => b.commandId === command.id && !b.hidden);
-    if (combos.length === 0) return [];
-    return [{ title: command.title, keys: combos.map((b) => formatCombo(b.combo)) }];
-  });
+  const entries = new Map<string, string[]>();
+  for (const command of COMMANDS) {
+    const keys = BINDINGS
+      .filter((b) => b.commandId === command.id && !b.hidden)
+      .map((b) => formatCombo(b.combo));
+    if (keys.length === 0) continue;
+    const merged = entries.get(command.title) ?? [];
+    entries.set(command.title, [...merged, ...keys.filter((key) => !merged.includes(key))]);
+  }
+  return [...entries].map(([title, keys]) => ({ title, keys }));
 }

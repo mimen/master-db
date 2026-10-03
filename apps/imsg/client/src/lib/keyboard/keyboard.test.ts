@@ -155,6 +155,13 @@ describe("registry", () => {
     expect(entries.find((e) => e.title === "New message")).toBeUndefined();
   });
 
+  test("help lists Enter once and names Esc for where it goes", () => {
+    const entries = helpEntries();
+    const enter = entries.filter((e) => e.keys.includes("↵"));
+    expect(enter).toEqual([{ title: "Open / reply", keys: ["↵"] }]);
+    expect(entries.find((e) => e.keys.includes("Esc"))?.title).toBe("Back to list");
+  });
+
   test("isCommandId accepts registry ids only", () => {
     expect(isCommandId("conversation.settle")).toBe(true);
     expect(isCommandId("conversation.archive")).toBe(false);

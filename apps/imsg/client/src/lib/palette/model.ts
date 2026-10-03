@@ -1,4 +1,5 @@
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import { shortcutFor } from "@/lib/keyboard/registry";
 
 /**
  * Headless ⌘K palette engine — pure derivation, no React, no platform code.
@@ -18,8 +19,8 @@ export interface PaletteCommand {
   title: string;
   /** Extra match terms beyond the title (e.g. "filter", "view"). */
   keywords: readonly string[];
-  /** Section subtitle rendered beside the title. */
-  hint: string;
+  /** Keyboard shortcut rendered beside the title, when the command has one. */
+  shortcut?: string;
 }
 
 interface LensCommand {
@@ -61,19 +62,18 @@ function lensEntries<Value extends string>(
     id: { kind, value } as PaletteCommandId,
     title: command.title,
     keywords: command.keywords,
-    hint: "View",
   }));
 }
 
 export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   ...lensEntries("state", STATE_COMMANDS),
   ...lensEntries("type", TYPE_COMMANDS),
-  { id: { kind: "tab", value: "messages" }, title: "Go to Messages", keywords: ["tab", "inbox"], hint: "Navigate" },
-  { id: { kind: "tab", value: "contacts" }, title: "Go to Contacts", keywords: ["tab", "people"], hint: "Navigate" },
-  { id: { kind: "action", value: "new-message" }, title: "New Message", keywords: ["compose", "start", "chat"], hint: "Action" },
-  { id: { kind: "action", value: "scheduled" }, title: "Scheduled Messages", keywords: ["schedule", "later", "send later", "queue", "pending"], hint: "Action" },
-  { id: { kind: "action", value: "shortcuts" }, title: "Keyboard Shortcuts", keywords: ["help", "keys"], hint: "Action" },
-  { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"], hint: "Action" },
+  { id: { kind: "tab", value: "messages" }, title: "Go to Messages", keywords: ["tab", "inbox"] },
+  { id: { kind: "tab", value: "contacts" }, title: "Go to Contacts", keywords: ["tab", "people"] },
+  { id: { kind: "action", value: "new-message" }, title: "New Message", keywords: ["compose", "start", "chat"], shortcut: shortcutFor("conversation.new") },
+  { id: { kind: "action", value: "scheduled" }, title: "Scheduled Messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
+  { id: { kind: "action", value: "shortcuts" }, title: "Keyboard Shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
+  { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"] },
 ] as const;
 
 export type PaletteItem =
@@ -85,6 +85,8 @@ export type PaletteItem =
 
 export interface PaletteSection {
   title: string;
+  /** Commands lead the list and their icons already set them apart. */
+  hideHeader?: boolean;
   items: PaletteItem[];
 }
 
@@ -146,6 +148,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
   if (needle.length === 0) {
     sections.push({
       title: "Commands",
+      hideHeader: true,
       items: PALETTE_COMMANDS.map((command) => ({
         kind: "command",
         key: commandKey(command.id),
@@ -212,7 +215,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
     CAPS.groups,
   );
 
-  if (commands.length > 0) sections.push({ title: "Commands", items: commands });
+  if (commands.length > 0) sections.push({ title: "Commands", hideHeader: true, items: commands });
   if (conversations.length > 0) sections.push({ title: "Conversations", items: conversations });
   if (groups.length > 0) sections.push({ title: "Groups", items: groups });
   if (input.messages.length > 0) {
