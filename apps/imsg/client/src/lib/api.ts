@@ -2,6 +2,7 @@ import type { FunctionArgs } from "convex/server";
 import { BASE_URL } from "./config";
 import { attachmentSource, messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
+import { enqueueVia, type CommandClient, type CommandPayload } from "./convex-commands";
 import { convexClient } from "./identity";
 import { currentConvexSends, currentDataSource } from "./settings";
 import type {
@@ -35,7 +36,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-type CommandPayload = FunctionArgs<typeof commaOutbox.enqueue>["payload"];
 const messageBatches = new Set<readonly Pick<Message, "guid" | "chatGuid">[]>();
 
 // Edit and unsend take only a message guid; mounted threads supply its chat.
@@ -52,16 +52,8 @@ function messageChatGuid(messageGuid: string): string | undefined {
   return undefined;
 }
 
-export async function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<boolean> {
-  if (!currentConvexSends() || currentDataSource() !== "convex") return false;
-  const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
-  if (!conversation) return false;
-  await convexClient.mutation(commaOutbox.enqueue, {
-    clientKey: `command-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    conversationId: conversation._id,
-    payload,
-  });
-  return true;
+export function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<boolean> {
+  return enqueueVia(convexClient as unknown as CommandClient, currentConvexSends() && currentDataSource() === "convex", chatGuid, payload);
 }
 
 export const api = {
