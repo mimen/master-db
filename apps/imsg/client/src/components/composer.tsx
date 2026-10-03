@@ -271,6 +271,7 @@ export function Composer({
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [customScheduleOpen, setCustomScheduleOpen] = useState(false);
   const [customScheduleAt, setCustomScheduleAt] = useState(Date.now() + 3_600_000);
+  const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
   const isSMS = chatIsSMS(chatGuid);
 
@@ -802,7 +803,7 @@ ${url}` : url;
   };
 
   const attachBtnRef = useRef<View>(null);
-  const scheduleBtnRef = useRef<View>(null);
+  const sendBtnRef = useRef<View>(null);
   const openAttachSheet = () => {
     const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
     if (Platform.OS !== "web") {
@@ -909,11 +910,16 @@ ${url}` : url;
         },
       },
     ];
-    // Desktop: anchor the popover to the schedule caret (opens upward); mobile
-    // keeps the centered sheet — same split the attachment menu above uses.
-    if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && scheduleBtnRef.current) {
-      scheduleBtnRef.current.measureInWindow((x, y) => showSheet({ title: "Send later", actions, anchor: { x, y } }));
+    // Desktop: both the menu and the date editor open upward from the send
+    // button, right edges aligned. Mobile keeps the centered sheet and dialog.
+    if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && sendBtnRef.current) {
+      sendBtnRef.current.measureInWindow((x, y, width) => {
+        const right = x + width;
+        setScheduleAnchor({ right: window.innerWidth - right, bottom: window.innerHeight - y + 8 });
+        showSheet({ title: "Send later", actions, anchor: { x: right - 18, y, align: "end" } });
+      });
     } else {
+      setScheduleAnchor(null);
       showSheet({ title: "Send later", actions });
     }
   };
@@ -977,6 +983,7 @@ ${url}` : url;
         initialText={text.trim()}
         initialSendAt={customScheduleAt}
         textEditable={false}
+        anchor={scheduleAnchor}
         onClose={() => setCustomScheduleOpen(false)}
         onSubmit={async (scheduledText, sendAt) => {
           await api.schedule(chatGuid, scheduledText, sendAt);
@@ -1160,7 +1167,6 @@ ${url}` : url;
         <View style={styles.actionCol}>
           {canSchedule && !recording && (
             <Pressable
-              ref={scheduleBtnRef}
               accessibilityRole="button"
               accessibilityLabel="Schedule message"
               onPress={openScheduleSheet}
@@ -1173,6 +1179,7 @@ ${url}` : url;
           )}
           {canSend && !recording ? (
             <Pressable
+              ref={sendBtnRef}
               accessibilityRole="button"
               accessibilityLabel="Send"
               onPress={() => void send()}

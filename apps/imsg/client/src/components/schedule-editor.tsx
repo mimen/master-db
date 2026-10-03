@@ -11,6 +11,8 @@ interface ScheduleEditorProps {
   initialText: string;
   initialSendAt: number;
   textEditable?: boolean;
+  /** Pin the card's bottom-right corner this far from the window's bottom-right (desktop send button). */
+  anchor?: { right: number; bottom: number } | null;
   onClose: () => void;
   onSubmit: (text: string, sendAt: number) => Promise<void>;
 }
@@ -21,6 +23,7 @@ export function ScheduleEditor({
   initialText,
   initialSendAt,
   textEditable = true,
+  anchor = null,
   onClose,
   onSubmit,
 }: ScheduleEditorProps): ReactElement {
@@ -64,7 +67,15 @@ export function ScheduleEditor({
   };
 
   return (
-    <OverlayShell visible={visible} onClose={onClose} cardStyle={styles.card} backdropStyle={styles.backdrop}>
+    <OverlayShell
+      visible={visible}
+      onClose={onClose}
+      cardStyle={[styles.card, anchor && styles.anchoredCard]}
+      backdropStyle={[
+        styles.backdrop,
+        anchor && { alignItems: "flex-end", justifyContent: "flex-end", paddingRight: anchor.right, paddingBottom: anchor.bottom },
+      ]}
+    >
       <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
       {textEditable && (
         <TextInput
@@ -145,6 +156,7 @@ const styles = StyleSheet.create({
     padding: 18,
     width: "100%",
   },
+  anchoredCard: { width: 380 },
   title: { fontSize: 18, fontWeight: "700" },
   message: {
     borderRadius: Radii.input,
