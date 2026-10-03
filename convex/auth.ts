@@ -1,9 +1,12 @@
 import Google from "@auth/core/providers/google";
-import { convexAuth } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
+import { convexAuth, createAccount, retrieveAccount } from "@convex-dev/auth/server";
+import { v, type Value } from "convex/values";
 
-import { internalQuery } from "./_generated/server";
+import type { DataModel } from "./_generated/dataModel";
+import { internalQuery, type ActionCtx } from "./_generated/server";
 import { ALLOWED_EMAIL } from "./_lib/authed";
+import { constantTimeEqual } from "./_lib/constantTimeEqual";
 
 /**
  * Reject any Google profile whose email does not match the whitelist.
@@ -56,8 +59,33 @@ export function allowedRedirect(redirectTo: string): string {
   );
 }
 
+export async function authorizeTailnet(
+  credentials: Partial<Record<string, Value | undefined>>,
+  ctx: ActionCtx,
+) {
+  const expected = process.env.COMMA_BRIDGE_SECRET;
+  const provided = credentials.secret;
+  if (!expected || typeof provided !== "string" || !constantTimeEqual(expected, provided)) {
+    return null;
+  }
+  const account = { provider: "tailnet", account: { id: ALLOWED_EMAIL } };
+  try {
+    const { user } = await retrieveAccount(ctx, account);
+    return { userId: user._id };
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "InvalidAccountId") throw error;
+  }
+  const { user } = await createAccount(ctx, {
+    ...account,
+    profile: { email: ALLOWED_EMAIL },
+    shouldLinkViaEmail: true,
+  });
+  return { userId: user._id };
+}
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
+    ConvexCredentials<DataModel>({ id: "tailnet", authorize: authorizeTailnet }),
     Google({
       profile(googleProfile) {
         return rejectIfNotAllowed(googleProfile as Record<string, unknown>);

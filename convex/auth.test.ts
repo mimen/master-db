@@ -1,7 +1,33 @@
-import { describe, expect, test } from "vitest";
+import { makeFunctionReference } from "convex/server";
+import { v } from "convex/values";
+import { convexTest } from "convex-test";
+import { afterEach, describe, expect, test } from "vitest";
 
+import { internalAction } from "./_generated/server";
 import { ALLOWED_EMAIL } from "./_lib/authed";
-import { allowedRedirect, rejectIfNotAllowed } from "./auth";
+import { allowedRedirect, authorizeTailnet, rejectIfNotAllowed } from "./auth";
+import schema from "./schema";
+
+const previousSecret = process.env.COMMA_BRIDGE_SECRET;
+afterEach(() => {
+  if (previousSecret === undefined) delete process.env.COMMA_BRIDGE_SECRET;
+  else process.env.COMMA_BRIDGE_SECRET = previousSecret;
+});
+
+const modules = {
+  "./_generated/api.js": () => import("./_generated/api.js"),
+  "./_generated/server.js": () => import("./_generated/server.js"),
+  "./auth.ts": () => import("./auth"),
+  "./tailnetTest.ts": async () => ({
+    authorize: internalAction({
+      args: { secret: v.optional(v.string()) },
+      handler: (ctx, args) => authorizeTailnet(args, ctx),
+    }),
+  }),
+};
+const authorize = makeFunctionReference<
+  "action", { secret?: string }, Awaited<ReturnType<typeof authorizeTailnet>>
+>("tailnetTest:authorize");
 
 describe("allowedRedirect", () => {
   test.each([
@@ -37,6 +63,54 @@ describe("allowedRedirect", () => {
     "not a URL",
   ])("rejects %s", (redirectTo) => {
     expect(() => allowedRedirect(redirectTo)).toThrow(/Disallowed redirectTo/);
+  });
+});
+
+describe("authorizeTailnet", () => {
+  test("links the tailnet account to the existing Google user and reuses it", async () => {
+    process.env.COMMA_BRIDGE_SECRET = "correct-secret";
+    const t = convexTest(schema, modules);
+    const userId = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        email: ALLOWED_EMAIL, emailVerificationTime: 1,
+      });
+      await ctx.db.insert("authAccounts", {
+        userId, provider: "google", providerAccountId: "google-user",
+      });
+      return userId;
+    });
+    expect(await t.action(authorize, { secret: "correct-secret" })).toEqual({ userId });
+    expect(await t.action(authorize, { secret: "correct-secret" })).toEqual({ userId });
+    const result = await t.run(async (ctx) => ({
+      users: await ctx.db.query("users").collect(),
+      accounts: await ctx.db.query("authAccounts").collect(),
+    }));
+    expect(result.users).toHaveLength(1);
+    expect(result.accounts.map((account) => account.provider)).toEqual(["google", "tailnet"]);
+    expect(result.accounts[1].providerAccountId).toBe(ALLOWED_EMAIL);
+  });
+
+  test("creates the allowed user when no account exists", async () => {
+    process.env.COMMA_BRIDGE_SECRET = "correct-secret";
+    const t = convexTest(schema, modules);
+    const result = await t.action(authorize, { secret: "correct-secret" });
+    const user = await t.run((ctx) => result ? ctx.db.get(result.userId) : Promise.resolve(null));
+    expect(user?.email).toBe("milad@afternoonumbrellafriends.com");
+  });
+
+  test.each(["wrong-secret", "", undefined])("rejects %s without creating an account", async (secret) => {
+    process.env.COMMA_BRIDGE_SECRET = "correct-secret";
+    const t = convexTest(schema, modules);
+    expect(await t.action(authorize, secret === undefined ? {} : { secret })).toBeNull();
+    expect(await t.run((ctx) => ctx.db.query("authAccounts").collect())).toEqual([]);
+  });
+
+  test("fails closed when the environment secret is unset or empty", async () => {
+    const t = convexTest(schema, modules);
+    delete process.env.COMMA_BRIDGE_SECRET;
+    expect(await t.action(authorize, { secret: "correct-secret" })).toBeNull();
+    process.env.COMMA_BRIDGE_SECRET = "";
+    expect(await t.action(authorize, { secret: "" })).toBeNull();
   });
 });
 

@@ -1,3 +1,4 @@
+import { constantTimeEqual } from "../_lib/constantTimeEqual";
 import { jsonResponse } from "../beeper/sync/auth";
 
 export function checkBridgeAuth(request: Request): Response | null {
@@ -7,11 +8,7 @@ export function checkBridgeAuth(request: Request): Response | null {
   }
   const header = request.headers.get("authorization") ?? "";
   const provided = header.startsWith("Bearer ") ? header.slice(7) : "";
-  let difference = expected.length ^ provided.length;
-  for (let i = 0; i < expected.length; i++) {
-    difference |= expected.charCodeAt(i) ^ (provided.charCodeAt(i) || 0);
-  }
-  return difference === 0
+  return constantTimeEqual(expected, provided)
     ? null
     : jsonResponse({ ok: false, error: "unauthorized" }, 401);
 }
