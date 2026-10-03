@@ -33,6 +33,7 @@ export class FakeIngest extends ConvexIngest {
       claim: kind === "claim" ? this.outboxRows.splice(0, (body as Bodies["claim"]).limit) : [],
       complete: true,
       storage: true,
+      photo: true,
       transcript: true,
       mediaBacklog: { items: this.backlog.splice(0), cursor: "done", isDone: true },
     };

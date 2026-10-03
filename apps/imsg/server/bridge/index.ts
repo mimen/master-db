@@ -9,6 +9,7 @@ import { ConvexIngest } from "./convex-ingest";
 import { LiveBridge, MessageWriter } from "./live";
 import { MediaWorker } from "./media";
 import { OverlayMirror } from "./overlay-mirror";
+import { PhotoMirror } from "./photos";
 import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
 import { ScheduledMirror } from "./scheduled-mirror";
@@ -32,9 +33,10 @@ export function startBridge(deps: {
   let scheduled: ScheduledMirror | null = null;
   let outbox: OutboxBridge | null = null;
   let media: MediaWorker | null = null;
+  let photos: PhotoMirror | null = null;
   function stopModules() {
-    live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop();
-    live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null;
+    live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop(); photos?.stop();
+    live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null; photos = null;
   }
   const startup = new RetryWork("startup", async () => {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
@@ -45,6 +47,7 @@ export function startBridge(deps: {
       live = new LiveBridge(writer, deps.now);
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
+      photos = new PhotoMirror(deps.db, ingest);
       outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
       media = worker;
@@ -66,6 +69,7 @@ export function startBridge(deps: {
     health: () => ({ enabled, lastEventAt: live?.lastEventAt ?? null,
       lastReconcileAt: reconcile?.lastReconcileAt ?? null, cursor: reconcile?.cursor ?? 0,
       outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
+      photos: { uploaded: photos?.uploaded ?? 0, pending: photos?.pending ?? 0 },
       media: media ? { ...media.counts(), uploadedToday: media.uploadedToday, lastError: media.lastError } : null,
       pending: startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
     scheduledChanged: () => scheduled?.request(),
@@ -77,6 +81,7 @@ export function startBridge(deps: {
       await overlay?.flush();
       await scheduled?.flush();
       await media?.flush();
+      await photos?.flush();
     },
     stop: () => { startup.stop(); stopModules(); },
   };
