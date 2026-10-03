@@ -12,6 +12,9 @@
       ],
       "@shared/*": [
         "../shared/*"
+      ],
+      "@convex-api": [
+        "../../../convex/_generated/api"
       ]
     }
   },
