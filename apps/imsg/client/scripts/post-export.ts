@@ -1,8 +1,8 @@
 /**
  * Painted while #root is still empty. React's first commit fills #root and the
  * selector stops matching, so nothing has to remove it. Grounds mirror
- * Colors.background in src/constants/theme.ts, which pulls react-native and
- * can't be imported here; post-export.test.ts keeps the two in step.
+ * Palette.background in src/constants/tokens.ts; post-export.test.ts keeps the
+ * two in step.
  */
 export const LOADING_SHELL_CSS =
   "body{margin:0}" +

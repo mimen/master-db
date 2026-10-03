@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Palette } from "../src/constants/tokens";
 import { LOADING_SHELL_CSS, postExport } from "./post-export";
 
 const roots: string[] = [];
@@ -43,10 +44,7 @@ describe("postExport", () => {
   });
 
   test("loading shell grounds match the app's light and dark backgrounds", async () => {
-    const theme = await Bun.file(new URL("../src/constants/theme.ts", import.meta.url)).text();
-    const backgrounds = [...theme.matchAll(/^    background: '(#[0-9a-f]{6})'/gm)].map((match) => match[1]);
-    expect(backgrounds).toEqual(["#ffffff", "#1a1a1c"]);
-    expect(LOADING_SHELL_CSS).toContain(`#root:empty{background:${backgrounds[0]}}`);
-    expect(LOADING_SHELL_CSS).toContain(`(prefers-color-scheme:dark){#root:empty{background:${backgrounds[1]}}`);
+    expect(LOADING_SHELL_CSS).toContain(`#root:empty{background:${Palette.light.background}}`);
+    expect(LOADING_SHELL_CSS).toContain(`(prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}`);
   });
 });

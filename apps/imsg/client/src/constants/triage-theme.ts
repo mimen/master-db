@@ -1,6 +1,8 @@
+import { Palette, Space } from "./tokens";
+
 export const TriageTheme = {
   light: {
-    desk: "#e6e7ee",
+    desk: Palette.light.desk,
     deskGradient: "linear-gradient(180deg, #eceef3 0%, #e6e7ee 100%)",
     rail: "rgba(40,38,44,0.92)",
     queue: "rgba(246,244,242,0.82)",
@@ -10,6 +12,8 @@ export const TriageTheme = {
     cardHover: "#F7F7F9",
     cardSelected: "#EEF0F4",
     empty: "#faf9f8",
+    // Legacy triage grays. They stay at shipped values until callers move to
+    // Palette.textSecondary / textTertiary in the migration wave.
     text: "#1a1a1c",
     snippet: "#55555c",
     meta: "#7a7a80",
@@ -23,7 +27,7 @@ export const TriageTheme = {
     cardShadow: "rgba(0,0,0,0.08)",
   },
   dark: {
-    desk: "#0b0b0d",
+    desk: Palette.dark.desk,
     deskGradient: "linear-gradient(180deg, #121214 0%, #0b0b0d 100%)",
     rail: "rgba(18,16,22,0.92)",
     queue: "rgba(26,26,30,0.78)",
@@ -32,12 +36,12 @@ export const TriageTheme = {
     card: "#232326",
     cardHover: "#28282a",
     cardSelected: "#2c2c2e",
-    empty: "#1a1a1c",
-    text: "#ffffff",
-    snippet: "#98989e",
-    meta: "#98989e",
-    muted: "#98989e",
-    hint: "#98989e",
+    empty: Palette.dark.background,
+    text: Palette.dark.text,
+    snippet: Palette.dark.textSecondary,
+    meta: Palette.dark.textSecondary,
+    muted: Palette.dark.textSecondary,
+    hint: Palette.dark.textSecondary,
     hairline: "rgba(255,255,255,0.08)",
     hairlineStrong: "rgba(255,255,255,0.14)",
     controlFill: "rgba(118,118,128,0.24)",
@@ -55,7 +59,7 @@ export const TriageGeometry = {
   inspectorWidth: 312,
   rowHeight: 62,
   rowRadius: 11,
-  rowGap: 6,
+  rowGap: Space.sm,
   listGutter: 10,
   threadHeaderHeight: 52,
   sweepWidth: 560,
