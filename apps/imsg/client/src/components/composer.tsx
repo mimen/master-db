@@ -97,7 +97,8 @@ const IOS_INPUT_LINE_HEIGHT = 22;
  */
 const IOS_INPUT_CHROME_V = 8 + 8 + INPUT_BORDER_W * 2;
 const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_CHROME_V;
-const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 10 + IOS_INPUT_CHROME_V;
+// Six lines, as Messages.app, then the field scrolls.
+const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 6 + IOS_INPUT_CHROME_V;
 
 
 function tempMessage(
@@ -418,7 +419,7 @@ export function Composer({
   };
 
   // Desktop web growth: the DOM textarea reports scrollHeight reliably —
-  // classic autosize, same 10-line cap as iOS. Runs after every text commit
+  // classic autosize, same 6-line cap as iOS. Runs after every text commit
   // (clears included), so it also shrinks back.
   useEffect(() => {
     if (Platform.OS !== "web") return;
