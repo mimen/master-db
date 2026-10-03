@@ -53,6 +53,7 @@ export interface MessageQueryOptions {
   from?: "me" | "them";
   chatGuid?: string;
   rowidRange?: { after: number; through: number };
+  highestRowid?: boolean;
 }
 
 /**
@@ -296,6 +297,9 @@ export class BlueBubblesClient implements BlueBubbles {
         { statement: "message.is_from_me = :inbound", args: { inbound: 0 } },
         { statement: "message.is_read = :unread", args: { unread: 0 } },
       );
+    }
+    if (options.highestRowid) {
+      where.push({ statement: "message.ROWID = (SELECT MAX(message_id) FROM chat_message_join)", args: {} });
     }
     if (options.rowidRange) {
       where.push({ statement: "message.ROWID > :afterRowid AND message.ROWID <= :throughRowid",
