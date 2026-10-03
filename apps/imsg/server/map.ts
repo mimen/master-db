@@ -98,7 +98,7 @@ function tapbackEmoji(m: BBMessage): string | undefined {
   return undefined;
 }
 
-function parseTapback(m: BBMessage): Tapback | null {
+export function parseTapback(m: BBMessage): Tapback | null {
   if (!isTapback(m)) return null;
   // BlueBubbles names the classic tapbacks ("love", "-love") and stringifies
   // every other code, so custom emoji arrive as "2006" / "3006".
@@ -169,7 +169,9 @@ function isGroupEvent(m: BBMessage): boolean {
 }
 
 function cleanText(m: BBMessage): string {
-  const text = (m.text ?? "").replaceAll("￼", "").trim();
+  const bodies = Array.isArray(m.attributedBody) ? m.attributedBody : [m.attributedBody];
+  const decoded = bodies.find((body) => body?.string)?.string ?? "";
+  const text = (m.text ?? decoded).replaceAll("￼", "").trim();
   const subject = (m.subject ?? "").trim();
   if (subject && text) return `${subject}\n${text}`;
   return subject || text;

@@ -87,6 +87,8 @@ export interface BBScheduledMessageRequest {
 }
 
 export interface BBMessage {
+  /** chat.db message ROWID, not a timestamp. */
+  originalROWID?: number;
   guid: string;
   tempGuid?: string | null;
   text?: string | null;
