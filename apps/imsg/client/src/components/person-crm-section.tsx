@@ -14,6 +14,7 @@ import {
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
+import { crmSummary } from "@/lib/crm-summary";
 import { CrmEventsEditor } from "./crm-events-editor";
 
 export interface PersonCrmSectionProps {
@@ -40,6 +41,32 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
 // with the app theme. Exported so the contacts list's trailing star
 // (contacts-list-pane.tsx) matches exactly.
 export const FAVORITE_GOLD = "#FFB800";
+
+/**
+ * Collapsed-by-default wrapper for the CRM editors. The editors are reference
+ * data, not the reason someone opens a person or group, so they sit below the
+ * conversations behind one row instead of between the actions and the content.
+ */
+export function CrmDisclosure({ summary, children }: { summary: string; children: React.ReactNode }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.disclosure}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={open ? "Hide CRM" : "Show CRM"}
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((current) => !current)}
+        style={({ hovered, pressed }) => [styles.disclosureRow, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+      >
+        <Text style={[styles.disclosureTitle, { color: theme.text }]}>CRM</Text>
+        <Text numberOfLines={1} style={[styles.disclosureSummary, { color: theme.textSecondary }]}>{summary}</Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color={theme.textSecondary} />
+      </Pressable>
+      {open && children}
+    </View>
+  );
+}
 
 /**
  * The private CRM row: favorite toggle, priority pills, and a tag editor.
@@ -88,107 +115,113 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
   };
 
   return (
-    <View style={styles.section}>
-      <View style={styles.row}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
-          accessibilityState={{ selected: isFavorite }}
-          hitSlop={8}
-          onPress={toggleFavorite}
-          style={({ hovered, pressed }) => [styles.favoriteBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-        >
-          <Ionicons
-            name={isFavorite ? "star" : "star-outline"}
-            size={19}
-            color={isFavorite ? FAVORITE_GOLD : theme.textSecondary}
-          />
-          <Text
-            style={[
-              styles.favoriteLabel,
-              { color: isFavorite ? FAVORITE_GOLD : theme.textSecondary },
-            ]}
+    <CrmDisclosure summary={crmSummary({ isFavorite, priority, tagCount: tags.length, eventCount: events.length })}>
+      <View style={styles.section}>
+        <View style={styles.row}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
+            accessibilityState={{ selected: isFavorite }}
+            hitSlop={8}
+            onPress={toggleFavorite}
+            style={({ hovered, pressed }) => [styles.favoriteBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
           >
-            Favorite
-          </Text>
-        </Pressable>
-
-        <View style={styles.priorityGroup} accessibilityRole="radiogroup" accessibilityLabel="Priority">
-          {PRIORITY_OPTIONS.map((opt) => {
-            const selected = priority === opt.value;
-            return (
-              <Pressable
-                key={opt.value}
-                accessibilityRole="radio"
-                accessibilityLabel={`${opt.label} priority`}
-                accessibilityState={{ checked: selected }}
-                onPress={() => choosePriority(opt.value)}
-                style={({ hovered, pressed }) => [
-                  styles.priorityPill,
-                  { backgroundColor: selected ? theme.text : hovered || pressed ? theme.backgroundSelected : theme.backgroundElement },
-                  selected && (hovered || pressed) && { opacity: pressed ? PRESS_DIM : HOVER_DIM },
-                ]}
-              >
-                <Text
-                  style={[styles.priorityLabel, { color: selected ? theme.background : theme.textSecondary }]}
-                >
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.tagRow}>
-        {tags.map((tag) => (
-          <View key={tag} style={[styles.tagChip, { backgroundColor: theme.backgroundElement }]}>
-            <Text style={[styles.tagLabel, { color: theme.text }]}>{tag}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Remove tag ${tag}`}
-              hitSlop={6}
-              onPress={() => removeTag({ personId, tag }).catch(() => showToast("Failed to remove tag"))}
+            <Ionicons
+              name={isFavorite ? "star" : "star-outline"}
+              size={19}
+              color={isFavorite ? FAVORITE_GOLD : theme.textSecondary}
+            />
+            <Text
+              style={[
+                styles.favoriteLabel,
+                { color: isFavorite ? FAVORITE_GOLD : theme.textSecondary },
+              ]}
             >
-              {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-            </Pressable>
-          </View>
-        ))}
-        <View style={[styles.tagInputWrap, { backgroundColor: theme.backgroundElement }]}>
-          <TextInput
-            value={tagInput}
-            onChangeText={setTagInput}
-            onSubmitEditing={submitTag}
-            placeholder="Add tag"
-            placeholderTextColor={theme.textSecondary}
-            returnKeyType="done"
-            style={[styles.tagInput, { color: theme.text }]}
-          />
-          {addingTag ? (
-            <ActivityIndicator size="small" />
-          ) : (
-            tagInput.trim().length > 0 && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Add tag" hitSlop={6} onPress={submitTag} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
-                <Ionicons name="add-circle" size={16} color={theme.accent} />
-              </Pressable>
-            )
-          )}
-        </View>
-      </View>
+              Favorite
+            </Text>
+          </Pressable>
 
-      <CrmEventsEditor
-        events={events}
-        onLink={async (record) =>
-          void (await linkEvent({ personId, airtable_event_id: record.record_id, event_name: record.name }))
-        }
-        onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Failed to unlink event"))}
-      />
-    </View>
+          <View style={styles.priorityGroup} accessibilityRole="radiogroup" accessibilityLabel="Priority">
+            {PRIORITY_OPTIONS.map((opt) => {
+              const selected = priority === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`${opt.label} priority`}
+                  accessibilityState={{ checked: selected }}
+                  onPress={() => choosePriority(opt.value)}
+                  style={({ hovered, pressed }) => [
+                    styles.priorityPill,
+                    { backgroundColor: selected ? theme.text : hovered || pressed ? theme.backgroundSelected : theme.backgroundElement },
+                    selected && (hovered || pressed) && { opacity: pressed ? PRESS_DIM : HOVER_DIM },
+                  ]}
+                >
+                  <Text
+                    style={[styles.priorityLabel, { color: selected ? theme.background : theme.textSecondary }]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.tagRow}>
+          {tags.map((tag) => (
+            <View key={tag} style={[styles.tagChip, { backgroundColor: theme.backgroundElement }]}>
+              <Text style={[styles.tagLabel, { color: theme.text }]}>{tag}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove tag ${tag}`}
+                hitSlop={6}
+                onPress={() => removeTag({ personId, tag }).catch(() => showToast("Failed to remove tag"))}
+              >
+                {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textSecondary} />}
+              </Pressable>
+            </View>
+          ))}
+          <View style={[styles.tagInputWrap, { backgroundColor: theme.backgroundElement }]}>
+            <TextInput
+              value={tagInput}
+              onChangeText={setTagInput}
+              onSubmitEditing={submitTag}
+              placeholder="Add tag"
+              placeholderTextColor={theme.textSecondary}
+              returnKeyType="done"
+              style={[styles.tagInput, { color: theme.text }]}
+            />
+            {addingTag ? (
+              <ActivityIndicator size="small" />
+            ) : (
+              tagInput.trim().length > 0 && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Add tag" hitSlop={6} onPress={submitTag} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
+                  <Ionicons name="add-circle" size={16} color={theme.accent} />
+                </Pressable>
+              )
+            )}
+          </View>
+        </View>
+
+        <CrmEventsEditor
+          events={events}
+          onLink={async (record) =>
+            void (await linkEvent({ personId, airtable_event_id: record.record_id, event_name: record.name }))
+          }
+          onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Failed to unlink event"))}
+        />
+      </View>
+    </CrmDisclosure>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { width: "100%", marginTop: 20, gap: 10 },
+  disclosure: { width: "100%", marginTop: 20 },
+  disclosureRow: { alignItems: "center", borderRadius: Radii.input, flexDirection: "row", gap: 8, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 8 },
+  disclosureTitle: { fontSize: Type.secondary, fontWeight: "600" },
+  disclosureSummary: { flex: 1, fontSize: Type.secondary },
+  section: { width: "100%", marginTop: 8, gap: 10 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   favoriteBtn: { flexDirection: "row", alignItems: "center", borderRadius: 6, gap: 6, margin: -4, padding: 4 },
   favoriteLabel: { fontSize: Type.secondary, fontWeight: "600" },

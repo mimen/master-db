@@ -3,6 +3,7 @@ import { openExternalUrl } from "@/lib/external-link";
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
 import type { IdentityRow } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
+import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 
 type NetworkIcon =
@@ -24,11 +25,18 @@ const NETWORK_META: Record<string, { label: string; icon: NetworkIcon; color: st
   matrix: { label: "Matrix", icon: { family: "ionicons", name: "git-network-outline" }, color: "#0DBD8B" },
   airtable_human: { label: "Airtable", icon: { family: "ionicons", name: "grid-outline" }, color: "#FCB400" },
   manual: { label: "Added manually", icon: { family: "ionicons", name: "person-add-outline" }, color: "#8E8E93" },
+  phone: { label: "Phone", icon: { family: "ionicons", name: "call-outline" }, color: "#8E8E93" },
+  email: { label: "Email", icon: { family: "ionicons", name: "mail-outline" }, color: "#8E8E93" },
   other: { label: "Other", icon: { family: "ionicons", name: "chatbubbles-outline" }, color: "#8E8E93" },
 };
 
 function metaFor(network: string | undefined, source: string, kind: string) {
   return NETWORK_META[network ?? source] ?? NETWORK_META[kind] ?? NETWORK_META.other;
+}
+
+/** Phones and emails read the way they do everywhere else; other handles stay raw. */
+function displayValue(kind: string, value: string): string {
+  return kind === "phone" || kind === "email" ? formatAddress(value) : value;
 }
 
 function NetworkIconView({ icon, color, size }: { icon: NetworkIcon; color: string; size: number }) {
@@ -66,7 +74,7 @@ export function PersonNetworksList({ identities, airtableId }: PersonNetworksLis
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{meta.label}</Text>
               <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }} numberOfLines={1}>
-                {isAirtable ? "View record" : i.value}
+                {isAirtable ? "View record" : displayValue(i.kind, i.value)}
               </Text>
             </View>
             {isAirtable && <Ionicons name="open-outline" size={14} color={theme.textSecondary} />}
@@ -79,7 +87,7 @@ export function PersonNetworksList({ identities, airtableId }: PersonNetworksLis
 
 const styles = StyleSheet.create({
   section: { width: "100%", marginTop: 20 },
-  sectionLabel: { fontSize: 12, fontWeight: "600", textTransform: "uppercase", marginBottom: 8 },
+  sectionLabel: { fontSize: 12, fontWeight: "600", marginBottom: 8 },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",

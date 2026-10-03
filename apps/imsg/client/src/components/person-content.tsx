@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { usePersonView } from "@/hooks/use-person-view";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM, Spacing, Type } from "@/constants/theme";
@@ -68,6 +69,9 @@ export function PersonContent({
   backLabel = "Back",
 }: PersonContentProps) {
   const theme = useTheme();
+  // A phone deep link opens this before the inbox has loaded the chat list;
+  // without it "Last contacted" read "No conversation yet" on phone only.
+  useChatDirectory();
   const { result, sortedChats, lastContactedAt, canCall, handleMessage, handleCall, openChat } = usePersonView(
     address,
     name,
@@ -141,6 +145,7 @@ export function PersonContent({
           />
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Add contact"
             disabled={creating}
             style={({ hovered, pressed }) => [styles.addButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]}
             onPress={async () => {
@@ -162,7 +167,7 @@ export function PersonContent({
                 // instead of waiting for the server's next mirror tick.
                 void api.refreshIdentity().catch(() => undefined);
               } catch {
-                showToast("Failed to add contact");
+                showToast("Couldn't add the contact. Try again.");
               } finally {
                 setCreating(false);
               }
@@ -171,7 +176,7 @@ export function PersonContent({
             {creating ? (
               <ActivityIndicator />
             ) : (
-              <Text style={{ color: theme.accent, fontSize: Type.body, fontWeight: "600" }}>+ Add Contact</Text>
+              <Text style={{ color: theme.accent, fontSize: Type.body, fontWeight: "600" }}>Add contact</Text>
             )}
           </Pressable>
         </View>
@@ -218,7 +223,7 @@ export function PersonContent({
       setEditingName(false);
       void api.refreshIdentity().catch(() => undefined);
     } catch {
-      showToast("Failed to save name");
+      showToast("Couldn't save the name. Try again.");
     } finally {
       setSaving(false);
     }
@@ -305,6 +310,9 @@ export function PersonContent({
           </Pressable>
         </View>
 
+        <PersonNetworksList identities={identities} airtableId={airtableId} />
+        <PersonConversationsList chats={sortedChats} onOpenChat={openChat} />
+
         <PersonCrmSection
           personId={person._id}
           isFavorite={person.is_favorite ?? false}
@@ -312,9 +320,6 @@ export function PersonContent({
           tags={tags}
           events={events}
         />
-
-        <PersonNetworksList identities={identities} airtableId={airtableId} />
-        <PersonConversationsList chats={sortedChats} onOpenChat={openChat} />
 
         {airtableId && (
           <Pressable accessibilityRole="link" style={styles.footerLink} onPress={() => void openExternalUrl(airtableRecordUrl(airtableId))}>
