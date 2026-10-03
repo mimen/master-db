@@ -7,6 +7,7 @@ import {
   handleUploadUrl as handleBeeperAttachmentsUploadUrl,
 } from "./beeper/sync/handleAttachments";
 import { handleIngest as handleBeeperIngest } from "./beeper/sync/handleIngest";
+import { handleIngest as handleCommaIngest, handleUploadUrl as handleCommaUploadUrl } from "./comma/ingest";
 import { handleIngestContacts } from "./identity/sync/handleIngestContacts";
 import { handleTodoistWebhook } from "./todoist/webhook";
 
@@ -102,5 +103,13 @@ http.route({
   method: "POST",
   handler: handleIngestContacts,
 });
+
+/**
+ * Comma bridge ingest. The Mini's bridge mirrors chat.db/BlueBubbles here.
+ * POST /comma/ingest/<conversations|messages|attachments|transcript|scheduled|overlay|sync>
+ * and POST /comma/ingest-upload-url. Auth: Bearer COMMA_BRIDGE_SECRET.
+ */
+http.route({ pathPrefix: "/comma/ingest/", method: "POST", handler: handleCommaIngest });
+http.route({ path: "/comma/ingest-upload-url", method: "POST", handler: handleCommaUploadUrl });
 
 export default http;
