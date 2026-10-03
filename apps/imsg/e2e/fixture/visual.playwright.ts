@@ -219,8 +219,8 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByText("Opus", { exact: true })).toBeVisible();
   await expect(page.getByText("Terra", { exact: true })).toBeVisible();
-  await expect(page.getByText("Claude · taste first", { exact: true })).toBeVisible();
-  await expect(page.getByText("ChatGPT · preserves Claude quota", { exact: true })).toBeVisible();
+  await expect(page.getByText("Claude", { exact: true })).toBeVisible();
+  await expect(page.getByText("ChatGPT", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-suggestion-settings.png", animations: "disabled" });
 
   await desk.request.post("/__fixture/reset");
@@ -456,7 +456,8 @@ test("wide cold routes project into the persistent desktop shell", async ({ desk
   await expect(page.getByText("To:", { exact: true })).toBeVisible();
 
   await page.goto("/forward", { waitUntil: "domcontentloaded" });
-  await expect(page.getByText("Nothing to forward", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("desktop-shell")).toBeVisible();
+  await expect(page.getByPlaceholder("Forward to…")).toHaveCount(0);
 
   const unknownApi = await desk.request.get("/api/not-real");
   expect(unknownApi.status()).toBe(404);
@@ -652,10 +653,10 @@ test("Sweep shows a settled-item trail and real undo", async ({ desk }) => {
   const card = page.getByTestId("sweep-card");
   await card.getByRole("button", { name: "Settle current conversation" }).click();
   await expect(card.getByText(/Alex Rivera · settled/)).toBeVisible();
-  await card.getByText("skip ⇢", { exact: true }).click();
+  await card.getByRole("button", { name: "Skip conversation" }).click();
   await expect(card.getByText("Avery Brooks", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-sweep-cleared-trail.png", animations: "disabled" });
-  await card.getByText("Z undoes the last settle", { exact: true }).click();
+  await card.getByRole("button", { name: "Undo last settle" }).click();
   await expect(card.getByText(/Alex Rivera · settled/)).toBeHidden();
   await expect(card.getByText("Alex Rivera", { exact: true })).toBeVisible();
 });
