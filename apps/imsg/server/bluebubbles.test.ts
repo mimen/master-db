@@ -44,6 +44,20 @@ describe("BlueBubblesClient transport recovery", () => {
 });
 
 describe("BlueBubblesClient message queries", () => {
+  test("unread inbound filter matches chat.db's is_read flag, not the always-zero date_read", async () => {
+    const transport = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ status: 200, data: [] })));
+    try {
+      const client = new BlueBubblesClient("http://127.0.0.1:1234", "test-password");
+      await client.queryMessages({ limit: 1000, offset: 0, unreadInboundOnly: true });
+      expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body)).where).toEqual([
+        { statement: "message.is_from_me = :inbound", args: { inbound: 0 } },
+        { statement: "message.is_read = :unread", args: { unread: 0 } },
+      ]);
+    } finally {
+      transport.mockRestore();
+    }
+  });
+
   test("combines literal text, sender, and chat filters", async () => {
     const transport = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ status: 200, data: [] })));
     try {
