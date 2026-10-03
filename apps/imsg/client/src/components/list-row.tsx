@@ -35,6 +35,8 @@ export interface ListRowProps {
   /** Escape hatch for per-row extras a fixed prop set can't express — a
    * divider border, for instance. */
   style?: StyleProp<ViewStyle>;
+  /** Screen-reader name; defaults to a string title. Required when the title is a node. */
+  accessibilityLabel?: string;
 }
 
 /**
@@ -60,12 +62,16 @@ export function ListRow({
   titleNumberOfLines = 1,
   titleWeight = "600",
   style,
+  accessibilityLabel,
 }: ListRowProps) {
   const theme = useTheme();
   const type = useType();
   const [hovered, setHovered] = useState(false);
   return (
     <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={accessibilityLabel ?? (typeof title === "string" ? title : undefined)}
+      accessibilityState={selected === undefined ? undefined : { selected }}
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}

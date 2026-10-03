@@ -67,12 +67,13 @@ export function OverlayShell({
   return (
     <Modal visible={visible} transparent animationType={animationType} onRequestClose={onClose}>
       <Pressable
-        accessibilityRole={backdropAccessibilityRole}
-        accessibilityLabel={backdropAccessibilityLabel}
+        accessibilityRole={backdropAccessibilityRole ?? "button"}
+        accessibilityLabel={backdropAccessibilityLabel ?? "Close"}
         onPress={onClose}
         style={[styles.backdrop, { backgroundColor: backdropColor ?? theme.backdrop }, backdropStyle]}
       >
         <Pressable
+          accessible={false}
           onPress={() => undefined}
           style={[card && [styles.card, { backgroundColor: theme.background }], cardStyle]}
         >

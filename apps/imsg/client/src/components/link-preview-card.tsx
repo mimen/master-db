@@ -54,6 +54,7 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
   return (
     <Pressable
       accessibilityRole="link"
+      accessibilityLabel={preview.title ? `${preview.title}, ${new URL(url).hostname}` : new URL(url).hostname}
       onPress={() => void openExternalUrl(url)}
       style={({ hovered, pressed }) => [
         styles.card,

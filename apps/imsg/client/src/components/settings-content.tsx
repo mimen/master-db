@@ -67,8 +67,8 @@ function ReleaseIdentityFooter(): JSX.Element {
     ["Running shell", displayReleaseSha(snapshot.shell.runningSha)],
     ["Staged shell", displayReleaseSha(snapshot.shell.stagedSha)],
   ] as const;
-  const version = webSha ? displayReleaseSha(webSha) : "development";
-  const qualifier = environment === "production" ? "" : ` · ${branch ?? environment}`;
+  const version = webSha ? displayReleaseSha(webSha) : "local build";
+  const qualifier = environment === "production" || !webSha ? "" : ` · ${branch ?? environment}`;
 
   return (
     <View style={styles.releaseFooter}>
@@ -81,7 +81,7 @@ function ReleaseIdentityFooter(): JSX.Element {
       >
         {({ hovered, pressed }) => (
           <Text style={[styles.releaseLabel, { color: hovered || pressed ? theme.text : theme.textSecondary }]}>
-            Version <Text style={styles.releaseValue}>{version}</Text>{qualifier}
+            {"Version "}<Text style={webSha ? styles.releaseValue : null}>{version}</Text>{qualifier}
           </Text>
         )}
       </Pressable>
@@ -233,6 +233,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             <View style={[styles.fieldGroup, styles.clearGroup, { backgroundColor: theme.backgroundElement }]}>
               <ListRow
                 title={<Text style={{ color: "#ff453a", fontSize: 15 }}>Clear suggestion learning</Text>}
+                accessibilityLabel="Clear suggestion learning"
                 titleWeight="400"
                 onPress={() => showSheet({
                   title: "Clear suggestion learning?",
