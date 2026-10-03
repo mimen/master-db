@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["scripts", "server/compression.ts", "server/static-cache.ts"]
+  "include": ["scripts", "server", "shared", "../../convex/schema/comma/validators.ts", "../../convex/comma/conversationKey.ts", "../../convex/identity/normalize.ts"]
 }
