@@ -41,6 +41,7 @@ import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
+import { useComposerDraft } from "@/hooks/use-composer-draft";
 import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import {
   browserFilesToAttachments,
@@ -274,6 +275,14 @@ export function Composer({
   const [scheduleAnchor, setScheduleAnchor] = useState<{ right: number; bottom: number } | null>(null);
   const containerRef = useRef<View>(null);
   const isSMS = chatIsSMS(chatGuid);
+  const loadRemoteDraft = useCallback((draft: string) => {
+    setText(draft);
+    setSelection({ start: draft.length, end: draft.length });
+    setMentions([]);
+    suggestionAttribution.current = null;
+    setInputHeight(IOS_INPUT_MIN_HEIGHT);
+  }, []);
+  const draftSync = useComposerDraft(chatGuid, editing !== null, loadRemoteDraft);
 
   // Track native keyboard visibility for keyboard-specific composer edge spacing.
   useEffect(() => {
@@ -1149,7 +1158,8 @@ ${url}` : url;
               value={text}
               selection={selection}
               onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
-              onFocus={() => setListMode(false)}
+              onFocus={() => { setListMode(false); draftSync.onFocus(); }}
+              onBlur={draftSync.onBlur}
               onChangeText={onChangeText}
               placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
               placeholderTextColor={theme.textSecondary}

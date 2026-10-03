@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { getFunctionName, type FunctionArgs } from "convex/server";
-import { commaApi } from "./convex-api";
+import { commaApi, commaDraftsApi } from "./convex-api";
 
 test("comma references resolve to the deployed query paths", () => {
   for (const name of [
@@ -9,6 +9,11 @@ test("comma references resolve to the deployed query paths", () => {
   ] as const) {
     expect(getFunctionName(commaApi[name])).toBe(`comma/queries:${name}`);
   }
+});
+
+test("draft mutation references resolve to the deployed paths", () => {
+  expect(getFunctionName(commaDraftsApi.setDraft)).toBe("comma/drafts:setDraft");
+  expect(getFunctionName(commaDraftsApi.clearDraft)).toBe("comma/drafts:clearDraft");
 });
 
 function checkQueryTypes() {
