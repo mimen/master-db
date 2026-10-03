@@ -122,7 +122,7 @@ export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
     if (outcome === "busy") {
       showToast("Still saving that change — try again in a moment");
     } else if (action === "settle") {
-      showToast("Settled — ⌘⇧Z to undo");
+      showToast("Settled", { label: "Undo", onPress: () => void undoLastTriageAction() });
     } else {
       showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs Reply");
     }
