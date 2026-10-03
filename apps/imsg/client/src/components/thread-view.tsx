@@ -349,6 +349,10 @@ export function ThreadView({
     () => rows.find((r) => r.message.isFromMe && !r.message.failed)?.message.guid ?? null,
     [rows],
   );
+  const latestInboundAt = useMemo(
+    () => rows.find((r) => !r.message.isFromMe)?.message.dateCreated ?? null,
+    [rows],
+  );
 
   const retry = useCallback(
     (failed: Message) => {
@@ -418,6 +422,20 @@ export function ThreadView({
                 onPress: () => {
                   setForwardText(message.text);
                   router.push("/forward");
+                },
+              },
+            ]
+          : []),
+        // A persisted error code is often stale, so this sends a new copy instead of an in-bubble retry.
+        ...(mine && message.text && message.error !== 0 && !message.pending && !message.failed
+          ? [
+              {
+                label: "Send again",
+                onPress: () => {
+                  void api
+                    .sendText(chatGuid, { text: message.text, replyToGuid: message.replyToGuid ?? undefined })
+                    .then(upsert)
+                    .catch(() => showToast("Send failed"));
                 },
               },
             ]
@@ -737,6 +755,7 @@ export function ThreadView({
                     groupEnd={item.groupEnd}
                     isGroupChat={isGroup}
                     isLatestOutgoing={item.message.guid === latestOutgoingGuid}
+                    latestInboundAt={latestInboundAt}
                     highlighted={item.message.guid === highlightGuid}
                     onLongPress={openMessageSheet}
                     onRetry={retry}

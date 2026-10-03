@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { deliveryState } from "@/lib/delivery-state";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -251,6 +252,8 @@ interface BubbleProps {
   groupEnd: boolean;
   isGroupChat: boolean;
   isLatestOutgoing: boolean;
+  /** dateCreated of the chat's newest inbound message, evidence a stale error code delivered. */
+  latestInboundAt: number | null;
   highlighted?: boolean;
   onLongPress: (message: Message, anchor?: { x: number; y: number }) => void;
   onRetry: (message: Message) => void;
@@ -278,6 +281,7 @@ export const Bubble = memo(function Bubble({
   groupEnd,
   isGroupChat,
   isLatestOutgoing,
+  latestInboundAt,
   highlighted = false,
   onLongPress,
   onRetry,
@@ -303,9 +307,8 @@ export const Bubble = memo(function Bubble({
         ? Math.min(winW * 0.5, 560)
         : "78%";
   const url = message.text ? firstUrl(message.text) : null;
-  // A persisted non-zero error is Apple's delivery failure (e.g. the iMessage
-  // half of a service-split send) — surface it like an optimistic failure.
-  const notDelivered = message.failed || (mine && (message.error ?? 0) !== 0);
+  const delivery = deliveryState(message, latestInboundAt, Date.now());
+  const notDelivered = delivery === "failed";
   // Tail only on the last text bubble of a group (not on media/failed). A pending
   // send already has it, so settling changes nothing about the bubble itself.
   const hasTail = groupEnd && !notDelivered && message.text !== "";
@@ -455,6 +458,8 @@ export const Bubble = memo(function Bubble({
             <Pressable accessibilityRole="button" accessibilityLabel="Retry sending" onPress={() => onRetry(message)} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
               <Text style={[styles.failed, { color: theme.destructive }]}>Not Delivered — tap to retry</Text>
             </Pressable>
+          ) : delivery === "uncertain" ? (
+            <Text style={[styles.meta, { color: theme.textSecondary }]}>May not have delivered</Text>
           ) : (
             (groupEnd || message.edited || showTime) && (
               <Text style={[styles.meta, { color: theme.textSecondary }]}>
