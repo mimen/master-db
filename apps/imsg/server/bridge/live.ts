@@ -87,7 +87,7 @@ export class MessageWriter {
     await this.upsertChats();
   }
 
-  async postMessages(raw: BBMessage[]): Promise<void> {
+  async postMessages(raw: BBMessage[]): Promise<MessageRow[]> {
     const messages: MessageRow[] = [];
     const attachments: AttachmentRow[] = [];
     for (const message of raw) {
@@ -111,6 +111,7 @@ export class MessageWriter {
     for (const batch of batches(messages)) await this.deps.ingest.post("messages", { messages: batch });
     for (const batch of batches(attachments)) await this.deps.ingest.post("attachments", { attachments: batch });
     if (attachments.length) this.onAttachments?.(attachments, Date.now());
+    return messages;
   }
 }
 
@@ -122,7 +123,7 @@ export class LiveBridge {
   private work: RetryWork;
   lastEventAt: number | null = null;
 
-  constructor(readonly writer: MessageWriter, private now = Date.now) {
+  constructor(readonly writer: MessageWriter, private now = Date.now, onMessages?: (rows: MessageRow[]) => void) {
     this.work = new RetryWork("live", () => writer.exclusive(async () => {
       const revision = this.refreshRevision;
       if (revision !== this.refreshedRevision) {
@@ -137,8 +138,9 @@ export class LiveBridge {
         if (!fetched) throw new Error(`Message ${message.guid} not yet readable`);
         hydrated.push({ ...fetched, ...message });
       }
-      await writer.postMessages(hydrated);
+      const rows = await writer.postMessages(hydrated);
       if (queued.length) await writer.deps.ingest.post("sync", { key: "continuous", lastEventAt: this.lastEventAt ?? undefined });
+      onMessages?.(rows);
       for (const message of queued) {
         if (this.messages.get(message.guid) === message) this.messages.delete(message.guid);
       }

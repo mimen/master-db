@@ -138,29 +138,8 @@ export class AiService {
       };
     }
     const voice = loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
-    const cached = this.deps.db.getSuggestionCache(chatGuid, selectedModel);
-
-    if (
-      cached &&
-      !force &&
-      cached.anchor_guid === currentGuid &&
-      cached.recipe_version === SUGGESTION_RECIPE_VERSION &&
-      cached.voice_revision === voice.voiceRevision &&
-      cached.edit_revision === voice.editRevision
-    ) {
-      const parsed = parseSuggestionCache(cached.payload);
-      if (parsed) {
-        return {
-          ok: true,
-          value: {
-            ...parsed,
-            basedOnMessageGuid: cached.anchor_guid,
-            stale: isStale(cached.anchor_guid, currentGuid),
-            generatedAt: cached.created_at,
-          },
-        };
-      }
-    }
+    const cached = force ? null : await this.cachedReplySuggestions(chatGuid, currentGuid, selectedModel, voice);
+    if (cached) return { ok: true, value: cached };
 
     const key = [
       chatGuid,
@@ -186,6 +165,22 @@ export class AiService {
     } finally {
       if (this.suggestionInFlight.get(key) === pending) this.suggestionInFlight.delete(key);
     }
+  }
+
+  async cachedReplySuggestions(
+    chatGuid: string,
+    anchorGuid: string,
+    selectedModel: SuggestionModel,
+    voice?: ReturnType<typeof loadVoiceState>,
+  ): Promise<ReplySuggestions | null> {
+    const cached = this.deps.db.getSuggestionCache(chatGuid, selectedModel);
+    if (!cached || cached.anchor_guid !== anchorGuid || cached.recipe_version !== SUGGESTION_RECIPE_VERSION) return null;
+    const currentVoice = voice ?? loadVoiceState(this.deps.db, await this.deps.recentOutboundText());
+    if (cached.voice_revision !== currentVoice.voiceRevision || cached.edit_revision !== currentVoice.editRevision) return null;
+    const parsed = parseSuggestionCache(cached.payload);
+    return parsed && parsed.selectedModel === selectedModel ? {
+      ...parsed, basedOnMessageGuid: anchorGuid, stale: false, generatedAt: cached.created_at,
+    } : null;
   }
 
   private async generateReplySuggestions(

@@ -1,3 +1,4 @@
+import { useQuery } from "convex/react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
@@ -12,6 +13,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
+import { commaApi } from "@/lib/convex-api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
 import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
@@ -19,7 +21,7 @@ import { useServerEvents } from "@/lib/sse";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
+import { useDataSource, useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { TAPBACK_EMOJI } from "./bubble";
@@ -29,6 +31,22 @@ import type { ReplySuggestion, ReplySuggestions } from "@shared/types";
 // the previous message.
 // ponytail: fixed delay, compare basedOnMessageGuid to the event guid if lag outgrows it.
 const AUTO_REFRESH_DELAY_MS = 1500;
+
+/**
+ * Precomputed suggestions for this chat when they answer its current last
+ * message. `undefined` while Convex is still answering, `null` to fall back to
+ * the on-demand fetch (server mode, nothing precomputed, or a stale anchor).
+ */
+function usePrecomputedSuggestions(chatGuid: string): ReplySuggestions | null | undefined {
+  const convexMode = useDataSource() === "convex";
+  const conversation = useQuery(commaApi.resolveChat, convexMode ? { chatGuid } : "skip");
+  const row = useQuery(commaApi.getSuggestions, conversation ? { conversationId: conversation._id } : "skip");
+  if (!convexMode) return null;
+  if (conversation === undefined || (conversation && row === undefined)) return undefined;
+  if (!conversation || !row || row.anchorGuid !== conversation.lastMessage?.guid) return null;
+  // Convex stores strategy/vibe/reaction as strings; the bridge wrote them from a typed ReplySuggestions.
+  return { ...row.payload, basedOnMessageGuid: row.anchorGuid, stale: false, generatedAt: row.createdAt } as ReplySuggestions;
+}
 
 interface SuggestionShelfProps {
   chatGuid: string;
@@ -81,6 +99,10 @@ export function SuggestionShelf({
     [chatGuid, selectedModel],
   );
 
+  // Convex mode: the bridge precomputes suggestions for the newest inbound
+  // message, so a fresh one renders instantly instead of after a model call.
+  const precomputed = usePrecomputedSuggestions(chatGuid);
+
   useEffect(() => {
     activeRequest.current++;
     messageEpoch.current = 0;
@@ -90,8 +112,14 @@ export function SuggestionShelf({
     setStale(false);
     setFailed(false);
     if (!enabled || !awaitingReply || mode !== "auto") return;
+    if (precomputed === undefined) return;
+    if (precomputed) {
+      setResult(precomputed);
+      setResolved(true);
+      return;
+    }
     void load(false);
-  }, [chatGuid, enabled, awaitingReply, mode, selectedModel, load]);
+  }, [chatGuid, enabled, awaitingReply, mode, selectedModel, load, precomputed]);
 
   useEffect(() => () => {
     if (autoRefresh.current) clearTimeout(autoRefresh.current);

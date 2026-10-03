@@ -13,6 +13,7 @@ import { PhotoMirror } from "./photos";
 import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
 import { ScheduledMirror } from "./scheduled-mirror";
+import { SuggestionsBridge, SUGGESTION_PRECOMPUTE, type SuggestionDeps } from "./suggestions";
 
 export function startBridge(deps: {
   config: Config;
@@ -26,6 +27,7 @@ export function startBridge(deps: {
   chatDbPath?: string;
   avatarDirectory?: string;
   now?: () => number;
+  suggestions?: Pick<SuggestionDeps, "ai" | "getChat">;
 }) {
   const enabled = Boolean(deps.config.commaBridgeSecret) && deps.backgroundServices !== false;
   let live: LiveBridge | null = null;
@@ -35,7 +37,9 @@ export function startBridge(deps: {
   let outbox: OutboxBridge | null = null;
   let media: MediaWorker | null = null;
   let photos: PhotoMirror | null = null;
+  let suggestions: SuggestionsBridge | null = null;
   function stopModules() {
+    suggestions?.stop(); suggestions = null;
     live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop(); photos?.stop();
     live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null; photos = null;
   }
@@ -45,7 +49,8 @@ export function startBridge(deps: {
     const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest, names: deps.names });
     try {
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
-      live = new LiveBridge(writer, deps.now);
+      if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now });
+      live = new LiveBridge(writer, deps.now, (rows) => suggestions?.observe(rows));
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
@@ -69,6 +74,7 @@ export function startBridge(deps: {
   return {
     health: () => ({ enabled, lastEventAt: live?.lastEventAt ?? null,
       lastReconcileAt: reconcile?.lastReconcileAt ?? null, cursor: reconcile?.cursor ?? 0,
+      suggestions: suggestions?.health() ?? { generatedToday: 0, cap: SUGGESTION_PRECOMPUTE.dailyCap, lastAt: null },
       outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
       photos: { uploaded: photos?.uploaded ?? 0, pending: photos?.pending ?? 0 },
       media: media ? { ...media.counts(), uploadedToday: media.uploadedToday, lastError: media.lastError } : null,
@@ -83,6 +89,7 @@ export function startBridge(deps: {
       await scheduled?.flush();
       await media?.flush();
       await photos?.flush();
+      await suggestions?.flush();
     },
     stop: () => { startup.stop(); stopModules(); },
   };

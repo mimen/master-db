@@ -69,7 +69,7 @@ export type AiServiceLike = Pick<
   | "recordSuggestionFeedback"
   | "recordReactionFeedback"
   | "clearSuggestionLearning"
->;
+> & Partial<Pick<AiService, "cachedReplySuggestions">>;
 
 export interface AppDependencies {
   config: Config;
@@ -186,7 +186,12 @@ directory.onEvent(() => broadcast({ kind: "chats-changed" }));
 const stopLiveEvents = wireLiveEvents(bb, directory, names, broadcast);
 const commands = new ChatCommands(bb, directory, names, () => commaBridge.scheduledChanged());
 const commaBridge = startBridge({ config, bb, db, names, now, commands,
-  backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath, avatarDirectory: deps.bridgeAvatarDirectory });
+  backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath,
+  avatarDirectory: deps.bridgeAvatarDirectory,
+  suggestions: { ai, getChat: async (chatGuid) => {
+    const result = await directory.summaries();
+    return result.ok ? result.chats.find((chat) => chat.guid === directory.canonicalGuid(chatGuid)) ?? null : null;
+  } } });
 
 // ------------------------------------------------------------------- routes
 

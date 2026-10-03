@@ -22,6 +22,7 @@ export interface Bodies {
   messages: { messages: MessageRow[] };
   attachments: { attachments: AttachmentRow[] };
   sync: SyncInput;
+  suggestions: FunctionArgs<typeof internal.comma.internal.setSuggestions>;
   overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionArgs<typeof internal.comma.outbox.claimOutbox>;
@@ -36,6 +37,7 @@ export interface Results {
   messages: { written: number; skipped: number };
   attachments: { written: number; skipped: number };
   sync: null;
+  suggestions: null;
   overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
   scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionReturnType<typeof internal.comma.outbox.claimOutbox>;
