@@ -61,35 +61,36 @@ export default function RootLayout() {
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <ActionSheetProvider>
             <LightboxProvider>
-              {/* freezeOnBlur: without it the conversation list keeps
-                  re-rendering on every inbound event while it sits invisible
-                  behind an open thread. */}
-              <DesktopShellProvider>
-                <Stack screenOptions={{ freezeOnBlur: true }}>
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                {/* Chevron only. A headerBackTitle ("Messages") renders INSIDE
-                    the circular glass back button on iOS 26 and gets clipped
-                    to "lessag" — the native "shrink the label when it doesn't
-                    fit" behaviour assumes a capsule that can grow, which the
-                    circle can't. "minimal" is the supported way to ask for
-                    just the chevron (React Navigation 7 replaced
-                    headerBackTitleVisible with this). */}
-                <Stack.Screen
-                  name="chat/[guid]"
-                  options={{ headerBackButtonDisplayMode: "minimal" }}
-                />
-                <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
-                <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New Message" }} />
-                <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />
-                <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
-                <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
-                <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
-                  <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
-                </Stack>
-              </DesktopShellProvider>
-              <ReleaseUpdateBanners />
-              <ToastHost />
-              <StatusBar style="auto" />
+              <ToastHost>
+                {/* freezeOnBlur: without it the conversation list keeps
+                    re-rendering on every inbound event while it sits invisible
+                    behind an open thread. */}
+                <DesktopShellProvider>
+                  <Stack screenOptions={{ freezeOnBlur: true }}>
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  {/* Chevron only. A headerBackTitle ("Messages") renders INSIDE
+                      the circular glass back button on iOS 26 and gets clipped
+                      to "lessag" — the native "shrink the label when it doesn't
+                      fit" behaviour assumes a capsule that can grow, which the
+                      circle can't. "minimal" is the supported way to ask for
+                      just the chevron (React Navigation 7 replaced
+                      headerBackTitleVisible with this). */}
+                  <Stack.Screen
+                    name="chat/[guid]"
+                    options={{ headerBackButtonDisplayMode: "minimal" }}
+                  />
+                  <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
+                  <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New Message" }} />
+                  <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />
+                  <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
+                  <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
+                  <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
+                    <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />
+                  </Stack>
+                </DesktopShellProvider>
+                <ReleaseUpdateBanners />
+                <StatusBar style="auto" />
+              </ToastHost>
             </LightboxProvider>
           </ActionSheetProvider>
         </ThemeProvider>

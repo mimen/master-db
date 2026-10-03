@@ -29,7 +29,7 @@ import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
-import { showToast } from "@/lib/toast";
+import { showToast, ToastAnchor } from "@/lib/toast";
 import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
@@ -76,6 +76,7 @@ interface ThreadViewProps {
   previewOnly?: boolean;
   /** Sweep mode advances only after a real send settles successfully. */
   onMessageSent?: () => void;
+  toastActive?: boolean;
 }
 
 export function ThreadView({
@@ -85,6 +86,7 @@ export function ThreadView({
   headerChat = null,
   previewOnly = false,
   onMessageSent,
+  toastActive = true,
 }: ThreadViewProps) {
   const theme = useTheme();
   const type = useType();
@@ -668,6 +670,7 @@ export function ThreadView({
         </EmptyState>
       ) : (
         <FlatList
+          testID="thread-message-list"
           ref={assignListRef}
           data={rows}
           inverted
@@ -779,41 +782,43 @@ export function ThreadView({
           </View>
         </View>
       )}
-      <SuggestionShelf
-        chatGuid={chatGuid}
-        enabled={aiStatus?.suggestions === true && !editing}
-        awaitingReply={awaitingReply}
-        reactionSuggestions={aiStatus?.reactionSuggestions === true}
-        reactionPreview={reactionPreview}
-      />
-      <Composer
-        chatGuid={chatGuid}
-        isGroup={isGroup}
-        participants={participants}
-        privateApi={privateApi}
-        replyTo={replyTo}
-        editing={editing}
-        onClearReply={() => setReplyTo(null)}
-        onClearEditing={() => setEditing(null)}
-        onEdited={upsert}
-        onOptimistic={(message) => {
-          upsert(message);
-          patchChatWithMessage(chatGuid, message);
-          scrollToLatest();
-        }}
-        onSettled={(tempGuid, message) => {
-          replaceTemp(tempGuid, message);
-          if (!message.failed) patchChatWithMessage(chatGuid, message);
-        }}
-        onSent={(message) => {
-          upsert(message);
-          patchChatWithMessage(chatGuid, message);
-          scrollToLatest();
-          onMessageSent?.();
-        }}
-        dropTargetRef={paneRef}
-        onDragActiveChange={setFileDragActive}
-      />
+      <ToastAnchor active={toastActive}>
+        <SuggestionShelf
+          chatGuid={chatGuid}
+          enabled={aiStatus?.suggestions === true && !editing}
+          awaitingReply={awaitingReply}
+          reactionSuggestions={aiStatus?.reactionSuggestions === true}
+          reactionPreview={reactionPreview}
+        />
+        <Composer
+          chatGuid={chatGuid}
+          isGroup={isGroup}
+          participants={participants}
+          privateApi={privateApi}
+          replyTo={replyTo}
+          editing={editing}
+          onClearReply={() => setReplyTo(null)}
+          onClearEditing={() => setEditing(null)}
+          onEdited={upsert}
+          onOptimistic={(message) => {
+            upsert(message);
+            patchChatWithMessage(chatGuid, message);
+            scrollToLatest();
+          }}
+          onSettled={(tempGuid, message) => {
+            replaceTemp(tempGuid, message);
+            if (!message.failed) patchChatWithMessage(chatGuid, message);
+          }}
+          onSent={(message) => {
+            upsert(message);
+            patchChatWithMessage(chatGuid, message);
+            scrollToLatest();
+            onMessageSent?.();
+          }}
+          dropTargetRef={paneRef}
+          onDragActiveChange={setFileDragActive}
+        />
+      </ToastAnchor>
       {fileDragActive && (
         <View
           pointerEvents="none"

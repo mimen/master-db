@@ -393,6 +393,7 @@ export function MessagesWorkspace({
             jumpTarget={jumpTarget}
             headerChat={selected}
             previewOnly={selectionIntent === "preview"}
+            toastActive={active}
           />
         ) : (
           <EmptyState

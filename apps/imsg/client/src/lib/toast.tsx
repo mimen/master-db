@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useIsFocused } from "expo-router/react-navigation";
 
 import { CardShadow, Colors } from "@/constants/theme";
 import { Radius, Space, TypeRamp, Weight } from "@/constants/tokens";
@@ -16,6 +17,12 @@ interface Toast {
   readonly action?: ToastAction;
 }
 
+const ToastContext = createContext<{
+  readonly pill: ReactNode;
+  readonly activeAnchor: symbol | undefined;
+  readonly registerAnchor: (anchor: symbol) => () => void;
+} | null>(null);
+
 type Listener = (toast: Toast) => void;
 let listener: Listener | null = null;
 
@@ -28,18 +35,43 @@ export function showToast(message: string, action?: ToastAction): void {
   listener?.({ message, action });
 }
 
-export function ToastHost() {
+export function ToastAnchor({ children, active }: { readonly children: ReactNode; readonly active: boolean }) {
+  const context = useContext(ToastContext);
+  const anchor = useRef(Symbol("toast-anchor")).current;
+  const focused = useIsFocused();
+  const registerAnchor = context?.registerAnchor;
+  useEffect(() => {
+    if (active && focused) return registerAnchor?.(anchor);
+  }, [active, anchor, focused, registerAnchor]);
+
+  return (
+    <View testID="thread-composer-chrome">
+      {children}
+      {context?.activeAnchor === anchor && (
+        <View pointerEvents="box-none" style={[styles.overlay, { top: Space.md }]}>
+          {context.pill}
+        </View>
+      )}
+    </View>
+  );
+}
+
+export function ToastHost({ children }: { readonly children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [anchors, setAnchors] = useState<ReadonlySet<symbol>>(() => new Set());
+  const activeAnchor = Array.from(anchors).at(-1);
+  const registerAnchor = useCallback((anchor: symbol) => {
+    setAnchors((current) => new Set(current).add(anchor));
+    return () => setAnchors((current) => {
+      const next = new Set(current);
+      next.delete(anchor);
+      return next;
+    });
+  }, []);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const useNativeDriver = Platform.OS !== "web";
   const dark = useColorScheme() === "dark";
-  const theme = Colors[dark ? "dark" : "light"];
   const inverse = Colors[dark ? "light" : "dark"];
   const insets = useSafeAreaInsets();
-  // Same events as ThreadView's keyboard inset. The thread pads itself by this
-  // height, so lifting the footer by it parks the pill in that padding, right
-  // under the composer, instead of behind the keyboard.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
@@ -55,65 +87,61 @@ export function ToastHost() {
   useEffect(() => {
     listener = (next) => {
       setToast(next);
-      Animated.timing(opacity, { toValue: 1, duration: 150, useNativeDriver }).start();
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver }).start(() => setToast(null));
-      }, next.action ? ACTION_MS : PLAIN_MS);
+      timer.current = setTimeout(() => setToast(null), next.action ? ACTION_MS : PLAIN_MS);
     };
     return () => {
       listener = null;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [opacity, useNativeDriver]);
+  }, []);
 
-  if (toast === null) return null;
-  const { action } = toast;
-  // A normal-flow footer under the app: it shrinks the app's flex area, so the
-  // pill can never cover the thread or the composer.
-  return (
+  const action = toast?.action;
+  const pill = toast && (
     <View
-      style={[
-        styles.footer,
-        {
-          backgroundColor: theme.background,
-          paddingBottom: Space.md + (keyboardHeight > 0 ? 0 : insets.bottom),
-          transform: [{ translateY: -keyboardHeight }],
-        },
-      ]}
+      role="status"
+      accessibilityLiveRegion="polite"
+      pointerEvents={action ? "box-none" : "none"}
+      style={[styles.toast, { backgroundColor: inverse.background }]}
     >
-      <Animated.View
-        role="status"
-        accessibilityLiveRegion="polite"
-        pointerEvents={action ? "box-none" : "none"}
-        style={[styles.toast, { backgroundColor: inverse.background, opacity }]}
-      >
-        <Text style={[styles.text, { color: inverse.text }]}>{toast.message}</Text>
-        {action && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            onPress={() => {
-              if (timer.current) clearTimeout(timer.current);
-              setToast(null);
-              action.onPress();
-            }}
-            style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: inverse.backgroundSelected }]}
-          >
-            <Text style={[styles.actionText, { color: inverse.text }]}>{action.label}</Text>
-          </Pressable>
-        )}
-      </Animated.View>
+      <Text style={[styles.text, { color: inverse.text }]}>{toast.message}</Text>
+      {action && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={() => {
+            if (timer.current) clearTimeout(timer.current);
+            setToast(null);
+            action.onPress();
+          }}
+          style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: inverse.backgroundSelected }]}
+        >
+          <Text style={[styles.actionText, { color: inverse.text }]}>{action.label}</Text>
+        </Pressable>
+      )}
     </View>
+  );
+  return (
+    <ToastContext.Provider value={{ pill, activeAnchor, registerAnchor }}>
+      {children}
+      {toast && activeAnchor === undefined && (
+        <View pointerEvents="box-none" style={[styles.overlay, { bottom: Space.md + Math.max(keyboardHeight, insets.bottom) }]}>
+          {pill}
+        </View>
+      )}
+    </ToastContext.Provider>
   );
 }
 
 const styles = StyleSheet.create({
-  footer: {
+  overlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 100,
     flexDirection: "row",
     justifyContent: "center",
     paddingHorizontal: Space.lg,
-    paddingTop: Space.md,
   },
   toast: {
     flexDirection: "row",
