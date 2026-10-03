@@ -51,6 +51,7 @@ import {
   type PendingAttachmentAsset,
 } from "@/lib/attachments";
 import { appleMapsLocationUrl, webLocationBlockReason } from "@/lib/message-actions";
+import { burstGate } from "@/lib/burst-gate";
 import { formatRecordingClock, type VoiceMemoEnd, voiceMemoOutcome } from "@/lib/voice-memo";
 import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
@@ -78,6 +79,9 @@ interface PendingAttachment extends PendingAttachmentAsset {
   /** Present when this pending item is a contact card, sent via the server. */
   contact?: Contact;
 }
+
+/** One toast per burst of failed sends, shared across composers and chats. */
+const sendFailureToast = burstGate(5_000);
 
 const IOS_INPUT_LINE_HEIGHT = 22;
 /**
@@ -444,7 +448,7 @@ export function Composer({
         clearText();
         onClearEditing();
       } catch {
-        showToast("Edit failed — edits are only allowed for ~15 minutes");
+        showToast("Couldn't edit. Messages can only be edited for 15 minutes.");
       } finally {
         setBusy(false);
       }
@@ -488,7 +492,7 @@ export function Composer({
         // No playSend() here — confirmation already fired on touch-up above.
       } catch {
         hapticFailure();
-        showToast("Attachment failed");
+        showToast("Couldn't send the attachment. Check the Mini connection.");
       } finally {
         for (const attachment of attachments) cleanupPendingAttachment(attachment);
         setBusy(false);
@@ -527,6 +531,7 @@ export function Composer({
     } catch {
       hapticFailure();
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
+      if (sendFailureToast()) showToast("Couldn't send. Check the Mini connection.");
     }
   };
 
@@ -753,7 +758,7 @@ ${url}` : url;
   const takePhoto = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      showToast("Camera permission denied");
+      showToast("Camera access is off. Allow it in Settings.");
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.9, mediaTypes: ["images", "videos"] });
@@ -825,7 +830,7 @@ ${url}` : url;
     try {
       const perm = await AudioModule.requestRecordingPermissionsAsync();
       if (!perm.granted) {
-        showToast("Microphone permission denied");
+        showToast("Microphone access is off. Allow it in Settings.");
         return;
       }
       await recorder.prepareToRecordAsync();
@@ -867,11 +872,11 @@ ${url}` : url;
         onSent((await res.json()) as Message);
       } else {
         hapticFailure();
-        showToast("Voice message failed");
+        showToast("Couldn't send the voice message. Check the Mini connection.");
       }
     } catch {
       hapticFailure();
-      showToast("Voice message failed");
+      showToast("Couldn't send the voice message. Check the Mini connection.");
     } finally {
       setBusy(false);
     }
@@ -892,7 +897,7 @@ ${url}` : url;
               setDraft(chatGuid, "");
               showToast(`Scheduled ${option.label.toLowerCase()}`);
             })
-            .catch(() => showToast("Couldn't schedule"));
+            .catch(() => showToast("Couldn't schedule the message. Try again."));
         },
       })),
       {
