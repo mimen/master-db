@@ -25,12 +25,7 @@ import { Colors, Type } from "@/constants/theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
-import {
-  ROW_SIGNAL_SIZE,
-  RowSignalColor,
-  rowSignal,
-  unreadLabel,
-} from "@/lib/row-signal";
+import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
@@ -42,21 +37,15 @@ const ACTION_WIDTH = 84;
 const SETTLE_COLOR = "#28A745";
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
-  const kind = rowSignal(chat);
+  const theme = useTheme();
+  const unread = rowSignal(chat) === "unread";
   return (
     <View
-      accessibilityElementsHidden={kind === null}
-      accessibilityLabel={
-        kind === "unread" ? `${unreadLabel(chat.unreadCount)} unread` : undefined
-      }
-      style={[
-        styles.signal,
-        kind === "unread" && { backgroundColor: RowSignalColor.unread },
-      ]}
+      accessibilityElementsHidden={!unread}
+      accessibilityLabel={unread ? "Unread" : undefined}
+      style={styles.signal}
     >
-      {kind === "unread" ? (
-        <Text style={styles.signalCount}>{unreadLabel(chat.unreadCount)}</Text>
-      ) : null}
+      {unread ? <View testID="unread-dot" style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
     </View>
   );
 }
@@ -479,11 +468,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: ROW_SIGNAL_SIZE,
   },
-  signalCount: {
-    color: RowSignalColor.onFill,
-    fontSize: 10,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "700",
+  unreadDot: {
+    borderRadius: UNREAD_DOT_SIZE / 2,
+    height: UNREAD_DOT_SIZE,
+    width: UNREAD_DOT_SIZE,
   },
   swipeAction: {
     width: ACTION_WIDTH,

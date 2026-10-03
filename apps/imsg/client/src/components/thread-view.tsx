@@ -535,7 +535,7 @@ export function ThreadView({
               <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
                 {headerChat.isGroup
                   ? `${headerChat.participants.length} people ›`
-                  : `${headerChat.flags.unresponded ? "needs reply" : headerChat.flags.waiting ? "waiting" : "conversation"}${headerChat.unreadCount ? ` · ${headerChat.unreadCount} unread` : ""}`}
+                  : `${headerChat.flags.unresponded ? "needs reply" : headerChat.flags.waiting ? "waiting" : "conversation"}${headerChat.unreadCount && !headerChat.lastMessage?.isFromMe ? ` · ${headerChat.unreadCount} unread` : ""}`}
               </Text>
             </View>
           </Pressable>
