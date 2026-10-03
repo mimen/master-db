@@ -4,4 +4,5 @@
 export const commaModules: Record<string, () => Promise<unknown>> = {
   "../../_generated/api.js": () => import("../_generated/api.js"),
   "../../_generated/server.js": () => import("../_generated/server.js"),
+  "../../comma/queries.ts": () => import("./queries"),
 };
