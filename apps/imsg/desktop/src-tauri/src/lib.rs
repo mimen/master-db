@@ -260,7 +260,12 @@ fn start_oauth_loopback(app: AppHandle) -> Result<u16, String> {
             while Instant::now() < deadline {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
-                        let code = read_oauth_code(&mut stream, deadline);
+                        // Browsers open speculative connections that never send a request, so
+                        // bound each read and keep listening until one carries the code.
+                        let code = read_oauth_code(
+                            &mut stream,
+                            deadline.min(Instant::now() + Duration::from_secs(5)),
+                        );
                         let (status, message) = if code.is_some() {
                             ("200 OK", "Signed in. You can close this tab and return to Comma.")
                         } else {
@@ -278,8 +283,8 @@ fn start_oauth_loopback(app: AppHandle) -> Result<u16, String> {
                                 eprintln!("Could not finish OAuth navigation: {error}");
                             }
                             let _ = window.set_focus();
+                            break;
                         }
-                        break;
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(50));
