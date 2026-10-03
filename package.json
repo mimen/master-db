@@ -28,6 +28,7 @@
     "@doist/todoist-api-typescript": "^5.5.0",
     "convex": "^1.39.1",
     "dotenv": "^17.2.2",
+    "libphonenumber-js": "^1.13.14",
     "zod": "^4.1.9"
   },
   "devDependencies": {

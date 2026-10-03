@@ -11,6 +11,8 @@ import {
   type CommaReaction,
 } from "../schema/comma/validators";
 
+import { conversationKey } from "./conversationKey";
+
 /**
  * Bridge write path for the Comma mirror. The bridge on the Mini calls these
  * through the /comma/ingest/* HTTP routes. Every function is idempotent: a
@@ -61,10 +63,21 @@ export const upsertConversations = internalMutation({
     for (const input of conversations) {
       const primaryChatGuid = choosePrimary(input.chats);
       const chatGuids = input.chats.map((chat) => chat.chatGuid).sort();
-      const existing = await ctx.db
+      let existing = await ctx.db
         .query("comma_conversations")
         .withIndex("by_conversationKey", (q) => q.eq("conversationKey", input.conversationKey))
         .unique();
+      if (!existing) {
+        for (const chatGuid of chatGuids) {
+          const alias = await ctx.db.query("comma_chat_aliases")
+            .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
+          const candidate = alias ? await ctx.db.get(alias.conversationId) : null;
+          if (candidate && conversationKey(candidate) === input.conversationKey) {
+            existing = candidate;
+            break;
+          }
+        }
+      }
       const row = {
         conversationKey: input.conversationKey,
         primaryChatGuid,

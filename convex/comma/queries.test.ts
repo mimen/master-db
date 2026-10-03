@@ -59,6 +59,17 @@ function authed() {
 }
 
 describe("Comma read queries", () => {
+  test("empty conversations do not consume sidebar page slots", async () => {
+    const t = authed();
+    await t.run(async (ctx) => {
+      await ctx.db.insert("comma_conversations", { ...conversation("empty-newest", 100), lastMessage: undefined });
+      await ctx.db.insert("comma_conversations", conversation("visible", 10));
+      await ctx.db.insert("comma_conversations", { ...conversation("empty-oldest", 0), lastMessage: undefined });
+    });
+    const result = await t.query(api.comma.queries.listConversations, { paginationOpts });
+    expect(result.page.map((row) => row.displayName)).toEqual(["visible"]);
+    expect(result.isDone).toBe(true);
+  });
   test("conversation queries reject unauthenticated callers", async () => {
     const t = convexTest(schema, commaModules);
     const id = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("one", 1)));

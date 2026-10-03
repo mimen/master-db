@@ -58,6 +58,7 @@ export const listConversations = query({
       .query("comma_conversations")
       .withIndex("by_lastMessageAt")
       .order("desc")
+      .filter((q) => q.neq(q.field("lastMessage"), undefined))
       .paginate(args.paginationOpts);
     return {
       ...result,

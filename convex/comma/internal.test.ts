@@ -93,6 +93,28 @@ describe("choosePrimary", () => {
 });
 
 describe("upsertConversations", () => {
+  test("corrects a legacy numeric key without duplicating or moving references", async () => {
+    const t = convexTest(schema, modules);
+    const chatGuid = "SMS;-;900080006201";
+    const input = { conversationKey: "dm:+900080006201", chats: [{ chatGuid, lastMessageAt: 1000 }],
+      displayName: "900080006201", isGroup: false, participants: [{ address: "900080006201", name: null }],
+      isSpam: false, hasGroupPhoto: false, lastMessageAt: 1000 };
+    const first = (await t.mutation(internal.comma.internal.upsertConversations, { conversations: [input] }))[chatGuid]!;
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [message(first, "legacy-message", { chatGuid })] });
+    await t.run((ctx) => ctx.db.insert("comma_drafts", { conversationId: first, text: "draft", updatedAt: 1000 }));
+    const updated = { ...input, conversationKey: "dm:900080006201" };
+    const second = (await t.mutation(internal.comma.internal.upsertConversations, { conversations: [updated] }))[chatGuid];
+    expect(second).toBe(first);
+    await t.mutation(internal.comma.internal.upsertConversations, { conversations: [updated] });
+    const rows = await t.run((ctx) => ctx.db.query("comma_conversations").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0].conversationKey).toBe("dm:900080006201");
+    expect(rows[0].lastMessage?.guid).toBe("legacy-message");
+    const aliases = await t.run((ctx) => ctx.db.query("comma_chat_aliases").collect());
+    expect(aliases[0].conversationId).toBe(first);
+    const drafts = await t.run((ctx) => ctx.db.query("comma_drafts").collect());
+    expect(drafts[0].conversationId).toBe(first);
+  });
   test("keeps numbers from different countries apart", async () => {
     const t = convexTest(schema, modules);
     const us = await seedDm(t, "+15550001111", [{ chatGuid: "SMS;-;+15550001111", lastMessageAt: 2000 }]);
