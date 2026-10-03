@@ -1,5 +1,8 @@
 import { BASE_URL } from "./config";
-import { attachmentSource } from "./convex-adapters";
+import { attachmentSource, messageToMessage } from "./convex-adapters";
+import { commaApi } from "./convex-api";
+import { convexClient } from "./identity";
+import { currentDataSource } from "./settings";
 import type {
   AttachmentSummary,
   AiStatus,
@@ -131,7 +134,18 @@ export const api = {
   newChat(body: { addresses: string[]; text: string }): Promise<{ chatGuid: string }> {
     return request("/api/chats/new", { method: "POST", body: JSON.stringify(body) });
   },
-  search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
+  async search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
+    // The Convex index filters by conversation, not sender, so "from" searches stay on REST.
+    if (currentDataSource() === "convex" && !opts.from) {
+      const conversation = opts.chat ? await convexClient.query(commaApi.resolveChat, { chatGuid: opts.chat }) : null;
+      if (!opts.chat || conversation) {
+        const rows = await convexClient.query(commaApi.searchMessages, {
+          query: q,
+          ...(conversation ? { conversationId: conversation._id } : {}),
+        });
+        return rows.map(messageToMessage);
+      }
+    }
     const params = new URLSearchParams({ q });
     if (opts.chat) params.set("chat", opts.chat);
     if (opts.from) params.set("from", opts.from);

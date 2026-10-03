@@ -139,6 +139,11 @@ export function setDataSource(dataSource: Settings["dataSource"]): void {
   persist();
 }
 
+/** Non-hook read for plain modules such as lib/api.ts. */
+export function currentDataSource(): Settings["dataSource"] {
+  return state.dataSource;
+}
+
 export function useDataSource(): Settings["dataSource"] {
   return useSyncExternalStore(subscribe, () => state.dataSource, () => state.dataSource);
 }

@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "convex/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { getChats } from "@/lib/chat-store";
+import { scheduledToScheduled } from "@/lib/convex-adapters";
+import { commaApi } from "@/lib/convex-api";
+import { useDataSource } from "@/lib/settings";
 import type { ScheduledMessage } from "@shared/types";
 
 export { formatScheduledWhen } from "@/lib/scheduled";
@@ -18,8 +23,17 @@ export interface UseScheduledResult {
  * server if the cancel request fails — same as the original inline logic.
  */
 export function useScheduled(): UseScheduledResult {
-  const [items, setItems] = useState<ScheduledMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const convexMode = useDataSource() === "convex";
+  // Convex mirrors BlueBubbles' queue live; cancel, edit and send-now still go through REST.
+  const convexRows = useQuery(commaApi.listScheduled, convexMode ? {} : "skip");
+  const convexItems = useMemo(
+    () => (convexRows ? convexRows.map((row) => scheduledToScheduled(row, getChats() ?? [])) : null),
+    [convexRows],
+  );
+  const [serverItems, setItems] = useState<ScheduledMessage[]>([]);
+  const [serverLoading, setLoading] = useState(true);
+  const items = convexMode ? (convexItems ?? []) : serverItems;
+  const loading = convexMode ? convexItems === null : serverLoading;
   const generation = useRef(0);
   const requestInFlight = useRef(false);
 
@@ -43,10 +57,11 @@ export function useScheduled(): UseScheduledResult {
   }, []);
 
   useEffect(() => {
+    if (convexMode) return;
     load();
     const timer = setInterval(load, 30_000);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, convexMode]);
 
   const cancel = useCallback(
     (id: number) => {
