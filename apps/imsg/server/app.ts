@@ -7,6 +7,7 @@ import { ChatDirectory } from "./chat-directory";
 import { startBridge } from "./bridge";
 import type { ConvexIngest } from "./bridge/convex-ingest";
 import type { Config } from "./config";
+import { registerConvexTokenRoute, type ConvexAuthClient } from "./convex-token";
 import { registerDesktopReleaseRoutes } from "./desktop-version";
 import { registerDeployStatusRoute } from "./deploy-status";
 import { ContactBook } from "./contacts";
@@ -76,6 +77,7 @@ export interface AppDependencies {
   bb: BlueBubbles;
   db: OverlayDb;
   now?: () => number;
+  convexAuthClient?: ConvexAuthClient;
   names?: NameSource;
   identity?: IdentityDirectory;
   ai?: AiServiceLike;
@@ -220,6 +222,7 @@ app.get("/api/health", async (c) => {
 // Immutable release identity consumed by the thin desktop shell.
 registerDeployStatusRoute(app, webReleaseManifestPath);
 registerDesktopReleaseRoutes(app, desktopRoot, desktopReleaseRoot);
+registerConvexTokenRoute(app, config, { client: deps.convexAuthClient, now });
 
 // Lets the client force the Identity Mirror to catch up immediately after an
 // in-app "Add Contact" / rename, instead of waiting for its 5-minute tick.
