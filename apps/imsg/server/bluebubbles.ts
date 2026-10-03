@@ -171,7 +171,7 @@ export class BlueBubblesClient implements BlueBubbles {
     socket.on("typing-indicator", (payload: { display: boolean; guid: string }) =>
       this.emit({ kind: "typing", chatGuid: payload.guid, display: payload.display }),
     );
-    for (const event of ["group-name-change", "participant-added", "participant-removed", "participant-left"]) {
+    for (const event of ["group-name-change", "participant-added", "participant-removed", "participant-left", "group-icon-changed", "group-icon-removed"]) {
       socket.on(event, () => this.emit({ kind: "group-changed" }));
     }
   }

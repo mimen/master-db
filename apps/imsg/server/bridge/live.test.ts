@@ -98,3 +98,34 @@ test("send errors are mirrored and failed ingest retains the batch without throw
   expect(calls.at(-1)?.body.messages[0]).toMatchObject({ error: 42, text: "hello", attachmentGuids: ["a1"] });
   expect(live.pending).toBe(0);
 });
+
+test("message and attachment batches never exceed 200 rows", async () => {
+  const { writer, raw, ingest } = fixture();
+  await writer.refreshChats();
+  await writer.postMessages(Array.from({ length: 205 }, (_, i) => ({ ...raw, guid: `batch-${i}`, originalROWID: i + 1,
+    attachments: [{ guid: `file-${i}`, transferState: 5 }] })));
+  expect(ingest.calls.filter((call) => call.kind === "messages").map((call) => call.body.messages.length)).toEqual([200, 5]);
+  expect(ingest.calls.filter((call) => call.kind === "attachments").map((call) => call.body.attachments.length)).toEqual([200, 5]);
+});
+
+test("a group change during a refresh is not lost", async () => {
+  const { writer, bb } = fixture();
+  const live = new LiveBridge(writer);
+  stops.push(() => live.stop());
+  await live.flush();
+  const original = bb.queryChats.bind(bb);
+  let release: () => void = () => {};
+  const blocked = new Promise<void>((resolve) => { release = resolve; });
+  const read = spyOn(bb, "queryChats").mockImplementationOnce(async () => {
+    await blocked;
+    return original();
+  });
+  bb.emit({ kind: "group-changed" });
+  const flushing = live.flush();
+  await Bun.sleep(5);
+  bb.emit({ kind: "group-changed" });
+  release();
+  await flushing;
+  expect(read).toHaveBeenCalledTimes(2);
+  read.mockRestore();
+});

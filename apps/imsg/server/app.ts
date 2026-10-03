@@ -4,6 +4,8 @@ import { endTime, setMetric, startTime, timing } from "hono/timing";
 import type { BBAttributedBody, BBMessage } from "./bb-types";
 import { downloadFailureReason, type BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
+import { startBridge } from "./bridge";
+import type { ConvexIngest } from "./bridge/convex-ingest";
 import type { Config } from "./config";
 import { registerDesktopReleaseRoutes } from "./desktop-version";
 import { registerDeployStatusRoute } from "./deploy-status";
@@ -78,6 +80,8 @@ export interface AppDependencies {
   identity?: IdentityDirectory;
   ai?: AiServiceLike;
   backgroundServices?: boolean;
+  bridgeIngest?: Pick<ConvexIngest, "post">;
+  bridgeChatDbPath?: string;
   staticRoot?: string;
   desktopRoot?: string;
   desktopReleaseRoot?: string;
@@ -178,7 +182,9 @@ directory.onEvent(() => broadcast({ kind: "chats-changed" }));
 
 // ------------------------------------------------- BlueBubbles event stream
 
-wireLiveEvents(bb, directory, names, broadcast);
+const stopLiveEvents = wireLiveEvents(bb, directory, names, broadcast);
+const commaBridge = startBridge({ config, bb, db, names, now,
+  backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath });
 
 // ------------------------------------------------------------------- routes
 
@@ -201,7 +207,7 @@ for (const path of [
 }
 
 app.get("/api/health", async (c) => {
-  return c.json({ ok: true, privateApi: bb.hasPrivateApi, eventClients: sseClients.size });
+  return c.json({ ok: true, privateApi: bb.hasPrivateApi, eventClients: sseClients.size, commaBridge: commaBridge.health() });
 });
 
 // Immutable release identity consumed by the thin desktop shell.
@@ -802,6 +808,7 @@ app.post("/api/scheduled", async (c) => {
   }
   const result = await bb.createScheduledMessage(body.chatGuid, body.text.trim(), body.sendAt);
   if (!result.ok) return c.json({ error: result.error }, 502);
+  commaBridge.scheduledChanged();
   const namesByGuid = await scheduledChatNames();
   return c.json(mapScheduledMessage(result.value, namesByGuid.get(body.chatGuid) ?? body.chatGuid));
 });
@@ -815,6 +822,7 @@ app.put("/api/scheduled/:id", async (c) => {
   }
   const result = await bb.updateScheduledMessage(id, body.chatGuid, body.text.trim(), body.sendAt);
   if (!result.ok) return c.json({ error: result.error }, 502);
+  commaBridge.scheduledChanged();
   const namesByGuid = await scheduledChatNames();
   return c.json(mapScheduledMessage(result.value, namesByGuid.get(body.chatGuid) ?? body.chatGuid));
 });
@@ -824,6 +832,7 @@ app.delete("/api/scheduled/:id", async (c) => {
   if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
   const result = await bb.deleteScheduledMessage(id);
   if (!result.ok) return c.json({ error: result.error }, 502);
+  commaBridge.scheduledChanged();
   return c.json({ ok: true });
 });
 
@@ -831,6 +840,7 @@ app.post("/api/scheduled/:id/send-now", async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
   const result = await scheduledSendNow.send(id);
+  commaBridge.scheduledChanged();
   if (!result.ok) {
     const status = result.error.includes("not found") || result.error.includes("claimed") ? 409 : 502;
     return c.json({ error: result.error }, status);
@@ -1067,6 +1077,9 @@ return {
   app,
   dispose: () => {
     if (reconnectTimer) clearInterval(reconnectTimer);
+    commaBridge.stop();
+    stopLiveEvents();
+    identitySync.stop();
     identity.stop();
   },
 };

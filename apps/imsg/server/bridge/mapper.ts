@@ -46,7 +46,7 @@ export function toConversationInputs(bbChats: BBChat[], names: NameSource = unna
   });
 }
 
-/** Stable across restarts. Backfill uses revision 0; live edits supply a persisted per-message sequence below 1000. */
+/** Backfill uses revision 0. Continuous sync persists per-GUID versions above this base in OverlayDb. */
 export function sourceVersion(message: BBMessage, editSequence = 0): number {
   const rowid = message.originalROWID;
   if (!Number.isSafeInteger(rowid) || !rowid || rowid < 1) throw new Error(`Missing message ROWID for ${message.guid}`);

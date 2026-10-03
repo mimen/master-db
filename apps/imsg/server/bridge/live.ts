@@ -89,16 +89,18 @@ export class MessageWriter {
 
 export class LiveBridge {
   private messages = new Map<string, BBMessage>();
-  private refresh = true;
+  private refreshRevision = 1;
+  private refreshedRevision = 0;
   private unsubscribe: () => void;
   private work: RetryWork;
   lastEventAt: number | null = null;
 
   constructor(readonly writer: MessageWriter, private now = Date.now) {
     this.work = new RetryWork("live", () => writer.exclusive(async () => {
-      if (this.refresh) {
+      const revision = this.refreshRevision;
+      if (revision !== this.refreshedRevision) {
         await writer.refreshChats();
-        this.refresh = false;
+        this.refreshedRevision = revision;
       }
       const queued = [...this.messages.values()];
       const hydrated: BBMessage[] = [];
@@ -124,7 +126,7 @@ export class LiveBridge {
         this.work.request(100);
       } else if (event.kind === "group-changed") {
         this.lastEventAt = this.now();
-        this.refresh = true;
+        this.refreshRevision++;
         this.work.request(100);
       }
     });
