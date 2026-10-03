@@ -243,6 +243,20 @@ export declare const api: {
     syncState: FunctionReference<"mutation", "public", any, any>;
   };
   comma: {
+    drafts: {
+      clearDraft: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      setDraft: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations">; text: string },
+        null
+      >;
+    };
     outbox: {
       enqueue: FunctionReference<
         "mutation",

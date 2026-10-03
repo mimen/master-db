@@ -5,6 +5,8 @@ import { internalMutation, mutation, query } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { outboxDoc, outboxPayload, outboxStatus } from "../schema/comma/validators";
 
+import { deleteConversationDraft } from "./drafts";
+
 /**
  * The command queue. Clients enqueue (Convex Auth); the Mini's bridge claims
  * and executes through BlueBubbles, then completes each row.
@@ -42,6 +44,7 @@ export const enqueue = mutation({
       updatedAt: now,
     });
     if (payload.kind === "send") {
+      await deleteConversationDraft(ctx, conversationId);
       const conversation = await ctx.db.get(conversationId);
       await ctx.db.insert("comma_messages", {
         guid: tempGuid(clientKey),
