@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
+import { useWhoIs, type Person } from "@/lib/identity";
+import { useDataSource } from "@/lib/settings";
 import type { ChatSummary } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -41,6 +44,11 @@ export function PersonAvatar({
   name: string;
   size: number;
 }) {
+  const identity = useWhoIs(useDataSource() === "convex" ? address : null);
+  const person: (Person & { photoUrl?: string | null }) | undefined = identity?.found ? identity.person : undefined;
+  const photoUrl = person?.photoUrl;
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const uri = address ? avatarUrl(address, photoUrl === failedPhoto ? null : photoUrl) : undefined;
   const color = avatarColor(address ?? name);
   return (
     <View
@@ -64,13 +72,14 @@ export function PersonAvatar({
       </Text>
       {address && (
         <Image
-          source={{ uri: avatarUrl(address) }}
+          source={{ uri }}
+          onError={() => { if (photoUrl) setFailedPhoto(photoUrl); }}
           style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
           contentFit="cover"
           transition={80}
           // Without a recycling key a reused list cell shows the previous
           // contact's face until this one decodes.
-          recyclingKey={address}
+          recyclingKey={uri}
           cachePolicy="memory-disk"
         />
       )}
