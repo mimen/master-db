@@ -2,8 +2,8 @@ import { mkdirSync } from "node:fs";
 import { expect, test } from "../fixtures/desk";
 
 test.use({
-  launchOptions: async ({ launchOptions }, use) => {
-    await use({ ...launchOptions, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
+  launchOptions: async ({ launchOptions }, provide) => {
+    await provide({ ...launchOptions, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
   },
 });
 
