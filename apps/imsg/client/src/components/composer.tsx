@@ -1,5 +1,15 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  FlatList,
+  type GestureResponderEvent,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -41,6 +51,7 @@ import {
   type PendingAttachmentAsset,
 } from "@/lib/attachments";
 import { appleMapsLocationUrl, webLocationBlockReason } from "@/lib/message-actions";
+import { formatRecordingClock, type VoiceMemoEnd, voiceMemoOutcome } from "@/lib/voice-memo";
 import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
 import { ScheduleEditor } from "./schedule-editor";
@@ -804,7 +815,13 @@ ${url}` : url;
   };
 
   // ---------------------------------------------------------- voice memo
+  // Native: hold to record, release sends, slide off cancels. Web: a click
+  // toggles recording on, then explicit Send / Cancel buttons (or Esc) end it.
+  const recordStartedAt = useRef<number | null>(null);
+  const micHeld = useRef(false);
+
   const startRecording = async () => {
+    if (recordStartedAt.current !== null) return;
     try {
       const perm = await AudioModule.requestRecordingPermissionsAsync();
       if (!perm.granted) {
@@ -813,16 +830,23 @@ ${url}` : url;
       }
       await recorder.prepareToRecordAsync();
       recorder.record();
+      recordStartedAt.current = Date.now();
+      // The hold ended while the permission prompt or prepare was in flight.
+      if (Platform.OS !== "web" && !micHeld.current) void finishRecording("cancel");
     } catch {
       showToast("Couldn't start recording");
     }
   };
 
-  const stopRecordingAndSend = async () => {
+  const finishRecording = async (end: VoiceMemoEnd) => {
+    const startedAt = recordStartedAt.current;
+    if (startedAt === null) return;
+    recordStartedAt.current = null;
+    const outcome = voiceMemoOutcome(end, Date.now() - startedAt);
     try {
       await recorder.stop();
       const uri = recorder.uri;
-      if (!uri) return;
+      if (outcome === "discard" || !uri) return;
       setBusy(true);
       const form = new FormData();
       const name = `voice-${Date.now()}.m4a`;
@@ -889,6 +913,23 @@ ${url}` : url;
   };
 
   const recording = recorderState.isRecording;
+  const finishRecordingRef = useRef(finishRecording);
+  finishRecordingRef.current = finishRecording;
+
+  // Esc cancels a take. Window capture runs before the app's document-level
+  // dispatcher, so Escape here never also closes the thread.
+  useEffect(() => {
+    if (Platform.OS !== "web" || !recording || typeof window === "undefined") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      void finishRecordingRef.current("cancel");
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recording]);
+
   const canSend = text.trim().length > 0 || pending.length > 0;
   const canSchedule = text.trim().length > 0 && pending.length === 0 && !editing;
   const sendColor = isSMS ? theme.sms : theme.bubbleMine;
@@ -1051,9 +1092,24 @@ ${url}` : url;
         {recording ? (
           <View style={[styles.input, styles.recordingBar, { borderColor: theme.divider }]}>
             <View style={styles.recDot} />
-            <Text style={{ color: theme.text, fontSize: 15 }}>
-              Recording {Math.floor((recorderState.durationMillis ?? 0) / 1000)}s…
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{ color: theme.text, fontSize: 15, fontVariant: ["tabular-nums"], flex: 1 }}
+            >
+              {formatRecordingClock(recorderState.durationMillis ?? 0)}
             </Text>
+            {Platform.OS === "web" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel recording"
+                onPress={() => void finishRecording("cancel")}
+                style={({ hovered, pressed }) => [styles.recCancel, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+              >
+                <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Cancel · Esc</Text>
+              </Pressable>
+            ) : (
+              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Slide away to cancel</Text>
+            )}
           </View>
         ) : (
           <View style={{ flex: 1 }}>
@@ -1118,8 +1174,27 @@ ${url}` : url;
             </Pressable>
           ) : (
             <Pressable
-              onPressIn={editing ? undefined : startRecording}
-              onPressOut={recording ? () => void stopRecordingAndSend() : undefined}
+              accessibilityRole="button"
+              accessibilityLabel={recording ? "Send voice message" : "Record voice message"}
+              {...(Platform.OS === "web"
+                ? {
+                    onPress: () => void (recording ? finishRecording("send") : startRecording()),
+                  }
+                : {
+                    onPressIn: () => {
+                      micHeld.current = true;
+                      void startRecording();
+                    },
+                    // RN Pressable fires onPressOut on release AND when the finger
+                    // slides off the hit rect; only a release inside it sends.
+                    onPressOut: (event: GestureResponderEvent) => {
+                      micHeld.current = false;
+                      const { locationX, locationY } = event.nativeEvent;
+                      const inside = locationX >= -24 && locationX <= 58 && locationY >= -24 && locationY <= 58;
+                      void finishRecording(inside ? "send" : "cancel");
+                    },
+                  })}
+              hitSlop={8}
               disabled={busy || Boolean(editing)}
               style={({ hovered, pressed }) => [
                 styles.sendButton,
@@ -1131,7 +1206,11 @@ ${url}` : url;
                 !recording && (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
               ]}
             >
-              <Ionicons name={recording ? "stop" : "mic"} size={19} color={recording ? theme.onAccent : theme.textSecondary} />
+              <Ionicons
+                name={recording ? (Platform.OS === "web" ? "arrow-up" : "stop") : "mic"}
+                size={19}
+                color={recording ? theme.onAccent : theme.textSecondary}
+              />
             </Pressable>
           )}
         </View>
@@ -1261,6 +1340,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
   },
   recordingBar: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -1292,6 +1372,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     borderRadius: Radii.chip,
   },
+  recCancel: { borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
   recDot: {
     width: 10,
     height: 10,
