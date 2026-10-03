@@ -71,7 +71,7 @@ export interface KeyboardRuntime {
 
 /**
  * Registered by the conversation list pane so keyboard order follows the
- * RENDERED order (priority shelf + filters + pins), which the raw chats array
+ * RENDERED order (filters + pins), which the raw chats array
  * does not reflect. The pane that owns visual order owns keyboard order.
  */
 export interface ListAdapter {

@@ -10,7 +10,7 @@ interface ChatActions {
 }
 
 /**
- * Shared conversation menu — used by rows, the priority shelf, and inside a
+ * Shared conversation menu — used by rows and inside a
  * chat. Queue resolution stays contextual; this menu contains only durable
  * conversation actions.
  */

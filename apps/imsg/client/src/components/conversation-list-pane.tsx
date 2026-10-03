@@ -6,7 +6,6 @@ import { FlashList } from "@shopify/flash-list";
 
 import { ChatRow } from "./chat-row";
 import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
-import type { PriorityShelfHandle } from "./priority-shelf";
 import { SkeletonList } from "./skeleton-list";
 import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
 
@@ -142,10 +141,8 @@ export function ConversationListPane({
   }, [model.listChats]);
   const deskModel = useMemo(() => wide ? ({
     ...model,
-    showPriorityShelf: false,
-    priority: [],
     listChats: deskChats,
-    navigationEntries: deskChats.map((chat, index) => ({ chat, location: { kind: "list" as const, index } })),
+    navigationEntries: deskChats.map((chat, index) => ({ chat, index })),
   }) : model, [model, deskChats, wide]);
   const sweepableChats = useMemo(
     () => deskModel.listChats.filter((chat) => chat.flags.unresponded),
@@ -188,14 +185,12 @@ export function ConversationListPane({
     [wide, glide, selectedGuid, onOpenChat],
   );
 
-  const shelfRef = useRef<PriorityShelfHandle>(null);
   useConversationListKeyboard({
     enabled: wide,
     model: deskModel,
     selectedGuid,
     viewport,
     search,
-    shelf: shelfRef,
     onOpenChat,
     onPreviewChat,
   });
@@ -250,8 +245,8 @@ export function ConversationListPane({
       ) : undefined}
       thumb={<SyntheticScrollThumb state={viewport.thumb} />}
     >
-      {/* Filters and the labeled shelf ride the list header, passing
-          behind the glass top bar. Wide search is sticky chrome. */}
+      {/* Filters ride the list header, passing behind the glass top bar.
+          Wide search is sticky chrome. */}
       <ConversationScrollList
           testID="conversation-list-scroll"
           // FlashListRef and FlatList's ref don't overlap; callers only use

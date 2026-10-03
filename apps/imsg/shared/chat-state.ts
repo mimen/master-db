@@ -156,65 +156,6 @@ export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCoun
   ) as StateCounts;
 }
 
-export interface PriorityShelfPartition {
-  priority: ChatSummary[];
-  recent: ChatSummary[];
-}
-
-/**
- * Selects the shelf's (up to 10) conversations, CRM priority first:
- *
- *   1. Chats with CRM priority P1–P2, best priority first (P1 before P2);
- *      ties within a priority level break on the same oldest-unread
- *      ordering as the fallback tier, then original index (so a
- *      no-unread P1 still sorts deterministically against another
- *      no-unread P1).
- *   2. Remaining slots fill with today's oldest-unread chats (unchanged
- *      rule), skipping anything already placed by (1).
- *
- * A chat with no unread AND no P1/P2 priority never appears here — the
- * shelf must not become a permanent pin list. When nothing in the input has
- * CRM priority, this is exactly the old "10 oldest unread" behavior.
- */
-export function partitionPriorityShelf(chats: ChatSummary[]): PriorityShelfPartition {
-  const indexed = chats.map((chat, index) => ({ chat, index }));
-
-  const highPriority = ({ chat }: { chat: ChatSummary }): boolean =>
-    chat.crm?.priority === 1 || chat.crm?.priority === 2;
-
-  // Oldest-unread-first, with no-unread entries sorted after any unread
-  // entry (by original index among themselves) — the same tie-break the
-  // old unread-only selection used, extended to rank a no-unread priority
-  // chat below any unread chat within its own priority tier.
-  const byOldestUnread = (
-    a: { chat: ChatSummary; index: number },
-    b: { chat: ChatSummary; index: number },
-  ): number => {
-    const aAt = a.chat.firstUnreadAt;
-    const bAt = b.chat.firstUnreadAt;
-    if (typeof aAt === "number" && typeof bAt === "number") return aAt - bAt || a.index - b.index;
-    if (typeof aAt === "number") return -1;
-    if (typeof bAt === "number") return 1;
-    return a.index - b.index;
-  };
-
-  const priorityTier = indexed
-    .filter(highPriority)
-    .sort((a, b) => a.chat.crm!.priority! - b.chat.crm!.priority! || byOldestUnread(a, b));
-  const priorityTierChats = new Set(priorityTier.map(({ chat }) => chat));
-
-  const unreadTier = indexed
-    .filter(({ chat }) => !priorityTierChats.has(chat) && typeof chat.firstUnreadAt === "number")
-    .sort(byOldestUnread);
-
-  const priority = [...priorityTier, ...unreadTier].slice(0, 10).map(({ chat }) => chat);
-  const priorityChats = new Set(priority);
-  return {
-    priority,
-    recent: chats.filter((chat) => !priorityChats.has(chat)),
-  };
-}
-
 /**
  * The SSE fast path: applies a message we already know about directly to a
  * summary list, ahead of a full rebuild — new last message, flag flips

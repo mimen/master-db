@@ -108,35 +108,23 @@ describe("desktopInboxTitle", () => {
 });
 
 describe("deriveInboxModel", () => {
-  test("derives the default priority shelf, pinned-first recent list, and section metadata", () => {
-    const oldestUnread = makeChat({ guid: "oldest", firstUnreadAt: 10 });
-    const newerUnread = makeChat({ guid: "newer", firstUnreadAt: 20 });
-    const pinnedRecent = makeChat({
-      guid: "pinned",
-      flags: { ...makeChat().flags, pinned: true },
-    });
-    const recent = makeChat({ guid: "recent" });
-
-    const model = deriveInboxModel(
-      [newerUnread, pinnedRecent, recent, oldestUnread],
-      DEFAULT_INBOX_FILTERS,
-      "  ",
+  test("the default All view lists every conversation, pinned first", () => {
+    const chats = Array.from({ length: 14 }, (_, i) =>
+      makeChat({ guid: `unread-${i}`, firstUnreadAt: i, flags: { ...makeChat().flags, unread: true } }),
     );
+    const pinned = makeChat({ guid: "pinned", flags: { ...makeChat().flags, pinned: true } });
+    const priority = makeChat({ guid: "p1", crm: { priority: 1 } });
 
-    expect(model.showPriorityShelf).toBe(true);
-    expect(model.priority).toEqual([oldestUnread, newerUnread]);
-    expect(model.listChats).toEqual([pinnedRecent, recent]);
-    // Navigation order is rendered order: shelf first, then the list.
-    expect(model.navigationEntries.map((e) => e.chat.guid)).toEqual([
-      "oldest",
-      "newer",
+    const model = deriveInboxModel([...chats, priority, pinned], DEFAULT_INBOX_FILTERS, "  ");
+
+    expect(model.listChats.map((c) => c.guid)).toEqual([
       "pinned",
-      "recent",
+      ...chats.map((c) => c.guid),
+      "p1",
     ]);
-    expect(model.navigationEntries[0]?.location).toEqual({ kind: "priority", index: 0 });
-    expect(model.navigationEntries[2]?.location).toEqual({ kind: "list", index: 0 });
+    expect(model.navigationEntries.map((e) => e.index)).toEqual(model.listChats.map((_, i) => i));
     expect(model.sectionLabel).toBe("Recent");
-    expect(model.sectionCount).toBe(2);
+    expect(model.sectionCount).toBe(16);
   });
 
   test("hides unknown and spam by default, reveals them under Unknown and Everyone", () => {
@@ -153,23 +141,8 @@ describe("deriveInboxModel", () => {
     expect(
       deriveInboxModel([known, unknown, spam], { state: "all", type: "all" }, "").listChats,
     ).toEqual([known, unknown, spam]);
-    // Everyone is not the default, so it loses the priority shelf and gets a
-    // heading that names the lens.
     const everyone = deriveInboxModel([known, unknown, spam], { state: "all", type: "all" }, "");
-    expect(everyone.showPriorityShelf).toBe(false);
     expect(everyone.sectionLabel).toBe("Everyone");
-  });
-
-  test("the default view keeps its priority shelf and Recent heading", () => {
-    const unread = makeChat({ guid: "unread", firstUnreadAt: 10 });
-    const stranger = makeChat({ guid: "stranger", known: false, firstUnreadAt: 5 });
-
-    const model = deriveInboxModel([unread, stranger], DEFAULT_INBOX_FILTERS, "");
-
-    expect(model.showPriorityShelf).toBe(true);
-    expect(model.priority).toEqual([unread]);
-    expect(model.sectionLabel).toBe("Recent");
-    expect(activeInboxFilterCount(DEFAULT_INBOX_FILTERS)).toBe(0);
   });
 
   test("search supersedes the state/type lenses (matches across everything)", () => {
@@ -198,10 +171,7 @@ describe("deriveInboxModel", () => {
     );
 
     // Search is a mode: the unread/group lenses do NOT constrain results.
-    expect(model.showPriorityShelf).toBe(false);
-    expect(model.priority).toEqual([]);
     expect(model.listChats).toEqual([groupUnread, directUnread, groupWaiting]);
-    expect(model.navigationEntries.map((e) => e.location.kind)).toEqual(["list", "list", "list"]);
     expect(model.sectionLabel).toBe("Search Results");
     expect(model.sectionCount).toBe(3);
   });
@@ -222,7 +192,6 @@ describe("deriveInboxModel", () => {
     );
 
     expect(model.listChats).toEqual([settled]);
-    expect(model.showPriorityShelf).toBe(false);
     expect(model.sectionLabel).toBe("Settled");
     expect(model.sectionCount).toBe(1);
   });
@@ -273,8 +242,6 @@ describe("deriveInboxModel", () => {
 
     const model = deriveInboxModel([chat], DEFAULT_INBOX_FILTERS, "invoices");
 
-    expect(model.listChats).toEqual([chat]);
-    expect(model.showPriorityShelf).toBe(false);
     expect(model.listChats).toEqual([chat]);
     expect(model.sectionLabel).toBe("Search Results");
     expect(model.sectionCount).toBe(1);

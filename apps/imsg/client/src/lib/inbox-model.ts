@@ -1,4 +1,4 @@
-import { matchesFilters, partitionPriorityShelf } from "@shared/chat-state";
+import { matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two independent lenses that define the visible conversation list. */
@@ -104,27 +104,17 @@ function sectionLabel(filters: InboxFilters, hasSearch: boolean): string {
   return `${STATE_LABELS[filters.state]} · ${TYPE_LABELS[filters.type]}`;
 }
 
-/** Where a navigable conversation is rendered: the horizontal priority shelf
- * or the vertical list. Keyboard code dispatches reveal-behavior on this. */
-export type InboxNavigationLocation =
-  | { kind: "priority"; index: number }
-  | { kind: "list"; index: number };
-
+/** A navigable conversation and its rendered row index. */
 export interface InboxNavigationEntry {
   chat: ChatSummary;
-  location: InboxNavigationLocation;
+  index: number;
 }
 
-/** Derived presentation data for the conversation list and priority shelf. */
+/** Derived presentation data for the conversation list. */
 export interface InboxModel {
-  /** Whether the priority shelf is meaningful for this unfiltered inbox view. */
-  showPriorityShelf: boolean;
-  /** Oldest unread conversations, sorted by their first unread timestamp. */
-  priority: ChatSummary[];
-  /** The main list, with pinned recent chats placed before unpinned recent chats. */
+  /** The list, with pinned chats placed before unpinned chats. */
   listChats: ChatSummary[];
-  /** Every navigable conversation in RENDERED order (shelf first, then list),
-   * with its rendered location — the single source of keyboard order. */
+  /** Every navigable conversation in rendered order, the single source of keyboard order. */
   navigationEntries: InboxNavigationEntry[];
   /** Contextual heading above the main list. */
   sectionLabel: string;
@@ -158,7 +148,7 @@ export function neighborAfterRemoval(
 
 /**
  * Produces the complete presentation model from the chat directory. This keeps
- * lens filtering, text search, priority eligibility, and pinned ordering in
+ * lens filtering, text search, and pinned ordering in
  * one pure function so every state/type pair follows the same rules.
  */
 export function deriveInboxModel(
@@ -195,24 +185,13 @@ export function deriveInboxModel(
         : matchesFilters(chat, filters.state, filters.type)
       : matchesNeedle(chat),
   );
-  const showPriorityShelf =
-    isDefaultStateLens(filters.state) && isDefaultTypeLens(filters.type) && needle.length === 0;
-  const { priority, recent } = partitionPriorityShelf(searchedChats);
-  const shelf = showPriorityShelf ? priority : [];
-  const listSource = showPriorityShelf ? recent : searchedChats;
   const listChats = [
-    ...listSource.filter((chat) => chat.flags.pinned),
-    ...listSource.filter((chat) => !chat.flags.pinned),
-  ];
-  const navigationEntries: InboxNavigationEntry[] = [
-    ...shelf.map((chat, index) => ({ chat, location: { kind: "priority", index } as const })),
-    ...listChats.map((chat, index) => ({ chat, location: { kind: "list", index } as const })),
+    ...searchedChats.filter((chat) => chat.flags.pinned),
+    ...searchedChats.filter((chat) => !chat.flags.pinned),
   ];
   return {
-    showPriorityShelf,
-    priority: shelf,
     listChats,
-    navigationEntries,
+    navigationEntries: listChats.map((chat, index) => ({ chat, index })),
     sectionLabel: sectionLabel(filters, needle.length > 0),
     sectionCount: listChats.length,
   };

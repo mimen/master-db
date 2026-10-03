@@ -28,7 +28,7 @@ export interface ConversationListViewport {
 
   scrollToTop(): void;
   /** Scroll so a navigation target is fully visible, edge-pinned toward the
-   * direction of travel. Priority targets reveal the header (shelf). */
+   * direction of travel. */
   revealEntry(entry: InboxNavigationEntry, delta: -1 | 1): void;
 }
 
@@ -112,16 +112,11 @@ export function useConversationListViewport(args: {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     },
     revealEntry(entry, delta) {
-      if (entry.location.kind === "priority") {
-        // Shelf rows live in the list header — scroll to top to reveal them.
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
-        return;
-      }
       // Keep the glide cursor FULLY on screen with edge-pinning: scroll the
       // minimum so the row sits flush at the edge being moved toward, where
       // it stays step after step (no recentering jumps). The viewable range
       // counts only fully-visible rows, so a partially clipped cursor pins.
-      const listIndex = entry.location.index;
+      const listIndex = entry.index;
       const range = viewableRange.current;
       if (range === null || listIndex < range.first || listIndex > range.last) {
         // Top pin must clear the frosted bar, which overlays content.
