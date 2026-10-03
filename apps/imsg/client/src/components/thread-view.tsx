@@ -34,13 +34,13 @@ import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
+import { settleActionFor } from "@shared/chat-state";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
 import { CenteredSpinner } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
-import { HoverFillButton } from "./hover-fill-button";
 import { TypingIndicator } from "./typing-indicator";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -575,6 +575,19 @@ export function ThreadView({
                 />}
               </Pressable>
             )}
+            {settleActionFor(headerChat) === "settle" && (
+              <Pressable
+                ref={(node) => { if (Platform.OS === "web") (node as unknown as HTMLElement | null)?.setAttribute("title", "Settle (⌘E)"); }}
+                testID="thread-settle"
+                accessibilityRole="button"
+                accessibilityLabel="Settle (⌘E)"
+                onPress={() => { void toggleSettleChat(headerChat); }}
+                hitSlop={8}
+                style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+              >
+                {({ hovered, pressed }) => <Ionicons name="checkmark-circle-outline" size={22} color={hovered || pressed ? theme.text : theme.textSecondary} />}
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Conversation info"
@@ -587,18 +600,6 @@ export function ThreadView({
           </View>
         </View>
       )}
-      {headerChat && (headerChat.flags.unresponded || headerChat.flags.waiting) && (
-        <View testID="resolve-strip" style={[styles.resolveStrip, { backgroundColor: headerChat.flags.unresponded ? "rgba(0,122,255,0.06)" : theme.backgroundElement, borderBottomColor: headerChat.flags.unresponded ? "rgba(0,122,255,0.15)" : theme.divider }]}>
-          <Ionicons name={headerChat.flags.unresponded ? "flag" : "hourglass-outline"} size={16} color={headerChat.flags.unresponded ? theme.accent : theme.textSecondary} />
-          <Text numberOfLines={1} style={[styles.resolveCopy, { color: theme.text }]}>
-            {headerChat.flags.unresponded
-              ? "In Needs Reply. Sending a reply settles it automatically."
-              : "In Waiting. Settle it when you no longer need a response."}
-          </Text>
-          <HoverFillButton accessibilityLabel="Settle conversation" onPress={() => { void toggleSettleChat(headerChat); }} restFill={theme.background} hoverFill={theme.backgroundSelected} style={styles.resolveAction}><Ionicons name="checkmark" size={13} color={theme.text} /><Text style={[styles.resolveActionText, { color: theme.text }]}>Settle<Text style={{ color: theme.textSecondary }}> ⌘E</Text></Text></HoverFillButton>
-        </View>
-      )}
-
       {searchOpen && (
         <View style={[styles.searchShelf, { backgroundColor: theme.backgroundElement, borderBottomColor: theme.divider }]}>
           <View style={[styles.searchField, { backgroundColor: theme.background }]}>
@@ -842,31 +843,6 @@ const styles = StyleSheet.create({
     width: 32,
   },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },
-  resolveStrip: {
-    alignItems: "center",
-    borderBottomWidth: 0.5,
-    flexDirection: "row",
-    gap: 8,
-    minHeight: 41,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  resolveCopy: {
-    flex: 1,
-    fontSize: 12,
-  },
-  resolveAction: {
-    alignItems: "center",
-    borderRadius: 7,
-    flexDirection: "row",
-    gap: 4,
-    height: 24,
-    paddingHorizontal: 8,
-  },
-  resolveActionText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
   searchShelf: {
     flexDirection: "row",
     alignItems: "center",

@@ -140,11 +140,11 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
   await page.keyboard.press("Tab");
   await expect(row.getByRole("button", { name: /^Settle / })).toBeFocused();
   await row.click();
-  await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).toContainText("E");
+  await expect(page.getByTestId("thread-settle")).toHaveAccessibleName("Settle (⌘E)");
+  await expect(page.getByTestId("thread-settle")).toHaveAttribute("title", "Settle (⌘E)");
 
   await page.getByRole("radio", { name: /^All,/ }).click();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
-  await expect(page.getByTestId("resolve-strip").getByRole("button", { name: "Settle conversation" })).not.toContainText(" E");
   row = page.getByTestId("conversation-row").first();
   await row.hover();
   await expect(row.getByText("Settle", { exact: true })).toHaveCount(0);
@@ -167,19 +167,17 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
   await expect(menu.getByText("Hide from Unresponded", { exact: true })).toHaveCount(0);
 });
 
-test("thread, resolve strip, inspector breakpoint, and global Sweep geometry", async ({ desk }) => {
+test("thread, header settle, inspector breakpoint, and global Sweep geometry", async ({ desk }) => {
   test.setTimeout(60_000);
   for (const width of [900, 1039, 1040, 1300]) {
     await resetAndOpen(desk, width, "light");
     const page = desk.page;
     await page.getByTestId("conversation-row").first().click();
-    const resolveStrip = page.getByTestId("resolve-strip");
-    await expect(resolveStrip).toBeVisible();
-    await expect(resolveStrip.getByRole("button", { name: "Settle conversation" })).toBeVisible();
-    await expect(resolveStrip.getByText("Done", { exact: true })).toHaveCount(0);
-    await expect(resolveStrip.getByText("Let go", { exact: true })).toHaveCount(0);
-    const stripBox = await resolveStrip.boundingBox();
-    expect(stripBox?.height).toBeGreaterThanOrEqual(40);
+    await expect(page.getByTestId("resolve-strip")).toHaveCount(0);
+    const settle = page.getByTestId("thread-settle");
+    await expect(settle).toBeVisible();
+    const settleBox = await settle.boundingBox();
+    expect(settleBox?.height).toBe(28);
 
     await page.keyboard.press("Meta+i");
     await expect(page.getByText("Details", { exact: true })).toBeVisible();
@@ -365,7 +363,7 @@ test("persistent desktop workspaces keep one rail, selections, and independent s
   const messageSearch = page.getByLabel("Search conversations and messages");
   await messageSearch.fill("Alex");
   await page.getByTestId("conversation-row").first().click();
-  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+  await expect(page.getByTestId("thread-settle")).toBeVisible();
 
   await page.getByRole("button", { name: "Contacts" }).click();
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
@@ -376,7 +374,7 @@ test("persistent desktop workspaces keep one rail, selections, and independent s
 
   await page.getByTestId("triage-rail").getByRole("button", { name: "Messages" }).click();
   await expect(messageSearch).toHaveValue("Alex");
-  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+  await expect(page.getByTestId("thread-settle")).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-persistent-messages.png", animations: "disabled" });
 
   await page.getByRole("button", { name: "Contacts" }).click();
@@ -446,7 +444,7 @@ test("wide cold routes project into the persistent desktop shell", async ({ desk
   await expect.poll(() => page.getByText("Jordan Lee", { exact: true }).filter({ visible: true }).count()).toBeGreaterThanOrEqual(2);
 
   await page.goto(`/chat/${encodeURIComponent(desk.chats.needs)}?name=Alex%20Rivera`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+  await expect(page.getByTestId("thread-settle")).toBeVisible();
 
   await page.goto(`/chat-info?guid=${encodeURIComponent(desk.chats.needs)}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByText("Details", { exact: true }).last()).toBeVisible();
@@ -528,7 +526,7 @@ test("Cmd+W clears the shell and route selection atomically", async ({ desk }) =
   await resetAndOpen(desk, 1300, "dark");
   const page = desk.page;
   await page.getByTestId("conversation-row").first().click();
-  await expect(page.getByTestId("resolve-strip")).toBeVisible();
+  await expect(page.getByTestId("thread-settle")).toBeVisible();
 
   await page.keyboard.press("Meta+w");
   await expect(page.getByText("Select a conversation", { exact: true }).filter({ visible: true })).toHaveCount(1);
@@ -573,7 +571,7 @@ test("every visible control remains stable and usable on hover", async ({ desk }
     await page.screenshot({ path: `/tmp/comma-hover-queue-${scheme}.png`, animations: "disabled" });
 
     await page.getByTestId("conversation-row").nth(1).click();
-    await expect(page.getByTestId("resolve-strip")).toBeVisible();
+    await expect(page.getByTestId("thread-settle")).toBeVisible();
     for (const control of await page.getByRole("button").all()) await expectHoverStable(control);
     await page.screenshot({ path: `/tmp/comma-hover-thread-${scheme}.png`, animations: "disabled" });
 
@@ -600,7 +598,7 @@ test("typing indicator renders from peer presence", async ({ desk }) => {
   await expect(indicator).toBeVisible();
   await expect(indicator.locator("div")).toHaveCount(3);
   const indicatorBox = await indicator.boundingBox();
-  const threadBox = await desk.page.getByTestId("resolve-strip").boundingBox();
+  const threadBox = await desk.page.getByTestId("thread-view").boundingBox();
   expect(indicatorBox?.x).toBeCloseTo((threadBox?.x ?? 0) + 14, 1);
 
   const positions = await firstDot.evaluate(async (dot) => {
