@@ -100,7 +100,10 @@ function tapbackEmoji(m: BBMessage): string | undefined {
 
 function parseTapback(m: BBMessage): Tapback | null {
   if (!isTapback(m)) return null;
-  const value = m.associatedMessageType;
+  // BlueBubbles names the classic tapbacks ("love", "-love") and stringifies
+  // every other code, so custom emoji arrive as "2006" / "3006".
+  const raw = m.associatedMessageType;
+  const value = typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : raw;
   if (typeof value === "number") {
     const remove = value >= 3000;
     const index = value - (remove ? 3000 : 2000);
@@ -113,8 +116,8 @@ function parseTapback(m: BBMessage): Tapback | null {
   }
   if (typeof value !== "string") return null;
   const remove = value.startsWith("-");
-  const raw = remove ? value.slice(1) : value;
-  return TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number]) ? { type: raw, remove } : null;
+  const name = remove ? value.slice(1) : value;
+  return TAPBACK_NAMES.includes(name as (typeof TAPBACK_NAMES)[number]) ? { type: name, remove } : null;
 }
 
 /** Strips the "p:0/" / "bp:0/" part prefix from an associated message GUID. */

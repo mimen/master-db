@@ -249,7 +249,7 @@ describe("custom-emoji tapbacks", () => {
       isFromMe: false,
       handle: { address: "+16195550101" },
       associatedMessageGuid: "p:0/7C5B4020-A903-489B-8C04-611B0CCB5A06",
-      associatedMessageType: 2006,
+      associatedMessageType: "2006",
       ...extra,
     };
   }
@@ -270,14 +270,14 @@ describe("custom-emoji tapbacks", () => {
       dateCreated: 3000,
       isFromMe: true,
       handle: null,
-      associatedMessageType: 3006,
+      associatedMessageType: "3006",
     });
     expect(buildThread([remove, add, target], chat, names)[0]?.reactions).toEqual([]);
   });
 
   test("a 3006 for a different emoji leaves the other reaction attached", () => {
     const add = emojiTapback({});
-    const remove = emojiTapback({ guid: "R2", text: "Removed 👍 from “Hahaha”", dateCreated: 3000, associatedMessageType: 3006 });
+    const remove = emojiTapback({ guid: "R2", text: "Removed 👍 from “Hahaha”", dateCreated: 3000, associatedMessageType: "3006" });
     expect(buildThread([remove, add, target], chat, names)[0]?.reactions.map((r) => r.emoji)).toEqual(["😍"]);
   });
 

@@ -103,7 +103,7 @@ describe("custom-emoji tapbacks live", () => {
         isFromMe: false,
         handle: { address: "+15550001111" },
         associatedMessageGuid: "p:0/m1",
-        associatedMessageType: 2006,
+        associatedMessageType: "2006",
         chats: [{ guid: CHAT }],
       },
     });
@@ -127,7 +127,7 @@ describe("custom-emoji tapbacks live", () => {
         dateCreated: 3000,
         isFromMe: true,
         associatedMessageGuid: "p:0/m1",
-        associatedMessageType: 3006,
+        associatedMessageType: "3006",
         chats: [{ guid: CHAT }],
       },
     });
