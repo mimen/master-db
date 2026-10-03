@@ -4,6 +4,7 @@ import { defineSchema } from "convex/server";
 // Service table definitions
 import * as agentic from "./schema/agentic";
 import * as beeper from "./schema/beeper";
+import * as comma from "./schema/comma";
 import * as identity from "./schema/identity";
 import * as routines from "./schema/routines";
 import { sync_state } from "./schema/sync/syncState";
@@ -26,6 +27,9 @@ export default defineSchema({
 
   // Beeper tables
   ...beeper,
+
+  // Comma iMessage mirror (bridge-written, auth-gated reads)
+  ...comma,
 
   // Identity graph (cross-network people + identities, Convex-canonical)
   ...identity,
