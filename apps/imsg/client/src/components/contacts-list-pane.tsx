@@ -126,7 +126,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
   const metrics = useSyntheticScrollMetrics({
     chromeHeight: topBarH,
     footerHeight: 0,
-    estimatedContentHeight: rows.length * (TriageGeometry.rowHeight + TriageGeometry.rowGap) + topBarH + 64,
+    estimatedContentHeight: rows.length * TriageGeometry.rowHeight + topBarH + 64,
   });
 
   const searchField = (
@@ -162,54 +162,51 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
 
   const renderRow = ({ item }: { item: Row }) => {
     if (item.kind === "header") return sectionHeader(item.letter);
-    if (item.kind === "favorites-header") return sectionHeader("★ Favorites");
+    if (item.kind === "favorites-header") return sectionHeader("Favorites");
     if (item.kind === "airtable-header") return sectionHeader("From Airtable");
     if (item.kind === "airtable") {
       const adding = addingId === item.human.record_id;
       return (
-        <ContactCard wide={wide}>
-          <ListRow
-            paddingHorizontal={wide ? 12 : 18}
-            minHeight={wide ? TriageGeometry.rowHeight : undefined}
-            hoverFill={wide ? visual.cardHover : undefined}
-            selectedFill={wide ? visual.cardSelected : undefined}
-            titleWeight="400"
-            disabled={adding}
-            onPress={() => addAirtableContact(item.human)}
-            leading={<PersonAvatar address={null} name={item.human.display_name} size={wide ? 34 : 36} />}
-            title={item.human.display_name}
-            trailing={
-              adding ? (
-                <ActivityIndicator size="small" />
-              ) : (
-                <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
-              )
-            }
-          />
-        </ContactCard>
-      );
-    }
-    return (
-      <ContactCard wide={wide} selected={selectedId === item.person._id}>
         <ListRow
           paddingHorizontal={wide ? 12 : 18}
           minHeight={wide ? TriageGeometry.rowHeight : undefined}
+          style={wide ? styles.rowWide : undefined}
           hoverFill={wide ? visual.cardHover : undefined}
-          selectedFill={wide ? visual.cardSelected : undefined}
           titleWeight="400"
-          selected={selectedId === item.person._id}
-          onPress={() => onSelectPerson(item.person)}
-          leading={
-            <PersonAvatar address={primaryHandle(item.person) ?? null} name={item.person.display_name} size={wide ? 34 : 36} />
-          }
-          title={item.title}
+          disabled={adding}
+          onPress={() => addAirtableContact(item.human)}
+          leading={<PersonAvatar address={null} name={item.human.display_name} size={wide ? 34 : 36} />}
+          title={item.human.display_name}
           trailing={
-            item.person.is_favorite ? (
-              <Ionicons name="star" size={15} color={FAVORITE_GOLD} accessibilityLabel="Favorite" />
-            ) : undefined
+            adding ? (
+              <ActivityIndicator size="small" />
+            ) : (
+              <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
+            )
           }
         />
-      </ContactCard>
+      );
+    }
+    return (
+      <ListRow
+        paddingHorizontal={wide ? 12 : 18}
+        minHeight={wide ? TriageGeometry.rowHeight : undefined}
+        style={wide ? styles.rowWide : undefined}
+        hoverFill={wide ? visual.cardHover : undefined}
+        selectedFill={wide ? visual.cardSelected : undefined}
+        titleWeight="400"
+        selected={selectedId === item.person._id}
+        onPress={() => onSelectPerson(item.person)}
+        leading={
+          <PersonAvatar address={primaryHandle(item.person) ?? null} name={item.person.display_name} size={wide ? 34 : 36} />
+        }
+        title={item.title}
+        trailing={
+          item.person.is_favorite ? (
+            <Ionicons name="star" size={15} color={FAVORITE_GOLD} accessibilityLabel="Favorite" />
+          ) : undefined
+        }
+      />
     );
   };
 
@@ -272,52 +269,14 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
   return pane;
 }
 
-/** Floating card wrapper — the same geometry ChatRow uses on the desk, so
- * contact rows read as the same material as conversation rows instead of
- * letting the desk gradient wash through a flat list. */
-function ContactCard({
-  wide,
-  selected = false,
-  children,
-}: {
-  wide: boolean;
-  selected?: boolean;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const visual = useTriageTheme();
-  if (!wide) return <>{children}</>;
-  return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: selected ? visual.cardSelected : visual.card,
-          ...(Platform.OS === "web"
-            ? ({ boxShadow: `0 1px 3px ${visual.cardShadow}` } as object)
-            : null),
-        },
-      ]}
-    >
-      {children}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
-  card: {
-    borderRadius: TriageGeometry.rowRadius,
-    marginBottom: TriageGeometry.rowGap,
-    overflow: "hidden",
-  },
+  rowWide: { borderRadius: TriageGeometry.rowRadius },
   sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 18, paddingVertical: 4 },
   sectionHeaderWide: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    paddingBottom: 6,
-    paddingHorizontal: 6,
+    fontSize: 12,
+    paddingBottom: 4,
+    paddingHorizontal: 12,
     paddingTop: 10,
-    textTransform: "uppercase",
   },
 });
