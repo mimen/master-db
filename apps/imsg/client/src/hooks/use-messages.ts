@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
+import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
+import { commaApi } from "@/lib/convex-api";
 import { foldReaction, mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
+import { useDataSource } from "@/lib/settings";
 import { readThreadCache, writeThreadCache, THREAD_CACHE_MAX } from "@/lib/thread-cache";
 import type { Message, ServerEvent } from "@shared/types";
 
@@ -127,7 +131,68 @@ function warmThread(guid: string): void {
     .catch(() => undefined);
 }
 
+/**
+ * Convex read path for an open thread. History comes live from the comma
+ * mirror; this session's own sends live in a local overlay until their echo
+ * (matched by clientKey or guid) arrives, so the optimistic bubble never
+ * blinks. Jump-to-message windows stay on the REST path.
+ */
+function useConvexMessages(conversationId: string | null, chatGuid: string | null): UseMessagesResult {
+  const { results, status, loadMore } = usePaginatedQuery(
+    commaApi.listMessages,
+    conversationId ? { conversationId: conversationId as never } : "skip",
+    { initialNumItems: 50 },
+  );
+  const [local, setLocal] = useState<Message[]>([]);
+  useEffect(() => setLocal([]), [conversationId]);
+  useEffect(() => {
+    if (chatGuid && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(chatGuid, true));
+  }, [chatGuid, status]);
+  const remote = useMemo(() => sortByDate(results.map(messageToMessage)), [results]);
+  const messages = useMemo(() => mergeConvexMessages(remote, local), [remote, local]);
+  const upsert = useCallback((message: Message) => {
+    setLocal((current) => upsertMessage(current, message));
+  }, []);
+  const replaceTemp = useCallback((tempGuid: string, message: Message) => {
+    setLocal((current) => settleTemp(current, tempGuid, message));
+  }, []);
+  const remove = useCallback((guid: string) => {
+    setLocal((current) => current.filter((m) => m.guid !== guid));
+  }, []);
+  const noop = useCallback(() => undefined, []);
+  const loadOlder = useCallback(() => {
+    if (status === "CanLoadMore") loadMore(50);
+  }, [status, loadMore]);
+  return {
+    messages,
+    loading: status === "LoadingFirstPage" && conversationId !== null,
+    failed: false,
+    retry: noop,
+    hasMore: status === "CanLoadMore",
+    hasNewer: false,
+    loadOlder,
+    loadNewer: noop,
+    upsert,
+    replaceTemp,
+    remove,
+    // Convex queries are live; there is no stream gap to reconcile.
+    reconcile: noop,
+  };
+}
+
 export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
+  const wantsConvex = useDataSource() === "convex" && target === null && chatGuid !== null;
+  // Any service-sibling guid resolves to its merged conversation.
+  const resolved = useQuery(commaApi.resolveChat, wantsConvex && chatGuid ? { chatGuid } : "skip");
+  const conversationId = wantsConvex && resolved ? resolved._id : null;
+  // Fall back to REST while resolving, or when the bridge hasn't mirrored this chat yet.
+  const convexMode = conversationId !== null;
+  const convex = useConvexMessages(conversationId, convexMode ? chatGuid : null);
+  const server = useServerMessages(convexMode ? null : chatGuid, target);
+  return convexMode ? convex : server;
+}
+
+function useServerMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
