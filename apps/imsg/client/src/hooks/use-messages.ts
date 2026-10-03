@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, registerMessageActions } from "@/lib/api";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
+import { liveMessagePreview } from "@/lib/live-message";
 import { mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
 import type { Message } from "@shared/types";
@@ -48,7 +49,7 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
     if (chatGuid && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(chatGuid, true));
   }, [chatGuid, status]);
   const remote = useMemo(() => sortByDate(results.map(messageToMessage)), [results]);
-  const messages = useMemo(() => mergeConvexMessages(remote, local), [remote, local]);
+  const messages = useMemo(() => mergeConvexMessages(liveMessagePreview.withHistory(chatGuid, remote), local), [chatGuid, remote, local]);
   const upsert = useCallback((message: Message) => {
     setLocal((current) => upsertMessage(current, message));
   }, []);
@@ -64,7 +65,7 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
   }, [status, loadMore]);
   return {
     messages,
-    loading: status === "LoadingFirstPage" && conversationId !== null,
+    loading: status === "LoadingFirstPage" && conversationId !== null && messages.length === 0,
     failed: false,
     retry: noop,
     hasMore: status === "CanLoadMore",
@@ -84,7 +85,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const convex = useConvexMessages(resolved?._id ?? null, !target ? chatGuid : null);
   // Historical jump windows have no Convex equivalent yet.
   const server = useServerMessages(target ? chatGuid : null, target);
-  const result = target ? server : { ...convex, loading: chatGuid !== null && (resolved === undefined || convex.loading) };
+  const result = target ? server : { ...convex, loading: chatGuid !== null && convex.messages.length === 0 && (resolved === undefined || convex.loading) };
   useEffect(() => registerMessageActions(result.messages), [result.messages]);
   return result;
 }

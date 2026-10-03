@@ -3,6 +3,7 @@ import { AppState, Platform } from "react-native";
 import EventSourceNative from "react-native-sse";
 import { BASE_URL } from "./config";
 import type { ServerEvent } from "@shared/types";
+import { liveMessagePreview } from "./live-message";
 
 // The server heartbeats the stream every 25s. A connection that has produced
 // neither an event nor a ping for this long is presumed dead — after a laptop
@@ -21,6 +22,7 @@ const listeners = new Set<Listener>();
 let stop: (() => void) | null = null;
 
 function emit(event: ServerEvent): void {
+  liveMessagePreview.receive(event);
   for (const listener of [...listeners]) listener(event);
 }
 
