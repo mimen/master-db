@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { endTime, setMetric, startTime, timing } from "hono/timing";
-import type { BBAttributedBody, BBMessage } from "./bb-types";
+import type { BBMessage } from "./bb-types";
 import { downloadFailureReason, type BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import { startBridge } from "./bridge";
@@ -27,7 +27,7 @@ import { fetchLinkPreview, parsePreviewUrl } from "./link-preview";
 import { buildThread, mapMessage, visibleAttachments } from "./map";
 import { wireLiveEvents } from "./live-events";
 import type { MentionAnnotation } from "../shared/mentions";
-import { buildMentionAttributedBody } from "./mention-body";
+import { ChatCommands } from "./commands";
 import { transcodeAttachment } from "./transcode";
 import { canThumbnail, parseThumbnailWidth, thumbnailAttachment } from "./thumbnail";
 import { mapScheduledMessage } from "./scheduled";
@@ -183,6 +183,7 @@ directory.onEvent(() => broadcast({ kind: "chats-changed" }));
 // ------------------------------------------------- BlueBubbles event stream
 
 const stopLiveEvents = wireLiveEvents(bb, directory, names, broadcast);
+const commands = new ChatCommands(bb, directory, names, () => commaBridge.scheduledChanged());
 const commaBridge = startBridge({ config, bb, db, names, now,
   backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath });
 
@@ -408,26 +409,9 @@ app.post("/api/chats/:guid/send", async (c) => {
     replyToPart?: number;
     mentions?: MentionAnnotation[];
   };
-  const textError = outboundTextError(body.text);
-  if (textError) return c.json({ error: textError }, 400);
-
-  let attributedBody: BBAttributedBody | undefined;
-  if (body.mentions && body.mentions.length > 0 && bb.hasPrivateApi && /^iMessage;/i.test(chatGuid)) {
-    const built = buildMentionAttributedBody(body.text, body.mentions);
-    if (!built.ok) return c.json({ error: built.error }, 400);
-    attributedBody = built.value;
-  }
-  await directory.summaries();
-  const result = await bb.sendText(
-    chatGuid,
-    body.text,
-    body.replyToGuid ? { guid: body.replyToGuid, part: body.replyToPart ?? 0 } : undefined,
-    attributedBody,
-  );
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  const mapped = mapMessage(result.value, chatGuid, names);
-  directory.applyKnownMessage(chatGuid, mapped);
-  return c.json(mapped);
+  const result = await commands.send(chatGuid, body);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json(result.value);
 });
 
 app.post("/api/chats/:guid/attachment", async (c) => {
@@ -476,11 +460,7 @@ app.post("/api/chats/:guid/contact", async (c) => {
 });
 
 app.post("/api/chats/:guid/read", async (c) => {
-  // Mark every service-sibling read so no stale badge lingers on a merged chat.
-  const results = await Promise.all(
-    directory.siblingGuids(c.req.param("guid")).map((g) => directory.markRead(g)),
-  );
-  return c.json({ ok: results.some(Boolean) });
+  return c.json({ ok: await commands.markRead(c.req.param("guid")) });
 });
 
 app.post("/api/chats/:guid/typing", async (c) => {
@@ -543,28 +523,8 @@ app.post("/api/messages/:guid/react", async (c) => {
     partIndex?: number;
     suggested?: boolean;
   };
-  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled on BlueBubbles" }, 501);
-  const partIndex = body.partIndex ?? 0;
-  if (partIndex !== 0) return c.json({ error: "message part is not reactable" }, 400);
-  const current = await bb.messageWithReactions(messageGuid);
-  if (!current.ok) return c.json({ error: current.error }, 502);
-  const rawTarget = current.value.find((message) => message.guid === messageGuid);
-  const allowedChats = directory.siblingGuids(body.chatGuid);
-  if (!rawTarget || !messageBelongsToAnyChat(rawTarget, allowedChats)) {
-    return c.json({ error: "reaction target is not valid in this chat" }, 400);
-  }
-  const target = buildThread(current.value, body.chatGuid, names).find((message) => message.guid === messageGuid);
-  if (!target || (body.suggested && target.isFromMe)) {
-    return c.json({ error: "reaction target is not valid in this chat" }, 400);
-  }
-  const alreadyActive = target.reactions.some((reaction) => reaction.isFromMe && reaction.type === body.reaction);
-  // Desired-state idempotence closes the BlueBubbles write→read race without
-  // turning a duplicate suggestion into a removal or flashing a false failure.
-  if (!body.remove && alreadyActive) return c.json({ ok: true });
-  if (body.remove && !alreadyActive) return c.json({ ok: true });
-  const reaction = body.remove ? `-${body.reaction}` : body.reaction;
-  const result = await bb.react(body.chatGuid, messageGuid, reaction, partIndex);
-  if (!result.ok) return c.json({ error: result.error }, 502);
+  const result = await commands.react(messageGuid, body);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json({ ok: true });
 });
 
@@ -582,36 +542,24 @@ app.get("/api/chats/find", async (c) => {
 });
 
 app.post("/api/messages/:guid/unsend", async (c) => {
-  if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
-  const result = await bb.unsend(c.req.param("guid"));
-  if (!result.ok) return c.json({ error: result.error }, 502);
+  const result = await commands.unsend(c.req.param("guid"));
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json({ ok: true });
 });
 
-// "Remove for you": deletes the message locally (Mac's Messages database),
-// not for the other side. The message lives in ONE of the merged
-// conversation's service-sibling chats — try each until one accepts.
 app.post("/api/messages/:guid/delete", async (c) => {
   if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
   const body = (await c.req.json()) as { chatGuid: string };
-  let lastError = "delete failed";
-  for (const guid of directory.siblingGuids(body.chatGuid)) {
-    const result = await bb.deleteMessage(guid, c.req.param("guid"));
-    if (result.ok) {
-      directory.invalidate();
-      return c.json({ ok: true });
-    }
-    lastError = result.error;
-  }
-  return c.json({ error: lastError }, 502);
+  const result = await commands.delete(c.req.param("guid"), body.chatGuid);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json({ ok: true });
 });
 
 app.post("/api/messages/:guid/edit", async (c) => {
   if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
   const body = (await c.req.json()) as { text: string };
-  if (!body.text?.trim()) return c.json({ error: "text required" }, 400);
-  const result = await bb.edit(c.req.param("guid"), body.text.trim());
-  if (!result.ok) return c.json({ error: result.error }, 502);
+  const result = await commands.edit(c.req.param("guid"), body.text);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json({ ok: true });
 });
 
@@ -745,9 +693,8 @@ app.get("/api/chats/:guid/info", async (c) => {
 app.post("/api/chats/:guid/rename", async (c) => {
   if (!bb.hasPrivateApi) return c.json({ error: "private API disabled" }, 501);
   const body = (await c.req.json()) as { name: string };
-  const result = await bb.renameGroup(c.req.param("guid"), body.name ?? "");
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  directory.invalidate();
+  const result = await commands.rename(c.req.param("guid"), body.name);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json({ ok: true });
 });
 
@@ -803,12 +750,8 @@ app.get("/api/scheduled", async (c) => {
 
 app.post("/api/scheduled", async (c) => {
   const body = (await c.req.json()) as { chatGuid: string; text: string; sendAt: number };
-  if (!body.chatGuid || !body.text?.trim() || !Number.isFinite(body.sendAt) || body.sendAt <= Date.now()) {
-    return c.json({ error: "chatGuid, text, and a future sendAt are required" }, 400);
-  }
-  const result = await bb.createScheduledMessage(body.chatGuid, body.text.trim(), body.sendAt);
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  commaBridge.scheduledChanged();
+  const result = await commands.schedule(body);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   const namesByGuid = await scheduledChatNames();
   return c.json(mapScheduledMessage(result.value, namesByGuid.get(body.chatGuid) ?? body.chatGuid));
 });
@@ -816,23 +759,16 @@ app.post("/api/scheduled", async (c) => {
 app.put("/api/scheduled/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const body = (await c.req.json()) as { chatGuid: string; text: string; sendAt: number };
-  if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
-  if (!body.chatGuid || !body.text?.trim() || !Number.isFinite(body.sendAt) || body.sendAt <= Date.now()) {
-    return c.json({ error: "chatGuid, text, and a future sendAt are required" }, 400);
-  }
-  const result = await bb.updateScheduledMessage(id, body.chatGuid, body.text.trim(), body.sendAt);
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  commaBridge.scheduledChanged();
+  const result = await commands.schedule(body, id);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   const namesByGuid = await scheduledChatNames();
   return c.json(mapScheduledMessage(result.value, namesByGuid.get(body.chatGuid) ?? body.chatGuid));
 });
 
 app.delete("/api/scheduled/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  if (!Number.isInteger(id) || id <= 0) return c.json({ error: "invalid schedule id" }, 400);
-  const result = await bb.deleteScheduledMessage(id);
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  commaBridge.scheduledChanged();
+  const result = await commands.cancelScheduled(id);
+  if (!result.ok) return c.json({ error: result.error }, result.status);
   return c.json({ ok: true });
 });
 

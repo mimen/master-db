@@ -233,6 +233,7 @@ export class FakeBlueBubbles implements BlueBubbles {
     message: string,
     _replyTo?: { guid: string; part: number },
     attributedBody?: BBAttributedBody,
+    clientKey?: string,
   ): Promise<Result<BBMessage>> {
     this.sentTexts.push({ chatGuid, message });
     if (attributedBody) {
@@ -241,6 +242,7 @@ export class FakeBlueBubbles implements BlueBubbles {
     const sent: BBMessage = {
       guid: `out-${this.seq}-${Math.random().toString(36).slice(2, 8)}`,
       text: message,
+      tempGuid: clientKey,
       dateCreated: this.nextTimestamp(),
       isFromMe: true,
       handle: null,

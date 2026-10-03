@@ -78,6 +78,7 @@ export interface BlueBubbles {
     message: string,
     replyTo?: { guid: string; part: number },
     attributedBody?: BBAttributedBody,
+    clientKey?: string,
   ): Promise<Result<BBMessage>>;
   sendAttachment(chatGuid: string, filename: string, bytes: Uint8Array): Promise<Result<BBMessage>>;
   react(
@@ -204,13 +205,14 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.unwrap<T>(await this.request(this.url(path, params), {}, true));
   }
 
-  private async post<T>(path: string, body: unknown, retryTransport = false): Promise<Result<T>> {
+  private async post<T>(path: string, body: unknown, retryTransport = false, signal?: AbortSignal): Promise<Result<T>> {
     const res = await this.request(
       this.url(path),
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: body === null ? undefined : JSON.stringify(body),
+        signal,
       },
       retryTransport,
     );
@@ -352,16 +354,17 @@ export class BlueBubblesClient implements BlueBubbles {
     message: string,
     replyTo?: { guid: string; part: number },
     attributedBody?: BBAttributedBody,
+    clientKey?: string,
   ): Promise<Result<BBMessage>> {
     return this.post<BBMessage>("/api/v1/message/text", {
       chatGuid,
-      tempGuid: tempGuid(),
+      tempGuid: clientKey ?? tempGuid(),
       method: attributedBody ? "private-api" : this.sendMethod(),
       message,
       selectedMessageGuid: replyTo?.guid,
       partIndex: replyTo?.part ?? 0,
       ...(attributedBody ? { attributedBody } : {}),
-    });
+    }, false, AbortSignal.timeout(30_000));
   }
 
   sendAttachment(
