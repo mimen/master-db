@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
-import { useSyncExternalStore, type JSX } from "react";
+import { useState, useSyncExternalStore, type JSX } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ListRow } from "./list-row";
@@ -45,37 +45,56 @@ const SUGGESTION_MODE_OPTIONS: ReadonlyArray<{ value: SuggestionMode; label: str
 ];
 
 const SUGGESTION_MODEL_OPTIONS: ReadonlyArray<{ value: SuggestionModel; label: string; detail: string }> = [
-  { value: "opus", label: "Opus", detail: "Claude · taste first" },
-  { value: "terra", label: "Terra", detail: "ChatGPT · preserves Claude quota" },
+  { value: "opus", label: "Opus", detail: "Claude" },
+  { value: "terra", label: "Terra", detail: "ChatGPT" },
 ];
 
+/** One version line; the full release identity is a click away for debugging. */
 function ReleaseIdentityFooter(): JSX.Element {
   const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
   const snapshot = useSyncExternalStore(
     releaseStatus.subscribe,
     releaseStatus.getSnapshot,
     releaseStatus.getSnapshot,
   );
+  const { environment, branch, webSha } = snapshot.running;
   const rows = [
-    ["Environment", snapshot.running.environment],
-    ["Branch", snapshot.running.branch ?? "—"],
-    ["Running web", displayReleaseSha(snapshot.running.webSha)],
+    ["Environment", environment],
+    ["Branch", branch ?? "—"],
+    ["Running web", displayReleaseSha(webSha)],
     ["Deployed web", displayReleaseSha(snapshot.deployedWeb?.webSha ?? null)],
     ["Running shell", displayReleaseSha(snapshot.shell.runningSha)],
     ["Staged shell", displayReleaseSha(snapshot.shell.stagedSha)],
   ] as const;
+  const version = webSha ? displayReleaseSha(webSha) : "development";
+  const qualifier = environment === "production" ? "" : ` · ${branch ?? environment}`;
 
   return (
-    <View
-      style={[styles.releaseFooter, { borderTopColor: theme.divider }]}
-      testID="release-identity-footer"
-    >
-      {rows.map(([label, value]) => (
-        <View key={label} style={styles.releaseRow}>
-          <Text style={[styles.releaseLabel, { color: theme.textSecondary }]}>{label}</Text>
-          <Text selectable style={[styles.releaseValue, { color: theme.textSecondary }]}>{value}</Text>
+    <View style={styles.releaseFooter}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? "Hide version details" : "Show version details"}
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.versionLine}
+      >
+        {({ hovered, pressed }) => (
+          <Text style={[styles.releaseLabel, { color: hovered || pressed ? theme.text : theme.textSecondary }]}>
+            Version <Text style={styles.releaseValue}>{version}</Text>{qualifier}
+          </Text>
+        )}
+      </Pressable>
+      {expanded && (
+        <View style={styles.releaseDetails} testID="release-identity-footer">
+          {rows.map(([label, value]) => (
+            <View key={label} style={styles.releaseRow}>
+              <Text style={[styles.releaseLabel, { color: theme.textSecondary }]}>{label}</Text>
+              <Text selectable style={[styles.releaseLabel, styles.releaseValue, { color: theme.textSecondary }]}>{value}</Text>
+            </View>
+          ))}
         </View>
-      ))}
+      )}
     </View>
   );
 }
@@ -208,7 +227,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
               ))}
             </View>
             <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
-              If the selected route fails, Comma tries the other model and labels the shelf fallback.
+              If one model fails, Comma uses the other.
             </Text>
 
             <View style={[styles.fieldGroup, styles.clearGroup, { backgroundColor: theme.backgroundElement }]}>
@@ -255,14 +274,10 @@ const styles = StyleSheet.create({
   fieldGroup: { width: "100%", borderRadius: Radii.input, overflow: "hidden" },
   clearGroup: { marginTop: 18 },
   fieldCaption: { fontSize: 12, marginTop: 6, paddingHorizontal: 6 },
-  releaseFooter: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 5,
-    marginTop: Spacing.two,
-    paddingHorizontal: 6,
-    paddingTop: Spacing.three,
-  },
+  releaseFooter: { marginTop: Spacing.two, paddingHorizontal: 6 },
+  versionLine: { alignSelf: "flex-start", paddingVertical: 4 },
+  releaseDetails: { gap: 5, marginTop: Spacing.two },
   releaseRow: { flexDirection: "row", justifyContent: "space-between", gap: Spacing.three },
   releaseLabel: { fontSize: 11 },
-  releaseValue: { fontFamily: Fonts.mono, fontSize: 11, textAlign: "right" },
+  releaseValue: { fontFamily: Fonts.mono },
 });
