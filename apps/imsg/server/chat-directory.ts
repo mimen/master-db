@@ -5,7 +5,7 @@ import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
 import { mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
-import type { ChatSummary, Message, TriageProgressStats } from "../shared/types";
+import type { ChatSummary, Message } from "../shared/types";
 import { sameSendAddress } from "./message-verification";
 
 export interface ChatLookup {
@@ -487,27 +487,6 @@ export class ChatDirectory {
     if (chat?.lastMessage) this.db.deleteTriageClear(this.canonicalGuid(guid), chat.lastMessage.guid);
     this.invalidate();
     return { ok: true };
-  }
-
-  async triageStats(): Promise<{ ok: true; value: TriageProgressStats } | { ok: false; error: string }> {
-    const result = await this.summaries();
-    if (!result.ok) return result;
-    const now = this.now();
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    const queueDates = result.chats
-      .filter((chat) => chat.flags.unresponded || chat.flags.waiting)
-      .map((chat) => chat.lastMessage?.dateCreated)
-      .filter((at): at is number => typeof at === "number" && at > 0);
-    const oldestQueueAt = queueDates.length > 0 ? Math.min(...queueDates) : null;
-    return {
-      ok: true,
-      value: {
-        clearedToday: this.db.countTriageClearsSince(start.getTime()),
-        oldestQueueAgeMs: oldestQueueAt === null ? null : Math.max(0, now - oldestQueueAt),
-        oldestQueueAt,
-      },
-    };
   }
 
   async findByAddress(

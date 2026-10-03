@@ -508,12 +508,6 @@ app.post("/api/chats/:guid/undismiss", async (c) => {
   return c.json({ ok: true });
 });
 
-app.get("/api/triage/stats", async (c) => {
-  const result = await directory.triageStats();
-  if (!result.ok) return c.json({ error: result.error }, 502);
-  return c.json(result.value);
-});
-
 app.post("/api/chats/:guid/pin", async (c) => {
   const body = (await c.req.json()) as { pinned: boolean };
   directory.setPinned(c.req.param("guid"), body.pinned);

@@ -154,15 +154,6 @@ export interface ChatSummary {
   };
 }
 
-export interface TriageProgressStats {
-  /** Explicit dismissals plus successful replies since local midnight. */
-  clearedToday: number;
-  /** Age of the oldest active Needs reply / Waiting item, or null for an empty queue. */
-  oldestQueueAgeMs: number | null;
-  /** Epoch ms of that oldest queue item, or null for an empty queue. */
-  oldestQueueAt: number | null;
-}
-
 export type StateCounts = Record<StateFilter, number>;
 
 export interface Contact {

@@ -971,7 +971,7 @@ describe("Triage Desk state", () => {
   });
 
   test("records dismiss and outbound clear exactly once", async () => {
-    const { directory, contacts } = await setup(twoChatSeed(), () => 50_000);
+    const { db, directory, contacts } = await setup(twoChatSeed(), () => 50_000);
     await directory.summaries();
     await directory.dismiss(CHAT_A, "unresponded", "a1");
     await directory.summaries();
@@ -982,10 +982,9 @@ describe("Triage Desk state", () => {
     );
     directory.applyKnownMessage(CHAT_B, outbound);
     directory.applyKnownMessage(CHAT_B, outbound);
-    const stats = await directory.triageStats();
-    expect(stats.ok).toBe(true);
-    if (!stats.ok) return;
-    expect(stats.value.clearedToday).toBe(2);
-    expect(stats.value.oldestQueueAgeMs).toBe(10_000);
+    expect(db.overlaySnapshot().triageEvents).toEqual([
+      { chatGuid: CHAT_A, messageGuid: "a1", reason: "dismiss", clearedAt: 50_000 },
+      { chatGuid: CHAT_B, messageGuid: "b1", reason: "reply", clearedAt: 50_000 },
+    ]);
   });
 });

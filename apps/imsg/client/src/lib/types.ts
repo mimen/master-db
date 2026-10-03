@@ -1,4 +1,1 @@
-export type {
-  ChatSummary,
-  TriageProgressStats,
-} from "@shared/types";
+export type { ChatSummary } from "@shared/types";

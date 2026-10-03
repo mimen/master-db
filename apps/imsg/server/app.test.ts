@@ -57,6 +57,15 @@ async function messages(app: Awaited<ReturnType<typeof createApp>>["app"], query
   ]);
 }
 
+test("the retired triage stats API is unavailable", async () => {
+  const { app, dispose } = await setup(seed(), () => 100_000);
+  try {
+    expect((await app.request("/api/triage/stats")).status).toBe(404);
+  } finally {
+    dispose();
+  }
+});
+
 describe("thread sibling lookup", () => {
   for (const query of ["", "?around=1500"]) {
     test(`reuses siblings after TTL expiry and invalidation ${query}`, async () => {

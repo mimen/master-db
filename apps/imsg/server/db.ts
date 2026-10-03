@@ -376,13 +376,6 @@ export class OverlayDb {
     this.overlayChanged(chatGuid);
   }
 
-  countTriageClearsSince(since: number): number {
-    const row = this.db
-      .query("SELECT COUNT(*) AS count FROM triage_clear_event WHERE cleared_at >= ?")
-      .get(since) as { count: number };
-    return row.count;
-  }
-
   // ----------------------------------------------------- comma media queue
 
   private mediaTable(): void {

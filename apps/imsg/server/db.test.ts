@@ -89,6 +89,9 @@ describe("triage overlay", () => {
     expect(db.recordTriageClear("chat-1", "m1", "dismiss", 10_000)).toBe(true);
     expect(db.recordTriageClear("chat-1", "m1", "reply", 11_000)).toBe(false);
     expect(db.recordTriageClear("chat-1", "m2", "reply", 12_000)).toBe(true);
-    expect(db.countTriageClearsSince(10_500)).toBe(1);
+    expect(db.overlaySnapshot().triageEvents).toEqual([
+      { chatGuid: "chat-1", messageGuid: "m1", reason: "dismiss", clearedAt: 10_000 },
+      { chatGuid: "chat-1", messageGuid: "m2", reason: "reply", clearedAt: 12_000 },
+    ]);
   });
 });
