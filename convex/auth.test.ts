@@ -1,7 +1,37 @@
 import { describe, expect, test } from "vitest";
 
 import { ALLOWED_EMAIL } from "./_lib/authed";
-import { rejectIfNotAllowed } from "./auth";
+import { allowedRedirect, rejectIfNotAllowed } from "./auth";
+
+describe("allowedRedirect", () => {
+  test.each([
+    "http://localhost:3000",
+    "http://localhost:3000/settings",
+    "https://convex-db-master-d31d50f579b2.herokuapp.com?tab=settings",
+    "https://milads-mac-mini.taild31e9a.ts.net:8447",
+    "http://127.0.0.1:54321",
+    "http://127.0.0.1:54321/",
+    "http://127.0.0.1:80?code=abc",
+    "http://127.0.0.1:65535/?code=abc",
+  ])("accepts %s", (redirectTo) => {
+    expect(allowedRedirect(redirectTo)).toBe(redirectTo);
+  });
+
+  test.each([
+    "http://127.0.0.1:54321/settings",
+    "http://127.0.0.1.evil.com:54321",
+    "http://user@127.0.0.1:5",
+    "http://user:pass@127.0.0.1:5",
+    "https://127.0.0.1:54321",
+    "http://localhost:54321",
+    "http://127.0.0.1:54321/#code=abc",
+    "http://127.0.0.1:65536",
+    "https://milads-mac-mini.taild31e9a.ts.net:8447.evil.com",
+    "not a URL",
+  ])("rejects %s", (redirectTo) => {
+    expect(() => allowedRedirect(redirectTo)).toThrow(/Disallowed redirectTo/);
+  });
+});
 
 describe("rejectIfNotAllowed", () => {
   test("returns profile when email matches", () => {

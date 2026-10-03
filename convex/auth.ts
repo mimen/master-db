@@ -41,6 +41,38 @@ const ALLOWED_REDIRECT_ORIGINS = [
   "https://milads-mac-mini.taild31e9a.ts.net:8447",
 ];
 
+export function allowedRedirect(redirectTo: string): string {
+  for (const origin of ALLOWED_REDIRECT_ORIGINS) {
+    if (
+      redirectTo === origin ||
+      redirectTo.startsWith(`${origin}/`) ||
+      redirectTo.startsWith(`${origin}?`)
+    ) {
+      return redirectTo;
+    }
+  }
+  const error = new Error(
+    `Disallowed redirectTo: ${redirectTo}. Add the origin to ALLOWED_REDIRECT_ORIGINS in convex/auth.ts.`,
+  );
+  let url: URL;
+  try {
+    url = new globalThis.URL(redirectTo);
+  } catch {
+    throw error;
+  }
+  if (
+    url.protocol === "http:" &&
+    url.hostname === "127.0.0.1" &&
+    url.username === "" &&
+    url.password === "" &&
+    url.pathname === "/" &&
+    url.hash === ""
+  ) {
+    return redirectTo;
+  }
+  throw error;
+}
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Google({
@@ -51,18 +83,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   ],
   callbacks: {
     async redirect({ redirectTo }) {
-      for (const origin of ALLOWED_REDIRECT_ORIGINS) {
-        if (
-          redirectTo === origin ||
-          redirectTo.startsWith(`${origin}/`) ||
-          redirectTo.startsWith(`${origin}?`)
-        ) {
-          return redirectTo;
-        }
-      }
-      throw new Error(
-        `Disallowed redirectTo: ${redirectTo}. Add the origin to ALLOWED_REDIRECT_ORIGINS in convex/auth.ts.`,
-      );
+      return allowedRedirect(redirectTo);
     },
   },
 });
