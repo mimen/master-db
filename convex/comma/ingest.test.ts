@@ -34,6 +34,7 @@ function post(path: string, body: unknown, token: string | null = SECRET) {
 describe("ingestKind", () => {
   test("maps known paths and rejects unknown ones", () => {
     expect(ingestKind("/comma/ingest/messages")).toBe("messages");
+    expect(ingestKind("/comma/ingest/photo")).toBe("photo");
     expect(ingestKind("/comma/ingest/toString")).toBeNull();
     expect(ingestKind("/comma/ingest/nope")).toBeNull();
   });
@@ -73,6 +74,17 @@ describe("POST /comma/ingest/*", () => {
     expect(await response.json()).toEqual({ ok: true, result: false });
     const invalid = post(path, { guid: "missing", thumbStorageId: "not-a-storage-id" });
     expect((await t.fetch(path, { ...init, body: invalid.body })).status).toBe(400);
+  });
+
+  test("photo ingest authenticates, validates storage IDs, and reports unmatched addresses", async () => {
+    const t = convexTest(schema, modules);
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["photo"])));
+    const { path, ...init } = post("/comma/ingest/photo", { address: "unknown@example.com", storageId, hash: "a".repeat(64) });
+    const response = await t.fetch(path, init);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, result: false });
+    expect((await t.fetch(path, { ...init, headers: { authorization: "Bearer wrong" } })).status).toBe(401);
+    expect((await t.fetch(path, { ...init, body: JSON.stringify({ address: "unknown", storageId: "bad", hash: "a".repeat(64) }) })).status).toBe(400);
   });
 
   test("returns 404 for an unknown kind", async () => {
