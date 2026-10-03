@@ -1,7 +1,11 @@
+import { usePaginatedQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { api } from "@/lib/api";
 import { getChats, mutationEpochNow, setChats, subscribeChats } from "@/lib/chat-store";
+import { conversationToChat } from "@/lib/convex-adapters";
+import { commaApi } from "@/lib/convex-api";
+import { useDataSource } from "@/lib/settings";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
@@ -15,15 +19,33 @@ interface UseChatsResult {
   refresh: () => void;
 }
 
+/** Every conversation from Convex, live. Pages load one after another until the list is complete. */
+function useConvexChats(enabled: boolean): { chats: ChatSummary[] | null } {
+  const { results, status, loadMore } = usePaginatedQuery(
+    commaApi.listConversations,
+    enabled ? {} : "skip",
+    { initialNumItems: 200 },
+  );
+  useEffect(() => {
+    if (enabled && status === "CanLoadMore") loadMore(200);
+  }, [enabled, status, loadMore]);
+  const chats = useMemo(() => results.map(conversationToChat), [results]);
+  return { chats: enabled && status !== "LoadingFirstPage" ? chats : null };
+}
+
 /**
  * Fetches the complete chat list once and filters locally — filter/lens
  * switches are pure computation, no network.
  */
 export function useChats(state: StateFilter, type: TypeFilter, freezeMembership = true): UseChatsResult {
-  const [all, setAll] = useState<ChatSummary[]>(getChats() ?? []);
-  const [loading, setLoading] = useState(getChats() === null);
+  const convexMode = useDataSource() === "convex";
+  const convex = useConvexChats(convexMode);
+  const [serverAll, setAll] = useState<ChatSummary[]>(getChats() ?? []);
+  const [serverLoading, setLoading] = useState(getChats() === null);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  const all = convexMode ? (convex.chats ?? []) : serverAll;
+  const loading = convexMode ? convex.chats === null : serverLoading;
 
   const refresh = useCallback(() => {
     const gen = ++generation.current;
