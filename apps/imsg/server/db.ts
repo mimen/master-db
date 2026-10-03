@@ -194,6 +194,22 @@ export class OverlayDb {
       ON CONFLICT(target) DO UPDATE SET cursor = excluded.cursor`).run(target, cursor);
   }
 
+  getBridgePhoto(address: string): { hash: string; storageId: string; matched: number } | null {
+    this.db.exec(`CREATE TABLE IF NOT EXISTS comma_contact_photo (
+      address TEXT PRIMARY KEY, hash TEXT NOT NULL, storage_id TEXT NOT NULL, matched INTEGER NOT NULL
+    );`);
+    return this.db.query<{ hash: string; storageId: string; matched: number }, [string]>(
+      "SELECT hash, storage_id AS storageId, matched FROM comma_contact_photo WHERE address = ?",
+    ).get(address);
+  }
+
+  setBridgePhoto(address: string, hash: string, storageId: string, matched: boolean): void {
+    this.getBridgePhoto(address);
+    this.db.query(`INSERT INTO comma_contact_photo (address, hash, storage_id, matched) VALUES (?, ?, ?, ?)
+      ON CONFLICT(address) DO UPDATE SET hash = excluded.hash, storage_id = excluded.storage_id, matched = excluded.matched`)
+      .run(address, hash, storageId, Number(matched));
+  }
+
   // ------------------------------------------------------------------ ai state
 
   getAiMeta(key: string): string | null {

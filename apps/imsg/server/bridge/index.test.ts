@@ -35,7 +35,7 @@ test("bridge is off without a secret or with background services disabled", asyn
       deps.db.setPinned(CHAT, true);
       deps.bb.emit({ kind: "new-message", message: { guid: "m1" } });
       await bridge.flush();
-      expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0, outbox: { inFlight: 0, lastExecutedAt: null }, media: null });
+      expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0, outbox: { inFlight: 0, lastExecutedAt: null }, media: null, photos: { uploaded: 0, pending: 0 } });
       expect(deps.ingest.calls).toEqual([]);
       expect(deps.bb.calls.queryChats).toBe(0);
     } finally { bridge.stop(); }
