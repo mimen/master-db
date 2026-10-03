@@ -247,6 +247,27 @@ export const upsertAttachments = internalMutation({
   },
 });
 
+export const setAttachmentStorage = internalMutation({
+  args: {
+    guid: v.string(),
+    thumbStorageId: v.optional(v.id("_storage")),
+    originalStorageId: v.optional(v.id("_storage")),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, { guid, thumbStorageId, originalStorageId }) => {
+    const attachment = await ctx.db
+      .query("comma_attachments")
+      .withIndex("by_guid", (q) => q.eq("guid", guid))
+      .unique();
+    if (!attachment) return false;
+    await ctx.db.patch(attachment._id, {
+      ...(thumbStorageId ? { thumbStorageId } : {}),
+      ...(originalStorageId ? { originalStorageId } : {}),
+    });
+    return true;
+  },
+});
+
 export const setTranscript = internalMutation({
   args: { attachmentGuid: v.string(), transcript: v.string() },
   returns: v.boolean(),

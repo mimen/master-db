@@ -64,6 +64,17 @@ describe("POST /comma/ingest/*", () => {
     expect(response.status).toBe(400);
   });
 
+  test("routes storage and reports missing attachments for retry", async () => {
+    const t = convexTest(schema, modules);
+    expect(ingestKind("/comma/ingest/storage")).toBe("storage");
+    const { path, ...init } = post("/comma/ingest/storage", { guid: "missing" });
+    const response = await t.fetch(path, init);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, result: false });
+    const invalid = post(path, { guid: "missing", thumbStorageId: "not-a-storage-id" });
+    expect((await t.fetch(path, { ...init, body: invalid.body })).status).toBe(400);
+  });
+
   test("returns 404 for an unknown kind", async () => {
     const t = convexTest(schema, modules);
     const { path, ...init } = post("/comma/ingest/nope", {});

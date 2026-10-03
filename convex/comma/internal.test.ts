@@ -252,6 +252,28 @@ describe("importOverlay", () => {
   });
 });
 
+describe("setAttachmentStorage", () => {
+  test("links either file without changing the row version or clearing the other file", async () => {
+    const t = convexTest(schema, modules);
+    const conversationId = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1 }]);
+    const attachment = { guid: "photo", messageGuid: "m1", conversationId,
+      isOnDisk: true, isSticker: false, hideAttachment: false, sourceVersion: 5, transcript: "hello" };
+    await t.mutation(internal.comma.internal.upsertAttachments, { attachments: [attachment] });
+    const thumbStorageId = await t.run((ctx) => ctx.storage.store(new Blob(["thumb"], { type: "image/jpeg" })));
+    const originalStorageId = await t.run((ctx) => ctx.storage.store(new Blob(["original"], { type: "image/jpeg" })));
+    expect(await t.mutation(internal.comma.internal.setAttachmentStorage, { guid: "missing", thumbStorageId })).toBe(false);
+    for (let i = 0; i < 2; i++) {
+      expect(await t.mutation(internal.comma.internal.setAttachmentStorage, { guid: "photo", thumbStorageId })).toBe(true);
+    }
+    await t.mutation(internal.comma.internal.setAttachmentStorage, { guid: "photo", originalStorageId });
+    let row = await t.run((ctx) => ctx.db.query("comma_attachments").first());
+    expect(row).toMatchObject({ thumbStorageId, originalStorageId, transcript: "hello", sourceVersion: 5 });
+    await t.mutation(internal.comma.internal.upsertAttachments, { attachments: [{ ...attachment, sourceVersion: 6 }] });
+    row = await t.run((ctx) => ctx.db.query("comma_attachments").first());
+    expect(row).toMatchObject({ thumbStorageId, originalStorageId, sourceVersion: 6 });
+  });
+});
+
 describe("mergeDuplicateConversations", () => {
   test("folds a re-keyed duplicate into the older conversation id", async () => {
     const t = convexTest(schema, modules);

@@ -2116,6 +2116,16 @@ export declare const internal: {
         },
         { deleted: number; upserted: number }
       >;
+      setAttachmentStorage: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          guid: string;
+          originalStorageId?: Id<"_storage">;
+          thumbStorageId?: Id<"_storage">;
+        },
+        boolean
+      >;
       setTranscript: FunctionReference<
         "mutation",
         "internal",
