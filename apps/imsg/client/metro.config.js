@@ -11,10 +11,13 @@ config.watchFolders = [path.resolve(__dirname, "..")];
 // Production never enters this branch, and the fixture module contains no
 // Convex client calls, so screenshots cannot touch live identity state.
 if (process.env.IMSG_VISUAL_FIXTURE === "1") {
-  const fixtureIdentity = path.resolve(__dirname, "src/lib/identity.fixture.ts");
+  const fixtures = {
+    "@/lib/identity": path.resolve(__dirname, "src/lib/identity.fixture.ts"),
+    "@/lib/convex-auth": path.resolve(__dirname, "src/lib/convex-auth.fixture.tsx"),
+  };
   config.resolver.resolveRequest = (context, moduleName, platform) => {
-    if (moduleName === "@/lib/identity") {
-      return context.resolveRequest(context, fixtureIdentity, platform);
+    if (Object.hasOwn(fixtures, moduleName)) {
+      return context.resolveRequest(context, fixtures[moduleName], platform);
     }
     return context.resolveRequest(context, moduleName, platform);
   };

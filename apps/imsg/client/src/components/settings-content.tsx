@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
 import { useState, useSyncExternalStore, type JSX } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ListRow } from "./list-row";
 
@@ -12,6 +12,8 @@ import { useTheme } from "@/hooks/use-theme";
 import { releaseStatus } from "@/lib/release-status";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
+import { useAuthActions, useConvexAuth } from "@/lib/convex-auth";
+import { isDesktopShell } from "@/lib/desktop-shell";
 import { showToast } from "@/lib/toast";
 import {
   setNameOrder,
@@ -48,6 +50,39 @@ const SUGGESTION_MODEL_OPTIONS: ReadonlyArray<{ value: SuggestionModel; label: s
   { value: "opus", label: "Opus", detail: "Claude" },
   { value: "terra", label: "Terra", detail: "ChatGPT" },
 ];
+
+function ConvexAccountRow() {
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const { signIn, signOut } = useAuthActions();
+  const [busy, setBusy] = useState(false);
+  const canSignIn = Platform.OS === "web" && !isDesktopShell();
+
+  async function changeSession() {
+    setBusy(true);
+    try {
+      if (isAuthenticated) {
+        await signOut();
+      } else {
+        await signIn("google", { redirectTo: window.location.origin });
+      }
+    } catch {
+      showToast(isAuthenticated ? "Could not sign out of Convex" : "Could not sign in to Convex");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ListRow
+      title={isAuthenticated ? "Signed in to Convex" : "Sign in to Convex"}
+      subtitle={isAuthenticated ? "Sign out" : canSignIn ? "Continue with Google" : "Sign in from the web app for now"}
+      accessibilityLabel={isAuthenticated ? "Sign out of Convex" : "Sign in to Convex"}
+      titleWeight="400"
+      disabled={isLoading || busy || (!isAuthenticated && !canSignIn)}
+      onPress={isAuthenticated || canSignIn ? () => void changeSession() : undefined}
+    />
+  );
+}
 
 /** One version line; the full release identity is a click away for debugging. */
 function ReleaseIdentityFooter(): JSX.Element {
@@ -155,6 +190,15 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {header}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Convex</Text>
+          <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+            <ConvexAccountRow />
+          </View>
+          <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
+            Sign-in is optional. Messages still use the existing connection.
+          </Text>
+        </View>
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Names</Text>
           <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>

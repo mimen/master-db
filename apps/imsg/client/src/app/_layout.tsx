@@ -1,5 +1,4 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
-import { ConvexProvider } from "convex/react";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -17,7 +16,7 @@ import { guardWindowFileDrops } from "@/lib/attachments";
 import { fetchDeployedWebRelease, installWebReleaseMonitor } from "@/lib/deploy-reload";
 import { installShellReleaseBridge } from "@/lib/desktop-shell";
 import { hydrateDrafts } from "@/lib/drafts";
-import { convexClient } from "@/lib/identity";
+import { ClientAuthProvider } from "@/lib/convex-auth";
 import { LightboxProvider } from "@/lib/lightbox";
 import { releaseStatus } from "@/lib/release-status";
 import { hydrateSettings } from "@/lib/settings";
@@ -57,7 +56,7 @@ export default function RootLayout() {
   return (
     <AppErrorBoundary>
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ConvexProvider client={convexClient}>
+      <ClientAuthProvider>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <ActionSheetProvider>
             <LightboxProvider>
@@ -94,7 +93,7 @@ export default function RootLayout() {
             </LightboxProvider>
           </ActionSheetProvider>
         </ThemeProvider>
-      </ConvexProvider>
+      </ClientAuthProvider>
     </GestureHandlerRootView>
     </AppErrorBoundary>
   );
