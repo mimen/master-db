@@ -9,13 +9,17 @@ import {
   conversationDoc,
   draftDoc,
   messageDoc,
+  participant,
   scheduledDoc,
   syncStateDoc,
   type CommaConversationDoc,
 } from "../schema/comma/validators";
 
+import { personForAddress } from "./photos";
+
 const conversationView = v.object({
   ...conversationDoc.fields,
+  participants: v.array(v.object({ ...participant.fields, photoUrl: v.optional(v.union(v.string(), v.null())) })),
   flags: v.object({
     unresponded: v.boolean(),
     waiting: v.boolean(),
@@ -46,7 +50,11 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
     conversation.lastMessage ?? null,
     unreadCount,
   );
-  return { ...conversation, flags, unreadCount };
+  const participants = await Promise.all(conversation.participants.map(async (participant) => {
+    const person = await personForAddress(ctx, participant.address);
+    return { ...participant, photoUrl: person?.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null };
+  }));
+  return { ...conversation, participants, flags, unreadCount };
 }
 
 export const listConversations = query({

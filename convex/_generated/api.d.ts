@@ -410,7 +410,11 @@ export declare const api: {
             text: string;
           };
           lastMessageAt: number;
-          participants: Array<{ address: string; name: string | null }>;
+          participants: Array<{
+            address: string;
+            name: string | null;
+            photoUrl?: string | null;
+          }>;
           primaryChatGuid: string;
           unreadCount: number;
           updatedAt: number;
@@ -469,7 +473,11 @@ export declare const api: {
               text: string;
             };
             lastMessageAt: number;
-            participants: Array<{ address: string; name: string | null }>;
+            participants: Array<{
+              address: string;
+              name: string | null;
+              photoUrl?: string | null;
+            }>;
             primaryChatGuid: string;
             unreadCount: number;
             updatedAt: number;
@@ -626,7 +634,11 @@ export declare const api: {
             text: string;
           };
           lastMessageAt: number;
-          participants: Array<{ address: string; name: string | null }>;
+          participants: Array<{
+            address: string;
+            name: string | null;
+            photoUrl?: string | null;
+          }>;
           primaryChatGuid: string;
           unreadCount: number;
           updatedAt: number;
@@ -2341,6 +2353,14 @@ export declare const internal: {
           resultGuid?: string;
           status: "sent" | "failed" | "unknown";
         },
+        boolean
+      >;
+    };
+    photos: {
+      setContactPhoto: FunctionReference<
+        "mutation",
+        "internal",
+        { address: string; hash: string; storageId: Id<"_storage"> },
         boolean
       >;
     };

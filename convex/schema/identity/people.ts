@@ -51,6 +51,8 @@ export const people = defineTable({
   is_self: v.boolean(), // the cluster that is Milad himself
 
   notes: v.optional(v.string()),
+  photoStorageId: v.optional(v.id("_storage")),
+  photoHash: v.optional(v.string()),
 
   // Optional downstream links — Convex stays canonical, these just point out.
   airtable_human_id: v.optional(v.string()),
