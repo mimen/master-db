@@ -60,7 +60,27 @@ shell runtime is restricted to `/Users/mimen/Applications/Comma.app`; the Mini m
 that artifact but never launches it. Web and shell updates activate through the in-app Reload
 and Restart banners.
 
+## Convex architecture
+
+- The [bridge](server/bridge/) mirrors Messages history, BlueBubbles events, media,
+  and SQLite Overlay state into Convex, and executes queued outbox commands.
+- The [`comma_*` tables](../../convex/schema/comma/) store conversations, messages,
+  attachments, conversation state, drafts, scheduled messages, triage, sync state, and outbox commands.
+  The local ingest contract reference is `apps/imsg/docs/convex-ingest-contract.md`.
+- [Settings](client/src/lib/settings.ts) default reads and sends to `auto`. Signed-in
+  clients resolve to Convex unless explicitly disabled. The [auth provider](client/src/lib/convex-auth.tsx)
+  also updates non-hook readers, without replacing persisted overrides.
+- Unsigned clients automatically use REST, including Tauri and Expo Go while system-browser
+  OAuth is deferred. REST read/send paths and the SSE-driven thread cache remain supported.
+- Convex functions deploy separately from the repo root with
+  `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`. A push to main deploys only imsg.
+
 ## Gotchas
+
+- imsg imports use `GenericId<"table">` from `convex/values` and `Infer` from schema validators,
+  not `convex/_generated/dataModel.d.ts`, which is absent on the Mini.
+- The entire imsg suite must pass in one `bun test` process. Module mocks leak across files,
+  so prefer injected dependencies over `mock.module`.
 
 - **`.env` is NOT in the checkout** (gitignored). Local server runs need
   `BB_URL/BB_PASSWORD/HOST/PORT/DB_PATH`; keep `HOST=127.0.0.1`. The Mini's

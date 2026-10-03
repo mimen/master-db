@@ -19,6 +19,9 @@ _Avoid_: filter logic, flag logic
 **Overlay**:
 App-local per-chat state stored in SQLite that BlueBubbles knows nothing about:
 dismissal GUIDs, mute, pin, marked-unread.
+Convex `comma_conversation_state` mirrors the Overlay. In Convex-sends mode, client
+writes go through the outbox. The bridge applies them to SQLite and mirrors the result
+back to Convex.
 _Avoid_: overlay DB rows (when meaning the concept), local state
 
 **Unresponded**:
