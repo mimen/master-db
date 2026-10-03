@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,9 +13,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
-import type { Contact } from "@shared/types";
+import type { ChatSummary, Contact } from "@shared/types";
+import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { type AirtableHumanRow } from "@/lib/identity";
@@ -24,9 +26,22 @@ import { PersonAvatar } from "./avatar";
 import { ListRow } from "./list-row";
 
 type Row =
+  | { kind: "recent-header"; key: string }
   | { kind: "contact"; key: string; contact: Contact }
   | { kind: "airtable-header"; key: string }
   | { kind: "airtable"; key: string; human: AirtableHumanRow };
+
+const RECENT_LIMIT = 8;
+
+/** People from the most recent one-to-one conversations, newest first. */
+function recentContacts(chats: readonly ChatSummary[] | null): Contact[] {
+  if (!chats) return [];
+  return [...chats]
+    .filter((chat) => !chat.isGroup && chat.participants[0])
+    .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0))
+    .slice(0, RECENT_LIMIT)
+    .map((chat) => ({ address: chat.participants[0]!.address, name: chat.displayName }));
+}
 
 /** New-message UI shared by the mobile route and the desktop overlay panel. */
 export function NewChatContent({
@@ -45,6 +60,8 @@ export function NewChatContent({
   const [sending, setSending] = useState(false);
 
   const needle = query.trim();
+  const chats = useChatDirectory();
+  const recents = useMemo(() => recentContacts(chats), [chats]);
 
   useEffect(() => {
     if (needle.length < 2) {
@@ -69,7 +86,12 @@ export function NewChatContent({
     if (address) addContact({ address, name: human.display_name });
   });
 
-  const rows: Row[] = [
+  const showRecents = needle.length === 0;
+  const unselectedRecents = recents.filter((c) => !selected.some((x) => x.address === c.address));
+  const rows: Row[] = showRecents ? [
+    ...(unselectedRecents.length > 0 ? [{ kind: "recent-header" as const, key: "recent-header" }] : []),
+    ...unselectedRecents.map((c) => ({ kind: "contact" as const, key: `recent-${c.address}`, contact: c })),
+  ] : [
     ...results.map((c) => ({ kind: "contact" as const, key: `${c.address}-${c.name}`, contact: c })),
     ...(airtableResults.length > 0
       ? [
@@ -147,10 +169,10 @@ export function NewChatContent({
         keyboardShouldPersistTaps="handled"
         style={{ flex: 1 }}
         renderItem={({ item }) => {
-          if (item.kind === "airtable-header") {
+          if (item.kind === "airtable-header" || item.kind === "recent-header") {
             return (
               <Text style={[styles.sectionHeader, { color: theme.textSecondary, backgroundColor: theme.background }]}>
-                From Airtable
+                {item.kind === "recent-header" ? "Recent" : "From Airtable"}
               </Text>
             );
           }
@@ -177,7 +199,7 @@ export function NewChatContent({
               onPress={() => addContact(item.contact)}
               leading={<PersonAvatar address={item.contact.address} name={item.contact.name} size={36} />}
               title={item.contact.name}
-              subtitle={item.contact.address}
+              subtitle={item.contact.name === formatAddress(item.contact.address) ? undefined : formatAddress(item.contact.address)}
             />
           );
         }}
@@ -241,7 +263,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 2,
   },
-  sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 16, paddingVertical: 4 },
+  sectionHeader: { fontSize: 12, fontWeight: "600", paddingHorizontal: 16, paddingBottom: 4, paddingTop: 10 },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
