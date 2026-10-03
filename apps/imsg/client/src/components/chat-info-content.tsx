@@ -15,7 +15,6 @@ import { router } from "expo-router";
 import { api, attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, pinChat } from "@/lib/chat-actions";
-import { getChats } from "@/lib/chat-store";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion, GalleryItem } from "@shared/types";
@@ -25,7 +24,8 @@ import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
 import { HOVER_DIM, PRESS_DIM, Type } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
-import { PersonAvatar } from "./avatar";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
 import { ChatCrmSection } from "./chat-crm-section";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
@@ -57,6 +57,7 @@ export function ChatInfoContent({
   const type = useType();
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
+  const chats = useChatDirectory();
   const [info, setInfo] = useState<{
     displayName: string | null;
     isGroup: boolean;
@@ -157,17 +158,18 @@ export function ChatInfoContent({
       title: p.name,
       actions: [
         {
-          label: "Remove from Conversation",
+          label: "Remove from conversation",
           destructive: true,
           onPress: () =>
-            api.participant(guid, p.address, "remove").then(load).catch(() => showToast("Failed")),
+            api.participant(guid, p.address, "remove").then(load).catch(() => showToast(`Couldn't remove ${p.name ?? formatAddress(p.address)}. Try again.`)),
         },
       ],
     });
   };
 
   const galleryMedia = gallery.map((g) => ({ url: attachmentUrl(g.guid), isVideo: g.isVideo }));
-  const summary = getChats()?.find((c) => c.guid === guid) ?? null;
+  const summary = chats?.find((c) => c.guid === guid) ?? null;
+  const peer = info.isGroup ? null : info.participants[0];
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -179,36 +181,9 @@ export function ChatInfoContent({
         ]}
         contentContainerStyle={{ padding: 16 }}
       >
-        {summary && (
-          <View style={styles.quickRow}>
-            {([
-              {
-                icon: (summary.flags.pinned ? "pin" : "pin-outline") as keyof typeof Ionicons.glyphMap,
-                label: summary.flags.pinned ? "Unpin" : "Pin",
-                onPress: () => {
-                  pinChat(summary, !summary.flags.pinned);
-                  showToast(summary.flags.pinned ? "Unpinned" : "Pinned");
-                },
-              },
-              {
-                icon: "mail-unread-outline" as keyof typeof Ionicons.glyphMap,
-                label: "Unread",
-                onPress: () => {
-                  markChatUnread(summary);
-                  showToast("Marked unread");
-                  onClose();
-                },
-              },
-            ] as const).map((a) => (
-              <Pressable key={a.label} style={({ hovered, pressed }) => [styles.quickAction, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]} onPress={a.onPress}>
-                <View style={[styles.quickIcon, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
-                  <Ionicons name={a.icon} size={22} color={theme.text} />
-                </View>
-                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{a.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        <View style={styles.hero}>
+          {summary ? <ChatAvatar chat={summary} size={72} /> : peer ? <PersonAvatar address={peer.address} name={peer.name ?? formatAddress(peer.address)} size={72} /> : <GroupPhotoAvatar guid={guid} size={72} />}
+        </View>
         {info.isGroup ? (
           renaming ? (
             <View>
@@ -293,7 +268,7 @@ export function ChatInfoContent({
           )
         ) : (
           <View>
-            <Text style={[styles.title, { color: theme.text }]}>
+            <Text style={[styles.title, { color: theme.text, fontSize: type.title }]}>
               {info.participants[0]?.name ??
                 (info.participants[0]?.address ? formatAddress(info.participants[0].address) : "Details")}
             </Text>
@@ -336,10 +311,45 @@ export function ChatInfoContent({
           </View>
         )}
 
-        <Text style={[styles.section, { color: theme.textSecondary }]}>
-          {info.participants.length} {info.participants.length === 1 ? "Person" : "People"}
-        </Text>
-        <View style={[styles.card, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
+        {summary && (
+          <View style={styles.quickRow}>
+            {([
+              {
+                icon: (summary.flags.pinned ? "pin" : "pin-outline") as keyof typeof Ionicons.glyphMap,
+                label: summary.flags.pinned ? "Unpin" : "Pin",
+                onPress: () => {
+                  pinChat(summary, !summary.flags.pinned);
+                  showToast(summary.flags.pinned ? "Unpinned" : "Pinned");
+                },
+              },
+              {
+                icon: "mail-unread-outline" as keyof typeof Ionicons.glyphMap,
+                label: "Mark unread",
+                onPress: () => {
+                  markChatUnread(summary);
+                  showToast("Marked unread");
+                  onClose();
+                },
+              },
+            ] as const).map((a) => (
+              <Pressable
+                key={a.label}
+                accessibilityRole="button"
+                style={({ hovered, pressed }) => [styles.quickAction, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }]}
+                onPress={a.onPress}
+              >
+                <Ionicons name={a.icon} size={15} color={theme.text} />
+                <Text style={{ color: theme.text, fontSize: Type.secondary, fontWeight: "600" }}>{a.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {info.isGroup && (
+          <Text style={[styles.section, { color: theme.textSecondary }]}>
+            {`${info.participants.length} people`}
+          </Text>
+        )}
+        <View style={[styles.card, !info.isGroup && styles.cardGap, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
           {info.participants.map((p, i) => (
             <View key={p.address}>
               {i > 0 && <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />}
@@ -378,7 +388,7 @@ export function ChatInfoContent({
               <Pressable accessibilityRole="button" accessibilityLabel="Cancel adding person" onPress={() => setAddingParticipant(false)} style={({ hovered, pressed }) => [styles.inlineIconAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}>{({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
             </View>
           ) : (
-            <Pressable onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
+            <Pressable accessibilityRole="button" onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
               <View style={[styles.addPersonIcon, { backgroundColor: "rgba(0,122,255,0.10)" }]}><Ionicons name="person-add" size={15} color={theme.accent} /></View>
               <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>Add person</Text>
             </Pressable>
@@ -396,56 +406,9 @@ export function ChatInfoContent({
           summary?.crm && <DmCrmNote crm={summary.crm} />
         )}
 
-        <View style={[styles.card, styles.cardGap, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
-          {info.isGroup && (
-            <>
-              <Pressable
-                style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
-                onPress={() =>
-                  showSheet({
-                    title: "Leave this conversation?",
-                    actions: [
-                      {
-                        label: "Leave Conversation",
-                        destructive: true,
-                        onPress: () =>
-                          api.leaveGroup(guid).then(() => onClose()).catch(() => showToast("Failed")),
-                      },
-                    ],
-                  })
-                }
-              >
-                <Text style={styles.actionDanger}>Leave Conversation</Text>
-              </Pressable>
-              <View style={[styles.rowDivider, { backgroundColor: theme.divider, marginLeft: 0 }]} />
-            </>
-          )}
-          <Pressable
-            style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
-            onPress={() =>
-              showSheet({
-                title: "Delete this conversation? This cannot be undone.",
-                actions: [
-                  {
-                    label: "Delete Conversation",
-                    destructive: true,
-                    onPress: () =>
-                      api
-                        .deleteChat(guid)
-                        .then(() => onDeleted())
-                        .catch(() => showToast("Delete failed")),
-                  },
-                ],
-              })
-            }
-          >
-            <Text style={styles.actionDanger}>Delete Conversation</Text>
-          </Pressable>
-        </View>
-
         {gallery.length > 0 && (
           <>
-            <Text style={[styles.section, { color: theme.textSecondary }]}>Photos & Videos</Text>
+            <Text style={[styles.section, { color: theme.textSecondary }]}>Photos and videos</Text>
             {/* Fixed-pixel square tiles from the measured width — aspectRatio +
                 percentage widths stagger under RN-web, so size them explicitly. */}
             <View style={styles.grid} onLayout={(e) => onGridLayout(e.nativeEvent.layout.width)}>
@@ -454,6 +417,8 @@ export function ChatInfoContent({
                 return (
                 <Pressable
                   key={item.guid}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.isVideo ? `Open video ${index + 1}` : `Open photo ${index + 1}`}
                   style={{ width: tileSize, height: tileSize }}
                   onPress={() => openLightbox(galleryMedia, index)}
                 >
@@ -475,6 +440,55 @@ export function ChatInfoContent({
             </View>
           </>
         )}
+
+        <View style={[styles.card, styles.cardGap, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
+          {info.isGroup && (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
+                onPress={() =>
+                  showSheet({
+                    title: "Leave this conversation? You'll stop getting its messages.",
+                    actions: [
+                      {
+                        label: "Leave conversation",
+                        destructive: true,
+                        onPress: () =>
+                          api.leaveGroup(guid).then(() => onClose()).catch(() => showToast("Couldn't leave the conversation. Try again.")),
+                      },
+                    ],
+                  })
+                }
+              >
+                <Text style={styles.actionDanger}>Leave conversation</Text>
+              </Pressable>
+              <View style={[styles.rowDivider, { backgroundColor: theme.divider, marginLeft: 0 }]} />
+            </>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
+            onPress={() =>
+              showSheet({
+                title: "Delete this conversation? This can't be undone.",
+                actions: [
+                  {
+                    label: "Delete conversation",
+                    destructive: true,
+                    onPress: () =>
+                      api
+                        .deleteChat(guid)
+                        .then(() => onDeleted())
+                        .catch(() => showToast("Couldn't delete the conversation. Try again.")),
+                  },
+                ],
+              })
+            }
+          >
+            <Text style={styles.actionDanger}>Delete conversation</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -556,11 +570,11 @@ const styles = StyleSheet.create({
   headerIcon: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 28 },
   inlineTextAction: { borderRadius: 6, marginHorizontal: -5, marginVertical: -3, paddingHorizontal: 5, paddingVertical: 3 },
   inlineIconAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", margin: -3, padding: 3 },
-  quickRow: { flexDirection: "row", justifyContent: "center", gap: 24, marginBottom: 8 },
-  quickAction: { alignItems: "center", gap: 6 },
-  quickIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  title: { fontWeight: "600" },
+  hero: { alignItems: "center", marginBottom: 12, marginTop: 4 },
+  quickRow: { flexDirection: "row", gap: 8, marginTop: 14 },
+  quickAction: { alignItems: "center", borderRadius: 8, flex: 1, flexDirection: "row", gap: 6, height: 32, justifyContent: "center" },
+  titleRow: { flexDirection: "row", alignItems: "center", alignSelf: "center", gap: 8 },
+  title: { fontWeight: "600", textAlign: "center" },
   renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   renameInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 18 },
   suggestBlock: { marginTop: 10, gap: 8 },
@@ -583,8 +597,8 @@ const styles = StyleSheet.create({
   identifyBlock: { marginTop: 8 },
   identityCard: { borderRadius: 12, padding: 12, gap: 5 },
   identityHead: { flexDirection: "row", alignItems: "center", gap: 7 },
-  confidence: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.3 },
-  section: { fontSize: 11, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", marginTop: 18, marginBottom: 6 },
+  confidence: { fontSize: 11 },
+  section: { fontSize: 12, fontWeight: "600", marginTop: 18, marginBottom: 6 },
   card: { borderRadius: 10, overflow: "hidden" },
   cardGap: { marginTop: 18 },
   rowDivider: { height: 0.5, marginLeft: 51 },
