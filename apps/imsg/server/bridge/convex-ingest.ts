@@ -15,13 +15,13 @@ export type MessageRow = Fields<CommaMessageDoc>;
 export type AttachmentRow = Fields<CommaAttachmentDoc>;
 export type SyncInput = Omit<Fields<Infer<typeof syncStateDoc>>, "updatedAt">;
 
-interface Bodies {
+export interface Bodies {
   conversations: { conversations: ConversationInput[] };
   messages: { messages: MessageRow[] };
   attachments: { attachments: AttachmentRow[] };
   sync: SyncInput;
 }
-interface Results {
+export interface Results {
   conversations: Record<string, MessageRow["conversationId"]>;
   messages: { written: number; skipped: number };
   attachments: { written: number; skipped: number };

@@ -39,6 +39,7 @@ export async function downloadFailureReason(res: Response): Promise<string> {
 export type BBEvent =
   | { kind: "new-message"; message: BBMessage }
   | { kind: "updated-message"; message: BBMessage }
+  | { kind: "message-send-error"; message: BBMessage }
   | { kind: "chat-read-status-changed" }
   | { kind: "typing"; chatGuid: string; display: boolean }
   | { kind: "group-changed" }
@@ -161,6 +162,9 @@ export class BlueBubblesClient implements BlueBubbles {
     socket.on("new-message", (payload: BBMessage) => this.emit({ kind: "new-message", message: payload }));
     socket.on("updated-message", (payload: BBMessage) =>
       this.emit({ kind: "updated-message", message: payload }),
+    );
+    socket.on("message-send-error", (payload: BBMessage) =>
+      this.emit({ kind: "message-send-error", message: payload }),
     );
     socket.on("chat-read-status-changed", () => this.emit({ kind: "chat-read-status-changed" }));
     socket.on("typing-indicator", (payload: { display: boolean; guid: string }) =>

@@ -131,6 +131,36 @@ export class OverlayDb {
     `);
   }
 
+  bridgeVersion(guid: string, fingerprint: string, baseVersion: number): number {
+    this.db.exec(`CREATE TABLE IF NOT EXISTS comma_message_version (
+      guid TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, version INTEGER NOT NULL
+    );`);
+    const prior = this.db.query<{ fingerprint: string; version: number }, [string]>(
+      "SELECT fingerprint, version FROM comma_message_version WHERE guid = ?",
+    ).get(guid);
+    if (prior?.fingerprint === fingerprint && prior.version > baseVersion) return prior.version;
+    // The counter is durable before upload. Identical retries keep the same version.
+    // It starts above backfill's ROWID * 1000 and has no 999-revision ceiling.
+    const version = Math.max(baseVersion, prior?.version ?? 0) + 1;
+    if (!Number.isSafeInteger(version)) throw new Error("Comma message version overflow");
+    this.db.query(`INSERT INTO comma_message_version (guid, fingerprint, version) VALUES (?, ?, ?)
+      ON CONFLICT(guid) DO UPDATE SET fingerprint = excluded.fingerprint, version = excluded.version`)
+      .run(guid, fingerprint, version);
+    return version;
+  }
+
+  getBridgeCursor(target: string): number | null {
+    this.db.exec("CREATE TABLE IF NOT EXISTS comma_cursor (target TEXT PRIMARY KEY, cursor INTEGER NOT NULL);");
+    return this.db.query<{ cursor: number }, [string]>("SELECT cursor FROM comma_cursor WHERE target = ?")
+      .get(target)?.cursor ?? null;
+  }
+
+  setBridgeCursor(target: string, cursor: number): void {
+    this.getBridgeCursor(target);
+    this.db.query(`INSERT INTO comma_cursor (target, cursor) VALUES (?, ?)
+      ON CONFLICT(target) DO UPDATE SET cursor = excluded.cursor`).run(target, cursor);
+  }
+
   // ------------------------------------------------------------------ ai state
 
   getAiMeta(key: string): string | null {
