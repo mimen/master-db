@@ -307,8 +307,9 @@ export const api = {
 
 };
 
-export function avatarUrl(address: string): string {
-  return `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=3`;
+export function avatarUrl(address: string, photoUrl?: string | null): string {
+  return currentDataSource() === "convex" && photoUrl
+    ? photoUrl : `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=3`;
 }
 
 export function groupPhotoUrl(chatGuid: string): string {
