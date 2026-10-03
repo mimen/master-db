@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BBChat } from "./bb-types";
-import { mapChat, mapMessage } from "./map";
+import type { BBAttachment, BBChat } from "./bb-types";
+import { mapChat, mapMessage, visibleAttachments } from "./map";
 import type { CrmData, NameSource } from "./name-resolver";
 
 /**
@@ -180,5 +180,53 @@ describe("inbound mention metadata", () => {
       fakeNameSource({}),
     );
     expect(message.mentions).toEqual([{ start: 3, length: 4, address: "+15550001111" }]);
+  });
+});
+
+describe("duplicate attachments", () => {
+  const guids = (attachments: BBAttachment[]) => visibleAttachments(attachments).map((a) => a.guid);
+
+  test("shows the JPEG rendition instead of its HEIC original", () => {
+    expect(guids([
+      { guid: "at_1", transferName: "8121__F647.HEIC.jpeg", mimeType: "image/jpeg", transferState: 5, width: 750 },
+      { guid: "at_0", transferName: "8121__F647.HEIC", mimeType: "image/heic", transferState: 0, width: 0 },
+    ])).toEqual(["at_1"]);
+  });
+
+  test("keeps one photo even after the HEIC original is pulled to disk", () => {
+    expect(guids([
+      { guid: "at_1", transferName: "IMG_1.HEIC.jpeg", mimeType: "image/jpeg", transferState: 5, width: 750 },
+      { guid: "at_0", transferName: "IMG_1.HEIC.jpeg", mimeType: "image/jpeg", transferState: 5, width: 3024 },
+    ])).toEqual(["at_0"]);
+  });
+
+  test("drops an RCS copy that never downloaded beside the one that did", () => {
+    expect(guids([
+      { guid: "at_0", transferName: "1729.png", mimeType: "image/png", transferState: 5, totalBytes: 10 },
+      { guid: "at_1", transferName: "1729.png", mimeType: "image/png", transferState: 0, totalBytes: 10 },
+    ])).toEqual(["at_0"]);
+  });
+
+  test("keeps distinct images that share a name", () => {
+    expect(guids([
+      { guid: "a", transferName: "png image.png", mimeType: "image/png", transferState: 5, totalBytes: 1 },
+      { guid: "b", transferName: "png image.png", mimeType: "image/png", transferState: 5, totalBytes: 2 },
+      { guid: "c", transferName: "other.png", mimeType: "image/png", transferState: 0 },
+    ])).toEqual(["a", "b", "c"]);
+  });
+
+  test("maps the deduped list onto the message", () => {
+    const message = mapMessage({
+      guid: "m",
+      text: "",
+      isFromMe: true,
+      attachments: [
+        { guid: "at_1", transferName: "x.HEIC.jpeg", mimeType: "image/jpeg", transferState: 5, width: 750, height: 1000 },
+        { guid: "at_0", transferName: "x.HEIC", mimeType: "image/heic", transferState: 0 },
+      ],
+    }, "iMessage;-;+15550001111", fakeNameSource({}));
+    expect(message.attachments).toEqual([
+      { guid: "at_1", mimeType: "image/jpeg", filename: "x.HEIC.jpeg", width: 750, height: 1000, totalBytes: null },
+    ]);
   });
 });

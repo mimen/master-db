@@ -18,6 +18,19 @@ import { scheduledMessageRequest } from "./scheduled";
 
 export type Result<T, E = string> = { ok: true; value: T } | { ok: false; error: E };
 
+/** BlueBubbles' own reason for a failed download, e.g. "Attachment does not exist in disk!". */
+export async function downloadFailureReason(res: Response): Promise<string> {
+  const body = await res.text().catch(() => "");
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown }; message?: unknown };
+    const message = parsed.error?.message ?? parsed.message;
+    if (typeof message === "string" && message) return `BlueBubbles ${res.status}: ${message}`;
+  } catch {
+    // Non-JSON bodies fall through to the raw text.
+  }
+  return `BlueBubbles ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}`;
+}
+
 /**
  * Inbound events from BlueBubbles, normalized off the raw socket.io stream.
  * The four group-* socket events collapse into one `group-changed` because

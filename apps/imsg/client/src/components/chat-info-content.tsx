@@ -12,7 +12,7 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { api, attachmentUrl } from "@/lib/api";
+import { api, attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, pinChat } from "@/lib/chat-actions";
 import { getChats } from "@/lib/chat-store";
@@ -457,7 +457,11 @@ export function ChatInfoContent({
                   style={{ width: tileSize, height: tileSize }}
                   onPress={() => openLightbox(galleryMedia, index)}
                 >
-                  <Image source={{ uri: attachmentUrl(item.guid) }} style={styles.tileImg} contentFit="cover" />
+                  <Image
+                    source={{ uri: item.isVideo ? attachmentUrl(item.guid) : attachmentThumbnailUrl(item.guid, tileSize) }}
+                    style={styles.tileImg}
+                    contentFit="cover"
+                  />
                   {item.isVideo && (
                     // Play badge sits on a fixed dark scrim over media thumbnails —
                     // theme-invariant by design, not a theme.onAccent site.

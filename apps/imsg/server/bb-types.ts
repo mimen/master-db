@@ -24,6 +24,8 @@ export interface BBAttachment {
   totalBytes?: number | null;
   isSticker?: boolean;
   hideAttachment?: boolean;
+  /** chat.db transfer_state; 5 means the file is on the Mini's disk, 0 means it never downloaded. */
+  transferState?: number;
   height?: number | null;
   width?: number | null;
 }

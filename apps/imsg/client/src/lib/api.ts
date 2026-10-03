@@ -266,3 +266,8 @@ export function groupPhotoUrl(chatGuid: string): string {
 export function attachmentUrl(guid: string): string {
   return `${BASE_URL}/api/attachments/${encodeURIComponent(guid)}`;
 }
+
+/** A small cached JPEG for in-thread display; the server snaps width to 260/520/1040 and serves GIFs whole. */
+export function attachmentThumbnailUrl(guid: string, displayWidth: number): string {
+  return `${attachmentUrl(guid)}?w=${Math.ceil(displayWidth * 2)}`;
+}

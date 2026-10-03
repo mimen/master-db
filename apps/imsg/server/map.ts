@@ -1,4 +1,4 @@
-import type { BBChat, BBHandle, BBMessage } from "./bb-types";
+import type { BBAttachment, BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { ChatSummary, Message, Participant, Reaction, SpecialContent } from "../shared/types";
 import type { MentionAnnotation } from "../shared/mentions";
 import type { ChatState } from "../shared/chat-state";
@@ -18,6 +18,36 @@ function messageService(
   if (chatService === "IMESSAGE") return "iMessage";
   const handleService = (m.handle?.service ?? "").toUpperCase();
   return handleService === "SMS" || handleService === "RCS" ? "SMS" : "iMessage";
+}
+
+const ON_DISK = 5;
+
+/**
+ * Messages often carry one photo twice: a HEIC original beside its
+ * "<name>.HEIC.jpeg" rendition, or an RCS/SMS copy that never downloaded
+ * beside the one that did. Keep one per photo, preferring a copy on disk,
+ * then the JPEG. Distinct same-name images (both on disk) all stay.
+ */
+export function visibleAttachments(attachments: readonly BBAttachment[]): BBAttachment[] {
+  const shown = attachments.filter((a) => a.guid && !a.hideAttachment);
+  const groups = new Map<string, BBAttachment[]>();
+  for (const a of shown) {
+    const key = (a.transferName ?? a.guid).toLowerCase().replace(/\.(heic|heif)\.jpe?g$/, ".$1");
+    groups.set(key, [...(groups.get(key) ?? []), a]);
+  }
+  const dropped = new Set<BBAttachment>();
+  const rank = (a: BBAttachment) =>
+    (a.transferState === ON_DISK ? 2 : 0) + (a.mimeType === "image/jpeg" ? 1 : 0);
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue;
+    const keep = group.reduce((best, a) =>
+      rank(a) > rank(best) || (rank(a) === rank(best) && (a.width ?? 0) > (best.width ?? 0)) ? a : best);
+    const onePhoto = /\.(heic|heif)$/.test(key);
+    for (const a of group) {
+      if (a !== keep && (onePhoto || a.transferState !== ON_DISK)) dropped.add(a);
+    }
+  }
+  return shown.filter((a) => !dropped.has(a));
 }
 
 /** Detects rich (non-plain-text) payloads by their app balloon bundle id. */
@@ -174,8 +204,7 @@ export function mapMessage(
     isFromMe: m.isFromMe === true,
     service: messageService(m, chatGuid, sourceChatGuid),
     sender: sender(m, contacts, participants),
-    attachments: (m.attachments ?? [])
-      .filter((a) => a.guid && !a.hideAttachment)
+    attachments: visibleAttachments(m.attachments ?? [])
       .map((a) => ({
         guid: a.guid,
         mimeType: a.mimeType ?? null,

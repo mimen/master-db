@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { endTime, setMetric, startTime, timing } from "hono/timing";
 import type { BBAttributedBody, BBMessage } from "./bb-types";
-import type { BlueBubbles } from "./bluebubbles";
+import { downloadFailureReason, type BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import type { Config } from "./config";
 import { registerDesktopReleaseRoutes } from "./desktop-version";
@@ -22,11 +22,12 @@ import {
 import { NameResolver } from "./name-resolver";
 import { computeCounts, matchesFilters } from "../shared/chat-state";
 import { fetchLinkPreview, parsePreviewUrl } from "./link-preview";
-import { buildThread, mapMessage } from "./map";
+import { buildThread, mapMessage, visibleAttachments } from "./map";
 import { wireLiveEvents } from "./live-events";
 import type { MentionAnnotation } from "../shared/mentions";
 import { buildMentionAttributedBody } from "./mention-body";
 import { transcodeAttachment } from "./transcode";
+import { canThumbnail, parseThumbnailWidth, thumbnailAttachment } from "./thumbnail";
 import { mapScheduledMessage } from "./scheduled";
 import { ScheduledSendNow } from "./scheduled-send-now";
 import { WhisperService } from "./whisper";
@@ -705,8 +706,8 @@ app.get("/api/chats/:guid/gallery", async (c) => {
     const batch = await bb.chatMessages(chatGuid, { limit: 200, before, sort: "DESC" });
     if (!batch.ok || batch.value.length === 0) break;
     for (const m of batch.value) {
-      for (const a of m.attachments ?? []) {
-        if (!a.guid || a.hideAttachment || seen.has(a.guid)) continue;
+      for (const a of visibleAttachments(m.attachments ?? [])) {
+        if (seen.has(a.guid)) continue;
         const mime = a.mimeType ?? "";
         const isImage = mime.startsWith("image/");
         const isVideo = mime.startsWith("video/");
@@ -944,6 +945,27 @@ app.get("/api/attachments/:guid", async (c) => {
   endTime(c, "meta");
   const mimeType = meta.ok ? (meta.value.mimeType ?? null) : null;
   const filename = meta.ok ? (meta.value.transferName ?? null) : null;
+  const failed = (reason: string) => {
+    console.warn(`attachment ${guid}: ${reason}`);
+    return c.json({ error: "download failed", reason }, 502);
+  };
+
+  const width = parseThumbnailWidth(c.req.query("w"));
+  if (width && canThumbnail(mimeType, filename)) {
+    startTime(c, "thumbnail");
+    const thumb = await thumbnailAttachment(guid, width, () => bb.downloadAttachment(guid));
+    endTime(c, "thumbnail");
+    if (!thumb.ok) return failed(thumb.reason);
+    const file = Bun.file(thumb.path);
+    // The guid and width fully determine the bytes, so clients keep them forever.
+    return new Response(file, {
+      headers: {
+        "Content-Type": "image/jpeg",
+        "Content-Length": String(file.size),
+        "Cache-Control": "private, max-age=31536000, immutable",
+      },
+    });
+  }
 
   startTime(c, "transcode");
   const transcoded = await transcodeAttachment(guid, mimeType, filename, () =>
@@ -959,12 +981,12 @@ app.get("/api/attachments/:guid", async (c) => {
 
   if (rangeHeader) {
     const file = await cachedAttachmentFile(guid);
-    if (!file) return c.json({ error: "download failed" }, 502);
+    if (!file) return failed("range download failed");
     return attachmentFileResponse(file, mimeType, rangeHeader);
   }
 
   const download = await bb.downloadAttachment(guid);
-  if (!download.ok || !download.body) return c.json({ error: "download failed" }, 502);
+  if (!download.ok || !download.body) return failed(await downloadFailureReason(download));
   return new Response(download.body, {
     headers: attachmentHeaders(mimeType ?? download.headers.get("Content-Type")),
   });

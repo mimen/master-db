@@ -4,7 +4,7 @@ import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
-import { attachmentUrl } from "@/lib/api";
+import { attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { formatBubbleTime } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
@@ -182,7 +182,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
                 </View>
               ) : (
                 <Image
-                  source={{ uri: url }}
+                  source={{ uri: attachmentThumbnailUrl(att.guid, mediaW) }}
                   style={{ width: mediaW, aspectRatio: ratio, borderRadius: Radii.card, backgroundColor: theme.backgroundElement }}
                   contentFit="cover"
                   transition={100}
