@@ -2,7 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
@@ -33,6 +33,27 @@ function conversation(key: string, date: number): Omit<Doc<"comma_conversations"
   };
 }
 
+function message(conversationId: Id<"comma_conversations">, guid: string, date: number): Omit<Doc<"comma_messages">, "_id" | "_creationTime"> {
+  return {
+    conversationId,
+    guid,
+    chatGuid: "iMessage;-;one",
+    dateCreated: date,
+    isFromMe: false,
+    text: "Hello comet",
+    service: "iMessage",
+    error: 0,
+    edited: false,
+    retracted: false,
+    isTapback: false,
+    reactions: [],
+    isGroupEvent: false,
+    mentions: [],
+    attachmentGuids: [],
+    sourceVersion: 1,
+  };
+}
+
 function authed() {
   return convexTest(schema, commaModules).withIdentity({ email: ALLOWED_EMAIL });
 }
@@ -44,6 +65,85 @@ describe("Comma read queries", () => {
     await expect(t.query(api.comma.queries.listConversations, { paginationOpts })).rejects.toThrow("Unauthorized");
     await expect(t.query(api.comma.queries.getConversation, { conversationId: id })).rejects.toThrow("Unauthorized");
     await expect(t.query(api.comma.queries.resolveChat, { chatGuid: "one" })).rejects.toThrow("Unauthorized");
+  });
+
+  test("message queries reject unauthenticated callers", async () => {
+    const t = convexTest(schema, commaModules);
+    const id = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("one", 1)));
+    await expect(t.query(api.comma.queries.listMessages, { conversationId: id, paginationOpts })).rejects.toThrow("Unauthorized");
+    await expect(t.query(api.comma.queries.searchMessages, { query: "comet" })).rejects.toThrow("Unauthorized");
+  });
+
+  test("paginates visible messages newest first within one conversation", async () => {
+    const t = authed();
+    const id = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      const other = await ctx.db.insert("comma_conversations", conversation("other", 1));
+      await ctx.db.insert("comma_messages", message(id, "oldest", 1));
+      await ctx.db.insert("comma_messages", message(id, "middle", 2));
+      await ctx.db.insert("comma_messages", { ...message(id, "retracted", 3), retracted: true });
+      await ctx.db.insert("comma_messages", message(id, "newest", 4));
+      await ctx.db.insert("comma_messages", { ...message(id, "tapback", 5), isTapback: true });
+      await ctx.db.insert("comma_messages", message(other, "other-chat", 6));
+      return id;
+    });
+    const first = await t.query(api.comma.queries.listMessages, { conversationId: id, paginationOpts });
+    expect(first.page.map((row) => row.guid)).toEqual(["newest", "middle"]);
+    expect(first.page.map((row) => row.attachments)).toEqual([[], []]);
+    expect(first.isDone).toBe(false);
+    const second = await t.query(api.comma.queries.listMessages, {
+      conversationId: id,
+      paginationOpts: { ...paginationOpts, cursor: first.continueCursor },
+    });
+    expect(second.page.map((row) => row.guid)).toEqual(["oldest"]);
+    expect(second.isDone).toBe(true);
+  });
+
+  test("joins only the message's attachments and resolves stored URLs", async () => {
+    const t = authed();
+    const seeded = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      await ctx.db.insert("comma_messages", message(id, "photo-message", 1));
+      const thumb = await ctx.storage.store(new Blob(["thumbnail"]));
+      const original = await ctx.storage.store(new Blob(["original"]));
+      const attachment = {
+        conversationId: id,
+        messageGuid: "photo-message",
+        isSticker: false,
+        hideAttachment: false,
+        isOnDisk: true,
+        sourceVersion: 1,
+      };
+      await ctx.db.insert("comma_attachments", { ...attachment, guid: "photo", filename: "photo.jpg", thumbStorageId: thumb, originalStorageId: original });
+      await ctx.db.insert("comma_attachments", { ...attachment, guid: "not-uploaded" });
+      await ctx.db.insert("comma_attachments", { ...attachment, guid: "unrelated", messageGuid: "other-message" });
+      return { id, thumbUrl: await ctx.storage.getUrl(thumb), originalUrl: await ctx.storage.getUrl(original) };
+    });
+    const result = await t.query(api.comma.queries.listMessages, { conversationId: seeded.id, paginationOpts });
+    expect(result.page[0].attachments.map((row) => row.guid)).toEqual(["photo", "not-uploaded"]);
+    expect(seeded.thumbUrl).toBeTypeOf("string");
+    expect(seeded.originalUrl).toBeTypeOf("string");
+    expect(result.page[0].attachments[0]).toMatchObject({ filename: "photo.jpg", thumbUrl: seeded.thumbUrl, originalUrl: seeded.originalUrl });
+    expect(result.page[0].attachments[1]).toMatchObject({ thumbUrl: null, originalUrl: null });
+  });
+
+  test("search excludes tapbacks and tombstones and supports a conversation filter", async () => {
+    const t = authed();
+    const id = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      const other = await ctx.db.insert("comma_conversations", conversation("other", 1));
+      await ctx.db.insert("comma_messages", message(id, "match", 1));
+      await ctx.db.insert("comma_messages", message(other, "other-match", 2));
+      await ctx.db.insert("comma_messages", { ...message(id, "reaction", 3), isTapback: true });
+      await ctx.db.insert("comma_messages", { ...message(id, "tombstone", 4), retracted: true });
+      await ctx.db.insert("comma_messages", { ...message(id, "unmatched", 5), text: "Goodbye" });
+      return id;
+    });
+    const global = await t.query(api.comma.queries.searchMessages, { query: "comet" });
+    expect(global.map((row) => row.guid).sort()).toEqual(["match", "other-match"]);
+    const scoped = await t.query(api.comma.queries.searchMessages, { query: "comet", conversationId: id });
+    expect(scoped.map((row) => row.guid)).toEqual(["match"]);
+    expect(await t.query(api.comma.queries.searchMessages, { query: "missing" })).toEqual([]);
   });
 
   test("resolves an allowed user from the JWT subject", async () => {
