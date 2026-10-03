@@ -16,6 +16,9 @@ export class FixtureBlueBubbles implements BlueBubbles {
   private fake: FakeBlueBubbles;
   private readonly listeners = new Set<(event: BBEvent) => void>();
   private faults = new Map<FaultableMethod, string>();
+  private readonly clientKeys = new Map<string, string>();
+  private readonly deletedMessages = new Set<string>();
+  private readonly groupNames = new Map<string, string>();
   /** sendText's response latency, and whether the event stream echoes the send before it, as BlueBubbles does. */
   private sendTiming: { delayMs: number; echo: boolean } | null = null;
 
@@ -26,11 +29,18 @@ export class FixtureBlueBubbles implements BlueBubbles {
   reset(seed: FakeSeed): void {
     this.fake = new FakeBlueBubbles(seed);
     this.faults.clear();
+    this.clientKeys.clear();
+    this.deletedMessages.clear();
+    this.groupNames.clear();
     this.sendTiming = null;
   }
 
   setSendTiming(timing: { delayMs: number; echo: boolean } | null): void {
     this.sendTiming = timing;
+  }
+
+  clientKeyFor(messageGuid: string): string | undefined {
+    return this.clientKeys.get(messageGuid);
   }
 
   setFault(method: FaultableMethod | null, error = "fixture fault"): void {
@@ -69,21 +79,32 @@ export class FixtureBlueBubbles implements BlueBubbles {
     return Promise.resolve(this.failure<BBServerInfo>("connect") ?? this.fake.connect());
   }
 
-  queryChats(_limit?: number): Promise<Result<BBChat[]>> {
-    return Promise.resolve(this.failure<BBChat[]>("queryChats") ?? this.fake.queryChats());
+  async queryChats(limit?: number): Promise<Result<BBChat[]>> {
+    const result = this.failure<BBChat[]>("queryChats") ?? await this.fake.queryChats(limit);
+    if (!result.ok) return result;
+    return { ok: true, value: await Promise.all(result.value.map((chat) => this.chatView(chat))) };
   }
 
-  chatMessages(
+  private async chatView(chat: BBChat): Promise<BBChat> {
+    const result = await this.fake.chatMessages(chat.guid, { limit: Number.MAX_SAFE_INTEGER });
+    const lastMessage = result.ok ? result.value.find((message) =>
+      !this.deletedMessages.has(message.guid) && !message.dateRetracted && !message.associatedMessageGuid) ?? null : chat.lastMessage;
+    return { ...chat, displayName: this.groupNames.get(chat.guid) ?? chat.displayName, lastMessage };
+  }
+
+  async chatMessages(
     chatGuid: string,
     options?: { limit?: number; before?: number; after?: number; sort?: "ASC" | "DESC" },
   ): Promise<Result<BBMessage[]>> {
-    return Promise.resolve(
-      this.failure<BBMessage[]>("chatMessages") ?? this.fake.chatMessages(chatGuid, options),
-    );
+    const failure = this.failure<BBMessage[]>("chatMessages");
+    if (failure) return failure;
+    const result = await this.fake.chatMessages(chatGuid, { ...options, limit: Number.MAX_SAFE_INTEGER });
+    return result.ok ? { ok: true, value: result.value.filter((message) => !this.deletedMessages.has(message.guid)).slice(0, options?.limit ?? 75) } : result;
   }
 
-  queryMessages(options: MessageQueryOptions): Promise<Result<BBMessage[]>> {
-    return Promise.resolve(this.failure<BBMessage[]>("queryMessages") ?? this.fake.queryMessages(options));
+  async queryMessages(options: MessageQueryOptions): Promise<Result<BBMessage[]>> {
+    const result = this.failure<BBMessage[]>("queryMessages") ?? await this.fake.queryMessages({ ...options, offset: 0, limit: Number.MAX_SAFE_INTEGER });
+    return result.ok ? { ok: true, value: result.value.filter((message) => !this.deletedMessages.has(message.guid)).slice(options.offset, options.offset + options.limit) } : result;
   }
 
   messageWithReactions(messageGuid: string): Promise<Result<BBMessage[]>> {
@@ -97,13 +118,17 @@ export class FixtureBlueBubbles implements BlueBubbles {
     message: string,
     replyTo?: { guid: string; part: number },
     attributedBody?: BBAttributedBody,
+    clientKey?: string,
   ): Promise<Result<BBMessage>> {
     const failure = this.failure<BBMessage>("sendText");
     if (failure) return failure;
-    const sent = await this.fake.sendText(chatGuid, message, replyTo, attributedBody);
     const timing = this.sendTiming;
-    if (sent.ok && timing) {
-      if (timing.echo) this.emit({ kind: "new-message", message: sent.value });
+    if (timing && !timing.echo) await Bun.sleep(timing.delayMs);
+    const sent = await this.fake.sendText(chatGuid, message, replyTo, attributedBody, clientKey);
+    if (sent.ok && replyTo) sent.value.threadOriginatorGuid = replyTo.guid;
+    if (sent.ok && clientKey) this.clientKeys.set(sent.value.guid, clientKey);
+    if (sent.ok && timing?.echo) {
+      this.emit({ kind: "new-message", message: sent.value });
       await Bun.sleep(timing.delayMs);
     }
     return sent;
@@ -115,10 +140,17 @@ export class FixtureBlueBubbles implements BlueBubbles {
     );
   }
 
-  react(_chatGuid: string, _messageGuid: string, _reaction: string, _partIndex?: number): Promise<Result<unknown>> {
-    return Promise.resolve(
-      this.failure<unknown>("react") ?? this.fake.react(),
-    );
+  async react(chatGuid: string, messageGuid: string, reaction: string, partIndex = 0): Promise<Result<unknown>> {
+    const failure = this.failure<unknown>("react");
+    if (failure) return failure;
+    const message: BBMessage = {
+      guid: `reaction-${crypto.randomUUID()}`, chats: [{ guid: chatGuid }],
+      isFromMe: true, dateCreated: Date.now(),
+      associatedMessageGuid: `p:${partIndex}/${messageGuid}`, associatedMessageType: reaction,
+    };
+    this.fake.appendMessage(chatGuid, message);
+    this.emit({ kind: "new-message", message });
+    return { ok: true, value: undefined };
   }
 
   markRead(chatGuid: string): Promise<Result<unknown>> {
@@ -129,14 +161,26 @@ export class FixtureBlueBubbles implements BlueBubbles {
     return Promise.resolve(this.failure<unknown>("setTyping") ?? this.fake.setTyping());
   }
 
-  unsend(_messageGuid: string, _partIndex?: number): Promise<Result<unknown>> {
-    return Promise.resolve(this.failure<unknown>("unsend") ?? this.fake.unsend());
+  async unsend(messageGuid: string, _partIndex?: number): Promise<Result<unknown>> {
+    const failure = this.failure<unknown>("unsend");
+    if (failure) return failure;
+    const result = await this.fake.messageWithReactions(messageGuid);
+    if (!result.ok) return result;
+    result.value[0].dateRetracted = Date.now();
+    this.emit({ kind: "updated-message", message: result.value[0] });
+    return { ok: true, value: undefined };
   }
 
-  edit(_messageGuid: string, _editedMessage: string, _partIndex?: number): Promise<Result<BBMessage>> {
-    return Promise.resolve(
-      this.failure<BBMessage>("edit") ?? this.fake.edit(),
-    );
+  async edit(messageGuid: string, editedMessage: string, _partIndex?: number): Promise<Result<BBMessage>> {
+    const failure = this.failure<BBMessage>("edit");
+    if (failure) return failure;
+    const result = await this.fake.messageWithReactions(messageGuid);
+    if (!result.ok) return result;
+    const message = result.value[0];
+    message.text = editedMessage;
+    message.dateEdited = Date.now();
+    this.emit({ kind: "updated-message", message });
+    return { ok: true, value: message };
   }
 
   createChat(addresses: string[], message: string): Promise<Result<BBChat>> {
@@ -161,8 +205,11 @@ export class FixtureBlueBubbles implements BlueBubbles {
     );
   }
 
-  renameGroup(_chatGuid: string, _name: string): Promise<Result<unknown>> {
-    return Promise.resolve(this.failure<unknown>("renameGroup") ?? this.fake.renameGroup());
+  renameGroup(chatGuid: string, name: string): Promise<Result<unknown>> {
+    const failure = this.failure<unknown>("renameGroup");
+    if (failure) return Promise.resolve(failure);
+    this.groupNames.set(chatGuid, name);
+    return Promise.resolve({ ok: true, value: undefined });
   }
 
   addParticipant(_chatGuid: string, _address: string): Promise<Result<unknown>> {
@@ -185,18 +232,23 @@ export class FixtureBlueBubbles implements BlueBubbles {
     return Promise.resolve(this.failure<unknown>("deleteChat") ?? this.fake.deleteChat());
   }
 
-  deleteMessage(_chatGuid: string, _messageGuid: string): Promise<Result<unknown>> {
-    return Promise.resolve(
-      this.failure<unknown>("deleteMessage") ?? this.fake.deleteMessage(),
-    );
+  async deleteMessage(chatGuid: string, messageGuid: string): Promise<Result<unknown>> {
+    const failure = this.failure<unknown>("deleteMessage");
+    if (failure) return failure;
+    const result = await this.fake.messageWithReactions(messageGuid);
+    if (!result.ok || !result.value[0].chats?.some((chat) => chat.guid === chatGuid)) return { ok: false, error: "message not found in chat" };
+    this.deletedMessages.add(messageGuid);
+    this.emit({ kind: "updated-message", message: { ...result.value[0], dateRetracted: Date.now() } });
+    return { ok: true, value: undefined };
   }
 
   contacts(): Promise<Result<BBContact[]>> {
     return Promise.resolve(this.failure<BBContact[]>("contacts") ?? this.fake.contacts());
   }
 
-  getChat(chatGuid: string): Promise<Result<BBChat>> {
-    return Promise.resolve(this.failure<BBChat>("getChat") ?? this.fake.getChat(chatGuid));
+  async getChat(chatGuid: string): Promise<Result<BBChat>> {
+    const result = this.failure<BBChat>("getChat") ?? await this.fake.getChat(chatGuid);
+    return result.ok ? { ok: true, value: await this.chatView(result.value) } : result;
   }
 
   attachmentMeta(guid: string): Promise<Result<BBAttachment>> {

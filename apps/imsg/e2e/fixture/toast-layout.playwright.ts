@@ -19,6 +19,7 @@ for (const scheme of ["light", "dark"] as const) {
       await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
       await page.getByRole("radio", { name: /^All,/ }).click();
       const rows = page.getByTestId("conversation-row");
+      await expect(rows.first()).toBeVisible();
       const before = await rows.count();
       const lastMessage = page.getByText("I added the revised run of show.", { exact: true });
       await expect(lastMessage).toBeVisible();

@@ -74,6 +74,18 @@ async function openThread(desk: Parameters<Parameters<typeof test>[1]>[0]["desk"
   return page;
 }
 
+async function sendText(page: Page, text: string): Promise<void> {
+  const command = page.waitForRequest((request) => {
+    if (!request.url().endsWith("/__fixture/convex") || request.method() !== "POST") return false;
+    const body = request.postDataJSON() as { name: string; args: { payload?: { kind: string; text?: string } } };
+    return body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "send" && body.args.payload.text === text;
+  });
+  const composer = page.getByPlaceholder("iMessage");
+  await composer.fill(text);
+  await composer.press("Enter");
+  await command;
+}
+
 for (const order of [
   { name: "echo before response", timing: { delayMs: 600, echo: true } },
   { name: "response before echo", timing: null },
@@ -84,9 +96,7 @@ for (const order of [
     const page = await openThread(desk);
     const text = `Flicker probe ${order.name}`;
     await traceBubble(page, text);
-    const composer = page.getByPlaceholder("iMessage");
-    await composer.fill(text);
-    await composer.press("Enter");
+    await sendText(page, text);
     await expect(page.getByText(" · Sent")).toBeVisible();
     await page.waitForTimeout(800);
     expect(await readTrace(page)).toEqual({ nodes: 1, dips: 0 });
@@ -100,9 +110,7 @@ test("a slow send renders at full color and only says Sending… once it is actu
   const page = await openThread(desk);
   const text = "Slow send probe";
   await traceBubble(page, text);
-  const composer = page.getByPlaceholder("iMessage");
-  await composer.fill(text);
-  await composer.press("Enter");
+  await sendText(page, text);
   await page.waitForTimeout(600);
   expect(await opacityNow(page)).toBe(1);
   await expect(page.getByText("Sending…")).toHaveCount(0);

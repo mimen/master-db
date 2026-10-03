@@ -32,6 +32,7 @@ async function resetAndOpen(
   await desk.page.emulateMedia({ colorScheme: scheme, reducedMotion });
   await desk.page.goto(`/?visual=${scheme}-${width}`, { waitUntil: "domcontentloaded" });
   await expect(desk.page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
+  await expect(desk.page.getByTestId("conversation-row").first()).toBeVisible();
 }
 
 test("live system theme changes update every mounted desktop surface", async ({ desk }) => {
@@ -122,7 +123,7 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
   await testInfo.attach("matrix-note", { body: Buffer.from("Screenshots: /tmp/comma-matrix-{light,dark}-{820,900,1039,1040,1280,1300,1440,1512}.png"), contentType: "text/plain" });
 });
 
-test("row actions follow the active queue lens and keep More minimal", async ({ desk }) => {
+test("row actions follow conversation state across queue lenses and keep More minimal", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const page = desk.page;
 
@@ -145,21 +146,21 @@ test("row actions follow the active queue lens and keep More minimal", async ({ 
 
   await page.getByRole("radio", { name: /^All,/ }).click();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
-  row = page.getByTestId("conversation-row").first();
+  row = page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" });
   await row.hover();
-  await expect(row.getByText("Settle", { exact: true })).toHaveCount(0);
-  const waitingBefore = await desk.request.get("/api/chats?state=waiting&type=all");
-  const waitingCountBefore = ((await waitingBefore.json()) as readonly unknown[]).length;
-  await page.keyboard.press("Escape");
-  await page.keyboard.press("e");
-  await page.waitForTimeout(100);
-  const waitingAfter = await desk.request.get("/api/chats?state=waiting&type=all");
-  expect(((await waitingAfter.json()) as readonly unknown[]).length).toBe(waitingCountBefore);
+  await expect(row.getByRole("button", { name: "Settle Alex Rivera", exact: true })).toBeVisible();
+  await page.keyboard.press("Meta+e");
+  await expect(row.getByRole("button", { name: "Un-settle Alex Rivera", exact: true })).toBeVisible();
+  await expect(page.getByText("Settled", { exact: true })).toBeVisible();
+  await page.keyboard.press("Meta+e");
+  await expect(row.getByRole("button", { name: "Settle Alex Rivera", exact: true })).toBeVisible();
+  await expect(page.getByText("Un-settled — back in Needs Reply", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   await row.hover();
   await row.getByRole("button", { name: /More actions for/ }).click();
   const menu = page.getByRole("dialog");
   await expect(menu.getByText(/^Mark as (?:read|unread)$/)).toBeVisible();
-  await expect(menu.getByText("Pin", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Unpin", { exact: true })).toBeVisible();
   await expect(menu.getByText("Details", { exact: true })).toBeVisible();
   await expect(menu.getByText("Archive", { exact: true })).toHaveCount(0);
   await expect(menu.getByText("No reply needed", { exact: true })).toHaveCount(0);
@@ -471,7 +472,9 @@ test("Scheduled edit state survives crossing the utility-pane breakpoint", async
     await page.getByRole("button", { name: "Scheduled" }).click();
     await page.getByRole("button", { name: "Edit scheduled message to Jordan Lee" }).click();
     const message = page.getByPlaceholder("Message");
+    await expect(message).toHaveValue("Checking back tomorrow morning.");
     await message.fill(`Preserved across ${startWidth}-${endWidth}`);
+    await expect(message).toHaveValue(`Preserved across ${startWidth}-${endWidth}`);
 
     await page.setViewportSize({ width: endWidth, height: 820 });
     await expect(page.getByText("Edit Scheduled Message", { exact: true })).toBeVisible();
@@ -635,14 +638,16 @@ test("messages send through the real UI and fixture replies arrive over SSE", as
   const page = desk.page;
   await page.getByTestId("conversation-row").first().click();
   const composer = page.getByRole("textbox").last();
+  const thread = page.getByTestId("thread-view");
   const outbound = "Fixture outbound: doors confirmed at eight.";
   await composer.fill(outbound);
   await composer.press("Enter");
-  await expect(page.getByText(outbound, { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(thread.getByText(outbound, { exact: true })).toHaveCount(1);
 
   const inbound = "Fixture inbound: perfect, see you there.";
   await desk.receive(desk.chats.needs, inbound, "+16195550101");
-  await expect(page.getByText(inbound, { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(thread.getByText(inbound, { exact: true })).toHaveCount(1);
+  await expect(page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" })).toContainText(inbound);
   await page.screenshot({ path: "/tmp/comma-send-receive-fixture.png", animations: "disabled" });
 });
 

@@ -57,6 +57,7 @@ test("settling shows a bottom toast whose Undo restores the conversation", async
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
+  await expect(page.getByTestId("conversation-row").first()).toBeVisible();
   const before = await page.getByTestId("conversation-row").count();
   await page.getByTestId("conversation-row").first().click();
   await page.keyboard.press("Meta+e");

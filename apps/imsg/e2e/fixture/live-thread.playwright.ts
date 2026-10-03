@@ -8,8 +8,11 @@ const NINA = `iMessage;-;${NINA_ADDRESS}`;
 async function holdThreadFetches(page: Page, chatGuid: string): Promise<() => void> {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  const path = `/api/chats/${encodeURIComponent(chatGuid)}/messages`;
-  await page.route((url) => url.pathname === path, async (route) => {
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string; args: { conversationId?: string } };
+    if (body.name !== "comma/queries:listMessages" || body.args.conversationId !== chatGuid) {
+      return route.continue();
+    }
     await gate;
     await route.continue();
   });
