@@ -19,6 +19,7 @@ export class FakeIngest extends ConvexIngest {
       messages: { written: 1, skipped: 0 },
       attachments: { written: 1, skipped: 0 },
       sync: null,
+      overlay: { states: 1, events: 1, open: 1, unresolved: 0 },
     };
     return results[kind];
   }

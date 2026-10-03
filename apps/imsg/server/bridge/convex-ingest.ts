@@ -1,4 +1,6 @@
 import type { Infer } from "convex/values";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import type { internal } from "../../../../convex/_generated/api";
 import type {
   CommaAttachmentDoc,
   CommaConversationDoc,
@@ -20,12 +22,14 @@ export interface Bodies {
   messages: { messages: MessageRow[] };
   attachments: { attachments: AttachmentRow[] };
   sync: SyncInput;
+  overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
 }
 export interface Results {
   conversations: Record<string, MessageRow["conversationId"]>;
   messages: { written: number; skipped: number };
   attachments: { written: number; skipped: number };
   sync: null;
+  overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
 }
 
 export class ConvexIngest {

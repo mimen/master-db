@@ -203,6 +203,28 @@ describe("replaceScheduled", () => {
 });
 
 describe("importOverlay", () => {
+  test("scoped snapshots remove deleted triage rows and allow state to turn off", async () => {
+    const t = convexTest(schema, modules);
+    const chatGuid = "iMessage;-;+15550001111";
+    const otherGuid = "iMessage;-;+15550002222";
+    const id = await seedDm(t, "+15550001111", [{ chatGuid, lastMessageAt: 1 }]);
+    await seedDm(t, "+15550002222", [{ chatGuid: otherGuid, lastMessageAt: 1 }]);
+    const state = { chatGuid, pinned: true, markedUnread: true, mutedUnresponded: false, readAt: 10, dismissedUnrespondedGuid: "m1" };
+    await t.mutation(internal.comma.internal.importOverlay, {
+      chatState: [state],
+      triageEvents: [chatGuid, otherGuid].map((guid) => ({ chatGuid: guid, messageGuid: "m1", reason: "dismiss" as const, clearedAt: 1 })),
+      triageOpen: [chatGuid, otherGuid].map((guid) => ({ chatGuid: guid, messageGuid: "m1", openedAt: 1 })),
+    });
+    const args = { replaceChatGuids: [chatGuid],
+      chatState: [{ chatGuid, pinned: false, markedUnread: false, mutedUnresponded: false, readAt: 20 }], triageEvents: [], triageOpen: [] };
+    await t.mutation(internal.comma.internal.importOverlay, args);
+    await t.mutation(internal.comma.internal.importOverlay, args);
+    const actual = await t.run((ctx) => ctx.db.query("comma_conversation_state").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).unique());
+    expect(actual).toMatchObject({ pinned: false, markedUnread: false, readAt: 20 });
+    expect(actual?.dismissedUnrespondedGuid).toBeUndefined();
+    expect(await t.run((ctx) => ctx.db.query("comma_triage_events").collect())).toHaveLength(1);
+    expect(await t.run((ctx) => ctx.db.query("comma_triage_open").collect())).toHaveLength(1);
+  });
   test("merges siblings so a pin survives a newer sibling, and re-import is idempotent", async () => {
     const t = convexTest(schema, modules);
     const c = await seedDm(t, "+15550001111", [

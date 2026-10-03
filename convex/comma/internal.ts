@@ -318,6 +318,7 @@ async function newerAnchor(ctx: MutationCtx, a: string | undefined, b: string | 
 
 export const importOverlay = internalMutation({
   args: {
+    replaceChatGuids: v.optional(v.array(v.string())),
     chatState: v.array(
       v.object({
         chatGuid: v.string(),
@@ -340,7 +341,23 @@ export const importOverlay = internalMutation({
     triageOpen: v.array(v.object({ chatGuid: v.string(), messageGuid: v.string(), openedAt: v.number() })),
   },
   returns: v.object({ states: v.number(), events: v.number(), open: v.number(), unresolved: v.number() }),
-  handler: async (ctx, { chatState, triageEvents, triageOpen }) => {
+  handler: async (ctx, { chatState, triageEvents, triageOpen, replaceChatGuids }) => {
+    // SQLite snapshots must also remove triage rows deleted by undismiss or reply.
+    const replaceIds = new Set<Id<"comma_conversations">>();
+    for (const chatGuid of replaceChatGuids ?? []) {
+      const id = await conversationForChat(ctx, chatGuid);
+      if (id) replaceIds.add(id);
+    }
+    for (const conversationId of replaceIds) {
+      for (const row of await ctx.db.query("comma_triage_events")
+        .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect()) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("comma_triage_open")
+        .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect()) {
+        await ctx.db.delete(row._id);
+      }
+    }
     let unresolved = 0;
     const merged = new Map<Id<"comma_conversations">, Omit<Doc<"comma_conversation_state">, "_id" | "_creationTime">>();
     for (const state of chatState) {
