@@ -55,6 +55,7 @@ export interface MessageQueryOptions {
   chatGuid?: string;
   rowidRange?: { after: number; through: number };
   highestRowid?: boolean;
+  dateCreatedAfter?: number;
 }
 
 /**
@@ -313,7 +314,8 @@ export class BlueBubblesClient implements BlueBubbles {
       limit: options.limit,
       offset: options.offset,
       sort: "DESC",
-      with: options.rowidRange
+      ...(options.dateCreatedAfter !== undefined ? { after: options.dateCreatedAfter } : {}),
+      with: options.rowidRange || options.dateCreatedAfter !== undefined
         ? ["chat", "attachment", "handle", "message.attributedBody", "message.messageSummaryInfo"]
         : ["chat", "handle", "message.attributedBody"],
       ...(options.chatGuid ? { chatGuid: options.chatGuid } : {}),

@@ -188,6 +188,7 @@ export class FakeBlueBubbles implements BlueBubbles {
       .filter((message) => !options.from || (message.isFromMe === true) === (options.from === "me"))
       .filter((message) => !options.chatGuid || message.chats?.some((chat) => chat.guid === options.chatGuid))
       .filter((message) => !options.text || (message.text ?? "").toLowerCase().includes(options.text.toLowerCase()))
+      .filter((message) => options.dateCreatedAfter === undefined || (message.dateCreated ?? 0) > options.dateCreatedAfter)
       .filter((message) => !options.rowidRange || ((message.originalROWID ?? 0) > options.rowidRange.after &&
         (message.originalROWID ?? 0) <= options.rowidRange.through));
     if (options.highestRowid) messages.sort((a, b) => (b.originalROWID ?? 0) - (a.originalROWID ?? 0));

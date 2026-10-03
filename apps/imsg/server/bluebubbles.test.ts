@@ -44,6 +44,17 @@ describe("BlueBubblesClient transport recovery", () => {
 });
 
 describe("BlueBubblesClient message queries", () => {
+  test("reconciliation date filter uses epoch milliseconds and includes raw attachments", async () => {
+    const transport = spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ status: 200, data: [] }));
+    try {
+      const client = new BlueBubblesClient("http://127.0.0.1:1234", "test-password");
+      await client.queryMessages({ limit: 1000, offset: 0, dateCreatedAfter: 123456789 });
+      expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toMatchObject({
+        after: 123456789,
+        with: ["chat", "attachment", "handle", "message.attributedBody", "message.messageSummaryInfo"],
+      });
+    } finally { transport.mockRestore(); }
+  });
   test("backfill pages chats and queries bounded ROWIDs with raw metadata", async () => {
     const transport = spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(Response.json({ status: 200, data: [] }))
