@@ -105,6 +105,11 @@ describe("a window fetch that lands mid-send", () => {
     expect(rows(mergeWindow([older, failed], [older]))).toEqual([["m-1", "m-1", false], ["temp-1", "temp-1", false]]);
   });
 
+  test("drops a failed row that is not this session's own send", () => {
+    const orphan = message("tapback-1", "", 3_000, { error: 3, failed: true });
+    expect(rows(mergeWindow([older, orphan, sent], [older, sent]))).toEqual([["m-1", "m-1", false], ["real-1", "real-1", false]]);
+  });
+
   test("drops what the window no longer contains when it is not newer", () => {
     const gone = message("m-0", "deleted", 500);
     expect(rows(mergeWindow([gone, older], [older]))).toEqual([["m-1", "m-1", false]]);
@@ -119,6 +124,25 @@ describe("reconcile after an event-stream gap", () => {
 
   test("settles a pending send whose echo was missed, under the temp's key", () => {
     expect(rows(reconcileWindow([older, temp], [older, sent]))).toEqual([["m-1", "m-1", false], ["temp-1", "real-1", false]]);
+  });
+
+  test("drops a row inside the window's range that the window no longer contains", () => {
+    const orphan = message("tapback-1", "", 3_000, { error: 3 });
+    const fromOlderPage = message("m-0", "loaded from an older page", 500);
+    expect(rows(reconcileWindow([fromOlderPage, older, orphan, sent], [older, sent]))).toEqual([
+      ["m-0", "m-0", false],
+      ["m-1", "m-1", false],
+      ["real-1", "real-1", false],
+    ]);
+  });
+
+  test("keeps this session's failed send", () => {
+    const failed = { ...temp, dateCreated: 3_000, pending: false, failed: true };
+    expect(rows(reconcileWindow([older, failed, sent], [older, sent]))).toEqual([
+      ["m-1", "m-1", false],
+      ["temp-1", "temp-1", false],
+      ["real-1", "real-1", false],
+    ]);
   });
 
   test("drops a retracted message", () => {

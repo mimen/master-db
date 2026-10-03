@@ -49,9 +49,14 @@ export function settleTemp(current: Message[], tempGuid: string, message: Messag
   return sortByDate(next);
 }
 
+/** This session's own optimistic send, still pending or failed: no fetch can contain it. */
+function isOwnUnsettledSend(m: Message): boolean {
+  return (m.pending === true || m.failed === true) && m.clientKey?.startsWith("temp-") === true;
+}
+
 /**
  * A fetched window replacing what's on screen. Keeps what the fetch couldn't have seen yet:
- * unsettled sends, and anything newer than the window's newest message.
+ * this session's unsettled sends, and anything newer than the window's newest message.
  */
 export function mergeWindow(current: Message[], batch: Message[]): Message[] {
   const byGuid = new Map(current.map((m) => [m.guid, m]));
@@ -62,15 +67,22 @@ export function mergeWindow(current: Message[], batch: Message[]): Message[] {
     return carryKey(known, m);
   });
   const newest = batch.reduce((max, m) => Math.max(max, m.dateCreated), -Infinity);
-  const local = current.filter(
-    (m) => !claimed.has(m) && (m.pending || m.failed || m.dateCreated > newest),
-  );
+  const local = current.filter((m) => !claimed.has(m) && (isOwnUnsettledSend(m) || m.dateCreated > newest));
   return sortByDate([...merged, ...local]);
 }
 
-/** Fold a refetched newest window into the loaded one; returns `current` itself when nothing changed. */
+/**
+ * Fold a refetched newest window into the loaded one, dropping rows inside its date range that it
+ * no longer contains. Returns `current` itself when nothing changed.
+ */
 export function reconcileWindow(current: Message[], batch: Message[]): Message[] {
-  const next = batch.reduce(upsertMessage, current);
+  const fetched = new Set(batch.map((m) => m.guid));
+  const oldest = batch.reduce((min, m) => Math.min(min, m.dateCreated), Infinity);
+  const newest = batch.reduce((max, m) => Math.max(max, m.dateCreated), -Infinity);
+  const kept = current.filter(
+    (m) => fetched.has(m.guid) || isOwnUnsettledSend(m) || m.dateCreated < oldest || m.dateCreated > newest,
+  );
+  const next = batch.reduce(upsertMessage, kept);
   return JSON.stringify(next) === JSON.stringify(current) ? current : next;
 }
 
