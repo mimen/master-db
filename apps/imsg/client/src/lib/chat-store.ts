@@ -1,5 +1,6 @@
 import { applyMessage } from "@shared/chat-state";
 import type { ChatFlags, ChatSummary, Message } from "@shared/types";
+import { currentDataSource } from "./settings";
 
 /**
  * Module-level conversation store. Server fetches replace the list; known
@@ -127,7 +128,7 @@ export function patchChatWithMessage(chatGuid: string, message: Message): void {
 
 /** Local flag tweak (e.g. clearing unread when a chat is opened). */
 export function patchChatFlags(chatGuid: string, patch: FlagPatch): void {
-  if (!all) return;
+  if (currentDataSource() === "convex" || !all) return;
   const index = all.findIndex((c) => c.guid === chatGuid);
   const chat = index >= 0 ? all[index] : undefined;
   if (!chat) return;
@@ -148,6 +149,7 @@ export function settlePendingFlags(chatGuid: string): void {
 
 /** Mutation failed: drop the hold and restore the pre-patch flags. */
 export function revertChatFlags(chatGuid: string, patch: FlagPatch): void {
+  if (currentDataSource() === "convex") return;
   pending.delete(chatGuid);
   if (!all) return;
   const index = all.findIndex((c) => c.guid === chatGuid);

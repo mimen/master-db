@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { setDataSource } from "./settings";
 
 import {
   getChats,
   mutationEpochNow,
   patchChatFlags,
   resetChatStore,
+  revertChatFlags,
   setChats,
   settlePendingFlags,
   subscribeChats,
@@ -114,8 +116,24 @@ describe("setChats identity reconciliation", () => {
 
 describe("optimistic flag patch vs stale refetch", () => {
   beforeEach(() => {
+    setDataSource("server");
     resetChatStore();
     setChats([chat("a")]);
+  });
+  afterEach(() => setDataSource("server"));
+
+  test("Convex mode skips optimistic flags and rollbacks without holding later snapshots", () => {
+    setDataSource("convex");
+    const before = getChats();
+    patchChatFlags("a", { unread: true, pinned: true });
+    revertChatFlags("a", { unread: true });
+    expect(getChats()).toBe(before);
+    expect(mutationEpochNow()).toBe(0);
+
+    setChats([chat("a", 2)]);
+    expect(getChats()?.[0]?.flags.unread).toBe(true);
+    setChats([chat("a")]);
+    expect(getChats()?.[0]?.flags.unread).toBe(false);
   });
 
   test("a refetch that started before the patch cannot revert it", () => {

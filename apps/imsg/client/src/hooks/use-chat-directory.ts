@@ -3,6 +3,8 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { api } from "@/lib/api";
 import { getChats, mutationEpochNow, setChats, subscribeChats } from "@/lib/chat-store";
+import { useDataSource } from "@/lib/settings";
+import { useConvexChats } from "./use-chats";
 
 /**
  * The shared chat list for panes that can open without the inbox mounted (a
@@ -11,11 +13,13 @@ import { getChats, mutationEpochNow, setChats, subscribeChats } from "@/lib/chat
  * the same summaries.
  */
 export function useChatDirectory(): readonly ChatSummary[] | null {
+  const convexMode = useDataSource() === "convex";
+  const convex = useConvexChats(convexMode);
   const chats = useSyncExternalStore(subscribeChats, getChats, getChats);
   useEffect(() => {
-    if (getChats() !== null) return;
+    if (convexMode || getChats() !== null) return;
     const epoch = mutationEpochNow();
     api.allChats().then((result) => setChats(result, epoch), () => undefined);
-  }, []);
-  return chats;
+  }, [convexMode]);
+  return convexMode ? convex.chats : chats;
 }

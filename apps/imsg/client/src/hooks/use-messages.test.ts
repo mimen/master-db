@@ -9,6 +9,7 @@ mock.module("react-native", () => ({
   AppState: { addEventListener: () => ({ remove() {} }) },
 }));
 mock.module("@/lib/api", () => ({
+  registerMessageActions: () => () => {},
   api: {
     messages: (guid: string) => {
       calls.push(guid);

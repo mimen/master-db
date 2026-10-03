@@ -1,7 +1,7 @@
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
-import { api } from "@/lib/api";
+import { api, registerMessageActions } from "@/lib/api";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { foldReaction, mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
@@ -189,7 +189,9 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const convexMode = conversationId !== null;
   const convex = useConvexMessages(conversationId, convexMode ? chatGuid : null);
   const server = useServerMessages(convexMode ? null : chatGuid, target);
-  return convexMode ? convex : server;
+  const result = convexMode ? convex : server;
+  useEffect(() => registerMessageActions(result.messages), [result.messages]);
+  return result;
 }
 
 function useServerMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {

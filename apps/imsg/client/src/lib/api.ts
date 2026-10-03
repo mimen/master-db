@@ -1,3 +1,4 @@
+import type { FunctionArgs } from "convex/server";
 import { BASE_URL } from "./config";
 import { attachmentSource, messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
@@ -32,6 +33,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`${res.status}: ${body.slice(0, 200)}`);
   }
   return (await res.json()) as T;
+}
+
+type CommandPayload = FunctionArgs<typeof commaOutbox.enqueue>["payload"];
+const messageBatches = new Set<readonly Pick<Message, "guid" | "chatGuid">[]>();
+
+// Edit and unsend take only a message guid; mounted threads supply its chat.
+export function registerMessageActions(messages: readonly Pick<Message, "guid" | "chatGuid">[]): () => void {
+  messageBatches.add(messages);
+  return () => { messageBatches.delete(messages); };
+}
+
+function messageChatGuid(messageGuid: string): string | undefined {
+  for (const messages of messageBatches) {
+    const message = messages.find((item) => item.guid === messageGuid);
+    if (message) return message.chatGuid;
+  }
+  return undefined;
+}
+
+export async function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<boolean> {
+  if (!currentConvexSends() || currentDataSource() !== "convex") return false;
+  const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
+  if (!conversation) return false;
+  await convexClient.mutation(commaOutbox.enqueue, {
+    clientKey: `command-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    conversationId: conversation._id,
+    payload,
+  });
+  return true;
 }
 
 export const api = {
@@ -83,54 +113,72 @@ export const api = {
       body: JSON.stringify(body),
     });
   },
-  markRead(chatGuid: string): Promise<{ ok: boolean }> {
+  async markRead(chatGuid: string): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, { kind: "markRead" })) return { ok: true };
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/read`, { method: "POST" });
   },
-  markUnread(chatGuid: string): Promise<{ ok: boolean }> {
+  async markUnread(chatGuid: string): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, { kind: "markUnread" })) return { ok: true };
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/unread`, { method: "POST" });
   },
-  dismiss(
+  async dismiss(
     chatGuid: string,
     kind: "unresponded" | "waiting",
     expectedLatestMessageGuid?: string,
   ): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, {
+      kind: "settle",
+      ...(expectedLatestMessageGuid !== undefined ? { messageGuid: expectedLatestMessageGuid } : {}),
+    })) return { ok: true };
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/dismiss`, {
       method: "POST",
       body: JSON.stringify({ kind, expectedLatestMessageGuid }),
     });
   },
-  undismiss(chatGuid: string, kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
+  async undismiss(chatGuid: string, kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, { kind: "unsettle" })) return { ok: true };
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/undismiss`, {
       method: "POST",
       body: JSON.stringify({ kind }),
     });
   },
-  setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
+  async setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, { kind: "pin", value: pinned })) return { ok: true };
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/pin`, {
       method: "POST",
       body: JSON.stringify({ pinned }),
     });
   },
-  react(
+  async react(
     messageGuid: string,
     body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean },
   ): Promise<{ ok: boolean }> {
+    // Suggested reactions need the REST handler's inbound-target guard.
+    if (!body.suggested && await enqueueCommand(body.chatGuid, {
+      kind: "react", messageGuid, reaction: body.reaction, remove: body.remove ?? false,
+      ...(body.partIndex !== undefined ? { partIndex: body.partIndex } : {}),
+    })) return { ok: true };
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/react`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   },
-  unsend(messageGuid: string): Promise<{ ok: boolean }> {
+  async unsend(messageGuid: string): Promise<{ ok: boolean }> {
+    const chatGuid = messageChatGuid(messageGuid);
+    if (chatGuid && await enqueueCommand(chatGuid, { kind: "unsend", messageGuid })) return { ok: true };
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/unsend`, { method: "POST" });
   },
-  deleteMessage(messageGuid: string, chatGuid: string): Promise<{ ok: boolean }> {
+  async deleteMessage(messageGuid: string, chatGuid: string): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, { kind: "delete", messageGuid })) return { ok: true };
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatGuid }),
     });
   },
-  edit(messageGuid: string, text: string): Promise<{ ok: boolean }> {
+  async edit(messageGuid: string, text: string): Promise<{ ok: boolean }> {
+    const chatGuid = messageChatGuid(messageGuid);
+    if (chatGuid && await enqueueCommand(chatGuid, { kind: "edit", messageGuid, text })) return { ok: true };
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/edit`, {
       method: "POST",
       body: JSON.stringify({ text }),
@@ -180,7 +228,8 @@ export const api = {
   }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/info`);
   },
-  renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
+  async renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
+    if (await enqueueCommand(chatGuid, { kind: "rename", name })) return { ok: true };
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/rename`, {
       method: "POST",
       body: JSON.stringify({ name }),

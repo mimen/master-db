@@ -80,10 +80,14 @@ describe("conversationToChat", () => {
     expect(chat.flags.pinned).toBe(true);
   });
 
-  test("hides unread until the bridge mirrors it", () => {
-    const chat = conversationToChat(conversation());
-    expect(chat.unreadCount).toBe(0);
-    expect(chat.flags.unread).toBe(false);
+  test("preserves Convex flags and unread counts, including a manual unread mark", () => {
+    const row = conversation();
+    const chat = conversationToChat(row);
+    expect(chat.unreadCount).toBe(3);
+    expect(chat.flags).toEqual(flags);
+    const manuallyUnread = conversationToChat(conversation({ unreadCount: 0 }));
+    expect(manuallyUnread.unreadCount).toBe(0);
+    expect(manuallyUnread.flags.unread).toBe(true);
   });
 });
 

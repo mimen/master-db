@@ -19,10 +19,9 @@ export function conversationToChat(row: ConvexConversation): ChatSummary {
     contactsAvailable: true,
     isSpam: row.isSpam,
     lastMessage: row.lastMessage ?? null,
-    // The bridge does not mirror unread yet. Never report its placeholder zero as read state.
-    unreadCount: 0,
+    unreadCount: row.unreadCount,
     firstUnreadAt: null,
-    flags: { ...row.flags, unread: false },
+    flags: row.flags,
     searchNames: [],
   };
 }

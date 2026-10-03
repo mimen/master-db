@@ -124,7 +124,9 @@ export function ChatInfoContent({
   const saveName = () => {
     setRenaming(false);
     if (name.trim() && name !== info.displayName) {
-      api.renameGroup(guid, name.trim()).then(load).catch(() => showToast("Rename failed"));
+      api.renameGroup(guid, name.trim())
+        .then(() => setInfo((current) => current ? { ...current, displayName: name.trim() } : current))
+        .catch(() => showToast("Rename failed"));
     }
   };
 

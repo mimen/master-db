@@ -20,7 +20,7 @@ interface UseChatsResult {
 }
 
 /** Every conversation from Convex, live. Pages load one after another until the list is complete. */
-function useConvexChats(enabled: boolean): { chats: ChatSummary[] | null } {
+export function useConvexChats(enabled: boolean): { chats: ChatSummary[] | null } {
   const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listConversations,
     enabled ? {} : "skip",
