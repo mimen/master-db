@@ -21,6 +21,28 @@ export function batches<T>(rows: T[]): T[][] {
 export class MessageWriter {
   readonly conversationIds = new Map<string, MessageRow["conversationId"]>();
   private chats = new Map<string, BBChat>();
+  private outboxClientKeys = new Set<string>();
+
+  rememberOutboxSend(clientKey: string): void {
+    this.outboxClientKeys.add(clientKey);
+    // ponytail: retain 1000 recent sends; persist correlations if late echoes exceed this window.
+    if (this.outboxClientKeys.size > 1000) {
+      const oldest = this.outboxClientKeys.values().next().value;
+      if (oldest !== undefined) this.outboxClientKeys.delete(oldest);
+    }
+  }
+
+  async resolveConversation(id: MessageRow["conversationId"]): Promise<string> {
+    const known = () => toConversationInputs([...this.chats.values()], this.deps.names)
+      .find((row) => row.chats.some((chat) => this.conversationIds.get(chat.chatGuid) === id))?.chats[0]?.chatGuid;
+    let guid = known();
+    if (!guid) {
+      await this.exclusive(() => this.refreshChats());
+      guid = known();
+    }
+    if (!guid) throw new Error(`Unresolved conversation ${id}`);
+    return guid;
+  }
   private serial: Promise<unknown> = Promise.resolve();
 
   constructor(readonly deps: {
@@ -76,6 +98,7 @@ export class MessageWriter {
       const id = this.conversationIds.get(chatGuid);
       if (!id) throw new Error(`Unresolved conversation ${chatGuid}`);
       const row = toMessageRow(message, id, 0, this.deps.names);
+      if (message.tempGuid && this.outboxClientKeys.has(message.tempGuid)) row.clientKey = message.tempGuid;
       const files = toAttachmentRows(message, id, 0);
       const fingerprint = createHash("sha256").update(JSON.stringify({ row, files })).digest("hex");
       const version = this.deps.db.bridgeVersion(message.guid, fingerprint, base);

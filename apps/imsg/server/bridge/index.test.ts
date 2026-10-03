@@ -1,5 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
 import { createApp } from "../app";
+import { ChatCommands } from "../commands";
+import { ChatDirectory } from "../chat-directory";
+import { ContactBook } from "../contacts";
 import { FakeBlueBubbles } from "../bluebubbles-fake";
 import type { Config } from "../config";
 import { OverlayDb } from "../db";
@@ -19,7 +22,9 @@ function fixture() {
     messages: [{ guid: "m1", originalROWID: 1, text: "hello", dateCreated: Date.now() }] }] });
   const db = new OverlayDb(":memory:");
   const ingest = new FakeIngest();
-  return { config, bb, db, ingest, chatDbPath: "/nonexistent/chat.db" };
+  const contacts = new ContactBook(bb);
+  const commands = new ChatCommands(bb, new ChatDirectory(bb, db, contacts), contacts);
+  return { config, bb, db, ingest, commands, chatDbPath: "/nonexistent/chat.db" };
 }
 
 test("bridge is off without a secret or with background services disabled", async () => {
@@ -30,7 +35,7 @@ test("bridge is off without a secret or with background services disabled", asyn
       deps.db.setPinned(CHAT, true);
       deps.bb.emit({ kind: "new-message", message: { guid: "m1" } });
       await bridge.flush();
-      expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0 });
+      expect(bridge.health()).toEqual({ enabled: false, lastEventAt: null, lastReconcileAt: null, cursor: 0, pending: 0, outbox: { inFlight: 0, lastExecutedAt: null } });
       expect(deps.ingest.calls).toEqual([]);
       expect(deps.bb.calls.queryChats).toBe(0);
     } finally { bridge.stop(); }

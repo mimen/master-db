@@ -1,4 +1,7 @@
 import type { BlueBubbles } from "../bluebubbles";
+import type { ChatCommands } from "../commands";
+import type { ConvexClient } from "convex/browser";
+import { OutboxBridge } from "./outbox";
 import type { Config } from "../config";
 import type { OverlayDb } from "../db";
 import type { NameSource } from "../name-resolver";
@@ -13,6 +16,8 @@ export function startBridge(deps: {
   config: Config;
   bb: BlueBubbles;
   db: OverlayDb;
+  commands: ChatCommands;
+  outboxClient?: ConvexClient;
   names?: NameSource;
   backgroundServices?: boolean;
   ingest?: Pick<ConvexIngest, "post">;
@@ -24,9 +29,10 @@ export function startBridge(deps: {
   let reconcile: ReconcileBridge | null = null;
   let overlay: OverlayMirror | null = null;
   let scheduled: ScheduledMirror | null = null;
+  let outbox: OutboxBridge | null = null;
   function stopModules() {
-    live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop();
-    live = null; reconcile = null; overlay = null; scheduled = null;
+    live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop();
+    live = null; reconcile = null; overlay = null; scheduled = null; outbox = null;
   }
   const startup = new RetryWork("startup", async () => {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
@@ -37,6 +43,7 @@ export function startBridge(deps: {
       live = new LiveBridge(writer, deps.now);
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
+      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now });
       console.log(`comma bridge: on (cursor ${reconcile.cursor})`);
     } catch (error) {
       stopModules();
@@ -50,10 +57,12 @@ export function startBridge(deps: {
   return {
     health: () => ({ enabled, lastEventAt: live?.lastEventAt ?? null,
       lastReconcileAt: reconcile?.lastReconcileAt ?? null, cursor: reconcile?.cursor ?? 0,
-      pending: startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) }),
+      outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
+      pending: startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
     scheduledChanged: () => scheduled?.request(),
     flush: async () => {
       await startup.flush();
+      await outbox?.flush();
       await live?.flush();
       await reconcile?.flush();
       await overlay?.flush();

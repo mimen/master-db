@@ -5,6 +5,7 @@ type Call = { [K in keyof Bodies]: { kind: K; body: Bodies[K] } }[keyof Bodies];
 export class FakeIngest extends ConvexIngest {
   readonly calls: Call[] = [];
   fail: keyof Bodies | null = null;
+  readonly outboxRows: Results["claim"] = [];
   readonly id = "conversation-test" as MessageRow["conversationId"];
 
   constructor() { super({ convexSiteUrl: "http://test.invalid", commaBridgeSecret: "test" }); }
@@ -21,6 +22,8 @@ export class FakeIngest extends ConvexIngest {
       sync: null,
       overlay: { states: 1, events: 1, open: 1, unresolved: 0 },
       scheduled: { upserted: 1, deleted: 0 },
+      claim: kind === "claim" ? this.outboxRows.splice(0, (body as Bodies["claim"]).limit) : [],
+      complete: true,
     };
     return results[kind];
   }

@@ -216,7 +216,7 @@ export class BlueBubblesClient implements BlueBubbles {
       },
       retryTransport,
     );
-    return this.unwrap<T>(res);
+    return this.unwrap<T>(res, signal !== undefined);
   }
 
   private async put<T>(path: string, body: unknown): Promise<Result<T>> {
@@ -232,11 +232,12 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.unwrap<T>(await fetch(this.url(path), { method: "DELETE" }));
   }
 
-  private async unwrap<T>(res: Response): Promise<Result<T>> {
+  private async unwrap<T>(res: Response, propagateReadError = false): Promise<Result<T>> {
     let envelope: BBEnvelope<T>;
     try {
       envelope = (await res.json()) as BBEnvelope<T>;
-    } catch {
+    } catch (error) {
+      if (propagateReadError && res.ok) throw error;
       return { ok: false, error: `non-JSON response (${res.status})` };
     }
     if (envelope.status !== 200) {
@@ -364,7 +365,7 @@ export class BlueBubblesClient implements BlueBubbles {
       selectedMessageGuid: replyTo?.guid,
       partIndex: replyTo?.part ?? 0,
       ...(attributedBody ? { attributedBody } : {}),
-    }, false, AbortSignal.timeout(30_000));
+    }, false, clientKey ? AbortSignal.timeout(30_000) : undefined);
   }
 
   sendAttachment(

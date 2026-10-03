@@ -24,6 +24,8 @@ export interface Bodies {
   sync: SyncInput;
   overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
+  claim: FunctionArgs<typeof internal.comma.outbox.claimOutbox>;
+  complete: FunctionArgs<typeof internal.comma.outbox.completeOutbox>;
 }
 export interface Results {
   conversations: Record<string, MessageRow["conversationId"]>;
@@ -32,6 +34,8 @@ export interface Results {
   sync: null;
   overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
   scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
+  claim: FunctionReturnType<typeof internal.comma.outbox.claimOutbox>;
+  complete: FunctionReturnType<typeof internal.comma.outbox.completeOutbox>;
 }
 
 export class ConvexIngest {
@@ -41,6 +45,8 @@ export class ConvexIngest {
     const { convexSiteUrl, commaBridgeSecret } = this.config;
     if (!commaBridgeSecret) throw new Error("Comma bridge disabled, COMMA_BRIDGE_SECRET is unset");
     if (!convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
+    // Claiming twice after a lost response would abandon the first batch's leases.
+    const retries = kind === "claim" ? 0 : 4;
     for (let attempt = 0; ; attempt++) {
       let response: Response;
       try {
@@ -51,11 +57,11 @@ export class ConvexIngest {
           signal: AbortSignal.timeout(60_000),
         });
       } catch (error) {
-        if (attempt >= 4) throw error;
+        if (attempt >= retries) throw error;
         await Bun.sleep(250 * 2 ** attempt);
         continue;
       }
-      if (response.status >= 500 && attempt < 4) {
+      if (response.status >= 500 && attempt < retries) {
         await response.text();
         await Bun.sleep(250 * 2 ** attempt);
         continue;
