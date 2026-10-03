@@ -2,8 +2,8 @@ import Google from "@auth/core/providers/google";
 import { convexAuth } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { ALLOWED_EMAIL } from "./_lib/authed";
 import { internalQuery } from "./_generated/server";
+import { ALLOWED_EMAIL } from "./_lib/authed";
 
 /**
  * Reject any Google profile whose email does not match the whitelist.
@@ -38,6 +38,7 @@ export function rejectIfNotAllowed(profile: Record<string, unknown>) {
 const ALLOWED_REDIRECT_ORIGINS = [
   "http://localhost:3000",
   "https://convex-db-master-d31d50f579b2.herokuapp.com",
+  "https://milads-mac-mini.taild31e9a.ts.net:8447",
 ];
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
