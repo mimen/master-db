@@ -107,15 +107,15 @@ export async function runBackfill(options: Options = {}) {
   for (let after = state.cursor; after < maxRowid; after += 1000) {
     const through = Math.min(after + 1000, maxRowid);
     const unique = new Map<string, BBMessage>();
-    for (let offset = 0; ; offset += 2000) {
-      const page = value(await bb.queryMessages({ limit: 2000, offset, rowidRange: { after, through } }));
+    for (let offset = 0; ; offset += 1000) {
+      const page = value(await bb.queryMessages({ limit: 1000, offset, rowidRange: { after, through } }));
       for (const message of page) {
         sourceVersion(message);
         if (message.originalROWID! <= after || message.originalROWID! > through) throw new Error("BlueBubbles returned a message outside the ROWID range");
         if (unique.has(message.guid)) counts.duplicates++;
         unique.set(message.guid, message);
       }
-      if (page.length < 2000) break;
+      if (page.length < 1000) break;
     }
     for (const row of inventory ?? []) {
       if (row.originalROWID <= after || row.originalROWID > through || unique.has(row.guid)) continue;

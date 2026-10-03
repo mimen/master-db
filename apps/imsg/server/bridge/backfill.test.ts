@@ -33,6 +33,7 @@ async function fixture() {
     participants: [{ address: "+15550001111" }], messages: raw }] });
   const query = bb.queryMessages.bind(bb);
   spyOn(bb, "queryMessages").mockImplementation(async (options) => {
+    expect(options.limit).toBeLessThanOrEqual(1000);
     const result = await query({ ...options, limit: 9999, offset: 0 });
     if (!result.ok) return result;
     const range = options.rowidRange;
