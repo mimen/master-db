@@ -512,6 +512,14 @@ export function Composer({
     playSend();
     hapticSend();
     try {
+      // Convex outbox (beta): the bubble stays pending until the bridge's echo,
+      // which carries this temp guid as its clientKey, replaces it.
+      if (await api.enqueueTextSend(chatGuid, temp.guid, { text: trimmed, replyToGuid: reply?.guid })) {
+        if (attribution) {
+          void api.recordSuggestionFeedback(chatGuid, { ...attribution, finalText: trimmed }).catch(() => undefined);
+        }
+        return;
+      }
       const message = await api.sendText(chatGuid, {
         text: trimmed,
         replyToGuid: reply?.guid,

@@ -1,8 +1,8 @@
 import { BASE_URL } from "./config";
 import { attachmentSource, messageToMessage } from "./convex-adapters";
-import { commaApi } from "./convex-api";
+import { commaApi, commaOutbox } from "./convex-api";
 import { convexClient } from "./identity";
-import { currentDataSource } from "./settings";
+import { currentConvexSends, currentDataSource } from "./settings";
 import type {
   AttachmentSummary,
   AiStatus,
@@ -55,6 +55,24 @@ export const api = {
     if (window?.around) params.set("around", String(window.around));
     const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/messages${qs}`);
+  },
+  /**
+   * Queue a plain text send through the Convex outbox. Resolves once Convex
+   * has the row; the bubble then settles when the bridge's echo arrives
+   * (matched by clientKey). Returns false when the chat isn't mirrored yet,
+   * so the caller falls back to the REST send.
+   */
+  async enqueueTextSend(chatGuid: string, clientKey: string, body: SendTextRequest): Promise<boolean> {
+    // Sends through Convex only make sense when the thread also reads from Convex.
+    if (!currentConvexSends() || currentDataSource() !== "convex" || body.mentions?.length) return false;
+    const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
+    if (!conversation) return false;
+    await convexClient.mutation(commaOutbox.enqueue, {
+      clientKey,
+      conversationId: conversation._id,
+      payload: { kind: "send", text: body.text, ...(body.replyToGuid ? { replyToGuid: body.replyToGuid } : {}) },
+    });
+    return true;
   },
   sendText(
     chatGuid: string,

@@ -82,6 +82,8 @@ export function messageToMessage(row: ConvexMessage | ConvexSearchMessage): Mess
     edited: row.edited,
     retracted: row.retracted,
     clientKey: row.clientKey,
+    // A queued send's optimistic row, before the bridge's echo replaces it.
+    ...(row.guid.startsWith("temp-") ? (row.error ? { failed: true } : { pending: true }) : {}),
   };
 }
 
@@ -110,7 +112,8 @@ export function mergeConvexMessages(remote: readonly Message[], local: readonly 
   const merged = remote.map((m) => {
     const own = byGuid.get(m.guid) ?? (m.clientKey ? byKey.get(m.clientKey) : undefined);
     if (own) claimed.add(own);
-    return own?.clientKey ? { ...m, clientKey: own.clientKey } : m;
+    // A queued send's Convex row is `temp-<clientKey>`; adopt the local bubble's identity so it never remounts.
+    return own?.clientKey ? { ...m, guid: m.guid.startsWith("temp-") ? own.guid : m.guid, clientKey: own.clientKey } : m;
   });
   return [...merged, ...local.filter((m) => !claimed.has(m) && (m.pending || m.failed || m.clientKey))]
     .sort((a, b) => a.dateCreated - b.dateCreated);

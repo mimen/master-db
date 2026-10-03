@@ -16,7 +16,9 @@ import { useAuthActions, useConvexAuth } from "@/lib/convex-auth";
 import { isDesktopShell } from "@/lib/desktop-shell";
 import { showToast } from "@/lib/toast";
 import {
+  setConvexSends,
   setDataSource,
+  useConvexSends,
   useDataSource,
   setNameOrder,
   setSuggestionMode,
@@ -152,6 +154,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   const theme = useTheme();
   const nameOrder = useNameOrder();
   const dataSource = useDataSource();
+  const convexSends = useConvexSends();
   const { isAuthenticated } = useConvexAuth();
   const suggestionMode = useSuggestionMode();
   const suggestionModel = useSuggestionModel();
@@ -206,6 +209,17 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
                   accessibilityLabel="Read messages from Convex (beta)"
                   value={dataSource === "convex"}
                   onValueChange={(enabled) => setDataSource(enabled ? "convex" : "server")}
+                />}
+              />
+            )}
+            {isAuthenticated && dataSource === "convex" && (
+              <ListRow
+                title="Send through Convex (beta)"
+                titleWeight="400"
+                trailing={<Switch
+                  accessibilityLabel="Send through Convex (beta)"
+                  value={convexSends}
+                  onValueChange={setConvexSends}
                 />}
               />
             )}

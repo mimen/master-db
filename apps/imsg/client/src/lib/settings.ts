@@ -23,10 +23,12 @@ export interface Settings {
   /** Contacts list name ordering — see NameOrder above. */
   nameOrder: NameOrder;
   dataSource: "server" | "convex";
+  /** Route plain text sends through the Convex outbox (beta). Independent of reads. */
+  convexSends: boolean;
 }
 
 const KEY = "imsg.settings.v2";
-const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last", dataSource: "server" };
+const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last", dataSource: "server", convexSends: false };
 
 let state: Settings = { ...DEFAULT };
 let hydrated = false;
@@ -70,6 +72,10 @@ export async function hydrateSettings(): Promise<void> {
     }
     if (parsed.dataSource === "server" || parsed.dataSource === "convex") {
       state = { ...state, dataSource: parsed.dataSource };
+      changed = true;
+    }
+    if (typeof parsed.convexSends === "boolean") {
+      state = { ...state, convexSends: parsed.convexSends };
       changed = true;
     }
     if (changed) emit();
@@ -137,6 +143,21 @@ export function setDataSource(dataSource: Settings["dataSource"]): void {
   state = { ...state, dataSource };
   emit();
   persist();
+}
+
+export function setConvexSends(convexSends: boolean): void {
+  if (state.convexSends === convexSends) return;
+  state = { ...state, convexSends };
+  persist();
+  emit();
+}
+
+export function currentConvexSends(): boolean {
+  return state.convexSends;
+}
+
+export function useConvexSends(): boolean {
+  return useSyncExternalStore(subscribe, () => state.convexSends, () => state.convexSends);
 }
 
 /** Non-hook read for plain modules such as lib/api.ts. */

@@ -130,3 +130,21 @@ describe("mergeConvexMessages", () => {
     expect(echoed[1]?.clientKey).toBe("temp-1");
   });
 });
+
+describe("queued sends", () => {
+  test("an optimistic outbox row reads as pending, and as failed once the bridge reports it", () => {
+    const temp = message({ guid: "temp-k1", isFromMe: true, clientKey: "k1", sourceVersion: 0 } as Partial<ConvexMessage>);
+    expect(messageToMessage(temp).pending).toBe(true);
+    expect(messageToMessage({ ...temp, error: 1 }).failed).toBe(true);
+    expect(messageToMessage(message()).pending).toBeUndefined();
+  });
+});
+
+describe("queued send dedupe", () => {
+  test("the Convex temp row and the local bubble for one send render once", () => {
+    const local = { ...messageToMessage(message({ guid: "temp-1", isFromMe: true, dateCreated: 20 })), clientKey: "temp-1", pending: true } as Message;
+    const convexTemp = messageToMessage(message({ guid: "temp-temp-1", isFromMe: true, clientKey: "temp-1", dateCreated: 20 } as Partial<ConvexMessage>));
+    const merged = mergeConvexMessages([convexTemp], [local]);
+    expect(merged.map((m) => m.guid)).toEqual(["temp-1"]);
+  });
+});
