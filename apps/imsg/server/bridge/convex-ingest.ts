@@ -23,6 +23,7 @@ export interface Bodies {
   attachments: { attachments: AttachmentRow[] };
   sync: SyncInput;
   overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
+  scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
 }
 export interface Results {
   conversations: Record<string, MessageRow["conversationId"]>;
@@ -30,6 +31,7 @@ export interface Results {
   attachments: { written: number; skipped: number };
   sync: null;
   overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
+  scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
 }
 
 export class ConvexIngest {
