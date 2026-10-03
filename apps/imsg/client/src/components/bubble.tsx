@@ -1,5 +1,5 @@
-import { memo, useEffect, useState, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -128,11 +128,40 @@ export const TAPBACK_EMOJI = new Map([
   ["question", "❓"],
 ]);
 
+/** Pulses under a thread image until its thumbnail paints. */
+function ImageSkeleton() {
+  const theme = useTheme();
+  const opacity = useRef(new Animated.Value(0.55)).current;
+  useEffect(() => {
+    const native = Platform.OS !== "web";
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 650, useNativeDriver: native }),
+        Animated.timing(opacity, { toValue: 0.55, duration: 650, useNativeDriver: native }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { backgroundColor: theme.backgroundElement, opacity }]}
+    />
+  );
+}
+
 function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
   const theme = useTheme();
   const { width: winW } = useLayoutMode();
   const openLightbox = useLightbox();
-  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
+  // Absent means a first load. A retry bumps the attempt, which remounts the Image.
+  const [imageState, setImageState] = useState<Record<string, { status: "loading" | "loaded" | "failed"; attempt: number }>>({});
+  const setImage = (guid: string, status: "loading" | "loaded" | "failed", nextAttempt = false) =>
+    setImageState((current) => {
+      const attempt = (current[guid]?.attempt ?? 0) + (nextAttempt ? 1 : 0);
+      return { ...current, [guid]: { status, attempt } };
+    });
   // Cap thumbnails so desktop doesn't blow them up huge — pane-relative too.
   const base = paneWidth > 0 ? paneWidth : winW;
   const mediaW = Math.min(260, Math.round(base * 0.6));
@@ -163,32 +192,44 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
             att.width && att.height && att.width > 0 && att.height > 0
               ? att.width / att.height
               : 4 / 3;
-          const failed = failedImages.has(att.guid);
+          const state = imageState[att.guid];
+          if (state?.status === "failed") {
+            return (
+              <Pressable
+                key={att.guid}
+                accessibilityRole="button"
+                accessibilityLabel="Photo unavailable. Retry"
+                onPress={() => setImage(att.guid, "loading", true)}
+                style={[styles.imageUnavailable, { backgroundColor: theme.backgroundElement }]}
+              >
+                <Ionicons name="image-outline" size={16} color={theme.textSecondary} />
+                <Text style={[styles.imageUnavailableText, { color: theme.textSecondary }]}>Photo unavailable</Text>
+                <Ionicons name="refresh" size={14} color={theme.accent} />
+              </Pressable>
+            );
+          }
+          const tile = { width: mediaW, aspectRatio: ratio, borderRadius: Radii.card };
           return (
             <Pressable
               key={att.guid}
-              disabled={failed}
               onPress={() =>
                 openLightbox(
                   images.map((i) => ({ url: attachmentUrl(i.guid), isVideo: false })),
                   images.findIndex((i) => i.guid === att.guid),
                 )
               }
+              style={[tile, { overflow: "hidden" }]}
             >
-              {failed ? (
-                <View style={[styles.imageFallback, { width: mediaW, aspectRatio: ratio, backgroundColor: theme.backgroundElement }]}>
-                  <Ionicons name="image-outline" size={28} color={theme.textSecondary} />
-                  <Text numberOfLines={2} style={[styles.imageFallbackText, { color: theme.textSecondary }]}>{att.filename ?? "Photo"}</Text>
-                </View>
-              ) : (
-                <Image
-                  source={{ uri: attachmentThumbnailUrl(att.guid, mediaW) }}
-                  style={{ width: mediaW, aspectRatio: ratio, borderRadius: Radii.card, backgroundColor: theme.backgroundElement }}
-                  contentFit="cover"
-                  transition={100}
-                  onError={() => setFailedImages((current) => new Set(current).add(att.guid))}
-                />
-              )}
+              {state?.status !== "loaded" && <ImageSkeleton />}
+              <Image
+                key={state?.attempt ?? 0}
+                source={{ uri: attachmentThumbnailUrl(att.guid, mediaW) }}
+                style={tile}
+                contentFit="cover"
+                transition={150}
+                onLoad={() => setImage(att.guid, "loaded")}
+                onError={() => setImage(att.guid, "failed")}
+              />
             </Pressable>
           );
         }
@@ -503,17 +544,18 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginTop: 2,
   },
-  imageFallback: {
+  imageUnavailable: {
     alignItems: "center",
+    alignSelf: "flex-start",
     borderRadius: Radii.card,
-    gap: 8,
-    justifyContent: "center",
-    overflow: "hidden",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
-  imageFallbackText: {
-    fontSize: 12,
-    maxWidth: "80%",
-    textAlign: "center",
+  imageUnavailableText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
   attachmentLink: {
     // color comes from theme.accent inline at the call site.
