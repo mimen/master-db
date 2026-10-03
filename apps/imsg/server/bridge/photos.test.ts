@@ -69,6 +69,7 @@ test("failed linking retries the persisted storage ID after a restart without up
     try {
       await restarted.flush();
       expect(restarted.pending).toBe(0);
+      expect(restarted.matched).toBe(1);
       expect(ingest.uploads).toHaveLength(1);
       expect(ingest.calls).toHaveLength(2);
       expect(ingest.calls[1]).toEqual(ingest.calls[0]);

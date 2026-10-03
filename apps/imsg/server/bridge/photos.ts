@@ -7,8 +7,12 @@ import type { ConvexIngest } from "./convex-ingest";
 import { RetryWork } from "./retry";
 
 export class PhotoMirror {
+  /** Uploads this process made; earlier runs' uploads are skipped by hash. */
   uploaded = 0;
+  /** Photos not linked to a person yet: no matching address in Convex, or a failed link. */
   pending = 0;
+  /** Photos linked to a person as of the last scan. */
+  matched = 0;
   private stopped = false;
   private work: RetryWork;
   private timer: ReturnType<typeof setInterval>;
@@ -22,6 +26,7 @@ export class PhotoMirror {
       });
       const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".img"));
       this.pending = files.length;
+      let matched = 0;
       let failure: unknown;
       for (const entry of files) {
         if (this.stopped) break;
@@ -44,11 +49,13 @@ export class PhotoMirror {
             db.setBridgePhoto(address, hash, prior.storageId, true);
           }
           this.pending--;
+          matched++;
         } catch (error) {
           console.error(`comma bridge photo ${entry.name}: ${String(error)}`);
           failure = error;
         }
       }
+      this.matched = matched;
       if (failure) throw failure;
     });
     this.timer = setInterval(() => this.request(), 10 * 60_000);
