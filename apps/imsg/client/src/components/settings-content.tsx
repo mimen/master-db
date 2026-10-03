@@ -13,7 +13,7 @@ import { releaseStatus } from "@/lib/release-status";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
 import { useAuthActions, useConvexAuth } from "@/lib/convex-auth";
-import { isDesktopShell } from "@/lib/desktop-shell";
+import { isDesktopShell, startOAuthLoopback } from "@/lib/desktop-shell";
 import { showToast } from "@/lib/toast";
 import {
   setConvexSends,
@@ -59,7 +59,8 @@ function ConvexAccountRow() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const { signIn, signOut } = useAuthActions();
   const [busy, setBusy] = useState(false);
-  const canSignIn = Platform.OS === "web" && !isDesktopShell();
+  const canSignIn = Platform.OS === "web";
+  const desktop = isDesktopShell();
 
   async function changeSession() {
     setBusy(true);
@@ -67,7 +68,12 @@ function ConvexAccountRow() {
       if (isAuthenticated) {
         await signOut();
       } else {
-        await signIn("google", { redirectTo: window.location.origin });
+        const redirectTo = desktop ? await startOAuthLoopback() : window.location.origin;
+        if (redirectTo === null) {
+          showToast("Could not sign in to Convex");
+          return;
+        }
+        await signIn("google", { redirectTo });
       }
     } catch {
       showToast(isAuthenticated ? "Could not sign out of Convex" : "Could not sign in to Convex");
@@ -79,7 +85,10 @@ function ConvexAccountRow() {
   return (
     <ListRow
       title={isAuthenticated ? "Signed in to Convex" : "Sign in to Convex"}
-      subtitle={isAuthenticated ? "Sign out" : canSignIn ? "Continue with Google" : "Sign in from the web app for now"}
+      subtitle={isAuthenticated ? "Sign out"
+        : !canSignIn ? "Sign in from the web app for now"
+        : desktop ? "Continue with Google in your browser"
+        : "Continue with Google"}
       accessibilityLabel={isAuthenticated ? "Sign out of Convex" : "Sign in to Convex"}
       titleWeight="400"
       disabled={isLoading || busy || (!isAuthenticated && !canSignIn)}

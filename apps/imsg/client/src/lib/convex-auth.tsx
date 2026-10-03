@@ -4,7 +4,6 @@ import { useEffect, type PropsWithChildren } from "react";
 import { useConvexAuth } from "convex/react";
 import { Platform } from "react-native";
 
-import { isDesktopShell } from "./desktop-shell";
 import { convexClient } from "./identity";
 import { setConvexAuthenticated } from "./settings";
 
@@ -31,7 +30,7 @@ export function ClientAuthProvider({ children }: PropsWithChildren) {
     <ConvexAuthProvider
       client={convexClient}
       storage={Platform.OS === "web" ? undefined : nativeStorage}
-      shouldHandleCode={Platform.OS === "web" && !isDesktopShell()}
+      shouldHandleCode={Platform.OS === "web"}
     >
       <AuthState>{children}</AuthState>
     </ConvexAuthProvider>

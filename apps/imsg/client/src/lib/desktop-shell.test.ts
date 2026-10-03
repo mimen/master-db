@@ -7,6 +7,7 @@ import {
   isDesktopShell,
   readShellReleaseState,
   restartToStagedShell,
+  startOAuthLoopback,
   SHELL_ACTIVATE_COMMAND,
   SHELL_RELEASE_STATE_COMMAND,
   SHELL_RESTART_COMMAND,
@@ -36,6 +37,55 @@ describe("isDesktopShell", () => {
 
   test("true when the native-shell init flag is set", () => {
     expect(isDesktopShell({ __IMSG_NATIVE_SHELL__: true })).toBe(true);
+  });
+});
+
+describe("startOAuthLoopback", () => {
+  test("returns the loopback redirect from the native listener port", async () => {
+    const commands: string[] = [];
+    const win: DesktopShellWindow = {
+      __TAURI__: {
+        core: {
+          invoke: async <Result,>(command: string): Promise<Result> => {
+            commands.push(command);
+            return 54321 as Result;
+          },
+        },
+        event: { listen: async () => () => undefined },
+        window: { getCurrentWindow: () => ({ close: async () => undefined }) },
+      },
+    };
+    expect(await startOAuthLoopback(win)).toBe("http://127.0.0.1:54321");
+    expect(commands).toEqual(["start_oauth_loopback"]);
+  });
+
+  test("returns null outside the shell or when invoke is unavailable", async () => {
+    expect(await startOAuthLoopback({})).toBeNull();
+    expect(await startOAuthLoopback({ __IMSG_NATIVE_SHELL__: true })).toBeNull();
+  });
+
+  test("returns null when the listener command fails", async () => {
+    const win: DesktopShellWindow = {
+      __TAURI__: {
+        core: { invoke: async () => { throw new Error("bind failed"); } },
+        event: { listen: async () => () => undefined },
+        window: { getCurrentWindow: () => ({ close: async () => undefined }) },
+      },
+    };
+    expect(await startOAuthLoopback(win)).toBeNull();
+  });
+
+  test("rejects invalid ports returned across the shell boundary", async () => {
+    for (const port of [0, 65536, 1.5, "54321", null]) {
+      const win: DesktopShellWindow = {
+        __TAURI__: {
+          core: { invoke: async <Result,>(): Promise<Result> => port as Result },
+          event: { listen: async () => () => undefined },
+          window: { getCurrentWindow: () => ({ close: async () => undefined }) },
+        },
+      };
+      expect(await startOAuthLoopback(win)).toBeNull();
+    }
   });
 });
 

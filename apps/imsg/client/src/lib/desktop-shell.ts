@@ -76,6 +76,20 @@ export async function openUrlViaShell(
   }
 }
 
+export async function startOAuthLoopback(
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): Promise<string | null> {
+  const invoke = tauriGlobal(win)?.core?.invoke;
+  if (!invoke) return null;
+  try {
+    const port = await invoke<unknown>("start_oauth_loopback");
+    if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+    return `http://127.0.0.1:${port}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Mirrors AppKit fullscreen state so web content only reserves titlebar space
  * while the overlay controls are visible. Resize is the Tauri v2 event emitted
