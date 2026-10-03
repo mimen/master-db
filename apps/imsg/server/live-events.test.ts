@@ -90,3 +90,48 @@ describe("wireLiveEvents", () => {
     expect(result.chats[0]?.lastMessage?.text).toBe("sent while the stream was down");
   });
 });
+
+describe("custom-emoji tapbacks live", () => {
+  test("a 2006 broadcasts a reaction on its target, never a new-message bubble", async () => {
+    const { bb, broadcasts } = await setup();
+    bb.emit({
+      kind: "new-message",
+      message: {
+        guid: "R1",
+        text: "Reacted 😍 to “hello”",
+        dateCreated: 2000,
+        isFromMe: false,
+        handle: { address: "+15550001111" },
+        associatedMessageGuid: "p:0/m1",
+        associatedMessageType: 2006,
+        chats: [{ guid: CHAT }],
+      },
+    });
+    expect(broadcasts.some((e) => e.kind === "new-message")).toBe(false);
+    expect(broadcasts.find((e) => e.kind === "reaction")).toEqual({
+      kind: "reaction",
+      chatGuid: CHAT,
+      targetGuid: "m1",
+      remove: false,
+      reaction: { type: "emoji", emoji: "😍", isFromMe: false, senderName: null, senderAddress: "+15550001111" },
+    });
+  });
+
+  test("a 3006 broadcasts a removal of the same emoji", async () => {
+    const { bb, broadcasts } = await setup();
+    bb.emit({
+      kind: "new-message",
+      message: {
+        guid: "R2",
+        text: "Removed ❤️ from “hello”",
+        dateCreated: 3000,
+        isFromMe: true,
+        associatedMessageGuid: "p:0/m1",
+        associatedMessageType: 3006,
+        chats: [{ guid: CHAT }],
+      },
+    });
+    const event = broadcasts.find((e) => e.kind === "reaction");
+    expect(event?.kind === "reaction" && [event.remove, event.reaction.emoji]).toEqual([true, "❤️"]);
+  });
+});

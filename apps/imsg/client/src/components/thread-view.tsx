@@ -367,7 +367,7 @@ export function ThreadView({
       showSheet({
         title: "Reactions",
         actions: message.reactions.map((r) => ({
-          label: `${TAPBACK_EMOJI.get(r.type) ?? r.type}  ${r.isFromMe ? "You" : (r.senderName ?? r.senderAddress ?? "Unknown")}`,
+          label: `${r.emoji ?? TAPBACK_EMOJI.get(r.type) ?? r.type}  ${r.isFromMe ? "You" : (r.senderName ?? r.senderAddress ?? "Unknown")}`,
           onPress: () => undefined,
         })),
       });

@@ -431,7 +431,8 @@ export const Bubble = memo(function Bubble({
               <View style={[styles.reactionRow, mine ? { left: -10 } : { right: -10 }]}>
                 {Object.entries(
                   message.reactions.reduce<Record<string, number>>((acc, r) => {
-                    acc[r.type] = (acc[r.type] ?? 0) + 1;
+                    const glyph = r.type === "emoji" ? (r.emoji ?? "🙂") : r.type;
+                    acc[glyph] = (acc[glyph] ?? 0) + 1;
                     return acc;
                   }, {}),
                 ).map(([type, count]) => (

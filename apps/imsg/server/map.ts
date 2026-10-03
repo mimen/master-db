@@ -72,16 +72,49 @@ function specialContent(m: BBMessage): SpecialContent | null {
 }
 
 const TAPBACK_NAMES = ["love", "like", "dislike", "laugh", "emphasize", "question"] as const;
+const CUSTOM_EMOJI_TAPBACK = 6;
+const PICTOGRAPH = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-/** Returns the tapback name for add-type reactions, null for non-tapbacks or removals. */
-function tapbackType(value: string | number | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number") {
-    if (value >= 2000 && value <= 2005) return TAPBACK_NAMES[value - 2000] ?? null;
-    return null; // 3000s = removal
+interface Tapback {
+  type: string;
+  emoji?: string;
+  remove: boolean;
+}
+
+/**
+ * BlueBubbles omits chat.db's associated_message_emoji, so the emoji comes
+ * from the synthesized text ("Reacted 😍 to “…”", "Removed ❤️ from “…”",
+ * localized variants). Only the part before the quoted target is scanned so
+ * an emoji inside the quote is never picked.
+ */
+function tapbackEmoji(m: BBMessage): string | undefined {
+  const body = Array.isArray(m.attributedBody) ? m.attributedBody[0] : m.attributedBody;
+  const text = m.text ?? body?.string ?? "";
+  const prefix = text.split("“")[0] ?? "";
+  for (const { segment } of graphemes.segment(prefix)) {
+    if (PICTOGRAPH.test(segment)) return segment;
   }
-  if (value.startsWith("-")) return null;
-  return TAPBACK_NAMES.includes(value as (typeof TAPBACK_NAMES)[number]) ? value : null;
+  return undefined;
+}
+
+function parseTapback(m: BBMessage): Tapback | null {
+  if (!isTapback(m)) return null;
+  const value = m.associatedMessageType;
+  if (typeof value === "number") {
+    const remove = value >= 3000;
+    const index = value - (remove ? 3000 : 2000);
+    if (index === CUSTOM_EMOJI_TAPBACK) {
+      const emoji = tapbackEmoji(m);
+      return emoji ? { type: "emoji", emoji, remove } : { type: "emoji", remove };
+    }
+    const type = TAPBACK_NAMES[index];
+    return type ? { type, remove } : null;
+  }
+  if (typeof value !== "string") return null;
+  const remove = value.startsWith("-");
+  const raw = remove ? value.slice(1) : value;
+  return TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number]) ? { type: raw, remove } : null;
 }
 
 /** Strips the "p:0/" / "bp:0/" part prefix from an associated message GUID. */
@@ -91,6 +124,22 @@ function stripPartPrefix(guid: string): string {
 
 function isTapback(m: BBMessage): boolean {
   return Boolean(m.associatedMessageGuid && m.associatedMessageType);
+}
+
+function reactionOf(tapback: Tapback, isFromMe: boolean, who: Participant | null): Reaction {
+  return {
+    type: tapback.type,
+    ...(tapback.emoji ? { emoji: tapback.emoji } : {}),
+    isFromMe,
+    senderName: who?.name ?? null,
+    senderAddress: who?.address ?? null,
+  };
+}
+
+/** `a` is the incoming reaction; one without a parsed emoji matches any emoji from the same sender. */
+function sameReaction(a: Reaction, b: Reaction): boolean {
+  const sameSender = a.isFromMe ? b.isFromMe : !b.isFromMe && a.senderAddress === b.senderAddress;
+  return sameSender && a.type === b.type && (!a.emoji || a.emoji === b.emoji);
 }
 
 /**
@@ -103,32 +152,12 @@ export function tapbackReactionEvent(
   contacts: NameSource,
   participants: readonly BBHandle[] = [],
 ): { targetGuid: string; reaction: Reaction; remove: boolean } | null {
-  if (!isTapback(m) || !m.associatedMessageGuid) return null;
-  const value = m.associatedMessageType;
-  let type: string | null = null;
-  let remove = false;
-  if (typeof value === "number") {
-    if (value >= 2000 && value <= 2005) type = TAPBACK_NAMES[value - 2000] ?? null;
-    else if (value >= 3000 && value <= 3005) {
-      type = TAPBACK_NAMES[value - 3000] ?? null;
-      remove = true;
-    }
-  } else if (typeof value === "string") {
-    remove = value.startsWith("-");
-    const raw = remove ? value.slice(1) : value;
-    type = TAPBACK_NAMES.includes(raw as (typeof TAPBACK_NAMES)[number]) ? raw : null;
-  }
-  if (!type) return null;
-  const reactionSender = sender(m, contacts, participants);
+  const tapback = parseTapback(m);
+  if (!tapback || !m.associatedMessageGuid) return null;
   return {
     targetGuid: stripPartPrefix(m.associatedMessageGuid),
-    remove,
-    reaction: {
-      type,
-      isFromMe: m.isFromMe === true,
-      senderName: reactionSender?.name ?? null,
-      senderAddress: reactionSender?.address ?? null,
-    },
+    remove: tapback.remove,
+    reaction: reactionOf(tapback, m.isFromMe === true, sender(m, contacts, participants)),
   };
 }
 
@@ -241,19 +270,19 @@ export function buildThread(
   contacts: NameSource,
 ): Message[] {
   const tapbacks = new Map<string, Reaction[]>();
-  for (const m of raw) {
-    if (!isTapback(m)) continue;
-    const type = tapbackType(m.associatedMessageType);
-    if (!type || !m.associatedMessageGuid) continue;
+  const chronological = raw.filter(isTapback).sort((a, b) => (a.dateCreated ?? 0) - (b.dateCreated ?? 0));
+  for (const m of chronological) {
+    const tapback = parseTapback(m);
+    if (!tapback || !m.associatedMessageGuid) continue;
     const target = stripPartPrefix(m.associatedMessageGuid);
-    const list = tapbacks.get(target) ?? [];
-    list.push({
-      type,
-      isFromMe: m.isFromMe === true,
-      senderName: m.handle?.address ? contacts.lookup(m.handle.address) : null,
-      senderAddress: m.handle?.address ?? null,
-    });
-    tapbacks.set(target, list);
+    const address = m.handle?.address ?? null;
+    const reaction = reactionOf(
+      tapback,
+      m.isFromMe === true,
+      address ? { address, name: contacts.lookup(address) } : null,
+    );
+    const rest = (tapbacks.get(target) ?? []).filter((r) => !sameReaction(reaction, r));
+    tapbacks.set(target, tapback.remove ? rest : [...rest, reaction]);
   }
 
   const messages = raw
@@ -410,8 +439,10 @@ const TAPBACK_VERBS: Record<string, string> = {
 
 function summarizeLast(m: BBMessage): string {
   if (isTapback(m)) {
-    const type = tapbackType(m.associatedMessageType);
-    return type ? (TAPBACK_VERBS[type] ?? `Reacted ${type}`) : "Removed a reaction";
+    const tapback = parseTapback(m);
+    if (!tapback || tapback.remove) return "Removed a reaction";
+    if (tapback.emoji) return `Reacted ${tapback.emoji} to a message`;
+    return TAPBACK_VERBS[tapback.type] ?? "Reacted to a message";
   }
   const text = cleanText(m);
   if (text) return text;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "@shared/types";
-import { mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "./message-window";
+import { foldReaction, mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "./message-window";
 
 const CHAT = "iMessage;-;+16195550101";
 
@@ -123,5 +123,36 @@ describe("reconcile after an event-stream gap", () => {
 
   test("drops a retracted message", () => {
     expect(rows(reconcileWindow([older, sent], [older, { ...sent, retracted: true }]))).toEqual([["m-1", "m-1", false]]);
+  });
+});
+
+describe("foldReaction custom emoji", () => {
+  const marla = { isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" };
+  const event = (emoji: string | undefined, remove: boolean) => ({
+    kind: "reaction" as const,
+    chatGuid: CHAT,
+    targetGuid: "t1",
+    remove,
+    reaction: { type: "emoji", ...(emoji ? { emoji } : {}), ...marla },
+  });
+
+  test("keeps different emoji from the same sender side by side", () => {
+    const target = message("t1", "Hahaha", 1, { reactions: [{ type: "emoji", emoji: "😍", ...marla }] });
+    expect(foldReaction(target, event("🔥", false)).reactions.map((r) => r.emoji)).toEqual(["😍", "🔥"]);
+  });
+
+  test("a removal drops only the matching emoji", () => {
+    const target = message("t1", "Hahaha", 1, {
+      reactions: [
+        { type: "emoji", emoji: "😍", ...marla },
+        { type: "emoji", emoji: "🔥", ...marla },
+      ],
+    });
+    expect(foldReaction(target, event("😍", true)).reactions.map((r) => r.emoji)).toEqual(["🔥"]);
+  });
+
+  test("re-adding the same emoji does not duplicate it", () => {
+    const target = message("t1", "Hahaha", 1, { reactions: [{ type: "emoji", emoji: "😍", ...marla }] });
+    expect(foldReaction(target, event("😍", false)).reactions).toEqual([{ type: "emoji", emoji: "😍", ...marla }]);
   });
 });

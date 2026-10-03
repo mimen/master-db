@@ -78,6 +78,9 @@ export function reconcileWindow(current: Message[], batch: Message[]): Message[]
 export function foldReaction(target: Message, event: Extract<ServerEvent, { kind: "reaction" }>): Message {
   const sameSender = (r: Message["reactions"][number]) =>
     event.reaction.isFromMe ? r.isFromMe : !r.isFromMe && r.senderAddress === event.reaction.senderAddress;
-  const rest = target.reactions.filter((r) => !(sameSender(r) && r.type === event.reaction.type));
+  const { type, emoji } = event.reaction;
+  const rest = target.reactions.filter(
+    (r) => !(sameSender(r) && r.type === type && (!emoji || r.emoji === emoji)),
+  );
   return { ...target, reactions: event.remove ? rest : [...rest, event.reaction] };
 }

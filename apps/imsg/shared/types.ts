@@ -20,8 +20,10 @@ export interface AttachmentSummary {
 }
 
 export interface Reaction {
-  /** e.g. "love" | "like" | "dislike" | "laugh" | "emphasize" | "question" | emoji */
+  /** "love" | "like" | "dislike" | "laugh" | "emphasize" | "question" | "emoji" */
   type: string;
+  /** The custom emoji for `type: "emoji"`; absent when it could not be parsed. */
+  emoji?: string;
   isFromMe: boolean;
   senderName: string | null;
   senderAddress: string | null;

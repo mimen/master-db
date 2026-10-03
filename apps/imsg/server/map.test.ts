@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BBAttachment, BBChat } from "./bb-types";
-import { mapChat, mapMessage, visibleAttachments } from "./map";
+import type { BBAttachment, BBChat, BBMessage } from "./bb-types";
+import { buildThread, mapChat, mapMessage, tapbackReactionEvent, visibleAttachments } from "./map";
 import type { CrmData, NameSource } from "./name-resolver";
 
 /**
@@ -228,5 +228,85 @@ describe("duplicate attachments", () => {
     expect(message.attachments).toEqual([
       { guid: "at_1", mimeType: "image/jpeg", filename: "x.HEIC.jpeg", width: 750, height: 1000, totalBytes: null },
     ]);
+  });
+});
+
+describe("custom-emoji tapbacks", () => {
+  const chat = "iMessage;-;+16195550101";
+  const names = fakeNameSource({ names: { "+16195550101": "Marla" } });
+  const target: BBMessage = {
+    guid: "7C5B4020-A903-489B-8C04-611B0CCB5A06",
+    text: "Hahaha",
+    dateCreated: 1000,
+    isFromMe: false,
+    handle: { address: "+16195550101" },
+  };
+  function emojiTapback(extra: Partial<BBMessage>): BBMessage {
+    return {
+      guid: "R1",
+      text: "Reacted 😍 to “Hahaha”",
+      dateCreated: 2000,
+      isFromMe: false,
+      handle: { address: "+16195550101" },
+      associatedMessageGuid: "p:0/7C5B4020-A903-489B-8C04-611B0CCB5A06",
+      associatedMessageType: 2006,
+      ...extra,
+    };
+  }
+
+  test("reload attaches a 2006 to its target with the parsed emoji", () => {
+    const thread = buildThread([emojiTapback({}), target], chat, names);
+    expect(thread.map((m) => m.guid)).toEqual([target.guid]);
+    expect(thread[0]?.reactions).toEqual([
+      { type: "emoji", emoji: "😍", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
+    ]);
+  });
+
+  test("reload drops a 2006 once the same sender's 3006 removes it", () => {
+    const add = emojiTapback({ text: "Reacted ❤️ to “Hahaha”", isFromMe: true, handle: null });
+    const remove = emojiTapback({
+      guid: "R2",
+      text: "Removed ❤️ from “Hahaha”",
+      dateCreated: 3000,
+      isFromMe: true,
+      handle: null,
+      associatedMessageType: 3006,
+    });
+    expect(buildThread([remove, add, target], chat, names)[0]?.reactions).toEqual([]);
+  });
+
+  test("a 3006 for a different emoji leaves the other reaction attached", () => {
+    const add = emojiTapback({});
+    const remove = emojiTapback({ guid: "R2", text: "Removed 👍 from “Hahaha”", dateCreated: 3000, associatedMessageType: 3006 });
+    expect(buildThread([remove, add, target], chat, names)[0]?.reactions.map((r) => r.emoji)).toEqual(["😍"]);
+  });
+
+  test("reads the emoji from the localized and hair-space text forms, ignoring emoji in the quote", () => {
+    const spanish = tapbackReactionEvent(emojiTapback({ text: "Reaccionó con 🥩 a “Bueno 😂”" }), names);
+    const spaced = tapbackReactionEvent(emojiTapback({ text: " ​👍​ to “ fun 😭 ” " }), names);
+    expect(spanish?.reaction.emoji).toBe("🥩");
+    expect(spaced?.reaction.emoji).toBe("👍");
+  });
+
+  test("falls back to the attributed body when BlueBubbles sends no text", () => {
+    const event = tapbackReactionEvent(
+      emojiTapback({ text: null, attributedBody: [{ string: "Reacted 🫶🏽 to “Hahaha”", runs: [] }] }),
+      names,
+    );
+    expect(event?.reaction.emoji).toBe("🫶🏽");
+  });
+
+  test("an unparseable 2006 still becomes a generic emoji reaction, not a bubble", () => {
+    const event = tapbackReactionEvent(emojiTapback({ text: "" }), names);
+    expect(event).toEqual({
+      targetGuid: target.guid,
+      remove: false,
+      reaction: { type: "emoji", isFromMe: false, senderName: "Marla", senderAddress: "+16195550101" },
+    });
+    expect(buildThread([emojiTapback({ text: "" }), target], chat, names).map((m) => m.guid)).toEqual([target.guid]);
+  });
+
+  test("the chat-list preview names the emoji instead of a removal", () => {
+    expect(mapMessage(emojiTapback({}), chat, names).text).toBe("Reacted 😍 to a message");
   });
 });
