@@ -76,3 +76,24 @@ describe("FakeBlueBubbles parity behavior", () => {
     expect(bb.scheduledDeletes).toEqual([1]);
   });
 });
+
+test("chat pages include empty chats without repeating the first page", async () => {
+  const bb = new FakeBlueBubbles({ chats: Array.from({ length: 1137 }, (_, i) => ({ guid: `chat${i}`, messages: [] })) });
+  const first = await bb.queryChats(1000, 0);
+  const second = await bb.queryChats(1000, 1000);
+  expect(first.ok && first.value.length).toBe(1000);
+  expect(second.ok && second.value.length).toBe(137);
+  expect(second.ok && second.value[0].guid).toBe("chat1000");
+});
+
+test("message queries bound ROWIDs and find the highest independent of date", async () => {
+  const bb = new FakeBlueBubbles({ chats: [{ guid: "chat", messages: [
+    { guid: "new-date", originalROWID: 1, dateCreated: 3000 },
+    { guid: "new-rowid", originalROWID: 3, dateCreated: 1000 },
+    { guid: "middle", originalROWID: 2, dateCreated: 2000 },
+  ] }] });
+  const high = await bb.queryMessages({ limit: 1, offset: 0, highestRowid: true });
+  expect(high.ok && high.value[0].guid).toBe("new-rowid");
+  const range = await bb.queryMessages({ limit: 1000, offset: 0, rowidRange: { after: 1, through: 2 } });
+  expect(range.ok && range.value.map((message) => message.guid)).toEqual(["middle"]);
+});

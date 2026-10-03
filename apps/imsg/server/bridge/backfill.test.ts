@@ -34,11 +34,7 @@ async function fixture() {
   const query = bb.queryMessages.bind(bb);
   spyOn(bb, "queryMessages").mockImplementation(async (options) => {
     expect(options.limit).toBeLessThanOrEqual(1000);
-    const result = await query({ ...options, limit: 9999, offset: 0 });
-    if (!result.ok) return result;
-    const range = options.rowidRange;
-    return { ok: true, value: result.value.filter((message) => !range ||
-      (message.originalROWID! > range.after && message.originalROWID! <= range.through)).slice(options.offset, options.offset + options.limit) };
+    return query(options);
   });
   spyOn(bb, "messageWithReactions").mockResolvedValue({ ok: true,
     value: [{ guid: "orphan", originalROWID: 1005 }] });

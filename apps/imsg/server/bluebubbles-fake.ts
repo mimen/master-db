@@ -149,7 +149,7 @@ export class FakeBlueBubbles implements BlueBubbles {
     return this.privateApi;
   }
 
-  queryChats(): Promise<Result<BBChat[]>> {
+  queryChats(limit = 1000, offset = 0): Promise<Result<BBChat[]>> {
     this.calls.queryChats++;
     const chats: BBChat[] = [...this.chatMeta.entries()].map(([guid, meta]) => ({
       guid,
@@ -160,7 +160,7 @@ export class FakeBlueBubbles implements BlueBubbles {
     chats.sort(
       (a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0),
     );
-    return Promise.resolve({ ok: true, value: chats });
+    return Promise.resolve({ ok: true, value: chats.slice(offset, offset + limit) });
   }
 
   chatMessages(
@@ -187,7 +187,10 @@ export class FakeBlueBubbles implements BlueBubbles {
       .filter((message) => !options.unreadInboundOnly || (message.isFromMe !== true && !message.dateRead))
       .filter((message) => !options.from || (message.isFromMe === true) === (options.from === "me"))
       .filter((message) => !options.chatGuid || message.chats?.some((chat) => chat.guid === options.chatGuid))
-      .filter((message) => !options.text || (message.text ?? "").toLowerCase().includes(options.text.toLowerCase()));
+      .filter((message) => !options.text || (message.text ?? "").toLowerCase().includes(options.text.toLowerCase()))
+      .filter((message) => !options.rowidRange || ((message.originalROWID ?? 0) > options.rowidRange.after &&
+        (message.originalROWID ?? 0) <= options.rowidRange.through));
+    if (options.highestRowid) messages.sort((a, b) => (b.originalROWID ?? 0) - (a.originalROWID ?? 0));
     const value = messages.slice(options.offset, options.offset + options.limit);
     return Promise.resolve({ ok: true, value });
   }
