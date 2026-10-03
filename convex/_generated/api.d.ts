@@ -243,6 +243,129 @@ export declare const api: {
     syncState: FunctionReference<"mutation", "public", any, any>;
   };
   comma: {
+    outbox: {
+      enqueue: FunctionReference<
+        "mutation",
+        "public",
+        {
+          clientKey: string;
+          conversationId: Id<"comma_conversations">;
+          payload:
+            | {
+                kind: "send";
+                mentions?: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToGuid?: string;
+                replyToPart?: number;
+                text: string;
+              }
+            | {
+                kind: "react";
+                messageGuid: string;
+                partIndex?: number;
+                reaction: string;
+                remove: boolean;
+              }
+            | {
+                kind: "edit";
+                messageGuid: string;
+                partIndex?: number;
+                text: string;
+              }
+            | { kind: "unsend"; messageGuid: string; partIndex?: number }
+            | { kind: "delete"; messageGuid: string; partIndex?: number }
+            | { kind: "markRead"; messageGuid?: string }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean }
+            | { kind: "rename"; name: string }
+            | { kind: "schedule"; sendAt: number; text: string }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" };
+        },
+        Id<"comma_outbox">
+      >;
+      outboxStatusFor: FunctionReference<
+        "query",
+        "public",
+        { clientKeys: Array<string> },
+        Array<{
+          clientKey: string;
+          error?: string;
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+        }>
+      >;
+      pendingOutbox: FunctionReference<
+        "query",
+        "public",
+        { bridgeKey: string },
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_outbox">;
+          attempts: number;
+          clientKey: string;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          error?: string;
+          leaseUntil?: number;
+          payload:
+            | {
+                kind: "send";
+                mentions?: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToGuid?: string;
+                replyToPart?: number;
+                text: string;
+              }
+            | {
+                kind: "react";
+                messageGuid: string;
+                partIndex?: number;
+                reaction: string;
+                remove: boolean;
+              }
+            | {
+                kind: "edit";
+                messageGuid: string;
+                partIndex?: number;
+                text: string;
+              }
+            | { kind: "unsend"; messageGuid: string; partIndex?: number }
+            | { kind: "delete"; messageGuid: string; partIndex?: number }
+            | { kind: "markRead"; messageGuid?: string }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean }
+            | { kind: "rename"; name: string }
+            | { kind: "schedule"; sendAt: number; text: string }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" };
+          resultGuid?: string;
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+          updatedAt: number;
+        }>
+      >;
+    };
     queries: {
       getConversation: FunctionReference<
         "query",
@@ -2105,6 +2228,79 @@ export declare const internal: {
           }>;
         },
         { skipped: number; written: number }
+      >;
+    };
+    outbox: {
+      claimOutbox: FunctionReference<
+        "mutation",
+        "internal",
+        { leaseMs: number; limit: number; now: number },
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_outbox">;
+          attempts: number;
+          clientKey: string;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          error?: string;
+          leaseUntil?: number;
+          payload:
+            | {
+                kind: "send";
+                mentions?: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToGuid?: string;
+                replyToPart?: number;
+                text: string;
+              }
+            | {
+                kind: "react";
+                messageGuid: string;
+                partIndex?: number;
+                reaction: string;
+                remove: boolean;
+              }
+            | {
+                kind: "edit";
+                messageGuid: string;
+                partIndex?: number;
+                text: string;
+              }
+            | { kind: "unsend"; messageGuid: string; partIndex?: number }
+            | { kind: "delete"; messageGuid: string; partIndex?: number }
+            | { kind: "markRead"; messageGuid?: string }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean }
+            | { kind: "rename"; name: string }
+            | { kind: "schedule"; sendAt: number; text: string }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" };
+          resultGuid?: string;
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+          updatedAt: number;
+        }>
+      >;
+      completeOutbox: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          clientKey: string;
+          error?: string;
+          resultGuid?: string;
+          status: "sent" | "failed" | "unknown";
+        },
+        boolean
       >;
     };
   };

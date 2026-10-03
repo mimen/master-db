@@ -198,6 +198,14 @@ export const upsertMessages = internalMutation({
       const row = { ...message, reactions: existing?.reactions ?? [] };
       if (existing) await ctx.db.patch(existing._id, row);
       else await ctx.db.insert("comma_messages", row);
+      // The real echo of a queued send replaces its optimistic temp row.
+      if (message.clientKey && !message.guid.startsWith("temp-")) {
+        const temp = await ctx.db
+          .query("comma_messages")
+          .withIndex("by_guid", (q) => q.eq("guid", `temp-${message.clientKey}`))
+          .unique();
+        if (temp) await ctx.db.delete(temp._id);
+      }
       written++;
       touchedConversations.add(message.conversationId);
       // A tapback refolds its target; a normal message folds tapbacks that arrived first.

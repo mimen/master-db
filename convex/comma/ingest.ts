@@ -18,6 +18,8 @@ const ROUTES = {
   scheduled: internal.comma.internal.replaceScheduled,
   overlay: internal.comma.internal.importOverlay,
   sync: internal.comma.internal.markSyncState,
+  claim: internal.comma.outbox.claimOutbox,
+  complete: internal.comma.outbox.completeOutbox,
 } as const;
 
 export type IngestKind = keyof typeof ROUTES;
