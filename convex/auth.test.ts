@@ -9,17 +9,17 @@ describe("allowedRedirect", () => {
     "http://localhost:3000/settings",
     "https://convex-db-master-d31d50f579b2.herokuapp.com?tab=settings",
     "https://milads-mac-mini.taild31e9a.ts.net:8447",
+  ])("accepts %s", (redirectTo) => {
+    expect(allowedRedirect(redirectTo)).toBe(redirectTo);
+  });
+
+  test.each([
     "http://127.0.0.1:54321",
     "http://127.0.0.1:54321/",
     "http://127.0.0.1:80?code=abc",
     "http://127.0.0.1:65535/?code=abc",
     "exp://192.168.1.5:8081/--/auth",
     "exp://milads-mac-mini.taild31e9a.ts.net:8081/--/settings?code=abc",
-  ])("accepts %s", (redirectTo) => {
-    expect(allowedRedirect(redirectTo)).toBe(redirectTo);
-  });
-
-  test.each([
     "http://127.0.0.1:54321/settings",
     "http://127.0.0.1.evil.com:54321",
     "http://user@127.0.0.1:5",

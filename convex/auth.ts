@@ -51,26 +51,9 @@ export function allowedRedirect(redirectTo: string): string {
       return redirectTo;
     }
   }
-  const error = new Error(
+  throw new Error(
     `Disallowed redirectTo: ${redirectTo}. Add the origin to ALLOWED_REDIRECT_ORIGINS in convex/auth.ts.`,
   );
-  let url: URL;
-  try {
-    url = new globalThis.URL(redirectTo);
-  } catch {
-    throw error;
-  }
-  if (
-    url.username === "" &&
-    url.password === "" &&
-    (
-      (url.protocol === "http:" && url.hostname === "127.0.0.1" && url.pathname === "/" && url.hash === "") ||
-      (url.protocol === "exp:" && url.pathname.startsWith("/--/"))
-    )
-  ) {
-    return redirectTo;
-  }
-  throw error;
 }
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({

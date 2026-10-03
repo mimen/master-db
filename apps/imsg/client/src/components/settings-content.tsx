@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
-import * as Linking from "expo-linking";
-import * as WebBrowser from "expo-web-browser";
 import { useState, useSyncExternalStore, type JSX } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
@@ -14,9 +12,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { releaseStatus } from "@/lib/release-status";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { useAuthActions, useConvexAuth } from "@/lib/convex-auth";
-import { isDesktopShell, startOAuthLoopback } from "@/lib/desktop-shell";
-import { oauthCallbackCode } from "@/lib/oauth-callback";
+import { useConvexAuth } from "@/lib/convex-auth";
 import { showToast } from "@/lib/toast";
 import {
   setConvexSends,
@@ -57,54 +53,6 @@ const SUGGESTION_MODEL_OPTIONS: ReadonlyArray<{ value: SuggestionModel; label: s
   { value: "opus", label: "Opus", detail: "Claude" },
   { value: "terra", label: "Terra", detail: "ChatGPT" },
 ];
-
-function ConvexAccountRow() {
-  const { isLoading, isAuthenticated } = useConvexAuth();
-  const { signIn, signOut } = useAuthActions();
-  const [busy, setBusy] = useState(false);
-  const desktop = isDesktopShell();
-
-  async function changeSession() {
-    setBusy(true);
-    try {
-      if (isAuthenticated) {
-        await signOut();
-      } else if (Platform.OS !== "web") {
-        const redirectTo = Linking.createURL("/settings");
-        const { redirect } = await signIn("google", { redirectTo });
-        if (!redirect) throw new Error("Missing OAuth redirect");
-        const result = await WebBrowser.openAuthSessionAsync(redirect.toString(), redirectTo);
-        if (result.type === "success") {
-          const code = oauthCallbackCode(result.url);
-          if (code === null) throw new Error("Missing OAuth code");
-          await signIn("google", { code });
-        }
-      } else {
-        const redirectTo = desktop ? await startOAuthLoopback() : window.location.origin;
-        if (redirectTo === null) {
-          showToast("Could not sign in to Convex");
-          return;
-        }
-        await signIn("google", { redirectTo });
-      }
-    } catch {
-      showToast(isAuthenticated ? "Could not sign out of Convex" : "Could not sign in to Convex");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ListRow
-      title={isAuthenticated ? "Signed in to Convex" : "Sign in to Convex"}
-      subtitle={isAuthenticated ? "Sign out" : desktop ? "Continue with Google in your browser" : "Continue with Google"}
-      accessibilityLabel={isAuthenticated ? "Sign out of Convex" : "Sign in to Convex"}
-      titleWeight="400"
-      disabled={isLoading || busy}
-      onPress={() => void changeSession()}
-    />
-  );
-}
 
 /** One version line; the full release identity is a click away for debugging. */
 function ReleaseIdentityFooter(): JSX.Element {
@@ -218,7 +166,6 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Convex</Text>
           <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
-            <ConvexAccountRow />
             {isAuthenticated && (
               <ListRow
                 title="Read messages from Convex"
