@@ -438,3 +438,61 @@ export const markSyncState = internalMutation({
     return null;
   },
 });
+
+/**
+ * One-off repair for conversations duplicated by a key change (e.g. a short
+ * code first keyed as fake E.164). For each pair of conversations sharing a
+ * chatGuid, keeps the older document id, moves every dependent row onto it,
+ * adopts the newer key, and deletes the newer document.
+ */
+export const mergeDuplicateConversations = internalMutation({
+  args: { dryRun: v.boolean() },
+  returns: v.array(v.object({ kept: v.id("comma_conversations"), removed: v.id("comma_conversations"), key: v.string() })),
+  handler: async (ctx, { dryRun }) => {
+    const byGuid = new Map<string, Doc<"comma_conversations">[]>();
+    for (const conversation of await ctx.db.query("comma_conversations").collect()) {
+      for (const chatGuid of conversation.chatGuids) {
+        byGuid.set(chatGuid, [...(byGuid.get(chatGuid) ?? []), conversation]);
+      }
+    }
+    const merges: { kept: Id<"comma_conversations">; removed: Id<"comma_conversations">; key: string }[] = [];
+    const removed = new Set<string>();
+    for (const group of byGuid.values()) {
+      if (group.length < 2) continue;
+      const [keep, ...rest] = [...group].sort((a, b) => a._creationTime - b._creationTime);
+      if (!keep) continue;
+      for (const dup of rest) {
+        if (removed.has(dup._id) || dup._id === keep._id) continue;
+        removed.add(dup._id);
+        merges.push({ kept: keep._id, removed: dup._id, key: dup.conversationKey });
+        if (dryRun) continue;
+        const id = dup._id;
+        const moved = [
+          ...(await ctx.db.query("comma_messages").withIndex("by_conversation_date", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_attachments").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_suggestions").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_triage_events").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_triage_open").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+          ...(await ctx.db.query("comma_conversation_state").withIndex("by_conversationId", (q) => q.eq("conversationId", id)).collect()),
+        ];
+        for (const row of moved) await ctx.db.patch(row._id, { conversationId: keep._id });
+        for (const alias of await ctx.db.query("comma_chat_aliases").withIndex("by_conversationId", (q) => q.eq("conversationId", dup._id)).collect()) {
+          await ctx.db.patch(alias._id, { conversationId: keep._id });
+        }
+        // Outbox and scheduled have no conversationId index; both stay small.
+        for (const row of [...(await ctx.db.query("comma_scheduled").collect()), ...(await ctx.db.query("comma_outbox").collect())]) {
+          if (row.conversationId === dup._id) await ctx.db.patch(row._id, { conversationId: keep._id });
+        }
+        await ctx.db.patch(keep._id, {
+          conversationKey: dup.conversationKey,
+          lastMessage: keep.lastMessage ?? dup.lastMessage,
+          lastMessageAt: Math.max(keep.lastMessageAt, dup.lastMessageAt),
+          updatedAt: Date.now(),
+        });
+        await ctx.db.delete(dup._id);
+      }
+    }
+    return merges;
+  },
+});

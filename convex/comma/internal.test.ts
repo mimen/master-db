@@ -229,3 +229,22 @@ describe("importOverlay", () => {
     expect(events).toHaveLength(1);
   });
 });
+
+describe("mergeDuplicateConversations", () => {
+  test("folds a re-keyed duplicate into the older conversation id", async () => {
+    const t = convexTest(schema, modules);
+    const ids = await t.run(async (ctx) => {
+      const base = { primaryChatGuid: "SMS;-;900080006201", chatGuids: ["SMS;-;900080006201"], displayName: "x", isGroup: false, participants: [], isSpam: false, hasGroupPhoto: false, lastMessageAt: 5, updatedAt: 1 };
+      const old = await ctx.db.insert("comma_conversations", { ...base, conversationKey: "dm:+900080006201" });
+      const dup = await ctx.db.insert("comma_conversations", { ...base, conversationKey: "dm:900080006201" });
+      await ctx.db.insert("comma_chat_aliases", { chatGuid: "SMS;-;900080006201", conversationId: dup, service: "SMS" });
+      return { old, dup };
+    });
+    const merges = await t.mutation(internal.comma.internal.mergeDuplicateConversations, { dryRun: false });
+    const rows = await t.run((ctx) => ctx.db.query("comma_conversations").collect());
+    const alias = await t.run((ctx) => ctx.db.query("comma_chat_aliases").first());
+    expect(merges).toEqual([{ kept: ids.old, removed: ids.dup, key: "dm:900080006201" }]);
+    expect(rows.map((row) => [row._id, row.conversationKey])).toEqual([[ids.old, "dm:900080006201"]]);
+    expect(alias?.conversationId).toBe(ids.old);
+  });
+});
