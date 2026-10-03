@@ -13,6 +13,8 @@ describe("allowedRedirect", () => {
     "http://127.0.0.1:54321/",
     "http://127.0.0.1:80?code=abc",
     "http://127.0.0.1:65535/?code=abc",
+    "exp://192.168.1.5:8081/--/auth",
+    "exp://milads-mac-mini.taild31e9a.ts.net:8081/--/settings?code=abc",
   ])("accepts %s", (redirectTo) => {
     expect(allowedRedirect(redirectTo)).toBe(redirectTo);
   });
@@ -26,6 +28,11 @@ describe("allowedRedirect", () => {
     "http://localhost:54321",
     "http://127.0.0.1:54321/#code=abc",
     "http://127.0.0.1:65536",
+    "exp://host:8081/other",
+    "exp://host:8081/--",
+    "exp://user@host:8081/--/auth",
+    "exp://user:pass@host:8081/--/auth",
+    "imsg://x",
     "https://milads-mac-mini.taild31e9a.ts.net:8447.evil.com",
     "not a URL",
   ])("rejects %s", (redirectTo) => {

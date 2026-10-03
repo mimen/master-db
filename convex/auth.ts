@@ -61,12 +61,12 @@ export function allowedRedirect(redirectTo: string): string {
     throw error;
   }
   if (
-    url.protocol === "http:" &&
-    url.hostname === "127.0.0.1" &&
     url.username === "" &&
     url.password === "" &&
-    url.pathname === "/" &&
-    url.hash === ""
+    (
+      (url.protocol === "http:" && url.hostname === "127.0.0.1" && url.pathname === "/" && url.hash === "") ||
+      (url.protocol === "exp:" && url.pathname.startsWith("/--/"))
+    )
   ) {
     return redirectTo;
   }

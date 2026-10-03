@@ -71,7 +71,7 @@ and Restart banners.
   clients resolve to Convex unless explicitly disabled. The [auth provider](client/src/lib/convex-auth.tsx)
   also updates non-hook readers, without replacing persisted overrides.
 - Unsigned clients automatically use REST. Tauri signs in through the system browser via a loopback
-  redirect; Expo Go OAuth is still deferred. REST read/send paths and the SSE-driven thread cache remain supported.
+  redirect; Expo Go uses an auth session with an `exp://` redirect. REST read/send paths and the SSE-driven thread cache remain supported.
 - Convex functions deploy separately from the repo root with
   `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`. A push to main deploys only imsg.
 
