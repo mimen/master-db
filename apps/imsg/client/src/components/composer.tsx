@@ -1063,6 +1063,8 @@ ${url}` : url;
                 </View>
               )}
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove attachment"
                 onPress={() => removePending(i)}
                 style={({ hovered, pressed }) => [styles.pendingRemove, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
                 hitSlop={6}
@@ -1165,6 +1167,8 @@ ${url}` : url;
           )}
           {canSend && !recording ? (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send"
               onPress={() => void send()}
               onLongPress={canSchedule ? openScheduleSheet : undefined}
               disabled={busy}

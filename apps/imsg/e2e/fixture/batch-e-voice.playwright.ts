@@ -30,6 +30,9 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
   await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   const mic = page.getByRole("button", { name: "Record voice message" });
+  await page.getByPlaceholder("iMessage").fill("labelled");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await page.getByPlaceholder("iMessage").fill("");
   const sendVoice = page.getByRole("button", { name: "Send voice message" });
   const uploads = () => page.evaluate(() => (window as unknown as { __uploads: { count: number } }).__uploads.count);
 
