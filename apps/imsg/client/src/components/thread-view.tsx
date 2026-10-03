@@ -38,7 +38,7 @@ import { settleActionFor } from "@shared/chat-state";
 import { Bubble, TAPBACK_EMOJI } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
-import { CenteredSpinner } from "./empty-state";
+import { CenteredSpinner, EmptyState } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
 import { TypingIndicator } from "./typing-indicator";
@@ -99,7 +99,7 @@ export function ThreadView({
   const paneRef = useRef<View>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, reconcile } =
+  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, reconcile } =
     useMessages(chatGuid, jumpTarget);
   messagesRef.current = messages;
   // Milad owes a reply when the newest real message is inbound. Drives whether
@@ -656,6 +656,18 @@ export function ThreadView({
 
       {loading && messages.length === 0 ? (
         <CenteredSpinner />
+      ) : failed && messages.length === 0 ? (
+        <EmptyState icon="cloud-offline-outline" message="Couldn't load messages">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading messages"
+            onPress={retryLoad}
+            hitSlop={8}
+            style={({ hovered, pressed }) => [styles.retryButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }]}
+          >
+            <Text style={{ color: theme.text, fontSize: type.secondary, fontWeight: "600" }}>Retry</Text>
+          </Pressable>
+        </EmptyState>
       ) : (
         <FlatList
           ref={assignListRef}
@@ -842,6 +854,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
+  retryButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },
   searchShelf: {
     flexDirection: "row",

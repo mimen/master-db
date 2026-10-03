@@ -1,6 +1,7 @@
 import type { ChatSummary, StateCounts } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 
 
@@ -42,6 +43,8 @@ interface ConversationListPaneProps {
   counts: StateCounts | null;
   filters: InboxFilters;
   loading: boolean;
+  /** The last chat-list fetch failed; the list is the saved copy. */
+  offline: boolean;
   wide: boolean;
   selectedGuid?: string;
   onFiltersChange: (filters: InboxFilters) => void;
@@ -60,6 +63,7 @@ export function ConversationListPane({
   counts,
   filters,
   loading,
+  offline,
   wide,
   selectedGuid,
   onFiltersChange,
@@ -263,6 +267,15 @@ export function ConversationListPane({
                 paddingTop: Platform.OS === "web" ? topBarH : 0,
               }}
             >
+              {offline && (
+                <View testID="offline-bar" style={[styles.offlineBar, { backgroundColor: theme.backgroundElement }]}>
+                  <Ionicons name="cloud-offline-outline" size={13} color={theme.textSecondary} />
+                  <Text numberOfLines={1} style={[styles.offlineText, { color: theme.textSecondary }]}>{allChats.length > 0 ? "Offline · showing saved conversations" : "Offline · couldn't load conversations"}</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Retry loading conversations" onPress={onRefresh} hitSlop={8}>
+                    {({ hovered, pressed }) => <Text style={[styles.offlineRetry, { color: theme.accent, opacity: hovered || pressed ? 0.7 : 1 }]}>Retry</Text>}
+                  </Pressable>
+                </View>
+              )}
               {!wide && (
                 <View style={styles.phoneSegments}>
                   <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />
@@ -303,6 +316,9 @@ export function ConversationListPane({
 }
 
 const styles = StyleSheet.create({
+  offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 12, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  offlineText: { flex: 1, fontSize: 12, minWidth: 0 },
+  offlineRetry: { fontSize: 12, fontWeight: "600" },
   phoneSegments: { paddingBottom: 4, paddingHorizontal: 16, paddingTop: 4 },
   sectionHeading: {
     alignItems: "baseline",

@@ -66,7 +66,7 @@ export function MessagesWorkspace({
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   const [sweep, setSweep] = useState<{ chats: ChatSummary[]; startGuid?: string } | null>(null);
-  const { chats, allChats, counts, loading, refresh } = useChats(state, type, !wide);
+  const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide);
 
   // Wide selection has one synchronous write path. Previously local state and
   // DesktopShell mirrored each other in opposing effects; clicking B while A
@@ -383,6 +383,7 @@ export function MessagesWorkspace({
       counts={counts}
       filters={{ state, type }}
       loading={loading}
+      offline={error !== null}
       wide={wide}
       selectedGuid={wide ? selected?.guid : undefined}
       onFiltersChange={(filters) => {

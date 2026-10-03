@@ -15,6 +15,9 @@ interface UseMessagesResult {
   /** Ascending by date. */
   messages: Message[];
   loading: boolean;
+  /** The opening fetch failed and there is nothing cached to show. */
+  failed: boolean;
+  retry: () => void;
   hasMore: boolean;
   hasNewer: boolean;
   loadOlder: () => void;
@@ -127,6 +130,8 @@ function warmThread(guid: string): void {
 export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [hasNewer, setHasNewer] = useState(false);
   const generation = useRef(0);
@@ -138,6 +143,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   useEffect(() => {
     setHasMore(false);
     setHasNewer(false);
+    setFailed(false);
     if (!chatGuid) {
       setMessages([]);
       return;
@@ -169,9 +175,13 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
         afterPaint(() => markOpenRendered(chatGuid, true));
       })
       .catch(() => {
-        if (generation.current === gen) setLoading(false);
+        if (generation.current !== gen) return;
+        setLoading(false);
+        setFailed(!(cached && cached.length > 0));
       });
-  }, [chatGuid, target]);
+  }, [chatGuid, target, attempt]);
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   // Keep the cache current as the open thread changes (sends, SSE, edits).
   useEffect(() => {
@@ -257,5 +267,5 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
     setMessages((current) => settleTemp(current, tempGuid, message));
   }, []);
 
-  return { messages, loading, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, reconcile };
+  return { messages, loading, failed, retry, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, reconcile };
 }
