@@ -40,7 +40,7 @@ interface LensCommand {
 const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
   all: { title: "All Conversations", keywords: ["view", "filter", "inbox"] },
   unread: { title: "Unread", keywords: ["view", "filter"] },
-  unresponded: { title: "Unresponded", keywords: ["view", "filter", "needs reply"] },
+  unresponded: { title: "Needs reply", keywords: ["view", "filter", "unresponded"] },
   waiting: { title: "Waiting", keywords: ["view", "filter", "awaiting reply"] },
   settled: { title: "Settled", keywords: ["view", "filter", "done", "handled", "archive"] },
 };

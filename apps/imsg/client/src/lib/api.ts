@@ -16,7 +16,6 @@ import type {
   SuggestionModel,
   StateFilter,
   TranscriptState,
-  TriageProgressStats,
   TypeFilter,
 } from "@shared/types";
 
@@ -84,9 +83,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ kind }),
     });
-  },
-  getTriageStats(): Promise<TriageProgressStats> {
-    return request("/api/triage/stats");
   },
   getShadowBrief(chatGuid: string, regenerate = false): Promise<ShadowBrief> {
     const query = regenerate ? "?regenerate=1" : "";

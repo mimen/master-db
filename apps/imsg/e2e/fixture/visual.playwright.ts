@@ -89,7 +89,7 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       const headerBox = await header.boundingBox();
       const messagesBox = await messagesItem.boundingBox();
       expect(railBox?.width).toBeCloseTo(64, 1);
-      expect(headerBox?.height).toBeCloseTo(112, 1);
+      expect(headerBox?.height).toBeCloseTo(120, 1);
       expect(messagesBox?.y).toBeGreaterThanOrEqual(38);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 

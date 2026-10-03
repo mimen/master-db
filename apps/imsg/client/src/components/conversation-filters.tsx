@@ -1,12 +1,10 @@
-import { useState } from "react";
 import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { OverlayShell } from "./overlay-shell";
-import { filterChipFill } from "./sidebar/chrome-control-fill";
 import {
   activeInboxFilterCount,
   resetInboxFilters,
@@ -21,22 +19,6 @@ interface FilterOption<Value extends StateFilter | TypeFilter> {
 }
 
 export const STATE_FILTERS = [
-  { value: "all", label: "All" },
-  { value: "unread", label: "Unread" },
-  { value: "unresponded", label: "Unresponded" },
-  { value: "waiting", label: "Waiting" },
-  { value: "settled", label: "Settled" },
-] as const satisfies readonly FilterOption<StateFilter>[];
-
-/**
- * The desktop triage control, and the only state lens you can reach by
- * pointer: openFilters has a wide branch, but the button holding filterBtnRef
- * renders inside the narrow SidebarChrome, so the popover has no desktop entry
- * point. ⌘K reaches every lens by name, so a lens left off this list is
- * discoverable-by-typing only, not unreachable. Carry the full axis anyway —
- * a lens you have to already know about is one most people never find.
- */
-const COMPACT_STATE_FILTERS = [
   { value: "unresponded", label: "Needs reply" },
   { value: "waiting", label: "Waiting" },
   { value: "unread", label: "Unread" },
@@ -44,10 +26,15 @@ const COMPACT_STATE_FILTERS = [
   { value: "settled", label: "Settled" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
+/** The three working queues. Unread, Settled, and the type lens live in the filter menu. */
+const SEGMENTS = [
+  { value: "unresponded", label: "Needs reply" },
+  { value: "waiting", label: "Waiting" },
+  { value: "all", label: "All" },
+] as const satisfies readonly FilterOption<StateFilter>[];
+
 /**
- * One axis, widest to narrowest, with the screened-only lens last. Every entry
- * renders at every width. Unknown used to be stripped on desktop and reachable
- * only through a footer link, which made it a room with no marked exit.
+ * One axis, widest to narrowest, with the screened-only lens last.
  */
 export const TYPE_FILTERS = [
   { value: "all", label: "Everyone" },
@@ -61,8 +48,6 @@ export interface ConversationFiltersProps {
   filters: InboxFilters;
   counts: StateCounts | null;
   onFiltersChange: (filters: InboxFilters) => void;
-  /** Desktop: tighter pills so the rail reads as chrome, not content. */
-  compact?: boolean;
 }
 
 function formatCount(count: number): string {
@@ -74,143 +59,43 @@ function filterAccessibilityLabel(label: string, count: number | undefined): str
   return `${label}, ${formatCount(count)} conversations`;
 }
 
-function FilterPill({
-  label,
-  count,
-  selected,
-  selection,
-  onSelect,
-  compact = false,
-}: {
-  label: string;
-  count?: number;
-  selected: boolean;
-  selection: InboxFilterSelection;
-  onSelect: (selection: InboxFilterSelection) => void;
-  compact?: boolean;
-}) {
-  const theme = useTheme();
-  const visual = useTriageTheme();
-  const [hovered, setHovered] = useState(false);
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={filterAccessibilityLabel(label, count)}
-      accessibilityState={{ checked: selected }}
-      onPress={() => onSelect(selection)}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      style={({ pressed }) => [
-        styles.pill,
-        compact && styles.pillCompact,
-        filterChipFill(theme, { selected, hovered, pressed }),
-        compact ? ({
-          backgroundColor: selected ? visual.activeChip : pressed || hovered ? visual.controlFill : visual.inactiveChip,
-          boxShadow: selected ? "none" : "0 1px 2px rgba(0,0,0,0.10)",
-        } as object) : null,
-        Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null,
-      ]}
-    >
-      <Text
-        style={[
-          styles.pillLabel,
-          compact && styles.pillLabelCompact,
-          { color: compact ? selected ? (visual.activeChip === "#f4f4f6" ? "#1a1a1c" : "#ffffff") : visual.meta : selected ? theme.background : theme.textSecondary },
-        ]}
-      >
-        {label}
-      </Text>
-      {count !== undefined && (
-        <Text
-          style={[
-            styles.pillCount,
-            compact && styles.pillCountCompact,
-            { color: selected ? theme.background : theme.textSecondary },
-          ]}
-        >
-          {formatCount(count)}
-        </Text>
-      )}
-    </Pressable>
-  );
-}
-
 /**
- * The filter rail. Desktop stacks the two axes and wraps; mobile keeps one
- * swipeable row.
- *
- * Desktop cannot use the swipe rail. The sidebar is ~350px and the two groups
- * need ~710px, so a single row parked every type lens in the 360px past the
- * edge, behind a hidden scroll indicator. Wrapping drops the width dependency
- * rather than tuning it, so no sidebar size can hide a lens again. Mobile keeps
- * scrolling: a horizontal swipe is discoverable by touch, and the filter sheet
- * is a second way in that desktop does not have.
+ * The state segmented control: Needs reply, Waiting, All. A state picked from
+ * the filter menu (Unread, Settled) leaves every segment unselected, and the
+ * list title names it.
  */
-export function ConversationFilters({
-  filters,
-  counts,
-  onFiltersChange,
-  compact = false,
-}: ConversationFiltersProps) {
-  const theme = useTheme();
-  const select = (selection: InboxFilterSelection): void => {
-    onFiltersChange(selectInboxFilter(filters, selection));
-  };
-
-  const stateGroup = (
+export function StateSegments({ filters, counts, onFiltersChange }: ConversationFiltersProps) {
+  const visual = useTriageTheme();
+  return (
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel="Conversation state"
-      style={[styles.filterGroup, compact && styles.filterGroupCompact]}
+      style={[styles.segments, { backgroundColor: visual.controlFill }]}
     >
-      {(compact ? COMPACT_STATE_FILTERS : STATE_FILTERS).map((filter) => (
-        <FilterPill key={filter.value} compact={compact} label={filter.label} count={counts?.[filter.value]} selected={filters.state === filter.value} selection={{ kind: "state", value: filter.value }} onSelect={select} />
-      ))}
-    </View>
-  );
-
-  const typeGroup = (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel="Conversation type"
-      style={[styles.filterGroup, compact && styles.filterGroupCompact]}
-    >
-      {TYPE_FILTERS.map((filter) => (
-        <FilterPill
-          key={filter.value}
-          compact={compact}
-          label={filter.label}
-          selected={filters.type === filter.value}
-          selection={{ kind: "type", value: filter.value }}
-          onSelect={select}
-        />
-      ))}
-    </View>
-  );
-
-  if (compact) {
-    // One row per axis, and each row wraps on its own at the narrowest sidebar.
-    // No divider: the row break already separates the two axes.
-    return (
-      <View accessibilityLabel="Conversation filters" style={styles.railStacked}>
-        {stateGroup}
-        {typeGroup}
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.rail}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.railContent}
-        accessibilityLabel="Conversation filters"
-      >
-        {stateGroup}
-        <View accessible={false} style={[styles.divider, { backgroundColor: theme.divider }]} />
-        {typeGroup}
-      </ScrollView>
+      {SEGMENTS.map((segment) => {
+        const selected = filters.state === segment.value;
+        const count = counts?.[segment.value];
+        return (
+          <Pressable
+            key={segment.value}
+            accessibilityRole="radio"
+            accessibilityLabel={filterAccessibilityLabel(segment.label, count)}
+            accessibilityState={{ checked: selected }}
+            onPress={() => onFiltersChange(selectInboxFilter(filters, { kind: "state", value: segment.value }))}
+            style={({ hovered, pressed }) => [
+              styles.segment,
+              selected
+                ? [styles.segmentSelected, { backgroundColor: visual.card }]
+                : (hovered || pressed) && { backgroundColor: visual.controlFill },
+            ]}
+          >
+            <Text numberOfLines={1} style={[styles.segmentLabel, { color: selected ? visual.text : visual.meta }]}>
+              {segment.label}
+              {count !== undefined ? <Text style={[styles.segmentCount, { color: visual.meta }]}>  {formatCount(count)}</Text> : null}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -466,63 +351,31 @@ export function ConversationFiltersModal({
 }
 
 const styles = StyleSheet.create({
-  rail: {
-    height: 50,
-  },
-  railContent: {
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 18,
-  },
-  // No fixed height: the rows grow when a group wraps at a narrow sidebar.
-  // The insets are tighter than railContent's 18 so that both groups clear the
-  // default 352px sidebar on one row each. They still wrap when dragged narrow.
-  railStacked: {
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  filterGroup: {
-    alignItems: "center",
+  segments: {
+    borderRadius: 8,
     flexDirection: "row",
-    gap: 8,
+    gap: 2,
+    height: 28,
+    padding: 2,
   },
-  filterGroupCompact: {
-    flexWrap: "wrap",
-    gap: 4,
-  },
-  divider: {
-    height: 22,
-    width: StyleSheet.hairlineWidth,
-  },
-  pill: {
+  segment: {
     alignItems: "center",
-    borderRadius: 17,
-    flexDirection: "row",
-    gap: 6,
-    height: 34,
-    paddingHorizontal: 14,
+    borderRadius: 6,
+    flex: 1,
+    justifyContent: "center",
+    minWidth: 0,
+    paddingHorizontal: 6,
   },
-  pillCompact: {
-    borderRadius: 12,
-    gap: 4,
-    height: 24,
-    paddingHorizontal: 10,
-  },
-  pillLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  pillLabelCompact: {
-    fontSize: 11,
-  },
-  pillCount: {
+  segmentSelected: {
+    boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
+  } as object,
+  segmentLabel: {
     fontSize: 12,
-    fontVariant: ["tabular-nums"],
     fontWeight: "600",
   },
-  pillCountCompact: {
-    fontSize: 11,
+  segmentCount: {
+    fontVariant: ["tabular-nums"],
+    fontWeight: "500",
   },
   popoverBackdrop: {
     ...StyleSheet.absoluteFill,
@@ -557,10 +410,8 @@ const styles = StyleSheet.create({
   popoverGroupTitle: {
     fontSize: Type.caption,
     fontWeight: "700",
-    letterSpacing: 0.6,
     paddingBottom: 4,
     paddingHorizontal: 12,
-    textTransform: "uppercase",
   },
   popoverFooter: {
     alignItems: "flex-end",
@@ -623,7 +474,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     paddingBottom: 4,
     paddingHorizontal: 20,
-    textTransform: "uppercase",
   },
   menuOption: {
     alignItems: "center",

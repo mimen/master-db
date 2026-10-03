@@ -1,40 +1,31 @@
-import { DeskHeader, DESK_HEADER_HEIGHT } from "./desk-header";
+import { DeskHeader, DESK_HEADER_WITH_CONTROLS_HEIGHT } from "./desk-header";
 import { TriageSummary } from "./triage-summary";
 
-export const TRIAGE_QUEUE_HEADER_HEIGHT = DESK_HEADER_HEIGHT;
+export const TRIAGE_QUEUE_HEADER_HEIGHT = DESK_HEADER_WITH_CONTROLS_HEIGHT;
 
-/** Messages' desk header — the shared DeskHeader shell with triage progress. */
+/** Messages' desk header: title, search and actions, then the state segments. */
 export function TriageQueueHeader({
   title,
-  completed,
   sweepCount,
-  oldestAt,
   search,
   action,
+  controls,
   onSweep,
 }: {
   title: string;
-  completed: number;
   sweepCount: number;
-  oldestAt: number | null;
   search: React.ReactNode;
   action: React.ReactNode;
+  controls: React.ReactNode;
   onSweep?: () => void;
 }): React.JSX.Element {
   return (
     <DeskHeader
       testID="triage-queue-header"
-      summary={
-        <TriageSummary
-          title={title}
-          sweepCount={sweepCount}
-          completed={completed}
-          oldestAt={oldestAt}
-          onSweep={onSweep}
-        />
-      }
+      summary={<TriageSummary title={title} sweepCount={sweepCount} onSweep={onSweep} />}
       search={search}
       action={action}
+      controls={controls}
     />
   );
 }

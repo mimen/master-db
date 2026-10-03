@@ -1,11 +1,11 @@
-import type { ChatSummary, StateCounts, TriageProgressStats } from "@shared/types";
+import type { ChatSummary, StateCounts } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 
 
 import { ChatRow } from "./chat-row";
-import { ConversationFilters, ConversationFiltersModal, type FilterAnchor } from "./conversation-filters";
+import { ConversationFiltersModal, StateSegments, type FilterAnchor } from "./conversation-filters";
 import { SkeletonList } from "./skeleton-list";
 import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
 
@@ -13,7 +13,6 @@ import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import SquarePenIcon from "@hugeicons/core-free-icons/SquarePenIcon";
 import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
-import { SidebarFooter } from "./sidebar/sidebar-footer";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
@@ -22,11 +21,10 @@ import { useConversationListViewport } from "./conversations/use-conversation-li
 import { useConversationSearch } from "./conversations/use-conversation-search";
 
 import { onTriageResolved, onTriageUndo, toggleSettleChat } from "@/hooks/use-triage-actions";
-import { api } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, desktopInboxTitle, type InboxFilters } from "@/lib/inbox-model";
-import { sidebarChromeHeight, sidebarFooterHeight } from "@/lib/sidebar-metrics";
+import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -35,6 +33,7 @@ import { useSyncExternalStore } from "react";
 // header) — that's React #185 in commitLayout, stack pointing at FlashList
 // inside ConversationListPane. Contacts already uses FlatList for this reason.
 const ConversationScrollList = Platform.OS === "web" ? FlatList : FlashList;
+const SEGMENT_LABELS = new Set(["Needs reply", "Waiting"]);
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -76,26 +75,15 @@ export function ConversationListPane({
   const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
-  const [stats, setStats] = useState<TriageProgressStats | null>(null);
-  const refreshStats = useCallback((): void => {
-    if (!wide) return;
-    void api.getTriageStats().then(setStats, () => undefined);
-  }, [wide]);
-  useEffect(() => { refreshStats(); }, [refreshStats, chats]);
   useEffect(() => {
-    const refreshTriage = (): void => {
-      onRefresh();
-      refreshStats();
-    };
-    const stopResolved = onTriageResolved(refreshTriage);
-    const stopUndo = onTriageUndo(refreshTriage);
+    const stopResolved = onTriageResolved(onRefresh);
+    const stopUndo = onTriageUndo(onRefresh);
     return () => {
       stopResolved();
       stopUndo();
     };
-  }, [onRefresh, refreshStats]);
+  }, [onRefresh]);
   const topBarH = wide ? TRIAGE_QUEUE_HEADER_HEIGHT : sidebarChromeHeight(false);
-  const footerH = sidebarFooterHeight(wide);
   const filterBtnRef = useRef<View>(null);
   const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
   const deskTitle = desktopInboxTitle(filters);
@@ -155,7 +143,6 @@ export function ConversationListPane({
   const viewport = useConversationListViewport({
     renderedChats: deskModel.listChats,
     chromeHeight: topBarH,
-    footerHeight: footerH,
     viewKey: search.viewKey,
   });
   useEffect(() => {
@@ -206,17 +193,16 @@ export function ConversationListPane({
     />
   );
 
+  const filterButton = (
+    <ChromeIconButton ref={filterBtnRef} icon="options-outline" accessibilityLabel="Filter conversations" onPress={openFilters} />
+  );
   const chrome = wide ? (
     <TriageQueueHeader
       title={deskTitle}
-      completed={stats?.clearedToday ?? 0}
       sweepCount={sweepableChats.length}
-      oldestAt={stats?.oldestQueueAt ?? deskModel.listChats.reduce<number | null>((oldest, chat) => {
-        const at = chat.lastMessage?.dateCreated ?? null;
-        return at === null ? oldest : oldest === null ? at : Math.min(oldest, at);
-      }, null)}
       search={searchField}
-      action={<ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} />}
+      action={<>{filterButton}<ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} /></>}
+      controls={<StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />}
       onSweep={filters.state === "unresponded" ? () => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); } : undefined}
     />
   ) : (
@@ -225,7 +211,7 @@ export function ConversationListPane({
       actions={
         <>
           <SettingsButton />
-          <ChromeIconButton ref={filterBtnRef} icon="options-outline" accessibilityLabel="Filter conversations" onPress={openFilters} />
+          {filterButton}
           <ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} />
         </>
       }
@@ -236,13 +222,6 @@ export function ConversationListPane({
     <SidebarFrame
       chrome={chrome}
       chromeHeight={topBarH}
-      footer={wide ? (
-        <SidebarFooter>
-          {/* Unknown is a chip on the filter rail now, so the footer is hint
-              text only. SidebarFooter centers its single child. */}
-          <View style={styles.footerHint}><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>{filters.state === "waiting" ? "Waiting settles when they reply" : filters.state === "unresponded" ? "Replying settles the queue" : "Hover for conversation actions"}</Text><Text style={[styles.footerHintText, { color: theme.textSecondary }]}>↑↓ glide · ↵ open</Text></View>
-        </SidebarFooter>
-      ) : undefined}
       thumb={<SyntheticScrollThumb state={viewport.thumb} />}
     >
       {/* Filters ride the list header, passing behind the glass top bar.
@@ -265,8 +244,8 @@ export function ConversationListPane({
           viewabilityConfig={viewport.viewabilityConfig}
           onViewableItemsChanged={viewport.onViewableItemsChanged}
           contentContainerStyle={{
-            paddingTop: Platform.OS === "web" ? 0 : topBarH + 8,
-            paddingBottom: footerH + 12,
+            paddingTop: Platform.OS === "web" ? 0 : topBarH,
+            paddingBottom: 12,
             paddingHorizontal: 0,
           }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
@@ -281,20 +260,17 @@ export function ConversationListPane({
               style={{
                 // FlashList on web drops contentContainerStyle paddingTop; the
                 // header has to own the chrome offset or search sits under the bar.
-                paddingTop: Platform.OS === "web" ? topBarH + 8 : 0,
-                paddingBottom: wide ? 6 : 0,
+                paddingTop: Platform.OS === "web" ? topBarH : 0,
               }}
             >
-              <ConversationFilters
-                compact={wide}
-                filters={filters}
-                counts={counts}
-                // Picking a badge exits search — the two never compose.
-                onFiltersChange={(f) => search.applyFilters(f)}
-              />
-              {/* Default "Recent" needs no label. Wide already names the
-                  view via the filter chips — don't stack a second heading. */}
-              {!wide && model.sectionLabel !== "Recent" && (
+              {!wide && (
+                <View style={styles.phoneSegments}>
+                  <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />
+                </View>
+              )}
+              {/* Name the view only when the segments can't: a menu-only
+                  state or a type lens. Wide names it in the header title. */}
+              {!wide && model.sectionLabel !== "Recent" && !SEGMENT_LABELS.has(model.sectionLabel) && (
                 <View style={styles.sectionHeading}>
                   <Text style={[styles.sectionTitle, { color: theme.text, fontSize: type.title }]}>{model.sectionLabel}</Text>
                   <Text style={[styles.sectionCount, { color: theme.textSecondary, fontSize: type.secondary }]}>{model.sectionCount}</Text>
@@ -327,10 +303,7 @@ export function ConversationListPane({
 }
 
 const styles = StyleSheet.create({
-  // No top border. It divided this row from the quiet-links row above it, and
-  // that row is gone. SidebarFooter already draws the hairline over the list.
-  footerHint: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: 31, paddingHorizontal: 6 },
-  footerHintText: { fontSize: 11 },
+  phoneSegments: { paddingBottom: 4, paddingHorizontal: 16, paddingTop: 4 },
   sectionHeading: {
     alignItems: "baseline",
     flexDirection: "row",

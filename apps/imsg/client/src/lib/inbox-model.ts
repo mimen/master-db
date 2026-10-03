@@ -59,7 +59,7 @@ export function activeInboxFilterCount(filters: InboxFilters): number {
 const STATE_LABELS: Record<StateFilter, string> = {
   all: "All",
   unread: "Unread",
-  unresponded: "Unresponded",
+  unresponded: "Needs reply",
   waiting: "Waiting",
   settled: "Settled",
 };

@@ -8,8 +8,6 @@ export const SIDEBAR_TITLE_HEIGHT = 52;
 export const SIDEBAR_TOOLBAR_HEIGHT = 44;
 /** Messages/Contacts switcher row under search. */
 export const SIDEBAR_NAV_HEIGHT = 56;
-/** Settings footer on wide/desktop. */
-export const SIDEBAR_FOOTER_HEIGHT = 64;
 /** Scroll-edge fade length. */
 export const SIDEBAR_SCROLL_FADE = 28;
 
@@ -18,10 +16,6 @@ export function sidebarChromeHeight(wide: boolean): number {
   return wide
     ? SIDEBAR_TITLE_HEIGHT + SIDEBAR_TOOLBAR_HEIGHT + SIDEBAR_NAV_HEIGHT
     : SIDEBAR_TITLE_HEIGHT;
-}
-
-export function sidebarFooterHeight(wide: boolean): number {
-  return wide ? SIDEBAR_FOOTER_HEIGHT : 0;
 }
 
 export function clampSidebarWidth(value: number): number {

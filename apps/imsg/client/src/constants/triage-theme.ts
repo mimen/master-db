@@ -21,8 +21,6 @@ export const TriageTheme = {
     controlFillHover: "rgba(118,118,128,0.22)",
     ringTrack: "rgba(0,0,0,0.10)",
     cardShadow: "rgba(0,0,0,0.08)",
-    inactiveChip: "#ffffff",
-    activeChip: "#1a1a1c",
   },
   dark: {
     desk: "#0b0b0d",
@@ -46,8 +44,6 @@ export const TriageTheme = {
     controlFillHover: "rgba(118,118,128,0.36)",
     ringTrack: "rgba(255,255,255,0.14)",
     cardShadow: "rgba(0,0,0,0.40)",
-    inactiveChip: "rgba(255,255,255,0.08)",
-    activeChip: "#f4f4f6",
   },
 } as const;
 

@@ -5,23 +5,25 @@ const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 
 export const DESK_HEADER_HEIGHT = 112;
+/** Title row, toolbar, and a segmented control, packed tight. */
+export const DESK_HEADER_WITH_CONTROLS_HEIGHT = 120;
 
 /**
  * The desk-language sidebar header shared by Messages and Contacts: a fixed
  * glass bar with a summary row on top and a search/action toolbar beneath.
- * Only the summary differs per surface (Messages shows triage progress,
- * Contacts a plain count), so the glass, drag regions, and height live here
- * and stay identical across both panes.
+ * Messages adds a controls row (the state segments) under the toolbar.
  */
 export function DeskHeader({
   summary,
   search,
   action,
+  controls,
   testID = "desk-header",
 }: {
   summary: React.ReactNode;
   search: React.ReactNode;
   action: React.ReactNode;
+  controls?: React.ReactNode;
   testID?: string;
 }): React.JSX.Element {
   const visual = useTriageTheme();
@@ -31,12 +33,17 @@ export function DeskHeader({
     WebkitBackdropFilter: "blur(40px) saturate(1.5)",
   } as object) : { backgroundColor: visual.queue };
   return (
-    <View testID={testID} style={[styles.header, glass, { borderBottomColor: visual.hairline }]} {...DRAG}>
+    <View
+      testID={testID}
+      style={[styles.header, controls ? styles.headerWithControls : null, glass, { borderBottomColor: visual.hairline }]}
+      {...DRAG}
+    >
       {summary}
-      <View style={styles.toolbar} {...NO_DRAG}>
+      <View style={[styles.toolbar, controls ? styles.toolbarTight : null]} {...NO_DRAG}>
         {search}
         {action}
       </View>
+      {controls ? <View style={styles.controls} {...NO_DRAG}>{controls}</View> : null}
     </View>
   );
 }
@@ -54,10 +61,21 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 10,
   },
+  headerWithControls: {
+    height: DESK_HEADER_WITH_CONTROLS_HEIGHT,
+    paddingBottom: 8,
+    paddingTop: 10,
+  },
   toolbar: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
     marginTop: 12,
+  },
+  toolbarTight: {
+    marginTop: 8,
+  },
+  controls: {
+    marginTop: 8,
   },
 });

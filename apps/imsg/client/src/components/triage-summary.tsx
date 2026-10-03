@@ -2,28 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { HoverFillButton } from "./hover-fill-button";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { queueAgeLabel } from "@/lib/queue-age";
 
 export function TriageSummary({
   title,
   sweepCount,
-  completed,
-  oldestAt,
   onSweep,
 }: {
   title: string;
   sweepCount: number;
-  completed: number;
-  oldestAt: number | null;
   onSweep?: () => void;
 }): React.JSX.Element {
   const visual = useTriageTheme();
   return (
     <View style={styles.wrap}>
-      <View style={styles.copy}>
-        <Text accessibilityRole="header" numberOfLines={1} style={[styles.title, { color: visual.text }]}>{title}</Text>
-        <Text numberOfLines={1} style={[styles.meta, { color: visual.meta }]}>{completed} settled today · {queueAgeLabel(oldestAt)}</Text>
-      </View>
+      <Text accessibilityRole="header" numberOfLines={1} style={[styles.title, { color: visual.text }]}>{title}</Text>
       {onSweep ? (
         <HoverFillButton
           accessibilityLabel={`Start sweep, ${sweepCount} conversations`}
@@ -46,21 +38,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 10,
-  },
-  copy: {
-    flex: 1,
-    minWidth: 0,
+    height: 28,
   },
   title: {
+    flex: 1,
     fontSize: 20,
     fontWeight: "700",
     letterSpacing: -0.3,
     lineHeight: 24,
-  },
-  meta: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 2,
+    minWidth: 0,
   },
   sweep: {
     alignItems: "center",
