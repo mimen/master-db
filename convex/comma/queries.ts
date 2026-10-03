@@ -11,6 +11,7 @@ import {
   messageDoc,
   participant,
   scheduledDoc,
+  suggestionDoc,
   syncStateDoc,
   type CommaConversationDoc,
 } from "../schema/comma/validators";
@@ -184,5 +185,17 @@ export const syncStatus = query({
   handler: async (ctx) => {
     await assertAllowed(ctx);
     return await ctx.db.query("comma_sync_state").withIndex("by_key").take(100);
+  },
+});
+
+export const getSuggestions = query({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.union(suggestionDoc, v.null()),
+  handler: async (ctx, args) => {
+    await assertAllowed(ctx);
+    return await ctx.db
+      .query("comma_suggestions")
+      .withIndex("by_conversationId", (q) => q.eq("conversationId", args.conversationId))
+      .unique();
   },
 });

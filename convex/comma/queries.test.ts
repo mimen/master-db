@@ -307,3 +307,18 @@ describe("Comma read queries", () => {
     expect(await t.query(api.comma.queries.resolveChat, { chatGuid: "SMS;-;one" })).toBeNull();
   });
 });
+
+test("suggestions require the allowed identity and return only the requested conversation", async () => {
+  const t = convexTest(schema, commaModules);
+  const id = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("suggestions", 1)));
+  await expect(t.query(api.comma.queries.getSuggestions, { conversationId: id })).rejects.toThrow("Unauthorized");
+  await expect(t.withIdentity({ email: "other@example.com" }).query(api.comma.queries.getSuggestions, { conversationId: id })).rejects.toThrow("Unauthorized");
+  const allowed = t.withIdentity({ email: ALLOWED_EMAIL });
+  expect(await allowed.query(api.comma.queries.getSuggestions, { conversationId: id })).toBeNull();
+  const payload = { suggestions: [], event: null, recipeVersion: 1, selectedModel: "opus" as const,
+    servedModel: "opus" as const, fallback: false, noReply: true };
+  await t.run((ctx) => ctx.db.insert("comma_suggestions", { conversationId: id, anchorGuid: "latest", payload, createdAt: 42 }));
+  expect(await allowed.query(api.comma.queries.getSuggestions, { conversationId: id })).toMatchObject({ anchorGuid: "latest", payload, createdAt: 42 });
+  const other = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("other", 2)));
+  expect(await allowed.query(api.comma.queries.getSuggestions, { conversationId: other })).toBeNull();
+});

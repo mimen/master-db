@@ -94,3 +94,22 @@ describe("POST /comma/ingest/*", () => {
     expect(response.status).toBe(404);
   });
 });
+
+test("suggestions ingest authenticates, validates the payload, and upserts the shelf", async () => {
+  const t = convexTest(schema, modules);
+  const conversationId = await t.run((ctx) => ctx.db.insert("comma_conversations", {
+    conversationKey: "dm:one", primaryChatGuid: "iMessage;-;one", chatGuids: ["iMessage;-;one"],
+    displayName: "Alex", participants: [{ address: "one", name: "Alex" }], isGroup: false,
+    isSpam: false, hasGroupPhoto: false, lastMessageAt: 1, updatedAt: 1,
+  }));
+  const body = { conversationId, anchorGuid: "latest", payload: { suggestions: [], event: null,
+    recipeVersion: 1, selectedModel: "opus", servedModel: "opus", fallback: false, noReply: true } };
+  const { path, ...init } = post("/comma/ingest/suggestions", body);
+  expect((await t.fetch(path, { ...init, headers: {} })).status).toBe(401);
+  expect((await t.fetch(path, init)).status).toBe(200);
+  expect((await t.fetch(path, init)).status).toBe(200);
+  const rows = await t.run((ctx) => ctx.db.query("comma_suggestions").collect());
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject(body);
+  expect((await t.fetch(path, { ...init, body: JSON.stringify({ ...body, payload: { ...body.payload, selectedModel: "invalid" } }) })).status).toBe(400);
+});

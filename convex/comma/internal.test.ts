@@ -292,3 +292,19 @@ describe("mergeDuplicateConversations", () => {
     expect(alias?.conversationId).toBe(ids.old);
   });
 });
+
+test("suggestions replace the latest shelf for one conversation without duplicating rows", async () => {
+  const t = convexTest(schema, modules);
+  const conversationId = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1 }]);
+  const otherId = await seedDm(t, "+15550002222", [{ chatGuid: "iMessage;-;+15550002222", lastMessageAt: 1 }]);
+  const payload = { suggestions: [], event: null, recipeVersion: 1, selectedModel: "opus" as const,
+    servedModel: "opus" as const, fallback: false, noReply: true };
+  await t.mutation(internal.comma.internal.setSuggestions, { conversationId, anchorGuid: "first", payload });
+  await t.mutation(internal.comma.internal.setSuggestions, { conversationId: otherId, anchorGuid: "other", payload });
+  await t.mutation(internal.comma.internal.setSuggestions, { conversationId, anchorGuid: "newest", payload: { ...payload, recipeVersion: 2 } });
+  await t.mutation(internal.comma.internal.setSuggestions, { conversationId, anchorGuid: "newest", payload: { ...payload, recipeVersion: 2 } });
+  const rows = await t.run((ctx) => ctx.db.query("comma_suggestions").collect());
+  expect(rows).toHaveLength(2);
+  expect(rows.find((row) => row.conversationId === conversationId)).toMatchObject({ anchorGuid: "newest", payload: { recipeVersion: 2 } });
+  expect(rows.find((row) => row.conversationId === otherId)?.anchorGuid).toBe("other");
+});

@@ -21,6 +21,7 @@ const ROUTES = {
   scheduled: internal.comma.internal.replaceScheduled,
   overlay: internal.comma.internal.importOverlay,
   sync: internal.comma.internal.markSyncState,
+  suggestions: internal.comma.internal.setSuggestions,
   claim: internal.comma.outbox.claimOutbox,
   complete: internal.comma.outbox.completeOutbox,
 } as const;

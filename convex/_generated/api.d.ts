@@ -432,6 +432,43 @@ export declare const api: {
           updatedAt: number;
         } | null
       >;
+      getSuggestions: FunctionReference<
+        "query",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        {
+          _creationTime: number;
+          _id: Id<"comma_suggestions">;
+          anchorGuid: string;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          payload: {
+            event: {
+              durationMinutes: number;
+              inviteEmails: Array<string>;
+              location: string | null;
+              start: string;
+              title: string;
+            } | null;
+            fallback: boolean;
+            noReply: boolean;
+            recipeVersion: number;
+            selectedModel: "opus" | "terra";
+            servedModel: "opus" | "terra";
+            suggestions: Array<{
+              id: string;
+              kind: "text" | "reaction";
+              reaction: string | null;
+              strategy: string;
+              targetMessageGuid: string | null;
+              targetMessagePreview: string | null;
+              targetPartIndex: number | null;
+              text: string;
+              vibe: string;
+            }>;
+          };
+        } | null
+      >;
       listConversations: FunctionReference<
         "query",
         "public",
@@ -2168,6 +2205,40 @@ export declare const internal: {
           thumbStorageId?: Id<"_storage">;
         },
         boolean
+      >;
+      setSuggestions: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          anchorGuid: string;
+          conversationId: Id<"comma_conversations">;
+          payload: {
+            event: {
+              durationMinutes: number;
+              inviteEmails: Array<string>;
+              location: string | null;
+              start: string;
+              title: string;
+            } | null;
+            fallback: boolean;
+            noReply: boolean;
+            recipeVersion: number;
+            selectedModel: "opus" | "terra";
+            servedModel: "opus" | "terra";
+            suggestions: Array<{
+              id: string;
+              kind: "text" | "reaction";
+              reaction: string | null;
+              strategy: string;
+              targetMessageGuid: string | null;
+              targetMessagePreview: string | null;
+              targetPartIndex: number | null;
+              text: string;
+              vibe: string;
+            }>;
+          };
+        },
+        null
       >;
       setTranscript: FunctionReference<
         "mutation",

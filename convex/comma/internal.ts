@@ -8,6 +8,7 @@ import {
   messageFields,
   participant,
   scheduledStatus,
+  suggestionFields,
   type CommaReaction,
 } from "../schema/comma/validators";
 
@@ -571,5 +572,24 @@ export const mediaBacklog = internalMutation({
         needsOriginal: !a.originalStorageId,
       }));
     return { items, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+export const setSuggestions = internalMutation({
+  args: {
+    conversationId: suggestionFields.conversationId,
+    anchorGuid: suggestionFields.anchorGuid,
+    payload: suggestionFields.payload,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("comma_suggestions")
+      .withIndex("by_conversationId", (q) => q.eq("conversationId", args.conversationId))
+      .unique();
+    const row = { ...args, createdAt: Date.now() };
+    if (existing) await ctx.db.replace(existing._id, row);
+    else await ctx.db.insert("comma_suggestions", row);
+    return null;
   },
 });
