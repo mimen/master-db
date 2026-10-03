@@ -63,7 +63,6 @@ export { DesktopType, Type, type TypeScale } from "./type-scale";
 // that reads them directly — everything else calls `useLayoutMode()`.
 export const Breakpoints = {
   wide: 768,
-  shadow: 1040,
 } as const;
 
 export { HOVER_DIM, PRESS_DIM } from "./interaction";
