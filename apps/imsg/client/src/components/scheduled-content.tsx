@@ -33,7 +33,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
     <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
       <Text style={[styles.paneHeaderTitle, { color: theme.text }]}>Scheduled</Text>
       {onClose && (
-        <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close scheduled">
+        <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8} accessibilityLabel="Close scheduled">
           <Ionicons name="close" size={20} color={theme.textSecondary} />
         </Pressable>
       )}
@@ -65,11 +65,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
             const editable = item.status === "pending";
             const errorState =
               item.status === "failed" || item.status === "interrupted" || item.status === "expired";
-            const statusColor = errorState
-              ? theme.destructive
-              : item.status === "pending"
-                ? theme.accent
-                : theme.textSecondary;
+            const statusColor = errorState ? theme.destructive : theme.textSecondary;
             return (
               <Pressable
                 onPress={editable ? () => setEditing(item) : undefined}
@@ -93,17 +89,16 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
                 <Text numberOfLines={3} style={[styles.message, { color: theme.text }]}>{item.text}</Text>
                 <View style={styles.cardFooter}>
                   <Text style={[styles.status, { color: statusColor }]}>
-                    {item.status === "pending" ? `${formatScheduledWhen(item.sendAt)} · ` : ""}
-                    {scheduledStatusLabel(item.status)}
+                    {item.status === "pending" ? formatScheduledWhen(item.sendAt) : scheduledStatusLabel(item.status)}
                     {item.error ? ` · ${item.error}` : ""}
                   </Text>
                   {editable ? (
                     <View style={styles.actions}>
                       <HoverFillButton accessibilityLabel={`Edit scheduled message to ${item.chatName}`} onPress={(event) => { event.stopPropagation(); setEditing(item); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
-                        <Text style={[styles.actionText, { color: theme.textSecondary }]}>Edit</Text>
+                        <Text style={[styles.actionText, { color: theme.text }]}>Edit</Text>
                       </HoverFillButton>
                       <HoverFillButton accessibilityLabel={`Send scheduled message to ${item.chatName} now`} onPress={(event) => { event.stopPropagation(); void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Could not send scheduled message")); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
-                        <Text style={[styles.actionText, { color: theme.accent }]}>Send now</Text>
+                        <Text style={[styles.actionText, { color: theme.text }]}>Send now</Text>
                       </HoverFillButton>
                     </View>
                   ) : null}
