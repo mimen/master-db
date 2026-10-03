@@ -5,7 +5,7 @@ import { Radius, Space, Weight } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 
-import { focusRing, focusVisible, stepFill, type InteractionState, type ThemeColors } from "./interaction";
+import { focusRing, focusVisible, type InteractionState, type ThemeColors } from "./interaction";
 
 export type PillTone = "neutral" | "accent" | "success";
 export type PillSize = "sm" | "md";
@@ -26,11 +26,12 @@ const HEIGHT: Record<PillSize, number> = { sm: 24, md: 32 };
 
 function toneColors(theme: ThemeColors, tone: PillTone, selected: boolean, state: InteractionState): { fill: string; text: string } {
   const solid = tone === "neutral" ? theme.text : tone === "accent" ? theme.accent : theme.success;
-  if (selected) return { fill: solid, text: theme.background };
-  if (tone === "neutral") return { fill: stepFill(theme, state, theme.backgroundElement), text: theme.text };
-  // Tinted tones keep their hue and deepen the tint on hover.
+  if (selected) return { fill: solid, text: tone === "accent" ? theme.onAccent : theme.background };
+  // The pill already rests one step up, so hover and press go to the top step.
   const active = state.hovered || state.pressed;
-  return { fill: active ? theme.backgroundSelected : theme.accentTint, text: tone === "accent" ? theme.accent : theme.success };
+  if (tone === "neutral") return { fill: active ? theme.backgroundSelected : theme.backgroundElement, text: theme.text };
+  if (tone === "accent") return { fill: active ? theme.backgroundSelected : theme.accentTint, text: theme.accent };
+  return { fill: active ? theme.backgroundSelected : theme.backgroundElement, text: theme.success };
 }
 
 /** A fully rounded chip: filters, suggestions, status. */

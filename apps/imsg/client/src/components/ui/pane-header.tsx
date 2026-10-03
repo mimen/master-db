@@ -21,7 +21,7 @@ export function PaneHeader({ title, leading, actions, style }: PaneHeaderProps):
   const theme = useTheme();
   const type = useTypeRamp();
   return (
-    <View style={[styles.base, { borderBottomColor: theme.divider }, style]}>
+    <View testID="pane-header" style={[styles.base, { borderBottomColor: theme.divider }, style]}>
       {leading}
       <Text
         accessibilityRole="header"
