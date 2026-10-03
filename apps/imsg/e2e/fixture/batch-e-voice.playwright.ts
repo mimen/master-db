@@ -13,6 +13,10 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
   const page = desk.page;
   await page.context().grantPermissions(["microphone"]);
   await page.addInitScript(() => {
+    const realNow = Date.now.bind(Date);
+    const clock = window as unknown as { __frozenAt: number | null };
+    clock.__frozenAt = null;
+    Date.now = () => clock.__frozenAt ?? realNow();
     const uploads = { count: 0 };
     (window as unknown as { __uploads: typeof uploads }).__uploads = uploads;
     const realFetch = window.fetch.bind(window);
@@ -36,10 +40,16 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
   const sendVoice = page.getByRole("button", { name: "Send voice message" });
   const uploads = () => page.evaluate(() => (window as unknown as { __uploads: { count: number } }).__uploads.count);
 
+  const freeze = (frozen: boolean) =>
+    page.evaluate((on) => {
+      (window as unknown as { __frozenAt: number | null }).__frozenAt = on ? Date.now() : null;
+    }, frozen);
+  await freeze(true);
   await mic.click();
   await expect(sendVoice).toBeVisible();
   await sendVoice.click();
   await expect(mic).toBeVisible();
+  await freeze(false);
   expect(await uploads(), "a click-length take is discarded").toBe(0);
 
   await mic.click();
