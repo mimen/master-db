@@ -1,8 +1,10 @@
 import type { ConvexAuthActionsContext } from "@convex-dev/auth/react";
 import type { PropsWithChildren } from "react";
+import { ConvexProvider } from "convex/react";
+import { convexClient } from "./identity.fixture";
 
 export function ClientAuthProvider({ children }: PropsWithChildren) {
-  return <>{children}</>;
+  return <ConvexProvider client={convexClient}>{children}</ConvexProvider>;
 }
 
 export function useConvexAuth() {

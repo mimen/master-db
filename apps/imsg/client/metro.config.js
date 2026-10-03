@@ -7,19 +7,17 @@ const config = getDefaultConfig(__dirname);
 // Let Metro bundle files from ../shared (outside the client project root).
 config.watchFolders = [path.resolve(__dirname, "..")];
 
-// Visual fixtures replace the Convex-backed identity module at bundle time.
-// Production never enters this branch, and the fixture module contains no
-// Convex client calls, so screenshots cannot touch live identity state.
 if (process.env.IMSG_VISUAL_FIXTURE === "1") {
   const fixtures = {
-    "@/lib/identity": path.resolve(__dirname, "src/lib/identity.fixture.ts"),
-    "@/lib/convex-auth": path.resolve(__dirname, "src/lib/convex-auth.fixture.tsx"),
+    [path.resolve(__dirname, "src/lib/identity.ts")]: path.resolve(__dirname, "src/lib/identity.fixture.ts"),
+    [path.resolve(__dirname, "src/lib/convex-auth.tsx")]: path.resolve(__dirname, "src/lib/convex-auth.fixture.tsx"),
   };
   config.resolver.resolveRequest = (context, moduleName, platform) => {
-    if (Object.hasOwn(fixtures, moduleName)) {
-      return context.resolveRequest(context, fixtures[moduleName], platform);
+    const resolved = context.resolveRequest(context, moduleName, platform);
+    if (resolved.type === "sourceFile" && Object.hasOwn(fixtures, resolved.filePath)) {
+      return context.resolveRequest(context, fixtures[resolved.filePath], platform);
     }
-    return context.resolveRequest(context, moduleName, platform);
+    return resolved;
   };
 }
 
