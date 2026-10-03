@@ -11,12 +11,11 @@ import { EmptyState } from "@/components/empty-state";
 import { SweepOverlay } from "@/components/sweep-overlay";
 import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
-import { applyThreadEvent, type JumpTarget } from "@/hooks/use-messages";
+import { type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
-import { patchChatFlags, patchChatWithMessage } from "@/lib/chat-store";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 import {
   getListAdapter,
@@ -78,27 +77,9 @@ export function MessagesWorkspace({
     });
   }, [shell.dispatch]);
 
-  const reconcile = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useServerEvents(
-    useCallback(
-      (event) => {
-        if (event.kind === "new-message") {
-          if (!event.message.isFromMe) playReceive();
-          // New messages are safe to patch immediately. Updates can remove
-          // unread eligibility, so the delayed refresh reconciles those.
-          patchChatWithMessage(event.chatGuid, event.message);
-        }
-        applyThreadEvent(event);
-        // Typing is pure presence — it changes nothing the sidebar renders, and
-        // scheduling a full list refetch for it meant a chatty conversation kept
-        // the whole directory reloading (and starved the debounce during bursts).
-        if (event.kind === "typing") return;
-        if (reconcile.current) clearTimeout(reconcile.current);
-        reconcile.current = setTimeout(() => refresh(), 1200);
-      },
-      [refresh],
-    ),
-  );
+  useServerEvents(useCallback((event) => {
+    if (event.kind === "new-message" && !event.message.isFromMe) playReceive();
+  }, []));
 
   // Wide-mode overlays (and the Contacts tab's "message them" action)
   // publish chats to open here instead of navigating.
@@ -206,12 +187,6 @@ export function MessagesWorkspace({
   }, [chats, selected]);
 
   const openChat = (chat: ChatSummary): void => {
-    // Clearing unread emits to the store, which re-filters every conversation
-    // and re-renders the list. Do it AFTER the navigation commits, or an unread
-    // row pays that whole recompute as tap latency before anything moves.
-    const clearUnread = (): void => {
-      if (chat.flags.unread) patchChatFlags(chat.guid, { unread: false, unreadCount: 0 });
-    };
     if (wide) {
       commitChatSelection(chat, "reply");
       router.replace({
@@ -226,7 +201,6 @@ export function MessagesWorkspace({
       });
       setListMode(false);
       requestFocus("composer");
-      clearUnread();
       return;
     }
     router.push({
@@ -239,7 +213,6 @@ export function MessagesWorkspace({
         hasGroupPhoto: chat.hasGroupPhoto ? "1" : "0",
       },
     });
-    globalThis.requestAnimationFrame(clearUnread);
   };
 
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */

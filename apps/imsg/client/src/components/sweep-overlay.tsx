@@ -5,7 +5,6 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { undoDepth } from "@/lib/action-undo";
 import { api } from "@/lib/api";
-import { patchChatWithMessage } from "@/lib/chat-store";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM } from "@/constants/theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
@@ -65,9 +64,8 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     if (!chat || !text || sending) return;
     setSending(true);
     const selected = selectedOption < suggestions.length ? suggestions[selectedOption] ?? null : null;
-    void api.sendText(chat.guid, { text }).then(
-      (message) => {
-        patchChatWithMessage(chat.guid, message);
+    void api.enqueueTextSend(chat.guid, `sweep-${Date.now()}-${Math.random().toString(36).slice(2)}`, { text }).then(
+      () => {
         if (selected && suggestionResult) {
           void api.recordSuggestionFeedback(chat.guid, {
             suggestion: selected,

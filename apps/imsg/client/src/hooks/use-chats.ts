@@ -1,11 +1,8 @@
 import { usePaginatedQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Platform } from "react-native";
-import { api } from "@/lib/api";
-import { getChats, mutationEpochNow, setChats, subscribeChats } from "@/lib/chat-store";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
-import { useDataSource } from "@/lib/settings";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 
@@ -20,17 +17,17 @@ interface UseChatsResult {
 }
 
 /** Every conversation from Convex, live. Pages load one after another until the list is complete. */
-export function useConvexChats(enabled: boolean): { chats: ChatSummary[] | null } {
+export function useConvexChats(): { chats: ChatSummary[] | null } {
   const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listConversations,
-    enabled ? {} : "skip",
+    {},
     { initialNumItems: 200 },
   );
   useEffect(() => {
-    if (enabled && status === "CanLoadMore") loadMore(200);
-  }, [enabled, status, loadMore]);
+    if (status === "CanLoadMore") loadMore(200);
+  }, [status, loadMore]);
   const chats = useMemo(() => results.map(conversationToChat), [results]);
-  return { chats: enabled && status !== "LoadingFirstPage" ? chats : null };
+  return { chats: status !== "LoadingFirstPage" ? chats : null };
 }
 
 /**
@@ -38,38 +35,11 @@ export function useConvexChats(enabled: boolean): { chats: ChatSummary[] | null 
  * switches are pure computation, no network.
  */
 export function useChats(state: StateFilter, type: TypeFilter, freezeMembership = true): UseChatsResult {
-  const convexMode = useDataSource() === "convex";
-  const convex = useConvexChats(convexMode);
-  const [serverAll, setAll] = useState<ChatSummary[]>(getChats() ?? []);
-  const [serverLoading, setLoading] = useState(getChats() === null);
-  const [error, setError] = useState<string | null>(null);
-  const generation = useRef(0);
-  const all = convexMode ? (convex.chats ?? []) : serverAll;
-  const loading = convexMode ? convex.chats === null : serverLoading;
-
-  const refresh = useCallback(() => {
-    const gen = ++generation.current;
-    const epoch = mutationEpochNow();
-    api
-      .allChats()
-      .then((result) => {
-        if (generation.current !== gen) return;
-        setChats(result, epoch);
-        setError(null);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if (generation.current !== gen) return;
-        setError(e instanceof Error ? e.message : String(e));
-        setLoading(false);
-      });
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeChats(setAll);
-    refresh();
-    return unsubscribe;
-  }, [refresh]);
+  const convex = useConvexChats();
+  const all = convex.chats ?? [];
+  const loading = convex.chats === null;
+  const refresh = useCallback(() => undefined, []);
+  const error = null;
 
   // Passive review lenses (Unread, Settled) freeze membership so an item does
   // not jump while it is being inspected. The active triage queues enumerated

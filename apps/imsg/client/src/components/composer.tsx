@@ -521,9 +521,9 @@ export function Composer({
     playSend();
     hapticSend();
     try {
-      // Convex outbox (beta): the bubble stays pending until the bridge's echo,
+      // Convex outbox: the bubble stays pending until the bridge's echo,
       // which carries this temp guid as its clientKey, replaces it.
-      if (await api.enqueueTextSend(chatGuid, temp.guid, { text: trimmed, replyToGuid: reply?.guid })) {
+      if (await api.enqueueTextSend(chatGuid, temp.guid, { text: trimmed, replyToGuid: reply?.guid, mentions: outgoingMentions })) {
         if (attribution) {
           void api.recordSuggestionFeedback(chatGuid, { ...attribution, finalText: trimmed }).catch(() => undefined);
         }

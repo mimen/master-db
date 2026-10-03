@@ -2,7 +2,6 @@ import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
 import { api } from "@/lib/api";
-import { patchChatFlags, revertChatFlags } from "@/lib/chat-store";
 import { showToast } from "@/lib/toast";
 import { runExclusiveTriageWrite, type TriageWriteOutcome } from "@/lib/triage-writes";
 
@@ -32,12 +31,9 @@ type TriageKind = "unresponded" | "waiting";
 const TRIAGE_KINDS: readonly TriageKind[] = ["unresponded", "waiting"];
 
 async function dismissOne(chat: ChatSummary, kind: TriageKind): Promise<void> {
-  const patch = kind === "unresponded" ? { unresponded: false } : { waiting: false };
-  patchChatFlags(chat.guid, patch);
   try {
     await api.dismiss(chat.guid, kind, chat.lastMessage?.guid);
   } catch (error) {
-    revertChatFlags(chat.guid, kind === "unresponded" ? { unresponded: true } : { waiting: true });
     const message = error instanceof Error ? error.message : "";
     showToast(message.startsWith("409:") ? "Conversation changed. Review the newest message." : "Could not settle conversation");
     throw error;
@@ -62,9 +58,6 @@ export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome>
     // The entry runs long after this write released the conversation, and it
     // takes no exclusion of its own. Undo must never be refused as busy.
     commitUndoAction(undoToken, () => {
-      for (const kind of kinds) {
-        patchChatFlags(chat.guid, kind === "unresponded" ? { unresponded: true } : { waiting: true });
-      }
       void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
         .then(() => emit(undoListeners, chat.guid))
         .catch(() => showToast("Could not undo Settle"));
@@ -88,11 +81,9 @@ function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
     if (!last) return;
     // Un-settling returns the conversation to the queue its last message implies,
     // which is exactly what computeFlags derives once the anchors are cleared.
-    patchChatFlags(chat.guid, { unresponded: !last.isFromMe, waiting: last.isFromMe });
     try {
       await Promise.all(TRIAGE_KINDS.map((kind) => api.undismiss(chat.guid, kind)));
     } catch (error) {
-      revertChatFlags(chat.guid, { unresponded: false, waiting: false });
       showToast("Could not un-settle conversation");
       throw error;
     }

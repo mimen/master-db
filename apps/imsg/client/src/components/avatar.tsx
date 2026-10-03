@@ -6,7 +6,6 @@ import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { initials } from "@/lib/format";
 import { useWhoIs, type Person } from "@/lib/identity";
-import { useDataSource } from "@/lib/settings";
 import type { ChatSummary } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -44,7 +43,7 @@ export function PersonAvatar({
   name: string;
   size: number;
 }) {
-  const identity = useWhoIs(useDataSource() === "convex" ? address : null);
+  const identity = useWhoIs(address);
   const person: (Person & { photoUrl?: string | null }) | undefined = identity?.found ? identity.person : undefined;
   const photoUrl = person?.photoUrl;
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);

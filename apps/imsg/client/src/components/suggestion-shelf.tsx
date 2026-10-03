@@ -21,7 +21,7 @@ import { useServerEvents } from "@/lib/sse";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { useDataSource, useSuggestionMode, useSuggestionModel } from "@/lib/settings";
+import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { TAPBACK_EMOJI } from "./bubble";
@@ -35,13 +35,11 @@ const AUTO_REFRESH_DELAY_MS = 1500;
 /**
  * Precomputed suggestions for this chat when they answer its current last
  * message. `undefined` while Convex is still answering, `null` to fall back to
- * the on-demand fetch (server mode, nothing precomputed, or a stale anchor).
+ * the on-demand fetch (nothing precomputed or a stale anchor).
  */
 function usePrecomputedSuggestions(chatGuid: string): ReplySuggestions | null | undefined {
-  const convexMode = useDataSource() === "convex";
-  const conversation = useQuery(commaApi.resolveChat, convexMode ? { chatGuid } : "skip");
+  const conversation = useQuery(commaApi.resolveChat, { chatGuid });
   const row = useQuery(commaApi.getSuggestions, conversation ? { conversationId: conversation._id } : "skip");
-  if (!convexMode) return null;
   if (conversation === undefined || (conversation && row === undefined)) return undefined;
   if (!conversation || !row || row.anchorGuid !== conversation.lastMessage?.guid) return null;
   // Convex stores strategy/vibe/reaction as strings; the bridge wrote them from a typed ReplySuggestions.

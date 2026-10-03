@@ -19,22 +19,22 @@ function client(resolved: { _id: string } | null) {
 describe("enqueueVia", () => {
   test("queues the command on the resolved conversation", async () => {
     const { fake, calls } = client({ _id: "conv-1" });
-    expect(await enqueueVia(fake, true, "iMessage;-;+15550001111", { kind: "pin", value: true })).toBe(true);
+    await enqueueVia(fake, "iMessage;-;+15550001111", { kind: "pin", value: true });
     const mutation = calls.find((call) => call.kind === "mutation")?.args as { conversationId: string; payload: unknown; clientKey: string };
     expect(mutation.conversationId).toBe("conv-1");
     expect(mutation.payload).toEqual({ kind: "pin", value: true });
     expect(mutation.clientKey.startsWith("command-")).toBe(true);
   });
 
-  test("falls back to REST when Convex sends aren't active", async () => {
-    const { fake, calls } = client({ _id: "conv-1" });
-    expect(await enqueueVia(fake, false, "iMessage;-;+15550001111", { kind: "markRead" })).toBe(false);
-    expect(calls).toEqual([]);
+  test("rejects an unmirrored chat without sending via REST", async () => {
+    const { fake, calls } = client(null);
+    await expect(enqueueVia(fake, "SMS;-;+15550009999", { kind: "settle" })).rejects.toThrow("Conversation is not mirrored yet");
+    expect(calls.some((call) => call.kind === "mutation")).toBe(false);
   });
 
-  test("falls back to REST when the chat isn't mirrored yet", async () => {
-    const { fake, calls } = client(null);
-    expect(await enqueueVia(fake, true, "SMS;-;+15550009999", { kind: "settle" })).toBe(false);
-    expect(calls.some((call) => call.kind === "mutation")).toBe(false);
+  test("propagates a rejected outbox write", async () => {
+    const { fake } = client({ _id: "conv-1" });
+    fake.mutation = async () => { throw new Error("outbox unavailable"); };
+    await expect(enqueueVia(fake, "chat", { kind: "markRead" })).rejects.toThrow("outbox unavailable");
   });
 });

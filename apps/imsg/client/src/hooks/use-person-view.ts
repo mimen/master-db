@@ -1,15 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { router } from "expo-router";
 import { Linking } from "react-native";
 import { matchesAnyAddress } from "@shared/address";
 import type { ChatSummary } from "@shared/types";
-import { getChats, subscribeChats } from "@/lib/chat-store";
+import { useChatDirectory } from "./use-chat-directory";
 import { type WhoIsResult, useWhoIs } from "@/lib/identity";
 import { selectChat } from "@/lib/selection";
 
 function useSharedChats(knownAddresses: string[]): ChatSummary[] {
-  const [all, setAll] = useState<ChatSummary[]>(getChats() ?? []);
-  useEffect(() => subscribeChats(setAll), []);
+  const all = useChatDirectory() ?? [];
   if (knownAddresses.length === 0) return [];
   return all.filter((c) => c.participants.some((p) => matchesAnyAddress(p.address, knownAddresses)));
 }

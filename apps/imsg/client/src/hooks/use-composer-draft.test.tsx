@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 
 if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
-  test("composer draft hook respects auth, mode, remote merges and lifecycle flushes", async () => {
+  test("composer draft hook respects auth, remote merges and lifecycle flushes", async () => {
     const child = Bun.spawn([process.execPath, "test", import.meta.filename], {
       cwd: import.meta.dir,
       env: { ...process.env, COMMA_DRAFT_HOOK_CHILD: "1" },
@@ -21,7 +21,6 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
   const dom = new JSDOM("<div id='root'></div>");
   Object.assign(globalThis, { window: dom.window, document: dom.window.document });
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
-  let mode = "server";
   let authenticated = false;
   let remote: { text: string; updatedAt: number } | null = { text: "cloud", updatedAt: 10 };
   const local = new Map<string, string>();
@@ -39,7 +38,6 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
     },
   }));
   mock.module("@/lib/convex-auth", () => ({ useConvexAuth: () => ({ isAuthenticated: authenticated }) }));
-  mock.module("@/lib/settings", () => ({ useDataSource: () => mode, currentDataSource: () => mode }));
   mock.module("@/lib/toast", () => ({ showToast: () => {} }));
   const save = (guid: string, text: string, source = "local") => {
     local.set(guid, text);
@@ -77,9 +75,6 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
     };
     await render();
     expect(queries.every((query) => query.skipped)).toBe(true);
-    expect(imports).toBe(0);
-    mode = "convex";
-    await render();
     expect(imports).toBe(0);
     authenticated = true;
     await render();

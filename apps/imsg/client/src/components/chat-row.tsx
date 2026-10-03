@@ -17,7 +17,7 @@ import Reanimated, {
 
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { prefetchThread, scheduleThreadPrefetch } from "@/hooks/use-messages";
+import { markOpenStart } from "@/lib/open-timing";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { useType } from "@/hooks/use-type";
@@ -151,15 +151,11 @@ function ChatRowInner({
     if (Platform.OS !== "web") return;
     const node = contextRef.current as unknown as HTMLElement | null;
     if (!node || typeof node.addEventListener !== "function") return;
-    let cancelPrefetch: (() => void) | undefined;
     const enter = () => {
       setHovered(true);
-      cancelPrefetch?.();
-      cancelPrefetch = scheduleThreadPrefetch(chat.guid);
     };
     const leave = () => {
       setHovered(false);
-      cancelPrefetch?.();
     };
     const focusIn = () => setFocusedWithin(true);
     const focusOut = (event: FocusEvent) => {
@@ -172,7 +168,6 @@ function ChatRowInner({
     node.addEventListener("focusin", focusIn);
     node.addEventListener("focusout", focusOut);
     return () => {
-      cancelPrefetch?.();
       node.removeEventListener("mouseenter", enter);
       node.removeEventListener("mouseleave", leave);
       node.removeEventListener("focusin", focusIn);
@@ -229,7 +224,7 @@ function ChatRowInner({
         testID="conversation-row"
         ref={contextRef as never}
         onPress={onPress}
-        onPressIn={() => prefetchThread(chat.guid)}
+        onPressIn={() => markOpenStart(chat.guid)}
         onLongPress={() => openMenu(chat)}
         style={({ pressed }) => [
           styles.row,

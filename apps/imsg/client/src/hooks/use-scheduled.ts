@@ -1,10 +1,9 @@
 import { useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { getChats } from "@/lib/chat-store";
 import { scheduledToScheduled } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
-import { useDataSource } from "@/lib/settings";
+import { useChatDirectory } from "./use-chat-directory";
 import type { ScheduledMessage } from "@shared/types";
 
 export { formatScheduledWhen } from "@/lib/scheduled";
@@ -17,80 +16,32 @@ export interface UseScheduledResult {
   edit: (item: ScheduledMessage, text: string, sendAt: number) => Promise<void>;
 }
 
-/**
- * Scheduled-message queue for app/scheduled.tsx: loads the list, and exposes
- * an optimistic cancel (row removed immediately) that reloads from the
- * server if the cancel request fails — same as the original inline logic.
- */
 export function useScheduled(): UseScheduledResult {
-  const convexMode = useDataSource() === "convex";
-  // Convex mirrors BlueBubbles' queue live; cancel, edit and send-now still go through REST.
-  const convexRows = useQuery(commaApi.listScheduled, convexMode ? {} : "skip");
-  const convexItems = useMemo(
-    () => (convexRows ? convexRows.map((row) => scheduledToScheduled(row, getChats() ?? [])) : null),
-    [convexRows],
+  const rows = useQuery(commaApi.listScheduled, {});
+  const chats = useChatDirectory();
+  const [hidden, setHidden] = useState<ReadonlySet<number>>(new Set());
+  const items = useMemo(
+    () => (rows ?? []).filter((row) => !hidden.has(row.bbId)).map((row) => scheduledToScheduled(row, chats ?? [])),
+    [rows, chats, hidden],
   );
-  const [serverItems, setItems] = useState<ScheduledMessage[]>([]);
-  const [serverLoading, setLoading] = useState(true);
-  const items = convexMode ? (convexItems ?? []) : serverItems;
-  const loading = convexMode ? convexItems === null : serverLoading;
-  const generation = useRef(0);
-  const requestInFlight = useRef(false);
-
-  const load = useCallback(() => {
-    if (requestInFlight.current) return;
-    requestInFlight.current = true;
-    const gen = ++generation.current;
-    api
-      .listScheduled()
-      .then((result) => {
-        if (generation.current !== gen) return;
-        setItems(result);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (generation.current === gen) setLoading(false);
-      })
-      .finally(() => {
-        requestInFlight.current = false;
-      });
+  const restore = useCallback((id: number) => {
+    setHidden((current) => new Set([...current].filter((value) => value !== id)));
   }, []);
-
-  useEffect(() => {
-    if (convexMode) return;
-    load();
-    const timer = setInterval(load, 30_000);
-    return () => clearInterval(timer);
-  }, [load, convexMode]);
-
-  const cancel = useCallback(
-    (id: number) => {
-      setItems((current) => current.filter((i) => i.id !== id));
-      api.cancelScheduled(id).catch(() => load());
-    },
-    [load],
-  );
-
-  const sendNow = useCallback(
-    async (id: number): Promise<void> => {
-      setItems((current) => current.filter((item) => item.id !== id));
-      try {
-        await api.sendScheduledNow(id);
-      } catch (error) {
-        load();
-        throw error;
-      }
-    },
-    [load],
-  );
-
-  const edit = useCallback(
-    async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
-      const updated = await api.updateScheduled(item.id, item.chatGuid, text, sendAt);
-      setItems((current) => current.map((entry) => (entry.id === item.id ? updated : entry)));
-    },
-    [],
-  );
-
-  return { items, loading, cancel, sendNow, edit };
+  const cancel = useCallback((id: number) => {
+    setHidden((current) => new Set([...current, id]));
+    void api.cancelScheduled(id).catch(() => restore(id));
+  }, [restore]);
+  const sendNow = useCallback(async (id: number): Promise<void> => {
+    setHidden((current) => new Set([...current, id]));
+    try {
+      await api.sendScheduledNow(id);
+    } catch (error) {
+      restore(id);
+      throw error;
+    }
+  }, [restore]);
+  const edit = useCallback(async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
+    await api.updateScheduled(item.id, item.chatGuid, text, sendAt);
+  }, []);
+  return { items, loading: rows === undefined, cancel, sendNow, edit };
 }

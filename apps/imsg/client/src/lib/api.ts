@@ -1,14 +1,11 @@
-import type { FunctionArgs } from "convex/server";
 import { BASE_URL } from "./config";
 import { attachmentSource, messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
 import { enqueueVia, type CommandClient, type CommandPayload } from "./convex-commands";
 import { convexClient } from "./identity";
-import { currentConvexSends, currentDataSource } from "./settings";
 import type {
   AttachmentSummary,
   AiStatus,
-  ChatSummary,
   Contact,
   ContactSuggestion,
   GalleryItem,
@@ -16,12 +13,9 @@ import type {
   ReplySuggestions,
   ScheduledMessage,
   SendTextRequest,
-  StateCounts,
   SuggestionFeedbackRequest,
   SuggestionModel,
-  StateFilter,
   TranscriptState,
-  TypeFilter,
 } from "@shared/types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -52,21 +46,12 @@ function messageChatGuid(messageGuid: string): string | undefined {
   return undefined;
 }
 
-export function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<boolean> {
-  return enqueueVia(convexClient as unknown as CommandClient, currentConvexSends() && currentDataSource() === "convex", chatGuid, payload);
+export async function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<{ ok: boolean }> {
+  await enqueueVia(convexClient as unknown as CommandClient, chatGuid, payload);
+  return { ok: true };
 }
 
 export const api = {
-  chats(state: StateFilter, type: TypeFilter): Promise<ChatSummary[]> {
-    return request(`/api/chats?state=${state}&type=${type}`);
-  },
-  /** Raw, unfiltered list — for clients that filter locally. */
-  allChats(): Promise<ChatSummary[]> {
-    return request(`/api/chats?state=any`);
-  },
-  counts(type: TypeFilter): Promise<StateCounts> {
-    return request(`/api/counts?type=${type}`);
-  },
   messages(
     chatGuid: string,
     window?: { before?: number; after?: number; around?: number },
@@ -78,17 +63,10 @@ export const api = {
     const qs = params.size > 0 ? `?${params.toString()}` : "";
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/messages${qs}`);
   },
-  /**
-   * Queue a plain text send through the Convex outbox. Resolves once Convex
-   * has the row; the bubble then settles when the bridge's echo arrives
-   * (matched by clientKey). Returns false when the chat isn't mirrored yet,
-   * so the caller falls back to the REST send.
-   */
   async enqueueTextSend(chatGuid: string, clientKey: string, body: SendTextRequest): Promise<boolean> {
-    // Sends through Convex only make sense when the thread also reads from Convex.
-    if (!currentConvexSends() || currentDataSource() !== "convex" || body.mentions?.length) return false;
+    if (body.mentions?.length) return false;
     const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
-    if (!conversation) return false;
+    if (!conversation) throw new Error("Conversation is not mirrored yet");
     await convexClient.mutation(commaOutbox.enqueue, {
       clientKey,
       conversationId: conversation._id,
@@ -106,50 +84,36 @@ export const api = {
     });
   },
   async markRead(chatGuid: string): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, { kind: "markRead" })) return { ok: true };
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/read`, { method: "POST" });
+    return enqueueCommand(chatGuid, { kind: "markRead" });
   },
   async markUnread(chatGuid: string): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, { kind: "markUnread" })) return { ok: true };
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/unread`, { method: "POST" });
+    return enqueueCommand(chatGuid, { kind: "markUnread" });
   },
   async dismiss(
     chatGuid: string,
-    kind: "unresponded" | "waiting",
+    _kind: "unresponded" | "waiting",
     expectedLatestMessageGuid?: string,
   ): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, {
+    return enqueueCommand(chatGuid, {
       kind: "settle",
       ...(expectedLatestMessageGuid !== undefined ? { messageGuid: expectedLatestMessageGuid } : {}),
-    })) return { ok: true };
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/dismiss`, {
-      method: "POST",
-      body: JSON.stringify({ kind, expectedLatestMessageGuid }),
     });
   },
-  async undismiss(chatGuid: string, kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, { kind: "unsettle" })) return { ok: true };
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/undismiss`, {
-      method: "POST",
-      body: JSON.stringify({ kind }),
-    });
+  async undismiss(chatGuid: string, _kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
+    return enqueueCommand(chatGuid, { kind: "unsettle" });
   },
   async setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, { kind: "pin", value: pinned })) return { ok: true };
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/pin`, {
-      method: "POST",
-      body: JSON.stringify({ pinned }),
-    });
+    return enqueueCommand(chatGuid, { kind: "pin", value: pinned });
   },
   async react(
     messageGuid: string,
     body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean },
   ): Promise<{ ok: boolean }> {
     // Suggested reactions need the REST handler's inbound-target guard.
-    if (!body.suggested && await enqueueCommand(body.chatGuid, {
+    if (!body.suggested) return enqueueCommand(body.chatGuid, {
       kind: "react", messageGuid, reaction: body.reaction, remove: body.remove ?? false,
       ...(body.partIndex !== undefined ? { partIndex: body.partIndex } : {}),
-    })) return { ok: true };
+    });
     return request(`/api/messages/${encodeURIComponent(messageGuid)}/react`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -157,24 +121,16 @@ export const api = {
   },
   async unsend(messageGuid: string): Promise<{ ok: boolean }> {
     const chatGuid = messageChatGuid(messageGuid);
-    if (chatGuid && await enqueueCommand(chatGuid, { kind: "unsend", messageGuid })) return { ok: true };
-    return request(`/api/messages/${encodeURIComponent(messageGuid)}/unsend`, { method: "POST" });
+    if (!chatGuid) throw new Error("Message conversation is unavailable");
+    return enqueueCommand(chatGuid, { kind: "unsend", messageGuid });
   },
   async deleteMessage(messageGuid: string, chatGuid: string): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, { kind: "delete", messageGuid })) return { ok: true };
-    return request(`/api/messages/${encodeURIComponent(messageGuid)}/delete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatGuid }),
-    });
+    return enqueueCommand(chatGuid, { kind: "delete", messageGuid });
   },
   async edit(messageGuid: string, text: string): Promise<{ ok: boolean }> {
     const chatGuid = messageChatGuid(messageGuid);
-    if (chatGuid && await enqueueCommand(chatGuid, { kind: "edit", messageGuid, text })) return { ok: true };
-    return request(`/api/messages/${encodeURIComponent(messageGuid)}/edit`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    });
+    if (!chatGuid) throw new Error("Message conversation is unavailable");
+    return enqueueCommand(chatGuid, { kind: "edit", messageGuid, text });
   },
   contacts(q: string): Promise<Contact[]> {
     return request(`/api/contacts?q=${encodeURIComponent(q)}`);
@@ -194,9 +150,10 @@ export const api = {
   },
   async search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
     // The Convex index filters by conversation, not sender, so "from" searches stay on REST.
-    if (currentDataSource() === "convex" && !opts.from) {
+    if (!opts.from) {
       const conversation = opts.chat ? await convexClient.query(commaApi.resolveChat, { chatGuid: opts.chat }) : null;
-      if (!opts.chat || conversation) {
+      if (opts.chat && !conversation) return [];
+      {
         const rows = await convexClient.query(commaApi.searchMessages, {
           query: q,
           ...(conversation ? { conversationId: conversation._id } : {}),
@@ -221,11 +178,7 @@ export const api = {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/info`);
   },
   async renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
-    if (await enqueueCommand(chatGuid, { kind: "rename", name })) return { ok: true };
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/rename`, {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    });
+    return enqueueCommand(chatGuid, { kind: "rename", name });
   },
   participant(chatGuid: string, address: string, action: "add" | "remove"): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/participant`, {
@@ -238,9 +191,6 @@ export const api = {
   },
   deleteChat(chatGuid: string): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/delete`, { method: "POST" });
-  },
-  listScheduled(): Promise<ScheduledMessage[]> {
-    return request("/api/scheduled");
   },
   schedule(chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
     return request("/api/scheduled", {
@@ -308,8 +258,7 @@ export const api = {
 };
 
 export function avatarUrl(address: string, photoUrl?: string | null): string {
-  return currentDataSource() === "convex" && photoUrl
-    ? photoUrl : `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=3`;
+  return photoUrl ?? `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=3`;
 }
 
 export function groupPhotoUrl(chatGuid: string): string {

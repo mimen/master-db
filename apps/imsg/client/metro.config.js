@@ -13,6 +13,9 @@ if (process.env.IMSG_VISUAL_FIXTURE === "1") {
     [path.resolve(__dirname, "src/lib/convex-auth.tsx")]: path.resolve(__dirname, "src/lib/convex-auth.fixture.tsx"),
   };
   config.resolver.resolveRequest = (context, moduleName, platform) => {
+    if (moduleName === "convex/react") {
+      return context.resolveRequest(context, path.resolve(__dirname, "src/lib/convex.fixture.ts"), platform);
+    }
     const resolved = context.resolveRequest(context, moduleName, platform);
     if (resolved.type === "sourceFile" && Object.hasOwn(fixtures, resolved.filePath)) {
       return context.resolveRequest(context, fixtures[resolved.filePath], platform);

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
 import { useState, useSyncExternalStore, type JSX } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ListRow } from "./list-row";
 
@@ -12,13 +12,8 @@ import { useTheme } from "@/hooks/use-theme";
 import { releaseStatus } from "@/lib/release-status";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { useConvexAuth } from "@/lib/convex-auth";
 import { showToast } from "@/lib/toast";
 import {
-  setConvexSends,
-  setDataSource,
-  useConvexSends,
-  useDataSource,
   setNameOrder,
   setSuggestionMode,
   setSuggestionModel,
@@ -119,9 +114,6 @@ function ReleaseIdentityFooter(): JSX.Element {
 export function SettingsContent({ showHeader = false, onClose, onBack, backLabel = "Back" }: SettingsContentProps) {
   const theme = useTheme();
   const nameOrder = useNameOrder();
-  const dataSource = useDataSource();
-  const convexSends = useConvexSends();
-  const { isAuthenticated } = useConvexAuth();
   const suggestionMode = useSuggestionMode();
   const suggestionModel = useSuggestionModel();
   const aiStatus = useAiStatus();
@@ -163,40 +155,6 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {header}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Convex</Text>
-          <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
-            {isAuthenticated && (
-              <ListRow
-                title="Read messages from Convex"
-                titleWeight="400"
-                trailing={<Switch
-                  accessibilityLabel="Read messages from Convex"
-                  value={dataSource === "convex"}
-                  onValueChange={(enabled) => setDataSource(enabled ? "convex" : "server")}
-                />}
-              />
-            )}
-            {isAuthenticated && dataSource === "convex" && (
-              <ListRow
-                title="Send through Convex"
-                titleWeight="400"
-                trailing={<Switch
-                  accessibilityLabel="Send through Convex"
-                  value={convexSends}
-                  onValueChange={setConvexSends}
-                />}
-              />
-            )}
-          </View>
-          <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
-            {dataSource === "convex" && isAuthenticated
-              ? convexSends
-                ? "Messages use Convex. Unsupported operations use the existing connection."
-                : "Reads use Convex. Sends use the existing connection."
-              : "Sign-in is optional. Messages use the existing connection."}
-          </Text>
-        </View>
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Names</Text>
           <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>

@@ -1,14 +1,11 @@
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform } from "react-native";
 import { api, registerMessageActions } from "@/lib/api";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
-import { foldReaction, mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
+import { mergeWindow, reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
-import { useDataSource } from "@/lib/settings";
-import { readThreadCache, writeThreadCache, THREAD_CACHE_MAX } from "@/lib/thread-cache";
-import type { Message, ServerEvent } from "@shared/types";
+import type { Message } from "@shared/types";
 
 export interface JumpTarget {
   guid: string;
@@ -31,104 +28,6 @@ interface UseMessagesResult {
   remove: (guid: string) => void;
   /** Refetch the newest window and fold it in — for after an event-stream gap. */
   reconcile: () => void;
-}
-
-// ------------------------------------------------------------- thread cache
-// Stale-while-revalidate: opening a chat renders instantly from the cache
-// while a fresh window loads behind it. Bounded LRU.
-const webStorage = (() => {
-  try {
-    return Platform.OS === "web" && typeof window !== "undefined" ? window.localStorage : null;
-  } catch {
-    return null;
-  }
-})();
-const threadCache = webStorage ? readThreadCache(webStorage) : new Map<string, Message[]>();
-// Newest-window fetches in flight, shared so a press-down prefetch and the
-// open that follows it cost one round trip, not two.
-const inflightNewest = new Map<string, Promise<Message[]>>();
-// Entries started by a live event: newest message only, history not fetched yet.
-const partialThreads = new Set<string>();
-let flushTimer: ReturnType<typeof setTimeout> | undefined;
-
-function flushThreadCache(): void {
-  clearTimeout(flushTimer);
-  flushTimer = undefined;
-  if (webStorage) writeThreadCache(webStorage, threadCache);
-}
-
-if (webStorage) {
-  window.addEventListener("pagehide", flushThreadCache);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushThreadCache();
-  });
-}
-
-function cacheThread(guid: string, messages: Message[]): void {
-  threadCache.delete(guid);
-  threadCache.set(guid, messages);
-  if (threadCache.size > THREAD_CACHE_MAX) {
-    const oldest = threadCache.keys().next().value;
-    if (oldest !== undefined) threadCache.delete(oldest);
-  }
-  if (webStorage) {
-    clearTimeout(flushTimer);
-    flushTimer = setTimeout(flushThreadCache, 400);
-  }
-}
-
-export function cachedThread(guid: string): Message[] | undefined {
-  return threadCache.get(guid);
-}
-
-/**
- * Fold a live event into its chat's cached thread, open or not, so a message the
- * sidebar already shows is there the moment the chat opens. A chat with no entry
- * starts one holding just this message; the open's fetch merges history behind it.
- */
-export function applyThreadEvent(event: ServerEvent): void {
-  if (event.kind === "new-message" || event.kind === "updated-message") {
-    const cached = threadCache.get(event.chatGuid);
-    if (!cached && (event.kind !== "new-message" || event.message.retracted)) return;
-    if (!cached) partialThreads.add(event.chatGuid);
-    cacheThread(event.chatGuid, upsertMessage(cached ?? [], event.message));
-  } else if (event.kind === "reaction") {
-    const cached = threadCache.get(event.chatGuid);
-    const target = cached?.find((m) => m.guid === event.targetGuid);
-    if (cached && target) cacheThread(event.chatGuid, upsertMessage(cached, foldReaction(target, event)));
-  }
-}
-
-export function fetchNewest(guid: string): Promise<Message[]> {
-  let pending = inflightNewest.get(guid);
-  if (!pending) {
-    pending = api.messages(guid).finally(() => inflightNewest.delete(guid));
-    inflightNewest.set(guid, pending);
-  }
-  return pending;
-}
-
-export function scheduleThreadPrefetch(guid: string): () => void {
-  const timer = setTimeout(() => {
-    if (inflightNewest.size < 2) warmThread(guid);
-  }, 150);
-  return () => clearTimeout(timer);
-}
-
-/** Press-down on a row: the open is coming, so start its clock and its fetch. */
-export function prefetchThread(guid: string): void {
-  markOpenStart(guid);
-  warmThread(guid);
-}
-
-function warmThread(guid: string): void {
-  if ((threadCache.has(guid) && !partialThreads.has(guid)) || inflightNewest.has(guid)) return;
-  fetchNewest(guid)
-    .then((batch) => {
-      partialThreads.delete(guid);
-      cacheThread(guid, mergeWindow(threadCache.get(guid) ?? [], sortByDate(batch)));
-    })
-    .catch(() => undefined);
 }
 
 /**
@@ -181,15 +80,11 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
 }
 
 export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
-  const wantsConvex = useDataSource() === "convex" && target === null && chatGuid !== null;
-  // Any service-sibling guid resolves to its merged conversation.
-  const resolved = useQuery(commaApi.resolveChat, wantsConvex && chatGuid ? { chatGuid } : "skip");
-  const conversationId = wantsConvex && resolved ? resolved._id : null;
-  // Fall back to REST while resolving, or when the bridge hasn't mirrored this chat yet.
-  const convexMode = conversationId !== null;
-  const convex = useConvexMessages(conversationId, convexMode ? chatGuid : null);
-  const server = useServerMessages(convexMode ? null : chatGuid, target);
-  const result = convexMode ? convex : server;
+  const resolved = useQuery(commaApi.resolveChat, chatGuid && !target ? { chatGuid } : "skip");
+  const convex = useConvexMessages(resolved?._id ?? null, !target ? chatGuid : null);
+  // Historical jump windows have no Convex equivalent yet.
+  const server = useServerMessages(target ? chatGuid : null, target);
+  const result = target ? server : { ...convex, loading: chatGuid !== null && (resolved === undefined || convex.loading) };
   useEffect(() => registerMessageActions(result.messages), [result.messages]);
   return result;
 }
@@ -219,22 +114,12 @@ function useServerMessages(chatGuid: string | null, target: JumpTarget | null): 
     pagingOlder.current = false;
     pagingNewer.current = false;
     markOpenStart(chatGuid);
-    const cached = !target ? threadCache.get(chatGuid) : undefined;
-    if (cached && cached.length > 0) {
-      // Instant render from cache; refresh silently underneath.
-      setMessages(cached);
-      setHasMore(cached.length >= 40);
-      setLoading(false);
-      afterPaint(() => markOpenRendered(chatGuid, false));
-    } else {
-      setMessages([]);
-      setLoading(true);
-    }
-    (target ? api.messages(chatGuid, { around: target.dateCreated }) : fetchNewest(chatGuid))
+    setMessages([]);
+    setLoading(true);
+    api.messages(chatGuid, { around: target?.dateCreated })
       .then((batch) => {
         if (generation.current !== gen) return;
         const sorted = sortByDate(batch);
-        if (!target) partialThreads.delete(chatGuid);
         setMessages((current) => mergeWindow(current, sorted));
         setHasMore(batch.length >= 40);
         setHasNewer(target !== null);
@@ -244,16 +129,11 @@ function useServerMessages(chatGuid: string | null, target: JumpTarget | null): 
       .catch(() => {
         if (generation.current !== gen) return;
         setLoading(false);
-        setFailed(!(cached && cached.length > 0));
+        setFailed(true);
       });
   }, [chatGuid, target, attempt]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
-
-  // Keep the cache current as the open thread changes (sends, SSE, edits).
-  useEffect(() => {
-    if (chatGuid && !target && messages.length > 0) cacheThread(chatGuid, messages);
-  }, [chatGuid, target, messages]);
 
   const loadOlder = useCallback(() => {
     if (!chatGuid || messages.length === 0 || pagingOlder.current) return;

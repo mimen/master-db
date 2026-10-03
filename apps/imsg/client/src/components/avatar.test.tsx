@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 
 if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
-  test("avatars prefer Convex photos only in Convex mode and retain their fallback", async () => {
+  test("avatars prefer Convex photos and retain their fallback", async () => {
     const child = Bun.spawn([process.execPath, "test", import.meta.filename], {
       cwd: import.meta.dir, env: { ...process.env, COMMA_AVATAR_TEST_CHILD: "1" }, stdout: "pipe", stderr: "pipe",
     });
@@ -17,7 +17,6 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   const dom = new JSDOM("<div id='root'></div>");
   Object.assign(globalThis, { window: dom.window, document: dom.window.document });
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
-  let mode = "convex";
   let photoUrl: string | null = "https://convex.test/photo-1";
   let failImage: (() => void) | undefined;
   const handles: Array<string | null> = [];
@@ -33,9 +32,6 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
     StyleSheet: { absoluteFill: {}, create: <T,>(styles: T) => styles },
   }));
   mock.module("@/lib/config", () => ({ BASE_URL: "http://photos.test" }));
-  mock.module("@/lib/settings", () => ({
-    currentDataSource: () => mode, useDataSource: () => mode, currentConvexSends: () => false,
-  }));
   mock.module("@/lib/identity", () => ({
     convexClient: {},
     useWhoIs: (handle: string | null) => {
@@ -65,13 +61,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
       photoUrl = null;
       await render();
       expect(container.querySelector("img")?.src).toBe("http://photos.test/api/avatars/person%40example.com?v=3");
-      mode = "server";
       photoUrl = "https://convex.test/photo-3";
-      await render();
-      expect(handles.at(-1)).toBeNull();
-      expect(container.querySelector("img")?.src).toBe("http://photos.test/api/avatars/person%40example.com?v=3");
-      expect(avatarUrl("+16195551234", photoUrl)).toBe("http://photos.test/api/avatars/%2B16195551234?v=3");
-      mode = "convex";
       expect(avatarUrl("+16195551234", photoUrl)).toBe(photoUrl);
       await render(null);
       expect(container.querySelector("img")).toBeNull();

@@ -30,7 +30,6 @@ import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast, ToastAnchor } from "@/lib/toast";
-import { patchChatWithMessage } from "@/lib/chat-store";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
@@ -563,7 +562,6 @@ export function ThreadView({
               compact
               onSent={(message) => {
                 upsert(message);
-                patchChatWithMessage(chatGuid, message);
               }}
             />
             <Pressable
@@ -802,16 +800,13 @@ export function ThreadView({
           onEdited={upsert}
           onOptimistic={(message) => {
             upsert(message);
-            patchChatWithMessage(chatGuid, message);
             scrollToLatest();
           }}
           onSettled={(tempGuid, message) => {
             replaceTemp(tempGuid, message);
-            if (!message.failed) patchChatWithMessage(chatGuid, message);
           }}
           onSent={(message) => {
             upsert(message);
-            patchChatWithMessage(chatGuid, message);
             scrollToLatest();
             onMessageSent?.();
           }}

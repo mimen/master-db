@@ -5,12 +5,11 @@ import { useConvexAuth } from "@/lib/convex-auth";
 import { createDraftSync } from "@/lib/draft-sync";
 import { getDraft, setDraft, subscribeDrafts, uploadLocalDrafts } from "@/lib/drafts";
 import { convexClient } from "@/lib/identity";
-import { currentDataSource, useDataSource } from "@/lib/settings";
 import { showToast } from "@/lib/toast";
 
 export function useComposerDraft(chatGuid: string, editing: boolean, onRemote: (text: string) => void) {
   const { isAuthenticated } = useConvexAuth();
-  const enabled = useDataSource() === "convex" && isAuthenticated;
+  const enabled = isAuthenticated;
   const conversation = useQuery(commaApi.resolveChat, enabled ? { chatGuid } : "skip");
   const remote = useQuery(commaApi.getDraft, enabled && conversation ? { conversationId: conversation._id } : "skip");
   const sync = useRef<ReturnType<typeof createDraftSync> | null>(null);
@@ -50,7 +49,6 @@ export function useComposerDraft(chatGuid: string, editing: boolean, onRemote: (
   useEffect(() => {
     if (!enabled) return;
     void uploadLocalDrafts(async (guid, text) => {
-      if (currentDataSource() !== "convex") throw new Error("Draft migration paused");
       const resolved = await convexClient.query(commaApi.resolveChat, { chatGuid: guid });
       if (!resolved) return;
       const existing = await convexClient.query(commaApi.getDraft, { conversationId: resolved._id });

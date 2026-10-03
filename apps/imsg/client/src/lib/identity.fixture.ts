@@ -1,4 +1,4 @@
-import { ConvexReactClient } from "convex/react";
+export { convexClient } from "./convex.fixture";
 import type {
   AirtableEventRow,
   AirtableHumanRow,
@@ -19,10 +19,6 @@ export type {
   Priority,
   WhoIsResult,
 } from "./identity";
-
-// Closing before any subscription makes accidental queries fail without opening a socket.
-export const convexClient = new ConvexReactClient("https://comma-fixture.invalid");
-void convexClient.close();
 
 const people: ContactListRow[] = [
   {
