@@ -51,3 +51,22 @@ for (const scheme of ["light", "dark"] as const) {
     await page.mouse.up();
   });
 }
+
+test("settling shows a bottom toast whose Undo restores the conversation", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1300, height: 820 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
+  const before = await page.getByTestId("conversation-row").count();
+  await page.getByTestId("conversation-row").first().click();
+  await page.keyboard.press("Meta+e");
+  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  await expect(undo).toBeVisible();
+  await expect(page.getByText("Settled", { exact: true })).toBeVisible();
+  const box = await undo.boundingBox();
+  expect(box!.y).toBeGreaterThan(820 / 2);
+  await page.screenshot({ path: `${OUT}/toast-undo.png`, animations: "disabled" });
+  await undo.click();
+  await expect(undo).toHaveCount(0);
+  await expect(page.getByTestId("conversation-row")).toHaveCount(before);
+});

@@ -76,8 +76,8 @@ export function ToastHost() {
 const styles = StyleSheet.create({
   toast: {
     position: "absolute",
-    // Clears the composer on every layout.
-    bottom: 96,
+    // Clears the composer and its suggestion shelf.
+    bottom: 132,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
