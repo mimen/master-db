@@ -1,8 +1,15 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
+  "jsPlugins": ["./lint/design-tokens.js"],
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["client/src/components/ui/**"],
+      "rules": { "design-tokens/no-raw-tokens": "error" }
+    }
+  ]
 }
