@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { setDataSource } from "./settings";
+import { setConvexAuthenticated, setDataSource } from "./settings";
 
 import {
   getChats,
@@ -120,9 +120,13 @@ describe("optimistic flag patch vs stale refetch", () => {
     resetChatStore();
     setChats([chat("a")]);
   });
-  afterEach(() => setDataSource("server"));
+  afterEach(() => {
+    setConvexAuthenticated(false);
+    setDataSource("server");
+  });
 
   test("Convex mode skips optimistic flags and rollbacks without holding later snapshots", () => {
+    setConvexAuthenticated(true);
     setDataSource("convex");
     const before = getChats();
     patchChatFlags("a", { unread: true, pinned: true });

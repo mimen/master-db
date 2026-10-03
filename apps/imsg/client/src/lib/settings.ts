@@ -22,16 +22,17 @@ export interface Settings {
   suggestionModel: SuggestionModel;
   /** Contacts list name ordering — see NameOrder above. */
   nameOrder: NameOrder;
-  dataSource: "server" | "convex";
-  /** Route plain text sends through the Convex outbox (beta). Independent of reads. */
-  convexSends: boolean;
+  dataSource: "auto" | "server" | "convex";
+  /** Route supported sends and commands through the Convex outbox. */
+  convexSends: "auto" | boolean;
 }
 
 const KEY = "imsg.settings.v2";
-const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last", dataSource: "server", convexSends: false };
+const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last", dataSource: "auto", convexSends: "auto" };
 
 let state: Settings = { ...DEFAULT };
 let hydrated = false;
+let authenticated = false;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -70,11 +71,11 @@ export async function hydrateSettings(): Promise<void> {
       state = { ...state, nameOrder: parsed.nameOrder };
       changed = true;
     }
-    if (parsed.dataSource === "server" || parsed.dataSource === "convex") {
+    if (parsed.dataSource === "auto" || parsed.dataSource === "server" || parsed.dataSource === "convex") {
       state = { ...state, dataSource: parsed.dataSource };
       changed = true;
     }
-    if (typeof parsed.convexSends === "boolean") {
+    if (parsed.convexSends === "auto" || typeof parsed.convexSends === "boolean") {
       state = { ...state, convexSends: parsed.convexSends };
       changed = true;
     }
@@ -145,26 +146,32 @@ export function setDataSource(dataSource: Settings["dataSource"]): void {
   persist();
 }
 
-export function setConvexSends(convexSends: boolean): void {
+export function setConvexSends(convexSends: Settings["convexSends"]): void {
   if (state.convexSends === convexSends) return;
   state = { ...state, convexSends };
   persist();
   emit();
 }
 
+export function setConvexAuthenticated(isAuthenticated: boolean): void {
+  if (authenticated === isAuthenticated) return;
+  authenticated = isAuthenticated;
+  emit();
+}
+
 export function currentConvexSends(): boolean {
-  return state.convexSends;
+  return authenticated && state.convexSends !== false;
 }
 
 export function useConvexSends(): boolean {
-  return useSyncExternalStore(subscribe, () => state.convexSends, () => state.convexSends);
+  return useSyncExternalStore(subscribe, currentConvexSends, currentConvexSends);
 }
 
 /** Non-hook read for plain modules such as lib/api.ts. */
-export function currentDataSource(): Settings["dataSource"] {
-  return state.dataSource;
+export function currentDataSource(): "server" | "convex" {
+  return authenticated && state.dataSource !== "server" ? "convex" : "server";
 }
 
-export function useDataSource(): Settings["dataSource"] {
-  return useSyncExternalStore(subscribe, () => state.dataSource, () => state.dataSource);
+export function useDataSource(): "server" | "convex" {
+  return useSyncExternalStore(subscribe, currentDataSource, currentDataSource);
 }

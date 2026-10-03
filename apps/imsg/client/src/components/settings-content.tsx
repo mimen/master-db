@@ -203,10 +203,10 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             <ConvexAccountRow />
             {isAuthenticated && (
               <ListRow
-                title="Read messages from Convex (beta)"
+                title="Read messages from Convex"
                 titleWeight="400"
                 trailing={<Switch
-                  accessibilityLabel="Read messages from Convex (beta)"
+                  accessibilityLabel="Read messages from Convex"
                   value={dataSource === "convex"}
                   onValueChange={(enabled) => setDataSource(enabled ? "convex" : "server")}
                 />}
@@ -214,10 +214,10 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             )}
             {isAuthenticated && dataSource === "convex" && (
               <ListRow
-                title="Send through Convex (beta)"
+                title="Send through Convex"
                 titleWeight="400"
                 trailing={<Switch
-                  accessibilityLabel="Send through Convex (beta)"
+                  accessibilityLabel="Send through Convex"
                   value={convexSends}
                   onValueChange={setConvexSends}
                 />}
@@ -226,8 +226,10 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
           </View>
           <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
             {dataSource === "convex" && isAuthenticated
-              ? "Reads use Convex. Sends still use the existing connection. Unread indicators are unavailable in this beta."
-              : "Sign-in is optional. Messages still use the existing connection."}
+              ? convexSends
+                ? "Messages use Convex. Unsupported operations use the existing connection."
+                : "Reads use Convex. Sends use the existing connection."
+              : "Sign-in is optional. Messages use the existing connection."}
           </Text>
         </View>
         <View style={styles.section}>
