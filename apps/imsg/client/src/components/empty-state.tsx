@@ -28,7 +28,7 @@ export function EmptyState({ icon, iconSize = 28, iconColor, message, children, 
     <View style={[styles.container, style]}>
       {icon && <Ionicons name={icon} size={iconSize} color={iconColor ?? theme.textSecondary} />}
       {typeof message === "string" ? (
-        <Text style={[styles.message, { color: theme.textSecondary, fontSize: type.body }]}>{message}</Text>
+        <Text style={{ color: theme.textSecondary, fontSize: type.body }}>{message}</Text>
       ) : (
         message
       )}
@@ -58,9 +58,6 @@ const styles = StyleSheet.create({
     // on icon-less/childless usages since RN gap only spaces siblings.
     gap: Spacing.two + 1,
     justifyContent: "center",
-  },
-  message: {
-    fontSize: 15,
   },
   spinner: {
     alignItems: "center",
