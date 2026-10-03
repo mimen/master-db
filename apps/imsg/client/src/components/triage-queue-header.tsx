@@ -3,7 +3,6 @@ import { TriageSummary } from "./triage-summary";
 
 export const TRIAGE_QUEUE_HEADER_HEIGHT = DESK_HEADER_WITH_CONTROLS_HEIGHT;
 
-/** Messages' desk header: title, search and actions, then the state segments. */
 export function TriageQueueHeader({
   title,
   sweepCount,

@@ -104,13 +104,11 @@ function sectionLabel(filters: InboxFilters, hasSearch: boolean): string {
   return `${STATE_LABELS[filters.state]} · ${TYPE_LABELS[filters.type]}`;
 }
 
-/** A navigable conversation and its rendered row index. */
 export interface InboxNavigationEntry {
   chat: ChatSummary;
   index: number;
 }
 
-/** Derived presentation data for the conversation list. */
 export interface InboxModel {
   /** The list, with pinned chats placed before unpinned chats. */
   listChats: ChatSummary[];

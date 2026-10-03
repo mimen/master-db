@@ -33,9 +33,6 @@ const SEGMENTS = [
   { value: "all", label: "All" },
 ] as const satisfies readonly FilterOption<StateFilter>[];
 
-/**
- * One axis, widest to narrowest, with the screened-only lens last.
- */
 export const TYPE_FILTERS = [
   { value: "all", label: "Everyone" },
   { value: "known", label: "Known" },

@@ -5,7 +5,6 @@ const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 
 export const DESK_HEADER_HEIGHT = 112;
-/** Title row, toolbar, and a segmented control, packed tight. */
 export const DESK_HEADER_WITH_CONTROLS_HEIGHT = 120;
 
 /**
