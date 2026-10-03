@@ -44,7 +44,7 @@ test("drains every thumbnail before any original, newest first", async () => {
   await worker.flush();
   // Videos have no thumbnail step; the GIF uploads whole as its thumbnail, then originals run newest first.
   expect(source.downloads).toEqual(["gif", "gif", "mid", "old"]);
-  const storage = ingest.calls.filter((call) => call.kind === "storage").map((call) => call.body);
+  const storage: Record<string, string | undefined>[] = ingest.calls.filter((call) => call.kind === "storage").map((call) => call.body);
   expect(storage).toEqual([
     { guid: "gif", thumbStorageId: "storage-1" },
     { guid: "gif", originalStorageId: "storage-2" },
