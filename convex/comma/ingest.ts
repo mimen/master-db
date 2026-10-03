@@ -16,6 +16,7 @@ const ROUTES = {
   attachments: internal.comma.internal.upsertAttachments,
   transcript: internal.comma.internal.setTranscript,
   storage: internal.comma.internal.setAttachmentStorage,
+  mediaBacklog: internal.comma.internal.mediaBacklog,
   scheduled: internal.comma.internal.replaceScheduled,
   overlay: internal.comma.internal.importOverlay,
   sync: internal.comma.internal.markSyncState,

@@ -367,6 +367,59 @@ export class OverlayDb {
     return row.count;
   }
 
+  // ----------------------------------------------------- comma media queue
+
+  private mediaTable(): void {
+    this.db.exec(`CREATE TABLE IF NOT EXISTS comma_media_queue (
+      guid TEXT PRIMARY KEY, mime_type TEXT, filename TEXT, created_at INTEGER NOT NULL,
+      thumb_done INTEGER NOT NULL DEFAULT 0, original_done INTEGER NOT NULL DEFAULT 0,
+      attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT
+    );`);
+  }
+
+  /** Queues on-disk attachments for Convex upload; an already-queued guid is left alone. */
+  enqueueMedia(items: { guid: string; mimeType: string | null; filename: string | null; createdAt: number }[]): void {
+    this.mediaTable();
+    const insert = this.db.query(`INSERT INTO comma_media_queue (guid, mime_type, filename, created_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(guid) DO NOTHING`);
+    for (const item of items) insert.run(item.guid, item.mimeType, item.filename, item.createdAt);
+  }
+
+  /** Newest first. Thumbnails drain before any original. Gives up on an item after 3 failures. */
+  nextMedia(stage: "thumb" | "original", limit: number): { guid: string; mimeType: string | null; filename: string | null }[] {
+    this.mediaTable();
+    const column = stage === "thumb" ? "thumb_done" : "original_done";
+    return this.db.query<{ guid: string; mimeType: string | null; filename: string | null }, [number]>(
+      `SELECT guid, mime_type AS mimeType, filename FROM comma_media_queue
+       WHERE ${column} = 0 AND attempts < 3 ORDER BY created_at DESC LIMIT ?`,
+    ).all(limit);
+  }
+
+  markMedia(guid: string, stage: "thumb" | "original", error?: string): void {
+    this.mediaTable();
+    const column = stage === "thumb" ? "thumb_done" : "original_done";
+    if (error) {
+      this.db.query("UPDATE comma_media_queue SET attempts = attempts + 1, last_error = ? WHERE guid = ?").run(error, guid);
+    } else {
+      this.db.query(`UPDATE comma_media_queue SET ${column} = 1, attempts = 0, last_error = NULL WHERE guid = ?`).run(guid);
+    }
+  }
+
+  mediaCounts(): { thumbsPending: number; originalsPending: number } {
+    this.mediaTable();
+    const row = this.db.query<{ thumbs: number; originals: number }, []>(
+      `SELECT SUM(thumb_done = 0 AND attempts < 3) AS thumbs, SUM(original_done = 0 AND attempts < 3) AS originals
+       FROM comma_media_queue`,
+    ).get();
+    return { thumbsPending: row?.thumbs ?? 0, originalsPending: row?.originals ?? 0 };
+  }
+
+  allTranscripts(): { attachmentGuid: string; text: string }[] {
+    return this.db.query<{ attachmentGuid: string; text: string }, []>(
+      "SELECT attachment_guid AS attachmentGuid, text FROM attachment_transcript",
+    ).all();
+  }
+
   // --------------------------------------------------- attachment transcripts
 
   getAttachmentTranscript(attachmentGuid: string): string | null {

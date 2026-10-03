@@ -542,3 +542,34 @@ export const mergeDuplicateConversations = internalMutation({
     return merges;
   },
 });
+
+/** Bridge media seeding: on-disk attachments still missing Convex storage, a page at a time. */
+export const mediaBacklog = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()), limit: v.number() },
+  returns: v.object({
+    items: v.array(v.object({
+      guid: v.string(),
+      mimeType: v.optional(v.string()),
+      filename: v.optional(v.string()),
+      createdAt: v.number(),
+      needsThumb: v.boolean(),
+      needsOriginal: v.boolean(),
+    })),
+    cursor: v.string(),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, { cursor, limit }) => {
+    const page = await ctx.db.query("comma_attachments").paginate({ cursor, numItems: Math.min(limit, 500) });
+    const items = page.page
+      .filter((a) => a.isOnDisk && !a.hideAttachment && (!a.thumbStorageId || !a.originalStorageId))
+      .map((a) => ({
+        guid: a.guid,
+        mimeType: a.mimeType,
+        filename: a.filename,
+        createdAt: a._creationTime,
+        needsThumb: !a.thumbStorageId,
+        needsOriginal: !a.originalStorageId,
+      }));
+    return { items, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});

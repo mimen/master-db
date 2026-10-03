@@ -52,6 +52,9 @@ export class MessageWriter {
     names?: NameSource;
   }) {}
 
+  /** Set by the bridge so every mirrored attachment reaches the media upload queue. */
+  onAttachments: ((rows: AttachmentRow[], createdAt: number) => void) | null = null;
+
   exclusive<T>(work: () => Promise<T>): Promise<T> {
     const next = this.serial.then(work, work);
     this.serial = next;
@@ -107,6 +110,7 @@ export class MessageWriter {
     }
     for (const batch of batches(messages)) await this.deps.ingest.post("messages", { messages: batch });
     for (const batch of batches(attachments)) await this.deps.ingest.post("attachments", { attachments: batch });
+    if (attachments.length) this.onAttachments?.(attachments, Date.now());
   }
 }
 

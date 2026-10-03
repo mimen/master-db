@@ -7,6 +7,7 @@ import type { OverlayDb } from "../db";
 import type { NameSource } from "../name-resolver";
 import { ConvexIngest } from "./convex-ingest";
 import { LiveBridge, MessageWriter } from "./live";
+import { MediaWorker } from "./media";
 import { OverlayMirror } from "./overlay-mirror";
 import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
@@ -20,7 +21,7 @@ export function startBridge(deps: {
   outboxClient?: ConvexClient;
   names?: NameSource;
   backgroundServices?: boolean;
-  ingest?: Pick<ConvexIngest, "post">;
+  ingest?: Pick<ConvexIngest, "post" | "upload">;
   chatDbPath?: string;
   now?: () => number;
 }) {
@@ -30,9 +31,10 @@ export function startBridge(deps: {
   let overlay: OverlayMirror | null = null;
   let scheduled: ScheduledMirror | null = null;
   let outbox: OutboxBridge | null = null;
+  let media: MediaWorker | null = null;
   function stopModules() {
-    live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop();
-    live = null; reconcile = null; overlay = null; scheduled = null; outbox = null;
+    live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop();
+    live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null;
   }
   const startup = new RetryWork("startup", async () => {
     if (!deps.config.convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
@@ -44,6 +46,12 @@ export function startBridge(deps: {
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
       outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now });
+      const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
+      media = worker;
+      writer.onAttachments = (rows, createdAt) => worker.enqueue(rows, createdAt);
+      worker.start();
+      void worker.seedFromConvex().catch((error) => console.error(`comma bridge media seed: ${String(error)}`));
+      void worker.copyTranscripts().catch((error) => console.error(`comma bridge transcripts: ${String(error)}`));
       console.log(`comma bridge: on (cursor ${reconcile.cursor})`);
     } catch (error) {
       stopModules();
@@ -58,6 +66,7 @@ export function startBridge(deps: {
     health: () => ({ enabled, lastEventAt: live?.lastEventAt ?? null,
       lastReconcileAt: reconcile?.lastReconcileAt ?? null, cursor: reconcile?.cursor ?? 0,
       outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
+      media: media ? { ...media.counts(), uploadedToday: media.uploadedToday, lastError: media.lastError } : null,
       pending: startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
     scheduledChanged: () => scheduled?.request(),
     flush: async () => {
@@ -67,6 +76,7 @@ export function startBridge(deps: {
       await reconcile?.flush();
       await overlay?.flush();
       await scheduled?.flush();
+      await media?.flush();
     },
     stop: () => { startup.stop(); stopModules(); },
   };

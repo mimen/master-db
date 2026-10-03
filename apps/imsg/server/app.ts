@@ -80,7 +80,7 @@ export interface AppDependencies {
   identity?: IdentityDirectory;
   ai?: AiServiceLike;
   backgroundServices?: boolean;
-  bridgeIngest?: Pick<ConvexIngest, "post">;
+  bridgeIngest?: Pick<ConvexIngest, "post" | "upload">;
   bridgeChatDbPath?: string;
   staticRoot?: string;
   desktopRoot?: string;

@@ -2084,6 +2084,23 @@ export declare const internal: {
         },
         null
       >;
+      mediaBacklog: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; limit: number },
+        {
+          cursor: string;
+          isDone: boolean;
+          items: Array<{
+            createdAt: number;
+            filename?: string;
+            guid: string;
+            mimeType?: string;
+            needsOriginal: boolean;
+            needsThumb: boolean;
+          }>;
+        }
+      >;
       mergeDuplicateConversations: FunctionReference<
         "mutation",
         "internal",

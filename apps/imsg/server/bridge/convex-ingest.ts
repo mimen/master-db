@@ -26,6 +26,9 @@ export interface Bodies {
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionArgs<typeof internal.comma.outbox.claimOutbox>;
   complete: FunctionArgs<typeof internal.comma.outbox.completeOutbox>;
+  storage: FunctionArgs<typeof internal.comma.internal.setAttachmentStorage>;
+  transcript: FunctionArgs<typeof internal.comma.internal.setTranscript>;
+  mediaBacklog: FunctionArgs<typeof internal.comma.internal.mediaBacklog>;
 }
 export interface Results {
   conversations: Record<string, MessageRow["conversationId"]>;
@@ -36,10 +39,35 @@ export interface Results {
   scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionReturnType<typeof internal.comma.outbox.claimOutbox>;
   complete: FunctionReturnType<typeof internal.comma.outbox.completeOutbox>;
+  storage: boolean;
+  transcript: boolean;
+  mediaBacklog: FunctionReturnType<typeof internal.comma.internal.mediaBacklog>;
 }
 
 export class ConvexIngest {
   constructor(private config: Pick<Config, "convexSiteUrl" | "commaBridgeSecret">) {}
+
+  /** Uploads bytes to Convex file storage and returns the storage id. */
+  async upload(bytes: Uint8Array, contentType: string): Promise<string> {
+    const { convexSiteUrl, commaBridgeSecret } = this.config;
+    if (!convexSiteUrl || !commaBridgeSecret) throw new Error("Comma bridge disabled");
+    const issued = await fetch(`${convexSiteUrl}/comma/ingest-upload-url`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${commaBridgeSecret}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!issued.ok) throw new Error(`Comma upload URL HTTP ${issued.status}`);
+    const { url } = await issued.json() as { url: string };
+    const uploaded = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": contentType },
+      body: bytes,
+      signal: AbortSignal.timeout(300_000),
+    });
+    if (!uploaded.ok) throw new Error(`Comma upload HTTP ${uploaded.status}`);
+    const { storageId } = await uploaded.json() as { storageId: string };
+    return storageId;
+  }
 
   async post<K extends keyof Bodies>(kind: K, body: Bodies[K]): Promise<Results[K]> {
     const { convexSiteUrl, commaBridgeSecret } = this.config;
