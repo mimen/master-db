@@ -67,11 +67,12 @@ and Restart banners.
 - The [`comma_*` tables](../../convex/schema/comma/) store conversations, messages,
   attachments, conversation state, drafts, scheduled messages, triage, sync state, and outbox commands.
   The local ingest contract reference is `apps/imsg/docs/convex-ingest-contract.md`.
-- [Settings](client/src/lib/settings.ts) default reads and sends to `auto`. Signed-in
-  clients resolve to Convex unless explicitly disabled. The [auth provider](client/src/lib/convex-auth.tsx)
-  also updates non-hook readers, without replacing persisted overrides.
-- Unsigned clients automatically use REST. Tauri signs in through the system browser via a loopback
-  redirect; Expo Go uses an auth session with an `exp://` redirect. REST read/send paths and the SSE-driven thread cache remain supported.
+- Clients always read and send through Convex. They never sign in: the [auth provider](client/src/lib/convex-auth.tsx)
+  fetches a Convex session from the Mini's `GET /api/convex-token`, which the Mini mints with the
+  `tailnet` credentials provider and the bridge secret. Port 8447 is tailnet-only, so tailnet
+  membership is the login; Convex's `authed*` guards still reject callers from the open internet.
+- The client still calls the Mini's REST API for features Convex does not mirror yet: jump-to-message
+  windows, gallery, info, sender search, mentions, and suggestion guards.
 - Convex functions deploy separately from the repo root with
   `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`. A push to main deploys only imsg.
 
