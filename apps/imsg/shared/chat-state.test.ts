@@ -536,10 +536,11 @@ describe("applyMessage", () => {
     }
   });
 
-  test("outbound message sets waiting, clears unresponded, preserves unread", () => {
+  test("outbound message sets waiting, clears unresponded, and clears the unread count", () => {
     const chats = [
       makeChat({
         guid: "chat-1",
+        unreadCount: 3,
         firstUnreadAt: 4000,
         flags: makeFlags({ unresponded: true, unread: true }),
       }),
@@ -547,8 +548,16 @@ describe("applyMessage", () => {
     const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
     expect(next[0]!.flags.waiting).toBe(true);
     expect(next[0]!.flags.unresponded).toBe(false);
+    expect(next[0]!.flags.unread).toBe(false);
+    expect(next[0]!.unreadCount).toBe(0);
+    expect(next[0]!.firstUnreadAt).toBeNull();
+  });
+
+  test("outbound message keeps a manual mark-unread", () => {
+    const chats = [makeChat({ guid: "chat-1", unreadCount: 0, flags: makeFlags({ unread: true }) })];
+    const next = applyMessage(chats, "chat-1", makeMessage({ isFromMe: true, dateCreated: 6000 }))!;
     expect(next[0]!.flags.unread).toBe(true);
-    expect(next[0]!.firstUnreadAt).toBe(4000);
+    expect(next[0]!.unreadCount).toBe(0);
   });
 
   test("stale message returns the same array reference", () => {

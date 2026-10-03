@@ -403,8 +403,10 @@ export function mapChat(
   // The scan is authoritative when available. A genuine last unread message
   // still provides a safe fallback if BlueBubbles' global query failed.
   const fallbackUnreadAt = last && isGenuineUnreadInbound(last) ? last.dateCreated ?? 0 : null;
-  const unreadCount = Math.max(scannedUnread?.count ?? 0, fallbackUnreadAt === null ? 0 : 1);
-  const firstUnreadAt = scannedUnread?.count ? scannedUnread.firstUnreadAt : fallbackUnreadAt;
+  // A chat whose last message is mine is read: replying reads the thread.
+  const lastFromMe = last?.isFromMe === true;
+  const unreadCount = lastFromMe ? 0 : Math.max(scannedUnread?.count ?? 0, fallbackUnreadAt === null ? 0 : 1);
+  const firstUnreadAt = lastFromMe ? null : scannedUnread?.count ? scannedUnread.firstUnreadAt : fallbackUnreadAt;
   const flagInput = last
     ? { guid: last.guid, dateCreated: last.dateCreated ?? 0, isFromMe: last.isFromMe === true }
     : null;

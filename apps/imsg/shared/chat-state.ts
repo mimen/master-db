@@ -174,20 +174,24 @@ export function applyMessage(
   const chat = index >= 0 ? chats[index] : undefined;
   if (!chat) return null;
   if ((chat.lastMessage?.dateCreated ?? 0) > message.dateCreated) return chats;
+  // Replying reads the conversation, so an outbound message clears the count.
+  // A manual mark-unread (flag set with no count) survives it.
   const qualifiesForUnreadAge =
     !message.isFromMe &&
     message.dateRead === null &&
     !message.retracted &&
     !message.isGroupEvent &&
     message.isAssociatedMessage !== true;
-  const firstUnreadAt = qualifiesForUnreadAge
-    ? Math.min(chat.firstUnreadAt ?? message.dateCreated, message.dateCreated)
-    : chat.firstUnreadAt;
+  const firstUnreadAt = message.isFromMe
+    ? null
+    : qualifiesForUnreadAge
+      ? Math.min(chat.firstUnreadAt ?? message.dateCreated, message.dateCreated)
+      : chat.firstUnreadAt;
   const updated: ChatSummary = {
     ...chat,
     isSpam: message.isSpam === true,
     firstUnreadAt,
-    unreadCount: qualifiesForUnreadAge ? chat.unreadCount + 1 : chat.unreadCount,
+    unreadCount: message.isFromMe ? 0 : qualifiesForUnreadAge ? chat.unreadCount + 1 : chat.unreadCount,
     lastMessage: {
       guid: message.guid,
       text: message.text || (message.attachments.length > 0 ? "Attachment" : ""),
@@ -200,7 +204,7 @@ export function applyMessage(
       ...chat.flags,
       unresponded: !message.isFromMe,
       waiting: message.isFromMe,
-      unread: message.isFromMe ? chat.flags.unread : true,
+      unread: message.isFromMe ? chat.flags.unread && chat.unreadCount === 0 : true,
     },
   };
   const next = [...chats];

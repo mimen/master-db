@@ -293,7 +293,7 @@ export class BlueBubblesClient implements BlueBubbles {
     if (options.unreadInboundOnly) {
       where.push(
         { statement: "message.is_from_me = :inbound", args: { inbound: 0 } },
-        { statement: "message.dateRead IS NULL", args: {} },
+        { statement: "message.is_read = :unread", args: { unread: 0 } },
       );
     }
     return this.post<BBMessage[]>("/api/v1/message/query", {

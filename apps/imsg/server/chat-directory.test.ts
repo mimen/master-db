@@ -240,6 +240,29 @@ describe("ChatDirectory.summaries", () => {
     expect(chat.firstUnreadAt).toBe(1000);
   });
 
+  test("a chat whose last message is mine reports no unread, even across service siblings", async () => {
+    const { directory } = await setup([
+      {
+        guid: CHAT_A,
+        participants: [{ address: "+15550001111" }],
+        messages: [inbound("a1", 1000), inbound("a2", 2000), { guid: "me", text: "ok", dateCreated: 3000, isFromMe: true }],
+      },
+      {
+        guid: "SMS;-;+15550001111",
+        participants: [{ address: "+15550001111" }],
+        messages: [inbound("sms-1", 500)],
+      },
+    ]);
+
+    const result = await directory.summaries();
+    if (!result.ok) return;
+    const chat = find(result.chats, CHAT_A);
+    expect(chat.flags.waiting).toBe(true);
+    expect(chat.unreadCount).toBe(0);
+    expect(chat.firstUnreadAt).toBeNull();
+    expect(chat.flags.unread).toBe(false);
+  });
+
   test("uses the genuine last message as a fallback only when the unread query fails", async () => {
     const { bb, directory } = await setup([{ guid: CHAT_A, messages: [inbound("fallback", 1000)] }]);
     bb.queryMessages = () => Promise.resolve({ ok: false, error: "offline" });
@@ -603,6 +626,28 @@ describe("ChatDirectory reactive fast path", () => {
     expect(a.flags.waiting).toBe(true);
     expect(a.flags.unresponded).toBe(false);
     expect(bb.sentTexts).toEqual([{ chatGuid: CHAT_A, message: "my reply" }]);
+  });
+
+  test("a live reply resets the count, so the next inbound counts from one", async () => {
+    let clock = 100_000;
+    const { bb, directory } = await setup(
+      [{ guid: CHAT_A, participants: [{ address: "+15550001111" }], messages: [inbound("a1", 1000), inbound("a2", 2000)] }],
+      () => clock,
+    );
+    let result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(2);
+
+    directory.applyMessage(CHAT_A, { guid: "me", text: "ok", dateCreated: 3000, isFromMe: true, chats: [{ guid: CHAT_A }] });
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(0);
+
+    bb.receiveMessage(CHAT_A, "again");
+    clock += 20_000;
+    result = await directory.summaries();
+    if (!result.ok) return;
+    expect(find(result.chats, CHAT_A).unreadCount).toBe(1);
   });
 
   test("markRead clears unread via the local override even when BB still says unread", async () => {

@@ -185,8 +185,11 @@ export class ChatDirectory {
 
   /** Extends a complete unread scan with a qualifying realtime message. */
   private patchUnreadSummary(chatGuid: string, message: Message): void {
+    if (message.isFromMe) {
+      this.unreadScan.summaries.delete(chatGuid);
+      return;
+    }
     if (
-      message.isFromMe ||
       message.dateRead !== null ||
       message.retracted ||
       message.isGroupEvent ||
@@ -341,12 +344,16 @@ export class ChatDirectory {
           entry.all.push(c.guid);
           this.siblingMap.set(c.guid, entry);
         }
-        existing.unreadCount += c.unreadCount;
-        const a = existing.firstUnreadAt ?? null;
-        const b = c.firstUnreadAt ?? null;
-        existing.firstUnreadAt = a === null ? b : b === null ? a : Math.min(a, b);
+        // The primary holds the newest message; if it is mine, the whole
+        // conversation is read and older sibling unread rows don't count.
+        if (existing.lastMessage?.isFromMe !== true) {
+          existing.unreadCount += c.unreadCount;
+          const a = existing.firstUnreadAt ?? null;
+          const b = c.firstUnreadAt ?? null;
+          existing.firstUnreadAt = a === null ? b : b === null ? a : Math.min(a, b);
+          existing.flags.unread = existing.flags.unread || c.flags.unread;
+        }
         existing.known = existing.known || c.known;
-        existing.flags.unread = existing.flags.unread || c.flags.unread;
       }
     }
     return out;
