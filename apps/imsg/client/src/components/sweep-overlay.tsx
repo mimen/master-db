@@ -202,7 +202,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                     style={({ hovered, pressed }) => [styles.skip, hovered && !pressed && { backgroundColor: visual.controlFill }, pressed && { backgroundColor: visual.controlFillHover }]}
                   >
                     {({ hovered, pressed }) => <>
-                      <Text style={[styles.skipText, { color: hovered || pressed ? visual.text : visual.muted }]}>skip ⇢</Text>
+                      <Text style={[styles.skipText, { color: hovered || pressed ? visual.text : visual.muted }]}>Skip</Text>
                       <Text style={[styles.keycap, { color: hovered || pressed ? visual.text : visual.muted, borderColor: visual.hairlineStrong }]}>S</Text>
                     </>}
                   </Pressable>
@@ -211,8 +211,8 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                 <View style={[styles.contextBubble, { backgroundColor: visual.controlFill }]}>
                   <Text style={[styles.contextText, { color: visual.text }]}>{chat.lastMessage?.text || "Attachment"}</Text>
                 </View>
-                <Pressable accessibilityRole="link" accessibilityLabel="Open full thread" onPress={() => onOpenFullThread(chat)}>
-                  <Text style={[styles.openThread, { color: visual.muted }]}>…earlier messages · <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={{ color: theme.accent, fontWeight: "600" }}>open full thread ↵</Text></Text>
+                <Pressable accessibilityRole="link" accessibilityLabel="Open full conversation" onPress={() => onOpenFullThread(chat)} style={styles.openThread}>
+                  {({ hovered, pressed }) => <Text style={[styles.openThreadText, { color: hovered || pressed ? visual.text : visual.muted }]}>Open conversation</Text>}
                 </Pressable>
 
                 <View style={styles.options}>
@@ -245,13 +245,12 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                 </View>
 
                 <View style={styles.actionsRow}>
-                  <HoverFillButton accessibilityLabel="Settle current conversation" onPress={settle} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.actionChip}><Ionicons name="checkmark" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Settle <Text style={{ color: visual.hint }}>E</Text></Text></HoverFillButton>
-                  <Text style={[styles.autoAdvance, { color: visual.hint }]}>sent replies auto-advance to the next</Text>
+                  <HoverFillButton accessibilityLabel="Settle current conversation" onPress={settle} restFill={visual.controlFill} hoverFill={visual.controlFillHover} style={styles.actionChip}><Ionicons name="checkmark" size={14} color={visual.text} /><Text style={[styles.actionText, { color: visual.text }]}>Settle</Text><Text style={[styles.keycap, { color: visual.meta, borderColor: visual.hairlineStrong }]}>E</Text></HoverFillButton>
                 </View>
               </View>
               <View style={[styles.footer, { borderTopColor: visual.hairline }]}>
                 <View style={styles.clearedLog}>{cleared.slice(-3).map((entry) => <View key={entry} style={styles.clearedItem}><Ionicons name="checkmark-circle-outline" size={14} color="#28A745" /><Text style={[styles.clearedText, { color: visual.meta }]}>{entry}</Text></View>)}</View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Undo last settle" onPress={undo} disabled={!canUndo}>{({ hovered, pressed }) => <Text style={[styles.undoText, { color: canUndo ? (hovered || pressed ? visual.text : visual.hint) : visual.hairlineStrong }]}>Z undoes the last settle</Text>}</Pressable>
+                {canUndo ? <Pressable accessibilityRole="button" accessibilityLabel="Undo last settle" onPress={undo} style={({ hovered, pressed }) => [styles.skip, hovered && !pressed && { backgroundColor: visual.controlFill }, pressed && { backgroundColor: visual.controlFillHover }]}>{({ hovered, pressed }) => <><Text style={[styles.skipText, { color: hovered || pressed ? visual.text : visual.muted }]}>Undo</Text><Text style={[styles.keycap, { color: hovered || pressed ? visual.text : visual.muted, borderColor: visual.hairlineStrong }]}>Z</Text></>}</Pressable> : null}
               </View>
             </>
           ) : (
@@ -282,7 +281,8 @@ const styles = StyleSheet.create({
   keycap: { borderRadius: 4, borderWidth: 0.5, fontSize: 11, fontWeight: "700", paddingHorizontal: 5, paddingVertical: 1 },
   contextBubble: { alignSelf: "flex-start", borderRadius: 18, marginTop: 18, maxWidth: "80%", paddingHorizontal: 13, paddingVertical: 9 },
   contextText: { fontSize: 15, lineHeight: 20 },
-  openThread: { fontSize: 11, marginBottom: 16, marginTop: 5 },
+  openThread: { alignSelf: "flex-start", marginBottom: 16, marginTop: 5 },
+  openThreadText: { fontSize: 11 },
   options: { gap: 7 },
   option: { alignItems: "center", borderRadius: 12, borderWidth: 1, flexDirection: "row", gap: 10, minHeight: 40, paddingHorizontal: 12, paddingVertical: 9 },
   optionKey: { borderRadius: 4, borderWidth: 0.5, fontSize: 11, fontWeight: "700", minWidth: 20, paddingHorizontal: 6, paddingVertical: 2, textAlign: "center" },
@@ -291,12 +291,10 @@ const styles = StyleSheet.create({
   actionsRow: { alignItems: "center", flexDirection: "row", gap: 8, marginTop: 16 },
   actionChip: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 5, height: 28, paddingHorizontal: 11 },
   actionText: { fontSize: 12, fontWeight: "600" },
-  autoAdvance: { flex: 1, fontSize: 11, textAlign: "right" },
   footer: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", justifyContent: "space-between", minHeight: 42, paddingHorizontal: 18, paddingVertical: 10 },
   clearedLog: { alignItems: "center", flex: 1, flexDirection: "row", gap: 12, overflow: "hidden" },
   clearedItem: { alignItems: "center", flexDirection: "row", gap: 4 },
   clearedText: { fontSize: 11 },
-  undoText: { fontSize: 11 },
   complete: { alignItems: "center", gap: 14, justifyContent: "center", minHeight: 360 },
   completeTitle: { fontSize: 22, fontWeight: "700" },
 });
