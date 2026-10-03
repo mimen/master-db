@@ -1934,6 +1934,7 @@ export declare const internal: {
             pinned: boolean;
             readAt: number;
           }>;
+          replaceChatGuids?: Array<string>;
           triageEvents: Array<{
             chatGuid: string;
             clearedAt: number;
