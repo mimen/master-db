@@ -44,7 +44,8 @@ next-env.d.ts
 
 # Convex
 .convex/
-convex/_generated/
+convex/_generated/*
+!convex/_generated/api.d.ts
 
 # IDE
 .vscode/
