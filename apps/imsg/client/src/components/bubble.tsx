@@ -170,7 +170,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
   return (
     <View style={{ gap: 6 }}>
       {message.attachments.map((att) => {
-        const url = attachmentUrl(att.guid);
+        const url = attachmentUrl(att);
         if (
           att.mimeType?.startsWith("audio/") ||
           /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "")
@@ -215,7 +215,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               key={att.guid}
               onPress={() =>
                 openLightbox(
-                  images.map((i) => ({ url: attachmentUrl(i.guid), isVideo: false })),
+                  images.map((i) => ({ url: attachmentUrl(i), isVideo: false })),
                   images.findIndex((i) => i.guid === att.guid),
                 )
               }
@@ -224,7 +224,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               {state?.status !== "loaded" && <ImageSkeleton />}
               <Image
                 key={state?.attempt ?? 0}
-                source={{ uri: attachmentThumbnailUrl(att.guid, mediaW) }}
+                source={{ uri: attachmentThumbnailUrl(att, mediaW) }}
                 style={tile}
                 contentFit="cover"
                 transition={150}

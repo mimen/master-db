@@ -1,5 +1,7 @@
 import { BASE_URL } from "./config";
+import { attachmentSource } from "./convex-adapters";
 import type {
+  AttachmentSummary,
   AiStatus,
   ChatSummary,
   Contact,
@@ -240,11 +242,15 @@ export function groupPhotoUrl(chatGuid: string): string {
   return `${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/photo?v=2`;
 }
 
-export function attachmentUrl(guid: string): string {
-  return `${BASE_URL}/api/attachments/${encodeURIComponent(guid)}`;
+export function attachmentUrl(attachment: string | AttachmentSummary): string {
+  const guid = typeof attachment === "string" ? attachment : attachment.guid;
+  const fallback = `${BASE_URL}/api/attachments/${encodeURIComponent(guid)}`;
+  return typeof attachment === "string" ? fallback : attachmentSource(attachment, fallback);
 }
 
 /** A small cached JPEG for in-thread display; the server snaps width to 260/520/1040 and serves GIFs whole. */
-export function attachmentThumbnailUrl(guid: string, displayWidth: number): string {
-  return `${attachmentUrl(guid)}?w=${Math.ceil(displayWidth * 2)}`;
+export function attachmentThumbnailUrl(attachment: string | AttachmentSummary, displayWidth: number): string {
+  const guid = typeof attachment === "string" ? attachment : attachment.guid;
+  const fallback = `${attachmentUrl(guid)}?w=${Math.ceil(displayWidth * 2)}`;
+  return typeof attachment === "string" ? fallback : attachmentSource(attachment, fallback, true);
 }

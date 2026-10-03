@@ -236,7 +236,7 @@ export function ConversationListPane({
           // scrollToOffset / scrollToIndex (ConversationListHandle).
           ref={viewport.listRef as never}
           data={deskModel.listChats}
-          keyExtractor={(chat) => chat.guid}
+          keyExtractor={(chat) => chat.conversationId ?? chat.guid}
           // Native-only: FlatList has no drawDistance, and FlashList's is what
           // keeps a fast iOS flick from showing blanks (default is 250px).
           {...(Platform.OS === "web" ? {} : { drawDistance: 1500 })}

@@ -12,6 +12,8 @@ export interface Participant {
 
 export interface AttachmentSummary {
   guid: string;
+  thumbUrl?: string | null;
+  originalUrl?: string | null;
   mimeType: string | null;
   filename: string | null;
   width: number | null;
@@ -95,6 +97,8 @@ export interface ChatFlags {
 }
 
 export interface ChatSummary {
+  /** Stable Convex row key. guid remains the REST chat target. */
+  conversationId?: string;
   guid: string;
   displayName: string;
   isGroup: boolean;

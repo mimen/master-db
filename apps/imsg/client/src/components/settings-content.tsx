@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
 import { useState, useSyncExternalStore, type JSX } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { ListRow } from "./list-row";
 
@@ -16,6 +16,8 @@ import { useAuthActions, useConvexAuth } from "@/lib/convex-auth";
 import { isDesktopShell } from "@/lib/desktop-shell";
 import { showToast } from "@/lib/toast";
 import {
+  setDataSource,
+  useDataSource,
   setNameOrder,
   setSuggestionMode,
   setSuggestionModel,
@@ -149,6 +151,8 @@ function ReleaseIdentityFooter(): JSX.Element {
 export function SettingsContent({ showHeader = false, onClose, onBack, backLabel = "Back" }: SettingsContentProps) {
   const theme = useTheme();
   const nameOrder = useNameOrder();
+  const dataSource = useDataSource();
+  const { isAuthenticated } = useConvexAuth();
   const suggestionMode = useSuggestionMode();
   const suggestionModel = useSuggestionModel();
   const aiStatus = useAiStatus();
@@ -194,9 +198,22 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Convex</Text>
           <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
             <ConvexAccountRow />
+            {isAuthenticated && (
+              <ListRow
+                title="Read messages from Convex (beta)"
+                titleWeight="400"
+                trailing={<Switch
+                  accessibilityLabel="Read messages from Convex (beta)"
+                  value={dataSource === "convex"}
+                  onValueChange={(enabled) => setDataSource(enabled ? "convex" : "server")}
+                />}
+              />
+            )}
           </View>
           <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
-            Sign-in is optional. Messages still use the existing connection.
+            {dataSource === "convex" && isAuthenticated
+              ? "Reads use Convex. Sends still use the existing connection. Unread indicators are unavailable in this beta."
+              : "Sign-in is optional. Messages still use the existing connection."}
           </Text>
         </View>
         <View style={styles.section}>

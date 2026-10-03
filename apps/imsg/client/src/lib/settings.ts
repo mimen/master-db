@@ -22,10 +22,11 @@ export interface Settings {
   suggestionModel: SuggestionModel;
   /** Contacts list name ordering — see NameOrder above. */
   nameOrder: NameOrder;
+  dataSource: "server" | "convex";
 }
 
 const KEY = "imsg.settings.v2";
-const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last" };
+const DEFAULT: Settings = { suggestionMode: "auto", suggestionModel: "opus", nameOrder: "first-last", dataSource: "server" };
 
 let state: Settings = { ...DEFAULT };
 let hydrated = false;
@@ -65,6 +66,10 @@ export async function hydrateSettings(): Promise<void> {
     }
     if (isNameOrder(parsed.nameOrder)) {
       state = { ...state, nameOrder: parsed.nameOrder };
+      changed = true;
+    }
+    if (parsed.dataSource === "server" || parsed.dataSource === "convex") {
+      state = { ...state, dataSource: parsed.dataSource };
       changed = true;
     }
     if (changed) emit();
@@ -125,4 +130,15 @@ export function useNameOrder(): NameOrder {
     () => state.nameOrder,
     () => state.nameOrder,
   );
+}
+
+export function setDataSource(dataSource: Settings["dataSource"]): void {
+  if (state.dataSource === dataSource) return;
+  state = { ...state, dataSource };
+  emit();
+  persist();
+}
+
+export function useDataSource(): Settings["dataSource"] {
+  return useSyncExternalStore(subscribe, () => state.dataSource, () => state.dataSource);
 }
