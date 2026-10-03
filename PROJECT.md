@@ -16,15 +16,17 @@ consumers.
 
 ## Components
 
-Five, in five directories. They share a repository and a Convex deployment.
+Seven, in seven directories. They share a repository and a Convex deployment.
 
-| Component | Path | What it is | Surfaces |
-|---|---|---|---|
-| Convex backend | `convex/` | Schema, functions, crons, HTTP routes. The center of gravity and the only cloud-deployed thing. Six domains: `todoist`, `routines`, `identity`, `beeper`, `agentic`, `dashboard`. | backend-data, api |
-| Todoist web app | `app/` | Vite and React 19 SPA with an agent drawer. Deployed to Heroku via Docker. | web |
-| imsg | `apps/imsg/` | Bun and Hono server fronting a BlueBubbles instance, plus an Expo RNW client. A self-hosted iMessage client. Runs on the Mac Mini. Its own `bun.lock`, lint config, and CONTEXT. | api, resident, mobile, web, desktop |
-| Agentic Engine | `engine/` | Bun and Hono HTTP service wrapping the Claude Agent SDK for async, durable, multi-entity runs. Runs on the Mac Mini. | api, resident |
-| Beeper sync CLI | `scripts/` | An operator-run Bun CLI pair that pulls Beeper chats and attachments and POSTs them to a Convex ingest endpoint. Not deployed; run by hand from a trusted machine. | cli-tui |
+| Component | Path | What it is | Surfaces | Stack |
+|---|---|---|---|---|
+| Convex backend | `convex/` | Schema, functions, crons, HTTP routes. The center of gravity and the only cloud-deployed thing. Six domains: `todoist`, `routines`, `identity`, `beeper`, `agentic`, `dashboard`. | backend-data, api | ts, convex |
+| Todoist web app | `app/` | Vite and React 19 SPA with an agent drawer. Deployed to Heroku via Docker. | web | ts, react, vite, tailwind, bun, docker, heroku |
+| imsg server | `apps/imsg/server/` | Bun and Hono API fronting BlueBubbles and serving the exported client. Runs on the Mac Mini. | api, resident | ts, hono, bun, launchd |
+| imsg client | `apps/imsg/client/` | Shared Expo and React Native client for mobile and web. Its web export is served by the imsg server. | mobile, web | ts, react, react-native, expo, bun |
+| imsg desktop shell | `apps/imsg/desktop/` | Native Tauri shell loading the hosted imsg web client, with its own Rust build and release path. | desktop | rust, tauri, bun |
+| Agentic Engine | `engine/` | Bun and Hono HTTP service wrapping the Claude Agent SDK for async, durable, multi-entity runs. Runs on the Mac Mini. | api, resident | ts, hono, bun, launchd |
+| Beeper sync CLI | `scripts/` | An operator-run Bun CLI pair that pulls Beeper chats and attachments and POSTs them to a Convex ingest endpoint. Not deployed; run by hand from a trusted machine. | cli-tui | ts, bun |
 
 `test-utils/` is a shared test-support library, not a component. `docs/` is documentation.
 An older inventory recorded four components and omitted the Beeper CLI, which has its own
