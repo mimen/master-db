@@ -44,6 +44,22 @@ describe("BlueBubblesClient transport recovery", () => {
 });
 
 describe("BlueBubblesClient message queries", () => {
+  test("backfill pages chats and queries bounded ROWIDs with raw metadata", async () => {
+    const transport = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ status: 200, data: [] }))
+      .mockResolvedValueOnce(Response.json({ status: 200, data: [] }));
+    try {
+      const client = new BlueBubblesClient("http://127.0.0.1:1234", "test-password");
+      await client.queryChats(1000, 1000);
+      expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toMatchObject({ limit: 1000, offset: 1000 });
+      await client.queryMessages({ limit: 2000, offset: 0, rowidRange: { after: 1000, through: 2000 } });
+      expect(JSON.parse(String(transport.mock.calls[1]?.[1]?.body))).toMatchObject({
+        with: ["chat", "attachment", "handle", "message.attributedBody", "message.messageSummaryInfo"],
+        where: [{ statement: "message.ROWID > :afterRowid AND message.ROWID <= :throughRowid",
+          args: { afterRowid: 1000, throughRowid: 2000 } }],
+      });
+    } finally { transport.mockRestore(); }
+  });
   test("unread inbound filter matches chat.db's is_read flag, not the always-zero date_read", async () => {
     const transport = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ status: 200, data: [] })));
     try {

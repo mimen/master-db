@@ -52,6 +52,7 @@ export interface MessageQueryOptions {
   text?: string;
   from?: "me" | "them";
   chatGuid?: string;
+  rowidRange?: { after: number; through: number };
 }
 
 /**
@@ -62,7 +63,7 @@ export interface MessageQueryOptions {
 export interface BlueBubbles {
   connect(): Promise<Result<BBServerInfo>>;
   readonly hasPrivateApi: boolean;
-  queryChats(limit?: number): Promise<Result<BBChat[]>>;
+  queryChats(limit?: number, offset?: number): Promise<Result<BBChat[]>>;
   chatMessages(
     chatGuid: string,
     options?: { limit?: number; before?: number; after?: number; sort?: "ASC" | "DESC" },
@@ -254,10 +255,10 @@ export class BlueBubblesClient implements BlueBubbles {
     return this.privateApi ? "private-api" : "apple-script";
   }
 
-  queryChats(limit = 1000): Promise<Result<BBChat[]>> {
+  queryChats(limit = 1000, offset = 0): Promise<Result<BBChat[]>> {
     return this.post<BBChat[]>("/api/v1/chat/query", {
       limit,
-      offset: 0,
+      offset,
       with: ["lastMessage", "sms"],
       sort: "lastmessage",
     }, true);
@@ -296,11 +297,17 @@ export class BlueBubblesClient implements BlueBubbles {
         { statement: "message.is_read = :unread", args: { unread: 0 } },
       );
     }
+    if (options.rowidRange) {
+      where.push({ statement: "message.ROWID > :afterRowid AND message.ROWID <= :throughRowid",
+        args: { afterRowid: options.rowidRange.after, throughRowid: options.rowidRange.through } });
+    }
     return this.post<BBMessage[]>("/api/v1/message/query", {
       limit: options.limit,
       offset: options.offset,
       sort: "DESC",
-      with: ["chat", "handle", "message.attributedBody"],
+      with: options.rowidRange
+        ? ["chat", "attachment", "handle", "message.attributedBody", "message.messageSummaryInfo"]
+        : ["chat", "handle", "message.attributedBody"],
       ...(options.chatGuid ? { chatGuid: options.chatGuid } : {}),
       where,
     }, true);
