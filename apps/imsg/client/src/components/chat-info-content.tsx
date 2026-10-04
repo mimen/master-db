@@ -1,3 +1,5 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -138,7 +140,7 @@ export function ChatInfoContent({
           label: "Remove from conversation",
           destructive: true,
           onPress: () =>
-            api.participant(guid, p.address, "remove").then(load).catch(() => showToast(`Couldn't remove ${p.name ?? formatAddress(p.address)}. Try again.`)),
+            runCommand(guid, { kind: "participant", address: p.address, action: "remove" }).then(load).catch((error: unknown) => showToast(messagingCommandError(error, `Couldn't remove ${p.name ?? formatAddress(p.address)}. Try again.`))),
         },
       ],
     });
@@ -307,7 +309,7 @@ export function ChatInfoContent({
                 onSubmitEditing={() => {
                   const address = participantAddress.trim();
                   if (!address) return;
-                  void api.participant(guid, address, "add").then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, () => showToast("Could not add person"));
+                  void runCommand(guid, { kind: "participant", address, action: "add" }).then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, (error: unknown) => showToast(messagingCommandError(error, "Could not add person")));
                 }}
                 placeholder="Phone number or email"
                 placeholderTextColor={theme.textSecondary}
@@ -383,7 +385,7 @@ export function ChatInfoContent({
                         label: "Leave conversation",
                         destructive: true,
                         onPress: () =>
-                          api.leaveGroup(guid).then(() => onClose()).catch(() => showToast("Couldn't leave the conversation. Try again.")),
+                          runCommand(guid, { kind: "leaveGroup" }).then(() => onClose()).catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't leave the conversation. Try again."))),
                       },
                     ],
                   })
@@ -405,10 +407,9 @@ export function ChatInfoContent({
                     label: "Delete conversation",
                     destructive: true,
                     onPress: () =>
-                      api
-                        .deleteChat(guid)
+                      runCommand(guid, { kind: "deleteChat", chatGuid: guid })
                         .then(() => onDeleted())
-                        .catch(() => showToast("Couldn't delete the conversation. Try again.")),
+                        .catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't delete the conversation. Try again."))),
                   },
                 ],
               })

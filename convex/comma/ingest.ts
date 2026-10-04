@@ -13,6 +13,7 @@ import { checkBridgeAuth } from "./bridgeAuth";
 const ROUTES = {
   ephemeral: (internal.comma as typeof internal.comma & { presence: { publish: import("convex/server").FunctionReference<"mutation", "internal", { state: import("convex/values").Infer<typeof import("./presence").ephemeralInput> }, boolean> } }).presence.publish,
   conversations: internal.comma.internal.upsertConversations,
+  deleteChat: (internal.comma as typeof internal.comma & { deletions: { deleteChat: import("convex/server").FunctionReference<"mutation", "internal"> } }).deletions.deleteChat,
   messages: internal.comma.internal.upsertMessages,
   attachments: internal.comma.internal.upsertAttachments,
   transcript: internal.comma.internal.setTranscript,

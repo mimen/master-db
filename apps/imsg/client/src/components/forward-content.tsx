@@ -1,9 +1,10 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import type { ChatSummary } from "@shared/types";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { api } from "@/lib/api";
 import { takeForwardText } from "@/lib/forward";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
@@ -28,14 +29,13 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
 
   const forwardTo = (chat: ChatSummary): void => {
     if (!text) return;
-    void api
-      .sendText(chat.guid, { text })
+    void runCommand(chat.guid, { kind: "send", text })
       .then(() => {
         showToast(`Forwarded to ${chat.displayName}`);
         onClose();
         onOpenChat(chat);
       })
-      .catch(() => showToast("Forward failed"));
+      .catch((error: unknown) => showToast(messagingCommandError(error, "Forward failed")));
   };
 
   // Forward only opens from a message. Reached any other way (a reload, a

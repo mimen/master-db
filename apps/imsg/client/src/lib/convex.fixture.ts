@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getFunctionName, type FunctionArgs, type FunctionReference, type FunctionReturnType } from "convex/server";
 import type { PaginatedQueryArgs, PaginatedQueryReference } from "convex/react";
+import { fixtureCommandWatch } from "./fixture-command-watch";
 import { subscribeServerEvents } from "./sse";
 
 type Query = FunctionReference<"query">;
@@ -17,7 +18,9 @@ async function call<Ref extends Query | Mutation | Action>(ref: Ref, args: Funct
   return response.json();
 }
 
-export const convexClient = { query: call, mutation: call, action: call };
+export const convexClient = { query: call, mutation: call, action: call,
+  watchQuery: <Ref extends Query>(ref: Ref, args: FunctionArgs<Ref>) => fixtureCommandWatch(() => call(ref, args)),
+};
 
 export function useAction<Ref extends Action>(ref: Ref) {
   return useCallback((args: FunctionArgs<Ref>) => call(ref, args), [ref]);

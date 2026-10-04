@@ -1,10 +1,11 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import type { ReactElement } from "react";
 import { Pressable, StyleSheet } from "react-native";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import Video01Icon from "@hugeicons/core-free-icons/Video01Icon";
 import * as Linking from "expo-linking";
 import type { Message } from "@shared/types";
-import { api } from "@/lib/api";
 import { faceTimeTargetUrl, type FaceTimeKind } from "@/lib/message-actions";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
@@ -44,11 +45,11 @@ export function FaceTimeButton({
 
   const createGroupLink = async (): Promise<void> => {
     try {
-      const result = await api.createFaceTimeLink(chatGuid);
+      const result = await runCommand(chatGuid, { kind: "createFaceTimeLink" });
       onSent?.(result.message);
       showToast("FaceTime link sent");
-    } catch {
-      showToast("Couldn't create a FaceTime link");
+    } catch (error) {
+      showToast(messagingCommandError(error, "Couldn't create a FaceTime link"));
     }
   };
 

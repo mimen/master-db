@@ -2,6 +2,7 @@ import { BASE_URL } from "./config";
 import { attachmentSource, messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
 import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from "./convex-commands";
+import { createMessagingApi, enqueueTextSendVia } from "./messaging-api";
 import { convexClient } from "./identity";
 import { searchMessages } from "./history-api";
 import { contactSearchArgs, identityApi } from "./identity-api";
@@ -56,27 +57,13 @@ async function scheduledChatGuid(id: number): Promise<string> {
   return scheduled.chatGuid;
 }
 
+const messagingApi = createMessagingApi(runCommand);
+
 export const api = {
   async enqueueTextSend(chatGuid: string, clientKey: string, body: SendTextRequest): Promise<boolean> {
-    if (body.mentions?.length) return false;
-    const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
-    if (!conversation) throw new Error("Conversation is not mirrored yet");
-    await convexClient.mutation(commaOutbox.enqueue, {
-      clientKey,
-      conversationId: conversation._id,
-      payload: { kind: "send", text: body.text, ...(body.replyToGuid ? { replyToGuid: body.replyToGuid } : {}) },
-    });
-    return true;
+    return enqueueTextSendVia(convexClient as unknown as CommandClient, chatGuid, clientKey, body);
   },
-  sendText(
-    chatGuid: string,
-    body: SendTextRequest,
-  ): Promise<Message> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/send`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-  },
+  sendText: messagingApi.sendText,
   async markRead(chatGuid: string): Promise<{ ok: boolean }> {
     return enqueueCommand(chatGuid, { kind: "markRead" });
   },
@@ -103,15 +90,12 @@ export const api = {
     messageGuid: string,
     body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean },
   ): Promise<{ ok: boolean }> {
-    // Suggested reactions need the REST handler's inbound-target guard.
     if (!body.suggested) return enqueueCommand(body.chatGuid, {
       kind: "react", messageGuid, reaction: body.reaction, remove: body.remove ?? false,
       ...(body.partIndex !== undefined ? { partIndex: body.partIndex } : {}),
     });
-    return request(`/api/messages/${encodeURIComponent(messageGuid)}/react`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    return runCommand(body.chatGuid, { kind: "react", messageGuid, reaction: body.reaction,
+      remove: body.remove ?? false, partIndex: body.partIndex, suggested: true });
   },
   async unsend(messageGuid: string): Promise<{ ok: boolean }> {
     const chatGuid = messageChatGuid(messageGuid);
@@ -130,20 +114,14 @@ export const api = {
     return convexClient.query(identityApi.searchContacts, contactSearchArgs(q));
   },
   sendContactCard(chatGuid: string, contact: Contact, caption?: string): Promise<Message> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/contact`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: contact.name, address: contact.address, caption }),
-    });
+    return messagingApi.sendContactCard(chatGuid, contact, caption);
   },
   async findChat(address: string): Promise<{ chatGuid: string }> {
     const result = await convexClient.query(identityApi.findChat, { address });
     if (!result) throw new Error("Chat not found");
     return result;
   },
-  newChat(body: { addresses: string[]; text: string }): Promise<{ chatGuid: string }> {
-    return request("/api/chats/new", { method: "POST", body: JSON.stringify(body) });
-  },
+  newChat: messagingApi.newChat,
   async search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
     const conversation = opts.chat ? await convexClient.query(commaApi.resolveChat, { chatGuid: opts.chat }) : null;
     if (opts.chat && !conversation) return [];
@@ -170,18 +148,9 @@ export const api = {
   async renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
     return enqueueCommand(chatGuid, { kind: "rename", name });
   },
-  participant(chatGuid: string, address: string, action: "add" | "remove"): Promise<{ ok: boolean }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/participant`, {
-      method: "POST",
-      body: JSON.stringify({ address, action }),
-    });
-  },
-  leaveGroup(chatGuid: string): Promise<{ ok: boolean }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/leave`, { method: "POST" });
-  },
-  deleteChat(chatGuid: string): Promise<{ ok: boolean }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/delete`, { method: "POST" });
-  },
+  participant: messagingApi.participant,
+  leaveGroup: messagingApi.leaveGroup,
+  deleteChat: messagingApi.deleteChat,
   async schedule(chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
     return (await runCommand(chatGuid, { kind: "schedule", text, sendAt })).scheduled;
   },
@@ -200,9 +169,7 @@ export const api = {
   transcribe(attachmentGuid: string): Promise<TranscriptState> {
     return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`, { method: "POST" });
   },
-  createFaceTimeLink(chatGuid: string): Promise<{ message: Message }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/facetime-link`, { method: "POST" });
-  },
+  createFaceTimeLink: messagingApi.createFaceTimeLink,
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
     return request("/api/health");
   },
