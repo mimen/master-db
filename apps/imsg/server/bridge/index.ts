@@ -1,3 +1,4 @@
+import type { HandlerMap } from "./commands/types";
 import type { BlueBubbles } from "../bluebubbles";
 import type { ChatCommands } from "../commands";
 import type { ConvexClient } from "convex/browser";
@@ -29,6 +30,7 @@ export function startBridge(deps: {
   avatarDirectory?: string;
   now?: () => number;
   suggestions?: Pick<SuggestionDeps, "ai" | "getChat">;
+  handlers?: Partial<HandlerMap>;
 }) {
   const enabled = Boolean(deps.config.commaBridgeSecret) && deps.backgroundServices !== false;
   let live: LiveBridge | null = null;
@@ -59,7 +61,7 @@ export function startBridge(deps: {
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
-      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now });
+      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now, handlers: deps.handlers });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
       media = worker;
       writer.onAttachments = (rows, createdAt) => worker.enqueue(rows, createdAt);

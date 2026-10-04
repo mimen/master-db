@@ -5,6 +5,7 @@ import type { BBMessage } from "./bb-types";
 import { downloadFailureReason, type BlueBubbles } from "./bluebubbles";
 import { ChatDirectory } from "./chat-directory";
 import { startBridge } from "./bridge";
+import { createAiHandlers } from "./bridge/commands/ai";
 import type { ConvexIngest } from "./bridge/convex-ingest";
 import type { Config } from "./config";
 import { registerConvexTokenRoute, type ConvexAuthClient } from "./convex-token";
@@ -193,7 +194,8 @@ const commaBridge = startBridge({ config, bb, db, names, now, commands,
   suggestions: { ai, getChat: async (chatGuid) => {
     const result = await directory.summaries();
     return result.ok ? result.chats.find((chat) => chat.guid === directory.canonicalGuid(chatGuid)) ?? null : null;
-  } } });
+  } },
+  handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), now }) });
 
 // ------------------------------------------------------------------- routes
 
