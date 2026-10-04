@@ -36,7 +36,7 @@ import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { settleActionFor } from "@shared/chat-state";
-import { Bubble, TAPBACK_EMOJI } from "./bubble";
+import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
 import { CenteredSpinner, EmptyState } from "./empty-state";
@@ -365,6 +365,7 @@ export function ThreadView({
             const active = message.reactions.some((r) => r.isFromMe && r.type === type);
             return {
               emoji,
+              label: TAPBACK_LABEL[type] ?? type,
               active,
               onPress: () => {
                 // Optimistic: show my reaction immediately; revert on failure.

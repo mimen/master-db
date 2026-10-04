@@ -120,6 +120,10 @@ function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean
   );
 }
 
+export const TAPBACK_LABEL: Record<string, string> = {
+  love: "Love", like: "Like", dislike: "Dislike", laugh: "Laugh", emphasize: "Emphasize", question: "Question",
+};
+
 export const TAPBACK_EMOJI = new Map([
   ["love", "❤️"],
   ["like", "👍"],

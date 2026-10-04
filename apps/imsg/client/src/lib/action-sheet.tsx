@@ -23,6 +23,8 @@ export interface SheetAction {
 
 export interface SheetTapback {
   emoji: string;
+  /** Spoken name, e.g. "Love"; the emoji alone reads poorly to a screen reader. */
+  label: string;
   active: boolean;
   onPress: () => void;
 }
@@ -139,6 +141,9 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       {rendered.tapbacks.map((t) => (
                         <Pressable
                           key={t.emoji}
+                          accessibilityRole="button"
+                          accessibilityLabel={t.active ? `Remove ${t.label}` : t.label}
+                          accessibilityState={{ selected: t.active }}
                           onPress={() => {
                             setRequest(null);
                             t.onPress();
@@ -188,6 +193,9 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                   {rendered.tapbacks.map((t) => (
                     <Pressable
                       key={t.emoji}
+                      accessibilityRole="button"
+                      accessibilityLabel={t.active ? `Remove ${t.label}` : t.label}
+                      accessibilityState={{ selected: t.active }}
                       onPress={() => {
                         setRequest(null);
                         t.onPress();
