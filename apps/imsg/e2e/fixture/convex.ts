@@ -185,7 +185,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
       case "typing": {
-        if (payload.active && payload.expiresAt <= Date.now()) break;
+        if (payload.active && payload.expiresAt <= Date.now()) return { kind: "typing" as const, ok: true as const };
         const timer = typingTimers.get(chatGuid);
         if (timer) clearTimeout(timer);
         typingTimers.delete(chatGuid);
@@ -194,7 +194,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
           const expiry = setTimeout(() => { typingTimers.delete(chatGuid); void bb.setTyping(chatGuid, false); }, Math.max(0, payload.expiresAt - Date.now()));
           expiry.unref(); typingTimers.set(chatGuid, expiry);
         }
-        break;
+        return { kind: "typing" as const, ok: true as const };
       }
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       case "suggestions": {
@@ -235,6 +235,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const row = (await conversations()).find((row) => row.chatGuids.includes(String(args.chatGuid)));
       return row ? { guid: String(args.chatGuid), displayName: row.rawDisplayName || null, isGroup: row.isGroup,
         participants: row.participants.map((p) => ({ address: p.address, name: names.lookup(p.address) ?? p.name ?? p.address, is_favorite: names.personCrm(p.address)?.is_favorite })) } : null;
+    },
     "comma/presence:presence": async (args) => {
       const row = peerTyping.get(controls.directory.canonicalGuid(String(args.conversationId)));
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > Date.now() } : null;
