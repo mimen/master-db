@@ -4,6 +4,30 @@ deployment_production_trigger: surface-specific; Comma auto-deploys on merge to 
 deployment_branch_command: surface-specific; Comma uses cd apps/imsg && bun run deploy:branch
 deployment_verify_command: surface-specific; Comma uses cd apps/imsg && bun run deploy:verify
 deployment_last_assessed: 2026-08-23
+deployment_targets:
+  - component: Convex backend
+    where: convex
+    detail: Shared master-db deployment shiny-gerbil-853; backend publishing is separate from imsg deployment
+    url: https://shiny-gerbil-853.convex.cloud
+  - component: Todoist web app
+    where: heroku
+    detail: Docker web process configured by heroku.yml and Dockerfile
+    url: https://convex-db-master-d31d50f579b2.herokuapp.com
+  - component: imsg server
+    where: mac-mini
+    detail: launchd com.milad.imsg; GitHub Actions self-hosted Mini runner deploys origin/main
+    url: https://milads-mac-mini.taild31e9a.ts.net:8447
+  - component: imsg client
+    where: mac-mini
+    detail: Web export served by imsg server; Expo Go source served by launchd com.milad.imsg-expo on port 8081
+    url: https://milads-mac-mini.taild31e9a.ts.net:8447
+  - component: imsg desktop shell
+    where: local-install
+    detail: Comma.app installed in ~/Applications; Mini publishes immutable shell releases for laptop staging and activation
+  - component: Agentic Engine
+    where: mac-mini
+    detail: launchd com.milad.agentic-engine runs ~/.agentic-engine/engine/deploy/start-with-secrets.sh
+    url: https://milads-mac-mini.taild31e9a.ts.net:10000
 ---
 
 # Master DB deployment
