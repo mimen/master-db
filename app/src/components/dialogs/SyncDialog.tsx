@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
+import { useDayAnchor } from "@/hooks/useDayAnchor"
 import { useRoutineActions } from "@/hooks/useRoutineActions"
 import { useTodoistAction } from "@/hooks/useTodoistAction"
 
@@ -28,7 +29,8 @@ interface SyncDialogProps {
 
 export function SyncDialog({ isOpen, onClose }: SyncDialogProps) {
   const syncStatus = useQuery(api.todoist.queries.getSyncStatus.getSyncStatus)
-  const routineStatus = useQuery(api.routines.queries.getRoutineGenerationStatus.getRoutineGenerationStatus)
+  const now = useDayAnchor()
+  const routineStatus = useQuery(api.routines.queries.getRoutineGenerationStatus.getRoutineGenerationStatus, { now })
   const pendingRoutineTasks = useQuery(api.routines.queries.getPendingRoutineTasks.getPendingRoutineTasks)
   const [isSyncing, setIsSyncing] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)

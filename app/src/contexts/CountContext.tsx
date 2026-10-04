@@ -3,6 +3,7 @@ import { createContext, useContext, useMemo } from "react"
 import type { ReactNode } from "react"
 
 import { api } from "@/convex/_generated/api"
+import { useDayAnchor } from "@/hooks/useDayAnchor"
 import { CountRegistry } from "@/lib/views/CountRegistry"
 import type { ViewBuildContext, ViewKey } from "@/lib/views/types"
 
@@ -33,9 +34,11 @@ const CountContext = createContext<CountContextValue | null>(null)
  * ```
  */
 export function CountProvider({ children }: { children: ReactNode }) {
+  const now = useDayAnchor()
   // Fetch all counts in a single query
   const listCounts = useQuery(api.todoist.computed.queries.getAllListCounts.getAllListCounts, {
     timezoneOffsetMinutes: new Date().getTimezoneOffset() * -1,
+    now,
   })
 
   // Create registry instance (memoized to avoid recreation on every render)

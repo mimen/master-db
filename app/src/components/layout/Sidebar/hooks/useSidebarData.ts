@@ -4,6 +4,7 @@ import { useMemo } from "react"
 import { buildProjectTree } from "../utils/projectTree"
 
 import { api } from "@/convex/_generated/api"
+import { useDayAnchor } from "@/hooks/useDayAnchor"
 import type { ViewBuildContext, ProjectTreeNode } from "@/lib/views/types"
 import type {
   TodoistLabelDoc,
@@ -22,7 +23,8 @@ export function useSidebarData() {
 
   const labels = useQuery(api.todoist.queries.getLabels.getLabels) as TodoistLabelDoc[] | undefined
 
-  const timeFilterCounts = useQuery(api.todoist.queries.getTimeFilterCounts.getTimeFilterCounts, {})
+  const now = useDayAnchor()
+  const timeFilterCounts = useQuery(api.todoist.queries.getTimeFilterCounts.getTimeFilterCounts, { now })
   const priorityFilterCounts = useQuery(api.todoist.queries.getPriorityFilterCounts.getPriorityFilterCounts, {})
   const labelFilterCounts = useQuery(api.todoist.queries.getLabelFilterCounts.getLabelFilterCounts, {})
 

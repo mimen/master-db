@@ -12,6 +12,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { api } from "@/convex/_generated/api"
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import { useDayAnchor } from "@/hooks/useDayAnchor"
 import { cn } from "@/lib/utils"
 
 interface RoutineDetailDialogProps {
@@ -69,9 +70,10 @@ export function RoutineDetailDialog({
   onClose,
   routineId,
 }: RoutineDetailDialogProps) {
+  const now = useDayAnchor()
   const stats = useQuery(
     api.routines.queries.getRoutineStats.getRoutineStats,
-    routineId ? { routineId } : "skip"
+    routineId ? { routineId, now } : "skip"
   )
 
   if (!stats) {

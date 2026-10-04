@@ -12,6 +12,7 @@ import { useHeaderSlotContent } from "@/contexts/HeaderSlotContext"
 import { api } from "@/convex/_generated/api"
 import { useListViewSettings } from "@/hooks/list-items/useListViewSettings"
 import { useAgentQueueKeybindings } from "@/hooks/useAgentQueueKeybindings"
+import { useDayAnchor } from "@/hooks/useDayAnchor"
 import { useTaskDialogShortcuts } from "@/hooks/useTaskDialogShortcuts"
 import { type AgentFilterKey, filterByAgent, mergeAgentOverlay, OPEN_STATUSES } from "@/lib/agent/agentOverlay"
 import { agentSortOptions, taskSortOptions, taskGroupOptions } from "@/lib/views/entityConfigs/taskConfig"
@@ -133,10 +134,11 @@ export function TaskListView({
     return list.query
   }, [list.query, projects])
 
+  const now = useDayAnchor()
   // Fetch tasks
   const tasks: TodoistItemsByListWithProjects | undefined = useQuery(
     api.todoist.queries.getItemsByViewWithProjects.getItemsByViewWithProjects,
-    resolvedQuery ? { list: resolvedQuery } : "skip"
+    resolvedQuery ? { list: resolvedQuery, now } : "skip"
   )
 
   const resolvedTasks = tasks ?? []

@@ -5,6 +5,7 @@ import { useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api } from "@/convex/_generated/api"
+import { useDayAnchor } from "@/hooks/useDayAnchor"
 import { getProjectColor } from "@/lib/colors"
 import { getPriorityColorClass } from "@/lib/priorities"
 import { cn } from "@/lib/utils"
@@ -26,9 +27,10 @@ export function DashboardView({
   onNavigate,
 }: DashboardViewProps) {
   const tzOffset = useMemo(() => getTimezoneOffsetMinutes(), [])
+  const now = useDayAnchor()
   const stats = useQuery(
     api.dashboard.queries.getDashboardStats.getDashboardStats,
-    { timezoneOffsetMinutes: tzOffset }
+    { timezoneOffsetMinutes: tzOffset, now }
   )
 
   if (stats === undefined) {
