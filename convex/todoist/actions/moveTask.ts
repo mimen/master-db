@@ -69,17 +69,11 @@ export const moveTask = authedAction({
         // STEP 3: SYNC - Update with real API response
         const updates: Record<string, string | number | null> = {
           project_id: task.projectId,
+          section_id: task.sectionId ?? null,
+          parent_id: task.parentId ?? null,
           updated_at: task.updatedAt || new Date().toISOString(),
           sync_version: Date.now(),
         };
-
-        if (task.sectionId !== null && task.sectionId !== undefined) {
-          updates.section_id = task.sectionId;
-        }
-
-        if (task.parentId !== null && task.parentId !== undefined) {
-          updates.parent_id = task.parentId;
-        }
 
         await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {
           todoistId: args.todoistId,
@@ -92,6 +86,8 @@ export const moveTask = authedAction({
       // STEP 4: ROLLBACK - Restore original values on error
       if (existing) {
         const rollbackUpdates: Record<string, string | number | null> = {
+          section_id: existing.section_id ?? null,
+          parent_id: existing.parent_id ?? null,
           sync_version: Date.now(),
         };
 
@@ -101,14 +97,6 @@ export const moveTask = authedAction({
 
         if (existing.updated_at !== undefined) {
           rollbackUpdates.updated_at = existing.updated_at;
-        }
-
-        if (existing.section_id !== undefined) {
-          rollbackUpdates.section_id = existing.section_id;
-        }
-
-        if (existing.parent_id !== undefined) {
-          rollbackUpdates.parent_id = existing.parent_id;
         }
 
         await ctx.runMutation(internal.todoist.internalMutations.updateItem.updateItem, {

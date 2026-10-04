@@ -7,7 +7,8 @@ const itemUpdateSchema = v.object({
   content: v.optional(v.string()),
   description: v.optional(v.string()),
   project_id: v.optional(v.string()),
-  section_id: v.optional(v.string()),
+  section_id: v.optional(v.union(v.string(), v.null())),
+  parent_id: v.optional(v.union(v.string(), v.null())),
   priority: v.optional(v.number()),
   due: v.optional(v.union(
     v.null(),
@@ -51,14 +52,14 @@ export const updateItem = internalMutation({
     }
 
     // Build patch updates, handling null values appropriately
-    // For clearable fields (due, deadline, completed_at), convert null to undefined to clear them
+    // For clearable fields, convert null to undefined to clear them
     // For other fields, skip null values (keep existing value)
     // Note: We use 'any' here because we're dynamically filtering properties
     // and TypeScript can't track the resulting type through Object.entries
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patchUpdates: any = {};
 
-    const clearableFields = new Set(['due', 'deadline', 'completed_at']);
+    const clearableFields = new Set(['due', 'deadline', 'completed_at', 'section_id', 'parent_id']);
 
     for (const [key, value] of Object.entries(updates)) {
       if (value === null) {
