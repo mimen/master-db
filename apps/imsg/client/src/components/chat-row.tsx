@@ -287,6 +287,8 @@ function ChatRowInner({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${settleLabel} ${chat.displayName}`}
+                    // One tab stop per row: E settles the focused row, so these stay pointer-only.
+                    tabIndex={-1}
                     onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
                     onHoverIn={() => setSettleHovered(true)}
                     onHoverOut={() => setSettleHovered(false)}
@@ -318,6 +320,7 @@ function ChatRowInner({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`More actions for ${chat.displayName}`}
+                tabIndex={-1}
                 onPress={(event) => {
                   event.stopPropagation();
                   openMenu(chat, { ...pressAnchor(event), align: "end" });

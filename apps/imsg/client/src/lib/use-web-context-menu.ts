@@ -23,11 +23,30 @@ export function useWebContextMenu<T>(handler: (anchor?: MenuAnchor) => void) {
     const onContextMenu = (event: Event) => {
       event.preventDefault();
       const mouse = event as MouseEvent;
-      handlerRef.current({ x: mouse.clientX, y: mouse.clientY });
+      // A keyboard-raised contextmenu (Menu key) reports 0,0; anchor it to the element instead.
+      handlerRef.current(mouse.clientX || mouse.clientY ? { x: mouse.clientX, y: mouse.clientY } : anchorOf(node));
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target !== node) return;
+      if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+        event.preventDefault();
+        handlerRef.current(anchorOf(node));
+      }
+    };
+    // Focusable so the menu is reachable without a pointer.
+    if (!node.hasAttribute("tabindex")) node.setAttribute("tabindex", "0");
     node.addEventListener("contextmenu", onContextMenu);
-    return () => node.removeEventListener("contextmenu", onContextMenu);
+    node.addEventListener("keydown", onKeyDown);
+    return () => {
+      node.removeEventListener("contextmenu", onContextMenu);
+      node.removeEventListener("keydown", onKeyDown);
+    };
   }, []);
 
   return ref;
+}
+
+function anchorOf(node: HTMLElement): MenuAnchor {
+  const box = node.getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
