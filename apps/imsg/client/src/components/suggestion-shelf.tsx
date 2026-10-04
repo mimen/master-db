@@ -72,6 +72,14 @@ export function SuggestionShelf({
   const currentAnchor = useRef(anchorGuid);
   currentAnchor.current = anchorGuid;
   const stale = !!result && (result.stale || !anchorGuid || result.basedOnMessageGuid !== anchorGuid);
+  // Most shelves resolve from precomputed suggestions in a few hundred ms; flashing three grey
+  // pills on every thread open read as broken. Placeholders appear only for a slow model call.
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  useEffect(() => {
+    if (!loading) { setShowSkeleton(false); return; }
+    const timer = setTimeout(() => setShowSkeleton(true), SKELETON_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const load = useCallback(
     async (refresh: boolean) => {
@@ -195,6 +203,8 @@ export function SuggestionShelf({
     );
   }
   if (!loading && suggestions.length === 0 && !eventUrl) return null;
+  // Before the skeleton delay elapses there is nothing worth a shelf; render none rather than an empty bar.
+  if (loading && !stale && !showSkeleton && suggestions.length === 0) return null;
 
   const modelName = result
     ? `${result.servedModel === "opus" ? "Opus" : "Terra"}${result.fallback ? " (fallback)" : ""}`
@@ -203,7 +213,7 @@ export function SuggestionShelf({
   return (
     <View style={[styles.container, styles.shelfRow, shelf]}>
       {loading && !stale ? (
-        <SkeletonPills wide={wide} />
+        showSkeleton ? <SkeletonPills wide={wide} /> : null
       ) : (
         <PillRow wide={wide}>
           {event && eventUrl && (
@@ -314,6 +324,7 @@ function PillScroller({ children }: { children: ReactNode }): React.JSX.Element 
 // Sized like a typical reply set so the real pills land where the
 // placeholders were and the shelf does not change height.
 const SKELETON_WIDTHS = [132, 96, 156] as const;
+const SKELETON_DELAY_MS = 600;
 
 function SkeletonPills({ wide }: { wide: boolean }): React.JSX.Element {
   return (
