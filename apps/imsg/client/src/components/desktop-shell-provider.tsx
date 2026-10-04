@@ -365,6 +365,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
             <OverlayShell
               visible={paletteOpen}
               onClose={() => setPaletteOpen(false)}
+              accessibilityLabel="Command palette"
               backdropStyle={styles.paletteBackdrop}
               cardStyle={styles.paletteCard}
             >

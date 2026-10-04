@@ -42,6 +42,8 @@ export interface OverlayShellProps {
    */
   card?: boolean;
   cardStyle?: StyleProp<ViewStyle>;
+  /** Names the panel for assistive tech; the backdrop alone reads as one "Close" button. */
+  accessibilityLabel?: string;
 }
 
 /**
@@ -62,6 +64,7 @@ export function OverlayShell({
   backdropAccessibilityRole,
   card = true,
   cardStyle,
+  accessibilityLabel,
 }: OverlayShellProps) {
   const theme = useTheme();
   return (
@@ -74,6 +77,7 @@ export function OverlayShell({
       >
         <Pressable
           accessible={false}
+          {...(accessibilityLabel ? { role: "dialog", "aria-modal": true, "aria-label": accessibilityLabel } as object : null)}
           onPress={() => undefined}
           style={[card && [styles.card, { backgroundColor: theme.background }], cardStyle]}
         >

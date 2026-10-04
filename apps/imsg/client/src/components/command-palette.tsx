@@ -237,12 +237,14 @@ function PaletteRoot({
   return (
     <View style={{ flex: 1, backgroundColor: visual.overlay }}>
       <View style={[styles.inputRow, { borderBottomColor: theme.divider }]}>
-        <Ionicons name="search" size={18} color={theme.textSecondary} />
+        <Ionicons aria-hidden name="search" size={18} color={theme.textSecondary} />
         <TextInput
           value={query}
           onChangeText={setQuery}
           placeholder="Search or jump to…"
           placeholderTextColor={theme.textSecondary}
+          accessibilityLabel="Search or jump to"
+          {...({ role: "combobox", "aria-expanded": true, "aria-controls": "command-palette-results" } as object)}
           autoFocus
           style={[styles.input, { color: theme.text }]}
         />
@@ -252,7 +254,11 @@ function PaletteRoot({
           </Pressable>
         )}
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.listContent}
+        {...({ id: "command-palette-results", role: "listbox", "aria-label": "Results" } as object)}
+      >
         {sections.length === 0 && query.trim().length >= 2 && (
           <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
             {searching ? "Searching…" : "No results"}
@@ -275,7 +281,7 @@ function PaletteRoot({
                 >
                   <PaletteRowContent item={item} />
                   {selected && (
-                    <Text style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>
+                    <Text aria-hidden style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>
                   )}
                 </PaletteListRow>
               );
@@ -294,7 +300,7 @@ function PaletteRowContent({ item }: { item: PaletteItem }) {
       return (
         <>
           <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons name={COMMAND_ICONS[item.command.id.kind]} size={16} color={theme.accent} />
+            <Ionicons aria-hidden name={COMMAND_ICONS[item.command.id.kind]} size={16} color={theme.accent} />
           </View>
           <Text style={[paletteStyles.title, { color: theme.text, flex: 1 }]}>{item.command.title}</Text>
           {item.command.shortcut && (
@@ -332,7 +338,7 @@ function PaletteRowContent({ item }: { item: PaletteItem }) {
       return (
         <>
           <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons name="chatbubble-outline" size={15} color={theme.textSecondary} />
+            <Ionicons aria-hidden name="chatbubble-outline" size={15} color={theme.textSecondary} />
           </View>
           <View style={paletteStyles.textCol}>
             <View style={styles.messageTop}>
@@ -595,7 +601,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
                   {row.contact.address}
                 </Text>
               </View>
-              {selected && <Text style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>}
+              {selected && <Text aria-hidden style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>}
             </PaletteListRow>
           );
         })}

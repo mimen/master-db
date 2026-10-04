@@ -56,10 +56,11 @@ export function SidebarResizeHandle({ width, onResize }: SidebarResizeHandleProp
 }
 
 const styles = StyleSheet.create({
+  // Inside the edge: the list pane clips overflow, so a handle hanging past it is half unreachable.
   handle: {
     bottom: 0,
     position: "absolute",
-    right: -3,
+    right: 0,
     top: 0,
     width: 6,
     zIndex: 20,
