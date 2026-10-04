@@ -1,5 +1,5 @@
 import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
@@ -40,8 +40,10 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   const loading = convex.chats === null;
   const refresh = useCallback(() => undefined, []);
   // Convex reconnects on its own; this only surfaces the outage it is already riding out.
+  // Its socket takes about a minute to notice a dead network, so the browser's own signal leads.
   const { isWebSocketConnected, hasEverConnected } = useConvexConnectionState();
-  const error = hasEverConnected && !isWebSocketConnected ? "offline" : null;
+  const browserOnline = useBrowserOnline();
+  const error = hasEverConnected && (!isWebSocketConnected || !browserOnline) ? "offline" : null;
 
   // Passive review lenses (Unread, Settled) freeze membership so an item does
   // not jump while it is being inspected. The active triage queues enumerated
@@ -84,4 +86,22 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   }, [all]);
 
   return { chats, allChats: all, counts, loading, error, refresh };
+}
+
+function subscribeOnline(onChange: () => void): () => void {
+  if (Platform.OS !== "web" || typeof window === "undefined") return () => undefined;
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+function useBrowserOnline(): boolean {
+  return useSyncExternalStore(
+    subscribeOnline,
+    () => Platform.OS !== "web" || typeof navigator === "undefined" || navigator.onLine,
+    () => true,
+  );
 }
