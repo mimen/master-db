@@ -1,3 +1,5 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
@@ -456,8 +458,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     const body = text.trim();
     if (recipients.length === 0 || body === "" || sending) return;
     setSending(true);
-    api
-      .newChat({ addresses: recipients.map((c) => c.address), text: body })
+    runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
       .then(({ chatGuid }) => {
         onClose();
         selectChat({ guid: chatGuid });
@@ -465,7 +466,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
       .catch((e: unknown) => {
         const detail =
           e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
-        showToast(detail ? `Couldn't start: ${detail.slice(0, 120)}` : "Couldn't start the conversation");
+        showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));
       })
       .finally(() => setSending(false));
   };

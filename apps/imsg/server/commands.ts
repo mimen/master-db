@@ -4,7 +4,8 @@ import type { ChatDirectory } from "./chat-directory";
 import type { MentionAnnotation } from "../shared/mentions";
 import { buildThread, mapMessage } from "./map";
 import { buildMentionAttributedBody } from "./mention-body";
-import { messageBelongsToAnyChat, outboundTextError } from "./message-verification";
+import { createdChatError, messageBelongsToAnyChat, outboundAddressesError, outboundTextError } from "./message-verification";
+import { createAndSendFaceTimeLink } from "./facetime";
 import type { NameSource } from "./name-resolver";
 
 type CommandResult<T> = { ok: true; value: T } | { ok: false; error: string; status: 400 | 501 | 502 };
@@ -59,7 +60,77 @@ export class ChatCommands {
     if (!target || (body.suggested && target.isFromMe)) return failure("reaction target is not valid in this chat", 400);
     const active = target.reactions.some((reaction) => reaction.isFromMe && reaction.type === body.reaction);
     if (Boolean(body.remove) === !active) return { ok: true as const, value: undefined };
-    return checked(await this.bb.react(body.chatGuid, messageGuid, body.remove ? `-${body.reaction}` : body.reaction, partIndex));
+    return checked(await this.sideEffect(() => this.bb.react(body.chatGuid, messageGuid, body.remove ? `-${body.reaction}` : body.reaction, partIndex)));
+  }
+
+  async sendContact(chatGuid: string, body: { name: string; address: string; caption?: string }) {
+    if (!body.name || !body.address) return failure("name and address required", 400);
+    const escape = (value: string) => value.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/;/g, "\\;").replace(/,/g, "\\,");
+    const field = body.address.includes("@") ? "EMAIL;TYPE=INTERNET" : "TEL;TYPE=CELL";
+    const vcard = ["BEGIN:VCARD", "VERSION:3.0", `FN:${escape(body.name)}`, `N:${escape(body.name)};;;;`,
+      `${field}:${escape(body.address)}`, "END:VCARD", ""].join("\r\n");
+    const filename = `${body.name.replace(/[^\w -]/g, "").trim() || "Contact"}.vcf`;
+    await this.directory.summaries();
+    const result = await this.sideEffect(() => this.bb.sendAttachmentWithCaption(
+      chatGuid, filename, new TextEncoder().encode(vcard), body.caption?.trim() || undefined));
+    if (!result.ok) return failure(result.error);
+    const message = mapMessage(result.value, chatGuid, this.names);
+    this.directory.applyKnownMessage(chatGuid, message);
+    return { ok: true as const, value: message };
+  }
+
+  async createChat(body: { addresses: string[]; text: string }) {
+    const textError = outboundTextError(body.text);
+    const addressesError = outboundAddressesError(body.addresses);
+    if (textError || addressesError) return failure(textError ?? addressesError!, 400);
+    const result = await this.sideEffect(() => this.bb.createChat(body.addresses, body.text));
+    if (!result.ok) return failure(result.error);
+    const chat = result.value;
+    const sent = chat.lastMessage;
+    if (!sent) return failure("created chat has no sent message");
+    const chatError = createdChatError(chat, body.addresses, sent);
+    if (chatError) return failure(chatError);
+    const message = mapMessage(sent, chat.guid, this.names, chat.participants ?? []);
+    if (!message.isFromMe || message.text !== body.text || message.service !== "iMessage" || message.error !== 0) {
+      return failure("created chat returned an invalid sent message");
+    }
+    this.directory.applyKnownMessage(chat.guid, message);
+    return { ok: true as const, value: { chat, message } };
+  }
+
+  async participant(chatGuid: string, address: string, action: "add" | "remove") {
+    if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
+    const result = checked(await this.sideEffect(() => action === "remove"
+      ? this.bb.removeParticipant(chatGuid, address) : this.bb.addParticipant(chatGuid, address)));
+    if (result.ok) this.directory.invalidate();
+    return result;
+  }
+
+  async leaveGroup(chatGuid: string) {
+    if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
+    const result = checked(await this.sideEffect(() => this.bb.leaveGroup(chatGuid)));
+    if (result.ok) this.directory.invalidate();
+    return result;
+  }
+
+  async deleteChat(chatGuid: string) {
+    const result = checked(await this.sideEffect(() => this.bb.deleteChat(chatGuid)));
+    if (result.ok) this.directory.invalidate();
+    return result;
+  }
+
+  async createFaceTimeLink(chatGuid: string) {
+    if (!this.bb.hasPrivateApi) return failure("private API disabled", 501);
+    const result = await this.sideEffect(() => createAndSendFaceTimeLink(this.bb, chatGuid));
+    if (!result.ok) return failure(result.error);
+    const message = mapMessage(result.value, chatGuid, this.names);
+    this.directory.applyKnownMessage(chatGuid, message);
+    return { ok: true as const, value: message };
+  }
+
+  private async sideEffect<T>(work: () => Promise<T>): Promise<T> {
+    try { return await work(); }
+    catch (error) { throw new UnknownSendError(String(error)); }
   }
 
   async markRead(chatGuid: string) {

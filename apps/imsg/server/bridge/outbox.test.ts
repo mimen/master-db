@@ -157,7 +157,7 @@ test("both global kinds skip conversation resolution, and stubs fail cleanly", a
     delete command.conversationId;
     h.ingest.outboxRows.push(command);
   }
-  const bridge = h.start();
+  const bridge = h.start({ handlers: { createChat: { execute: async () => { throw new Error("not implemented"); } } } });
   try {
     await bridge.flush();
     expect(completions(h.ingest)).toEqual([

@@ -1,3 +1,5 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Reanimated, { FadeInUp } from "react-native-reanimated";
 import {
@@ -359,10 +361,12 @@ export function ThreadView({
     (failed: Message) => {
       const revived: Message = { ...failed, pending: true, failed: false };
       replaceTemp(failed.guid, revived);
-      api
-        .sendText(chatGuid, { text: failed.text, replyToGuid: failed.replyToGuid ?? undefined })
-        .then((message) => replaceTemp(revived.guid, message))
-        .catch(() => replaceTemp(revived.guid, { ...revived, pending: false, failed: true }));
+      runCommand(chatGuid, { kind: "send", text: failed.text, replyToGuid: failed.replyToGuid ?? undefined, mentions: failed.mentions })
+        .then(({ message }) => replaceTemp(revived.guid, message))
+        .catch((error: unknown) => {
+          replaceTemp(revived.guid, { ...revived, pending: false, failed: true });
+          showToast(messagingCommandError(error, "Send failed"));
+        });
     },
     [chatGuid, replaceTemp],
   );
@@ -433,10 +437,9 @@ export function ThreadView({
               {
                 label: "Send again",
                 onPress: () => {
-                  void api
-                    .sendText(chatGuid, { text: message.text, replyToGuid: message.replyToGuid ?? undefined })
-                    .then(upsert)
-                    .catch(() => showToast("Send failed"));
+                  void runCommand(chatGuid, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions })
+                    .then(({ message: sent }) => upsert(sent))
+                    .catch((error: unknown) => showToast(messagingCommandError(error, "Send failed")));
                 },
               },
             ]

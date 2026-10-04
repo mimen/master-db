@@ -1,8 +1,9 @@
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
-import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
+import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
+import { mapMessage } from "../../server/map";
 import { ChatCommands } from "../../server/commands";
 import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Message, ScheduledMessage } from "../../shared/types";
@@ -80,7 +81,8 @@ class FixtureError extends Error {
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity) {
   const drafts = new Map<string, Infer<typeof draftDoc>>();
-  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string }>();
+  const receipts = new Map<string, { id: string; status: "sent"; clientKey: string; updatedAt: number; result?: CommandResult; resultGuid?: string }>();
+  const deletedChats = new Set<string>();
   const inFlight = new Map<string, Promise<string>>();
   const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
   const read = async <T>(path: string): Promise<T> => {
@@ -91,8 +93,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const accept = (result: { ok: boolean; error?: string; status?: number }) => {
     if (!result.ok) throw new FixtureError(result.error ?? "BlueBubbles operation failed", result.status);
   };
-  const conversations = async () => (await read<ChatSummary[]>("/api/chats?state=any")).map(conversationRow);
+  const conversations = async () => (await read<ChatSummary[]>("/api/chats?state=any")).filter((chat) => !deletedChats.has(chat.guid)).map(conversationRow);
   const messages = async (chatGuid: string): Promise<ConvexMessage[]> => {
+    if (deletedChats.has(chatGuid)) return [];
     const rows: Message[] = [];
     let before: number | undefined;
     for (;;) {
@@ -105,13 +108,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     }
     return rows.sort((a, b) => b.dateCreated - a.dateCreated).map((m) => messageRow(m, bb.clientKeyFor(m.guid)));
   };
-  const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string) => {
+  const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string): Promise<CommandResult | undefined> => {
     const directory = controls.directory;
     switch (payload.kind) {
       case "send": {
         const result = await commands.send(chatGuid, payload, clientKey);
         accept(result);
-        if (result.ok) return result.value.guid;
+        if (result.ok) return { kind: "send", message: result.value };
         break;
       }
       case "markRead": accept({ ok: await commands.markRead(chatGuid) }); break;
@@ -135,10 +138,44 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
-      default: {
-        const unknown: never = payload;
-        throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(unknown)}`, 400);
+      case "createChat": {
+        const result = await commands.createChat(payload);
+        accept(result);
+        if (result.ok) return { kind: "createChat", chatGuid: result.value.chat.guid, service: "iMessage",
+          isGroup: payload.addresses.length > 1, participants: (result.value.chat.participants ?? []).map((p) => p.address), message: result.value.message };
+        break;
       }
+      case "sendContact": {
+        if (!payload.name || !payload.address) throw new FixtureError("name and address required", 400);
+        const result = await bb.sendText(chatGuid, payload.caption?.trim() || "\ufffc", undefined, undefined, clientKey);
+        accept(result);
+        if (result.ok) {
+          result.value.attachments = [{ guid: `card-${result.value.guid}`, mimeType: "text/vcard",
+            transferName: `${payload.name}.vcf`, totalBytes: 100, transferState: 5 }];
+          const message = mapMessage(result.value, chatGuid, names);
+          directory.applyKnownMessage(chatGuid, message);
+          return { kind: "sendContact", message };
+        }
+        break;
+      }
+      case "participant": accept(await commands.participant(chatGuid, payload.address, payload.action)); break;
+      case "leaveGroup": accept(await commands.leaveGroup(chatGuid)); break;
+      case "deleteChat":
+        if (payload.chatGuid !== chatGuid) throw new FixtureError("Chat alias is not in this conversation", 400);
+        accept(await commands.deleteChat(payload.chatGuid));
+        db.deleteSuggestionFeedbackForChat(payload.chatGuid);
+        deletedChats.add(payload.chatGuid);
+        break;
+      case "createFaceTimeLink": {
+        const result = await commands.createFaceTimeLink(chatGuid);
+        accept(result);
+        if (result.ok) return { kind: "createFaceTimeLink", message: result.value };
+        break;
+      }
+      default: throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(payload)}`, 400);
+    }
+    if (["react", "edit", "unsend", "delete", "markRead", "markUnread", "pin", "mute", "settle", "unsettle", "rename", "participant", "leaveGroup", "deleteChat", "cancelScheduled"].includes(payload.kind)) {
+      return { kind: payload.kind, ok: true } as CommandResult;
     }
     return undefined;
   };
@@ -185,12 +222,15 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const pending = inFlight.get(clientKey);
       if (pending) return pending;
       const execution = (async () => {
-        const chatGuid = String(args.conversationId);
-        if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
         const payload = args.payload as CommaOutboxPayload;
-        const resultGuid = await execute(chatGuid, payload, clientKey);
+        const chatGuid = typeof args.conversationId === "string" ? args.conversationId : "";
+        if (payload.kind === "createChat") {
+          if (chatGuid) throw new FixtureError("createChat must be global", 400);
+        } else if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
+        const result = await execute(chatGuid, payload, clientKey);
+        const resultGuid = result && "message" in result ? result.message.guid : undefined;
         if (payload.kind === "send") drafts.delete(chatGuid);
-        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(resultGuid ? { resultGuid } : {}) };
+        const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
         receipts.set(clientKey, receipt);
         controls.broadcast({ kind: "chats-changed" });
         return receipt.id;
@@ -198,6 +238,12 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       inFlight.set(clientKey, execution);
       try { return await execution; }
       finally { if (inFlight.get(clientKey) === execution) inFlight.delete(clientKey); }
+    },
+    "comma/outbox:getCommand": async (args) => {
+      const receipt = [...receipts.values()].find((row) => row.id === args.commandId);
+      if (!receipt) return null;
+      const { id: commandId, ...row } = receipt;
+      return { commandId, ...row };
     },
     "comma/outbox:outboxStatusFor": async (args) => (args.clientKeys as string[]).slice(0, 100).flatMap((clientKey) => {
       const row = receipts.get(clientKey);
@@ -214,5 +260,5 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); };
+  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); deletedChats.clear(); };
 }

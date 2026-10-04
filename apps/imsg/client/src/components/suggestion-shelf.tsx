@@ -1,3 +1,5 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import { useQuery } from "convex/react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -161,8 +163,8 @@ export function SuggestionShelf({
       actions: [{
         label: `React ${emoji}`,
         onPress: () => {
-          void api.react(suggestion.targetMessageGuid!, {
-            chatGuid,
+          void runCommand(chatGuid, {
+            kind: "react", messageGuid: suggestion.targetMessageGuid!, remove: false,
             reaction: suggestion.reaction!,
             partIndex: suggestion.targetPartIndex ?? 0,
             suggested: true,
@@ -175,7 +177,7 @@ export function SuggestionShelf({
               selectedAt: Date.now(),
               finalText: suggestion.text,
             }).catch(() => undefined);
-          }).catch(() => showToast("Reaction failed"));
+          }).catch((error: unknown) => showToast(messagingCommandError(error, "Reaction failed")));
         },
       }],
     });

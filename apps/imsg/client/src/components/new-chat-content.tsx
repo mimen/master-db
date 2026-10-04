@@ -1,3 +1,5 @@
+import { runCommand } from "@/lib/convex-commands";
+import { messagingCommandError } from "@/lib/messaging-api";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -105,7 +107,8 @@ export function NewChatContent({
     if (selected.length === 0 || !text.trim() || sending) return;
     setSending(true);
     try {
-      const { chatGuid } = await api.newChat({
+      const { chatGuid } = await runCommand(null, {
+        kind: "createChat",
         addresses: selected.map((c) => c.address),
         text: text.trim(),
       });
@@ -118,7 +121,7 @@ export function NewChatContent({
       // the group-creation failure (apple-script vs private-api) opaque.
       const detail =
         e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
-      showToast(detail ? `Couldn't start: ${detail.slice(0, 120)}` : "Couldn't start the conversation");
+      showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));
     } finally {
       setSending(false);
     }
