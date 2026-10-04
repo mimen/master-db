@@ -24,6 +24,7 @@ const ROUTES = {
   suggestions: internal.comma.internal.setSuggestions,
   claim: internal.comma.outbox.claimOutbox,
   complete: internal.comma.outbox.completeOutbox,
+  renew: internal.comma.outbox.renewOutbox,
 } as const;
 
 export type IngestKind = keyof typeof ROUTES;

@@ -9,6 +9,8 @@
  */
 
 import type { FunctionReference } from "convex/server";
+import type { CommaOutboxPayload, CommandResult, outboxDoc, commandReceipt } from "../schema/comma/validators";
+import type { Infer } from "convex/values";
 import type { GenericId as Id } from "convex/values";
 
 /**
@@ -258,127 +260,10 @@ export declare const api: {
       >;
     };
     outbox: {
-      enqueue: FunctionReference<
-        "mutation",
-        "public",
-        {
-          clientKey: string;
-          conversationId: Id<"comma_conversations">;
-          payload:
-            | {
-                kind: "send";
-                mentions?: Array<{
-                  address: string;
-                  length: number;
-                  start: number;
-                }>;
-                replyToGuid?: string;
-                replyToPart?: number;
-                text: string;
-              }
-            | {
-                kind: "react";
-                messageGuid: string;
-                partIndex?: number;
-                reaction: string;
-                remove: boolean;
-              }
-            | {
-                kind: "edit";
-                messageGuid: string;
-                partIndex?: number;
-                text: string;
-              }
-            | { kind: "unsend"; messageGuid: string; partIndex?: number }
-            | { kind: "delete"; messageGuid: string; partIndex?: number }
-            | { kind: "markRead"; messageGuid?: string }
-            | { kind: "markUnread"; messageGuid?: string }
-            | { kind: "settle"; messageGuid?: string }
-            | { kind: "unsettle"; messageGuid?: string }
-            | { kind: "pin"; value: boolean }
-            | { kind: "mute"; value: boolean }
-            | { kind: "rename"; name: string }
-            | { kind: "schedule"; sendAt: number; text: string }
-            | {
-                bbId: number;
-                kind: "editScheduled";
-                sendAt: number;
-                text: string;
-              }
-            | { bbId: number; kind: "cancelScheduled" };
-        },
-        Id<"comma_outbox">
-      >;
-      outboxStatusFor: FunctionReference<
-        "query",
-        "public",
-        { clientKeys: Array<string> },
-        Array<{
-          clientKey: string;
-          error?: string;
-          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
-        }>
-      >;
-      pendingOutbox: FunctionReference<
-        "query",
-        "public",
-        { bridgeKey: string },
-        Array<{
-          _creationTime: number;
-          _id: Id<"comma_outbox">;
-          attempts: number;
-          clientKey: string;
-          conversationId: Id<"comma_conversations">;
-          createdAt: number;
-          error?: string;
-          leaseUntil?: number;
-          payload:
-            | {
-                kind: "send";
-                mentions?: Array<{
-                  address: string;
-                  length: number;
-                  start: number;
-                }>;
-                replyToGuid?: string;
-                replyToPart?: number;
-                text: string;
-              }
-            | {
-                kind: "react";
-                messageGuid: string;
-                partIndex?: number;
-                reaction: string;
-                remove: boolean;
-              }
-            | {
-                kind: "edit";
-                messageGuid: string;
-                partIndex?: number;
-                text: string;
-              }
-            | { kind: "unsend"; messageGuid: string; partIndex?: number }
-            | { kind: "delete"; messageGuid: string; partIndex?: number }
-            | { kind: "markRead"; messageGuid?: string }
-            | { kind: "markUnread"; messageGuid?: string }
-            | { kind: "settle"; messageGuid?: string }
-            | { kind: "unsettle"; messageGuid?: string }
-            | { kind: "pin"; value: boolean }
-            | { kind: "mute"; value: boolean }
-            | { kind: "rename"; name: string }
-            | { kind: "schedule"; sendAt: number; text: string }
-            | {
-                bbId: number;
-                kind: "editScheduled";
-                sendAt: number;
-                text: string;
-              }
-            | { bbId: number; kind: "cancelScheduled" };
-          resultGuid?: string;
-          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
-          updatedAt: number;
-        }>
-      >;
+      enqueue: FunctionReference<"mutation", "public", { clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload }, Id<"comma_outbox">>;
+      getCommand: FunctionReference<"query", "public", { commandId: Id<"comma_outbox"> }, Infer<typeof commandReceipt> | null>;
+      outboxStatusFor: FunctionReference<"query", "public", { clientKeys: string[] }, { clientKey: string; status: "pending" | "claimed" | "sent" | "failed" | "unknown"; error?: string }[]>;
+      pendingOutbox: FunctionReference<"query", "public", { bridgeKey: string }, Infer<typeof outboxDoc>[]>;
     };
     queries: {
       getConversation: FunctionReference<
@@ -2355,86 +2240,11 @@ export declare const internal: {
       >;
     };
     outbox: {
-      claimOutbox: FunctionReference<
-        "mutation",
-        "internal",
-        { leaseMs: number; limit: number; now: number },
-        Array<{
-          _creationTime: number;
-          _id: Id<"comma_outbox">;
-          attempts: number;
-          clientKey: string;
-          conversationId: Id<"comma_conversations">;
-          createdAt: number;
-          error?: string;
-          leaseUntil?: number;
-          payload:
-            | {
-                kind: "send";
-                mentions?: Array<{
-                  address: string;
-                  length: number;
-                  start: number;
-                }>;
-                replyToGuid?: string;
-                replyToPart?: number;
-                text: string;
-              }
-            | {
-                kind: "react";
-                messageGuid: string;
-                partIndex?: number;
-                reaction: string;
-                remove: boolean;
-              }
-            | {
-                kind: "edit";
-                messageGuid: string;
-                partIndex?: number;
-                text: string;
-              }
-            | { kind: "unsend"; messageGuid: string; partIndex?: number }
-            | { kind: "delete"; messageGuid: string; partIndex?: number }
-            | { kind: "markRead"; messageGuid?: string }
-            | { kind: "markUnread"; messageGuid?: string }
-            | { kind: "settle"; messageGuid?: string }
-            | { kind: "unsettle"; messageGuid?: string }
-            | { kind: "pin"; value: boolean }
-            | { kind: "mute"; value: boolean }
-            | { kind: "rename"; name: string }
-            | { kind: "schedule"; sendAt: number; text: string }
-            | {
-                bbId: number;
-                kind: "editScheduled";
-                sendAt: number;
-                text: string;
-              }
-            | { bbId: number; kind: "cancelScheduled" };
-          resultGuid?: string;
-          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
-          updatedAt: number;
-        }>
-      >;
-      completeOutbox: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          clientKey: string;
-          error?: string;
-          resultGuid?: string;
-          status: "sent" | "failed" | "unknown";
-        },
-        boolean
-      >;
+      claimOutbox: FunctionReference<"mutation", "internal", { now: number; leaseMs: number; limit: number }, Infer<typeof outboxDoc>[]>;
+      completeOutbox: FunctionReference<"mutation", "internal", { clientKey: string; claimToken: string; status: "sent" | "failed" | "unknown"; error?: string; resultGuid?: string; result?: CommandResult }, boolean>;
+      renewOutbox: FunctionReference<"mutation", "internal", { clientKey: string; claimToken: string; now: number; leaseMs: number }, boolean>;
     };
-    photos: {
-      setContactPhoto: FunctionReference<
-        "mutation",
-        "internal",
-        { address: string; hash: string; storageId: Id<"_storage"> },
-        boolean
-      >;
-    };
+    photos: { setContactPhoto: FunctionReference<"mutation", "internal", { address: string; hash: string; storageId: Id<"_storage"> }, boolean>; };
   };
   identity: {
     admin: {

@@ -34,6 +34,7 @@ function post(path: string, body: unknown, token: string | null = SECRET) {
 describe("ingestKind", () => {
   test("maps known paths and rejects unknown ones", () => {
     expect(ingestKind("/comma/ingest/messages")).toBe("messages");
+    expect(ingestKind("/comma/ingest/renew")).toBe("renew");
     expect(ingestKind("/comma/ingest/photo")).toBe("photo");
     expect(ingestKind("/comma/ingest/toString")).toBeNull();
     expect(ingestKind("/comma/ingest/nope")).toBeNull();
