@@ -1,3 +1,4 @@
+import { openSettingsPane } from "../settings-pane";
 import { BINDINGS } from "./registry";
 import type { CommandId, CommandSource, KeyBinding, KeyboardRuntime, ListAdapter } from "./types";
 
@@ -183,5 +184,7 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
     case "help.open":
       rt.openHelp();
       return true;
+    case "settings.open":
+      return openSettingsPane();
   }
 }

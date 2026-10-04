@@ -209,7 +209,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
     let new_message = MenuItemBuilder::with_id("conversation.new", "New Message")
         .accelerator("CmdOrCtrl+N")
         .build(app)?;
-    let close = MenuItemBuilder::with_id("navigation.close", "Close")
+    let close = MenuItemBuilder::with_id("navigation.close", "Close Window")
         .accelerator("CmdOrCtrl+W")
         .build(app)?;
     let find = MenuItemBuilder::with_id("conversation.find", "Find in Conversation")
@@ -218,6 +218,9 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
     let search = MenuItemBuilder::with_id("palette.open", "Search")
         .accelerator("CmdOrCtrl+K")
         .build(app)?;
+    let settings = MenuItemBuilder::with_id("settings.open", "Settings…")
+        .accelerator("CmdOrCtrl+,")
+        .build(app)?;
 
     let display_name = app.package_info().name.clone();
     let app_menu = SubmenuBuilder::new(app, &display_name)
@@ -225,6 +228,8 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
             name: Some(display_name),
             ..Default::default()
         }))
+        .separator()
+        .item(&settings)
         .separator()
         .services()
         .separator()
@@ -252,11 +257,19 @@ fn build_menu(app: &tauri::App) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         .item(&search)
         .build()?;
 
+    let window = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .maximize()
+        .separator()
+        .fullscreen()
+        .build()?;
+
     MenuBuilder::new(app)
         .item(&app_menu)
         .item(&file)
         .item(&edit)
         .item(&find_menu)
+        .item(&window)
         .build()
 }
 

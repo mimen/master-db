@@ -20,7 +20,8 @@ export type CommandId =
   | "action.undo"
   | "navigation.escape"
   | "navigation.close"
-  | "help.open";
+  | "help.open"
+  | "settings.open";
 
 export type ScopeKind = "global" | "list" | "thread" | "composer" | "inspector" | "overlay";
 
