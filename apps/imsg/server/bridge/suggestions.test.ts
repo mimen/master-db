@@ -3,7 +3,7 @@ import { OverlayDb } from "../db";
 import type { ChatSummary, ReplySuggestions } from "../../shared/types";
 import { FakeIngest } from "./fake-ingest";
 import type { MessageRow } from "./convex-ingest";
-import { SUGGESTION_PRECOMPUTE, SuggestionsBridge } from "./suggestions";
+import { SUGGESTION_PRECOMPUTE, SuggestionsBridge, type ShelfUpdate } from "./suggestions";
 
 const CHAT = "iMessage;-;+15550001111";
 
@@ -51,7 +51,7 @@ function harness(current: ChatSummary | null) {
     bridge, ingest, db,
     advance: (ms: number) => { now += ms; },
     generations: () => generations,
-    posted: () => ingest.calls.filter((call) => call.kind === "suggestions").map((call) => call.body),
+    posted: () => (ingest.calls as unknown as Array<{ kind: string; body: { update: ShelfUpdate } }>).filter((call) => call.kind === "suggestionShelves").map((call) => call.body.update),
   };
 }
 
@@ -63,7 +63,7 @@ test("an inbound DM from a known contact precomputes once after the debounce", a
   h.advance(SUGGESTION_PRECOMPUTE.debounceMs);
   await h.bridge.flush();
   expect(h.generations()).toBe(1);
-  expect(h.posted()).toEqual([expect.objectContaining({ conversationId: "conversation-test", anchorGuid: "m1" })]);
+  expect(h.posted()).toEqual([expect.objectContaining({ kind: "publish", model: "opus", conversationId: "conversation-test", suggestions: expect.objectContaining({ basedOnMessageGuid: "m1" }) })]);
   h.bridge.stop();
 });
 
@@ -106,7 +106,7 @@ test("the daily cap stops generation and survives a restart", async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await capped.flush();
   expect(capped.health()).toMatchObject({ generatedToday: SUGGESTION_PRECOMPUTE.dailyCap, cap: SUGGESTION_PRECOMPUTE.dailyCap });
-  expect(h.ingest.calls.filter((call) => call.kind === "suggestions")).toEqual([]);
+  expect(h.posted()).toEqual([]);
   capped.stop();
   h.bridge.stop();
 });

@@ -1,13 +1,13 @@
 import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
-import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
+import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread } from "../../server/map";
 import { ChatCommands } from "../../server/commands";
 import type { OverlayDb } from "../../server/db";
-import type { ChatSummary, Contact, Message, ScheduledMessage } from "../../shared/types";
+import type { AiStatus, ChatSummary, Contact, ContactSuggestion, Message, ReplySuggestions, ScheduledMessage } from "../../shared/types";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
@@ -99,11 +99,12 @@ export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: Fixtur
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
   const drafts = new Map<string, Infer<typeof draftDoc>>();
-  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string }>();
+  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string; result?: CommandResult }>();
+  const shelves = new Map<string, ReplySuggestions>();
   const inFlight = new Map<string, Promise<string>>();
   const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
-  const read = async <T>(path: string): Promise<T> => {
-    const response = await app.request(path);
+  const read = async <T>(path: string, init?: RequestInit): Promise<T> => {
+    const response = await app.request(path, init);
     if (!response.ok) throw new FixtureError(await response.text(), response.status);
     return response.json() as Promise<T>;
   };
@@ -152,7 +153,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "send": {
         const result = await commands.send(chatGuid, payload, clientKey);
         accept(result);
-        if (result.ok) return result.value.guid;
+        if (result.ok) return { kind: "send" as const, message: { ...result.value, mentions: result.value.mentions ?? [] } };
         break;
       }
       case "markRead": accept({ ok: await commands.markRead(chatGuid) }); break;
@@ -176,9 +177,23 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
+      case "suggestions": {
+        const generated = await read<ReplySuggestions>(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}?model=${payload.model}${payload.refresh ? "&refresh=1" : ""}`);
+        const suggestions = { ...generated, event: generated.event ?? null };
+        if (!suggestions.stale) shelves.set(JSON.stringify([chatGuid, payload.model]), suggestions);
+        return { kind: "suggestions" as const, suggestions };
+      }
+      case "suggestionFeedback":
+        await read(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload.feedback) });
+        return { kind: "suggestionFeedback" as const, ok: true as const };
+      case "clearSuggestionLearning":
+        await read("/api/ai/suggestions/learning", { method: "DELETE" });
+        shelves.clear();
+        return { kind: "clearSuggestionLearning" as const, ok: true as const };
+      case "identify":
+        return { kind: "identify" as const, contact: await read<ContactSuggestion>(`/api/ai/identify/${encodeURIComponent(chatGuid)}`) };
       default: {
-        const unknown: never = payload;
-        throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(unknown)}`, 400);
+        throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(payload)}`, 400);
       }
     }
     return undefined;
@@ -223,6 +238,15 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     })),
     "comma/queries:getDraft": async (args) => drafts.get(String(args.conversationId)) ?? null,
     "comma/queries:getSuggestions": async () => null,
+    "comma/suggestions:getSuggestions": async (args) => {
+      const chat = (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid);
+      const shelf = shelves.get(JSON.stringify([args.chatGuid, args.model]));
+      if (!chat || !shelf || chat.lastMessage?.isFromMe || shelf.basedOnMessageGuid !== chat.lastMessage?.guid) return null;
+      const { basedOnMessageGuid, generatedAt, stale: _stale, ...payload } = shelf;
+      return { _id: id(`shelf-${chat._id}-${args.model}`), _creationTime: generatedAt, conversationId: chat._id,
+        model: args.model, anchorGuid: basedOnMessageGuid, createdAt: generatedAt, payload };
+    },
+    "comma/suggestions:aiStatus": async () => read<AiStatus>("/api/ai/status"),
     "comma/queries:syncStatus": async () => [],
     "comma/drafts:setDraft": async (args) => {
       const conversationId = String(args.conversationId);
@@ -244,12 +268,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const pending = inFlight.get(clientKey);
       if (pending) return pending;
       const execution = (async () => {
-        const chatGuid = String(args.conversationId);
-        if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
         const payload = args.payload as CommaOutboxPayload;
-        const resultGuid = await execute(chatGuid, payload, clientKey);
+        const chatGuid = args.conversationId ? String(args.conversationId) : "";
+        if (payload.kind !== "clearSuggestionLearning" && !(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
+        const result = await execute(chatGuid, payload, clientKey);
+        const resultGuid = result?.kind === "send" ? result.message.guid : undefined;
         if (payload.kind === "send") drafts.delete(chatGuid);
-        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(resultGuid ? { resultGuid } : {}) };
+        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(resultGuid ? { resultGuid } : {}), ...(result ? { result } : {}) };
         receipts.set(clientKey, receipt);
         controls.broadcast({ kind: "chats-changed" });
         return receipt.id;
@@ -257,6 +282,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       inFlight.set(clientKey, execution);
       try { return await execution; }
       finally { if (inFlight.get(clientKey) === execution) inFlight.delete(clientKey); }
+    },
+    "comma/outbox:getCommand": async (args) => {
+      const entry = [...receipts.entries()].find(([, row]) => row.id === args.commandId);
+      if (!entry) return null;
+      const [clientKey, row] = entry;
+      return { commandId: row.id, clientKey, status: row.status, updatedAt: FIXTURE_NOW,
+        ...(row.resultGuid ? { resultGuid: row.resultGuid } : {}), ...(row.result ? { result: row.result } : {}) };
     },
     "comma/outbox:outboxStatusFor": async (args) => (args.clientKeys as string[]).slice(0, 100).flatMap((clientKey) => {
       const row = receipts.get(clientKey);
@@ -273,5 +305,5 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); };
+  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); shelves.clear(); };
 }

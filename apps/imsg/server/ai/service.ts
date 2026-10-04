@@ -1,6 +1,6 @@
 import type { Result } from "../bluebubbles";
 import type { AiConfig } from "../config";
-import type { OverlayDb } from "../db";
+import type { OverlayDb, SuggestionFeedbackRow } from "../db";
 import type {
   ContactSuggestion,
   EventSuggestion,
@@ -109,6 +109,7 @@ function isValidCachedEvent(event: SuggestionCachePayload["event"]): boolean {
 
 export class AiService {
   private suggestionInFlight = new Map<string, Promise<Result<ReplySuggestions>>>();
+  private learningEpoch = 0;
   private aiActive = 0;
   private aiWaiters: Array<() => void> = [];
   private readonly aiConcurrency = 2;
@@ -148,6 +149,7 @@ export class AiService {
       SUGGESTION_RECIPE_VERSION,
       voice.voiceRevision,
       voice.editRevision,
+      this.learningEpoch,
     ].join(":");
     const existing = this.suggestionInFlight.get(key);
     if (existing) return existing;
@@ -158,6 +160,7 @@ export class AiService {
       currentGuid,
       selectedModel,
       voice,
+      this.learningEpoch,
     );
     this.suggestionInFlight.set(key, pending);
     try {
@@ -190,6 +193,7 @@ export class AiService {
     currentGuid: string,
     selectedModel: SuggestionModel,
     voice: ReturnType<typeof loadVoiceState>,
+    learningEpoch: number,
   ): Promise<Result<ReplySuggestions>> {
     const [profile, context] = await Promise.all([
       loadProfile(this.deps.config.vaultPath),
@@ -239,34 +243,19 @@ export class AiService {
     // rejected reply set still surfaces a grounded scheduling agreement.
     const detected = extractEventSuggestion(generated.value.value, messages, new Date());
     const event = detected ? { ...detected, inviteEmails: this.inviteEmails(messages) } : null;
-    if (!validated.ok) {
-      return {
-        ok: true,
-        value: {
-          suggestions: [],
-          event,
-          recipeVersion: SUGGESTION_RECIPE_VERSION,
-          selectedModel,
-          servedModel: generated.value.servedModel,
-          fallback: generated.value.servedModel !== selectedModel,
-          noReply: false,
-          basedOnMessageGuid: currentGuid,
-          stale: false,
-          generatedAt: Date.now(),
-        },
-      };
-    }
-
     const payload: SuggestionCachePayload = {
       recipeVersion: SUGGESTION_RECIPE_VERSION,
       selectedModel,
       servedModel: generated.value.servedModel,
       fallback: generated.value.servedModel !== selectedModel,
-      noReply: validated.value.noReply,
-      suggestions: validated.value.suggestions,
+      noReply: validated.ok ? validated.value.noReply : false,
+      suggestions: validated.ok ? validated.value.suggestions : [],
       event,
     };
-    this.deps.db.setSuggestionCache({
+    const latest = await this.deps.fetchMessages(chatGuid);
+    if (!latest.ok) return latest;
+    const stale = isStale(currentGuid, lastGuid(latest.value)) || learningEpoch !== this.learningEpoch;
+    if (!stale && validated.ok) this.deps.db.setSuggestionCache({
       chat_guid: chatGuid,
       selected_model: selectedModel,
       anchor_guid: currentGuid,
@@ -280,7 +269,7 @@ export class AiService {
       value: {
         ...payload,
         basedOnMessageGuid: currentGuid,
-        stale: false,
+        stale,
         generatedAt: Date.now(),
       },
     };
@@ -382,13 +371,13 @@ export class AiService {
     );
   }
 
-  recordSuggestionFeedback(chatGuid: string, request: SuggestionFeedbackRequest): Result<true> {
+  recordSuggestionFeedback(chatGuid: string, request: SuggestionFeedbackRequest, clientKey?: string): Result<true> {
     if (request.suggestion.kind !== "text") return { ok: false, error: "reaction feedback is recorded at send" };
     if (!hasFeedbackLineage(request.suggestion.text, request.finalText)) {
       return { ok: false, error: "suggestion attribution was abandoned" };
     }
-    this.deps.db.addSuggestionFeedback({
-      id: newId(),
+    this.recordFeedback({
+      id: clientKey ? `command-${clientKey}` : newId(),
       chat_guid: chatGuid,
       suggestion_id: request.suggestion.id,
       kind: request.suggestion.kind,
@@ -408,9 +397,10 @@ export class AiService {
   recordReactionFeedback(
     chatGuid: string,
     request: Omit<SuggestionFeedbackRequest, "finalText">,
+    clientKey?: string,
   ): void {
-    this.deps.db.addSuggestionFeedback({
-      id: newId(),
+    this.recordFeedback({
+      id: clientKey ? `command-${clientKey}` : newId(),
       chat_guid: chatGuid,
       suggestion_id: request.suggestion.id,
       kind: request.suggestion.kind,
@@ -426,8 +416,20 @@ export class AiService {
     });
   }
 
-  clearSuggestionLearning(): void {
+  private recordFeedback(row: SuggestionFeedbackRow): void {
+    try {
+      this.deps.db.addSuggestionFeedback(row);
+    } catch (error) {
+      // The SQLite primary key fences a replay even after a bridge restart.
+      if (!(error instanceof Error) || !error.message.includes("UNIQUE constraint failed: suggestion_feedback.id")) throw error;
+    }
+  }
+
+  clearSuggestionLearning(clientKey?: string): void {
+    if (clientKey && this.deps.db.getAiMeta("suggestion_learning_clear_command") === clientKey) return;
+    this.learningEpoch++;
     this.deps.db.clearSuggestionLearning();
+    if (clientKey) this.deps.db.setAiMeta("suggestion_learning_clear_command", clientKey);
   }
 
   private async completeJsonLimited<T>(

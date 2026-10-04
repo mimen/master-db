@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AiConfig } from "../config";
 import { OverlayDb } from "../db";
-import type { Message } from "../../shared/types";
+import type { Message, SuggestionFeedbackRequest } from "../../shared/types";
 import { AiService, isStale, serializeSuggestionCache } from "./service";
 import { Gateway } from "./gateway";
 
@@ -42,10 +42,13 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
 }
 
 /** A Gateway whose network calls are replaced by canned completions. */
-function fakeGateway(reply: string, structured: object = suggestionSet("what time works?")): Gateway {
+function fakeGateway(reply: string, structured: object = suggestionSet("what time works?"), onGenerate?: () => void): Gateway {
   const gateway = new Gateway(makeConfig());
   (gateway as unknown as { complete: unknown }).complete = async () => ({ ok: true, value: reply });
-  (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => ({ ok: true, value: structured });
+  (gateway as unknown as { completeStructured: unknown }).completeStructured = async () => {
+    onGenerate?.();
+    return { ok: true, value: structured };
+  };
   return gateway;
 }
 
@@ -75,12 +78,13 @@ function makeService(options: {
   db?: OverlayDb;
   fetchError?: string;
   contactEmails?: (address: string) => string[];
+  onGenerate?: () => void;
 }) {
   const db = options.db ?? new OverlayDb(":memory:");
   const service = new AiService({
     config: makeConfig(),
     db,
-    gateway: fakeGateway(options.reply ?? "[]", options.structured),
+    gateway: fakeGateway(options.reply ?? "[]", options.structured, options.onGenerate),
     fetchMessages: async () => options.fetchError
       ? { ok: false, error: options.fetchError }
       : { ok: true, value: options.messages ?? [] },
@@ -299,3 +303,67 @@ describe("identify", () => {
     }
   });
 });
+
+describe("Convex suggestion commands", () => {
+  test("keeps separate model caches and bypasses only the selected cache on refresh", async () => {
+    let generations = 0;
+    const { service, db } = makeService({ messages: [makeMessage({ text: "when works?" })], onGenerate: () => { generations++; } });
+    await service.replySuggestions("chat-1", "Sarah", false, "opus");
+    await service.replySuggestions("chat-1", "Sarah", false, "terra");
+    expect(generations).toBe(2);
+    expect(db.getSuggestionCache("chat-1", "opus")).not.toBeNull();
+    const terra = db.getSuggestionCache("chat-1", "terra");
+    expect(terra).not.toBeNull();
+    await service.replySuggestions("chat-1", "Sarah", false, "opus");
+    expect(generations).toBe(2);
+    await service.replySuggestions("chat-1", "Sarah", true, "opus");
+    expect(generations).toBe(3);
+    expect(db.getSuggestionCache("chat-1", "terra")).toEqual(terra);
+  });
+
+  test("returns stale and skips caching when the anchor changes during generation", async () => {
+    const messages = [makeMessage({ text: "when works?" })];
+    const { service, db } = makeService({ messages, onGenerate: () => { messages.push(makeMessage({ guid: "m2", text: "actually never mind" })); } });
+    const result = await service.replySuggestions("chat-1", "Sarah", false, "opus");
+    expect(result).toMatchObject({ ok: true, value: { stale: true, basedOnMessageGuid: "m1" } });
+    expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
+  });
+
+  test("a clear fences in-flight generation and clears learning across chats and models", async () => {
+    let clear = () => {};
+    const { service, db } = makeService({ messages: [makeMessage({ text: "when works?" })], onGenerate: () => clear() });
+    await service.replySuggestions("chat-1", "Sarah", false, "terra");
+    await service.replySuggestions("chat-2", "Sarah", false, "opus");
+    service.recordSuggestionFeedback("chat-1", feedback(), "feedback-1");
+    clear = () => service.clearSuggestionLearning("clear-1");
+    const result = await service.replySuggestions("chat-1", "Sarah", true, "opus");
+    expect(result).toMatchObject({ ok: true, value: { stale: true } });
+    expect(db.getSuggestionCache("chat-1", "opus")).toBeNull();
+    expect(db.getSuggestionCache("chat-1", "terra")).toBeNull();
+    expect(db.getSuggestionCache("chat-2", "opus")).toBeNull();
+    expect(db.listSuggestionFeedback()).toEqual([]);
+    service.recordSuggestionFeedback("chat-1", feedback(), "feedback-2");
+    service.clearSuggestionLearning("clear-1");
+    expect(db.listSuggestionFeedback()).toHaveLength(1);
+  });
+
+  test("rejects abandoned lineage and deduplicates text and reaction feedback after restart", () => {
+    const { service, db } = makeService({ messages: [] });
+    expect(service.recordSuggestionFeedback("chat-1", { ...feedback(), finalText: "pizza delivery arrived" }, "abandoned")).toEqual({ ok: false, error: "suggestion attribution was abandoned" });
+    expect(db.listSuggestionFeedback()).toEqual([]);
+    expect(service.recordSuggestionFeedback("chat-1", feedback(), "feedback-1").ok).toBe(true);
+    const restarted = makeService({ db, messages: [] }).service;
+    expect(restarted.recordSuggestionFeedback("chat-1", feedback(), "feedback-1").ok).toBe(true);
+    const reaction = { ...feedback(), suggestion: { ...feedback().suggestion, kind: "reaction" as const, reaction: "like" as const } };
+    restarted.recordReactionFeedback("chat-1", reaction, "reaction-1");
+    restarted.recordReactionFeedback("chat-1", reaction, "reaction-1");
+    expect(db.listSuggestionFeedback()).toHaveLength(2);
+  });
+});
+
+function feedback(): SuggestionFeedbackRequest {
+  return {
+    suggestion: { id: "s1", kind: "text", strategy: "clarify", vibe: "curious", text: "what time works?", reaction: null, targetMessageGuid: null, targetMessagePreview: null, targetPartIndex: null },
+    selectedModel: "opus", servedModel: "opus", recipeVersion: 1, selectedAt: 1, finalText: "what time works for you?",
+  };
+}

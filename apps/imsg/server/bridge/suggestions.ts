@@ -1,7 +1,17 @@
 import type { AiService } from "../ai/service";
 import type { OverlayDb } from "../db";
-import type { ChatSummary } from "../../shared/types";
+import type { ChatSummary, ReplySuggestions, SuggestionModel } from "../../shared/types";
 import type { ConvexIngest, MessageRow } from "./convex-ingest";
+
+export type ShelfUpdate =
+  | { kind: "publish"; conversationId: MessageRow["conversationId"]; model: SuggestionModel; suggestions: ReplySuggestions; startedAt: number }
+  | { kind: "clear"; clientKey: string; clearedAt: number };
+
+export async function publishShelf(ingest: Pick<ConvexIngest, "post">, update: ShelfUpdate): Promise<boolean> {
+  // The shared transport's kind map is owned by the composition workstream.
+  const post = ingest.post as unknown as (kind: "suggestionShelves", body: { update: ShelfUpdate }) => Promise<boolean>;
+  return post.call(ingest, "suggestionShelves", { update });
+}
 
 export const SUGGESTION_PRECOMPUTE = {
   directMessagesOnly: true,
@@ -95,6 +105,7 @@ export class SuggestionsBridge {
   }
 
   private async generate(message: MessageRow): Promise<void> {
+    const startedAt = this.now();
     const chat = await this.deps.getChat(message.chatGuid);
     if (!chat || chat.lastMessage?.guid !== message.guid || chat.lastMessage.isFromMe || chat.isSpam ||
       (SUGGESTION_PRECOMPUTE.directMessagesOnly && (chat.isGroup || chat.participants.length !== 1)) ||
@@ -117,8 +128,9 @@ export class SuggestionsBridge {
     if (this.stopped || result.stale || result.basedOnMessageGuid !== message.guid) return;
     const latest = await this.deps.getChat(message.chatGuid);
     if (latest?.lastMessage?.guid !== message.guid || latest.lastMessage.isFromMe) return;
-    const { basedOnMessageGuid: _anchor, stale: _stale, generatedAt: _at, ...payload } = result;
-    await this.deps.ingest.post("suggestions", { conversationId: message.conversationId, anchorGuid: message.guid, payload });
+    await publishShelf(this.deps.ingest, {
+      kind: "publish", conversationId: message.conversationId, model: "opus", suggestions: result, startedAt,
+    });
   }
 
   private resetDay(): void {

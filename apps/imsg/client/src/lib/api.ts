@@ -5,18 +5,14 @@ import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from 
 import { convexClient } from "./identity";
 import { searchMessages } from "./history-api";
 import { contactSearchArgs, identityApi } from "./identity-api";
+import { createAiApi } from "./ai-api";
 import type {
   AttachmentSummary,
-  AiStatus,
   Contact,
-  ContactSuggestion,
   GalleryItem,
   Message,
-  ReplySuggestions,
   ScheduledMessage,
   SendTextRequest,
-  SuggestionFeedbackRequest,
-  SuggestionModel,
   TranscriptState,
 } from "@shared/types";
 
@@ -211,27 +207,7 @@ export const api = {
     return request("/api/health");
   },
   // ------------------------------------------------------------------- ai
-  aiStatus(): Promise<AiStatus> {
-    return request("/api/ai/status");
-  },
-
-  aiSuggestions(chatGuid: string, model: SuggestionModel, refresh = false): Promise<ReplySuggestions> {
-    const params = new URLSearchParams({ model });
-    if (refresh) params.set("refresh", "1");
-    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}?${params.toString()}`);
-  },
-  recordSuggestionFeedback(chatGuid: string, body: SuggestionFeedbackRequest): Promise<{ ok: boolean }> {
-    return request(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}/feedback`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-  },
-  clearSuggestionLearning(): Promise<{ ok: boolean }> {
-    return request("/api/ai/suggestions/learning", { method: "DELETE" });
-  },
-  aiIdentify(chatGuid: string): Promise<ContactSuggestion> {
-    return request(`/api/ai/identify/${encodeURIComponent(chatGuid)}`);
-  },
+  ...createAiApi(convexClient),
 
 };
 
