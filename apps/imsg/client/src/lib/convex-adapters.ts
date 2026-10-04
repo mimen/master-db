@@ -109,7 +109,12 @@ export function mergeConvexMessages(remote: readonly Message[], local: readonly 
   const byGuid = new Map(local.map((m) => [m.guid, m]));
   const byKey = new Map(local.filter((m) => m.clientKey).map((m) => [m.clientKey, m]));
   const claimed = new Set<Message>();
-  const merged = remote.map((m) => {
+  // A temp row whose send already settled locally to a real guid is a leftover: the real row
+  // owns it, and BlueBubbles echoes rarely carry the clientKey that would otherwise retire it.
+  const settledKeys = new Set(local.filter((m) => m.clientKey && !m.guid.startsWith("temp-")).map((m) => m.clientKey));
+  const remoteGuids = new Set(remote.map((m) => m.guid));
+  const merged = remote.filter((m) => !(m.guid.startsWith("temp-") && m.clientKey && settledKeys.has(m.clientKey) &&
+    local.some((own) => own.clientKey === m.clientKey && remoteGuids.has(own.guid)))).map((m) => {
     const own = byGuid.get(m.guid) ?? (m.clientKey ? byKey.get(m.clientKey) : undefined);
     if (own) claimed.add(own);
     // A queued send's Convex row is `temp-<clientKey>`; adopt the local bubble's identity so it never remounts.

@@ -151,4 +151,14 @@ describe("queued send dedupe", () => {
     const merged = mergeConvexMessages([convexTemp], [local]);
     expect(merged.map((m) => m.guid)).toEqual(["temp-1"]);
   });
+
+  test("a settled send renders once when the echo carries no clientKey and the temp row lingers", () => {
+    // Production: BlueBubbles echoes omit tempGuid, so the mirrored real row has no clientKey,
+    // while the composer settled its local bubble to the real guid from the send result.
+    const settled = { ...messageToMessage(message({ guid: "REAL", isFromMe: true, dateCreated: 21 })), clientKey: "temp-1" } as Message;
+    const convexTemp = messageToMessage(message({ guid: "temp-temp-1", isFromMe: true, clientKey: "temp-1", dateCreated: 20 } as Partial<ConvexMessage>));
+    const echo = messageToMessage(message({ guid: "REAL", isFromMe: true, dateCreated: 21 }));
+    const merged = mergeConvexMessages([convexTemp, echo], [settled]);
+    expect(merged.map((m) => m.guid)).toEqual(["REAL"]);
+  });
 });
