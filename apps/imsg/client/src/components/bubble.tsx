@@ -14,7 +14,7 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { CardShadow, HOVER_DIM, Radii, Type } from "@/constants/theme";
-import { AudioBubble, VideoBubble } from "./media";
+import { AudioBubble, VideoBubble, MediaUnavailable } from "./media";
 import { PersonAvatar } from "./avatar";
 import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
@@ -171,17 +171,19 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
     <View style={{ gap: 6 }}>
       {message.attachments.map((att) => {
         const url = attachmentUrl(att);
+        const thumbnail = attachmentThumbnailUrl(att, mediaW);
+        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} />;
         if (
           att.mimeType?.startsWith("audio/") ||
           /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "")
         ) {
-          return <AudioBubble key={att.guid} guid={att.guid} url={url} mine={mine} />;
+          return <AudioBubble key={att.guid} guid={att.guid} chatGuid={message.chatGuid} url={url!} mine={mine} />;
         }
         if (att.mimeType?.startsWith("video/") || /\.(mov|mp4|m4v)$/i.test(att.filename ?? "")) {
           return (
             <VideoBubble
               key={att.guid}
-              url={url}
+              url={url!}
               width={Math.min(230, mediaW)}
               sourceWidth={att.width}
               sourceHeight={att.height}
@@ -213,9 +215,11 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           return (
             <Pressable
               key={att.guid}
+              accessibilityRole="button"
+              accessibilityLabel="Open photo"
               onPress={() =>
                 openLightbox(
-                  images.map((i) => ({ url: attachmentUrl(i), isVideo: false })),
+                  images.map((i) => ({ ...i, isVideo: false })),
                   images.findIndex((i) => i.guid === att.guid),
                 )
               }
@@ -224,7 +228,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               {state?.status !== "loaded" && <ImageSkeleton />}
               <Image
                 key={state?.attempt ?? 0}
-                source={{ uri: attachmentThumbnailUrl(att, mediaW) }}
+                source={{ uri: thumbnail! }}
                 style={tile}
                 contentFit="cover"
                 transition={150}
@@ -235,7 +239,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           );
         }
         return (
-          <Pressable key={att.guid} accessibilityRole="link" onPress={() => void openExternalUrl(url)}>
+          <Pressable key={att.guid} accessibilityRole="link" onPress={() => void openExternalUrl(url!)}>
             <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.attachmentLink, { color: theme.accent }]}>{att.filename ?? "Attachment"}</Text>
           </Pressable>
         );

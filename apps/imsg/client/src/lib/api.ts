@@ -1,5 +1,5 @@
 import { BASE_URL } from "./config";
-import { attachmentSource, messageToMessage } from "./convex-adapters";
+import { messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
 import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from "./convex-commands";
 import { createMessagingApi, enqueueTextSendVia } from "./messaging-api";
@@ -7,10 +7,12 @@ import { convexClient } from "./identity";
 import { searchMessages } from "./history-api";
 import { contactSearchArgs, identityApi } from "./identity-api";
 import { createAiApi } from "./ai-api";
+import { mediaApi, storedAttachmentUrl, storedAttachmentThumbnailUrl, type GalleryAttachment } from "./media-api";
 import type {
   AttachmentSummary,
   Contact,
   GalleryItem,
+  ContactSuggestion,
   Message,
   ScheduledMessage,
   SendTextRequest,
@@ -132,8 +134,9 @@ export const api = {
     });
     return rows.map(messageToMessage);
   },
-  gallery(chatGuid: string): Promise<GalleryItem[]> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/gallery`);
+  async gallery(chatGuid: string): Promise<GalleryAttachment[]> {
+    const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
+    return conversation ? convexClient.query(mediaApi.gallery, { conversationId: conversation._id }) : [];
   },
   async chatInfo(chatGuid: string): Promise<{
     guid: string;
@@ -164,10 +167,12 @@ export const api = {
     return runCommand(await scheduledChatGuid(id), { kind: "sendScheduledNow", bbId: id });
   },
   transcriptState(attachmentGuid: string): Promise<TranscriptState> {
-    return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`);
+    return convexClient.query(mediaApi.transcriptState, { attachmentGuid });
   },
-  transcribe(attachmentGuid: string): Promise<TranscriptState> {
-    return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`, { method: "POST" });
+  async transcribe(attachmentGuid: string, chatGuid?: string): Promise<TranscriptState> {
+    const chat = chatGuid ?? await convexClient.query(mediaApi.attachmentChatGuid, { guid: attachmentGuid });
+    if (!chat) throw new Error("Attachment conversation is unavailable");
+    return (await runCommand(chat, { kind: "transcribe", attachmentGuid })).transcript;
   },
   createFaceTimeLink: messagingApi.createFaceTimeLink,
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
@@ -186,15 +191,10 @@ export function groupPhotoUrl(chat: { groupPhotoUrl?: string | null }): string |
   return chat.groupPhotoUrl ?? null;
 }
 
-export function attachmentUrl(attachment: string | AttachmentSummary): string {
-  const guid = typeof attachment === "string" ? attachment : attachment.guid;
-  const fallback = `${BASE_URL}/api/attachments/${encodeURIComponent(guid)}`;
-  return typeof attachment === "string" ? fallback : attachmentSource(attachment, fallback);
+export function attachmentUrl(attachment: string | Pick<AttachmentSummary, "originalUrl">): string | null {
+  return storedAttachmentUrl(attachment);
 }
 
-/** A small cached JPEG for in-thread display; the server snaps width to 260/520/1040 and serves GIFs whole. */
-export function attachmentThumbnailUrl(attachment: string | AttachmentSummary, displayWidth: number): string {
-  const guid = typeof attachment === "string" ? attachment : attachment.guid;
-  const fallback = `${attachmentUrl(guid)}?w=${Math.ceil(displayWidth * 2)}`;
-  return typeof attachment === "string" ? fallback : attachmentSource(attachment, fallback, true);
+export function attachmentThumbnailUrl(attachment: string | Pick<AttachmentSummary, "originalUrl" | "thumbUrl">, _displayWidth: number): string | null {
+  return storedAttachmentThumbnailUrl(attachment);
 }

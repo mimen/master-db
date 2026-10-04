@@ -218,3 +218,24 @@ test("presence and bridge capabilities queries support the typing command fixtur
   await command({ kind: "typing", active: false, expiresAt: Date.now() });
   await command({ kind: "typing", active: true, expiresAt: Date.now() - 1 });
 });
+
+test("Convex media fixture serves gallery objects, storage URLs, upload finalization, and command results", async () => {
+  const gallery = await call<Array<{ guid: string; originalUrl: string | null; thumbUrl: string | null }>>("comma/media:gallery", { conversationId: CHAT_GUIDS.unreadGroup });
+  expect(gallery).toHaveLength(1);
+  expect(gallery[0]).toMatchObject({ guid: "fixture-image", originalUrl: "/__fixture/media/fixture-image", thumbUrl: "/__fixture/media/fixture-image" });
+  expect(await call("comma/media:attachmentMedia", { guid: "fixture-image" })).toMatchObject({ guid: "fixture-image", originalUrl: gallery[0]!.originalUrl, thumbUrl: gallery[0]!.thumbUrl });
+  expect(await call("comma/media:attachmentMedia", { guid: "missing" })).toBeNull();
+  expect(await call("comma/media:attachmentChatGuid", { guid: "fixture-image" })).toBe(CHAT_GUIDS.unreadGroup);
+  const url = await call<string>("comma/uploads:generateAttachmentUploadUrl");
+  const uploaded = await fixture.app.request(url, { method: "POST", headers: { "Content-Type": "audio/mp4" }, body: "voice" });
+  const { storageId } = await uploaded.json() as { storageId: string };
+  await expect(command({ kind: "sendAttachment", storageId: storageId as Extract<CommaOutboxPayload, { kind: "sendAttachment" }>["storageId"], filename: "memo.m4a", mimeType: "audio/mp4", isAudioMessage: true })).rejects.toThrow("Finalized");
+  await call("comma/uploads:finalizeUpload", { storageId, filename: "memo.m4a", mimeType: "audio/mp4" });
+  const commandId = await command({ kind: "sendAttachment", storageId: storageId as Extract<CommaOutboxPayload, { kind: "sendAttachment" }>["storageId"], filename: "memo.m4a", mimeType: "audio/mp4", caption: "listen", isAudioMessage: true });
+  expect(await call("comma/outbox:getCommand", { commandId })).toMatchObject({ status: "sent", result: { kind: "sendAttachment", message: { attachments: [{ guid: storageId, mimeType: "audio/mp4" }] } } });
+  expect((await messages()).page.some((m) => m.attachments.some((a) => (a as { guid: string }).guid === storageId))).toBe(true);
+  expect(await (await fixture.app.request(`/__fixture/media/${storageId}`)).text()).toBe("voice");
+  const transcriptId = await command({ kind: "transcribe", attachmentGuid: storageId });
+  expect(await call("comma/outbox:getCommand", { commandId: transcriptId })).toMatchObject({ result: { kind: "transcribe", transcript: { state: "unavailable" } } });
+  expect(await call("comma/media:transcriptState", { attachmentGuid: storageId })).toMatchObject({ state: "unavailable" });
+});

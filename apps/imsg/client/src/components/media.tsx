@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useEventListener } from "expo";
@@ -6,7 +6,9 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
-import { api } from "@/lib/api";
+import { useQuery } from "convex/react";
+import { mediaApi } from "@/lib/media-api";
+import { runCommand } from "@/lib/convex-commands";
 import type { TranscriptState } from "@shared/types";
 
 function formatSeconds(total: number): string {
@@ -34,7 +36,15 @@ function fakeWaveform(seed: string): number[] {
   return bars;
 }
 
-export function AudioBubble({ guid, url, mine }: { guid: string; url: string; mine: boolean }) {
+export function MediaUnavailable() {
+  const theme = useTheme();
+  return <View accessibilityLabel="Media unavailable" style={{ padding: 16, alignItems: "center", justifyContent: "center" }}>
+    <Ionicons name="cloud-download-outline" size={20} color={theme.textSecondary} />
+    <Text style={{ color: theme.textSecondary }}>Media pending or unavailable</Text>
+  </View>;
+}
+
+export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatGuid: string; url: string; mine: boolean }) {
   const theme = useTheme();
   const player = useAudioPlayer({ uri: url });
   const status = useAudioPlayerStatus(player);
@@ -44,45 +54,16 @@ export function AudioBubble({ guid, url, mine }: { guid: string; url: string; mi
   const dimTint = mine ? "rgba(255,255,255,0.4)" : theme.divider;
   const waveform = useMemo(() => fakeWaveform(url), [url]);
   const [rateIndex, setRateIndex] = useState(0);
-  const [transcript, setTranscript] = useState<TranscriptState>({ state: "not-requested" });
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .transcriptState(guid)
-      .then((state) => {
-        if (!cancelled) setTranscript(state);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [guid]);
-
-  useEffect(() => {
-    if (transcript.state !== "working") return;
-    let cancelled = false;
-    const poll = (): void => {
-      api
-        .transcriptState(guid)
-        .then((state) => {
-          if (!cancelled) setTranscript(state);
-        })
-        .catch(() => undefined);
-    };
-    const timer = setInterval(poll, 1000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [guid, transcript.state]);
-
+  const state = useQuery(mediaApi.transcriptState, { attachmentGuid: guid });
+  const [requestState, setRequestState] = useState<TranscriptState | null>(null);
+  const transcript = state?.state === "ready" ? state : requestState ?? state ?? { state: "not-requested" as const };
   const requestTranscript = async () => {
-    setTranscript({ state: "working" });
+    setRequestState({ state: "working" });
     try {
-      setTranscript(await api.transcribe(guid));
+      await runCommand(chatGuid, { kind: "transcribe", attachmentGuid: guid });
+      setRequestState(null);
     } catch {
-      setTranscript({ state: "failed", error: "Transcript request failed" });
+      setRequestState({ state: "failed", error: "Transcript request failed" });
     }
   };
 
