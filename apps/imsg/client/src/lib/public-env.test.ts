@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   requireConvexUrl,
-  requireIdentityKey,
   validateConvexUrl,
-  validateIdentityKey,
 } from "./public-env";
 
 describe("Convex public URL validation", () => {
@@ -35,19 +33,5 @@ describe("Convex public URL validation", () => {
       ok: false,
       error: "EXPO_PUBLIC_CONVEX_URL must be an absolute HTTP(S) URL",
     });
-  });
-
-  test("requires the identity key embedded in the client", () => {
-    expect(validateIdentityKey("identity-key")).toEqual({
-      ok: true,
-      value: "identity-key",
-    });
-    expect(validateIdentityKey("  ")).toEqual({
-      ok: false,
-      error: "EXPO_PUBLIC_IMSG_IDENTITY_KEY is required",
-    });
-    expect(() => requireIdentityKey(undefined)).toThrow(
-      "EXPO_PUBLIC_IMSG_IDENTITY_KEY is required",
-    );
   });
 });

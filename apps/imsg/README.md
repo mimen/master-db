@@ -59,7 +59,7 @@ Use `bun run dev:server` only for local API development. Native builds reach the
 | `PORT` | `8377` | |
 | `DB_PATH` | `imsg.db` | overlay SQLite |
 | `CONVEX_CLOUD_URL` | — | optional identity mirror and CRM deployment URL |
-| `IMSG_IDENTITY_KEY` | — | shared identity gate; must match Convex and `client/.env` |
+| `IMSG_SERVER_SECRET` | — | server-only identity key; must match Convex's `IMSG_SERVER_SECRET` |
 | `WHISPER_BINARY_PATH` | — | optional local `whisper-cli` binary |
 | `WHISPER_MODEL_PATH` | — | optional local multilingual ggml model |
 | `WHISPER_WORK_DIR` | `.cache/whisper` | ephemeral conversion files |
@@ -69,10 +69,9 @@ The Expo client reads a separate `client/.env` when exporting web or starting Me
 | var | default | |
 |---|---|---|
 | `EXPO_PUBLIC_CONVEX_URL` | — | required absolute HTTP(S) Convex deployment URL |
-| `EXPO_PUBLIC_IMSG_IDENTITY_KEY` | — | required; must match the Convex deployment's `IMSG_IDENTITY_KEY` |
 
-Both client values are embedded in the bundle. The identity key is a coarse shared gate,
-not a confidential browser secret. Builds fail before export when either value is absent.
+The value is embedded in the bundle, and the build fails before export when it is absent. Identity
+queries from the client ride the signed-in Convex session from `/api/convex-token`.
 
 ## Network boundary
 

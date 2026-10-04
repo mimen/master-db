@@ -1,6 +1,6 @@
 import { ConvexReactClient, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
-import { requireConvexUrl, requireIdentityKey } from "./public-env";
+import { requireConvexUrl } from "./public-env";
 
 /**
  * imsg is not part of the master-db Convex build (Metro can't safely cross
@@ -16,14 +16,6 @@ export const convexClient = new ConvexReactClient(
   { unsavedChangesWarning: false },
 );
 
-/**
- * Shared-key auth for the identity module (convex/identity/key.ts):
- * the Convex deployment URL ships in this JS bundle, so every public
- * identity function requires this key on every call. Read once at module
- * load; every hook below injects it so no call-site elsewhere in the client
- * needs to know it exists.
- */
-export const IDENTITY_KEY = requireIdentityKey(process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY);
 
 export type IdentityRow = {
   kind: string;
@@ -125,18 +117,17 @@ export type AirtableHumanRow = {
   email?: string;
 };
 
-const whoIsRef = makeFunctionReference<"query", { key: string; handle: string }, WhoIsResult>(
+const whoIsRef = makeFunctionReference<"query", { handle: string }, WhoIsResult>(
   "identity/queries:whoIs",
 );
 
-const listPeopleRef = makeFunctionReference<"query", { key: string }, ContactListRow[]>(
+const listPeopleRef = makeFunctionReference<"query", Record<string, never>, ContactListRow[]>(
   "identity/queries:listPeople",
 );
 
 const createPersonRef = makeFunctionReference<
   "mutation",
   {
-    key: string;
     handle: string;
     display_name?: string;
     first_name?: string;
@@ -149,14 +140,13 @@ const createPersonRef = makeFunctionReference<
 
 const searchAirtableHumansRef = makeFunctionReference<
   "action",
-  { key: string; query: string },
+  { query: string },
   AirtableHumanRow[]
 >("identity/airtableSearch:searchAirtableHumans");
 
 const addPersonFromAirtableRef = makeFunctionReference<
   "mutation",
   {
-    key: string;
     record_id: string;
     display_name?: string;
     first_name?: string;
@@ -170,7 +160,6 @@ const addPersonFromAirtableRef = makeFunctionReference<
 const renamePersonRef = makeFunctionReference<
   "mutation",
   {
-    key: string;
     personId: string;
     display_name?: string;
     first_name?: string;
@@ -186,31 +175,31 @@ const renamePersonRef = makeFunctionReference<
 
 const setFavoriteRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: string; is_favorite: boolean },
+  { personId: string; is_favorite: boolean },
   null
 >("identity/crm:setFavorite");
 
 const setPriorityRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: string; priority?: Priority | null },
+  { personId: string; priority?: Priority | null },
   null
 >("identity/crm:setPriority");
 
 const addTagRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: string; tag: string },
+  { personId: string; tag: string },
   null
 >("identity/crm:addTag");
 
 const removeTagRef = makeFunctionReference<
   "mutation",
-  { key: string; personId: string; tag: string },
+  { personId: string; tag: string },
   null
 >("identity/crm:removeTag");
 
 const listTagsRef = makeFunctionReference<
   "query",
-  { key: string },
+  Record<string, never>,
   Array<{ tag: string; count: number }>
 >("identity/queries:listTags");
 
@@ -220,31 +209,31 @@ const listTagsRef = makeFunctionReference<
 
 const setChatFavoriteRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; is_favorite: boolean },
+  { chatGuid: string; is_favorite: boolean },
   null
 >("identity/crm:setChatFavorite");
 
 const setChatPriorityRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; priority?: Priority | null },
+  { chatGuid: string; priority?: Priority | null },
   null
 >("identity/crm:setChatPriority");
 
 const addChatTagRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; tag: string },
+  { chatGuid: string; tag: string },
   null
 >("identity/crm:addChatTag");
 
 const removeChatTagRef = makeFunctionReference<
   "mutation",
-  { key: string; chatGuid: string; tag: string },
+  { chatGuid: string; tag: string },
   null
 >("identity/crm:removeChatTag");
 
 const chatCrmRef = makeFunctionReference<
   "query",
-  { key: string; chatGuids?: string[] },
+  { chatGuids?: string[] },
   Record<string, ChatCrm>
 >("identity/queries:chatCrm");
 
@@ -253,26 +242,26 @@ const chatCrmRef = makeFunctionReference<
 
 const searchEventsRef = makeFunctionReference<
   "action",
-  { key: string; query: string },
+  { query: string },
   AirtableEventRow[]
 >("identity/events:searchEvents");
 
 const linkEventRef = makeFunctionReference<
   "mutation",
-  { key: string; personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string },
+  { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string },
   { linkId: string }
 >("identity/events:linkEvent");
 
-const unlinkEventRef = makeFunctionReference<"mutation", { key: string; linkId: string }, null>(
+const unlinkEventRef = makeFunctionReference<"mutation", { linkId: string }, null>(
   "identity/events:unlinkEvent",
 );
 
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
-  return useQuery(whoIsRef, handle ? { key: IDENTITY_KEY, handle } : "skip");
+  return useQuery(whoIsRef, handle ? { handle } : "skip");
 }
 
 export function useListPeople(): ContactListRow[] | undefined {
-  return useQuery(listPeopleRef, { key: IDENTITY_KEY });
+  return useQuery(listPeopleRef, {});
 }
 
 export function useCreatePerson() {
@@ -284,12 +273,12 @@ export function useCreatePerson() {
     last_name?: string;
     nickname?: string;
     organization?: string;
-  }) => mutate({ key: IDENTITY_KEY, ...args });
+  }) => mutate(args);
 }
 
 export function useSearchAirtableHumans() {
   const run = useAction(searchAirtableHumansRef);
-  return (args: { query: string }) => run({ key: IDENTITY_KEY, ...args });
+  return (args: { query: string }) => run(args);
 }
 
 export function useAddPersonFromAirtable() {
@@ -301,7 +290,7 @@ export function useAddPersonFromAirtable() {
     last_name?: string;
     phone?: string;
     email?: string;
-  }) => mutate({ key: IDENTITY_KEY, ...args });
+  }) => mutate(args);
 }
 
 export function useRenamePerson() {
@@ -313,76 +302,76 @@ export function useRenamePerson() {
     last_name?: string;
     nickname?: string;
     organization?: string;
-  }) => mutate({ key: IDENTITY_KEY, ...args });
+  }) => mutate(args);
 }
 
 export function useSetFavorite() {
   const mutate = useMutation(setFavoriteRef);
-  return (args: { personId: string; is_favorite: boolean }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { personId: string; is_favorite: boolean }) => mutate(args);
 }
 
 export function useSetPriority() {
   const mutate = useMutation(setPriorityRef);
-  return (args: { personId: string; priority?: Priority | null }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { personId: string; priority?: Priority | null }) => mutate(args);
 }
 
 export function useAddTag() {
   const mutate = useMutation(addTagRef);
-  return (args: { personId: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { personId: string; tag: string }) => mutate(args);
 }
 
 export function useRemoveTag() {
   const mutate = useMutation(removeTagRef);
-  return (args: { personId: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { personId: string; tag: string }) => mutate(args);
 }
 
 export function useListTags(): Array<{ tag: string; count: number }> | undefined {
-  return useQuery(listTagsRef, { key: IDENTITY_KEY });
+  return useQuery(listTagsRef, {});
 }
 
 /** A GROUP chat's live CRM projection — undefined while loading, `{tags:[],
  * events:[]}` (no is_favorite/priority) when the chat has never been
  * annotated. `null`/omitted chatGuid skips the query (mirrors useWhoIs). */
 export function useChatCrm(chatGuid: string | null): ChatCrm | undefined {
-  const result = useQuery(chatCrmRef, chatGuid ? { key: IDENTITY_KEY, chatGuids: [chatGuid] } : "skip");
+  const result = useQuery(chatCrmRef, chatGuid ? { chatGuids: [chatGuid] } : "skip");
   if (!chatGuid) return undefined;
   return result?.[chatGuid] ?? (result ? { tags: [], events: [] } : undefined);
 }
 
 export function useSetChatFavorite() {
   const mutate = useMutation(setChatFavoriteRef);
-  return (args: { chatGuid: string; is_favorite: boolean }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { chatGuid: string; is_favorite: boolean }) => mutate(args);
 }
 
 export function useSetChatPriority() {
   const mutate = useMutation(setChatPriorityRef);
-  return (args: { chatGuid: string; priority?: Priority | null }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { chatGuid: string; priority?: Priority | null }) => mutate(args);
 }
 
 export function useAddChatTag() {
   const mutate = useMutation(addChatTagRef);
-  return (args: { chatGuid: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { chatGuid: string; tag: string }) => mutate(args);
 }
 
 export function useRemoveChatTag() {
   const mutate = useMutation(removeChatTagRef);
-  return (args: { chatGuid: string; tag: string }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { chatGuid: string; tag: string }) => mutate(args);
 }
 
 export function useSearchEvents() {
   const run = useAction(searchEventsRef);
-  return (args: { query: string }) => run({ key: IDENTITY_KEY, ...args });
+  return (args: { query: string }) => run(args);
 }
 
 export function useLinkEvent() {
   const mutate = useMutation(linkEventRef);
   return (args: { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string }) =>
-    mutate({ key: IDENTITY_KEY, ...args });
+    mutate(args);
 }
 
 export function useUnlinkEvent() {
   const mutate = useMutation(unlinkEventRef);
-  return (args: { linkId: string }) => mutate({ key: IDENTITY_KEY, ...args });
+  return (args: { linkId: string }) => mutate(args);
 }
 
 /** A person's first phone or email — enough to key the /person screen's whoIs lookup. */

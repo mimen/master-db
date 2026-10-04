@@ -36,7 +36,7 @@ type ConvexQueryResponse<T> =
  * `lookup()`/`chatCrm()`/`personCrm()` are all synchronous map reads.
  *
  * No-ops (logs once per source, then stays silent) if CONVEX_CLOUD_URL or
- * IMSG_IDENTITY_KEY aren't configured — the mirror is optional, imsg must
+ * IMSG_SERVER_SECRET aren't configured — the mirror is optional, imsg must
  * keep working (falling back to ContactBook alone, and no CRM at all) without
  * it. Same fail-open contract for chat CRM as for names: mirror down or
  * unconfigured ⇒ no CRM shown, never an error.
@@ -52,7 +52,7 @@ export class IdentityMirror {
 
   start(): void {
     if (!this.config.convexCloudUrl || !this.config.identityKey) {
-      console.log("identity-mirror: CONVEX_CLOUD_URL/IMSG_IDENTITY_KEY not set, skipping");
+      console.log("identity-mirror: CONVEX_CLOUD_URL/IMSG_SERVER_SECRET not set, skipping");
       return;
     }
     void this.refresh();

@@ -17,8 +17,7 @@ beforeAll(async () => {
   // stay external so injected dependencies and the test use the same runtimes.
   const built = await Bun.build({ entrypoints: [join(import.meta.dir, "use-scheduled.ts")], target: "bun",
     external: ["react", "convex/*"],
-    define: { "process.env.EXPO_PUBLIC_CONVEX_URL": JSON.stringify("https://scheduled-test.convex.cloud"),
-      "process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY": JSON.stringify("test") },
+    define: { "process.env.EXPO_PUBLIC_CONVEX_URL": JSON.stringify("https://scheduled-test.convex.cloud") },
     plugins: [{ name: "web-platform", setup(build) {
       build.onResolve({ filter: /^react-native$/ }, () => ({ path: "platform", namespace: "scheduled-platform" }));
       build.onLoad({ filter: /.*/, namespace: "scheduled-platform" }, () => ({ loader: "js",

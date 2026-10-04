@@ -30,17 +30,3 @@ export function requireConvexUrl(value: string | undefined): string {
   if (!result.ok) throw new Error(result.error);
   return result.value;
 }
-
-export function validateIdentityKey(value: string | undefined): PublicEnvResult {
-  const key = value?.trim() ?? "";
-  if (!key) {
-    return { ok: false, error: "EXPO_PUBLIC_IMSG_IDENTITY_KEY is required" };
-  }
-  return { ok: true, value: key };
-}
-
-export function requireIdentityKey(value: string | undefined): string {
-  const result = validateIdentityKey(value);
-  if (!result.ok) throw new Error(result.error);
-  return result.value;
-}

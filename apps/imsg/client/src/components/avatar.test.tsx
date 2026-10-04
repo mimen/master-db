@@ -34,7 +34,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   }));
   mock.module("@/lib/config", () => ({ BASE_URL: "http://photos.test" }));
   mock.module("@/lib/identity", () => ({
-    convexClient: {}, IDENTITY_KEY: "fixture-only",
+    convexClient: {},
     useWhoIs: (handle: string | null) => {
       handles.push(handle);
       return handle ? { found: true, person: { _id: "person", photoUrl } } : undefined;

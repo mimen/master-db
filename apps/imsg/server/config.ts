@@ -17,7 +17,7 @@ export interface Config {
    * Optional — the mirror is skipped if unset.
    */
   convexCloudUrl: string | null;
-  /** Shared key for identity/queries.ts's requireIdentityKey gate. Optional — the mirror is skipped if unset. */
+  /** IMSG_SERVER_SECRET, the server-only key for convex/identity/key.ts. Optional — the mirror is skipped if unset. */
   identityKey: string | null;
   whisper: WhisperConfig;
   ai: AiConfig;
@@ -87,7 +87,7 @@ export function loadConfig(): Config {
     convexSiteUrl: Bun.env.CONVEX_SITE_URL?.replace(/\/$/, "") ?? null,
     appleContactsIngestSecret: Bun.env.APPLE_CONTACTS_INGEST_SECRET ?? null,
     convexCloudUrl: Bun.env.CONVEX_CLOUD_URL?.replace(/\/$/, "") ?? null,
-    identityKey: Bun.env.IMSG_IDENTITY_KEY ?? null,
+    identityKey: Bun.env.IMSG_SERVER_SECRET?.trim() || null,
     commaBridgeSecret: Bun.env.COMMA_BRIDGE_SECRET?.trim() || null,
     whisper: {
       binaryPath: Bun.env.WHISPER_BINARY_PATH?.trim() || null,

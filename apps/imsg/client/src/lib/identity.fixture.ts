@@ -1,4 +1,3 @@
-export const IDENTITY_KEY = "fixture-only";
 export { convexClient } from "./convex.fixture";
 import type {
   AirtableEventRow,

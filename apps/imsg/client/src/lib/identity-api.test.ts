@@ -15,7 +15,6 @@ if (process.env.COMMA_IDENTITY_API_TEST_CHILD !== "1") {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   const responses = new Map<string, unknown>();
   mock.module("@/lib/identity", () => ({
-    IDENTITY_KEY: "fixture-key",
     convexClient: { query: async (ref: FunctionReference<"query">, args: Record<string, unknown>) => {
       const name = getFunctionName(ref);
       calls.push({ name, args });
@@ -25,13 +24,13 @@ if (process.env.COMMA_IDENTITY_API_TEST_CHILD !== "1") {
   mock.module("@/lib/config", () => ({ BASE_URL: "http://mini.invalid" }));
   const { api, avatarUrl, groupPhotoUrl } = await import("./api");
 
-  test("contacts preserve favorites and inject the identity key; info and lookup keep their shape and reject misses", async () => {
+  test("contacts preserve favorites and send no shared key; info and lookup keep their shape and reject misses", async () => {
     const fetch = spyOn(globalThis, "fetch");
     try {
       const contacts = [{ address: "friend@example.com", name: "Current Name", is_favorite: true }];
       responses.set("identity/queries:searchContacts", contacts);
       expect(await api.contacts("current")).toEqual(contacts);
-      expect(calls.at(-1)).toEqual({ name: "identity/queries:searchContacts", args: { key: "fixture-key", q: "current" } });
+      expect(calls.at(-1)).toEqual({ name: "identity/queries:searchContacts", args: { q: "current" } });
       responses.set("comma/conversationInfo:findChat", { chatGuid: "iMessage;-;friend@example.com", service: "iMessage", isGroup: false, participants: ["friend@example.com"] });
       expect(await api.findChat("friend@example.com")).toMatchObject({ chatGuid: "iMessage;-;friend@example.com" });
       expect(calls.at(-1)).toEqual({ name: "comma/conversationInfo:findChat", args: { address: "friend@example.com" } });
