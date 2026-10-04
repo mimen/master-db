@@ -87,8 +87,8 @@ export class IdentitySync {
 /**
  * Deliberately drops `avatar` — it's raw base64 image bytes, not a URL, and
  * a single contact photo can alone exceed Convex's 1MiB per-document cap
- * (hit in practice against a real 1518-contact export). The imsg client
- * already renders photos via its own /api/avatars/:address route, which
+ * (hit in practice against a real 1518-contact export). The bridge
+ * mirrors photos into Convex storage through PhotoMirror, which
  * reads the same AddressBook export this app has always used — nothing
  * downstream reads a photo out of the identity graph, so there's nothing to
  * lose by not duplicating it there.

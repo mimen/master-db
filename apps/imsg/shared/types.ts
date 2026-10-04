@@ -223,7 +223,7 @@ export type TranscriptState =
 
 // ------------------------------------------------------------------------ AI
 
-/** Reported by /api/ai/status so the client can hide surfaces it cannot use. */
+/** Mirrored through Convex so the client can hide unavailable AI features. */
 export type SuggestionModel = "opus" | "terra";
 export type SuggestionStrategy =
   | "answer"
@@ -307,8 +307,8 @@ export type ServerEvent =
   | { kind: "chats-changed" }
   | { kind: "typing"; chatGuid: string; display: boolean }
   /**
-   * The server's BlueBubbles event stream (or the client's own /events
-   * connection) was down and has recovered: anything that happened in the gap
+   * The server's BlueBubbles event stream was down and has recovered.
+   * Anything that happened in the gap
    * was silently missed. Consumers must refetch what they render.
    */
   | { kind: "resync" };

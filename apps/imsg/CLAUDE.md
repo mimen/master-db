@@ -67,12 +67,17 @@ and Restart banners.
 - The [`comma_*` tables](../../convex/schema/comma/) store conversations, messages,
   attachments, conversation state, drafts, scheduled messages, triage, sync state, and outbox commands.
   The local ingest contract reference is `apps/imsg/docs/convex-ingest-contract.md`.
-- Clients always read and send through Convex. They never sign in: the [auth provider](client/src/lib/convex-auth.tsx)
+- Clients read and send every feature through Convex. The client never calls the Mini except
+  for session and release routes, `GET /api/convex-token` and `GET /api/deploy/status`.
+  They never sign in: the [auth provider](client/src/lib/convex-auth.tsx)
   fetches a Convex session from the Mini's `GET /api/convex-token`, which the Mini mints with the
   `tailnet` credentials provider and the bridge secret. Port 8447 is tailnet-only, so tailnet
   membership is the login; Convex's `authed*` guards still reject callers from the open internet.
-- The client still calls the Mini's REST API for features Convex does not mirror yet: jump-to-message
-  windows, gallery, info, sender search, mentions, and suggestion guards.
+- The Mini's HTTP routes are session and release routes plus `GET /api/health` for deployment
+  checks. Release routes include `/api/deploy/status`, `/api/desktop-release`,
+  `/api/desktop-release/artifact/:filename`, and `/api/desktop-version`. It also serves static
+  files and the SPA, with a 404 boundary for unknown `/api/*` paths. Feature REST routes and
+  `/events` are gone; the bridge still uses the local services directly.
 - Convex functions deploy separately from the repo root with
   `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`. A push to main deploys only imsg.
 

@@ -381,7 +381,7 @@ export class ChatDirectory {
   /**
    * Socket fast path: patches both unread and summary caches. A null chatGuid
    * (or a chat missing from the cache) invalidates instead. Returns
-   * the mapped message so the caller can broadcast it, or null when it only
+   * the mapped message for command results, or null when it only
    * invalidated (no chat to attribute the message to).
    */
   applyMessage(chatGuid: string | null, message: BBMessage): Message | null {

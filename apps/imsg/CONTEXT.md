@@ -1,8 +1,9 @@
 # imsg
 
-Self-hosted iMessage web client: an Expo/React-Native-Web app talking to a Bun/Hono
-server that fronts a BlueBubbles instance, with an app-local SQLite overlay for state
-Apple doesn't track (dismissals, pins).
+Self-hosted iMessage client. The Expo/React-Native-Web app reads and sends through
+Convex. A Bun/Hono server on the Mini bridges BlueBubbles and its SQLite overlay
+into Convex, and serves session, release and deployment-health routes plus the web app.
+The client has no feature REST calls or Mini event-stream connection.
 
 ## Language
 
@@ -19,8 +20,8 @@ _Avoid_: filter logic, flag logic
 **Overlay**:
 App-local per-chat state stored in SQLite that BlueBubbles knows nothing about:
 dismissal GUIDs, mute, pin, marked-unread.
-Convex `comma_conversation_state` mirrors the Overlay. In Convex-sends mode, client
-writes go through the outbox. The bridge applies them to SQLite and mirrors the result
+Convex `comma_conversation_state` mirrors the Overlay. Client
+writes go through the Convex outbox. The bridge applies them to SQLite and mirrors the result
 back to Convex.
 _Avoid_: overlay DB rows (when meaning the concept), local state
 
@@ -37,9 +38,10 @@ The single interface to BlueBubbles — REST operations plus the inbound event s
 Two adapters: the HTTP/socket.io client in production, an in-memory fake in tests.
 _Avoid_: BB client (when meaning the seam), API wrapper
 
-**SSE fast path**:
-Applying a message we already know about directly to the Chat Directory and client
-store ahead of BlueBubbles' own DB catching up; the next full rebuild reconciles.
+**Directory fast path**:
+Applying a known BlueBubbles event or command result directly to the Chat Directory
+ahead of BlueBubbles' own DB catching up. The next full rebuild reconciles. The bridge
+mirrors changes into Convex, whose live queries update clients.
 _Avoid_: instant state sync, optimistic patch
 
 **Identity Mirror**:

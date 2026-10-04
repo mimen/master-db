@@ -118,7 +118,7 @@ export class IdentityMirror {
    * Every mirror person whose name-term set contains `query` (case-
    * insensitive substring) — a Convex-backed contact result. One result per
    * matched handle (address = the normalized match key), deduped by
-   * address. Used by GET /api/contacts alongside ContactBook.search so a
+   * address. The identity directory can search alternate names so a
    * rename/nickname/organization surfaces the person even when Apple
    * Contacts still has the old name. `is_favorite` rides along from the
    * same CRM data personCrm()/chatCrm() read — lets the ⌘K palette rank a
