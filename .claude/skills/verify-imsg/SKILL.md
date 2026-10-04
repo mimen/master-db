@@ -103,7 +103,8 @@ The `desk` fixture gives every drive four things:
 
 Everything goes to `$TMPDIR/verify-imsg/evidence/<feature-id>/`:
 - **`run.log`:** the Playwright output.
-- **`playwright/`:** traces and failure screenshots.
+- **`video.webm`:** a recording of the whole drive, made on every run, passing or failing. Review it to audit timing, flicker and what the user actually saw.
+- **`playwright/`:** the trace (`trace.zip`, open with `bunx playwright show-trace`) and end-of-test screenshots.
 - **Your own captures:** whatever the drive writes, using the `VERIFY_IMSG_EVIDENCE` env var.
 
 A drive's proof must include:
