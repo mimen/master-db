@@ -29,6 +29,7 @@ const conversationView = v.object({
     pinned: v.boolean(),
   }),
   unreadCount: v.number(),
+  groupPhotoUrl: v.union(v.string(), v.null()),
 });
 
 async function withConversationState(ctx: QueryCtx, conversation: CommaConversationDoc) {
@@ -53,9 +54,25 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
   );
   const participants = await Promise.all(conversation.participants.map(async (participant) => {
     const person = await personForAddress(ctx, participant.address);
-    return { ...participant, photoUrl: person?.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null };
+    return { ...participant, name: person?.display_name ?? participant.name, photoUrl: person?.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null };
   }));
-  return { ...conversation, participants, flags, unreadCount };
+  const displayName = conversation.isGroup
+    ? conversation.rawDisplayName === undefined ? conversation.displayName
+      : conversation.rawDisplayName.trim() || participants.map((p) => p.name ?? p.address).join(", ")
+    : participants[0]?.name ?? conversation.displayName;
+  const lastMessage = conversation.lastMessage;
+  let senderName = lastMessage?.senderName ?? null;
+  if (lastMessage && !lastMessage.isFromMe) {
+    const senderAddress = !conversation.isGroup && conversation.participants.length === 1
+      ? conversation.participants[0].address
+      : (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastMessage.guid)).unique())?.sender?.address;
+    const person = senderAddress ? await personForAddress(ctx, senderAddress) : null;
+    senderName = person?.display_name ?? senderName;
+  }
+  return { ...conversation, displayName, participants, flags, unreadCount,
+    ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
+    groupPhotoUrl: conversation.groupPhotoStorageId ? await ctx.storage.getUrl(conversation.groupPhotoStorageId) : null,
+  };
 }
 
 export const listConversations = query({
@@ -116,8 +133,10 @@ export const listMessages = query({
         .query("comma_attachments")
         .withIndex("by_messageGuid", (q) => q.eq("messageGuid", message.guid))
         .collect();
+      const person = message.sender ? await personForAddress(ctx, message.sender.address) : null;
       return {
         ...message,
+        ...(message.sender ? { sender: { ...message.sender, name: person?.display_name ?? message.sender.name } } : {}),
         attachments: await Promise.all(attachments.map(async (attachment) => ({
           ...attachment,
           thumbUrl: attachment.thumbStorageId ? await ctx.storage.getUrl(attachment.thumbStorageId) : null,

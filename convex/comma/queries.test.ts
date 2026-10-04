@@ -322,3 +322,24 @@ test("suggestions require the allowed identity and return only the requested con
   const other = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("other", 2)));
   expect(await allowed.query(api.comma.queries.getSuggestions, { conversationId: other })).toBeNull();
 });
+
+test("conversation and message names react to identity changes without a bridge refresh", async () => {
+  const t = authed();
+  const { personId, conversationId } = await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      display_name: "Name Before", normalized_phones: ["+16195551234"], normalized_emails: [],
+      identity_count: 1, message_count: 0, is_self: false, auto_clustered: false,
+      created_at: "before", updated_at: "before",
+    });
+    await ctx.db.insert("identities", { person_id: personId, kind: "phone", source: "manual", value: "+16195551234", normalized: "+16195551234",
+      is_self: false, message_count: 0, chat_count: 0, created_at: "before", updated_at: "before" });
+    const conversationId = await ctx.db.insert("comma_conversations", conversation("+16195551234", 1));
+    await ctx.db.insert("comma_messages", { ...message(conversationId, "m", 1), sender: { address: "+16195551234 (smsfp)", name: "Old mirrored name" } });
+    return { personId, conversationId };
+  });
+  await t.run((ctx) => ctx.db.patch(personId, { display_name: "Name After" }));
+  const view = await t.query(api.comma.queries.getConversation, { conversationId });
+  expect(view).toMatchObject({ displayName: "Name After", participants: [{ name: "Name After" }], lastMessage: { senderName: "Name After" } });
+  const messages = await t.query(api.comma.queries.listMessages, { conversationId, paginationOpts });
+  expect(messages.page[0].sender?.name).toBe("Name After");
+});

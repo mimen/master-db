@@ -180,6 +180,43 @@ export const whoIs = query({
   },
 });
 
+/** Search all name variants and normalized addresses, then flatten matching people. */
+export const searchContacts = query({
+  args: { key: v.string(), q: v.string(), limit: v.optional(v.number()) },
+  returns: v.array(v.object({ address: v.string(), name: v.string(), is_favorite: v.optional(v.boolean()) })),
+  handler: async (ctx, { key, q, limit }) => {
+    requireIdentityKey(key);
+    const needle = q.trim().toLowerCase();
+    if (!needle) return [];
+    const cap = Math.max(0, Math.min(25, Math.floor(limit ?? 25)));
+    if (!cap) return [];
+    // Partial phone inputs are shorter than E.164; strip punctuation without
+    // inventing a country code, then match within the stored digits.
+    const digits = /^[+\d\s().-]+$/.test(needle) ? needle.replace(/\D/g, "") : "";
+    const people = await ctx.db.query("people").collect();
+    const contacts = new Map<string, { address: string; name: string; is_favorite?: boolean }>();
+    for (const person of people) {
+      if (person.merged_into) continue;
+      const addresses = [...person.normalized_phones, ...person.normalized_emails]
+        .map((raw) => normalizeEmail(raw) || normalizePhone(raw) || raw.trim().toLowerCase());
+      if (!nameTerms(person).some((term) => term.includes(needle)) &&
+        !addresses.some((address) => address.includes(needle) ||
+          (digits && !address.includes("@") && address.replace(/\D/g, "").includes(digits)))) continue;
+      for (const address of addresses) {
+        if (!address) continue;
+        const prior = contacts.get(address);
+        if (!prior) contacts.set(address, {
+          address, name: person.display_name || [person.first_name, person.last_name].filter(Boolean).join(" ") ||
+            person.nickname || person.organization || address,
+          ...(person.is_favorite !== undefined ? { is_favorite: person.is_favorite } : {}),
+        });
+        else if (person.is_favorite) prior.is_favorite = true;
+      }
+    }
+    return [...contacts.values()].slice(0, cap);
+  },
+});
+
 /** Find people by (case-insensitive substring) display name, with their identities. */
 export const searchPeople = query({
   args: { key: v.string(), name: v.string() },

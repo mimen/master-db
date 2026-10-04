@@ -5,11 +5,11 @@ import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
 import { ChatCommands } from "../../server/commands";
 import type { OverlayDb } from "../../server/db";
-import type { ChatSummary, Message, ScheduledMessage } from "../../shared/types";
+import type { ChatSummary, Contact, Message, ScheduledMessage } from "../../shared/types";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
-import { FIXTURE_NOW, type FixtureIdentity } from "./world";
+import { fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
-type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount">;
+type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount"> & { groupPhotoUrl: string | null };
 type ConvexMessage = Infer<typeof messageDoc> & { attachments: Array<Infer<typeof attachmentDoc> & { thumbUrl: null; originalUrl: null }> };
 type Pagination = { numItems: number; cursor: string | null };
 
@@ -25,7 +25,7 @@ export function conversationRow(chat: ChatSummary): Conversation {
     displayName: chat.displayName, isGroup: chat.isGroup, participants: chat.participants,
     ...(chat.lastMessage ? { lastMessage: chat.lastMessage } : {}),
     lastMessageAt: chat.lastMessage?.dateCreated ?? 0, isSpam: chat.isSpam,
-    hasGroupPhoto: chat.hasGroupPhoto ?? false, updatedAt: FIXTURE_NOW,
+    hasGroupPhoto: chat.hasGroupPhoto ?? false, groupPhotoUrl: chat.groupPhotoUrl ?? null, updatedAt: FIXTURE_NOW,
     flags: chat.flags, unreadCount: chat.unreadCount,
   };
 }
@@ -91,7 +91,29 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const accept = (result: { ok: boolean; error?: string; status?: number }) => {
     if (!result.ok) throw new FixtureError(result.error ?? "BlueBubbles operation failed", result.status);
   };
-  const conversations = async () => (await read<ChatSummary[]>("/api/chats?state=any")).map(conversationRow);
+  const conversations = async () => Promise.all((await read<ChatSummary[]>("/api/chats?state=any")).map(async (chat) => {
+    const raw = await bb.getChat(chat.guid);
+    const row = conversationRow(chat);
+    return { ...row, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName: raw.ok ? raw.value.displayName ?? "" : "" };
+  }));
+  const searchContacts = (query: string, limit = 25): Contact[] => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return [];
+    const digits = /^[+\d\s().-]+$/.test(needle) ? needle.replace(/\D/g, "") : "";
+    const contacts = new Map<string, Contact>();
+    for (const person of fixtureSeed().contacts ?? []) {
+      const addresses = [...(person.phoneNumbers ?? []), ...(person.emails ?? [])].map((entry) => entry.address);
+      const terms = [person.displayName, person.firstName, person.lastName, person.nickname,
+        [person.firstName, person.lastName].filter(Boolean).join(" ")];
+      if (!terms.some((term) => term?.toLowerCase().includes(needle)) && !addresses.some((address) =>
+        address.toLowerCase().includes(needle) || (digits && !address.includes("@") && address.replace(/\D/g, "").includes(digits)))) continue;
+      for (const address of addresses) contacts.set(address.toLowerCase(), {
+        address: address.toLowerCase(), name: names.lookup(address) ?? person.displayName ?? address,
+        is_favorite: names.personCrm(address)?.is_favorite,
+      });
+    }
+    return [...contacts.values()].slice(0, Math.max(0, Math.min(25, Math.floor(limit))));
+  };
   const messages = async (chatGuid: string): Promise<ConvexMessage[]> => {
     const rows: Message[] = [];
     let before: number | undefined;
@@ -143,6 +165,18 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     return undefined;
   };
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "identity/queries:searchContacts": async (args) => searchContacts(String(args.q), args.limit === undefined ? 25 : Number(args.limit)),
+    "comma/conversationInfo:findChat": async (args) => {
+      const key = conversationKey({ isGroup: false, primaryChatGuid: "", participants: [{ address: String(args.address), name: null }] });
+      const row = (await conversations()).find((row) => !row.isGroup && row.participants.length === 1 && row.conversationKey === key);
+      const guid = args.service ? row?.chatGuids.find((guid) => args.service === "SMS" ? /^(SMS|RCS);/.test(guid) : guid.startsWith("iMessage;")) : row?.primaryChatGuid;
+      return row && guid ? { chatGuid: guid, service: guid.startsWith("iMessage;") ? "iMessage" : "SMS", isGroup: false, participants: row.participants.map((p) => p.address) } : null;
+    },
+    "comma/conversationInfo:chatInfo": async (args) => {
+      const row = (await conversations()).find((row) => row.chatGuids.includes(String(args.chatGuid)));
+      return row ? { guid: String(args.chatGuid), displayName: row.rawDisplayName || null, isGroup: row.isGroup,
+        participants: row.participants.map((p) => ({ address: p.address, name: names.lookup(p.address) ?? p.name ?? p.address, is_favorite: names.personCrm(p.address)?.is_favorite })) } : null;
+    },
     "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,

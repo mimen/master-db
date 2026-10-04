@@ -6,6 +6,7 @@ import type { Config } from "../config";
 import type { OverlayDb } from "../db";
 import type { NameSource } from "../name-resolver";
 import { ConvexIngest } from "./convex-ingest";
+import { GroupPhotoMirror } from "./group-photos";
 import { LiveBridge, MessageWriter } from "./live";
 import { MediaWorker } from "./media";
 import { OverlayMirror } from "./overlay-mirror";
@@ -37,8 +38,10 @@ export function startBridge(deps: {
   let outbox: OutboxBridge | null = null;
   let media: MediaWorker | null = null;
   let photos: PhotoMirror | null = null;
+  let groupPhotos: GroupPhotoMirror | null = null;
   let suggestions: SuggestionsBridge | null = null;
   function stopModules() {
+    groupPhotos?.stop(); groupPhotos = null;
     suggestions?.stop(); suggestions = null;
     live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop(); photos?.stop();
     live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null; photos = null;
@@ -48,6 +51,8 @@ export function startBridge(deps: {
     const ingest = deps.ingest ?? new ConvexIngest(deps.config);
     const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest, names: deps.names });
     try {
+      groupPhotos = new GroupPhotoMirror(deps.bb, deps.db, ingest);
+      writer.onChats = (chats) => groupPhotos?.observe(chats);
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
       if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now });
       live = new LiveBridge(writer, deps.now, (rows) => suggestions?.observe(rows));
@@ -89,6 +94,7 @@ export function startBridge(deps: {
       await scheduled?.flush();
       await media?.flush();
       await photos?.flush();
+      await groupPhotos?.flush();
       await suggestions?.flush();
     },
     stop: () => { startup.stop(); stopModules(); },

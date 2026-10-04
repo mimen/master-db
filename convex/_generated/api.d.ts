@@ -245,6 +245,10 @@ export declare const api: {
     syncState: FunctionReference<"mutation", "public", any, any>;
   };
   comma: {
+    conversationInfo: {
+      findChat: FunctionReference<"query", "public", { address: string; service?: "iMessage" | "SMS" }, null | { chatGuid: string; service: "iMessage" | "SMS"; isGroup: false; participants: string[] }>;
+      chatInfo: FunctionReference<"query", "public", { chatGuid: string }, null | { guid: string; displayName: string | null; isGroup: boolean; participants: { address: string; name: string; is_favorite?: boolean }[] }>;
+    };
     drafts: {
       clearDraft: FunctionReference<
         "mutation",
@@ -284,6 +288,10 @@ export declare const api: {
             waiting: boolean;
           };
           hasGroupPhoto: boolean;
+          rawDisplayName?: string;
+          groupPhotoGuid?: string;
+          groupPhotoStorageId?: Id<"_storage">;
+          groupPhotoUrl: string | null;
           isGroup: boolean;
           isSpam: boolean;
           lastMessage?: {
@@ -384,6 +392,10 @@ export declare const api: {
               waiting: boolean;
             };
             hasGroupPhoto: boolean;
+            rawDisplayName?: string;
+            groupPhotoGuid?: string;
+            groupPhotoStorageId?: Id<"_storage">;
+            groupPhotoUrl: string | null;
             isGroup: boolean;
             isSpam: boolean;
             lastMessage?: {
@@ -545,6 +557,10 @@ export declare const api: {
             waiting: boolean;
           };
           hasGroupPhoto: boolean;
+          rawDisplayName?: string;
+          groupPhotoGuid?: string;
+          groupPhotoStorageId?: Id<"_storage">;
+          groupPhotoUrl: string | null;
           isGroup: boolean;
           isSpam: boolean;
           lastMessage?: {
@@ -789,6 +805,7 @@ export declare const api: {
       listPeople: FunctionReference<"query", "public", { key: string }, any>;
       listTags: FunctionReference<"query", "public", { key: string }, any>;
       nameDirectory: FunctionReference<"query", "public", { key: string }, any>;
+      searchContacts: FunctionReference<"query", "public", { key: string; q: string; limit?: number }, { address: string; name: string; is_favorite?: boolean }[]>;
       searchPeople: FunctionReference<
         "query",
         "public",
@@ -2166,6 +2183,7 @@ export declare const internal: {
             chats: Array<{ chatGuid: string; lastMessageAt: number }>;
             conversationKey: string;
             displayName: string;
+            rawDisplayName?: string;
             hasGroupPhoto: boolean;
             isGroup: boolean;
             isSpam: boolean;
@@ -2244,6 +2262,7 @@ export declare const internal: {
       completeOutbox: FunctionReference<"mutation", "internal", { clientKey: string; claimToken: string; status: "sent" | "failed" | "unknown"; error?: string; resultGuid?: string; result?: CommandResult }, boolean>;
       renewOutbox: FunctionReference<"mutation", "internal", { clientKey: string; claimToken: string; now: number; leaseMs: number }, boolean>;
     };
+    groupPhotos: { setGroupPhoto: FunctionReference<"mutation", "internal", { chatGuid: string; guid: string | null; storageId?: Id<"_storage"> }, boolean>; };
     photos: { setContactPhoto: FunctionReference<"mutation", "internal", { address: string; hash: string; storageId: Id<"_storage"> }, boolean>; };
   };
   identity: {

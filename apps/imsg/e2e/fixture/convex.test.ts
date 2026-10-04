@@ -154,3 +154,22 @@ test("unknown function names return a diagnostic 400 and reset clears fixture dr
   reset();
   expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toBeNull();
 });
+
+test("fixture contact search, normalized DM lookup and raw chat info use the fixture world", async () => {
+  const contacts = await call<Array<{ address: string; name: string; is_favorite?: boolean }>>("identity/queries:searchContacts", { key: "fixture-only", q: "alex" });
+  expect(contacts).toEqual([{ address: "+16195550101", name: "Alex Rivera", is_favorite: true }]);
+  expect(await call("identity/queries:searchContacts", { key: "fixture-only", q: "(619) 555-0101" })).toEqual(contacts);
+  expect(await call("comma/conversationInfo:findChat", { address: "(619) 555-0101" })).toMatchObject({
+    chatGuid: CHAT_GUIDS.needs, service: "iMessage", isGroup: false, participants: ["+16195550101"],
+  });
+  expect(await call("comma/conversationInfo:findChat", { address: "+16195550101", service: "SMS" })).toBeNull();
+  expect(await call("comma/conversationInfo:chatInfo", { chatGuid: CHAT_GUIDS.needs })).toMatchObject({
+    displayName: null, participants: [{ address: "+16195550101", name: "Alex Rivera", is_favorite: true }],
+  });
+  await bb.renameGroup(CHAT_GUIDS.unreadGroup, "");
+  expect(await call("comma/conversationInfo:chatInfo", { chatGuid: CHAT_GUIDS.unreadGroup })).toMatchObject({ displayName: null, isGroup: true });
+  expect(await call("comma/conversationInfo:chatInfo", { chatGuid: "missing" })).toBeNull();
+  expect(await call("comma/conversationInfo:findChat", { address: "missing@example.com" })).toBeNull();
+  const capped = await call<unknown[]>("identity/queries:searchContacts", { key: "fixture-only", q: "contact", limit: 100 });
+  expect(capped.length).toBeLessThanOrEqual(25);
+});

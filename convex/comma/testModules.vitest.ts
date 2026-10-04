@@ -7,5 +7,8 @@ export const commaModules: Record<string, () => Promise<unknown>> = {
   "../../comma/outbox.ts": () => import("./outbox"),
   "../../comma/drafts.ts": () => import("./drafts"),
   "../../comma/ingest.ts": () => import("./ingest"),
+  "../../comma/conversationInfo.ts": () => import("./conversationInfo"),
+  "../../comma/groupPhotos.ts": () => import("./groupPhotos"),
+  "../../comma/internal.ts": () => import("./internal"),
   "../../comma/queries.ts": () => import("./queries"),
 };

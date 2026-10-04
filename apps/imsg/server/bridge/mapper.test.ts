@@ -108,3 +108,11 @@ test("sourceVersion uses ROWID and sequence, never dates", () => {
   expect(() => sourceVersion(message({ originalROWID: undefined }))).toThrow("ROWID");
   expect(() => sourceVersion(message(), 1000)).toThrow("sequence");
 });
+
+test("raw group name stays empty for unnamed groups instead of using participant names", () => {
+  const group: BBChat = { guid: "iMessage;+;group", displayName: "", participants: [{ address: "person@example.com" }] };
+  const names = { available: true, lookup: () => "Contact Name", searchTerms: () => [], chatCrm: () => undefined, personCrm: () => undefined };
+  expect(toConversationInputs([group], names)[0]).toMatchObject({ rawDisplayName: "", displayName: "Contact Name" });
+  expect(toConversationInputs([{ ...group, displayName: " Raw group name " }], names)[0])
+    .toMatchObject({ rawDisplayName: " Raw group name ", displayName: "Raw group name" });
+});

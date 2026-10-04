@@ -36,6 +36,7 @@ export function toConversationInputs(bbChats: BBChat[], names: NameSource = unna
       conversationKey: key,
       chats: siblings.map((chat) => ({ chatGuid: chat.guid, lastMessageAt: chat.lastMessage?.dateCreated ?? 0 })),
       displayName: primary.displayName,
+      rawDisplayName: siblings[0].displayName ?? "",
       isGroup: primary.isGroup,
       participants: primary.participants,
       isSpam: primary.isSpam,
