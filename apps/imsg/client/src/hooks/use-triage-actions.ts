@@ -60,7 +60,7 @@ export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome>
     commitUndoAction(undoToken, () => {
       void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
         .then(() => emit(undoListeners, chat.guid))
-        .catch(() => showToast("Could not undo Settle"));
+        .catch(() => showToast("Couldn't undo the settle. Try again."));
     });
   });
 }
@@ -84,7 +84,7 @@ function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
     try {
       await Promise.all(TRIAGE_KINDS.map((kind) => api.undismiss(chat.guid, kind)));
     } catch (error) {
-      showToast("Could not un-settle conversation");
+      showToast("Couldn't un-settle the conversation. Try again.");
       throw error;
     }
     emit(undoListeners, chat.guid);

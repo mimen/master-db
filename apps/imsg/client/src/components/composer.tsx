@@ -505,7 +505,7 @@ export function Composer({
         // No playSend() here — confirmation already fired on touch-up above.
       } catch (error) {
         hapticFailure();
-        showToast(messagingCommandError(error, "Couldn't send the attachment. Check the bridge connection."));
+        showToast(messagingCommandError(error, "Couldn't send the attachment. Check the Mac mini connection."));
       } finally {
         for (const attachment of attachments) cleanupPendingAttachment(attachment);
         setBusy(false);
@@ -543,7 +543,7 @@ export function Composer({
     } catch {
       hapticFailure();
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
-      if (sendFailureToast()) showToast("Couldn't send. Check the Mini connection.");
+      if (sendFailureToast()) showToast("Couldn't send. Check the Mac mini connection.");
     }
   };
 
@@ -663,7 +663,7 @@ export function Composer({
         },
       ]);
     } catch {
-      showToast("Couldn't paste the clipboard image");
+      showToast("Couldn't paste the image. Try copying it again.");
     }
   };
 
@@ -841,7 +841,7 @@ ${url}` : url;
       // The hold ended while the permission prompt or prepare was in flight.
       if (Platform.OS !== "web" && !micHeld.current) void finishRecording("cancel");
     } catch {
-      showToast("Couldn't start recording");
+      showToast("Couldn't start recording. Check microphone access.");
     }
   };
 
@@ -862,7 +862,7 @@ ${url}` : url;
       }));
     } catch (error) {
       hapticFailure();
-      showToast(messagingCommandError(error, "Couldn't send the voice message. Check the bridge connection."));
+      showToast(messagingCommandError(error, "Couldn't send the voice message. Check the Mac mini connection."));
     } finally {
       setBusy(false);
     }
@@ -1090,7 +1090,7 @@ ${url}` : url;
         </View>
         {recording ? (
           <View style={[styles.input, styles.recordingBar, { borderColor: theme.divider }]}>
-            <View style={styles.recDot} />
+            <View style={[styles.recDot, { backgroundColor: theme.destructive }]} />
             <Text
               accessibilityLiveRegion="polite"
               style={{ color: theme.text, fontSize: 15, fontVariant: ["tabular-nums"], flex: 1 }}
@@ -1200,11 +1200,7 @@ ${url}` : url;
               disabled={busy || Boolean(editing)}
               style={({ hovered, pressed }) => [
                 styles.sendButton,
-                // Intentionally NOT theme.destructive: this literal is the
-                // iOS system-red LIGHT variant, already correct in light mode.
-                // Theming it would flip dark mode to #FF453A — an unauthorized
-                // visual change outside this sweep's two approved exceptions.
-                { backgroundColor: recording ? "#FF3B30" : theme.backgroundElement },
+                { backgroundColor: recording ? theme.destructive : theme.backgroundElement },
                 !recording && (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
               ]}
             >
@@ -1379,9 +1375,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    // Intentionally NOT theme.destructive — see the recording-button comment
-    // above; same #FF3B30-is-already-correct-in-light-mode reasoning.
-    backgroundColor: "#FF3B30",
   },
   actionCol: {
     flexDirection: "row",

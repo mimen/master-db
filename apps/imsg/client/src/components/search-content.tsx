@@ -119,7 +119,7 @@ export function SearchContent({
         ListEmptyComponent={
           query.trim().length >= 2 ? (
             <Text style={[styles.empty, { color: theme.textSecondary }]}>
-              {searching ? "Searching…" : "No results"}
+              {searching ? "Searching…" : `No results for “${query.trim()}”`}
             </Text>
           ) : null
         }

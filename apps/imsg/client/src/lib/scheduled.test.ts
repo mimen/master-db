@@ -36,8 +36,8 @@ describe("formatScheduledWhen", () => {
 
 test("formats normalized BlueBubbles schedule statuses", () => {
   expect(scheduledStatusLabel("pending")).toBe("Scheduled");
-  expect(scheduledStatusLabel("interrupted")).toBe("Interrupted");
-  expect(scheduledStatusLabel("expired")).toBe("Expired");
+  expect(scheduledStatusLabel("interrupted")).toBe("Not sent");
+  expect(scheduledStatusLabel("expired")).toBe("Not sent");
 });
 
 

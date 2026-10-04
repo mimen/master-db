@@ -95,7 +95,7 @@ export function desktopInboxTitle(filters: InboxFilters): string {
 }
 
 function sectionLabel(filters: InboxFilters, hasSearch: boolean): string {
-  if (hasSearch) return "Search Results";
+  if (hasSearch) return "Search results";
   const defaultState = isDefaultStateLens(filters.state);
   const defaultType = isDefaultTypeLens(filters.type);
   if (defaultState && defaultType) return "Recent";

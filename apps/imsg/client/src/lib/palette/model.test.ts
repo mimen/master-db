@@ -108,7 +108,7 @@ describe("buildPaletteSections", () => {
     const help = buildPaletteSections({ query: "help", chats: [], messages: [], contacts: [] });
     expect(
       help.find((s) => s.title === "Commands")!.items.some(
-        (i) => i.kind === "command" && i.command.title === "Keyboard Shortcuts",
+        (i) => i.kind === "command" && i.command.title === "Keyboard shortcuts",
       ),
     ).toBe(true);
   });
@@ -119,7 +119,7 @@ describe("buildPaletteSections", () => {
     const shortcuts = Object.fromEntries(
       commands!.items.map((i) => (i.kind === "command" ? [i.command.title, i.command.shortcut] : ["?", "?"])),
     );
-    expect(shortcuts["Keyboard Shortcuts"]).toBe("⌘/");
+    expect(shortcuts["Keyboard shortcuts"]).toBe("⌘/");
     expect(shortcuts["Settings"]).toBeUndefined();
     expect(Object.values(shortcuts)).not.toContain("Action");
   });

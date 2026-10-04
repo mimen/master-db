@@ -380,7 +380,7 @@ export function ThreadView({
                 hapticSelect();
                 void api.react(message.guid, { chatGuid, reaction: type, remove: active }).catch(() => {
                   upsert(message);
-                  showToast("Reaction failed");
+                  showToast("Couldn't send the reaction. Try again.");
                 });
               },
             };
@@ -435,7 +435,7 @@ export function ThreadView({
                   void api
                     .unsend(message.guid)
                     .then(() => upsert({ ...message, retracted: true }))
-                    .catch(() => showToast("Unsend failed — messages can only be unsent for ~2 minutes"));
+                    .catch(() => showToast("Couldn't unsend. Messages can only be unsent for about 2 minutes."));
                 },
               },
             ]
@@ -454,7 +454,7 @@ export function ThreadView({
                       upsert({ ...message, retracted: true });
                       showToast("Deleted");
                     })
-                    .catch(() => showToast("Delete failed"));
+                    .catch(() => showToast("Couldn't delete the message. Try again."));
                 },
               },
             ]

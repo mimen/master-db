@@ -6,29 +6,12 @@ import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { useQuery } from "convex/react";
 import { commaApi } from "@/lib/convex-api";
+import { avatarColor } from "@/lib/avatar-color";
 import { initials } from "@/lib/format";
 import { useWhoIs, type Person } from "@/lib/identity";
 import type { ChatSummary } from "@shared/types";
 import { useTheme } from "@/hooks/use-theme";
 
-// "Muted Editorial" palette, saturation nudged up: 20 evenly-spaced hues drawn
-// as a soft diagonal gradient — richer than a rainbow, still grown-up.
-const PALETTE = { s1: 54, l1: 58, shift: 30, s2: 58, l2: 47 } as const;
-
-/** Deterministic per-contact gradient. A 20-slot palette keyed off the address. */
-function avatarColor(key: string): { start: string; end: string; fg: string } {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  const hue = (h % 20) * 18;
-  const hue2 = (hue + PALETTE.shift) % 360;
-  return {
-    start: `hsl(${hue}, ${PALETTE.s1}%, ${PALETTE.l1}%)`,
-    end: `hsl(${hue2}, ${PALETTE.s2}%, ${PALETTE.l2}%)`,
-    // Generated avatar initials always need to contrast the generated gradient,
-    // never the app theme — theme-invariant by design.
-    fg: PALETTE.l1 > 64 ? "rgba(0,0,0,0.72)" : "#ffffff",
-  };
-}
 
 /**
  * The base primitive: a gradient-initials circle with the cached contact

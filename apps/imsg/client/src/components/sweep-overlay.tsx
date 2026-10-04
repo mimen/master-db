@@ -252,7 +252,7 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
                 </View>
               </View>
               <View style={[styles.footer, { borderTopColor: visual.hairline }]}>
-                <View style={styles.clearedLog}>{cleared.slice(-3).map((entry) => <View key={entry} style={styles.clearedItem}><Ionicons name="checkmark-circle-outline" size={14} color="#28A745" /><Text style={[styles.clearedText, { color: visual.meta }]}>{entry}</Text></View>)}</View>
+                <View style={styles.clearedLog}>{cleared.slice(-3).map((entry) => <View key={entry} style={styles.clearedItem}><Ionicons name="checkmark-circle-outline" size={14} color={theme.successFill} /><Text style={[styles.clearedText, { color: visual.meta }]}>{entry}</Text></View>)}</View>
                 {canUndo ? <Pressable accessibilityRole="button" accessibilityLabel="Undo last settle" onPress={undo} style={({ hovered, pressed }) => [styles.skip, hovered && !pressed && { backgroundColor: visual.controlFill }, pressed && { backgroundColor: visual.controlFillHover }]}>{({ hovered, pressed }) => <><Text style={[styles.skipText, { color: hovered || pressed ? visual.text : visual.muted }]}>Undo</Text><Text style={[styles.keycap, { color: hovered || pressed ? visual.text : visual.muted, borderColor: visual.hairlineStrong }]}>Z</Text></>}</Pressable> : null}
               </View>
             </>

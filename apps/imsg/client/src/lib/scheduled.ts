@@ -24,11 +24,9 @@ export function scheduledStatusLabel(status: ScheduledMessageStatus): string {
     case "complete":
       return "Sent";
     case "failed":
-      return "Failed";
     case "interrupted":
-      return "Interrupted";
     case "expired":
-      return "Expired";
+      return "Not sent";
   }
 }
 

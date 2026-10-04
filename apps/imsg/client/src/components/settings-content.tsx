@@ -235,7 +235,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
 
             <View style={[styles.fieldGroup, styles.clearGroup, { backgroundColor: theme.backgroundElement }]}>
               <ListRow
-                title={<Text style={{ color: "#ff453a", fontSize: 15 }}>Clear suggestion learning</Text>}
+                title={<Text style={{ color: theme.destructive, fontSize: 15 }}>Clear suggestion learning</Text>}
                 accessibilityLabel="Clear suggestion learning"
                 titleWeight="400"
                 onPress={() => showSheet({
@@ -245,7 +245,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
                     destructive: true,
                     onPress: () => void api.clearSuggestionLearning().then(
                       () => showToast("Suggestion learning cleared"),
-                      () => showToast("Could not clear suggestion learning"),
+                      () => showToast("Couldn't clear suggestion learning. Try again."),
                     ),
                   }],
                 })}

@@ -89,7 +89,7 @@ export function ChatInfoContent({
     api
       .aiIdentify(guid)
       .then(setIdentity)
-      .catch(() => showToast("Couldn't identify"))
+      .catch(() => showToast("Couldn't look up this contact. Try again."))
       .finally(() => setIdentifying(false));
   };
 
@@ -132,7 +132,7 @@ export function ChatInfoContent({
     if (name.trim() && name !== info.displayName) {
       api.renameGroup(guid, name.trim())
         .then(() => setInfo((current) => current ? { ...current, displayName: name.trim() } : current))
-        .catch(() => showToast("Rename failed"));
+        .catch(() => showToast("Couldn't rename the conversation. Try again."));
     }
   };
 
@@ -323,7 +323,7 @@ export function ChatInfoContent({
             </View>
           ) : (
             <Pressable accessibilityRole="button" onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
-              <View style={[styles.addPersonIcon, { backgroundColor: "rgba(0,122,255,0.10)" }]}><Ionicons name="person-add" size={15} color={theme.accent} /></View>
+              <View style={[styles.addPersonIcon, { backgroundColor: theme.accentTint }]}><Ionicons name="person-add" size={15} color={theme.accent} /></View>
               <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>Add person</Text>
             </Pressable>
           ))}
@@ -396,7 +396,7 @@ export function ChatInfoContent({
                   })
                 }
               >
-                <Text style={styles.actionDanger}>Leave conversation</Text>
+                <Text style={[styles.actionDanger, { color: theme.destructive }]}>Leave conversation</Text>
               </Pressable>
               <View style={[styles.rowDivider, { backgroundColor: theme.divider, marginLeft: 0 }]} />
             </>
@@ -420,7 +420,7 @@ export function ChatInfoContent({
               })
             }
           >
-            <Text style={styles.actionDanger}>Delete conversation</Text>
+            <Text style={[styles.actionDanger, { color: theme.destructive }]}>Delete conversation</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -525,11 +525,7 @@ const styles = StyleSheet.create({
   cardGap: { marginTop: 18 },
   rowDivider: { height: 0.5, marginLeft: 51 },
   dangerRow: { alignItems: "flex-start", justifyContent: "center", minHeight: 50, paddingHorizontal: 14 },
-  // Intentionally NOT theme.destructive: that literal is the iOS system-red
-  // LIGHT variant, and it's already correct in light mode. Swapping to the
-  // themed token would flip dark mode to #FF453A, which is outside this
-  // sweep's two authorized visual changes (accent + #FF453A→light-mode-red).
-  actionDanger: { color: "#FF3B30", fontSize: 13, fontWeight: "500" },
+  actionDanger: { fontSize: 13, fontWeight: "500" },
   grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
   tileImg: { width: "100%", height: "100%", borderRadius: 6 },
   playBadge: {

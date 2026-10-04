@@ -8,11 +8,11 @@ export function undoLastAction(): boolean {
 }
 
 export function pinChat(chat: ChatSummary, pinned: boolean): void {
-  void api.setPinned(chat.guid, pinned).catch(() => showToast("Pin failed"));
+  void api.setPinned(chat.guid, pinned).catch(() => showToast("Couldn't pin the conversation. Try again."));
 }
 
 export function markChatRead(chat: ChatSummary): void {
-  void api.markRead(chat.guid).catch(() => showToast("Failed"));
+  void api.markRead(chat.guid).catch(() => showToast("Couldn't mark as read. Try again."));
 }
 
 export function markChatUnread(chat: ChatSummary, onSuccess?: () => void): void {
@@ -20,5 +20,5 @@ export function markChatUnread(chat: ChatSummary, onSuccess?: () => void): void 
   void api.markUnread(chat.guid).then(() => {
     commitUndoAction(undoToken, () => markChatRead(chat));
     onSuccess?.();
-  }).catch(() => showToast("Failed"));
+  }).catch(() => showToast("Couldn't mark as unread. Try again."));
 }

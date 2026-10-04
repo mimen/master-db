@@ -58,7 +58,7 @@ export const Palette = {
     accentTint: "rgba(0,122,255,0.10)",
     success: "#1F7A35",
     warning: "#C93400",
-    destructive: "#FF3B30",
+    destructive: "#D70015",
   },
   dark: {
     text: "#ffffff",
@@ -80,6 +80,8 @@ export const Colors = {
     cardBorder: "rgba(0,0,0,0.08)",
     backgroundElement: "#F0F0F3",
     backgroundSelected: "#E0E1E6",
+    // Sent bubbles keep Messages.app's blue and green on purpose: white text measures 4.0:1 on
+    // the blue and 2.2:1 on the green. The owner chose parity over AA here (2026-10-04).
     bubbleMine: Palette.light.accent,
     bubbleTheirs: "#E9E9EB",
     bubbleTheirsText: Palette.light.text,
@@ -88,6 +90,8 @@ export const Colors = {
     sms: "#34C759",
     // Text and icons drawn on an accent, destructive or sms fill.
     onAccent: "#fff",
+    // A fill white text sits on (5.4:1); success itself is a text color in dark.
+    successFill: Palette.light.success,
     backdrop: "rgba(0,0,0,0.45)",
   },
   dark: {
@@ -101,6 +105,7 @@ export const Colors = {
     divider: "#38383a",
     sms: "#34C759",
     onAccent: "#fff",
+    successFill: Palette.light.success,
     backdrop: "rgba(0,0,0,0.45)",
   },
 } as const;

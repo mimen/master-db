@@ -58,12 +58,12 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
   const priority = crm.priority;
 
   const toggleFavorite = () => {
-    setFavorite({ chatGuid, is_favorite: !isFavorite }).catch(() => showToast("Failed to update favorite"));
+    setFavorite({ chatGuid, is_favorite: !isFavorite }).catch(() => showToast("Couldn't update the favorite. Try again."));
   };
 
   const choosePriority = (value: Priority) => {
     const next = priority === value ? null : value;
-    setPriority({ chatGuid, priority: next }).catch(() => showToast("Failed to update priority"));
+    setPriority({ chatGuid, priority: next }).catch(() => showToast("Couldn't update the priority. Try again."));
   };
 
   const submitTag = async () => {
@@ -74,7 +74,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
       await addTag({ chatGuid, tag });
       setTagInput("");
     } catch {
-      showToast("Failed to add tag");
+      showToast("Couldn't add the tag. Try again.");
     } finally {
       setAddingTag(false);
     }
@@ -100,7 +100,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
             <Text
               style={[
                 styles.favoriteLabel,
-                { color: isFavorite ? FAVORITE_GOLD : theme.textSecondary },
+                { color: isFavorite ? theme.text : theme.textSecondary },
               ]}
             >
               Favorite
@@ -142,7 +142,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
                 accessibilityRole="button"
                 accessibilityLabel={`Remove tag ${tag}`}
                 hitSlop={6}
-                onPress={() => removeTag({ chatGuid, tag }).catch(() => showToast("Failed to remove tag"))}
+                onPress={() => removeTag({ chatGuid, tag }).catch(() => showToast("Couldn't remove the tag. Try again."))}
               >
                 {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textSecondary} />}
               </Pressable>
@@ -175,7 +175,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
           onLink={async (record) =>
             void (await linkEvent({ chatGuid, airtable_event_id: record.record_id, event_name: record.name }))
           }
-          onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Failed to unlink event"))}
+          onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Couldn't unlink the event. Try again."))}
         />
       </View>
     </CrmDisclosure>

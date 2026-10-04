@@ -6,7 +6,7 @@ import type { CommandClient, RunCommandOptions, runCommand } from "./convex-comm
 
 export function messagingCommandError(error: unknown, fallback: string): string {
   return error instanceof UnknownCommandError
-    ? "Command outcome unknown. Check the conversation before trying again."
+    ? "Not sure this went through. Check the conversation before trying again."
     : fallback;
 }
 

@@ -37,7 +37,7 @@ describe("legacy aliases keep their shipped values", () => {
   test("Colors carries the semantic palette in both schemes", () => {
     expect(Colors.light.textSecondary).toBe("#60646C");
     expect(Colors.dark.textSecondary).toBe("#98989e");
-    expect(Colors.light.destructive).toBe("#FF3B30");
+    expect(Colors.light.destructive).toBe("#D70015");
     expect(Colors.dark.destructive).toBe("#FF453A");
     expect(Colors.light.bubbleMine).toBe("#007AFF");
     expect(Colors.dark.accentTint).toBe(Palette.dark.accentTint);

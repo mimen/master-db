@@ -60,11 +60,12 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
           data={items}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: Spacing.three, gap: 10 }}
-          ListEmptyComponent={<EmptyState message="No scheduled messages" />}
+          ListEmptyComponent={<EmptyState message="Nothing scheduled. Long-press Send in a conversation to send a message later." />}
           renderItem={({ item }) => {
-            const editable = item.status === "pending";
             const errorState =
               item.status === "failed" || item.status === "interrupted" || item.status === "expired";
+            // A message that didn't go out stays fixable: edit it or send it now.
+            const editable = item.status === "pending" || errorState;
             const statusColor = errorState ? theme.destructive : theme.textSecondary;
             return (
               <Pressable
@@ -97,7 +98,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
                       <HoverFillButton accessibilityLabel={`Edit scheduled message to ${item.chatName}`} onPress={(event) => { event.stopPropagation(); setEditing(item); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
                         <Text style={[styles.actionText, { color: theme.text }]}>Edit</Text>
                       </HoverFillButton>
-                      <HoverFillButton accessibilityLabel={`Send scheduled message to ${item.chatName} now`} onPress={(event) => { event.stopPropagation(); void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Could not send scheduled message")); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
+                      <HoverFillButton accessibilityLabel={`Send scheduled message to ${item.chatName} now`} onPress={(event) => { event.stopPropagation(); void sendNow(item.id).then(() => showToast("Sent now")).catch(() => showToast("Couldn't send the scheduled message. Try again.")); }} restFill="transparent" hoverFill={theme.backgroundSelected} hitSlop={8} style={styles.textAction}>
                         <Text style={[styles.actionText, { color: theme.text }]}>Send now</Text>
                       </HoverFillButton>
                     </View>

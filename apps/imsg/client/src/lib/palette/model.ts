@@ -39,7 +39,7 @@ interface LensCommand {
  * each miss meant a lens with no way to ask for it.
  */
 const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
-  all: { title: "All Conversations", keywords: ["view", "filter", "inbox"] },
+  all: { title: "All conversations", keywords: ["view", "filter", "inbox"] },
   unread: { title: "Unread", keywords: ["view", "filter"] },
   unresponded: { title: "Needs reply", keywords: ["view", "filter", "unresponded"] },
   waiting: { title: "Waiting", keywords: ["view", "filter", "awaiting reply"] },
@@ -51,7 +51,7 @@ const TYPE_COMMANDS: Record<TypeFilter, LensCommand> = {
   known: { title: "Known", keywords: ["view", "filter", "contacts", "saved"] },
   dm: { title: "DMs", keywords: ["view", "filter", "direct messages"] },
   group: { title: "Groups", keywords: ["view", "filter", "group chats"] },
-  unknown: { title: "Unknown Senders", keywords: ["view", "filter", "spam", "numbers"] },
+  unknown: { title: "Unknown senders", keywords: ["view", "filter", "spam", "numbers"] },
 };
 
 function lensEntries<Value extends string>(
@@ -68,11 +68,11 @@ function lensEntries<Value extends string>(
 export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   ...lensEntries("state", STATE_COMMANDS),
   ...lensEntries("type", TYPE_COMMANDS),
-  { id: { kind: "tab", value: "messages" }, title: "Go to Messages", keywords: ["tab", "inbox"] },
-  { id: { kind: "tab", value: "contacts" }, title: "Go to Contacts", keywords: ["tab", "people"] },
-  { id: { kind: "action", value: "new-message" }, title: "New Message", keywords: ["compose", "start", "chat"], shortcut: shortcutFor("conversation.new") },
-  { id: { kind: "action", value: "scheduled" }, title: "Scheduled Messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
-  { id: { kind: "action", value: "shortcuts" }, title: "Keyboard Shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
+  { id: { kind: "tab", value: "messages" }, title: "Go to messages", keywords: ["tab", "inbox"] },
+  { id: { kind: "tab", value: "contacts" }, title: "Go to contacts", keywords: ["tab", "people"] },
+  { id: { kind: "action", value: "new-message" }, title: "New message", keywords: ["compose", "start", "chat"], shortcut: shortcutFor("conversation.new") },
+  { id: { kind: "action", value: "scheduled" }, title: "Scheduled messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
+  { id: { kind: "action", value: "shortcuts" }, title: "Keyboard shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
   { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"] },
 ] as const;
 

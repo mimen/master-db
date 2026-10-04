@@ -76,7 +76,7 @@ export function useAirtableSearch(needle: string, onAdded: (personId: string, hu
       setRawResults((current) => current.filter((r) => r.record_id !== human.record_id));
       onAdded(result.personId, human);
     } catch {
-      showToast("Couldn't add contact");
+      showToast("Couldn't add the contact. Try again.");
     } finally {
       setAddingId(null);
     }

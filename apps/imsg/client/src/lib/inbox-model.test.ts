@@ -172,7 +172,7 @@ describe("deriveInboxModel", () => {
 
     // Search is a mode: the unread/group lenses do NOT constrain results.
     expect(model.listChats).toEqual([groupUnread, directUnread, groupWaiting]);
-    expect(model.sectionLabel).toBe("Search Results");
+    expect(model.sectionLabel).toBe("Search results");
     expect(model.sectionCount).toBe(3);
   });
 
@@ -243,7 +243,7 @@ describe("deriveInboxModel", () => {
     const model = deriveInboxModel([chat], DEFAULT_INBOX_FILTERS, "invoices");
 
     expect(model.listChats).toEqual([chat]);
-    expect(model.sectionLabel).toBe("Search Results");
+    expect(model.sectionLabel).toBe("Search results");
     expect(model.sectionCount).toBe(1);
   });
 });

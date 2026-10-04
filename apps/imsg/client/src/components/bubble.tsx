@@ -22,8 +22,8 @@ import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 
 const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  contact: { icon: "person-circle-outline", label: "Contact Card" },
-  location: { icon: "location-outline", label: "Shared Location" },
+  contact: { icon: "person-circle-outline", label: "Contact card" },
+  location: { icon: "location-outline", label: "Shared location" },
   "apple-cash": { icon: "cash-outline", label: "Apple Cash" },
   poll: { icon: "bar-chart-outline", label: "Poll" },
   unknown: { icon: "cube-outline", label: "App Message" },
@@ -470,7 +470,7 @@ export const Bubble = memo(function Bubble({
 
           {notDelivered ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Retry sending" onPress={() => onRetry(message)} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
-              <Text style={[styles.failed, { color: theme.destructive }]}>Not Delivered — tap to retry</Text>
+              <Text style={[styles.failed, { color: theme.destructive }]}>Not delivered. Select to retry.</Text>
             </Pressable>
           ) : delivery === "uncertain" ? (
             <Text style={[styles.meta, { color: theme.textSecondary }]}>May not have delivered</Text>

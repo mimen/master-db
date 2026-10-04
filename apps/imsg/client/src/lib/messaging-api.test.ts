@@ -75,7 +75,7 @@ test("failed and unknown results never acknowledge a send, navigate, or report s
       try { await operation(); succeeded = true; }
       catch (error) {
         expect(messagingCommandError(error, "Existing failure toast")).toBe(status === "unknown"
-          ? "Command outcome unknown. Check the conversation before trying again." : "Existing failure toast");
+          ? "Not sure this went through. Check the conversation before trying again." : "Existing failure toast");
         if (status === "unknown") expect(error).toBeInstanceOf(UnknownCommandError);
       }
     }

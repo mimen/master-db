@@ -79,7 +79,7 @@ export default function RootLayout() {
                     options={{ headerBackButtonDisplayMode: "minimal" }}
                   />
                   <Stack.Screen name="search" options={{ presentation: "modal", title: "Search" }} />
-                  <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New Message" }} />
+                  <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New message" }} />
                   <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />
                   <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
                   <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />

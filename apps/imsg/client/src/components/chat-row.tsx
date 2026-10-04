@@ -33,8 +33,6 @@ import { ChatAvatar } from "./avatar";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 const ACTION_WIDTH = 84;
-/** The settled green the sweep overlay already uses for a cleared conversation. */
-const SETTLE_COLOR = "#28A745";
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const theme = useTheme();
@@ -203,7 +201,7 @@ function ChatRowInner({
           translation={translation}
           icon={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark-circle-outline"}
           label={settleLabel}
-          color={SETTLE_COLOR}
+          color={theme.successFill}
           side="right"
           commit={commit}
         />

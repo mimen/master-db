@@ -40,7 +40,8 @@ const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
 // favorite star needs to read as "gold" in both light and dark, not shift
 // with the app theme. Exported so the contacts list's trailing star
 // (contacts-list-pane.tsx) matches exactly.
-export const FAVORITE_GOLD = "#FFB800";
+/** The favorite star. A fill-only color: labels next to it stay in the text color. */
+export const FAVORITE_GOLD = "#B07800";
 
 /**
  * Collapsed-by-default wrapper for the CRM editors. The editors are reference
@@ -89,7 +90,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
   const [addingTag, setAddingTag] = useState(false);
 
   const toggleFavorite = () => {
-    setFavorite({ personId, is_favorite: !isFavorite }).catch(() => showToast("Failed to update favorite"));
+    setFavorite({ personId, is_favorite: !isFavorite }).catch(() => showToast("Couldn't update the favorite. Try again."));
   };
 
   // Tapping the already-selected priority pill clears it back to unset
@@ -97,7 +98,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
   // values with no way back to "no opinion recorded."
   const choosePriority = (value: Priority) => {
     const next = priority === value ? null : value;
-    setPriority({ personId, priority: next }).catch(() => showToast("Failed to update priority"));
+    setPriority({ personId, priority: next }).catch(() => showToast("Couldn't update the priority. Try again."));
   };
 
   const submitTag = async () => {
@@ -108,7 +109,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
       await addTag({ personId, tag });
       setTagInput("");
     } catch {
-      showToast("Failed to add tag");
+      showToast("Couldn't add the tag. Try again.");
     } finally {
       setAddingTag(false);
     }
@@ -134,7 +135,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
             <Text
               style={[
                 styles.favoriteLabel,
-                { color: isFavorite ? FAVORITE_GOLD : theme.textSecondary },
+                { color: isFavorite ? theme.text : theme.textSecondary },
               ]}
             >
               Favorite
@@ -176,7 +177,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
                 accessibilityRole="button"
                 accessibilityLabel={`Remove tag ${tag}`}
                 hitSlop={6}
-                onPress={() => removeTag({ personId, tag }).catch(() => showToast("Failed to remove tag"))}
+                onPress={() => removeTag({ personId, tag }).catch(() => showToast("Couldn't remove the tag. Try again."))}
               >
                 {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textSecondary} />}
               </Pressable>
@@ -209,7 +210,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
           onLink={async (record) =>
             void (await linkEvent({ personId, airtable_event_id: record.record_id, event_name: record.name }))
           }
-          onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Failed to unlink event"))}
+          onUnlink={(linkId) => unlinkEvent({ linkId }).catch(() => showToast("Couldn't unlink the event. Try again."))}
         />
       </View>
     </CrmDisclosure>

@@ -12,13 +12,12 @@ export const TriageTheme = {
     cardHover: "#F7F7F9",
     cardSelected: "#EEF0F4",
     empty: "#faf9f8",
-    // Legacy triage grays. They stay at shipped values until callers move to
-    // Palette.textSecondary / textTertiary in the migration wave.
+    // Secondary text reads textSecondary, as in dark; the old light grays measured 2.7 to 4.1:1.
     text: "#1a1a1c",
     snippet: "#55555c",
-    meta: "#7a7a80",
-    muted: "#8a8a90",
-    hint: "#9a9aa0",
+    meta: Palette.light.textSecondary,
+    muted: Palette.light.textSecondary,
+    hint: Palette.light.textSecondary,
     hairline: "rgba(0,0,0,0.10)",
     hairlineStrong: "rgba(0,0,0,0.15)",
     controlFill: "rgba(118,118,128,0.12)",

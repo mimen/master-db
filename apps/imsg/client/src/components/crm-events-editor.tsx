@@ -38,7 +38,7 @@ export function CrmEventsEditor({ events, onLink, onUnlink }: CrmEventsEditorPro
     setSearching(true);
     searchEvents({ query: needle })
       .then(setResults)
-      .catch(() => showToast("Couldn't search events"))
+      .catch(() => showToast("Couldn't search events. Try again."))
       .finally(() => setSearching(false));
   };
 
@@ -49,7 +49,7 @@ export function CrmEventsEditor({ events, onLink, onUnlink }: CrmEventsEditorPro
       setQuery("");
       setResults([]);
     } catch {
-      showToast("Couldn't link event");
+      showToast("Couldn't link the event. Try again.");
     } finally {
       setLinkingId(null);
     }
