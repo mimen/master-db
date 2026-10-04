@@ -12,8 +12,7 @@ import { ingestMessageSchema } from "../types/ingestApi";
  * edit (we accept the latter and overwrite, since attempts at field-level
  * version reasoning would lose reactions/edits).
  *
- * Also bumps `beeper_chats.message_count` to reflect the row count for the
- * chat after the upsert (best-effort cache; not authoritative for analytics).
+ * Also adds the batch's inserts to `beeper_chats.message_count`.
  */
 export const upsertMessages = internalMutation({
   args: {
@@ -78,18 +77,14 @@ export const upsertMessages = internalMutation({
       }
     }
 
-    // Update message_count on the chat (best-effort cache).
+    // Messages are never deleted, so each insert adds exactly one row.
     const chat = await ctx.db
       .query("beeper_chats")
       .withIndex("by_chat_id", (q) => q.eq("chat_id", chat_id))
       .first();
     if (chat) {
-      const all = await ctx.db
-        .query("beeper_messages")
-        .withIndex("by_chat_recent", (q) => q.eq("chat_id", chat_id))
-        .collect();
       await ctx.db.patch(chat._id, {
-        message_count: all.length,
+        message_count: chat.message_count + inserted,
         last_synced_at: now,
       });
     }
