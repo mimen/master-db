@@ -6,21 +6,28 @@ Evidence lives on the laptop in `apps/imsg/artifacts/2026-10-04-native-dive/`, w
 
 | Path | Contents |
 |---|---|
-| `phone/` | Simulator screenshots `01` to `17`, `phone-dive.mp4`, and the reviewer's `findings.md` |
-| `desktop/` | Window screenshots `01` to `21` and the reviewer's `findings.md` |
+| `phone/` | Simulator screenshots `01` to `19`, `phone-dive.mp4`, and the reviewer's `findings.md` |
+| `desktop/` | First desktop run, on the stale shell: screenshots `01` to `24` and `findings.md` |
+| `desktop-r2/` | Desktop run on shell `ee1d0c7`, plus real screen captures `30` to `32` |
+| `19-token-blip*`, `20-palette*`, `21-verify-round2*` | Production checks for N6, N9, N10 and N11, with their scripts in `scripts/` |
 | `unread-compare.json` | Per-conversation unread counts, Convex against `chat.db` |
 | `scripts/unread-compare.py` | The comparison. Rerun it with `python3 scripts/unread-compare.py out.json` |
 
-## Fixed and deployed
-
-N1 to N3 are re-verified in production. N4 is deployed but not yet running: see its row.
+## Fixed, deployed and re-verified in production
 
 | # | Severity | Finding | Evidence | Fix | Re-verified |
 |---|---|---|---|---|---|
 | N1 | High | No conversation ever showed the unread dot. Since the Convex cutover, `listConversations` returned `unreadCount: 0` for every conversation (a TODO in `convex/comma/queries.ts`). `chat.db` had 175 unread conversations. | Source; `chat.db` query on the Mini: 177 chats with unread inbound messages. | `33d63b7` adds an unread mirror to the bridge. It posts each chat's inbound messages newer than its last read or sent message after every arrival, edit and read-status change, and every two minutes. Convex sums sibling chats and clears conversations read since. A mark-read in Comma clears the count before `chat.db` catches up. `02ca3de` makes it pass the deploy gate, which typechecks against the committed generated API. | `unread-compare.json`: 760 conversations, 175 unread in Convex and 175 in `chat.db`, zero mismatches. The production sidebar shows the dots (`../2026-10-04-production-dive/18-verify-unread/01-sidebar-dots.png`). |
 | N2 | Medium | A deep-linked phone thread titled itself with the raw handle (`+19259976370`). A named DM showed no number, so same-name threads looked identical. | `phone/07-self-thread-deeplink.png`, `phone/06-thread-error.png`. | `1ae96be` takes the name from the chat directory and shows the formatted number under it. | `phone/16-header-fixed.png`: "Sprout Imen" over "(925) 997-6370". |
 | N3 | Medium | Phone Settings opened as a modal sheet with no visible way to close it. The reviewer could not leave it. | `phone/13-settings.png`, `phone/findings.md` item 7. | `1ae96be` adds a Done button. | `phone/17-settings-done.png`. Expo Go's own developer gear sits over it in the simulator; that gear is Expo Go chrome and does not exist on a phone without the developer menu enabled. |
-| N4 | Medium | The desktop app had no native Settings entry, so Cmd+comma did nothing, and no Window menu for Minimize, Zoom or Full Screen. | `desktop/findings.md` items 2 and 3, `desktop/06-cmd-comma.png`. | `ee1d0c7` adds Settings… (Cmd+comma) to the app menu through a new `settings.open` command, a standard Window menu, and renames Close to Close Window. | Not yet re-verified. The Mini built and published shell `ee1d0c7`, but the installed `Comma.app` is still shell `8385983` and only picks up a new shell when the user clicks Restart. After Restart, Comma ▸ Settings… and Cmd+comma should open Settings, and the Window menu should appear. |
+| N4 | Medium | The desktop app had no native Settings entry, so Cmd+comma did nothing, and no Window menu for Minimize, Zoom or Full Screen. | `desktop/findings.md` items 2 and 3, `desktop/06-cmd-comma.png`. | `ee1d0c7` adds Settings… (Cmd+comma) to the app menu through a new `settings.open` command, a standard Window menu, and renames Close to Close Window. | After activation (N5), the accessibility tree reads: Comma menu "About Comma, Settings…, Services, Hide Comma, Hide Others, Quit Comma"; File "New Message, Close Window"; Window "Minimize, Zoom, Toggle Full Screen". Cmd+comma opens Settings and Escape closes it (`desktop-r2/findings.md`). |
+| N5 | Medium | The desktop app ran shell `8385983` from Oct 2, so its findings described stale web code, and its Restart banner failed with "Run bun run deploy:activate": that shell predates the in-app activation commands. | `desktop/10-self-open.png`, `desktop/24-after-restart.png`. | With the user's approval, `bun run deploy:activate`, the documented bootstrap for an installed shell older than activation. | `deploy:status`: shell `ee1d0c7` installed, activation verified. The relaunched window shows no update banners (`desktop-r2/01-initial.png`). Later shells update through the in-app Restart. |
+| N6 | Medium | The command palette seemed not to close on Escape or a backdrop click in the desktop app. | `desktop/findings.md` items 6 to 8. | No code change. On current code it closes in Chromium and WebKit (`20-palette.json`, `20-palette-webkit/`). On the live desktop app, real screen captures before Cmd+K and after Escape are byte-identical (`desktop-r2/30-screen.png`, `32-after-esc.png`). The reviewer's window captures went stale and repeated the open palette: four sequential window captures had the same bytes (`desktop-r2/20` to `23`). | `20-palette.json`: opens, Escape closes, backdrop click closes without reaching the list. |
+| N7 | Low | The phone filter strip cut "Waiting" off with no scroll cue, and named the queue "Unresponded". | `phone/05-search.png`. | No code change. That strip was removed on Oct 2 (`953df00`); the first phone run was on a stale Expo Go session. | `phone/18-list-current.png`: the current list shows one Needs reply / Waiting / All control. |
+| N8 | Low | Phone Settings read "Version local build", because Metro served source without a release SHA. | `phone/13-settings.png`. | `17c68e7` has the `comma:expo` agent export the checkout's SHA and the production environment when it starts, which every deploy does. | `phone/19-settings-version.png`: "Version 17c68e702b14". |
+| N9 | Low | Dragging the desktop sidebar divider also selected page text. | `desktop/20-divider-drag.png`. | `48231f9` sets `user-select: none` on the document for the length of a drag. The detail pane overlaps the right half of the 6 px handle, so only its left 3 px take the pointer. | `21-verify-round2.json`: the divider moved 119 px with 0 characters selected, and the body style was restored. |
+| N10 | Low | A note-to-self thread showed two or three received copies of each unsent test message: with the outgoing original gone, no echo had anything to match. | `phone/14-after-metro-restart.png`. | `48231f9`: once a thread is a note-to-self, inbound copies of the same text within 10 s collapse to the first. A real chat keeps someone's repeated message. | `21-verify-round2.json`: one copy each of "[comma test ds4k] unsend" and "[comma test 5tfr] unsend". |
+| N11 | High | Two failed `/api/convex-token` requests during a load threw the app onto "Something went wrong" with `Unauthorized`. Convex treats a null token as signed out. The desktop app hit this on Reload. | `desktop/22-after-restart.png`; `19-token-blip.json`: with 2 token failures, `crashed: true`, 0 rows. | `eaa5384` retries the token at 250 ms, 750 ms, 2 s and 5 s before giving up. | `19-token-blip-after-fix.json`: 3 failed token requests, no crash, 144 rows. |
 
 ## Checked and explained
 
@@ -28,16 +35,10 @@ N1 to N3 are re-verified in production. N4 is deployed but not yet running: see 
 - **Sending from the phone works.** One send, "[comma test phone] hello from the simulator", appeared once within about 1.5 s and showed "Read" within 6 s (`phone/10-sent-immediate.png`, `phone/11-sent-after-6s.png`).
 - **The keyboard keeps the last message visible** above the composer (`phone/12-keyboard.png`).
 
-## Remaining findings, with proposed fixes
+## Remaining
 
-| # | Severity | Finding | Evidence | Proposed fix |
-|---|---|---|---|---|
-| N5 | Medium | The desktop app runs an old shell. It shows "Web update ready" and "Shell update ready" banners over the thread header, so many desktop findings may describe stale web code (the stacked filter chips, the triage footer and the missing handle labels are all older UI). | `desktop/10-self-open.png`. | Click Restart in the desktop app. That is the user's call; the agent does not restart the running production app. Then rerun the desktop dive. |
-| N6 | Medium | In the desktop app, the command palette did not always close on Escape, and clicks reached the window behind it. | `desktop/findings.md` items 6 to 8, `desktop/08-cmd-k.png`. | Re-check after N5; if it reproduces on current code, give the palette a modal backdrop that takes clicks and closes on Escape from any focus. |
-| N7 | Low | The phone filter strip cuts "Waiting" off at the right edge with no scroll cue. | `phone/05-search.png`. | Fade the trailing edge, or use the desktop's three-segment control on the phone. |
-| N8 | Low | Phone Settings reads "Version local build" in production Expo Go, because Metro serves source without a release SHA. | `phone/13-settings.png`. | Have the `comma:expo` LaunchAgent export `EXPO_PUBLIC_IMSG_WEB_SHA` from the Mini's checkout. |
-| N9 | Low | Dragging the desktop sidebar divider also selects page text. | `desktop/20-divider-drag.png`. | Set `user-select: none` on the document while a divider drag is active. |
-| N10 | Low | Note-to-self threads show the received copy several times for sends from before the echo fix (three copies each of "5tfr" and "ds4k"). | `phone/14-after-metro-restart.png`. | BlueBubbles stored two or three inbound rows per send for those runs; the client filter hides one echo per outgoing message. Hide every inbound copy that matches, or leave the history as is. |
+- **The palette and the Settings modal are thin in the accessibility tree.** The desktop review found the palette exposes only a Close button, not its input or commands (`desktop-r2/findings.md` item 2). Proposed fix: give the palette list `role="listbox"` with labelled options and the input `aria-controls`.
+- **The resize handle's right half sits under the detail pane.** Dragging works from the left 3 px. Proposed fix: raise the handle above the detail pane, or move it 3 px left.
 
 ## Not evaluated
 
