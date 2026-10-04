@@ -37,8 +37,9 @@ export function createReceiveSoundObserver(now = Date.now()) {
         const message = chat.lastMessage;
         if (!message) continue;
         const previousAt = latestAt.get(chat.guid) ?? -Infinity;
+        // No upper bound: dates come from the Mac's clock, which may run ahead of this device.
         if (initialized && connected && !seen.has(message.guid) && !message.isFromMe &&
-          message.dateCreated >= liveSince && message.dateCreated <= now && message.dateCreated > previousAt) {
+          message.dateCreated >= liveSince && message.dateCreated > previousAt) {
           received.push(message.guid);
         }
         seen.add(message.guid);

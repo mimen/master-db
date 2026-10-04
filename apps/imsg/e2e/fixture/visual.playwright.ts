@@ -650,6 +650,15 @@ test("messages send through the real UI and fixture replies arrive through Conve
   await composer.fill(outbound);
   await composer.press("Enter");
   await expect(thread.getByText(outbound, { exact: true })).toHaveCount(1);
+  // The optimistic bubble precedes confirmation. Publish the reply only after
+  // the outgoing mirror exists so the two messages retain their real order.
+  await expect.poll(async () => {
+    const response = await desk.request.post("/__fixture/convex", {
+      data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 100, cursor: null } } },
+    });
+    const { page: messages } = await response.json() as { page: Array<{ guid: string; text: string }> };
+    return messages.find((message) => message.text === outbound)?.guid ?? "";
+  }).toMatch(/^out-/);
 
   const inbound = "Fixture inbound: perfect, see you there.";
   await desk.receive(desk.chats.needs, inbound, "+16195550101");

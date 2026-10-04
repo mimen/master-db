@@ -53,3 +53,9 @@ test("preview threads do not consume inbound GUIDs; retractions do not mark read
   expect(reads.observe("chat", [message("new")], true)).toBe(true);
   expect(reads.observe("chat", [{ ...message("retracted"), retracted: true }], true)).toBe(false);
 });
+
+test("a message stamped ahead of this device's clock still sounds", () => {
+  const sound = createReceiveSoundObserver(100_000);
+  sound.observe([chat("initial", 90_000)], 100_000);
+  expect(sound.observe([chat("mac-clock-ahead", 105_000)], 101_000)).toEqual(["mac-clock-ahead"]);
+});
