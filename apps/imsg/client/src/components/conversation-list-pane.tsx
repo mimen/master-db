@@ -270,10 +270,7 @@ export function ConversationListPane({
               {offline && (
                 <View testID="offline-bar" style={[styles.offlineBar, { backgroundColor: theme.backgroundElement }]}>
                   <Ionicons name="cloud-offline-outline" size={13} color={theme.textSecondary} />
-                  <Text numberOfLines={1} style={[styles.offlineText, { color: theme.textSecondary }]}>{allChats.length > 0 ? "Offline · showing saved conversations" : "Offline · couldn't load conversations"}</Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Retry loading conversations" onPress={onRefresh} hitSlop={8}>
-                    {({ hovered, pressed }) => <Text style={[styles.offlineRetry, { color: theme.accent, opacity: hovered || pressed ? 0.7 : 1 }]}>Retry</Text>}
-                  </Pressable>
+                  <Text numberOfLines={1} style={[styles.offlineText, { color: theme.textSecondary }]}>{allChats.length > 0 ? "Offline · reconnecting, sends will go out when back" : "Offline · reconnecting…"}</Text>
                 </View>
               )}
               {!wide && (
@@ -318,7 +315,6 @@ export function ConversationListPane({
 const styles = StyleSheet.create({
   offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 12, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
   offlineText: { flex: 1, fontSize: 12, minWidth: 0 },
-  offlineRetry: { fontSize: 12, fontWeight: "600" },
   phoneSegments: { paddingBottom: 4, paddingHorizontal: 16, paddingTop: 4 },
   sectionHeading: {
     alignItems: "baseline",

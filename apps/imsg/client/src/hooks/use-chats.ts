@@ -1,4 +1,4 @@
-import { usePaginatedQuery } from "convex/react";
+import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Platform } from "react-native";
 import { conversationToChat } from "@/lib/convex-adapters";
@@ -39,7 +39,9 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   const all = convex.chats ?? [];
   const loading = convex.chats === null;
   const refresh = useCallback(() => undefined, []);
-  const error = null;
+  // Convex reconnects on its own; this only surfaces the outage it is already riding out.
+  const { isWebSocketConnected, hasEverConnected } = useConvexConnectionState();
+  const error = hasEverConnected && !isWebSocketConnected ? "offline" : null;
 
   // Passive review lenses (Unread, Settled) freeze membership so an item does
   // not jump while it is being inspected. The active triage queues enumerated

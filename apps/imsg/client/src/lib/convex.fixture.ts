@@ -70,5 +70,5 @@ export function useConvexAuth() {
 }
 
 export function useConvexConnectionState() {
-  return { isWebSocketConnected: true };
+  return { isWebSocketConnected: true, hasEverConnected: true };
 }
