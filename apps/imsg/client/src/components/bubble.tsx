@@ -176,7 +176,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
       {message.attachments.map((att) => {
         const url = attachmentUrl(att);
         const thumbnail = attachmentThumbnailUrl(att, mediaW);
-        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} />;
+        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
         if (
           att.mimeType?.startsWith("audio/") ||
           /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "")

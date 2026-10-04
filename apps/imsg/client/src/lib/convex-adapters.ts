@@ -66,6 +66,7 @@ export function messageToMessage(row: ConvexMessage | ConvexSearchMessage): Mess
       height: a.height ?? null,
       totalBytes: a.totalBytes ?? null,
       thumbUrl: a.thumbUrl,
+      onMac: a.isOnDisk,
       originalUrl: a.originalUrl,
     })),
     mentions: row.mentions,

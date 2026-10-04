@@ -19,6 +19,8 @@ export interface AttachmentSummary {
   width: number | null;
   height: number | null;
   totalBytes: number | null;
+  /** False when Messages never downloaded the file on the Mac; absent means unknown. */
+  onMac?: boolean;
 }
 
 export interface Reaction {

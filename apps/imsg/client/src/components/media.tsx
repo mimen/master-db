@@ -36,11 +36,13 @@ function fakeWaveform(seed: string): number[] {
   return bars;
 }
 
-export function MediaUnavailable() {
+export function MediaUnavailable({ onMac }: { onMac?: boolean }) {
   const theme = useTheme();
-  return <View accessibilityLabel="Media unavailable" style={{ padding: 16, alignItems: "center", justifyContent: "center" }}>
-    <Ionicons name="cloud-download-outline" size={20} color={theme.textSecondary} />
-    <Text style={{ color: theme.textSecondary }}>Media pending or unavailable</Text>
+  // Messages never fetched the file, so no retry here can produce it; say so instead of "pending".
+  const label = onMac === false ? "Not downloaded on the Mac" : "Media pending or unavailable";
+  return <View accessibilityLabel={label} style={{ padding: 16, alignItems: "center", justifyContent: "center" }}>
+    <Ionicons name={onMac === false ? "cloud-offline-outline" : "cloud-download-outline"} size={20} color={theme.textSecondary} />
+    <Text style={{ color: theme.textSecondary }}>{label}</Text>
   </View>;
 }
 
