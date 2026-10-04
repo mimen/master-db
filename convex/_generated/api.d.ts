@@ -9,8 +9,6 @@
  */
 
 import type { FunctionReference } from "convex/server";
-import type { CommaOutboxPayload, CommandResult, outboxDoc, commandReceipt } from "../schema/comma/validators";
-import type { Infer } from "convex/values";
 import type { GenericId as Id } from "convex/values";
 
 /**
@@ -245,9 +243,49 @@ export declare const api: {
     syncState: FunctionReference<"mutation", "public", any, any>;
   };
   comma: {
+    bridgeState: {
+      bridgeState: FunctionReference<
+        "query",
+        "public",
+        {},
+        {
+          key: "mini";
+          lastSeenAt: number;
+          privateApi: boolean;
+          reactionSuggestions: boolean;
+          suggestions: boolean;
+          whisperAvailable: boolean;
+          whisperDetail?: string;
+        } | null
+      >;
+    };
     conversationInfo: {
-      findChat: FunctionReference<"query", "public", { address: string; service?: "iMessage" | "SMS" }, null | { chatGuid: string; service: "iMessage" | "SMS"; isGroup: false; participants: string[] }>;
-      chatInfo: FunctionReference<"query", "public", { chatGuid: string }, null | { guid: string; displayName: string | null; isGroup: boolean; participants: { address: string; name: string; is_favorite?: boolean }[] }>;
+      chatInfo: FunctionReference<
+        "query",
+        "public",
+        { chatGuid: string },
+        null | {
+          displayName: string | null;
+          guid: string;
+          isGroup: boolean;
+          participants: Array<{
+            address: string;
+            is_favorite?: boolean;
+            name: string;
+          }>;
+        }
+      >;
+      findChat: FunctionReference<
+        "query",
+        "public",
+        { address: string; service?: "iMessage" | "SMS" },
+        null | {
+          chatGuid: string;
+          isGroup: false;
+          participants: Array<string>;
+          service: "iMessage" | "SMS";
+        }
+      >;
     };
     drafts: {
       clearDraft: FunctionReference<
@@ -263,11 +301,1250 @@ export declare const api: {
         null
       >;
     };
+    history: {
+      messageWindow: FunctionReference<
+        "query",
+        "public",
+        {
+          after?: number;
+          around?: number;
+          before?: number;
+          conversationId: Id<"comma_conversations">;
+        },
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_messages">;
+          attachmentGuids: Array<string>;
+          attachments: Array<{
+            _creationTime: number;
+            _id: Id<"comma_attachments">;
+            conversationId: Id<"comma_conversations">;
+            filename?: string;
+            guid: string;
+            height?: number;
+            hideAttachment: boolean;
+            isOnDisk: boolean;
+            isSticker: boolean;
+            messageGuid: string;
+            mimeType?: string;
+            originalStorageId?: Id<"_storage">;
+            originalUrl: string | null;
+            sourceVersion: number;
+            thumbStorageId?: Id<"_storage">;
+            thumbUrl: string | null;
+            totalBytes?: number;
+            transcript?: string;
+            transcriptDetail?: string;
+            transcriptError?: string;
+            transcriptState?:
+              | "not-requested"
+              | "working"
+              | "ready"
+              | "unavailable"
+              | "failed";
+            transferName?: string;
+            transferState?: number;
+            uti?: string;
+            width?: number;
+          }>;
+          chatGuid: string;
+          clientKey?: string;
+          conversationId: Id<"comma_conversations">;
+          dateCreated: number;
+          dateDelivered?: number;
+          dateEdited?: number;
+          dateRead?: number;
+          dateRetracted?: number;
+          edited: boolean;
+          error: number;
+          guid: string;
+          isFromMe: boolean;
+          isGroupEvent: boolean;
+          isSpam?: boolean;
+          isTapback: boolean;
+          mentions: Array<{ address: string; length: number; start: number }>;
+          reactions: Array<{
+            emoji?: string;
+            isFromMe: boolean;
+            senderAddress: string | null;
+            senderName: string | null;
+            type: string;
+          }>;
+          replyToFromMe?: boolean;
+          replyToGuid?: string;
+          replyToPreview?: string;
+          retracted: boolean;
+          sendEffect?: string;
+          sender?: { address: string; name: string | null };
+          service: "iMessage" | "SMS";
+          sourceVersion: number;
+          special?:
+            | { kind: "contact"; name: string | null }
+            | { kind: "location" }
+            | { kind: "apple-cash" }
+            | { kind: "poll" }
+            | { kind: "unknown"; label: string };
+          tapback?: {
+            emoji?: string;
+            reaction: string;
+            remove: boolean;
+            targetGuid: string;
+          };
+          tapbackTargetGuid?: string;
+          text: string;
+        }>
+      >;
+    };
+    linkPreview: {
+      fetchLinkPreview: FunctionReference<
+        "action",
+        "public",
+        { url: string },
+        null | {
+          description: string | null;
+          image: string | null;
+          siteName: string | null;
+          title: string | null;
+          url: string;
+        }
+      >;
+    };
+    media: {
+      attachmentChatGuid: FunctionReference<
+        "query",
+        "public",
+        { guid: string },
+        string | null
+      >;
+      attachmentMedia: FunctionReference<
+        "query",
+        "public",
+        { guid: string },
+        {
+          guid: string;
+          originalUrl: string | null;
+          thumbUrl: string | null;
+        } | null
+      >;
+      gallery: FunctionReference<
+        "query",
+        "public",
+        { conversationId: Id<"comma_conversations">; limit?: number },
+        Array<{
+          dateCreated: number;
+          filename: string | null;
+          guid: string;
+          isImage: boolean;
+          isVideo: boolean;
+          mimeType: string | null;
+          originalUrl: string | null;
+          thumbUrl: string | null;
+        }>
+      >;
+      transcriptState: FunctionReference<
+        "query",
+        "public",
+        { attachmentGuid: string },
+        | { state: "not-requested" }
+        | { state: "working" }
+        | { state: "ready"; text: string }
+        | { detail: string; state: "unavailable" }
+        | { error: string; state: "failed" }
+      >;
+    };
     outbox: {
-      enqueue: FunctionReference<"mutation", "public", { clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload }, Id<"comma_outbox">>;
-      getCommand: FunctionReference<"query", "public", { commandId: Id<"comma_outbox"> }, Infer<typeof commandReceipt> | null>;
-      outboxStatusFor: FunctionReference<"query", "public", { clientKeys: string[] }, { clientKey: string; status: "pending" | "claimed" | "sent" | "failed" | "unknown"; error?: string }[]>;
-      pendingOutbox: FunctionReference<"query", "public", { bridgeKey: string }, Infer<typeof outboxDoc>[]>;
+      enqueue: FunctionReference<
+        "mutation",
+        "public",
+        {
+          clientKey: string;
+          conversationId?: Id<"comma_conversations">;
+          payload:
+            | {
+                kind: "send";
+                mentions?: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToGuid?: string;
+                replyToPart?: number;
+                text: string;
+              }
+            | {
+                kind: "react";
+                messageGuid: string;
+                partIndex?: number;
+                reaction: string;
+                remove: boolean;
+                suggested?: boolean;
+              }
+            | {
+                kind: "edit";
+                messageGuid: string;
+                partIndex?: number;
+                text: string;
+              }
+            | { kind: "unsend"; messageGuid: string; partIndex?: number }
+            | { kind: "delete"; messageGuid: string; partIndex?: number }
+            | { kind: "markRead"; messageGuid?: string }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean }
+            | { kind: "rename"; name: string }
+            | { kind: "schedule"; sendAt: number; text: string }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" }
+            | { addresses: Array<string>; kind: "createChat"; text: string }
+            | {
+                address: string;
+                caption?: string;
+                kind: "sendContact";
+                name: string;
+              }
+            | {
+                caption?: string;
+                filename: string;
+                isAudioMessage: boolean;
+                kind: "sendAttachment";
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }
+            | { action: "add" | "remove"; address: string; kind: "participant" }
+            | { kind: "leaveGroup" }
+            | { chatGuid: string; kind: "deleteChat" }
+            | { bbId: number; kind: "sendScheduledNow" }
+            | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "createFaceTimeLink" }
+            | { active: boolean; expiresAt: number; kind: "typing" }
+            | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
+            | {
+                feedback: {
+                  finalText: string;
+                  recipeVersion: number;
+                  selectedAt: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  suggestion: {
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  };
+                };
+                kind: "suggestionFeedback";
+              }
+            | { kind: "clearSuggestionLearning" }
+            | { kind: "identify" };
+        },
+        Id<"comma_outbox">
+      >;
+      getCommand: FunctionReference<
+        "query",
+        "public",
+        { commandId: Id<"comma_outbox"> },
+        {
+          clientKey: string;
+          commandId: Id<"comma_outbox">;
+          error?: string;
+          result?:
+            | {
+                kind: "send";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendContact";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendAttachment";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "createFaceTimeLink";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                chatGuid: string;
+                isGroup: boolean;
+                kind: "createChat";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+                participants: Array<string>;
+                service: "iMessage";
+              }
+            | {
+                kind: "schedule";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "editScheduled";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "transcribe";
+                transcript:
+                  | { state: "not-requested" }
+                  | { state: "working" }
+                  | { state: "ready"; text: string }
+                  | { detail: string; state: "unavailable" }
+                  | { error: string; state: "failed" };
+              }
+            | {
+                kind: "suggestions";
+                suggestions: {
+                  basedOnMessageGuid: string | null;
+                  event: {
+                    durationMinutes: number;
+                    inviteEmails: Array<string>;
+                    location: string | null;
+                    start: string;
+                    title: string;
+                  } | null;
+                  fallback: boolean;
+                  generatedAt: number;
+                  noReply: boolean;
+                  recipeVersion: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  stale: boolean;
+                  suggestions: Array<{
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  }>;
+                };
+              }
+            | {
+                contact: {
+                  confidence: "high" | "medium" | "low";
+                  name: string | null;
+                  reasoning: string;
+                };
+                kind: "identify";
+              }
+            | { kind: "react"; ok: true }
+            | { kind: "edit"; ok: true }
+            | { kind: "unsend"; ok: true }
+            | { kind: "delete"; ok: true }
+            | { kind: "markRead"; ok: true }
+            | { kind: "markUnread"; ok: true }
+            | { kind: "settle"; ok: true }
+            | { kind: "unsettle"; ok: true }
+            | { kind: "pin"; ok: true }
+            | { kind: "mute"; ok: true }
+            | { kind: "rename"; ok: true }
+            | { kind: "cancelScheduled"; ok: true }
+            | { kind: "participant"; ok: true }
+            | { kind: "leaveGroup"; ok: true }
+            | { kind: "deleteChat"; ok: true }
+            | { kind: "sendScheduledNow"; ok: true }
+            | { kind: "typing"; ok: true }
+            | { kind: "suggestionFeedback"; ok: true }
+            | { kind: "clearSuggestionLearning"; ok: true };
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+          updatedAt: number;
+        } | null
+      >;
+      outboxStatusFor: FunctionReference<
+        "query",
+        "public",
+        { clientKeys: Array<string> },
+        Array<{
+          clientKey: string;
+          error?: string;
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+        }>
+      >;
+      pendingOutbox: FunctionReference<
+        "query",
+        "public",
+        { bridgeKey: string },
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_outbox">;
+          attempts: number;
+          claimToken?: string;
+          clientKey: string;
+          conversationId?: Id<"comma_conversations">;
+          createdAt: number;
+          error?: string;
+          leaseUntil?: number;
+          payload:
+            | {
+                kind: "send";
+                mentions?: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToGuid?: string;
+                replyToPart?: number;
+                text: string;
+              }
+            | {
+                kind: "react";
+                messageGuid: string;
+                partIndex?: number;
+                reaction: string;
+                remove: boolean;
+                suggested?: boolean;
+              }
+            | {
+                kind: "edit";
+                messageGuid: string;
+                partIndex?: number;
+                text: string;
+              }
+            | { kind: "unsend"; messageGuid: string; partIndex?: number }
+            | { kind: "delete"; messageGuid: string; partIndex?: number }
+            | { kind: "markRead"; messageGuid?: string }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean }
+            | { kind: "rename"; name: string }
+            | { kind: "schedule"; sendAt: number; text: string }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" }
+            | { addresses: Array<string>; kind: "createChat"; text: string }
+            | {
+                address: string;
+                caption?: string;
+                kind: "sendContact";
+                name: string;
+              }
+            | {
+                caption?: string;
+                filename: string;
+                isAudioMessage: boolean;
+                kind: "sendAttachment";
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }
+            | { action: "add" | "remove"; address: string; kind: "participant" }
+            | { kind: "leaveGroup" }
+            | { chatGuid: string; kind: "deleteChat" }
+            | { bbId: number; kind: "sendScheduledNow" }
+            | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "createFaceTimeLink" }
+            | { active: boolean; expiresAt: number; kind: "typing" }
+            | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
+            | {
+                feedback: {
+                  finalText: string;
+                  recipeVersion: number;
+                  selectedAt: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  suggestion: {
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  };
+                };
+                kind: "suggestionFeedback";
+              }
+            | { kind: "clearSuggestionLearning" }
+            | { kind: "identify" };
+          result?:
+            | {
+                kind: "send";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendContact";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendAttachment";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "createFaceTimeLink";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                chatGuid: string;
+                isGroup: boolean;
+                kind: "createChat";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+                participants: Array<string>;
+                service: "iMessage";
+              }
+            | {
+                kind: "schedule";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "editScheduled";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "transcribe";
+                transcript:
+                  | { state: "not-requested" }
+                  | { state: "working" }
+                  | { state: "ready"; text: string }
+                  | { detail: string; state: "unavailable" }
+                  | { error: string; state: "failed" };
+              }
+            | {
+                kind: "suggestions";
+                suggestions: {
+                  basedOnMessageGuid: string | null;
+                  event: {
+                    durationMinutes: number;
+                    inviteEmails: Array<string>;
+                    location: string | null;
+                    start: string;
+                    title: string;
+                  } | null;
+                  fallback: boolean;
+                  generatedAt: number;
+                  noReply: boolean;
+                  recipeVersion: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  stale: boolean;
+                  suggestions: Array<{
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  }>;
+                };
+              }
+            | {
+                contact: {
+                  confidence: "high" | "medium" | "low";
+                  name: string | null;
+                  reasoning: string;
+                };
+                kind: "identify";
+              }
+            | { kind: "react"; ok: true }
+            | { kind: "edit"; ok: true }
+            | { kind: "unsend"; ok: true }
+            | { kind: "delete"; ok: true }
+            | { kind: "markRead"; ok: true }
+            | { kind: "markUnread"; ok: true }
+            | { kind: "settle"; ok: true }
+            | { kind: "unsettle"; ok: true }
+            | { kind: "pin"; ok: true }
+            | { kind: "mute"; ok: true }
+            | { kind: "rename"; ok: true }
+            | { kind: "cancelScheduled"; ok: true }
+            | { kind: "participant"; ok: true }
+            | { kind: "leaveGroup"; ok: true }
+            | { kind: "deleteChat"; ok: true }
+            | { kind: "sendScheduledNow"; ok: true }
+            | { kind: "typing"; ok: true }
+            | { kind: "suggestionFeedback"; ok: true }
+            | { kind: "clearSuggestionLearning"; ok: true };
+          resultGuid?: string;
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+          updatedAt: number;
+        }>
+      >;
+    };
+    presence: {
+      presence: FunctionReference<
+        "query",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        { expiresAt: number; peerTyping: boolean; updatedAt: number } | null
+      >;
     };
     queries: {
       getConversation: FunctionReference<
@@ -287,11 +1564,10 @@ export declare const api: {
             unresponded: boolean;
             waiting: boolean;
           };
-          hasGroupPhoto: boolean;
-          rawDisplayName?: string;
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
           groupPhotoUrl: string | null;
+          hasGroupPhoto: boolean;
           isGroup: boolean;
           isSpam: boolean;
           lastMessage?: {
@@ -309,6 +1585,7 @@ export declare const api: {
             photoUrl?: string | null;
           }>;
           primaryChatGuid: string;
+          rawDisplayName?: string;
           unreadCount: number;
           updatedAt: number;
         } | null
@@ -335,6 +1612,7 @@ export declare const api: {
           anchorGuid: string;
           conversationId: Id<"comma_conversations">;
           createdAt: number;
+          model?: "opus" | "terra";
           payload: {
             event: {
               durationMinutes: number;
@@ -391,11 +1669,10 @@ export declare const api: {
               unresponded: boolean;
               waiting: boolean;
             };
-            hasGroupPhoto: boolean;
-            rawDisplayName?: string;
             groupPhotoGuid?: string;
             groupPhotoStorageId?: Id<"_storage">;
             groupPhotoUrl: string | null;
+            hasGroupPhoto: boolean;
             isGroup: boolean;
             isSpam: boolean;
             lastMessage?: {
@@ -413,6 +1690,7 @@ export declare const api: {
               photoUrl?: string | null;
             }>;
             primaryChatGuid: string;
+            rawDisplayName?: string;
             unreadCount: number;
             updatedAt: number;
           }>;
@@ -460,6 +1738,14 @@ export declare const api: {
               thumbUrl: string | null;
               totalBytes?: number;
               transcript?: string;
+              transcriptDetail?: string;
+              transcriptError?: string;
+              transcriptState?:
+                | "not-requested"
+                | "working"
+                | "ready"
+                | "unavailable"
+                | "failed";
               transferName?: string;
               transferState?: number;
               uti?: string;
@@ -556,11 +1842,10 @@ export declare const api: {
             unresponded: boolean;
             waiting: boolean;
           };
-          hasGroupPhoto: boolean;
-          rawDisplayName?: string;
           groupPhotoGuid?: string;
           groupPhotoStorageId?: Id<"_storage">;
           groupPhotoUrl: string | null;
+          hasGroupPhoto: boolean;
           isGroup: boolean;
           isSpam: boolean;
           lastMessage?: {
@@ -578,6 +1863,7 @@ export declare const api: {
             photoUrl?: string | null;
           }>;
           primaryChatGuid: string;
+          rawDisplayName?: string;
           unreadCount: number;
           updatedAt: number;
         } | null
@@ -585,7 +1871,11 @@ export declare const api: {
       searchMessages: FunctionReference<
         "query",
         "public",
-        { conversationId?: Id<"comma_conversations">; query: string },
+        {
+          conversationId?: Id<"comma_conversations">;
+          from?: "me" | "them";
+          query: string;
+        },
         Array<{
           _creationTime: number;
           _id: Id<"comma_messages">;
@@ -651,6 +1941,66 @@ export declare const api: {
           lastReconcileAt?: number;
           updatedAt: number;
         }>
+      >;
+    };
+    suggestions: {
+      aiStatus: FunctionReference<
+        "query",
+        "public",
+        {},
+        { reactionSuggestions: boolean; suggestions: boolean }
+      >;
+      getSuggestions: FunctionReference<
+        "query",
+        "public",
+        { chatGuid: string; model: "opus" | "terra" },
+        {
+          _creationTime: number;
+          _id: Id<"comma_suggestions">;
+          anchorGuid: string;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          model?: "opus" | "terra";
+          payload: {
+            event: {
+              durationMinutes: number;
+              inviteEmails: Array<string>;
+              location: string | null;
+              start: string;
+              title: string;
+            } | null;
+            fallback: boolean;
+            noReply: boolean;
+            recipeVersion: number;
+            selectedModel: "opus" | "terra";
+            servedModel: "opus" | "terra";
+            suggestions: Array<{
+              id: string;
+              kind: "text" | "reaction";
+              reaction: string | null;
+              strategy: string;
+              targetMessageGuid: string | null;
+              targetMessagePreview: string | null;
+              targetPartIndex: number | null;
+              text: string;
+              vibe: string;
+            }>;
+          };
+        } | null
+      >;
+    };
+    uploads: {
+      finalizeUpload: FunctionReference<
+        "mutation",
+        "public",
+        { filename: string; mimeType: string; storageId: Id<"_storage"> },
+        Id<"comma_uploads">
+      >;
+      generateAttachmentUploadUrl: FunctionReference<
+        "mutation",
+        "public",
+        {},
+        string
       >;
     };
   };
@@ -805,7 +2155,12 @@ export declare const api: {
       listPeople: FunctionReference<"query", "public", { key: string }, any>;
       listTags: FunctionReference<"query", "public", { key: string }, any>;
       nameDirectory: FunctionReference<"query", "public", { key: string }, any>;
-      searchContacts: FunctionReference<"query", "public", { key: string; q: string; limit?: number }, { address: string; name: string; is_favorite?: boolean }[]>;
+      searchContacts: FunctionReference<
+        "query",
+        "public",
+        { key: string; limit?: number; q: string },
+        Array<{ address: string; is_favorite?: boolean; name: string }>
+      >;
       searchPeople: FunctionReference<
         "query",
         "public",
@@ -2005,6 +3360,50 @@ export declare const internal: {
     };
   };
   comma: {
+    deletions: {
+      deleteChat: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          chatGuid: string;
+          cursor?: string;
+          phase?:
+            | "messages"
+            | "attachments"
+            | "scheduled"
+            | "suggestions"
+            | "events"
+            | "open"
+            | "state"
+            | "drafts"
+            | "presence"
+            | "finalize";
+        },
+        {
+          cursor?: string;
+          done: boolean;
+          phase?:
+            | "messages"
+            | "attachments"
+            | "scheduled"
+            | "suggestions"
+            | "events"
+            | "open"
+            | "state"
+            | "drafts"
+            | "presence"
+            | "finalize";
+        }
+      >;
+    };
+    groupPhotos: {
+      setGroupPhoto: FunctionReference<
+        "mutation",
+        "internal",
+        { chatGuid: string; guid: string | null; storageId?: Id<"_storage"> },
+        boolean
+      >;
+    };
     ingest: {
       generateUploadUrl: FunctionReference<"mutation", "internal", {}, any>;
     };
@@ -2167,6 +3566,14 @@ export declare const internal: {
             thumbStorageId?: Id<"_storage">;
             totalBytes?: number;
             transcript?: string;
+            transcriptDetail?: string;
+            transcriptError?: string;
+            transcriptState?:
+              | "not-requested"
+              | "working"
+              | "ready"
+              | "unavailable"
+              | "failed";
             transferName?: string;
             transferState?: number;
             uti?: string;
@@ -2183,7 +3590,6 @@ export declare const internal: {
             chats: Array<{ chatGuid: string; lastMessageAt: number }>;
             conversationKey: string;
             displayName: string;
-            rawDisplayName?: string;
             hasGroupPhoto: boolean;
             isGroup: boolean;
             isSpam: boolean;
@@ -2197,6 +3603,7 @@ export declare const internal: {
             };
             lastMessageAt: number;
             participants: Array<{ address: string; name: string | null }>;
+            rawDisplayName?: string;
           }>;
         },
         Record<string, Id<"comma_conversations">>
@@ -2257,13 +3664,1103 @@ export declare const internal: {
         { skipped: number; written: number }
       >;
     };
-    outbox: {
-      claimOutbox: FunctionReference<"mutation", "internal", { now: number; leaseMs: number; limit: number }, Infer<typeof outboxDoc>[]>;
-      completeOutbox: FunctionReference<"mutation", "internal", { clientKey: string; claimToken: string; status: "sent" | "failed" | "unknown"; error?: string; resultGuid?: string; result?: CommandResult }, boolean>;
-      renewOutbox: FunctionReference<"mutation", "internal", { clientKey: string; claimToken: string; now: number; leaseMs: number }, boolean>;
+    media: {
+      bridgeMedia: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          request:
+            | {
+                commandId: Id<"comma_outbox">;
+                kind: "upload";
+                storageId: Id<"_storage">;
+              }
+            | {
+                attachmentGuid: string;
+                conversationId?: Id<"comma_conversations">;
+                kind: "transcript";
+                transcript:
+                  | { state: "not-requested" }
+                  | { state: "working" }
+                  | { state: "ready"; text: string }
+                  | { detail: string; state: "unavailable" }
+                  | { error: string; state: "failed" };
+              };
+        },
+        string | boolean
+      >;
     };
-    groupPhotos: { setGroupPhoto: FunctionReference<"mutation", "internal", { chatGuid: string; guid: string | null; storageId?: Id<"_storage"> }, boolean>; };
-    photos: { setContactPhoto: FunctionReference<"mutation", "internal", { address: string; hash: string; storageId: Id<"_storage"> }, boolean>; };
+    outbox: {
+      claimOutbox: FunctionReference<
+        "mutation",
+        "internal",
+        { leaseMs: number; limit: number; now: number },
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_outbox">;
+          attempts: number;
+          claimToken?: string;
+          clientKey: string;
+          conversationId?: Id<"comma_conversations">;
+          createdAt: number;
+          error?: string;
+          leaseUntil?: number;
+          payload:
+            | {
+                kind: "send";
+                mentions?: Array<{
+                  address: string;
+                  length: number;
+                  start: number;
+                }>;
+                replyToGuid?: string;
+                replyToPart?: number;
+                text: string;
+              }
+            | {
+                kind: "react";
+                messageGuid: string;
+                partIndex?: number;
+                reaction: string;
+                remove: boolean;
+                suggested?: boolean;
+              }
+            | {
+                kind: "edit";
+                messageGuid: string;
+                partIndex?: number;
+                text: string;
+              }
+            | { kind: "unsend"; messageGuid: string; partIndex?: number }
+            | { kind: "delete"; messageGuid: string; partIndex?: number }
+            | { kind: "markRead"; messageGuid?: string }
+            | { kind: "markUnread"; messageGuid?: string }
+            | { kind: "settle"; messageGuid?: string }
+            | { kind: "unsettle"; messageGuid?: string }
+            | { kind: "pin"; value: boolean }
+            | { kind: "mute"; value: boolean }
+            | { kind: "rename"; name: string }
+            | { kind: "schedule"; sendAt: number; text: string }
+            | {
+                bbId: number;
+                kind: "editScheduled";
+                sendAt: number;
+                text: string;
+              }
+            | { bbId: number; kind: "cancelScheduled" }
+            | { addresses: Array<string>; kind: "createChat"; text: string }
+            | {
+                address: string;
+                caption?: string;
+                kind: "sendContact";
+                name: string;
+              }
+            | {
+                caption?: string;
+                filename: string;
+                isAudioMessage: boolean;
+                kind: "sendAttachment";
+                mimeType: string;
+                storageId: Id<"_storage">;
+              }
+            | { action: "add" | "remove"; address: string; kind: "participant" }
+            | { kind: "leaveGroup" }
+            | { chatGuid: string; kind: "deleteChat" }
+            | { bbId: number; kind: "sendScheduledNow" }
+            | { attachmentGuid: string; kind: "transcribe" }
+            | { kind: "createFaceTimeLink" }
+            | { active: boolean; expiresAt: number; kind: "typing" }
+            | { kind: "suggestions"; model: "opus" | "terra"; refresh: boolean }
+            | {
+                feedback: {
+                  finalText: string;
+                  recipeVersion: number;
+                  selectedAt: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  suggestion: {
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  };
+                };
+                kind: "suggestionFeedback";
+              }
+            | { kind: "clearSuggestionLearning" }
+            | { kind: "identify" };
+          result?:
+            | {
+                kind: "send";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendContact";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendAttachment";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "createFaceTimeLink";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                chatGuid: string;
+                isGroup: boolean;
+                kind: "createChat";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+                participants: Array<string>;
+                service: "iMessage";
+              }
+            | {
+                kind: "schedule";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "editScheduled";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "transcribe";
+                transcript:
+                  | { state: "not-requested" }
+                  | { state: "working" }
+                  | { state: "ready"; text: string }
+                  | { detail: string; state: "unavailable" }
+                  | { error: string; state: "failed" };
+              }
+            | {
+                kind: "suggestions";
+                suggestions: {
+                  basedOnMessageGuid: string | null;
+                  event: {
+                    durationMinutes: number;
+                    inviteEmails: Array<string>;
+                    location: string | null;
+                    start: string;
+                    title: string;
+                  } | null;
+                  fallback: boolean;
+                  generatedAt: number;
+                  noReply: boolean;
+                  recipeVersion: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  stale: boolean;
+                  suggestions: Array<{
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  }>;
+                };
+              }
+            | {
+                contact: {
+                  confidence: "high" | "medium" | "low";
+                  name: string | null;
+                  reasoning: string;
+                };
+                kind: "identify";
+              }
+            | { kind: "react"; ok: true }
+            | { kind: "edit"; ok: true }
+            | { kind: "unsend"; ok: true }
+            | { kind: "delete"; ok: true }
+            | { kind: "markRead"; ok: true }
+            | { kind: "markUnread"; ok: true }
+            | { kind: "settle"; ok: true }
+            | { kind: "unsettle"; ok: true }
+            | { kind: "pin"; ok: true }
+            | { kind: "mute"; ok: true }
+            | { kind: "rename"; ok: true }
+            | { kind: "cancelScheduled"; ok: true }
+            | { kind: "participant"; ok: true }
+            | { kind: "leaveGroup"; ok: true }
+            | { kind: "deleteChat"; ok: true }
+            | { kind: "sendScheduledNow"; ok: true }
+            | { kind: "typing"; ok: true }
+            | { kind: "suggestionFeedback"; ok: true }
+            | { kind: "clearSuggestionLearning"; ok: true };
+          resultGuid?: string;
+          status: "pending" | "claimed" | "sent" | "failed" | "unknown";
+          updatedAt: number;
+        }>
+      >;
+      completeOutbox: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          claimToken: string;
+          clientKey: string;
+          error?: string;
+          result?:
+            | {
+                kind: "send";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendContact";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "sendAttachment";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                kind: "createFaceTimeLink";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+              }
+            | {
+                chatGuid: string;
+                isGroup: boolean;
+                kind: "createChat";
+                message: {
+                  attachments: Array<{
+                    filename: string | null;
+                    guid: string;
+                    height: number | null;
+                    mimeType: string | null;
+                    originalUrl?: string | null;
+                    thumbUrl?: string | null;
+                    totalBytes: number | null;
+                    width: number | null;
+                  }>;
+                  chatGuid: string;
+                  clientKey?: string;
+                  dateCreated: number;
+                  dateDelivered: number | null;
+                  dateRead: number | null;
+                  edited: boolean;
+                  error: number;
+                  failed?: boolean;
+                  guid: string;
+                  isAssociatedMessage?: boolean;
+                  isFromMe: boolean;
+                  isGroupEvent: boolean;
+                  isSpam?: boolean;
+                  mentions?: Array<{
+                    address: string;
+                    length: number;
+                    start: number;
+                  }>;
+                  pending?: boolean;
+                  reactions: Array<{
+                    emoji?: string;
+                    isFromMe: boolean;
+                    senderAddress: string | null;
+                    senderName: string | null;
+                    type: string;
+                  }>;
+                  replyToFromMe: boolean | null;
+                  replyToGuid: string | null;
+                  replyToPreview: string | null;
+                  retracted: boolean;
+                  sendEffect: string | null;
+                  sender: { address: string; name: string | null } | null;
+                  service: "iMessage" | "SMS";
+                  special:
+                    | { kind: "contact"; name: string | null }
+                    | { kind: "location" }
+                    | { kind: "apple-cash" }
+                    | { kind: "poll" }
+                    | { kind: "unknown"; label: string }
+                    | null;
+                  text: string;
+                };
+                participants: Array<string>;
+                service: "iMessage";
+              }
+            | {
+                kind: "schedule";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "editScheduled";
+                scheduled: {
+                  chatGuid: string;
+                  chatName: string;
+                  error: string | null;
+                  id: number;
+                  sendAt: number;
+                  sentAt: number | null;
+                  status:
+                    | "pending"
+                    | "in-progress"
+                    | "complete"
+                    | "failed"
+                    | "interrupted"
+                    | "expired";
+                  text: string;
+                };
+              }
+            | {
+                kind: "transcribe";
+                transcript:
+                  | { state: "not-requested" }
+                  | { state: "working" }
+                  | { state: "ready"; text: string }
+                  | { detail: string; state: "unavailable" }
+                  | { error: string; state: "failed" };
+              }
+            | {
+                kind: "suggestions";
+                suggestions: {
+                  basedOnMessageGuid: string | null;
+                  event: {
+                    durationMinutes: number;
+                    inviteEmails: Array<string>;
+                    location: string | null;
+                    start: string;
+                    title: string;
+                  } | null;
+                  fallback: boolean;
+                  generatedAt: number;
+                  noReply: boolean;
+                  recipeVersion: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  stale: boolean;
+                  suggestions: Array<{
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  }>;
+                };
+              }
+            | {
+                contact: {
+                  confidence: "high" | "medium" | "low";
+                  name: string | null;
+                  reasoning: string;
+                };
+                kind: "identify";
+              }
+            | { kind: "react"; ok: true }
+            | { kind: "edit"; ok: true }
+            | { kind: "unsend"; ok: true }
+            | { kind: "delete"; ok: true }
+            | { kind: "markRead"; ok: true }
+            | { kind: "markUnread"; ok: true }
+            | { kind: "settle"; ok: true }
+            | { kind: "unsettle"; ok: true }
+            | { kind: "pin"; ok: true }
+            | { kind: "mute"; ok: true }
+            | { kind: "rename"; ok: true }
+            | { kind: "cancelScheduled"; ok: true }
+            | { kind: "participant"; ok: true }
+            | { kind: "leaveGroup"; ok: true }
+            | { kind: "deleteChat"; ok: true }
+            | { kind: "sendScheduledNow"; ok: true }
+            | { kind: "typing"; ok: true }
+            | { kind: "suggestionFeedback"; ok: true }
+            | { kind: "clearSuggestionLearning"; ok: true };
+          resultGuid?: string;
+          status: "sent" | "failed" | "unknown";
+        },
+        boolean
+      >;
+      renewOutbox: FunctionReference<
+        "mutation",
+        "internal",
+        { claimToken: string; clientKey: string; leaseMs: number; now: number },
+        boolean
+      >;
+    };
+    photos: {
+      setContactPhoto: FunctionReference<
+        "mutation",
+        "internal",
+        { address: string; hash: string; storageId: Id<"_storage"> },
+        boolean
+      >;
+    };
+    presence: {
+      expireTyping: FunctionReference<
+        "mutation",
+        "internal",
+        { commandId: Id<"comma_outbox"> },
+        null
+      >;
+      publish: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          state:
+            | {
+                conversationId: Id<"comma_conversations">;
+                expiresAt: number;
+                kind: "presence";
+                peerTyping: boolean;
+                updatedAt: number;
+              }
+            | {
+                key: "mini";
+                kind: "bridgeState";
+                lastSeenAt: number;
+                privateApi: boolean;
+                reactionSuggestions: boolean;
+                suggestions: boolean;
+                whisperAvailable: boolean;
+                whisperDetail?: string;
+              }
+            | { claimToken: string; clientKey: string; kind: "typingCurrent" };
+        },
+        boolean
+      >;
+    };
+    suggestions: {
+      publish: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          update:
+            | {
+                conversationId: Id<"comma_conversations">;
+                kind: "publish";
+                model: "opus" | "terra";
+                startedAt: number;
+                suggestions: {
+                  basedOnMessageGuid: string | null;
+                  event: {
+                    durationMinutes: number;
+                    inviteEmails: Array<string>;
+                    location: string | null;
+                    start: string;
+                    title: string;
+                  } | null;
+                  fallback: boolean;
+                  generatedAt: number;
+                  noReply: boolean;
+                  recipeVersion: number;
+                  selectedModel: "opus" | "terra";
+                  servedModel: "opus" | "terra";
+                  stale: boolean;
+                  suggestions: Array<{
+                    id: string;
+                    kind: "text" | "reaction";
+                    reaction:
+                      | "love"
+                      | "like"
+                      | "dislike"
+                      | "laugh"
+                      | "emphasize"
+                      | "question"
+                      | null;
+                    strategy:
+                      | "answer"
+                      | "clarify"
+                      | "advance"
+                      | "defer"
+                      | "decline"
+                      | "close"
+                      | "react";
+                    targetMessageGuid: string | null;
+                    targetMessagePreview: string | null;
+                    targetPartIndex: number | null;
+                    text: string;
+                    vibe:
+                      | "curious"
+                      | "affirmative"
+                      | "cautious"
+                      | "boundary"
+                      | "playful";
+                  }>;
+                };
+              }
+            | { clearedAt: number; clientKey: string; kind: "clear" };
+        },
+        boolean
+      >;
+    };
   };
   identity: {
     admin: {
