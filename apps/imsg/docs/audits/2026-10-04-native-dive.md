@@ -35,10 +35,12 @@ Evidence lives on the laptop in `apps/imsg/artifacts/2026-10-04-native-dive/`, w
 - **Sending from the phone works.** One send, "[comma test phone] hello from the simulator", appeared once within about 1.5 s and showed "Read" within 6 s (`phone/10-sent-immediate.png`, `phone/11-sent-after-6s.png`).
 - **The keyboard keeps the last message visible** above the composer (`phone/12-keyboard.png`).
 
-## Remaining
+## Round 3
 
-- **The palette and the Settings modal are thin in the accessibility tree.** The desktop review found the palette exposes only a Close button, not its input or commands (`desktop-r2/findings.md` item 2). Proposed fix: give the palette list `role="listbox"` with labelled options and the input `aria-controls`.
-- **The resize handle's right half sits under the detail pane.** Dragging works from the left 3 px. Proposed fix: raise the handle above the detail pane, or move it 3 px left.
+| # | Severity | Finding | Fix | Re-verified |
+|---|---|---|---|---|
+| N12 | Medium | The command palette exposed only its backdrop's "Close" button to assistive tech; its input and commands were invisible. | `2249b10` makes it a labelled modal dialog with a combobox controlling a listbox of options, marks the current option selected, and hides its icons and Enter hint. | `22-a11y-production-aria.txt`: `dialog "Command palette"` > `combobox "Search or jump to"` > `listbox "Results"` with 22 named options, one selected. |
+| N13 | Low | The sidebar resize handle hung 3 px past an overflow-clipped pane, so only its left half took the pointer. | `2249b10` moves it inside the edge. | `22-a11y-production.json`: all 6 px reachable; a drag from its centre moved it 97 px. |
 
 ## Not evaluated
 
