@@ -1,5 +1,5 @@
 import { useQuery } from "convex/react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
   FadeIn,
@@ -13,7 +13,7 @@ import Reanimated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
-import { commaApi } from "@/lib/convex-api";
+import { aiApi, shelfSuggestions } from "@/lib/ai-api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
 import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
@@ -25,7 +25,7 @@ import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { TAPBACK_EMOJI } from "./bubble";
-import type { ReplySuggestion, ReplySuggestions } from "@shared/types";
+import type { ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
 
 // BlueBubbles' DB lags the SSE event; regenerating immediately would answer
 // the previous message.
@@ -37,13 +37,9 @@ const AUTO_REFRESH_DELAY_MS = 1500;
  * message. `undefined` while Convex is still answering, `null` to fall back to
  * the on-demand fetch (nothing precomputed or a stale anchor).
  */
-function usePrecomputedSuggestions(chatGuid: string): ReplySuggestions | null | undefined {
-  const conversation = useQuery(commaApi.resolveChat, { chatGuid });
-  const row = useQuery(commaApi.getSuggestions, conversation ? { conversationId: conversation._id } : "skip");
-  if (conversation === undefined || (conversation && row === undefined)) return undefined;
-  if (!conversation || !row || row.anchorGuid !== conversation.lastMessage?.guid) return null;
-  // Convex stores strategy/vibe/reaction as strings; the bridge wrote them from a typed ReplySuggestions.
-  return { ...row.payload, basedOnMessageGuid: row.anchorGuid, stale: false, generatedAt: row.createdAt } as ReplySuggestions;
+function usePrecomputedSuggestions(chatGuid: string, model: SuggestionModel): ReplySuggestions | null | undefined {
+  const row = useQuery(aiApi.getSuggestions, { chatGuid, model });
+  return useMemo(() => shelfSuggestions(row), [row]);
 }
 
 interface SuggestionShelfProps {
@@ -99,13 +95,14 @@ export function SuggestionShelf({
 
   // Convex mode: the bridge precomputes suggestions for the newest inbound
   // message, so a fresh one renders instantly instead of after a model call.
-  const precomputed = usePrecomputedSuggestions(chatGuid);
+  const precomputed = usePrecomputedSuggestions(chatGuid, selectedModel);
 
   useEffect(() => {
     activeRequest.current++;
     messageEpoch.current = 0;
     if (autoRefresh.current) clearTimeout(autoRefresh.current);
     setResult(null);
+    setLoading(false);
     setResolved(false);
     setStale(false);
     setFailed(false);

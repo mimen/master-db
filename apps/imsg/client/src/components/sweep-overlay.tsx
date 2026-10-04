@@ -5,6 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { undoDepth } from "@/lib/action-undo";
 import { api } from "@/lib/api";
+import { sendWithSuggestionFeedback } from "@/lib/ai-api";
+import { runCommand } from "@/lib/convex-commands";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM } from "@/constants/theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
@@ -64,20 +66,23 @@ export function SweepOverlay({ visible, chats, startGuid, onOpenFullThread, onCl
     if (!chat || !text || sending) return;
     setSending(true);
     const selected = selectedOption < suggestions.length ? suggestions[selectedOption] ?? null : null;
-    void api.enqueueTextSend(chat.guid, `sweep-${Date.now()}-${Math.random().toString(36).slice(2)}`, { text }).then(
-      () => {
+    const clientKey = `sweep-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    void sendWithSuggestionFeedback(
+      () => runCommand(chat.guid, { kind: "send", text }, { clientKey }),
+      async () => {
         if (selected && suggestionResult) {
-          void api.recordSuggestionFeedback(chat.guid, {
+          await api.recordSuggestionFeedback(chat.guid, {
             suggestion: selected,
             selectedModel: suggestionResult.selectedModel,
             servedModel: suggestionResult.servedModel,
             recipeVersion: suggestionResult.recipeVersion,
             selectedAt: Date.now(),
             finalText: text,
-          }).catch(() => undefined);
+          });
         }
-        advance(`${chat.displayName} · replied`);
       },
+    ).then(
+      () => advance(`${chat.displayName} · replied`),
       () => undefined,
     ).finally(() => setSending(false));
   }, [advance, chat, draft, selectedOption, sending, suggestionResult, suggestions]);
