@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 
-import { AgentSurface } from "./AgentSurface"
+import { LazyAgentSurface } from "./LazyAgentSurface"
 import { QueueEmptyState } from "./QueueEmptyState"
 
 import {
@@ -41,7 +41,7 @@ export function AgentModeLayout({
       <ResizablePanel defaultSize={58} className="flex flex-col overflow-hidden">
         <AgentComposerProvider>
           {selectedEntityRef ? (
-            <AgentSurface entity_ref={selectedEntityRef} />
+            <LazyAgentSurface entity_ref={selectedEntityRef} />
           ) : (
             <QueueEmptyState message="Select a task to view its agent thread." />
           )}

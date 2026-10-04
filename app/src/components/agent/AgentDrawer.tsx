@@ -1,6 +1,6 @@
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
-import { AgentSurface } from "./AgentSurface"
+import { LazyAgentSurface } from "./LazyAgentSurface"
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
@@ -22,7 +22,7 @@ export function AgentDrawer() {
           </SheetDescription>
         </VisuallyHidden>
         <AgentComposerProvider>
-          {activeEntityRef ? <AgentSurface entity_ref={activeEntityRef} /> : null}
+          {activeEntityRef ? <LazyAgentSurface entity_ref={activeEntityRef} /> : null}
         </AgentComposerProvider>
       </SheetContent>
     </Sheet>

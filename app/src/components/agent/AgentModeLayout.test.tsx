@@ -6,9 +6,9 @@ vi.mock("./AgentSurface", () => ({ AgentSurface: ({ entity_ref }: { entity_ref: 
 import { AgentModeLayout } from "./AgentModeLayout"
 
 describe("AgentModeLayout", () => {
-  test("shows AgentSurface for the selected entity_ref", () => {
+  test("shows AgentSurface for the selected entity_ref", async () => {
     render(<AgentModeLayout selectedEntityRef="todoist:task:b"><div>list</div></AgentModeLayout>)
-    expect(screen.getByTestId("surface")).toHaveTextContent("todoist:task:b")
+    expect(await screen.findByTestId("surface")).toHaveTextContent("todoist:task:b")
     expect(screen.getByText("list")).toBeInTheDocument()
   })
   test("empty state when nothing selected", () => {
