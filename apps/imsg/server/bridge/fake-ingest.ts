@@ -33,6 +33,7 @@ export class FakeIngest extends ConvexIngest {
       scheduled: { upserted: 1, deleted: 0 },
       claim: kind === "claim" ? this.outboxRows.splice(0, (body as Bodies["claim"]).limit) : [],
       complete: true,
+      renew: true,
       storage: true,
       photo: true,
       transcript: true,

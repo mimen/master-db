@@ -26,6 +26,7 @@ export interface Bodies {
   overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionArgs<typeof internal.comma.outbox.claimOutbox>;
+  renew: FunctionArgs<typeof internal.comma.outbox.renewOutbox>;
   complete: FunctionArgs<typeof internal.comma.outbox.completeOutbox>;
   storage: FunctionArgs<typeof internal.comma.internal.setAttachmentStorage>;
   transcript: FunctionArgs<typeof internal.comma.internal.setTranscript>;
@@ -41,6 +42,7 @@ export interface Results {
   overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
   scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionReturnType<typeof internal.comma.outbox.claimOutbox>;
+  renew: FunctionReturnType<typeof internal.comma.outbox.renewOutbox>;
   complete: FunctionReturnType<typeof internal.comma.outbox.completeOutbox>;
   storage: boolean;
   photo: boolean;
@@ -78,7 +80,7 @@ export class ConvexIngest {
     if (!commaBridgeSecret) throw new Error("Comma bridge disabled, COMMA_BRIDGE_SECRET is unset");
     if (!convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
     // Claiming twice after a lost response would abandon the first batch's leases.
-    const retries = kind === "claim" ? 0 : 4;
+    const retries = kind === "claim" ? 0 : kind === "renew" ? 1 : 4;
     for (let attempt = 0; ; attempt++) {
       let response: Response;
       try {
@@ -86,7 +88,7 @@ export class ConvexIngest {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${commaBridgeSecret}` },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(60_000),
+          signal: AbortSignal.timeout(kind === "renew" ? 10_000 : 60_000),
         });
       } catch (error) {
         if (attempt >= retries) throw error;
