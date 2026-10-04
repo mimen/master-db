@@ -18,6 +18,8 @@ import { CardShadow, HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme
 export interface SheetAction {
   label: string;
   destructive?: boolean;
+  /** Shown but inert, so the user learns the action exists and why it is unavailable. */
+  disabled?: boolean;
   onPress: () => void;
 }
 
@@ -86,8 +88,9 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
   const show = useCallback((req: SheetRequest) => {
     // The tapback pill needs the custom sheet on every platform.
     if (Platform.OS === "ios" && !req.tapbacks) {
-      const labels = [...req.actions.map((a) => a.label), "Cancel"];
-      const destructiveIndexes = req.actions
+      const enabled = req.actions.filter((a) => !a.disabled);
+      const labels = [...enabled.map((a) => a.label), "Cancel"];
+      const destructiveIndexes = enabled
         .map((a, i) => (a.destructive ? i : -1))
         .filter((i) => i >= 0);
       ActionSheetIOS.showActionSheetWithOptions(
@@ -98,7 +101,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
           destructiveButtonIndex: destructiveIndexes.length === 1 ? destructiveIndexes[0] : undefined,
         },
         (index) => {
-          req.actions[index]?.onPress();
+          enabled[index]?.onPress();
         },
       );
       return;
@@ -163,13 +166,15 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                         hovered && { backgroundColor: theme.backgroundSelected },
                         pressed && { opacity: PRESS_DIM },
                       ]}
+                      disabled={action.disabled}
+                      accessibilityState={{ disabled: !!action.disabled }}
                       onPress={() => {
                         setRequest(null);
                         action.onPress();
                       }}
                     >
                       <Text
-                        style={[styles.popoverLabel, { color: action.destructive ? theme.destructive : theme.text }]}
+                        style={[styles.popoverLabel, { color: action.disabled ? theme.textSecondary : action.destructive ? theme.destructive : theme.text }]}
                       >
                         {action.label}
                       </Text>
@@ -214,12 +219,14 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                     styles.dialogAction,
                     pressed && { backgroundColor: theme.backgroundSelected },
                   ]}
+                  disabled={action.disabled}
+                  accessibilityState={{ disabled: !!action.disabled }}
                   onPress={() => {
                     setRequest(null);
                     action.onPress();
                   }}
                 >
-                  <Text style={[styles.dialogLabel, { color: action.destructive ? theme.destructive : theme.text }]}>
+                  <Text style={[styles.dialogLabel, { color: action.disabled ? theme.textSecondary : action.destructive ? theme.destructive : theme.text }]}>
                     {action.label}
                   </Text>
                 </Pressable>
@@ -264,13 +271,15 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       styles.action,
                       pressed && { backgroundColor: theme.backgroundSelected },
                     ]}
+                    disabled={action.disabled}
+                    accessibilityState={{ disabled: !!action.disabled }}
                     onPress={() => {
                       setRequest(null);
                       action.onPress();
                     }}
                   >
                     <Text
-                      style={[styles.actionLabel, { color: action.destructive ? theme.destructive : theme.text }]}
+                      style={[styles.actionLabel, { color: action.disabled ? theme.textSecondary : action.destructive ? theme.destructive : theme.text }]}
                     >
                       {action.label}
                     </Text>

@@ -418,6 +418,11 @@ export function ThreadView({
               },
             ]
           : []),
+        // While a send is confirming, show Edit and Unsend inert rather than hiding them.
+        ...(mine && privateApi && message.text && message.pending
+          ? [{ label: "Edit · available once sent", disabled: true, onPress: () => undefined },
+            { label: "Unsend · available once sent", disabled: true, onPress: () => undefined }]
+          : []),
         ...(mine && privateApi && message.text && age < EDIT_WINDOW_MS && !message.pending
           ? [{ label: `Edit · ${formatWindowRemaining(EDIT_WINDOW_MS, age)}`, onPress: () => setEditing(message) }]
           : []),
