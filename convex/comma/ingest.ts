@@ -24,6 +24,7 @@ const ROUTES = {
   mediaBacklog: internal.comma.internal.mediaBacklog,
   scheduled: internal.comma.internal.replaceScheduled,
   overlay: internal.comma.internal.importOverlay,
+  unread: internal.comma.internal.replaceUnread,
   sync: internal.comma.internal.markSyncState,
   suggestions: internal.comma.internal.setSuggestions,
   suggestionShelves: (internal.comma as unknown as { suggestions: { publish: import("convex/server").FunctionReference<"mutation", "internal", { update: import("./suggestions").ShelfUpdate }, boolean> } }).suggestions.publish,

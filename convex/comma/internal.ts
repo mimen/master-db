@@ -463,6 +463,33 @@ export const importOverlay = internalMutation({
   },
 });
 
+/** Replaces every conversation's unread state with one chat.db snapshot. */
+export const replaceUnread = internalMutation({
+  args: { chats: v.array(v.object({ chatGuid: v.string(), count: v.number(), firstAt: v.number() })) },
+  returns: v.object({ changed: v.number(), unresolved: v.number() }),
+  handler: async (ctx, { chats }) => {
+    const next = new Map<Id<"comma_conversations">, { count: number; firstAt: number }>();
+    let unresolved = 0;
+    for (const chat of chats) {
+      const id = await conversationForChat(ctx, chat.chatGuid);
+      if (!id) {
+        unresolved++;
+        continue;
+      }
+      const prior = next.get(id);
+      next.set(id, { count: (prior?.count ?? 0) + chat.count, firstAt: Math.min(prior?.firstAt ?? chat.firstAt, chat.firstAt) });
+    }
+    let changed = 0;
+    for await (const conversation of ctx.db.query("comma_conversations")) {
+      const want = next.get(conversation._id);
+      if (want?.count === conversation.unread?.count && want?.firstAt === conversation.unread?.firstAt) continue;
+      await ctx.db.patch(conversation._id, { unread: want });
+      changed++;
+    }
+    return { changed, unresolved };
+  },
+});
+
 export const markSyncState = internalMutation({
   args: {
     key: v.string(),

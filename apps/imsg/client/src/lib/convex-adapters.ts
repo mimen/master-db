@@ -21,7 +21,7 @@ export function conversationToChat(row: ConvexConversation): ChatSummary {
     isSpam: row.isSpam,
     lastMessage: row.lastMessage ?? null,
     unreadCount: row.unreadCount,
-    firstUnreadAt: null,
+    firstUnreadAt: row.unreadCount ? row.unread?.firstAt ?? null : null,
     flags: row.flags,
     searchNames: [],
   };

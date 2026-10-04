@@ -31,6 +31,7 @@ export class FakeIngest extends ConvexIngest {
       sync: null,
       suggestions: null,
       overlay: { states: 1, events: 1, open: 1, unresolved: 0 },
+      unread: { changed: 0, unresolved: 0 },
       scheduled: { upserted: 1, deleted: 0 },
       claim: kind === "claim" ? this.outboxRows.splice(0, (body as Bodies["claim"]).limit) : [],
       complete: true,

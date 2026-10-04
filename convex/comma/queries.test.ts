@@ -290,6 +290,18 @@ describe("Comma read queries", () => {
     expect(second.isDone).toBe(true);
   });
 
+  test("unread comes from the mirrored count until Comma marks the conversation read", async () => {
+    const t = authed();
+    const [unread, read] = await t.run(async (ctx) => {
+      const unread = await ctx.db.insert("comma_conversations", { ...conversation("unread", 20), unread: { count: 3, firstAt: 15 } });
+      const read = await ctx.db.insert("comma_conversations", { ...conversation("read", 10), unread: { count: 2, firstAt: 5 } });
+      await ctx.db.insert("comma_conversation_state", { conversationId: read, mutedUnresponded: false, markedUnread: false, pinned: false, readAt: 10, updatedAt: 10 });
+      return [unread, read];
+    });
+    const { page } = await t.query(api.comma.queries.listConversations, { paginationOpts });
+    expect(page.map((row) => [row._id, row.unreadCount, row.flags.unread])).toEqual([[unread, 3, true], [read, 0, false]]);
+  });
+
   test("waiting dismissal expires when the last message changes", async () => {
     const t = authed();
     const id = await t.run(async (ctx) => {

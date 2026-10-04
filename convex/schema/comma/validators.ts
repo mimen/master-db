@@ -65,6 +65,8 @@ export const conversationFields = {
   lastMessageAt: v.number(),
   isSpam: v.boolean(),
   hasGroupPhoto: v.boolean(),
+  /** Mirrored from chat.db: inbound messages newer than the last read or sent one. */
+  unread: v.optional(v.object({ count: v.number(), firstAt: v.number() })),
   updatedAt: v.number(),
 };
 

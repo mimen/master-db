@@ -18,6 +18,7 @@ import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
 import { ScheduledMirror } from "./scheduled-mirror";
 import { BridgeStatePublisher, type BridgeCapabilities } from "./state";
+import { UnreadMirror } from "./unread";
 import { SuggestionsBridge, SUGGESTION_PRECOMPUTE, type SuggestionDeps } from "./suggestions";
 
 export function startBridge(deps: {
@@ -42,6 +43,7 @@ export function startBridge(deps: {
   let live: LiveBridge | null = null;
   let reconcile: ReconcileBridge | null = null;
   let overlay: OverlayMirror | null = null;
+  let unread: UnreadMirror | null = null;
   let scheduled: ScheduledMirror | null = null;
   let outbox: OutboxBridge | null = null;
   let media: MediaWorker | null = null;
@@ -53,6 +55,7 @@ export function startBridge(deps: {
     typing?.stop(); typing = null;
     state?.stop(); state = null;
     suggestions?.stop(); suggestions = null;
+    unread?.stop(); unread = null;
     live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop(); photos?.stop();
     live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null; photos = null;
   }
@@ -77,6 +80,7 @@ export function startBridge(deps: {
         if (rows.some((row) => row.isFromMe)) scheduled?.request();
       });
       overlay = new OverlayMirror(writer);
+      unread = new UnreadMirror(writer, { chatDbPath: deps.chatDbPath });
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
       outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now, handlers: { ...deps.handlers, typing: typingHandler(typing, deps.now) } });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
@@ -102,7 +106,7 @@ export function startBridge(deps: {
       outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
       photos: { matched: photos?.matched ?? 0, pending: photos?.pending ?? 0, uploadedThisRun: photos?.uploaded ?? 0 },
       media: media ? { ...media.counts(), uploadedToday: media.uploadedToday, lastError: media.lastError } : null,
-      pending: (state?.pending ?? 0) + startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
+      pending: (state?.pending ?? 0) + startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (unread?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
     scheduledChanged: () => scheduled?.request(),
     flush: async () => {
       await startup.flush();
@@ -112,6 +116,7 @@ export function startBridge(deps: {
       await live?.flush();
       await reconcile?.flush();
       await overlay?.flush();
+      await unread?.flush();
       await scheduled?.flush();
       await media?.flush();
       await photos?.flush();

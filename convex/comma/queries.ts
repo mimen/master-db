@@ -38,8 +38,8 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
     .query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
     .unique();
-  // TODO: Mirror the bridge's unread count instead of scanning message history on every inbox read.
-  const unreadCount = 0;
+  // A mark-read in Comma lands here before chat.db catches up.
+  const unreadCount = (state?.readAt ?? 0) >= conversation.lastMessageAt ? 0 : conversation.unread?.count ?? 0;
   const flags = computeFlags(
     state ? {
       chatGuid: conversation.primaryChatGuid,

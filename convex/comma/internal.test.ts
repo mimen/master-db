@@ -252,6 +252,31 @@ describe("importOverlay", () => {
   });
 });
 
+describe("replaceUnread", () => {
+  test("sums sibling chats and clears conversations that were read since", async () => {
+    const t = convexTest(schema, modules);
+    const merged = await seedDm(t, "+15550001111", [
+      { chatGuid: "iMessage;-;+15550001111", lastMessageAt: 2000 },
+      { chatGuid: "SMS;-;+15550001111", lastMessageAt: 1000 },
+    ]);
+    const other = await seedDm(t, "+15550002222", [{ chatGuid: "iMessage;-;+15550002222", lastMessageAt: 3000 }]);
+    const first = await t.mutation(internal.comma.internal.replaceUnread, { chats: [
+      { chatGuid: "iMessage;-;+15550001111", count: 2, firstAt: 1800 },
+      { chatGuid: "SMS;-;+15550001111", count: 1, firstAt: 900 },
+      { chatGuid: "iMessage;-;+15550002222", count: 1, firstAt: 3000 },
+      { chatGuid: "iMessage;-;unknown", count: 1, firstAt: 1 },
+    ] });
+    expect(first).toEqual({ changed: 2, unresolved: 1 });
+    expect((await t.run((ctx) => ctx.db.get(merged)))?.unread).toEqual({ count: 3, firstAt: 900 });
+    const second = await t.mutation(internal.comma.internal.replaceUnread, { chats: [
+      { chatGuid: "iMessage;-;+15550001111", count: 2, firstAt: 1800 },
+      { chatGuid: "SMS;-;+15550001111", count: 1, firstAt: 900 },
+    ] });
+    expect(second).toEqual({ changed: 1, unresolved: 0 });
+    expect((await t.run((ctx) => ctx.db.get(other)))?.unread).toBeUndefined();
+  });
+});
+
 describe("setAttachmentStorage", () => {
   test("links either file without changing the row version or clearing the other file", async () => {
     const t = convexTest(schema, modules);

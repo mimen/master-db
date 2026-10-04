@@ -31,6 +31,7 @@ export interface Bodies {
   sync: SyncInput;
   suggestions: FunctionArgs<typeof internal.comma.internal.setSuggestions>;
   overlay: FunctionArgs<typeof internal.comma.internal.importOverlay>;
+  unread: FunctionArgs<typeof internal.comma.internal.replaceUnread>;
   scheduled: FunctionArgs<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionArgs<typeof internal.comma.outbox.claimOutbox>;
   renew: FunctionArgs<typeof internal.comma.outbox.renewOutbox>;
@@ -49,6 +50,7 @@ export interface Results {
   sync: null;
   suggestions: null;
   overlay: FunctionReturnType<typeof internal.comma.internal.importOverlay>;
+  unread: FunctionReturnType<typeof internal.comma.internal.replaceUnread>;
   scheduled: FunctionReturnType<typeof internal.comma.internal.replaceScheduled>;
   claim: FunctionReturnType<typeof internal.comma.outbox.claimOutbox>;
   renew: FunctionReturnType<typeof internal.comma.outbox.renewOutbox>;
