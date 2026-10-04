@@ -3,6 +3,7 @@ import { attachmentSource, messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
 import { enqueueVia, type CommandClient, type CommandPayload } from "./convex-commands";
 import { convexClient } from "./identity";
+import { searchMessages } from "./history-api";
 import type {
   AttachmentSummary,
   AiStatus,
@@ -52,17 +53,6 @@ export async function enqueueCommand(chatGuid: string, payload: CommandPayload):
 }
 
 export const api = {
-  messages(
-    chatGuid: string,
-    window?: { before?: number; after?: number; around?: number },
-  ): Promise<Message[]> {
-    const params = new URLSearchParams();
-    if (window?.before) params.set("before", String(window.before));
-    if (window?.after) params.set("after", String(window.after));
-    if (window?.around) params.set("around", String(window.around));
-    const qs = params.size > 0 ? `?${params.toString()}` : "";
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/messages${qs}`);
-  },
   async enqueueTextSend(chatGuid: string, clientKey: string, body: SendTextRequest): Promise<boolean> {
     if (body.mentions?.length) return false;
     const conversation = await convexClient.query(commaApi.resolveChat, { chatGuid });
@@ -149,22 +139,14 @@ export const api = {
     return request("/api/chats/new", { method: "POST", body: JSON.stringify(body) });
   },
   async search(q: string, opts: { chat?: string; from?: "me" | "them" } = {}): Promise<Message[]> {
-    // The Convex index filters by conversation, not sender, so "from" searches stay on REST.
-    if (!opts.from) {
-      const conversation = opts.chat ? await convexClient.query(commaApi.resolveChat, { chatGuid: opts.chat }) : null;
-      if (opts.chat && !conversation) return [];
-      {
-        const rows = await convexClient.query(commaApi.searchMessages, {
-          query: q,
-          ...(conversation ? { conversationId: conversation._id } : {}),
-        });
-        return rows.map(messageToMessage);
-      }
-    }
-    const params = new URLSearchParams({ q });
-    if (opts.chat) params.set("chat", opts.chat);
-    if (opts.from) params.set("from", opts.from);
-    return request(`/api/search?${params.toString()}`);
+    const conversation = opts.chat ? await convexClient.query(commaApi.resolveChat, { chatGuid: opts.chat }) : null;
+    if (opts.chat && !conversation) return [];
+    const rows = await convexClient.query(searchMessages, {
+      query: q,
+      ...(conversation ? { conversationId: conversation._id } : {}),
+      ...(opts.from ? { from: opts.from } : {}),
+    });
+    return rows.map(messageToMessage);
   },
   gallery(chatGuid: string): Promise<GalleryItem[]> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/gallery`);

@@ -1,4 +1,4 @@
-import { paginationOptsValidator, paginationResultValidator } from "convex/server";
+import { paginationOptsValidator, paginationResultValidator, type SearchFilterFinalizer } from "convex/server";
 import { v } from "convex/values";
 
 import { computeFlags } from "../../apps/imsg/shared/chat-state";
@@ -14,6 +14,7 @@ import {
   suggestionDoc,
   syncStateDoc,
   type CommaConversationDoc,
+  type CommaMessageDoc,
 } from "../schema/comma/validators";
 
 import { personForAddress } from "./photos";
@@ -92,10 +93,26 @@ const attachmentView = v.object({
   originalUrl: v.union(v.string(), v.null()),
 });
 
-const messageView = v.object({
+export const messageView = v.object({
   ...messageDoc.fields,
   attachments: v.array(attachmentView),
 });
+
+export async function withMessageAttachments(ctx: QueryCtx, message: CommaMessageDoc) {
+  const attachments = await ctx.db
+    .query("comma_attachments")
+    .withIndex("by_messageGuid", (q) => q.eq("messageGuid", message.guid))
+    .filter((q) => q.eq(q.field("hideAttachment"), false))
+    .collect();
+  return {
+    ...message,
+    attachments: await Promise.all(attachments.map(async (attachment) => ({
+      ...attachment,
+      thumbUrl: attachment.thumbStorageId ? await ctx.storage.getUrl(attachment.thumbStorageId) : null,
+      originalUrl: attachment.originalStorageId ? await ctx.storage.getUrl(attachment.originalStorageId) : null,
+    }))),
+  };
+}
 
 export const listMessages = query({
   args: {
@@ -111,34 +128,34 @@ export const listMessages = query({
       .order("desc")
       .filter((q) => q.and(q.eq(q.field("isTapback"), false), q.eq(q.field("retracted"), false)))
       .paginate(args.paginationOpts);
-    const page = await Promise.all(result.page.map(async (message) => {
-      const attachments = await ctx.db
-        .query("comma_attachments")
-        .withIndex("by_messageGuid", (q) => q.eq("messageGuid", message.guid))
-        .collect();
-      return {
-        ...message,
-        attachments: await Promise.all(attachments.map(async (attachment) => ({
-          ...attachment,
-          thumbUrl: attachment.thumbStorageId ? await ctx.storage.getUrl(attachment.thumbStorageId) : null,
-          originalUrl: attachment.originalStorageId ? await ctx.storage.getUrl(attachment.originalStorageId) : null,
-        }))),
-      };
-    }));
+    const page = await Promise.all(result.page.map((message) => withMessageAttachments(ctx, message)));
     return { ...result, page };
   },
 });
 
 export const searchMessages = query({
-  args: { query: v.string(), conversationId: v.optional(v.id("comma_conversations")) },
+  args: {
+    query: v.string(),
+    conversationId: v.optional(v.id("comma_conversations")),
+    from: v.optional(v.union(v.literal("me"), v.literal("them"))),
+  },
   returns: v.array(messageDoc),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
     return await ctx.db
       .query("comma_messages")
       .withSearchIndex("search_text", (q) => {
-        const search = q.search("text", args.query).eq("isTapback", false).eq("retracted", false);
-        return args.conversationId ? search.eq("conversationId", args.conversationId) : search;
+        let search = q.search("text", args.query).eq("isTapback", false).eq("retracted", false);
+        if (args.conversationId) search = search.eq("conversationId", args.conversationId);
+        // The sibling schema branch adds isFromMe to search_text.filterFields.
+        if (args.from) {
+          const senderSearch = search as SearchFilterFinalizer<CommaMessageDoc, {
+            searchField: "text";
+            filterFields: "conversationId" | "isTapback" | "retracted" | "isFromMe";
+          }>;
+          return senderSearch.eq("isFromMe", args.from === "me");
+        }
+        return search;
       })
       .take(50);
   },

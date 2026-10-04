@@ -6,7 +6,7 @@ import { createApp } from "../../server/app";
 import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
 import { FixtureAi } from "./ai";
-import { registerConvexFixture } from "./convex";
+import { fixtureMessageWindow, registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles, type FaultableMethod } from "./fake-bluebubbles";
 import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
 
@@ -150,7 +150,9 @@ const { app, dispose } = await createApp({
   backgroundServices: false,
   staticRoot: join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {
-    const resetConvex = registerConvexFixture(fixtureApp, controls, bb, db, identity);
+    const resetConvex = registerConvexFixture(fixtureApp, controls, bb, db, identity, {
+      "comma/history:messageWindow": (args) => fixtureMessageWindow(bb, identity, args),
+    });
     fixtureApp.post("/__fixture/reset", (c) => {
       bb.reset(fixtureSeed());
       resetOverlay();
