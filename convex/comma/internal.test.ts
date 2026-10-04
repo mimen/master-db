@@ -252,6 +252,11 @@ describe("importOverlay", () => {
   });
 });
 
+// The committed generated API predates replaceUnread.
+const replaceUnread = (internal.comma.internal as typeof internal.comma.internal & {
+  replaceUnread: import("convex/server").FunctionReference<"mutation", "internal", { chats: { chatGuid: string; count: number; firstAt: number }[] }, { changed: number; unresolved: number }>;
+}).replaceUnread;
+
 describe("replaceUnread", () => {
   test("sums sibling chats and clears conversations that were read since", async () => {
     const t = convexTest(schema, modules);
@@ -260,7 +265,7 @@ describe("replaceUnread", () => {
       { chatGuid: "SMS;-;+15550001111", lastMessageAt: 1000 },
     ]);
     const other = await seedDm(t, "+15550002222", [{ chatGuid: "iMessage;-;+15550002222", lastMessageAt: 3000 }]);
-    const first = await t.mutation(internal.comma.internal.replaceUnread, { chats: [
+    const first = await t.mutation(replaceUnread, { chats: [
       { chatGuid: "iMessage;-;+15550001111", count: 2, firstAt: 1800 },
       { chatGuid: "SMS;-;+15550001111", count: 1, firstAt: 900 },
       { chatGuid: "iMessage;-;+15550002222", count: 1, firstAt: 3000 },
@@ -268,7 +273,7 @@ describe("replaceUnread", () => {
     ] });
     expect(first).toEqual({ changed: 2, unresolved: 1 });
     expect((await t.run((ctx) => ctx.db.get(merged)))?.unread).toEqual({ count: 3, firstAt: 900 });
-    const second = await t.mutation(internal.comma.internal.replaceUnread, { chats: [
+    const second = await t.mutation(replaceUnread, { chats: [
       { chatGuid: "iMessage;-;+15550001111", count: 2, firstAt: 1800 },
       { chatGuid: "SMS;-;+15550001111", count: 1, firstAt: 900 },
     ] });
