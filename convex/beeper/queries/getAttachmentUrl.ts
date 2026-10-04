@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 
 /**
  * Resolve an mxc_id to a short-lived Convex File Storage URL. Returns null
@@ -10,7 +10,7 @@ import { query } from "../../_generated/server";
  * URLs returned by `ctx.storage.getUrl` expire after a short window; callers
  * should re-fetch on each render rather than persist the URL.
  */
-export const getAttachmentUrl = query({
+export const getAttachmentUrl = internalQuery({
   args: { mxc_id: v.string() },
   handler: async (ctx, { mxc_id }) => {
     const row = await ctx.db

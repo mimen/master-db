@@ -1,4 +1,4 @@
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 
 /**
  * Aggregate Beeper sync health across accounts. One row per known account
@@ -10,7 +10,7 @@ import { query } from "../../_generated/server";
  * cheap because that table has one row per chat (hundreds, not tens of
  * thousands).
  */
-export const getSyncStatus = query({
+export const getSyncStatus = internalQuery({
   handler: async (ctx) => {
     const accounts = await ctx.db.query("beeper_accounts").collect();
     const chats = await ctx.db.query("beeper_chats").collect();

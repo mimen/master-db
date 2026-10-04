@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 
 /**
  * Full-text search across all Beeper messages.
@@ -9,7 +9,7 @@ import { query } from "../../_generated/server";
  * Filters by network / chat_id / sender_id are pushed into the index when
  * provided.
  */
-export const searchMessages = query({
+export const searchMessages = internalQuery({
   args: {
     query: v.string(),
     network: v.optional(v.string()),

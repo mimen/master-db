@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 
 /**
  * Most-recently-active chats, optionally filtered to a single network.
@@ -8,7 +8,7 @@ import { query } from "../../_generated/server";
  * Backed by the `by_network_activity` / `by_last_activity` indexes so the
  * usual "show me my recent chats" panel is a single index walk.
  */
-export const getRecentChats = query({
+export const getRecentChats = internalQuery({
   args: {
     network: v.optional(v.string()),
     limit: v.optional(v.number()),

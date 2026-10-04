@@ -1,6 +1,6 @@
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 
-export const all = mutation({
+export const all = internalMutation({
   handler: async (ctx) => {
     // Get all items and delete them
     const items = await ctx.db.query("todoist_items").collect();
@@ -56,7 +56,7 @@ export const all = mutation({
   },
 });
 
-export const items = mutation({
+export const items = internalMutation({
   handler: async (ctx) => {
     const items = await ctx.db.query("todoist_items").collect();
     for (const item of items) {
@@ -69,7 +69,7 @@ export const items = mutation({
   },
 });
 
-export const projects = mutation({
+export const projects = internalMutation({
   handler: async (ctx) => {
     const projects = await ctx.db.query("todoist_projects").collect();
     for (const project of projects) {
@@ -82,7 +82,7 @@ export const projects = mutation({
   },
 });
 
-export const syncState = mutation({
+export const syncState = internalMutation({
   handler: async (ctx) => {
     const syncStates = await ctx.db.query("sync_state").collect();
     for (const state of syncStates) {

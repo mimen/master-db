@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import { query } from "../../_generated/server";
+import { internalQuery } from "../../_generated/server";
 
 /**
  * Messages for one chat, ordered by ts_epoch_ms. Default newest-first.
@@ -8,7 +8,7 @@ import { query } from "../../_generated/server";
  * For pagination, callers pass `before_ts_epoch_ms` (the oldest ts they have)
  * and we return the next page going backwards.
  */
-export const getMessagesByChat = query({
+export const getMessagesByChat = internalQuery({
   args: {
     chat_id: v.string(),
     before_ts_epoch_ms: v.optional(v.number()),
