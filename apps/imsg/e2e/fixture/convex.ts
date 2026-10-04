@@ -1,3 +1,4 @@
+import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
 import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
@@ -143,6 +144,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     return undefined;
   };
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "comma/linkPreview:fetchLinkPreview": async (args) => {
+      const url = typeof args.url === "string" ? parsePublicPreviewUrl(args.url) : null;
+      return url ? extractLinkPreview('<title>Fixture link preview</title><meta name="description" content="A deterministic preview for fixture messages.">', url) : null;
+    },
     "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,

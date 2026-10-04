@@ -5,8 +5,9 @@ import { subscribeServerEvents } from "./sse";
 
 type Query = FunctionReference<"query">;
 type Mutation = FunctionReference<"mutation">;
+type Action = FunctionReference<"action">;
 
-async function call<Ref extends Query | Mutation>(ref: Ref, args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> {
+async function call<Ref extends Query | Mutation | Action>(ref: Ref, args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> {
   const response = await fetch("/__fixture/convex", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -16,7 +17,11 @@ async function call<Ref extends Query | Mutation>(ref: Ref, args: FunctionArgs<R
   return response.json();
 }
 
-export const convexClient = { query: call, mutation: call };
+export const convexClient = { query: call, mutation: call, action: call };
+
+export function useAction<Ref extends Action>(ref: Ref) {
+  return useCallback((args: FunctionArgs<Ref>) => call(ref, args), [ref]);
+}
 
 export function useQuery<Ref extends Query>(ref: Ref, args: FunctionArgs<Ref> | "skip"): FunctionReturnType<Ref> | undefined {
   const key = JSON.stringify(args);

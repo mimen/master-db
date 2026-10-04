@@ -154,3 +154,17 @@ test("unknown function names return a diagnostic 400 and reset clears fixture dr
   reset();
   expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toBeNull();
 });
+
+test("link preview actions return deterministic public previews and null for blocked URLs", async () => {
+  const name = "comma/linkPreview:fetchLinkPreview";
+  const url = "https://example.com/article";
+  const preview = await call(name, { url });
+  expect(preview).toEqual({
+    url, title: "Fixture link preview", description: "A deterministic preview for fixture messages.",
+    image: null, siteName: "example.com",
+  });
+  expect(await call(name, { url })).toEqual(preview);
+  for (const blocked of ["http://localhost/", "http://10.0.0.1/", "https://device.ts.net/", "not a URL"]) {
+    expect(await call(name, { url: blocked })).toBeNull();
+  }
+});
