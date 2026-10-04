@@ -1,15 +1,13 @@
 import { makeFunctionReference } from "convex/server";
-import { v, type GenericId, type Infer } from "convex/values";
+import type { GenericId, ObjectType } from "convex/values";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
-import { bridgeStateFields, presenceFields } from "../../../../../convex/schema/comma/validators";
+import type { bridgeStateFields, presenceFields } from "../../../../../convex/schema/comma/validators";
 import { commaApi } from "./convex-api";
 import { runCommand } from "./convex-commands";
 
-const bridgeStateValue = v.object(bridgeStateFields);
-export type BridgeState = Infer<typeof bridgeStateValue>;
-const presenceValue = v.object(presenceFields);
-export type PeerPresence = Omit<Infer<typeof presenceValue>, "conversationId">;
+export type BridgeState = ObjectType<typeof bridgeStateFields>;
+export type PeerPresence = Omit<ObjectType<typeof presenceFields>, "conversationId">;
 export const presenceApi = {
   presence: makeFunctionReference<"query", { conversationId: GenericId<"comma_conversations"> }, PeerPresence | null>("comma/presence:presence"),
   bridgeState: makeFunctionReference<"query", Record<string, never>, BridgeState | null>("comma/bridgeState:bridgeState"),

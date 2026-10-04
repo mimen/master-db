@@ -66,6 +66,10 @@ export class FixtureBlueBubbles implements BlueBubbles {
     return message;
   }
 
+  receiveTyping(chatGuid: string, display: boolean): void {
+    this.emit({ kind: "typing", chatGuid, display });
+  }
+
   onEvent(callback: (event: BBEvent) => void): () => void {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);

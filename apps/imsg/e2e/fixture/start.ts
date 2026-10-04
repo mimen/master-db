@@ -176,7 +176,7 @@ const { app, dispose } = await createApp({
       if (!body.chatGuid || typeof body.display !== "boolean") {
         return c.json({ error: "chatGuid and display are required" }, 400);
       }
-      controls.broadcast({ kind: "typing", chatGuid: body.chatGuid, display: body.display });
+      bb.receiveTyping(body.chatGuid, body.display);
       return c.json({ ok: true });
     });
 

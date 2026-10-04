@@ -6,7 +6,6 @@ import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, mapMessage } from "../../server/map";
 import { ChatCommands } from "../../server/commands";
-import { mapMessage } from "../../server/map";
 import { WhisperService } from "../../server/whisper";
 import type { OverlayDb } from "../../server/db";
 import type { AiStatus, ChatSummary, Contact, ContactSuggestion, Message, ReplySuggestions, ScheduledMessage, TranscriptState } from "../../shared/types";
@@ -110,9 +109,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const inFlight = new Map<string, Promise<string>>();
   const peerTyping = new Map<string, { peerTyping: boolean; updatedAt: number; expiresAt: number }>();
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const unsubscribeTyping = bb.onEvent((event) => {
+  bb.onEvent((event) => {
     if (event.kind === "typing") {
-      const now = Date.now();
+      const now = new Date().getTime();
       peerTyping.set(controls.directory.canonicalGuid(event.chatGuid), { peerTyping: event.display, updatedAt: now, expiresAt: now + (event.display ? 12_000 : 0) });
     } else if (event.kind === "stream-connected") peerTyping.clear();
   });
@@ -183,7 +182,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         accept(result);
         if (result.ok) {
           if (payload.isAudioMessage && payload.caption) accept(await bb.sendText(chatGuid, payload.caption));
-          return { kind: "sendAttachment" as const, message: mapMessage(result.value, chatGuid, names) };
+          const message = mapMessage(result.value, chatGuid, names);
+          directory.applyKnownMessage(chatGuid, message);
+          return { kind: "sendAttachment" as const, message };
         }
         break;
       }
@@ -215,13 +216,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
       case "typing": {
-        if (payload.active && payload.expiresAt <= Date.now()) return { kind: "typing" as const, ok: true as const };
+        if (payload.active && payload.expiresAt <= new Date().getTime()) return { kind: "typing" as const, ok: true as const };
         const timer = typingTimers.get(chatGuid);
         if (timer) clearTimeout(timer);
         typingTimers.delete(chatGuid);
         accept(await bb.setTyping(chatGuid, payload.active));
         if (payload.active) {
-          const expiry = setTimeout(() => { typingTimers.delete(chatGuid); void bb.setTyping(chatGuid, false); }, Math.max(0, payload.expiresAt - Date.now()));
+          const expiry = setTimeout(() => { typingTimers.delete(chatGuid); void bb.setTyping(chatGuid, false); }, Math.max(0, payload.expiresAt - new Date().getTime()));
           expiry.unref(); typingTimers.set(chatGuid, expiry);
         }
         return { kind: "typing" as const, ok: true as const };
@@ -229,7 +230,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       case "suggestions": {
         const generated = await read<ReplySuggestions>(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}?model=${payload.model}${payload.refresh ? "&refresh=1" : ""}`);
-        const suggestions = { ...generated, event: generated.event ?? null };
+        const anchor = (await conversations()).find((row) => row.primaryChatGuid === chatGuid)?.lastMessage;
+        const suggestions = { ...generated, basedOnMessageGuid: anchor?.guid ?? generated.basedOnMessageGuid,
+          suggestions: generated.suggestions.map((suggestion) => suggestion.kind === "reaction" && anchor
+            ? { ...suggestion, targetMessageGuid: anchor.guid, targetMessagePreview: anchor.text } : suggestion),
+          event: generated.event ?? null };
         if (!suggestions.stale) shelves.set(JSON.stringify([chatGuid, payload.model]), suggestions);
         return { kind: "suggestions" as const, suggestions };
       }
@@ -294,7 +299,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   };
   app.post("/__fixture/upload", async (c) => {
     const storageId = `fixture-storage-${uploads.size + 1}`;
-    uploads.set(storageId, { bytes: await c.req.blob() });
+    uploads.set(storageId, { bytes: new Blob([await c.req.arrayBuffer()], { type: c.req.header("Content-Type")?.split(";")[0].trim() }) });
     return c.json({ storageId });
   });
   app.get("/__fixture/media/:guid", (c) => {
@@ -321,7 +326,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     },
     "comma/presence:presence": async (args) => {
       const row = peerTyping.get(controls.directory.canonicalGuid(String(args.conversationId)));
-      return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > Date.now() } : null;
+      return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
     "comma/bridgeState:bridgeState": async () => {
       const health = await read<{ privateApi: boolean }>("/api/health");
@@ -332,7 +337,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "comma/uploads:finalizeUpload": async (args) => {
       const upload = uploads.get(String(args.storageId));
       if (!upload) throw new FixtureError("Uploaded file not found", 400);
-      if (!args.filename || upload.bytes.type !== args.mimeType || !upload.bytes.size) throw new FixtureError("Invalid upload metadata", 400);
+      if (!args.filename || upload.bytes.type.split(";")[0] !== args.mimeType || !upload.bytes.size) throw new FixtureError(`Invalid upload metadata: ${upload.bytes.type}, ${upload.bytes.size} bytes`, 400);
       upload.filename = String(args.filename); upload.mimeType = String(args.mimeType);
       return `upload-${String(args.storageId)}`;
     },
@@ -444,5 +449,5 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     }
   });
   return () => { drafts.clear(); receipts.clear(); inFlight.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
-    unsubscribeTyping(); for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
+    for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

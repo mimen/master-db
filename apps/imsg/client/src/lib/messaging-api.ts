@@ -2,7 +2,7 @@ import type { GenericId } from "convex/values";
 import type { Contact, SendTextRequest } from "@shared/types";
 import { UnknownCommandError } from "./command-results";
 import { commaApi, commaOutbox } from "./convex-api";
-import type { CommandClient, runCommand } from "./convex-commands";
+import type { CommandClient, RunCommandOptions, runCommand } from "./convex-commands";
 
 export function messagingCommandError(error: unknown, fallback: string): string {
   return error instanceof UnknownCommandError
@@ -12,7 +12,7 @@ export function messagingCommandError(error: unknown, fallback: string): string 
 
 export function createMessagingApi(run: typeof runCommand) {
   return {
-    sendText: async (chatGuid: string, body: SendTextRequest) => (await run(chatGuid, { kind: "send", ...body })).message,
+    sendText: async (chatGuid: string, body: SendTextRequest, options?: RunCommandOptions) => (await run(chatGuid, { kind: "send", ...body }, options)).message,
     sendContactCard: async (chatGuid: string, contact: Contact, caption?: string) =>
       (await run(chatGuid, { kind: "sendContact", name: contact.name, address: contact.address, ...(caption !== undefined ? { caption } : {}) })).message,
     newChat: async (body: { addresses: string[]; text: string }) => run(null, { kind: "createChat", ...body }),

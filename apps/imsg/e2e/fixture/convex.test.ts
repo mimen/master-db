@@ -239,3 +239,26 @@ test("Convex media fixture serves gallery objects, storage URLs, upload finaliza
   expect(await call("comma/outbox:getCommand", { commandId: transcriptId })).toMatchObject({ result: { kind: "transcribe", transcript: { state: "unavailable" } } });
   expect(await call("comma/media:transcriptState", { attachmentGuid: storageId })).toMatchObject({ state: "unavailable" });
 });
+
+test("peer presence survives fixture resets and follows on/off bridge events", async () => {
+  for (let index = 0; index < 2; index++) {
+    reset();
+    bb.receiveTyping(CHAT_GUIDS.needs, true);
+    const presence = await call<{ peerTyping: boolean; expiresAt: number }>("comma/presence:presence", { conversationId: CHAT_GUIDS.needs });
+    expect(presence.peerTyping).toBe(true);
+    expect(presence.expiresAt).toBeGreaterThan(new Date().getTime());
+    bb.receiveTyping(CHAT_GUIDS.needs, false);
+    expect(await call("comma/presence:presence", { conversationId: CHAT_GUIDS.needs })).toMatchObject({ peerTyping: false });
+  }
+});
+
+test("text attachments tolerate Bun's charset MIME parameter and remain visible in Convex", async () => {
+  const url = await call<string>("comma/uploads:generateAttachmentUploadUrl");
+  const response = await fixture.app.request(url, { method: "POST", headers: { "Content-Type": "text/plain" }, body: "notes" });
+  const { storageId } = await response.json() as { storageId: string };
+  await call("comma/uploads:finalizeUpload", { storageId, filename: "notes.txt", mimeType: "text/plain" });
+  await command({ kind: "sendAttachment", storageId: storageId as Extract<CommaOutboxPayload, { kind: "sendAttachment" }>["storageId"],
+    filename: "notes.txt", mimeType: "text/plain", caption: "Here are the notes", isAudioMessage: false });
+  expect((await messages()).page).toContainEqual(expect.objectContaining({ text: "Here are the notes",
+    attachments: [expect.objectContaining({ guid: storageId, mimeType: "text/plain", filename: "notes.txt" })] }));
+});

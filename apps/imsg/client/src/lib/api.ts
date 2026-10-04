@@ -1,4 +1,3 @@
-import { BASE_URL } from "./config";
 import { messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
 import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from "./convex-commands";
@@ -18,18 +17,6 @@ import type {
   SendTextRequest,
   TranscriptState,
 } from "@shared/types";
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status}: ${body.slice(0, 200)}`);
-  }
-  return (await res.json()) as T;
-}
 
 const messageBatches = new Set<readonly Pick<Message, "guid" | "chatGuid">[]>();
 
@@ -175,9 +162,6 @@ export const api = {
     return (await runCommand(chat, { kind: "transcribe", attachmentGuid })).transcript;
   },
   createFaceTimeLink: messagingApi.createFaceTimeLink,
-  health(): Promise<{ ok: boolean; privateApi: boolean }> {
-    return request("/api/health");
-  },
   // ------------------------------------------------------------------- ai
   ...createAiApi(convexClient),
 

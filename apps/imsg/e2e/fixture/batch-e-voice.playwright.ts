@@ -22,10 +22,7 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
     const realFetch = window.fetch.bind(window);
     window.fetch = (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      if (url.includes("/attachment") && init?.method === "POST") {
-        uploads.count++;
-        return Promise.resolve(new Response("{}", { status: 500 }));
-      }
+      if (url.endsWith("/__fixture/upload") && init?.method === "POST") uploads.count++;
       return realFetch(input, init);
     };
   });
@@ -69,7 +66,16 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
   expect(await uploads(), "Cancel button cancels").toBe(0);
 
   await mic.click();
-  await page.waitForTimeout(800);
+  await expect(sendVoice).toBeVisible();
+  await expect(page.getByText("0:01", { exact: true })).toBeVisible();
+  const command = page.waitForRequest((request) => {
+    if (!request.url().endsWith("/__fixture/convex")) return false;
+    const body = request.postDataJSON() as { args: { payload?: { kind: string; isAudioMessage?: boolean } } };
+    return body.args.payload?.kind === "sendAttachment" && body.args.payload.isAudioMessage === true;
+  });
   await sendVoice.click();
   await expect.poll(uploads).toBe(1);
+  const payload = (await command).postDataJSON().args.payload;
+  expect(payload).toMatchObject({ kind: "sendAttachment", mimeType: "audio/mp4", isAudioMessage: true });
+  await expect(page.getByText(/Transcription unavailable/).last()).toBeVisible();
 });

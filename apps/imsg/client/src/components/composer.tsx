@@ -30,7 +30,10 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { api } from "@/lib/api";
 import { chatIsSMS } from "@/lib/chat-service";
 import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
-import { BASE_URL } from "@/lib/config";
+import { uploadAndSendAttachment } from "@/lib/attachment-upload";
+import { setTyping as sendTyping } from "@/lib/presence-api";
+import { messagingCommandError } from "@/lib/messaging-api";
+import { sendWithSuggestionFeedback } from "@/lib/ai-api";
 import { getDraft, setDraft } from "@/lib/drafts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
@@ -298,6 +301,7 @@ export function Composer({
   const inputRef = useRef<TextInput>(null);
   const acceptMentionRef = useRef<() => boolean>(() => false);
   const typingActive = useRef(false);
+  const typingSentAt = useRef(0);
   const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -386,13 +390,11 @@ export function Composer({
   }, []);
 
   const setTyping = (active: boolean) => {
-    if (typingActive.current === active) return;
+    const now = Date.now();
+    if (typingActive.current === active && (!active || now - typingSentAt.current < 2500)) return;
     typingActive.current = active;
-    void fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/typing`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active }),
-    }).catch(() => undefined);
+    typingSentAt.current = now;
+    void sendTyping(chatGuid, active).catch(() => undefined);
   };
 
   const onChangeText = (value: string) => {
@@ -501,9 +503,9 @@ export function Composer({
         }
         onClearReply();
         // No playSend() here — confirmation already fired on touch-up above.
-      } catch {
+      } catch (error) {
         hapticFailure();
-        showToast("Couldn't send the attachment. Check the Mini connection.");
+        showToast(messagingCommandError(error, "Couldn't send the attachment. Check the bridge connection."));
       } finally {
         for (const attachment of attachments) cleanupPendingAttachment(attachment);
         setBusy(false);
@@ -521,19 +523,16 @@ export function Composer({
     playSend();
     hapticSend();
     try {
-      // Convex outbox: the bubble stays pending until the bridge's echo,
-      // which carries this temp guid as its clientKey, replaces it.
-      if (await api.enqueueTextSend(chatGuid, temp.guid, { text: trimmed, replyToGuid: reply?.guid, mentions: outgoingMentions })) {
-        if (attribution) {
-          void api.recordSuggestionFeedback(chatGuid, { ...attribution, finalText: trimmed }).catch(() => undefined);
-        }
-        return;
-      }
-      const message = await api.sendText(chatGuid, {
-        text: trimmed,
-        replyToGuid: reply?.guid,
-        mentions: outgoingMentions.length > 0 ? outgoingMentions : undefined,
-      });
+      const message = await sendWithSuggestionFeedback(
+        () => api.sendText(chatGuid, {
+          text: trimmed,
+          replyToGuid: reply?.guid,
+          mentions: outgoingMentions.length > 0 ? outgoingMentions : undefined,
+        }, { clientKey: temp.guid }),
+        () => attribution
+          ? api.recordSuggestionFeedback(chatGuid, { ...attribution, finalText: trimmed })
+          : Promise.resolve(),
+      );
       const withMentions =
         outgoingMentions.length > 0 && (message.mentions ?? []).length === 0
           ? { ...message, mentions: outgoingMentions }
@@ -541,12 +540,6 @@ export function Composer({
       // BlueBubbles can echo a freshly-sent SMS back as "iMessage" before it
       // reclassifies — pin the service so the green bubble never flashes blue.
       onSettled(temp.guid, isSMS ? { ...withMentions, service: "SMS" } : withMentions);
-      if (attribution) {
-        void api.recordSuggestionFeedback(chatGuid, {
-          ...attribution,
-          finalText: trimmed,
-        }).catch(() => undefined);
-      }
     } catch {
       hapticFailure();
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
@@ -561,20 +554,10 @@ export function Composer({
       onSent(await api.sendContactCard(chatGuid, att.contact, caption));
       return;
     }
-    const form = new FormData();
-    if (Platform.OS === "web") {
-      const blob = await (await fetch(att.uri)).blob();
-      form.append("attachment", new File([blob], att.name));
-    } else {
-      form.append("attachment", { uri: att.uri, name: att.name, type: att.mime } as unknown as Blob);
-    }
-    if (caption) form.append("caption", caption);
-    const res = await fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/attachment`, {
-      method: "POST",
-      body: form,
-    });
-    if (!res.ok) throw new Error(String(res.status));
-    onSent((await res.json()) as Message);
+    onSent(await uploadAndSendAttachment(chatGuid, {
+      uri: att.uri, filename: att.name, mimeType: att.mime,
+      caption, isAudioMessage: false,
+    }));
   };
 
   // Attachments are staged as drafts above the composer; nothing sends until
@@ -872,30 +855,14 @@ ${url}` : url;
       const uri = recorder.uri;
       if (outcome === "discard" || !uri) return;
       setBusy(true);
-      const form = new FormData();
-      const name = `voice-${Date.now()}.m4a`;
-      if (Platform.OS === "web") {
-        const blob = await (await fetch(uri)).blob();
-        form.append("attachment", new File([blob], name));
-      } else {
-        form.append("attachment", { uri, name, type: "audio/mp4" } as unknown as Blob);
-      }
-      form.append("isAudioMessage", "true");
       playSend();
       hapticSend();
-      const res = await fetch(`${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/attachment`, {
-        method: "POST",
-        body: form,
-      });
-      if (res.ok) {
-        onSent((await res.json()) as Message);
-      } else {
-        hapticFailure();
-        showToast("Couldn't send the voice message. Check the Mini connection.");
-      }
-    } catch {
+      onSent(await uploadAndSendAttachment(chatGuid, {
+        uri, filename: `voice-${Date.now()}.m4a`, mimeType: "audio/mp4", isAudioMessage: true,
+      }));
+    } catch (error) {
       hapticFailure();
-      showToast("Couldn't send the voice message. Check the Mini connection.");
+      showToast(messagingCommandError(error, "Couldn't send the voice message. Check the bridge connection."));
     } finally {
       setBusy(false);
     }

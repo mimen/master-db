@@ -10,7 +10,7 @@ const message = { guid: "message", chatGuid: "chat", text: "sent", dateCreated: 
   sendEffect: null, reactions: [], replyToGuid: null, replyToPreview: null, replyToFromMe: null, isGroupEvent: false,
   error: 0, edited: false, retracted: false };
 function harness(status: CommandReceipt["status"] = "sent") {
-  const calls: Array<{ conversationId?: string; payload: CommandPayload }> = [];
+  const calls: Array<{ conversationId?: string; clientKey: string; payload: CommandPayload }> = [];
   let receipt: CommandReceipt;
   let callback: (() => void) | undefined;
   const client: ResultCommandClient = {
@@ -34,7 +34,8 @@ function harness(status: CommandReceipt["status"] = "sent") {
 test("send returns the message and preserves mentions and reply part", async () => {
   const h = harness();
   const body = { text: "Hi Alex", replyToGuid: "reply", replyToPart: 2, mentions: [{ start: 3, length: 4, address: "recipient" }] };
-  expect(await h.api.sendText("chat", body)).toEqual(message);
+  expect(await h.api.sendText("chat", body, { clientKey: "temp-composer" })).toEqual(message);
+  expect(h.calls[0]?.clientKey).toBe("temp-composer");
   expect(h.calls[0]?.payload).toEqual({ kind: "send", ...body });
 });
 
