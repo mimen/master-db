@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "@shared/types";
-import { foldReaction, mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "./message-window";
+import { foldReaction, hideSelfEchoes, mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "./message-window";
 
 const CHAT = "iMessage;-;+16195550101";
 
@@ -178,5 +178,23 @@ describe("foldReaction custom emoji", () => {
   test("re-adding the same emoji does not duplicate it", () => {
     const target = message("t1", "Hahaha", 1, { reactions: [{ type: "emoji", emoji: "😍", ...marla }] });
     expect(foldReaction(target, event("😍", false)).reactions).toEqual([{ type: "emoji", emoji: "😍", ...marla }]);
+  });
+});
+
+describe("hideSelfEchoes", () => {
+  const msg = (guid: string, isFromMe: boolean, at: number, text = "same") =>
+    ({ guid, isFromMe, dateCreated: at, text, attachments: [], reactions: [] }) as unknown as Message;
+  test("drops the inbound copy iMessage echoes back in a note-to-self thread", () => {
+    const thread = [msg("out", true, 1000, "one"), msg("echo", false, 1080, "one"),
+      msg("out2", true, 2000, "two"), msg("echo2", false, 2050, "two"), msg("note", false, 9000, "a photo caption")];
+    expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["out", "out2", "note"]);
+  });
+  test("keeps a genuine inbound message with the same text outside the echo window", () => {
+    const thread = [msg("out", true, 1000), msg("reply", false, 1000 + 60_000)];
+    expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["out", "reply"]);
+  });
+  test("a real chat where someone once repeats your words keeps their message", () => {
+    const thread = [msg("a", true, 1000, "ok"), msg("b", false, 1500, "ok"), msg("c", true, 5000, "see you at 8"), msg("d", true, 9000, "bring the cables")];
+    expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["a", "b", "c", "d"]);
   });
 });

@@ -96,3 +96,21 @@ export function foldReaction(target: Message, event: Extract<ServerEvent, { kind
   );
   return { ...target, reactions: event.remove ? rest : [...rest, event.reaction] };
 }
+
+/** iMessage echoes a note-to-self back within seconds; wider gaps are real messages. */
+const SELF_ECHO_WINDOW_MS = 10_000;
+
+/**
+ * A note-to-self thread (a DM with one of the user's own handles) holds every send twice:
+ * the outgoing message and iMessage's inbound echo. Keep the outgoing copy.
+ */
+export function hideSelfEchoes(messages: readonly Message[]): Message[] {
+  const outgoing = messages.filter((m) => m.isFromMe && m.text !== "");
+  const isEcho = (m: Message) => !m.isFromMe && m.text !== "" && outgoing.some((own) =>
+    own.text === m.text && Math.abs(m.dateCreated - own.dateCreated) <= SELF_ECHO_WINDOW_MS);
+  // Only a thread that echoes nearly every send is a note-to-self; one coincidence in a real
+  // chat (someone repeating your words) must not hide their message.
+  const echoes = messages.filter(isEcho).length;
+  if (outgoing.length === 0 || echoes < Math.max(2, outgoing.length * 0.8)) return [...messages];
+  return messages.filter((m) => !isEcho(m));
+}

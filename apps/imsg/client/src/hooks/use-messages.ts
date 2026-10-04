@@ -4,7 +4,7 @@ import { registerMessageActions } from "@/lib/api";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { messageWindow } from "@/lib/history-api";
-import { reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
+import { reconcileWindow, settleTemp, sortByDate, upsertMessage, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import type { Message } from "@shared/types";
 import { useMessageWindow } from "./use-message-window";
@@ -51,7 +51,7 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
   }, [chatGuid, status]);
   const remote = useMemo(() => sortByDate(results.map(messageToMessage)), [results]);
   const mirrored = useMemo(() => reconcileWindow(remote, [...newest]), [newest, remote]);
-  const messages = useMemo(() => mergeConvexMessages(mirrored, local), [mirrored, local]);
+  const messages = useMemo(() => hideSelfEchoes(mergeConvexMessages(mirrored, local)), [mirrored, local]);
   // Retire overlays once a real mirrored row owns the send. Otherwise an unsent
   // message could reappear from its old local acknowledgement after retraction.
   useEffect(() => {
