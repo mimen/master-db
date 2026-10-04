@@ -2,19 +2,15 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
-import { BASE_URL } from "@/lib/config";
+import { useAction } from "convex/react";
+import { makeFunctionReference } from "convex/server";
+import type { LinkPreview } from "@shared/link-preview";
 import { useTheme } from "@/hooks/use-theme";
 import { HOVER_DIM, Radii, Type } from "@/constants/theme";
 
-interface LinkPreviewData {
-  url: string;
-  title: string | null;
-  description: string | null;
-  image: string | null;
-  siteName: string | null;
-}
+const fetchLinkPreviewRef = makeFunctionReference<"action", { url: string }, LinkPreview | null>("comma/linkPreview:fetchLinkPreview");
 
-const cache = new Map<string, LinkPreviewData | null>();
+const cache = new Map<string, LinkPreview | null>();
 const URL_PATTERN = /https?:\/\/[^\s<>"')\]]+/;
 
 export function firstUrl(text: string): string | null {
@@ -23,15 +19,19 @@ export function firstUrl(text: string): string | null {
 
 export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
   const theme = useTheme();
-  const [preview, setPreview] = useState<LinkPreviewData | null | undefined>(
+  const fetchLinkPreview = useAction(fetchLinkPreviewRef);
+  const [preview, setPreview] = useState<LinkPreview | null | undefined>(
     cache.has(url) ? cache.get(url) : undefined,
   );
 
   useEffect(() => {
-    if (cache.has(url)) return;
+    if (cache.has(url)) {
+      setPreview(cache.get(url));
+      return;
+    }
+    setPreview(undefined);
     let cancelled = false;
-    fetch(`${BASE_URL}/api/link-preview?url=${encodeURIComponent(url)}`)
-      .then((res) => res.json() as Promise<LinkPreviewData | null>)
+    fetchLinkPreview({ url })
       .then((data) => {
         cache.set(url, data);
         if (!cancelled) setPreview(data);
@@ -43,7 +43,7 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, fetchLinkPreview]);
 
   if (!preview) return null;
 

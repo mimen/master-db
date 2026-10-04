@@ -1,68 +1,20 @@
 import { lookup } from "node:dns/promises";
-import { BlockList, isIP } from "node:net";
+import { isIP } from "node:net";
+import { extractLinkPreview, isPublicPreviewHost, parsePublicPreviewUrl, type LinkPreview } from "../shared/link-preview";
 
-export interface LinkPreview {
-  url: string;
-  title: string | null;
-  description: string | null;
-  image: string | null;
-  siteName: string | null;
-}
+export type { LinkPreview } from "../shared/link-preview";
 
 const cache = new Map<string, { at: number; preview: LinkPreview | null }>();
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 500;
 
-function metaContent(html: string, property: string): string | null {
-  const patterns = [
-    new RegExp(`<meta[^>]+(?:property|name)=["']${property}["'][^>]+content=["']([^"']+)["']`, "i"),
-    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${property}["']`, "i"),
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) return decodeEntities(match[1]);
-  }
-  return null;
-}
-
-function decodeEntities(text: string): string {
-  return text
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&#x27;", "'");
-}
-
 export async function parsePreviewUrl(rawUrl: string): Promise<URL | null> {
+  const url = parsePublicPreviewUrl(rawUrl);
+  if (!url) return null;
   try {
-    const url = new URL(rawUrl);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     const host = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "");
-    if (host === "localhost" || host.endsWith(".localhost") ||
-        host === "milads-mac-mini" || host === "milads-mac-mini.taild31e9a.ts.net") return null;
-    const blocked = new BlockList();
-    blocked.addSubnet("0.0.0.0", 8);
-    blocked.addSubnet("10.0.0.0", 8);
-    blocked.addSubnet("127.0.0.0", 8);
-    blocked.addSubnet("169.254.0.0", 16);
-    blocked.addSubnet("172.16.0.0", 12);
-    blocked.addSubnet("192.168.0.0", 16);
-    blocked.addSubnet("100.64.0.0", 10);
-    blocked.addSubnet("198.18.0.0", 15);
-    blocked.addSubnet("224.0.0.0", 4);
-    blocked.addSubnet("240.0.0.0", 4);
-    blocked.addAddress("::", "ipv6");
-    blocked.addAddress("::1", "ipv6");
-    blocked.addSubnet("fe80::", 10, "ipv6");
-    blocked.addSubnet("fc00::", 7, "ipv6");
-    blocked.addSubnet("ff00::", 8, "ipv6");
-    const family = isIP(host);
-    const addresses = family ? [{ address: host, family }] : await lookup(host, { all: true });
-    return addresses.length > 0 && addresses.every(({ address, family }) => !blocked.check(address, family === 6 ? "ipv6" : "ipv4"))
-      ? url
-      : null;
+    const addresses = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+    return addresses.length > 0 && addresses.every(({ address }) => isPublicPreviewHost(address)) ? url : null;
   } catch {
     return null;
   }
@@ -85,17 +37,7 @@ export async function fetchLinkPreview(url: URL): Promise<LinkPreview | null> {
     const contentType = res.headers.get("content-type") ?? "";
     if (res.ok && contentType.includes("text/html")) {
       const html = (await res.text()).slice(0, 300_000);
-      const title =
-        metaContent(html, "og:title") ??
-        (decodeEntities(html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? "") || null);
-      preview = {
-        url: url.href,
-        title,
-        description: metaContent(html, "og:description") ?? metaContent(html, "description"),
-        image: metaContent(html, "og:image"),
-        siteName: metaContent(html, "og:site_name") ?? url.hostname,
-      };
-      if (!preview.title && !preview.description && !preview.image) preview = null;
+      preview = extractLinkPreview(html, url);
     }
   } catch {
     preview = null;
