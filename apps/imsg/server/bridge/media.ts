@@ -55,10 +55,13 @@ export class MediaWorker {
     });
   }
 
-  /** Queue on-disk attachments as the bridge mirrors them. */
+  /**
+   * Queue visible attachments as the bridge mirrors them. Off-disk ones are included: the
+   * BlueBubbles download makes Messages fetch them, and the retry budget bounds the rest.
+   */
   enqueue(rows: Pick<AttachmentRow, "guid" | "mimeType" | "filename" | "isOnDisk" | "hideAttachment">[], createdAt: number): void {
     const items = rows
-      .filter((row) => row.isOnDisk && !row.hideAttachment)
+      .filter((row) => !row.hideAttachment)
       .map((row) => ({ guid: row.guid, mimeType: row.mimeType ?? null, filename: row.filename ?? null, createdAt }));
     if (!items.length) return;
     this.deps.db.enqueueMedia(items);

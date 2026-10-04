@@ -564,7 +564,7 @@ export const mediaBacklog = internalMutation({
   handler: async (ctx, { cursor, limit }) => {
     const page = await ctx.db.query("comma_attachments").paginate({ cursor, numItems: Math.min(limit, 500) });
     const items = page.page
-      .filter((a) => a.isOnDisk && !a.hideAttachment && (!a.thumbStorageId || !a.originalStorageId))
+      .filter((a) => !a.hideAttachment && (!a.thumbStorageId || !a.originalStorageId))
       .map((a) => ({
         guid: a.guid,
         mimeType: a.mimeType,

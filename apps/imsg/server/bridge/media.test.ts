@@ -22,11 +22,13 @@ const row = (guid: string, mimeType: string, extra: Partial<{ isOnDisk: boolean;
   guid, mimeType, filename: guid, isOnDisk: true, hideAttachment: false, ...extra,
 });
 
-test("queues only on-disk, visible attachments", () => {
+test("queues visible attachments, including ones Messages has not downloaded yet", () => {
+  // BlueBubbles' download endpoint makes Messages fetch a not-yet-downloaded file,
+  // so an off-disk attachment is still worth requesting.
   const db = new OverlayDb(":memory:");
   const worker = new MediaWorker({ bb: bb({}), db, ingest: new FakeIngest(), pauseMs: 0 });
   worker.enqueue([row("a", "video/mp4"), row("b", "video/mp4", { isOnDisk: false }), row("c", "video/mp4", { hideAttachment: true })], 1);
-  expect(db.nextMedia("original", 10).map((item) => item.guid)).toEqual(["a"]);
+  expect(db.nextMedia("original", 10).map((item) => item.guid).sort()).toEqual(["a", "b"]);
   worker.stop();
 });
 
