@@ -80,7 +80,7 @@ bunx convex run beeper:queries.getRecentChats.getRecentChats '{"limit": 20}'
 bunx convex run beeper:queries.getRecentChats.getRecentChats '{"network": "WhatsApp", "limit": 20}'
 
 # Messages for a specific chat
-bunx convex run beeper:queries.getMessagesByChat.getMessagesByChat '{"chat_id": "!9iCfip38rzlgcROX7VP3:beeper.local"}'
+bunx convex run beeper:queries.getMessagesByChat.getMessagesByChat '{"chat_id": "!9iCfip38rzlgcROX7VP3:beeper.local", "paginationOpts": {"numItems": 100, "cursor": null}}'
 
 # Full-text search
 bunx convex run beeper:queries.searchMessages.searchMessages '{"query": "umbrella weekend", "network": "WhatsApp"}'
