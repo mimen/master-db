@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { mutation, type MutationCtx } from "../_generated/server";
 
-import { requireIdentityKey } from "./key";
+import { requireIdentityAccess } from "./key";
 
 /**
  * The private CRM layer: favorites, priority, and tags — for both people and
@@ -44,9 +44,9 @@ export function clampPriority(n: number): number {
  * matches — `is_favorite` unset reads as `false`, so setting `false` on a
  * never-favorited person is also a no-op. */
 export const setFavorite = mutation({
-  args: { key: v.string(), personId: v.id("people"), is_favorite: v.boolean() },
+  args: { key: v.optional(v.string()), personId: v.id("people"), is_favorite: v.boolean() },
   handler: async (ctx, { key, personId, is_favorite }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const person = await ctx.db.get(personId);
     if (!person) throw new Error("Person not found");
 
@@ -63,12 +63,12 @@ export const setFavorite = mutation({
  * stored. */
 export const setPriority = mutation({
   args: {
-    key: v.string(),
+    key: v.optional(v.string()),
     personId: v.id("people"),
     priority: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, { key, personId, priority }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const person = await ctx.db.get(personId);
     if (!person) throw new Error("Person not found");
 
@@ -83,9 +83,9 @@ export const setPriority = mutation({
  * person (the unified `tags` table — see schema/identity/tags.ts). No-op when
  * the person already carries this tag. */
 export const addTag = mutation({
-  args: { key: v.string(), personId: v.id("people"), tag: v.string() },
+  args: { key: v.optional(v.string()), personId: v.id("people"), tag: v.string() },
   handler: async (ctx, { key, personId, tag }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const person = await ctx.db.get(personId);
     if (!person) throw new Error("Person not found");
     await addTagRow(ctx, { person_id: personId }, tag);
@@ -95,9 +95,9 @@ export const addTag = mutation({
 /** Remove a personal tag from a person. No-op (nothing to delete) when the
  * person doesn't carry this tag. */
 export const removeTag = mutation({
-  args: { key: v.string(), personId: v.id("people"), tag: v.string() },
+  args: { key: v.optional(v.string()), personId: v.id("people"), tag: v.string() },
   handler: async (ctx, { key, personId, tag }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const person = await ctx.db.get(personId);
     if (!person) throw new Error("Person not found");
     await removeTagRow(ctx, { person_id: personId }, tag);
@@ -118,9 +118,9 @@ async function getChatCrmRow(ctx: MutationCtx, chatGuid: string) {
  * when the requested value already matches what's stored (including "no row
  * yet, and the request is `false`"). */
 export const setChatFavorite = mutation({
-  args: { key: v.string(), chatGuid: v.string(), is_favorite: v.boolean() },
+  args: { key: v.optional(v.string()), chatGuid: v.string(), is_favorite: v.boolean() },
   handler: async (ctx, { key, chatGuid, is_favorite }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const existing = await getChatCrmRow(ctx, chatGuid);
     const current = existing?.is_favorite ?? false;
     if (current === is_favorite) return;
@@ -140,12 +140,12 @@ export const setChatFavorite = mutation({
  * priority). No-op when the requested (clamped) value already matches. */
 export const setChatPriority = mutation({
   args: {
-    key: v.string(),
+    key: v.optional(v.string()),
     chatGuid: v.string(),
     priority: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, { key, chatGuid, priority }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const next = priority == null ? undefined : clampPriority(priority);
     const existing = await getChatCrmRow(ctx, chatGuid);
     const current = existing?.priority ?? undefined;
@@ -163,18 +163,18 @@ export const setChatPriority = mutation({
 
 /** Add a tag to a GROUP chat — the chat-side twin of `addTag`. */
 export const addChatTag = mutation({
-  args: { key: v.string(), chatGuid: v.string(), tag: v.string() },
+  args: { key: v.optional(v.string()), chatGuid: v.string(), tag: v.string() },
   handler: async (ctx, { key, chatGuid, tag }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     await addTagRow(ctx, { chat_guid: chatGuid }, tag);
   },
 });
 
 /** Remove a tag from a GROUP chat — the chat-side twin of `removeTag`. */
 export const removeChatTag = mutation({
-  args: { key: v.string(), chatGuid: v.string(), tag: v.string() },
+  args: { key: v.optional(v.string()), chatGuid: v.string(), tag: v.string() },
   handler: async (ctx, { key, chatGuid, tag }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     await removeTagRow(ctx, { chat_guid: chatGuid }, tag);
   },
 });

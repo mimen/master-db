@@ -4,7 +4,7 @@ import { mutation } from "../_generated/server";
 
 import { ingestOneCard } from "./ingestContacts";
 import { recomputePersonAggregates } from "./internal";
-import { requireIdentityKey } from "./key";
+import { requireIdentityAccess } from "./key";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
 /** Trims a string arg; an all-whitespace or empty result becomes `undefined`
@@ -52,7 +52,7 @@ function deriveDisplayName(firstName: string | undefined, lastName: string | und
  */
 export const createPerson = mutation({
   args: {
-    key: v.string(),
+    key: v.optional(v.string()),
     handle: v.string(),
     display_name: v.optional(v.string()),
     first_name: v.optional(v.string()),
@@ -61,7 +61,7 @@ export const createPerson = mutation({
     organization: v.optional(v.string()),
   },
   handler: async (ctx, { key, handle, display_name, first_name, last_name, nickname, organization }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const trimmed = handle.trim();
     const normalized = normalizePhone(trimmed) || normalizeEmail(trimmed) || trimmed;
     const kind: "phone" | "email" = normalizePhone(trimmed) ? "phone" : "email";
@@ -180,7 +180,7 @@ export const createPerson = mutation({
  */
 export const addPersonFromAirtable = mutation({
   args: {
-    key: v.string(),
+    key: v.optional(v.string()),
     record_id: v.string(),
     display_name: v.optional(v.string()),
     first_name: v.optional(v.string()),
@@ -189,7 +189,7 @@ export const addPersonFromAirtable = mutation({
     email: v.optional(v.string()),
   },
   handler: async (ctx, { key, record_id, display_name, first_name, last_name, phone, email }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const result = await ingestOneCard(
       ctx,
       "airtable_human",
@@ -233,7 +233,7 @@ export const addPersonFromAirtable = mutation({
  */
 export const renamePerson = mutation({
   args: {
-    key: v.string(),
+    key: v.optional(v.string()),
     personId: v.id("people"),
     display_name: v.optional(v.string()),
     first_name: v.optional(v.string()),
@@ -242,7 +242,7 @@ export const renamePerson = mutation({
     organization: v.optional(v.string()),
   },
   handler: async (ctx, { key, personId, display_name, first_name, last_name, nickname, organization }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const person = await ctx.db.get(personId);
     if (!person) throw new Error("Person not found");
 

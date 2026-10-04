@@ -104,7 +104,7 @@ export const searchAirtableHumansRef = makeFunctionReference<
 
 export const listTagsRef = makeFunctionReference<
   "query",
-  { key: string },
+  { key?: string },
   Array<{ tag: string; count: number }>
 >("identity/queries:listTags");
 

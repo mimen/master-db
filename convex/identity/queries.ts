@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 
-import { requireIdentityKey } from "./key";
+import { requireIdentityAccess } from "./key";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
 /** A single event association, projected for the client — see
@@ -132,9 +132,9 @@ function nameTerms(p: Doc<"people">): string[] {
  * else do I talk to them" lookup.
  */
 export const whoIs = query({
-  args: { key: v.string(), handle: v.string() },
+  args: { key: v.optional(v.string()), handle: v.string() },
   handler: async (ctx, { key, handle }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const normalized = normalizePhone(handle) || normalizeEmail(handle) || handle.trim();
     // Multiple identity rows can share a normalized key (different
     // networks/sources feeding the same person, or an as-yet-unresolved row
@@ -182,10 +182,10 @@ export const whoIs = query({
 
 /** Search all name variants and normalized addresses, then flatten matching people. */
 export const searchContacts = query({
-  args: { key: v.string(), q: v.string(), limit: v.optional(v.number()) },
+  args: { key: v.optional(v.string()), q: v.string(), limit: v.optional(v.number()) },
   returns: v.array(v.object({ address: v.string(), name: v.string(), is_favorite: v.optional(v.boolean()) })),
   handler: async (ctx, { key, q, limit }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const needle = q.trim().toLowerCase();
     if (!needle) return [];
     const cap = Math.max(0, Math.min(25, Math.floor(limit ?? 25)));
@@ -219,9 +219,9 @@ export const searchContacts = query({
 
 /** Find people by (case-insensitive substring) display name, with their identities. */
 export const searchPeople = query({
-  args: { key: v.string(), name: v.string() },
+  args: { key: v.optional(v.string()), name: v.string() },
   handler: async (ctx, { key, name }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const needle = name.trim().toLowerCase();
     const people = await ctx.db.query("people").collect();
     const matches = people.filter(
@@ -261,9 +261,9 @@ export const searchPeople = query({
  * your own contacts.
  */
 export const listPeople = query({
-  args: { key: v.string() },
+  args: { key: v.optional(v.string()) },
   handler: async (ctx, { key }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const people = await ctx.db.query("people").collect();
     const named = people
       .filter((p) => !p.merged_into && !p.is_self && p.display_name)
@@ -317,9 +317,9 @@ export const listPeople = query({
  * the person's CRM along here means map.ts doesn't need a second lookup.
  */
 export const nameDirectory = query({
-  args: { key: v.string() },
+  args: { key: v.optional(v.string()) },
   handler: async (ctx, { key }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const people = await ctx.db.query("people").collect();
     // Single pass per table — see personCrmMaps (same N+1 listPeople hit).
     const { tagsByPerson, eventsByPerson } = await personCrmMaps(ctx);
@@ -356,9 +356,9 @@ export const nameDirectory = query({
  * person_tags.ts's docstring.
  */
 export const listTags = query({
-  args: { key: v.string() },
+  args: { key: v.optional(v.string()) },
   handler: async (ctx, { key }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const rows = await ctx.db.query("tags").collect();
     const counts = new Map<string, number>();
     for (const r of rows) counts.set(r.tag, (counts.get(r.tag) ?? 0) + 1);
@@ -370,9 +370,9 @@ export const listTags = query({
 
 /** The people with the most linked identities — the merge graph's payoff. */
 export const topLinkedPeople = query({
-  args: { key: v.string(), limit: v.optional(v.number()) },
+  args: { key: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, { key, limit }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const people = await ctx.db.query("people").collect();
     return people
       .filter((p) => !p.merged_into && p.identity_count > 1)
@@ -404,9 +404,9 @@ export const topLinkedPeople = query({
  * a single open chat's info screen).
  */
 export const chatCrm = query({
-  args: { key: v.string(), chatGuids: v.optional(v.array(v.string())) },
+  args: { key: v.optional(v.string()), chatGuids: v.optional(v.array(v.string())) },
   handler: async (ctx, { key, chatGuids }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const wanted = chatGuids ? new Set(chatGuids) : null;
 
     type ChatCrmProjection = { is_favorite?: boolean; priority?: number; tags: string[]; events: EventRef[] };

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { action, mutation } from "../_generated/server";
 
 import { airtableNameSearchFormula } from "./airtableSearch";
-import { requireIdentityKey } from "./key";
+import { requireIdentityAccess } from "./key";
 
 /**
  * Typed event/project association: search AUF's Airtable Events table and
@@ -31,9 +31,9 @@ type AirtableEventRecord = {
  * reasoning as airtableSearch.ts's searchAirtableHumans: searched live each
  * call, capped, cheap enough for an on-demand picker. */
 export const searchEvents = action({
-  args: { key: v.string(), query: v.string() },
-  handler: async (_ctx, { key, query }) => {
-    requireIdentityKey(key);
+  args: { key: v.optional(v.string()), query: v.string() },
+  handler: async (ctx, { key, query }) => {
+    await requireIdentityAccess(ctx, key);
     const needle = query.trim();
     if (needle.length < 2) return [];
 
@@ -72,14 +72,14 @@ export const searchEvents = action({
  */
 export const linkEvent = mutation({
   args: {
-    key: v.string(),
+    key: v.optional(v.string()),
     personId: v.optional(v.id("people")),
     chatGuid: v.optional(v.string()),
     airtable_event_id: v.string(),
     event_name: v.string(),
   },
   handler: async (ctx, { key, personId, chatGuid, airtable_event_id, event_name }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     if (Boolean(personId) === Boolean(chatGuid)) {
       throw new Error("linkEvent requires exactly one of personId or chatGuid");
     }
@@ -107,9 +107,9 @@ export const linkEvent = mutation({
 /** Remove an event link by id. No-op when it's already gone (double-tap
  * safe), same discipline as crm.ts's removeTag. */
 export const unlinkEvent = mutation({
-  args: { key: v.string(), linkId: v.id("event_links") },
+  args: { key: v.optional(v.string()), linkId: v.id("event_links") },
   handler: async (ctx, { key, linkId }) => {
-    requireIdentityKey(key);
+    await requireIdentityAccess(ctx, key);
     const existing = await ctx.db.get(linkId);
     if (!existing) return;
     await ctx.db.delete(linkId);
