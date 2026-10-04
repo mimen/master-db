@@ -116,6 +116,15 @@ describe("message service mapping", () => {
     expect(message.service).toBe("SMS");
   });
 
+  test("an unsent message reads as retracted: BlueBubbles reports it as an edit to no text", () => {
+    const unsent = mapMessage({ guid: "u-1", text: null, isFromMe: true, dateEdited: 1791118569379 } as never, "iMessage;-;+15550001111", source);
+    expect(unsent.retracted).toBe(true);
+    const edited = mapMessage({ guid: "e-1", text: "still here", isFromMe: true, dateEdited: 1791118563158 } as never, "iMessage;-;+15550001111", source);
+    expect(edited.retracted).toBe(false);
+    const attachmentOnly = mapMessage({ guid: "a-1", text: null, isFromMe: true, attachments: [{ guid: "att", mimeType: "image/png" }] } as never, "iMessage;-;+15550001111", source);
+    expect(attachmentOnly.retracted).toBe(false);
+  });
+
   test("keeps an iMessage sibling blue under an SMS canonical chat", () => {
     const message = mapMessage({
       guid: "imessage-1",

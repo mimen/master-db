@@ -261,8 +261,14 @@ export function mapMessage(
     isSpam: m.isSpam === true,
     error: m.error ?? 0,
     edited: Boolean(m.dateEdited),
-    retracted: Boolean(m.dateRetracted),
+    retracted: isRetracted(m),
   };
+}
+
+/** BlueBubbles leaves dateRetracted unset on an unsend; it reports an edit that emptied the message. */
+function isRetracted(m: BBMessage): boolean {
+  if (m.dateRetracted) return true;
+  return Boolean(m.dateEdited) && !m.text && !m.attachments?.length;
 }
 
 /**
