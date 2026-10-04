@@ -107,12 +107,15 @@ function SwipeAction({
 
 function ChatRowInner({
   chat,
+  handle,
   selected,
   keyboardFocused = false,
   onPress,
   onSettle,
 }: {
   chat: ChatSummary;
+  /** The handle that separates this row from another with the same name. */
+  handle?: string;
   selected: boolean;
   /** Glide-mode cursor: accent edge on the selected row while navigating. */
   keyboardFocused?: boolean;
@@ -261,6 +264,11 @@ function ChatRowInner({
               <Text numberOfLines={1} style={[styles.name, { color: compact ? visual.text : theme.text, fontSize: compact ? 13 : type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
                 {chat.displayName}
               </Text>
+              {handle && (
+                <Text numberOfLines={1} style={[styles.handle, { color: theme.textSecondary }]}>
+                  {handle}
+                </Text>
+              )}
               {/* Private CRM layer (favorite/priority) — mirrors the star shown
                   on favorited rows in contacts-list-pane.tsx. */}
               {chat.crm?.is_favorite && (
@@ -405,6 +413,12 @@ const styles = StyleSheet.create({
   },
   favoriteStar: {
     flexShrink: 0,
+  },
+  // Shrinks before the name does: the name is what the row is, the handle only separates it.
+  handle: {
+    flexShrink: 2,
+    fontSize: 12,
+    minWidth: 0,
   },
   messageRow: {
     alignItems: "flex-start",

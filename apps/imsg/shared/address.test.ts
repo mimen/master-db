@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   addressesMatch,
+  disambiguators,
   emailMatchKey,
   formatAddress,
   formatPhone,
@@ -70,4 +71,27 @@ test("matchesAnyAddress checks a candidate against a whole list", () => {
   expect(matchesAnyAddress("Jane@Example.com", known)).toBe(true);
   expect(matchesAnyAddress("+19995551234", known)).toBe(false);
   expect(matchesAnyAddress("anything", [])).toBe(false);
+});
+
+describe("disambiguators", () => {
+  const dm = (guid: string, displayName: string, address: string) =>
+    ({ guid, displayName, isGroup: false, participants: [{ address, name: displayName }] });
+  test("labels only DMs whose display name repeats, with each one's own handle", () => {
+    const chats = [
+      dm("iMessage;-;+19259976370", "Sprout Imen", "+19259976370"),
+      dm("SMS;-;+19253759404", "Sprout Imen", "+19253759404"),
+      dm("iMessage;-;miladmaaan@gmail.com", "Sprout Imen", "miladmaaan@gmail.com"),
+      dm("iMessage;-;+16195550101", "Alex Rivera", "+16195550101"),
+    ];
+    expect(disambiguators(chats)).toEqual(new Map([
+      ["iMessage;-;+19259976370", "(925) 997-6370"],
+      ["SMS;-;+19253759404", "(925) 375-9404"],
+      ["iMessage;-;miladmaaan@gmail.com", "miladmaaan@gmail.com"],
+    ]));
+  });
+
+  test("leaves groups alone, and ignores a name that repeats only across a group and a DM", () => {
+    const group = { guid: "iMessage;+;crew", displayName: "Alex Rivera", isGroup: true, participants: [] };
+    expect(disambiguators([group, dm("iMessage;-;+16195550101", "Alex Rivera", "+16195550101")])).toEqual(new Map());
+  });
 });

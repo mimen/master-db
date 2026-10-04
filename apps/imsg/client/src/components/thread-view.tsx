@@ -36,6 +36,7 @@ import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { settleActionFor } from "@shared/chat-state";
+import { formatAddress } from "@shared/address";
 import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
@@ -525,7 +526,7 @@ export function ThreadView({
               <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
                 {headerChat.isGroup
                   ? `${headerChat.participants.length} people ›`
-                  : `${headerChat.flags.unresponded ? "needs reply" : headerChat.flags.waiting ? "waiting" : "conversation"}${headerChat.unreadCount && !headerChat.lastMessage?.isFromMe ? ` · ${headerChat.unreadCount} unread` : ""}`}
+                  : `${formatAddress(headerChat.participants[0]?.address ?? headerChat.guid.split(";").pop() ?? "")} · ${headerChat.flags.unresponded ? "needs reply" : headerChat.flags.waiting ? "waiting" : "conversation"}${headerChat.unreadCount && !headerChat.lastMessage?.isFromMe ? ` · ${headerChat.unreadCount} unread` : ""}`}
               </Text>
             </View>
           </Pressable>

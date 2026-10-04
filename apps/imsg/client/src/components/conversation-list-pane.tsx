@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 
 
+import { disambiguators } from "@shared/address";
 import { ChatRow } from "./chat-row";
 import { ConversationFiltersModal, StateSegments, type FilterAnchor } from "./conversation-filters";
 import { SkeletonList } from "./skeleton-list";
@@ -160,10 +161,13 @@ export function ConversationListPane({
 
   // FlashList's cell memo compares renderItem by identity, so a fresh arrow here
   // re-renders every mounted row on every render of this pane.
+  // One person's second number or email reads as a duplicate row without its handle.
+  const handles = useMemo(() => disambiguators(allChats), [allChats]);
   const renderRow = useCallback(
     ({ item }: { item: ChatSummary }) => (
       <ChatRow
         chat={item}
+        handle={handles.get(item.guid)}
         selected={wide && selectedGuid === item.guid}
         keyboardFocused={wide && glide && selectedGuid === item.guid}
         onPress={() => onOpenChat(item)}
@@ -173,7 +177,7 @@ export function ConversationListPane({
         onSettle={() => { void toggleSettleChat(item); }}
       />
     ),
-    [wide, glide, selectedGuid, onOpenChat],
+    [wide, glide, selectedGuid, onOpenChat, handles],
   );
 
   useConversationListKeyboard({

@@ -71,3 +71,29 @@ export function addressesMatch(a: string, b: string): boolean {
 export function matchesAnyAddress(candidate: string, known: string[]): boolean {
   return known.some((k) => addressesMatch(candidate, k));
 }
+
+/**
+ * For one-to-one chats whose display name repeats, the handle that tells them apart
+ * (one person's second number, email, or SMS line). Keyed by chat guid; absent means
+ * the name is already unique and needs no label.
+ */
+export function disambiguators(
+  chats: readonly { guid: string; displayName: string; isGroup: boolean; participants: readonly { address: string }[] }[],
+): Map<string, string> {
+  const byName = new Map<string, typeof chats[number][]>();
+  for (const chat of chats) {
+    if (chat.isGroup) continue;
+    const list = byName.get(chat.displayName) ?? [];
+    list.push(chat);
+    byName.set(chat.displayName, list);
+  }
+  const labels = new Map<string, string>();
+  for (const list of byName.values()) {
+    if (list.length < 2) continue;
+    for (const chat of list) {
+      const address = chat.participants[0]?.address ?? chat.guid.split(";").pop() ?? "";
+      labels.set(chat.guid, formatAddress(address));
+    }
+  }
+  return labels;
+}
