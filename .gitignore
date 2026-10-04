@@ -67,7 +67,8 @@ temp/
 .superpowers/
 
 # Local Claude Code state
-.claude/
+.claude/*
+!.claude/skills/
 
 # Local progress state for the Beeper sync/upload scripts (per-account, per-machine)
 scripts/.beeper-sync-progress.json
