@@ -154,3 +154,14 @@ test("unknown function names return a diagnostic 400 and reset clears fixture dr
   reset();
   expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toBeNull();
 });
+
+test("presence and bridge capabilities queries support the typing command fixture", async () => {
+  const state = await call<{ privateApi: boolean; suggestions: boolean; whisperAvailable: boolean; lastSeenAt: number }>("comma/bridgeState:bridgeState");
+  expect(state).toMatchObject({ privateApi: true, suggestions: false, whisperAvailable: false });
+  expect(state.lastSeenAt).toBeGreaterThan(0);
+  expect(await call("comma/presence:presence", { conversationId: CHAT_GUIDS.needs })).toBeNull();
+  const receipt = await command({ kind: "typing", active: true, expiresAt: Date.now() + 1000 });
+  expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "typing", ok: true } });
+  await command({ kind: "typing", active: false, expiresAt: Date.now() });
+  await command({ kind: "typing", active: true, expiresAt: Date.now() - 1 });
+});

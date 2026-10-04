@@ -1,4 +1,4 @@
-import type { Infer } from "convex/values";
+import { v, type Infer } from "convex/values";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { internal } from "../../../../convex/_generated/api";
 import type {
@@ -7,7 +7,13 @@ import type {
   CommaMessageDoc,
   syncStateDoc,
 } from "../../../../convex/schema/comma/validators";
+import { presenceFields, bridgeStateFields } from "../../../../convex/schema/comma/validators";
 import type { Config } from "../config";
+
+const presenceValue = v.object(presenceFields);
+const bridgeStateValue = v.object(bridgeStateFields);
+export type BridgeState = Infer<typeof bridgeStateValue>;
+export type EphemeralState = ({ kind: "presence" } & Infer<typeof presenceValue>) | ({ kind: "bridgeState" } & BridgeState) | { kind: "typingCurrent"; clientKey: string; claimToken: string };
 
 type Fields<T> = Omit<T, "_id" | "_creationTime">;
 export type ConversationInput = Omit<Fields<CommaConversationDoc>, "primaryChatGuid" | "chatGuids" | "updatedAt"> & {
@@ -18,6 +24,7 @@ export type AttachmentRow = Fields<CommaAttachmentDoc>;
 export type SyncInput = Omit<Fields<Infer<typeof syncStateDoc>>, "updatedAt">;
 
 export interface Bodies {
+  ephemeral: { state: EphemeralState };
   conversations: { conversations: ConversationInput[] };
   messages: { messages: MessageRow[] };
   attachments: { attachments: AttachmentRow[] };
@@ -34,6 +41,7 @@ export interface Bodies {
   mediaBacklog: FunctionArgs<typeof internal.comma.internal.mediaBacklog>;
 }
 export interface Results {
+  ephemeral: boolean;
   conversations: Record<string, MessageRow["conversationId"]>;
   messages: { written: number; skipped: number };
   attachments: { written: number; skipped: number };

@@ -80,8 +80,16 @@ class FixtureError extends Error {
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity) {
   const drafts = new Map<string, Infer<typeof draftDoc>>();
-  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string }>();
+  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string; result?: { kind: "typing"; ok: true } }>();
   const inFlight = new Map<string, Promise<string>>();
+  const peerTyping = new Map<string, { peerTyping: boolean; updatedAt: number; expiresAt: number }>();
+  const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const unsubscribeTyping = bb.onEvent((event) => {
+    if (event.kind === "typing") {
+      const now = Date.now();
+      peerTyping.set(controls.directory.canonicalGuid(event.chatGuid), { peerTyping: event.display, updatedAt: now, expiresAt: now + (event.display ? 12_000 : 0) });
+    } else if (event.kind === "stream-connected") peerTyping.clear();
+  });
   const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
   const read = async <T>(path: string): Promise<T> => {
     const response = await app.request(path);
@@ -134,15 +142,40 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "rename": accept(await commands.rename(chatGuid, payload.name)); break;
       case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
+      case "typing": {
+        if (payload.active && payload.expiresAt <= Date.now()) break;
+        const timer = typingTimers.get(chatGuid);
+        if (timer) clearTimeout(timer);
+        typingTimers.delete(chatGuid);
+        accept(await bb.setTyping(chatGuid, payload.active));
+        if (payload.active) {
+          const expiry = setTimeout(() => { typingTimers.delete(chatGuid); void bb.setTyping(chatGuid, false); }, Math.max(0, payload.expiresAt - Date.now()));
+          expiry.unref(); typingTimers.set(chatGuid, expiry);
+        }
+        break;
+      }
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       default: {
-        const unknown: never = payload;
+        const unknown = payload;
         throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(unknown)}`, 400);
       }
     }
     return undefined;
   };
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "comma/presence:presence": async (args) => {
+      const row = peerTyping.get(controls.directory.canonicalGuid(String(args.conversationId)));
+      return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > Date.now() } : null;
+    },
+    "comma/bridgeState:bridgeState": async () => {
+      const health = await read<{ privateApi: boolean }>("/api/health");
+      const ai = await read<{ suggestions: boolean; reactionSuggestions: boolean }>("/api/ai/status");
+      return { key: "mini", ...health, ...ai, whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
+    },
+    "comma/outbox:getCommand": async (args) => {
+      const receipt = [...receipts.entries()].find(([, row]) => row.id === args.commandId);
+      return receipt ? { commandId: receipt[1].id, clientKey: receipt[0], status: receipt[1].status, ...(receipt[1].result ? { result: receipt[1].result } : {}), updatedAt: Date.now() } : null;
+    },
     "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,
@@ -190,7 +223,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         const payload = args.payload as CommaOutboxPayload;
         const resultGuid = await execute(chatGuid, payload, clientKey);
         if (payload.kind === "send") drafts.delete(chatGuid);
-        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(resultGuid ? { resultGuid } : {}) };
+        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(resultGuid ? { resultGuid } : {}), ...(payload.kind === "typing" ? { result: { kind: "typing" as const, ok: true as const } } : {}) };
         receipts.set(clientKey, receipt);
         controls.broadcast({ kind: "chats-changed" });
         return receipt.id;
@@ -214,5 +247,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); };
+  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); peerTyping.clear();
+    unsubscribeTyping(); for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

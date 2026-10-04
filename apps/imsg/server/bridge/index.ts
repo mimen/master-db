@@ -1,18 +1,21 @@
 import type { BlueBubbles } from "../bluebubbles";
 import type { ChatCommands } from "../commands";
 import type { ConvexClient } from "convex/browser";
-import { OutboxBridge } from "./outbox";
 import type { Config } from "../config";
 import type { OverlayDb } from "../db";
 import type { NameSource } from "../name-resolver";
+import { typingHandler } from "./commands/presence";
 import { ConvexIngest } from "./convex-ingest";
 import { LiveBridge, MessageWriter } from "./live";
 import { MediaWorker } from "./media";
+import { OutboxBridge } from "./outbox";
 import { OverlayMirror } from "./overlay-mirror";
 import { PhotoMirror } from "./photos";
+import { OutboundTyping } from "./presence";
 import { ReconcileBridge } from "./reconcile";
 import { RetryWork } from "./retry";
 import { ScheduledMirror } from "./scheduled-mirror";
+import { BridgeStatePublisher, type BridgeCapabilities } from "./state";
 import { SuggestionsBridge, SUGGESTION_PRECOMPUTE, type SuggestionDeps } from "./suggestions";
 
 export function startBridge(deps: {
@@ -27,9 +30,12 @@ export function startBridge(deps: {
   chatDbPath?: string;
   avatarDirectory?: string;
   now?: () => number;
+  capabilities?: () => BridgeCapabilities;
   suggestions?: Pick<SuggestionDeps, "ai" | "getChat">;
 }) {
   const enabled = Boolean(deps.config.commaBridgeSecret) && deps.backgroundServices !== false;
+  let typing: OutboundTyping | null = null;
+  let state: BridgeStatePublisher | null = null;
   let live: LiveBridge | null = null;
   let reconcile: ReconcileBridge | null = null;
   let overlay: OverlayMirror | null = null;
@@ -39,6 +45,8 @@ export function startBridge(deps: {
   let photos: PhotoMirror | null = null;
   let suggestions: SuggestionsBridge | null = null;
   function stopModules() {
+    typing?.stop(); typing = null;
+    state?.stop(); state = null;
     suggestions?.stop(); suggestions = null;
     live?.stop(); reconcile?.stop(); overlay?.stop(); scheduled?.stop(); outbox?.stop(); media?.stop(); photos?.stop();
     live = null; reconcile = null; overlay = null; scheduled = null; outbox = null; media = null; photos = null;
@@ -48,13 +56,17 @@ export function startBridge(deps: {
     const ingest = deps.ingest ?? new ConvexIngest(deps.config);
     const writer = new MessageWriter({ bb: deps.bb, db: deps.db, ingest, names: deps.names });
     try {
+      typing = new OutboundTyping(deps.bb, deps.now);
+      state = new BridgeStatePublisher({ bb: deps.bb, ingest, now: deps.now,
+        capabilities: deps.capabilities ?? (() => ({ privateApi: deps.bb.hasPrivateApi, suggestions: deps.suggestions?.ai.available ?? false,
+          reactionSuggestions: deps.bb.hasPrivateApi, whisperAvailable: false, whisperDetail: "Whisper capabilities were not supplied" })) });
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
       if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now });
       live = new LiveBridge(writer, deps.now, (rows) => suggestions?.observe(rows));
       overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
-      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now });
+      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now, handlers: { typing: typingHandler(typing, deps.now) } });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
       media = worker;
       writer.onAttachments = (rows, createdAt) => worker.enqueue(rows, createdAt);
@@ -78,10 +90,12 @@ export function startBridge(deps: {
       outbox: { inFlight: outbox?.inFlight ?? 0, lastExecutedAt: outbox?.lastExecutedAt ?? null },
       photos: { matched: photos?.matched ?? 0, pending: photos?.pending ?? 0, uploadedThisRun: photos?.uploaded ?? 0 },
       media: media ? { ...media.counts(), uploadedToday: media.uploadedToday, lastError: media.lastError } : null,
-      pending: startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
+      pending: (state?.pending ?? 0) + startup.pending + (live?.pending ?? 0) + (reconcile?.pending ?? 0) + (overlay?.pending ?? 0) + (scheduled?.pending ?? 0) + (outbox?.pending ?? 0) }),
     scheduledChanged: () => scheduled?.request(),
     flush: async () => {
       await startup.flush();
+      await state?.flush();
+      await typing?.flush();
       await outbox?.flush();
       await live?.flush();
       await reconcile?.flush();
