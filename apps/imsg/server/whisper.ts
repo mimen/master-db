@@ -103,7 +103,19 @@ function processFailure(label: string, result: ProcessResult): TranscriptState {
   return { state: "failed", error: detail ? `${label}: ${detail}` : `${label} exited ${result.exitCode}` };
 }
 
+type TranscriptListener = (cache: TranscriptCache, guid: string, state: TranscriptState) => void;
+const transcriptListeners = new Set<TranscriptListener>();
+const services = new WeakMap<TranscriptCache, WhisperService>();
+export function subscribeTranscripts(listener: TranscriptListener): () => void {
+  transcriptListeners.add(listener);
+  return () => { transcriptListeners.delete(listener); };
+}
+
 export class WhisperService {
+  static forCache(cache: TranscriptCache): WhisperService | undefined { return services.get(cache); }
+  private publish(guid: string, state: TranscriptState): void {
+    for (const listener of transcriptListeners) listener(this.cache, guid, state);
+  }
   private readonly availabilityValue: WhisperAvailability;
   private readonly inFlight = new Map<string, Promise<TranscriptState>>();
   private readonly failures = new Map<string, Extract<TranscriptState, { state: "failed" }>>();
@@ -117,6 +129,7 @@ export class WhisperService {
     private readonly runtime: WhisperRuntime = whisperRuntime,
   ) {
     this.availabilityValue = probeWhisper(config, runtime);
+    services.set(cache, this);
   }
 
   availability(): WhisperAvailability {
@@ -154,12 +167,14 @@ export class WhisperService {
       .then((result) => {
         if (result.state === "failed") this.failures.set(attachmentGuid, result);
         else this.failures.delete(attachmentGuid);
+        this.publish(attachmentGuid, result);
         return result;
       })
       .finally(() => {
         this.inFlight.delete(attachmentGuid);
       });
     this.inFlight.set(attachmentGuid, task);
+    this.publish(attachmentGuid, { state: "working" });
     return task;
   }
 

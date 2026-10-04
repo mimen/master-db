@@ -12,12 +12,12 @@ import {
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { api, attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
+import { api, attachmentThumbnailUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
 import { markChatUnread, pinChat } from "@/lib/chat-actions";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
-import type { ChatSummary, Contact, ContactSuggestion, GalleryItem } from "@shared/types";
+import type { ChatSummary, Contact, ContactSuggestion } from "@shared/types";
 import { formatAddress } from "@shared/address";
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
@@ -27,6 +27,10 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
 import { ChatCrmSection } from "./chat-crm-section";
+import { useQuery } from "convex/react";
+import { commaApi } from "@/lib/convex-api";
+import { mediaApi } from "@/lib/media-api";
+import { MediaUnavailable } from "./media";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
@@ -63,7 +67,8 @@ export function ChatInfoContent({
     isGroup: boolean;
     participants: Contact[];
   } | null>(null);
-  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const conversation = useQuery(commaApi.resolveChat, guid ? { chatGuid: guid } : "skip");
+  const gallery = useQuery(mediaApi.gallery, conversation ? { conversationId: conversation._id } : "skip") ?? [];
   const [gridWidth, setGridWidth] = useState(0);
   const onGridLayout = useCallback((width: number): void => {
     const next = Math.round(width);
@@ -92,7 +97,6 @@ export function ChatInfoContent({
       setInfo(i);
       setName(i.displayName ?? "");
     }).catch(() => undefined);
-    api.gallery(guid).then(setGallery).catch(() => undefined);
   }, [guid]);
 
   useEffect(load, [load]);
@@ -144,7 +148,7 @@ export function ChatInfoContent({
     });
   };
 
-  const galleryMedia = gallery.map((g) => ({ url: attachmentUrl(g.guid), isVideo: g.isVideo }));
+  const galleryMedia = gallery;
   const summary = chats?.find((c) => c.guid === guid) ?? null;
   const peer = info.isGroup ? null : info.participants[0];
 
@@ -342,6 +346,7 @@ export function ChatInfoContent({
             <View style={styles.grid} onLayout={(e) => onGridLayout(e.nativeEvent.layout.width)}>
               {gallery.map((item, index) => {
                 const tileSize = gridWidth > 0 ? (gridWidth - 2 * GRID_GAP) / 3 : 0;
+                const thumbnail = attachmentThumbnailUrl(item, tileSize);
                 return (
                 <Pressable
                   key={item.guid}
@@ -350,11 +355,11 @@ export function ChatInfoContent({
                   style={{ width: tileSize, height: tileSize }}
                   onPress={() => openLightbox(galleryMedia, index)}
                 >
-                  <Image
-                    source={{ uri: item.isVideo ? attachmentUrl(item.guid) : attachmentThumbnailUrl(item.guid, tileSize) }}
+                  {thumbnail ? <Image
+                    source={{ uri: thumbnail }}
                     style={styles.tileImg}
                     contentFit="cover"
-                  />
+                  /> : <MediaUnavailable />}
                   {item.isVideo && (
                     // Play badge sits on a fixed dark scrim over media thumbnails —
                     // theme-invariant by design, not a theme.onAccent site.

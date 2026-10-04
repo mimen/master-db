@@ -5,14 +5,18 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView, useVideoPlayer } from "expo-video";
 
+import { useQuery } from "convex/react";
+import { mediaApi } from "./media-api";
+
 export interface LightboxMedia {
-  url: string;
+  guid: string;
+  originalUrl?: string | null;
+  thumbUrl?: string | null;
   isVideo: boolean;
 }
 
@@ -37,11 +41,17 @@ function LightboxVideo({ url }: { url: string }) {
   );
 }
 
+function LightboxAttachment({ attachment }: { attachment: LightboxMedia }) {
+  const media = useQuery(mediaApi.attachmentMedia, { guid: attachment.guid });
+  const url = media === undefined ? attachment.originalUrl ?? null : media?.originalUrl ?? null;
+  if (!url) return <Text accessibilityLabel="Media unavailable" style={{ color: "#fff" }}>Media pending or unavailable</Text>;
+  return attachment.isVideo ? <LightboxVideo key={url} url={url} /> : <Image source={{ uri: url }} style={styles.media} contentFit="contain" />;
+}
+
 /** Full-screen media viewer: swipe/arrow between items, tap to dismiss. */
 export function LightboxProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<LightboxMedia[]>([]);
   const [index, setIndex] = useState(0);
-  const { width } = useWindowDimensions();
 
   const open = useCallback<OpenLightbox>((media, start) => {
     if (media.length === 0) return;
@@ -60,12 +70,7 @@ export function LightboxProvider({ children }: { children: React.ReactNode }) {
       <Modal visible={items.length > 0} transparent animationType="fade" onRequestClose={close}>
         <View style={styles.backdrop}>
           <Pressable style={StyleSheet.absoluteFill} onPress={close} />
-          {current &&
-            (current.isVideo ? (
-              <LightboxVideo url={current.url} />
-            ) : (
-              <Image source={{ uri: current.url }} style={styles.media} contentFit="contain" />
-            ))}
+          {current && <LightboxAttachment key={current.guid} attachment={current} />}
           {/* Full-screen media viewer over a fixed near-black backdrop — every
               control below is theme-invariant by design, not app-theme-driven. */}
           <Pressable

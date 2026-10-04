@@ -15,6 +15,7 @@ const ROUTES = {
   messages: internal.comma.internal.upsertMessages,
   attachments: internal.comma.internal.upsertAttachments,
   transcript: internal.comma.internal.setTranscript,
+  media: (internal as unknown as { comma: { media: { bridgeMedia: import("convex/server").FunctionReference<"mutation", "internal", { request: import("./media").MediaBridgeRequest }, string | boolean> } } }).comma.media.bridgeMedia,
   storage: internal.comma.internal.setAttachmentStorage,
   photo: internal.comma.photos.setContactPhoto,
   mediaBacklog: internal.comma.internal.mediaBacklog,

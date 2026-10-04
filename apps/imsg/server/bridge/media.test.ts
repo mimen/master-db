@@ -81,3 +81,56 @@ test("seeding from Convex queues the backlog, and transcripts copy once", async 
     .toEqual([{ attachmentGuid: "memo-1", transcript: "hello there" }]);
   worker.stop();
 });
+
+test("publishes new Whisper results after startup and retries failed ingest", async () => {
+  const { WhisperService } = await import("../whisper");
+  const db = new OverlayDb(":memory:");
+  const calls: unknown[] = [];
+  let offline = true;
+  const ingest = {
+    post: async (kind: string, body: unknown) => {
+      if (kind !== "media") throw new Error("unexpected ingest kind");
+      calls.push(body);
+      if (offline) throw new Error("offline");
+      return true;
+    },
+    upload: async () => "unused",
+  } as unknown as ConstructorParameters<typeof MediaWorker>[0]["ingest"];
+  const worker = new MediaWorker({ bb: bb({}), db, ingest, pauseMs: 0 });
+  const { FakeBlueBubbles } = await import("../bluebubbles-fake");
+  const service = new WhisperService({ binaryPath: null, modelPath: null, workDir: "/tmp/unused" }, new FakeBlueBubbles({ chats: [] }), db);
+  try {
+    db.setAttachmentTranscript("new-memo", "newly finished");
+    await service.transcribe("new-memo");
+    await worker.flush();
+    expect(calls.at(-1)).toEqual({ request: { kind: "transcript", attachmentGuid: "new-memo", transcript: { state: "ready", text: "newly finished" } } });
+    const failedAttempts = calls.length;
+    offline = false;
+    await worker.flush();
+    expect(calls).toHaveLength(failedAttempts + 1);
+    const delivered = calls.length;
+    await worker.flush();
+    expect(calls).toHaveLength(delivered);
+  } finally { worker.stop(); }
+});
+
+test("an unmirrored transcript does not block publication for mirrored attachments", async () => {
+  const { WhisperService } = await import("../whisper");
+  const { FakeBlueBubbles } = await import("../bluebubbles-fake");
+  const db = new OverlayDb(":memory:");
+  const calls: string[] = [];
+  const ingest = {
+    post: async (_kind: string, body: { request: { attachmentGuid: string } }) => { calls.push(body.request.attachmentGuid); return body.request.attachmentGuid !== "missing"; },
+    upload: async () => "unused",
+  } as unknown as ConstructorParameters<typeof MediaWorker>[0]["ingest"];
+  const worker = new MediaWorker({ bb: bb({}), db, ingest, pauseMs: 0 });
+  const service = new WhisperService({ binaryPath: null, modelPath: null, workDir: "/tmp/unused" }, new FakeBlueBubbles({ chats: [] }), db);
+  try {
+    for (const guid of ["missing", "present"]) { db.setAttachmentTranscript(guid, "finished"); await service.transcribe(guid); }
+    await worker.flush();
+    expect(calls).toContain("present");
+    const successes = calls.filter((guid) => guid === "present").length;
+    await worker.flush();
+    expect(calls.filter((guid) => guid === "present")).toHaveLength(successes);
+  } finally { worker.stop(); }
+});

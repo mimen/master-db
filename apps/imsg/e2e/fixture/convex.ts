@@ -4,13 +4,15 @@ import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
 import { ChatCommands } from "../../server/commands";
+import { mapMessage } from "../../server/map";
+import { WhisperService } from "../../server/whisper";
 import type { OverlayDb } from "../../server/db";
-import type { ChatSummary, Message, ScheduledMessage } from "../../shared/types";
+import type { ChatSummary, Message, ScheduledMessage, TranscriptState } from "../../shared/types";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount">;
-type ConvexMessage = Infer<typeof messageDoc> & { attachments: Array<Infer<typeof attachmentDoc> & { thumbUrl: null; originalUrl: null }> };
+type ConvexMessage = Infer<typeof messageDoc> & { attachments: Array<Infer<typeof attachmentDoc> & { thumbUrl: string | null; originalUrl: string | null }> };
 type Pagination = { numItems: number; cursor: string | null };
 
 function id<Table extends string>(value: string): GenericId<Table> {
@@ -60,7 +62,8 @@ export function messageRow(message: Message, clientKey?: string): ConvexMessage 
       ...(a.height !== null ? { height: a.height } : {}),
       ...(a.totalBytes !== null ? { totalBytes: a.totalBytes } : {}),
       isSticker: false, hideAttachment: false, isOnDisk: true,
-      thumbUrl: null, originalUrl: null, sourceVersion: 1,
+      thumbUrl: a.mimeType?.startsWith("image/") ? `/__fixture/media/${encodeURIComponent(a.guid)}` : null,
+      originalUrl: `/__fixture/media/${encodeURIComponent(a.guid)}`, sourceVersion: 1,
     })),
   };
 }
@@ -80,7 +83,9 @@ class FixtureError extends Error {
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity) {
   const drafts = new Map<string, Infer<typeof draftDoc>>();
-  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string }>();
+  const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string; result?: unknown }>();
+  const uploads = new Map<string, { bytes: Blob; filename?: string; mimeType?: string }>();
+  const transcripts = new Map<string, TranscriptState>();
   const inFlight = new Map<string, Promise<string>>();
   const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
   const read = async <T>(path: string): Promise<T> => {
@@ -114,6 +119,29 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (result.ok) return result.value.guid;
         break;
       }
+      case "sendAttachment": {
+        const upload = uploads.get(payload.storageId);
+        if (!upload?.filename || upload.filename !== payload.filename || upload.mimeType !== payload.mimeType) throw new FixtureError("Finalized upload not found", 400);
+        const bytes = new Uint8Array(await upload.bytes.arrayBuffer());
+        let result = payload.isAudioMessage ? await bb.sendAudio(chatGuid, payload.filename, bytes) : await bb.sendAttachmentWithCaption(chatGuid, payload.filename, bytes, payload.caption);
+        if (!result.ok && result.error === "not implemented in fake") {
+          result = await bb.sendText(chatGuid, payload.isAudioMessage ? "" : payload.caption ?? "");
+          if (result.ok) result.value.attachments = [{ guid: payload.storageId, mimeType: payload.mimeType, transferName: payload.filename, totalBytes: bytes.byteLength, transferState: 5 }];
+        }
+        accept(result);
+        if (result.ok) {
+          if (payload.isAudioMessage && payload.caption) accept(await bb.sendText(chatGuid, payload.caption));
+          return { kind: "sendAttachment" as const, message: mapMessage(result.value, chatGuid, names) };
+        }
+        break;
+      }
+      case "transcribe": {
+        transcripts.set(payload.attachmentGuid, { state: "working" });
+        controls.broadcast({ kind: "chats-changed" });
+        const transcript = await WhisperService.forCache(db)!.transcribe(payload.attachmentGuid);
+        transcripts.set(payload.attachmentGuid, transcript);
+        return { kind: "transcribe" as const, transcript };
+      }
       case "markRead": accept({ ok: await commands.markRead(chatGuid) }); break;
       case "markUnread": directory.markUnread(chatGuid); break;
       case "pin": directory.setPinned(chatGuid, payload.value); break;
@@ -136,13 +164,60 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       default: {
-        const unknown: never = payload;
+        const unknown = payload;
         throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(unknown)}`, 400);
       }
     }
     return undefined;
   };
+  const attachment = async (guid: string) => {
+    for (const chat of await conversations()) {
+      for (const message of await messages(chat.primaryChatGuid)) {
+        const found = message.attachments.find((a) => a.guid === guid);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  app.post("/__fixture/upload", async (c) => {
+    const storageId = `fixture-storage-${uploads.size + 1}`;
+    uploads.set(storageId, { bytes: await c.req.blob() });
+    return c.json({ storageId });
+  });
+  app.get("/__fixture/media/:guid", (c) => {
+    const upload = uploads.get(c.req.param("guid"));
+    return upload ? new Response(upload.bytes) : bb.downloadAttachment(c.req.param("guid"));
+  });
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
+    "comma/uploads:finalizeUpload": async (args) => {
+      const upload = uploads.get(String(args.storageId));
+      if (!upload) throw new FixtureError("Uploaded file not found", 400);
+      if (!args.filename || upload.bytes.type !== args.mimeType || !upload.bytes.size) throw new FixtureError("Invalid upload metadata", 400);
+      upload.filename = String(args.filename); upload.mimeType = String(args.mimeType);
+      return `upload-${String(args.storageId)}`;
+    },
+    "comma/media:attachmentMedia": async (args) => {
+      const found = await attachment(String(args.guid));
+      return found ? { guid: found.guid, thumbUrl: found.thumbUrl, originalUrl: found.originalUrl } : null;
+    },
+    "comma/media:attachmentChatGuid": async (args) => (await attachment(String(args.guid)))?.conversationId ?? null,
+    "comma/media:transcriptState": async (args) => transcripts.get(String(args.attachmentGuid)) ?? WhisperService.forCache(db)!.state(String(args.attachmentGuid)),
+    "comma/media:gallery": async (args) => {
+      const cap = Math.max(0, Math.min(120, Math.floor(Number(args.limit ?? 120))));
+      const seen = new Set<string>();
+      return (await messages(String(args.conversationId))).flatMap((message) => message.attachments.flatMap((a) => {
+        const isImage = a.mimeType?.startsWith("image/") ?? false;
+        const isVideo = a.mimeType?.startsWith("video/") ?? false;
+        if ((!isImage && !isVideo) || seen.has(a.guid) || a.hideAttachment || message.retracted || message.isTapback) return [];
+        seen.add(a.guid);
+        return [{ guid: a.guid, mimeType: a.mimeType ?? null, filename: a.filename ?? null, isImage, isVideo, dateCreated: message.dateCreated, thumbUrl: a.thumbUrl, originalUrl: a.originalUrl }];
+      })).slice(0, cap);
+    },
+    "comma/outbox:getCommand": async (args) => {
+      const entry = [...receipts.entries()].find(([, row]) => row.id === args.commandId);
+      return entry ? { commandId: entry[1].id, clientKey: entry[0], status: entry[1].status, result: entry[1].result, updatedAt: FIXTURE_NOW } : null;
+    },
     "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,
@@ -188,9 +263,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         const chatGuid = String(args.conversationId);
         if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
         const payload = args.payload as CommaOutboxPayload;
-        const resultGuid = await execute(chatGuid, payload, clientKey);
+        const executionResult = await execute(chatGuid, payload, clientKey);
+        const resultGuid = typeof executionResult === "string" ? executionResult : executionResult?.kind === "sendAttachment" ? executionResult.message.guid : undefined;
         if (payload.kind === "send") drafts.delete(chatGuid);
-        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(resultGuid ? { resultGuid } : {}) };
+        const receipt = { id: `outbox-${clientKey}`, status: "sent" as const, ...(typeof executionResult === "object" ? { result: executionResult } : {}), ...(resultGuid ? { resultGuid } : {}) };
         receipts.set(clientKey, receipt);
         controls.broadcast({ kind: "chats-changed" });
         return receipt.id;
@@ -214,5 +290,5 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); };
+  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); uploads.clear(); transcripts.clear(); };
 }
