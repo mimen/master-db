@@ -4,6 +4,7 @@ Evidence from production dives and verification runs: videos, Playwright traces,
 
 | Folder | Run | Audit |
 |---|---|---|
+| `2026-10-04-native-dive/` | Phone (Expo Go simulator) and desktop app dive, plus the unread comparison | [docs/audits/2026-10-04-native-dive.md](../docs/audits/2026-10-04-native-dive.md) |
 | `2026-10-04-production-dive/` | Production dive and fix verification, self line only | [docs/audits/2026-10-04-production-dive.md](../docs/audits/2026-10-04-production-dive.md) |
 
 Each run folder holds:
