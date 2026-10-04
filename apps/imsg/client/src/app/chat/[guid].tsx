@@ -2,6 +2,8 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { formatAddress } from "@shared/address";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar, GroupPhotoAvatar } from "@/components/avatar";
@@ -26,6 +28,9 @@ function HeaderTitle({
 }) {
   const theme = useTheme();
   const dmAddress = !isGroup ? (guid.split(";").pop() ?? null) : null;
+  // A deep link carries no name; the directory knows it once it loads.
+  const known = useChatDirectory()?.find((chat) => chat.guid === guid);
+  const title = known?.displayName ?? name;
   return (
     <View style={headerStyles.container}>
       {isGroup ? (
@@ -35,10 +40,13 @@ function HeaderTitle({
       )}
       <View style={headerStyles.identityText}>
         <Text numberOfLines={1} style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
-          {name}
+          {title}
         </Text>
         {isGroup && memberCount !== undefined && memberCount > 0 && (
           <Text style={{ color: theme.textSecondary, fontSize: 11 }}>{memberCount} people</Text>
+        )}
+        {dmAddress && (
+          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 11 }}>{formatAddress(dmAddress)}</Text>
         )}
       </View>
     </View>
@@ -91,7 +99,7 @@ export default function ChatScreen(): React.JSX.Element | null {
           headerTitle: () => (
             <HeaderTitle
               guid={params.guid}
-              name={params.name ?? (params.guid.split(";").pop() ?? params.guid)}
+              name={params.name ?? (isGroup ? "Group conversation" : formatAddress(params.guid.split(";").pop() ?? params.guid))}
               isGroup={isGroup}
               memberCount={params.count ? Number(params.count) : undefined}
               hasGroupPhoto={params.hasGroupPhoto === "1"}
