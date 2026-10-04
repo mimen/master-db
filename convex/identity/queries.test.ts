@@ -1,3 +1,4 @@
+import { makeFunctionReference } from "convex/server";
 import { convexTest, type TestConvex } from "convex-test";
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -567,5 +568,45 @@ describe("chatCrm", () => {
   test("rejects a wrong key", async () => {
     const t = convexTest(schema, modules);
     await expect(t.query(chatCrmRef, { key: "wrong" })).rejects.toThrow();
+  });
+});
+
+const searchContactsRef = makeFunctionReference<"query", { key: string; q: string; limit?: number },
+  { address: string; name: string; is_favorite?: boolean }[]>("identity/queries:searchContacts");
+
+describe("searchContacts", () => {
+  test("matches every name variant, normalized phone and case-insensitive email", async () => {
+    const t = convexTest(schema, modules);
+    await seedPerson(t, { display_name: "New Display", first_name: "Former", last_name: "Surname",
+      nickname: "Nickname", organization: "Umbrella Org", normalized_phones: ["+15551234567"],
+      normalized_emails: ["person@example.com"], is_favorite: true });
+    for (const q of ["NEW DISPLAY", "former", "surname", "former surname", "nickname", "umbrella org", "(555) 123", "PERSON@EXAMPLE.COM"]) {
+      expect(await t.query(searchContactsRef, { key: TEST_KEY, q })).toEqual([
+        { address: "+15551234567", name: "New Display", is_favorite: true },
+        { address: "person@example.com", name: "New Display", is_favorite: true },
+      ]);
+    }
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "unknown" })).toEqual([]);
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "   " })).toEqual([]);
+  });
+
+  test("dedupes normalized addresses, carries favorites, excludes merged people and caps after flattening", async () => {
+    const t = convexTest(schema, modules);
+    const person = await seedPerson(t, { display_name: "Match One", normalized_phones: ["+16195551234", "(619) 555-1234"],
+      normalized_emails: ["PERSON@EXAMPLE.COM", "person@example.com"] });
+    await seedPerson(t, { display_name: "Match Duplicate", normalized_phones: ["+16195551234"], is_favorite: true });
+    await seedPerson(t, { display_name: "Match Merged", merged_into: person, normalized_phones: ["+16195559999"] });
+    await seedPerson(t, { display_name: "Match Self", is_self: true, normalized_emails: ["self@example.com"] });
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "match" })).toEqual([
+      { address: "+16195551234", name: "Match One", is_favorite: true },
+      { address: "person@example.com", name: "Match One" },
+      { address: "self@example.com", name: "Match Self" },
+    ]);
+    for (let i = 0; i < 30; i++) await seedPerson(t, { display_name: "Match Person " + i, normalized_emails: ["match" + i + "@example.com"] });
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "match" })).toHaveLength(25);
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "match", limit: 100 })).toHaveLength(25);
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "match", limit: 3 })).toHaveLength(3);
+    expect(await t.query(searchContactsRef, { key: TEST_KEY, q: "match", limit: 0 })).toEqual([]);
+    await expect(t.query(searchContactsRef, { key: "wrong", q: "match" })).rejects.toThrow("Unauthorized");
   });
 });

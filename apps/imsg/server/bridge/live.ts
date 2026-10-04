@@ -54,6 +54,7 @@ export class MessageWriter {
 
   /** Set by the bridge so every mirrored attachment reaches the media upload queue. */
   onAttachments: ((rows: AttachmentRow[], createdAt: number) => void) | null = null;
+  onChats: ((chats: BBChat[]) => void) | null = null;
 
   exclusive<T>(work: () => Promise<T>): Promise<T> {
     const next = this.serial.then(work, work);
@@ -79,6 +80,7 @@ export class MessageWriter {
       const resolved = await this.deps.ingest.post("conversations", { conversations: batch });
       for (const [guid, id] of Object.entries(resolved)) this.conversationIds.set(guid, id);
     }
+    this.onChats?.([...this.chats.values()]);
   }
 
   async ensureChat(chatGuid: string): Promise<void> {

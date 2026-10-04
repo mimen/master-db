@@ -31,6 +31,7 @@ export interface Bodies {
   storage: FunctionArgs<typeof internal.comma.internal.setAttachmentStorage>;
   transcript: FunctionArgs<typeof internal.comma.internal.setTranscript>;
   photo: FunctionArgs<typeof internal.comma.photos.setContactPhoto>;
+  groupPhoto: FunctionArgs<typeof internal.comma.groupPhotos.setGroupPhoto>;
   mediaBacklog: FunctionArgs<typeof internal.comma.internal.mediaBacklog>;
 }
 export interface Results {
@@ -46,6 +47,7 @@ export interface Results {
   complete: FunctionReturnType<typeof internal.comma.outbox.completeOutbox>;
   storage: boolean;
   photo: boolean;
+  groupPhoto: boolean;
   transcript: boolean;
   mediaBacklog: FunctionReturnType<typeof internal.comma.internal.mediaBacklog>;
 }

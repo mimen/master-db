@@ -35,7 +35,7 @@ export class FakeIngest extends ConvexIngest {
       complete: true,
       renew: true,
       storage: true,
-      photo: true,
+      photo: true, groupPhoto: true,
       transcript: true,
       mediaBacklog: { items: this.backlog.splice(0), cursor: "done", isDone: true },
     };

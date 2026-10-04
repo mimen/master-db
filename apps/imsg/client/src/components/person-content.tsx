@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { openExternalUrl } from "@/lib/external-link";
 import { Ionicons } from "@expo/vector-icons";
-import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { useCreatePerson, useRenamePerson } from "@/lib/identity";
 import { airtableRecordUrl } from "@/lib/airtable";
@@ -163,9 +162,6 @@ export function PersonContent({
                   organization: addForm.organization.trim() || undefined,
                 });
                 showToast("Contact added");
-                // So the inbox picks up the new name/known status right away
-                // instead of waiting for the server's next mirror tick.
-                void api.refreshIdentity().catch(() => undefined);
               } catch {
                 showToast("Couldn't add the contact. Try again.");
               } finally {
@@ -221,7 +217,6 @@ export function PersonContent({
         organization: nameForm.organization.trim(),
       });
       setEditingName(false);
-      void api.refreshIdentity().catch(() => undefined);
     } catch {
       showToast("Couldn't save the name. Try again.");
     } finally {

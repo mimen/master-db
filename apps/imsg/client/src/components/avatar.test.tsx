@@ -1,7 +1,7 @@
-import { expect, mock, test } from "bun:test";
+import { afterAll, expect, mock, test } from "bun:test";
 
 if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
-  test("avatars prefer Convex photos and retain their fallback", async () => {
+  test("avatars use Convex photos and render initials on a missing or failed photo", async () => {
     const child = Bun.spawn([process.execPath, "test", import.meta.filename], {
       cwd: import.meta.dir, env: { ...process.env, COMMA_AVATAR_TEST_CHILD: "1" }, stdout: "pipe", stderr: "pipe",
     });
@@ -17,6 +17,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   const dom = new JSDOM("<div id='root'></div>");
   Object.assign(globalThis, { window: dom.window, document: dom.window.document });
   Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  afterAll(() => dom.window.close());
   let photoUrl: string | null = "https://convex.test/photo-1";
   let failImage: (() => void) | undefined;
   const handles: Array<string | null> = [];
@@ -33,14 +34,16 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   }));
   mock.module("@/lib/config", () => ({ BASE_URL: "http://photos.test" }));
   mock.module("@/lib/identity", () => ({
-    convexClient: {},
+    convexClient: {}, IDENTITY_KEY: "fixture-only",
     useWhoIs: (handle: string | null) => {
       handles.push(handle);
       return handle ? { found: true, person: { _id: "person", photoUrl } } : undefined;
     },
   }));
   mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({}) }));
-  const { PersonAvatar } = await import("./avatar");
+  let groupPhotoUrl: string | null = null;
+  mock.module("convex/react", () => ({ useQuery: () => ({ groupPhotoUrl }) }));
+  const { PersonAvatar, GroupPhotoAvatar } = await import("./avatar");
   const { avatarUrl } = await import("../lib/api");
 
   test("renders cloud photos, falls back on errors, and accepts a changed cloud photo", async () => {
@@ -54,17 +57,37 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
       await render();
       expect(container.querySelector("img")?.src).toBe("https://convex.test/photo-1");
       await act(async () => { failImage?.(); });
-      expect(container.querySelector("img")?.src).toBe("http://photos.test/api/avatars/person%40example.com?v=3");
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.textContent).toBe("P");
       photoUrl = "https://convex.test/photo-2";
       await render();
       expect(container.querySelector("img")?.src).toBe(photoUrl);
       photoUrl = null;
       await render();
-      expect(container.querySelector("img")?.src).toBe("http://photos.test/api/avatars/person%40example.com?v=3");
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.textContent).toBe("P");
       photoUrl = "https://convex.test/photo-3";
       expect(avatarUrl("+16195551234", photoUrl)).toBe(photoUrl);
       await render(null);
       expect(container.querySelector("img")).toBeNull();
-    } finally { await act(async () => root.unmount()); dom.window.close(); }
+    } finally { await act(async () => root.unmount()); }
+  });
+  test("group avatar reads the projected URL and renders its glyph on missing or failed photos", async () => {
+    const container = document.getElementById("root");
+    if (!container) throw new Error("Missing test root");
+    const root = createRoot(container);
+    const render = () => act(async () => { root.render(createElement(GroupPhotoAvatar, { guid: "group", size: 40, hasPhoto: true })); });
+    try {
+      await render();
+      expect(container.querySelector("img")).toBeNull();
+      groupPhotoUrl = "https://convex.test/group-1";
+      await render();
+      expect(container.querySelector("img")?.src).toBe(groupPhotoUrl);
+      await act(async () => { failImage?.(); });
+      expect(container.querySelector("img")).toBeNull();
+      groupPhotoUrl = "https://convex.test/group-2";
+      await render();
+      expect(container.querySelector("img")?.src).toBe(groupPhotoUrl);
+    } finally { await act(async () => root.unmount()); }
   });
 }

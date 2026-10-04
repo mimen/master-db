@@ -4,6 +4,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
+import { useQuery } from "convex/react";
+import { commaApi } from "@/lib/convex-api";
 import { initials } from "@/lib/format";
 import { useWhoIs, type Person } from "@/lib/identity";
 import type { ChatSummary } from "@shared/types";
@@ -69,7 +71,7 @@ export function PersonAvatar({
       <Text style={{ fontSize: size * 0.34, fontWeight: "600", color: color.fg }}>
         {initials(name)}
       </Text>
-      {address && (
+      {uri ? (
         <Image
           source={{ uri }}
           onError={() => { if (photoUrl) setFailedPhoto(photoUrl); }}
@@ -81,12 +83,14 @@ export function PersonAvatar({
           recyclingKey={uri}
           cachePolicy="memory-disk"
         />
-      )}
+      ) : null}
     </View>
   );
 }
 
 export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) {
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const uri = groupPhotoUrl(chat);
   if (!chat.isGroup) {
     return (
       <PersonAvatar
@@ -117,16 +121,17 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
           size={size * 0.58}
         />
       </View>
-      {chat.hasGroupPhoto === true && (
+      {uri && uri !== failedPhoto ? (
         <Image
-          source={{ uri: groupPhotoUrl(chat.guid) }}
+          source={{ uri }}
+          onError={() => setFailedPhoto(uri)}
           style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
           contentFit="cover"
           transition={80}
           recyclingKey={chat.guid}
           cachePolicy="memory-disk"
         />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -183,7 +188,6 @@ export function GroupPhotoAvatar({
   guid,
   size,
   iconSize,
-  hasPhoto = false,
 }: {
   guid: string;
   size: number;
@@ -191,6 +195,9 @@ export function GroupPhotoAvatar({
   hasPhoto?: boolean;
 }) {
   const theme = useTheme();
+  const conversation = useQuery(commaApi.resolveChat, { chatGuid: guid });
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const uri = conversation ? groupPhotoUrl(conversation) : null;
   return (
     <View
       style={[
@@ -199,16 +206,17 @@ export function GroupPhotoAvatar({
       ]}
     >
       <Ionicons name="people" size={iconSize ?? size * 0.47} color={theme.textSecondary} />
-      {hasPhoto && (
+      {uri && uri !== failedPhoto ? (
         <Image
-          source={{ uri: groupPhotoUrl(guid) }}
+          source={{ uri }}
+          onError={() => setFailedPhoto(uri)}
           style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
           contentFit="cover"
           transition={80}
           recyclingKey={guid}
           cachePolicy="memory-disk"
         />
-      )}
+      ) : null}
     </View>
   );
 }

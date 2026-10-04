@@ -14,6 +14,7 @@ export function conversationToChat(row: ConvexConversation): ChatSummary {
     displayName: row.displayName,
     isGroup: row.isGroup,
     hasGroupPhoto: row.hasGroupPhoto,
+    groupPhotoUrl: row.groupPhotoUrl,
     participants: row.participants,
     known: row.participants.some((p) => p.name !== null),
     contactsAvailable: true,

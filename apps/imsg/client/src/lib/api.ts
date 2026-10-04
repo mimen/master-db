@@ -4,6 +4,7 @@ import { commaApi, commaOutbox } from "./convex-api";
 import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from "./convex-commands";
 import { convexClient } from "./identity";
 import { searchMessages } from "./history-api";
+import { contactSearchArgs, identityApi } from "./identity-api";
 import type {
   AttachmentSummary,
   AiStatus,
@@ -130,7 +131,7 @@ export const api = {
     return enqueueCommand(chatGuid, { kind: "edit", messageGuid, text });
   },
   contacts(q: string): Promise<Contact[]> {
-    return request(`/api/contacts?q=${encodeURIComponent(q)}`);
+    return convexClient.query(identityApi.searchContacts, contactSearchArgs(q));
   },
   sendContactCard(chatGuid: string, contact: Contact, caption?: string): Promise<Message> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/contact`, {
@@ -139,8 +140,10 @@ export const api = {
       body: JSON.stringify({ name: contact.name, address: contact.address, caption }),
     });
   },
-  findChat(address: string): Promise<{ chatGuid: string }> {
-    return request(`/api/chats/find?address=${encodeURIComponent(address)}`);
+  async findChat(address: string): Promise<{ chatGuid: string }> {
+    const result = await convexClient.query(identityApi.findChat, { address });
+    if (!result) throw new Error("Chat not found");
+    return result;
   },
   newChat(body: { addresses: string[]; text: string }): Promise<{ chatGuid: string }> {
     return request("/api/chats/new", { method: "POST", body: JSON.stringify(body) });
@@ -158,13 +161,15 @@ export const api = {
   gallery(chatGuid: string): Promise<GalleryItem[]> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/gallery`);
   },
-  chatInfo(chatGuid: string): Promise<{
+  async chatInfo(chatGuid: string): Promise<{
     guid: string;
     displayName: string | null;
     isGroup: boolean;
     participants: Contact[];
   }> {
-    return request(`/api/chats/${encodeURIComponent(chatGuid)}/info`);
+    const result = await convexClient.query(identityApi.chatInfo, { chatGuid });
+    if (!result) throw new Error("Chat not found");
+    return result;
   },
   async renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
     return enqueueCommand(chatGuid, { kind: "rename", name });
@@ -205,16 +210,6 @@ export const api = {
   health(): Promise<{ ok: boolean; privateApi: boolean }> {
     return request("/api/health");
   },
-  /**
-   * Fire-and-forget: tells the server to refresh its Identity Mirror (the
-   * Convex name directory) right away, so an in-app "Add Contact" / rename
-   * shows up in the inbox immediately instead of waiting for the mirror's
-   * own 5-minute tick. 204 response — bypasses `request()`'s JSON parse.
-   */
-  refreshIdentity(): Promise<void> {
-    return fetch(`${BASE_URL}/api/identity/refresh`, { method: "POST" }).then(() => undefined);
-  },
-
   // ------------------------------------------------------------------- ai
   aiStatus(): Promise<AiStatus> {
     return request("/api/ai/status");
@@ -240,12 +235,12 @@ export const api = {
 
 };
 
-export function avatarUrl(address: string, photoUrl?: string | null): string {
-  return photoUrl ?? `${BASE_URL}/api/avatars/${encodeURIComponent(address)}?v=3`;
+export function avatarUrl(_address: string, photoUrl?: string | null): string | null {
+  return photoUrl ?? null;
 }
 
-export function groupPhotoUrl(chatGuid: string): string {
-  return `${BASE_URL}/api/chats/${encodeURIComponent(chatGuid)}/photo?v=2`;
+export function groupPhotoUrl(chat: { groupPhotoUrl?: string | null }): string | null {
+  return chat.groupPhotoUrl ?? null;
 }
 
 export function attachmentUrl(attachment: string | AttachmentSummary): string {

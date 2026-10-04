@@ -23,7 +23,7 @@ export const convexClient = new ConvexReactClient(
  * load; every hook below injects it so no call-site elsewhere in the client
  * needs to know it exists.
  */
-const IDENTITY_KEY = requireIdentityKey(process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY);
+export const IDENTITY_KEY = requireIdentityKey(process.env.EXPO_PUBLIC_IMSG_IDENTITY_KEY);
 
 export type IdentityRow = {
   kind: string;

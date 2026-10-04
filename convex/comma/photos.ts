@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 
+import { stripServiceSuffix } from "../../apps/imsg/shared/address";
 import { internalMutation, type QueryCtx } from "../_generated/server";
 import { normalizeEmail, normalizePhone } from "../identity/normalize";
 
 export async function personForAddress(ctx: Pick<QueryCtx, "db">, address: string) {
-  const normalized = normalizeEmail(address) || normalizePhone(address) || address.trim();
+  const raw = stripServiceSuffix(address);
+  const normalized = normalizeEmail(raw) || normalizePhone(raw) || raw;
   const identities = await ctx.db.query("identities")
     .withIndex("by_normalized", (q) => q.eq("normalized", normalized)).collect();
   for (const identity of identities) {

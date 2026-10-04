@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
 import {
   type AirtableHumanRow,
   type ContactListRow,
@@ -76,7 +75,6 @@ export function useAirtableSearch(needle: string, onAdded: (personId: string, hu
       // Local eviction ahead of `people` catching up via Convex reactivity.
       setRawResults((current) => current.filter((r) => r.record_id !== human.record_id));
       onAdded(result.personId, human);
-      void api.refreshIdentity().catch(() => undefined);
     } catch {
       showToast("Couldn't add contact");
     } finally {
