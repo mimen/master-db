@@ -49,7 +49,7 @@ export function Row({ title, subtitle, leading, trailing, density = "regular", s
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
-      accessibilityState={{ selected }}
+      aria-selected={selected}
       onPress={onPress}
       style={(state: InteractionState) => [
         ...frame,

@@ -27,6 +27,9 @@ describe("postExport", () => {
     expect(html).toContain('<meta name="comma-web-sha" content="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/>');
     expect(html).toContain("manifest.webmanifest");
     expect(html).toContain("<title>Comma</title>");
+    // Keyboard focus and pinch zoom stay available.
+    expect(html).not.toContain("outline:none!important");
+    expect(html).not.toContain("user-scalable=no");
   });
 
   test("paints a loading shell on the empty root that respects reduced motion", async () => {

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useReducedMotion } from "react-native-reanimated";
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
   StyleSheet,
@@ -97,23 +97,6 @@ function TypingDot({
   );
 }
 
-function useReducedMotion(): boolean {
-  const [reduceMotion, setReduceMotion] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (active) setReduceMotion(enabled);
-    });
-    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotion);
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
-
-  return reduceMotion;
-}
 
 const styles = StyleSheet.create({
   bubble: {

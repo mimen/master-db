@@ -66,7 +66,7 @@ export function Pill({ label, tone = "neutral", size = "md", selected = false, i
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected }}
+      aria-selected={selected}
       onPress={onPress}
       style={(state: InteractionState) => body(state).container}
     >

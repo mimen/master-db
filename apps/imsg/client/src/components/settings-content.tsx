@@ -75,7 +75,7 @@ function ReleaseIdentityFooter(): JSX.Element {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={expanded ? "Hide version details" : "Show version details"}
-        accessibilityState={{ expanded }}
+        aria-expanded={expanded}
         onPress={() => setExpanded((current) => !current)}
         style={styles.versionLine}
       >
@@ -157,10 +157,11 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Names</Text>
-          <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+          <View role="radiogroup" aria-label="Name order" style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
             {NAME_ORDER_OPTIONS.map((opt, i) => (
               <ListRow
                 key={opt.value}
+                checked={nameOrder === opt.value}
                 title={opt.label}
                 titleWeight="400"
                 onPress={() => setNameOrder(opt.value)}
@@ -184,10 +185,11 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
         {aiStatus?.suggestions && (
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>AI</Text>
-            <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+            <View role="radiogroup" aria-label="Reply suggestions" style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
               {SUGGESTION_MODE_OPTIONS.map((opt, i) => (
                 <ListRow
                   key={opt.value}
+                  checked={suggestionMode === opt.value}
                   title={opt.label}
                   titleWeight="400"
                   onPress={() => setSuggestionMode(opt.value)}
@@ -210,10 +212,11 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             </Text>
 
             <Text style={[styles.subsectionLabel, { color: theme.textSecondary }]}>Model</Text>
-            <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
+            <View role="radiogroup" aria-label="Suggestion model" style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
               {SUGGESTION_MODEL_OPTIONS.map((opt, i) => (
                 <ListRow
                   key={opt.value}
+                  checked={suggestionModel === opt.value}
                   title={opt.label}
                   subtitle={opt.detail}
                   titleWeight="400"

@@ -69,7 +69,7 @@ export function TriageNavigationRail({
     WebkitBackdropFilter: "blur(40px) saturate(1.6)",
   } as object) : { backgroundColor: visual.rail };
   return (
-    <View testID="triage-rail" style={[styles.rail, glass]} {...DRAG}>
+    <View testID="triage-rail" role="navigation" aria-label="Workspaces" style={[styles.rail, glass]} {...DRAG}>
       <View style={styles.top}>
         <View style={[styles.primary, { marginTop: titlebarInset }]}>
           <Item icon="messages" label="Messages" active={onMessages} onPress={() => { if (!onMessages) router.replace("/"); }} />

@@ -45,9 +45,11 @@ export function SidebarFrame({
       edges={shell ? [] : ["top"]}
     >
       <View style={styles.listWrap}>
+        {/* Chrome is absolutely positioned on top, but comes first in the DOM so Tab and
+            screen readers reach search and filters before the rows. */}
+        {chrome}
         {children}
         {thumb}
-        {chrome}
         {footer}
       </View>
     </SafeAreaView>

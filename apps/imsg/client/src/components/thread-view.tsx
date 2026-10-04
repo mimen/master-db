@@ -525,7 +525,7 @@ export function ThreadView({
               <ChatAvatar chat={headerChat} size={30} />
             )}
             <View style={styles.paneIdentityText}>
-              <Text numberOfLines={1} style={{ color: theme.text, fontSize: type.title, fontWeight: "600" }}>
+              <Text role="heading" aria-level={2} numberOfLines={1} style={{ color: theme.text, fontSize: type.title, fontWeight: "600" }}>
                 {headerChat.displayName}
               </Text>
               <Text style={{ color: theme.textSecondary, fontSize: 11 }}>

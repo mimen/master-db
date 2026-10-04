@@ -1,14 +1,18 @@
 import { useEffect, useRef } from "react";
 import { Animated, Platform, StyleSheet, View } from "react-native";
 
+import { useReducedMotion } from "react-native-reanimated";
+
 import { useTheme } from "@/hooks/use-theme";
 
 /** Pulsing placeholder rows shown while the chat list first loads. */
 export function SkeletonList({ rows = 9 }: { rows?: number }) {
   const theme = useTheme();
   const opacity = useRef(new Animated.Value(0.5)).current;
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, {
@@ -25,7 +29,7 @@ export function SkeletonList({ rows = 9 }: { rows?: number }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   return (
     <Animated.View style={{ opacity }}>

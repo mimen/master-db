@@ -89,8 +89,9 @@ export function PaletteListRow({
     <Pressable
       // RNW renders dataSet as data-* attributes; RN's types don't know it.
       {...({ dataSet: { paletteKey } } as object)}
-      {...({ role: "option", "aria-selected": selected } as object)}
-      accessibilityState={{ selected, disabled }}
+      role="option"
+      aria-selected={selected}
+      aria-disabled={disabled}
       disabled={disabled}
       onPress={onPress}
       // Hover moves the palette cursor; the selection fill IS the hover

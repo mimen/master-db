@@ -40,11 +40,7 @@ function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element 
   const theme = useTheme();
   const unread = rowSignal(chat) === "unread";
   return (
-    <View
-      accessibilityElementsHidden={!unread}
-      accessibilityLabel={unread ? "Unread" : undefined}
-      style={styles.signal}
-    >
+    <View aria-hidden style={styles.signal}>
       {unread ? <View testID="unread-dot" style={[styles.unreadDot, { backgroundColor: theme.accent }]} /> : null}
     </View>
   );
@@ -226,6 +222,10 @@ function ChatRowInner({
       <Pressable
         testID="conversation-row"
         ref={contextRef as never}
+        role="button"
+        // The dot is drawn, so unread has to be spoken here too.
+        aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, snippet, last ? formatListTimestamp(last.dateCreated) : null].filter(Boolean).join(", ")}
+        aria-selected={selected}
         onPress={onPress}
         onPressIn={() => markOpenStart(chat.guid)}
         onLongPress={() => openMenu(chat)}

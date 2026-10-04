@@ -271,12 +271,15 @@ export function ConversationListPane({
                 paddingTop: Platform.OS === "web" ? topBarH : 0,
               }}
             >
-              {offline && (
-                <View testID="offline-bar" style={[styles.offlineBar, { backgroundColor: theme.backgroundElement }]}>
-                  <Ionicons name="cloud-offline-outline" size={13} color={theme.textSecondary} />
-                  <Text numberOfLines={1} style={[styles.offlineText, { color: theme.textSecondary }]}>{allChats.length > 0 ? "Offline · reconnecting, sends will go out when back" : "Offline · reconnecting…"}</Text>
-                </View>
-              )}
+              {/* Mounted empty so a screen reader announces the text when it arrives. */}
+              <View role="status" aria-live="polite">
+                {offline && (
+                  <View testID="offline-bar" style={[styles.offlineBar, { backgroundColor: theme.backgroundElement }]}>
+                    <Ionicons aria-hidden name="cloud-offline-outline" size={13} color={theme.textSecondary} />
+                    <Text style={[styles.offlineText, { color: theme.textSecondary }]}>{allChats.length > 0 ? "Offline. Messages send when you reconnect." : "Offline. Reconnecting…"}</Text>
+                  </View>
+                )}
+              </View>
               {!wide && (
                 <View style={styles.phoneSegments}>
                   <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />

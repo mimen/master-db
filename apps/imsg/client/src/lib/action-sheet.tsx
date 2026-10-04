@@ -121,7 +121,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
         {variant === "popover" && rendered?.anchor ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setRequest(null)}>
             {(() => {
-              const POP_W = 208;
+              const POP_W = 248;
               const requestedLeft = rendered.anchor.align === "end"
                 ? rendered.anchor.x - POP_W + 18
                 : rendered.anchor.x;
@@ -146,7 +146,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                           key={t.emoji}
                           accessibilityRole="button"
                           accessibilityLabel={t.active ? `Remove ${t.label}` : t.label}
-                          accessibilityState={{ selected: t.active }}
+                          aria-selected={t.active}
                           onPress={() => {
                             setRequest(null);
                             t.onPress();
@@ -200,7 +200,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
                       key={t.emoji}
                       accessibilityRole="button"
                       accessibilityLabel={t.active ? `Remove ${t.label}` : t.label}
-                      accessibilityState={{ selected: t.active }}
+                      aria-selected={t.active}
                       onPress={() => {
                         setRequest(null);
                         t.onPress();

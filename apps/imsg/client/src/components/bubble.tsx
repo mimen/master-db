@@ -17,6 +17,7 @@ import { CardShadow, HOVER_DIM, Radii, Type } from "@/constants/theme";
 import { AudioBubble, VideoBubble, MediaUnavailable } from "./media";
 import { PersonAvatar } from "./avatar";
 import { useLightbox } from "@/lib/lightbox";
+import { useReducedMotion } from "react-native-reanimated";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 
@@ -137,7 +138,9 @@ export const TAPBACK_EMOJI = new Map([
 function ImageSkeleton() {
   const theme = useTheme();
   const opacity = useRef(new Animated.Value(0.55)).current;
+  const reduceMotion = useReducedMotion();
   useEffect(() => {
+    if (reduceMotion) return;
     const native = Platform.OS !== "web";
     const loop = Animated.loop(
       Animated.sequence([
@@ -147,7 +150,7 @@ function ImageSkeleton() {
     );
     loop.start();
     return () => loop.stop();
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
   return (
     <Animated.View
       pointerEvents="none"
@@ -400,6 +403,9 @@ export const Bubble = memo(function Bubble({
             {(message.text !== "" || message.special) && (
               <Pressable
                 ref={contextRef as never}
+                testID="message-bubble"
+                role="button"
+                aria-label={`${mine ? "You" : senderName || "Them"}: ${message.text || "attachment"}`}
                 onPress={() => setShowTime((v) => !v)}
                 onLongPress={() => onLongPress(message)}
                 delayLongPress={280}

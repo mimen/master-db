@@ -18,6 +18,8 @@ export interface ListRowProps {
   onLongPress?: () => void;
   disabled?: boolean;
   selected?: boolean;
+  /** A single-choice row: exposed as a radio, with the trailing checkmark as its visual. */
+  checked?: boolean;
   hoverFill?: string;
   selectedFill?: string;
   /** Taller touch target for surfaces with a deliberately larger row (e.g.
@@ -55,6 +57,7 @@ export function ListRow({
   onLongPress,
   disabled,
   selected,
+  checked,
   hoverFill,
   selectedFill,
   minHeight,
@@ -69,9 +72,10 @@ export function ListRow({
   const [hovered, setHovered] = useState(false);
   return (
     <Pressable
-      accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={accessibilityLabel ?? (typeof title === "string" ? title : undefined)}
-      accessibilityState={selected === undefined ? undefined : { selected }}
+      role={checked !== undefined ? "radio" : onPress ? "button" : undefined}
+      aria-label={accessibilityLabel ?? (typeof title === "string" ? title : undefined)}
+      aria-checked={checked}
+      aria-selected={selected}
       disabled={disabled}
       onPress={onPress}
       onLongPress={onLongPress}

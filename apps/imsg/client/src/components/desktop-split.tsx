@@ -38,7 +38,7 @@ export function DesktopSplit({ list, detail, children }: DesktopSplitProps): JSX
         {list}
         <SidebarResizeHandle width={listWidth} onResize={setListWidth} />
       </View>
-      <View style={[frame.pane, frame.detailPane]}>{detail}</View>
+      <View role="main" style={[frame.pane, frame.detailPane]}>{detail}</View>
       {children}
     </View>
   );

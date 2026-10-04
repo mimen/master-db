@@ -18,10 +18,10 @@ export async function postExport(outputDirectory: string, webSha: string | undef
 const path = `${outputDirectory.replace(/\/$/, "")}/index.html`;
 let html = await Bun.file(path).text();
 
-// Replace Expo's default viewport with a zoom-locked, safe-area-aware one.
+// Replace Expo's default viewport with a safe-area-aware one.
 html = html.replace(
   /<meta name="viewport"[^>]*\/?>/,
-  '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>',
+  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>',
 );
 
 html = html.replace(/<title>[^<]*<\/title>/, "<title>Comma</title>");
@@ -36,15 +36,12 @@ const tags = [
   '<meta name="mobile-web-app-capable" content="yes"/>',
   '<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)"/>',
   '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>',
-  // 16px inputs stop iOS Safari from zooming on focus; block gesture zoom;
-  // never show the browser focus ring/outline; fill the dynamic viewport so a
+  // 16px inputs stop iOS Safari from zooming on focus; fill the dynamic viewport so a
   // standalone PWA doesn't leave a white bar over the home-indicator area.
   "<style>input,textarea,select{font-size:16px!important}" +
     "@media (min-width:768px){input,textarea,select{font-size:13px!important}}" +
     "[data-tauri-drag-region]{-webkit-app-region:drag;app-region:drag}" +
     '[data-tauri-drag-region="false"],button,a,input,textarea,[role="button"]{-webkit-app-region:no-drag;app-region:no-drag}' +
-    // Policy: no focus outlines anywhere in this app — inputs, buttons, anything.
-    "*:focus,*:focus-visible{outline:none!important;box-shadow:none!important}" +
     "html,body,#root{height:100dvh!important;min-height:100dvh!important}" +
     "html{touch-action:manipulation;-webkit-text-size-adjust:100%}" +
     // Svelte, track-less scrollbars everywhere — a thin thumb, no container.

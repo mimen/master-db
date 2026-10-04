@@ -4,6 +4,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { CardShadow, Radii, Type } from "@/constants/theme";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { OverlayShell } from "./overlay-shell";
 import {
   activeInboxFilterCount,
@@ -77,7 +78,7 @@ export function StateSegments({ filters, counts, onFiltersChange }: Conversation
             key={segment.value}
             accessibilityRole="radio"
             accessibilityLabel={filterAccessibilityLabel(segment.label, count)}
-            accessibilityState={{ checked: selected }}
+            aria-checked={selected}
             onPress={() => onFiltersChange(selectInboxFilter(filters, { kind: "state", value: segment.value }))}
             style={({ hovered, pressed }) => [
               styles.segment,
@@ -117,7 +118,7 @@ function FilterMenuOption({
     <Pressable
       accessibilityRole="radio"
       accessibilityLabel={filterAccessibilityLabel(label, count)}
-      accessibilityState={{ checked: selected }}
+      aria-checked={selected}
       onPress={() => onSelect(selection)}
       style={({ pressed }) => [
         styles.menuOption,
@@ -185,9 +186,10 @@ export function ConversationFiltersModal({
   };
 
   if (anchor) {
-    const popoverWidth = Math.min(376, windowWidth - 16);
+    // Stays over the queue it filters instead of covering the navigation rail.
+    const popoverWidth = Math.min(TriageGeometry.queueWidth - 16, windowWidth - 16);
     const left = Math.min(
-      Math.max(8, anchor.x + anchor.width - popoverWidth),
+      Math.max(TriageGeometry.railWidth + 8, anchor.x + anchor.width - popoverWidth),
       windowWidth - popoverWidth - 8,
     );
     const top = anchor.y + anchor.height + 6;
@@ -200,7 +202,9 @@ export function ConversationFiltersModal({
           style={styles.popoverBackdrop}
         />
         <View
-          accessibilityLabel="Conversation filters"
+          role="dialog"
+          aria-modal
+          aria-label="Conversation filters"
           style={[
             styles.popover,
             {
@@ -358,7 +362,10 @@ const styles = StyleSheet.create({
   segment: {
     alignItems: "center",
     borderRadius: 6,
-    flex: 1,
+    // Content-sized so the active label keeps its count; flex: 1 split the track in equal thirds.
+    flexBasis: "auto",
+    flexGrow: 1,
+    flexShrink: 1,
     justifyContent: "center",
     minWidth: 0,
     paddingHorizontal: 6,

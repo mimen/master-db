@@ -396,6 +396,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
             </OverlayShell>
             <OverlayShell
               visible={helpOpen}
+              accessibilityLabel="Keyboard shortcuts"
               onClose={() => setHelpOpen(false)}
               backdropStyle={styles.paletteBackdrop}
               cardStyle={[styles.helpCard, { borderColor: theme.cardBorder }]}

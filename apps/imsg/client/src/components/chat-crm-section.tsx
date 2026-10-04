@@ -87,7 +87,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={isFavorite ? "Remove from favorites" : "Add to favorites"}
-            accessibilityState={{ selected: isFavorite }}
+            aria-selected={isFavorite}
             hitSlop={8}
             onPress={toggleFavorite}
             style={({ hovered, pressed }) => [styles.favoriteBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
@@ -115,7 +115,7 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
                   key={opt.value}
                   accessibilityRole="radio"
                   accessibilityLabel={`${opt.label} priority`}
-                  accessibilityState={{ checked: selected }}
+                  aria-checked={selected}
                   onPress={() => choosePriority(opt.value)}
                   style={({ hovered, pressed }) => [
                     styles.priorityPill,
