@@ -2,6 +2,9 @@ import { defineTable } from "convex/server";
 
 import {
   attachmentFields,
+  presenceFields,
+  bridgeStateFields,
+  uploadFields,
   chatAliasFields,
   conversationFields,
   conversationStateFields,
@@ -31,7 +34,7 @@ export const comma_messages = defineTable(messageFields)
   .index("by_tapbackTargetGuid", ["tapbackTargetGuid"])
   .searchIndex("search_text", {
     searchField: "text",
-    filterFields: ["conversationId", "isTapback", "retracted"],
+    filterFields: ["conversationId", "isTapback", "retracted", "isFromMe"],
   });
 
 export const comma_attachments = defineTable(attachmentFields)
@@ -59,6 +62,12 @@ export const comma_scheduled = defineTable(scheduledFields)
   .index("by_bbId", ["bbId"])
   .index("by_sendAt", ["sendAt"]);
 
-export const comma_suggestions = defineTable(suggestionFields).index("by_conversationId", ["conversationId"]);
+export const comma_suggestions = defineTable(suggestionFields)
+  .index("by_conversationId", ["conversationId"])
+  .index("by_conversation_model", ["conversationId", "model"]);
 
 export const comma_sync_state = defineTable(syncStateFields).index("by_key", ["key"]);
+
+export const comma_presence = defineTable(presenceFields).index("by_conversationId", ["conversationId"]);
+export const comma_bridge_state = defineTable(bridgeStateFields).index("by_key", ["key"]);
+export const comma_uploads = defineTable(uploadFields).index("by_storageId", ["storageId"]).index("by_commandId", ["commandId"]);
