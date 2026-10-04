@@ -54,6 +54,8 @@ import type { NameSource } from "./name-resolver";
 export interface FixtureRouteControls {
   readonly broadcast: (event: ServerEvent) => void;
   readonly directory: ChatDirectory;
+  readonly ai: AiServiceLike;
+  readonly health: () => { ok: boolean; privateApi: boolean; eventClients: number; commaBridge: ReturnType<ReturnType<typeof startBridge>["health"]> };
 }
 
 export interface IdentityDirectory {
@@ -1006,7 +1008,7 @@ app.get("/events", (c) => {
   });
 });
 
-deps.configureFixtureRoutes?.(app, { broadcast, directory });
+deps.configureFixtureRoutes?.(app, { broadcast, directory, ai, health: () => ({ ok: true, privateApi: bb.hasPrivateApi, eventClients: sseClients.size, commaBridge: commaBridge.health() }) });
 
 // Unknown API paths must remain API 404s instead of falling through to the
 // SPA shell, which would turn a client typo into a misleading 200 HTML reply.

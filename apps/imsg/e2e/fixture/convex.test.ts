@@ -19,13 +19,14 @@ let fixture: Awaited<ReturnType<typeof createApp>>;
 let bb: FixtureBlueBubbles;
 let db: OverlayDb;
 let reset: () => void;
+let directory: import("../../server/chat-directory").ChatDirectory;
 beforeEach(async () => {
   bb = new FixtureBlueBubbles(fixtureSeed());
   db = new OverlayDb(":memory:");
   const identity = new FixtureIdentity();
   fixture = await createApp({
     config, bb, db, now: () => FIXTURE_NOW, names: identity, identity, backgroundServices: false,
-    configureFixtureRoutes: (app, controls) => { reset = registerConvexFixture(app, controls, bb, db, identity, {
+    configureFixtureRoutes: (app, controls) => { directory = controls.directory; reset = registerConvexFixture(app, controls, bb, db, identity, {
       "comma/history:messageWindow": (args) => fixtureMessageWindow(bb, identity, args),
     }); },
   });
@@ -44,13 +45,15 @@ const conversation = (guid = CHAT_GUIDS.needs as string) => query<{ _id: string;
 const messages = (guid = CHAT_GUIDS.needs as string) => query<{ page: Array<Message & { attachments: unknown[]; clientKey?: string }> }>("listMessages", { conversationId: guid, paginationOpts: { numItems: 100, cursor: null } });
 const command = (payload: CommaOutboxPayload, guid = CHAT_GUIDS.needs as string, clientKey: string = crypto.randomUUID()) => call<string>("comma/outbox:enqueue", { clientKey, conversationId: guid, payload });
 
-test("Convex pagination and resolution mirror the REST directory", async () => {
-  const rest = await (await fixture.app.request("/api/chats?state=any")).json() as ChatSummary[];
+test("Convex pagination and resolution use the fixture directory", async () => {
+  const result = await directory.summaries();
+  if (!result.ok) throw new Error(result.error);
+  const chats = result.chats;
   const first = await query<{ page: Array<{ _id: string; primaryChatGuid: string }>; isDone: boolean; continueCursor: string }>("listConversations", { paginationOpts: { numItems: 2, cursor: null } });
-  expect(first.page.map((row) => row.primaryChatGuid)).toEqual(rest.slice(0, 2).map((row) => row.guid));
+  expect(first.page.map((row) => row.primaryChatGuid)).toEqual(chats.slice(0, 2).map((row) => row.guid));
   expect(first.isDone).toBe(false);
   const remainder = await query<typeof first>("listConversations", { paginationOpts: { numItems: 100, cursor: first.continueCursor } });
-  expect(remainder.page.length).toBe(rest.length - 2);
+  expect(remainder.page.length).toBe(chats.length - 2);
   expect(remainder.isDone).toBe(true);
   expect((await conversation())._id).toBe(CHAT_GUIDS.needs);
   expect(await query("resolveChat", { chatGuid: "missing" })).toBeNull();
@@ -59,7 +62,7 @@ test("Convex pagination and resolution mirror the REST directory", async () => {
   expect(page.page[0]).toMatchObject({ conversationId: CHAT_GUIDS.needs, sourceVersion: 1, mentions: [], isTapback: false });
 });
 
-test("sends share REST history, preserve the client key, clear drafts, and deduplicate", async () => {
+test("sends share BlueBubbles history, preserve the client key, clear drafts, and deduplicate", async () => {
   await call("comma/drafts:setDraft", { conversationId: CHAT_GUIDS.needs, text: "draft" });
   expect(await query("getDraft", { conversationId: CHAT_GUIDS.needs })).toMatchObject({ text: "draft" });
   const clientKey = "fixture-send-key";
@@ -69,8 +72,9 @@ test("sends share REST history, preserve the client key, clear drafts, and dedup
   const page = await messages();
   expect(page.page[0]).toMatchObject({ text: "sent through Convex", clientKey, replyToGuid: "needs-2", replyToPreview: "Can you send the final arrival time?" });
   expect(page.page.filter((row) => row.clientKey === clientKey)).toHaveLength(1);
-  const rest = await (await fixture.app.request(`/api/chats/${encodeURIComponent(CHAT_GUIDS.needs)}/messages`)).json() as Message[];
-  expect(rest.at(-1)?.guid).toBe(page.page[0].guid);
+  const raw = await bb.chatMessages(CHAT_GUIDS.needs, { limit: 100, sort: "DESC" });
+  if (!raw.ok) throw new Error(raw.error);
+  expect(raw.value[0]?.guid).toBe(page.page[0].guid);
   expect(await call<unknown>("comma/outbox:outboxStatusFor", { clientKeys: [clientKey] })).toEqual([{ clientKey, status: "sent" }]);
 });
 
@@ -103,7 +107,7 @@ test("concurrent enqueue retries execute a send once and failed execution can re
   expect((await messages()).page.filter((row) => row.clientKey === "concurrent-key")).toHaveLength(1);
 });
 
-test("reactions, edits, unsends, deletes, and rename persist in both read paths", async () => {
+test("reactions, edits, unsends, deletes, and rename persist in the fixture world", async () => {
   await command({ kind: "react", messageGuid: "needs-2", reaction: "like", remove: false });
   expect((await messages()).page.find((row) => row.guid === "needs-2")?.reactions).toMatchObject([{ type: "like", isFromMe: true }]);
   await command({ kind: "react", messageGuid: "needs-2", reaction: "like", remove: true });
@@ -118,7 +122,7 @@ test("reactions, edits, unsends, deletes, and rename persist in both read paths"
   expect((await conversation(CHAT_GUIDS.unreadGroup)).displayName).toBe("Renamed Crew");
 });
 
-test("scheduled commands and REST changes appear in the Convex scheduled query", async () => {
+test("scheduled commands and BlueBubbles changes appear in the Convex scheduled query", async () => {
   const sendAt = Date.now() + 86_400_000;
   await command({ kind: "schedule", text: "scheduled Convex", sendAt });
   const rows = await query<Array<{ bbId: number; text: string }>>("listScheduled");

@@ -5,10 +5,12 @@ import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, mapMessage } from "../../server/map";
+import { MessageSearch } from "../../server/message-search";
+import { mapScheduledMessage } from "../../server/scheduled";
 import { ChatCommands } from "../../server/commands";
 import { WhisperService } from "../../server/whisper";
 import type { OverlayDb } from "../../server/db";
-import type { AiStatus, ChatSummary, Contact, ContactSuggestion, Message, ReplySuggestions, ScheduledMessage, TranscriptState } from "../../shared/types";
+import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
@@ -116,15 +118,19 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     } else if (event.kind === "stream-connected") peerTyping.clear();
   });
   const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
-  const read = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const response = await app.request(path, init);
-    if (!response.ok) throw new FixtureError(await response.text(), response.status);
-    return response.json() as Promise<T>;
+  const ai = controls.ai;
+  const search = new MessageSearch(bb, names);
+  const health = () => controls.health();
+  const aiStatus = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi });
+  const chatSummaries = async () => {
+    const result = await controls.directory.summaries();
+    if (!result.ok) throw new FixtureError(result.error, 502);
+    return result.chats;
   };
   const accept = (result: { ok: boolean; error?: string; status?: number }) => {
     if (!result.ok) throw new FixtureError(result.error ?? "BlueBubbles operation failed", result.status);
   };
-  const conversations = async () => Promise.all((await read<ChatSummary[]>("/api/chats?state=any")).filter((chat) => !deletedChats.has(chat.guid)).map(async (chat) => {
+  const conversations = async () => Promise.all((await chatSummaries()).filter((chat) => !deletedChats.has(chat.guid)).map(async (chat) => {
     const raw = await bb.getChat(chat.guid);
     const row = conversationRow(chat);
     return { ...row, chatGuids: controls.directory.siblingGuids(chat.guid), rawDisplayName: raw.ok ? raw.value.displayName ?? "" : "" };
@@ -149,17 +155,13 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   };
   const messages = async (chatGuid: string): Promise<ConvexMessage[]> => {
     if (deletedChats.has(chatGuid)) return [];
-    const rows: Message[] = [];
-    let before: number | undefined;
-    for (;;) {
-      const batch = await read<Message[]>(`/api/chats/${encodeURIComponent(chatGuid)}/messages${before ? `?before=${before}` : ""}`);
-      if (batch.length === 0) break;
-      rows.push(...batch);
-      const oldest = Math.min(...batch.map((m) => m.dateCreated));
-      if (before !== undefined && oldest >= before) break;
-      before = oldest;
-    }
-    return rows.sort((a, b) => b.dateCreated - a.dateCreated).map((m) => messageRow(m, bb.clientKeyFor(m.guid)));
+    await controls.directory.ensureSiblings();
+    const pages = await Promise.all(controls.directory.siblingGuids(chatGuid).map((guid) =>
+      bb.chatMessages(guid, { limit: Number.MAX_SAFE_INTEGER, sort: "DESC" })));
+    if (pages.every((page) => !page.ok)) throw new FixtureError("fetch failed", 502);
+    const raw = new Map(pages.flatMap((page) => page.ok ? page.value.map((message) => [message.guid, message] as const) : []));
+    return buildThread([...raw.values()], chatGuid, names).sort((a, b) => b.dateCreated - a.dateCreated)
+      .map((message) => messageRow(message, bb.clientKeyFor(message.guid)));
   };
   const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string): Promise<CommandResult | undefined> => {
     const directory = controls.directory;
@@ -229,7 +231,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       }
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       case "suggestions": {
-        const generated = await read<ReplySuggestions>(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}?model=${payload.model}${payload.refresh ? "&refresh=1" : ""}`);
+        const chat = (await chatSummaries()).find((row) => row.guid === chatGuid);
+        const result = await ai.replySuggestions(chatGuid, chat && !chat.isGroup ? chat.displayName : null, payload.refresh, payload.model);
+        if (!result.ok) throw new FixtureError(result.error, 502);
+        const generated = result.value;
         const anchor = (await conversations()).find((row) => row.primaryChatGuid === chatGuid)?.lastMessage;
         const suggestions = { ...generated, basedOnMessageGuid: anchor?.guid ?? generated.basedOnMessageGuid,
           suggestions: generated.suggestions.map((suggestion) => suggestion.kind === "reaction" && anchor
@@ -238,15 +243,27 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (!suggestions.stale) shelves.set(JSON.stringify([chatGuid, payload.model]), suggestions);
         return { kind: "suggestions" as const, suggestions };
       }
-      case "suggestionFeedback":
-        await read(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}/feedback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload.feedback) });
+      case "suggestionFeedback": {
+        if (payload.feedback.suggestion.kind === "reaction") ai.recordReactionFeedback(chatGuid, payload.feedback);
+        else {
+          const result = ai.recordSuggestionFeedback(chatGuid, payload.feedback);
+          if (!result.ok) throw new FixtureError(result.error, 400);
+        }
         return { kind: "suggestionFeedback" as const, ok: true as const };
+      }
       case "clearSuggestionLearning":
-        await read("/api/ai/suggestions/learning", { method: "DELETE" });
+        ai.clearSuggestionLearning();
         shelves.clear();
         return { kind: "clearSuggestionLearning" as const, ok: true as const };
-      case "identify":
-        return { kind: "identify" as const, contact: await read<ContactSuggestion>(`/api/ai/identify/${encodeURIComponent(chatGuid)}`) };
+      case "identify": {
+        const chat = await bb.getChat(chatGuid);
+        if (!chat.ok) throw new FixtureError(chat.error, 502);
+        const address = chat.value.participants?.[0]?.address;
+        if (!address) throw new FixtureError("no participant address", 400);
+        const result = await ai.identify(chatGuid, address, names.lookup(address));
+        if (!result.ok) throw new FixtureError(result.error, 502);
+        return { kind: "identify" as const, contact: result.value };
+      }
       case "createChat": {
         const result = await commands.createChat(payload);
         accept(result);
@@ -329,9 +346,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
     "comma/bridgeState:bridgeState": async () => {
-      const health = await read<{ privateApi: boolean }>("/api/health");
-      const ai = await read<{ suggestions: boolean; reactionSuggestions: boolean }>("/api/ai/status");
-      return { key: "mini", ...health, ...ai, whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
+      return { key: "mini", ...health(), ...aiStatus(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
     "comma/uploads:finalizeUpload": async (args) => {
@@ -363,21 +378,27 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,
     "comma/queries:listMessages": async (args) => paginate(await messages(String(args.conversationId)), args.paginationOpts as Pagination),
     "comma/queries:searchMessages": async (args) => {
-      const params = new URLSearchParams({ q: String(args.query) });
-      if (args.conversationId) params.set("chat", String(args.conversationId));
-      if (args.from) params.set("from", String(args.from));
-      return (await read<Message[]>(`/api/search?${params}`)).map((message) => {
+      return (await search.search(String(args.query), {
+        chatGuid: args.conversationId ? String(args.conversationId) : undefined,
+        from: args.from === "me" || args.from === "them" ? args.from : undefined,
+      })).map((message) => {
         const { attachments: _attachments, ...row } = messageRow(message, bb.clientKeyFor(message.guid));
         return row;
       });
     },
-    "comma/queries:listScheduled": async () => (await read<ScheduledMessage[]>("/api/scheduled")).map((row): Infer<typeof scheduledDoc> => ({
+    "comma/queries:listScheduled": async () => {
+      const [result, chats] = await Promise.all([bb.listScheduledMessages(), chatSummaries()]);
+      if (!result.ok) throw new FixtureError(result.error, 502);
+      const namesByGuid = new Map(chats.map((chat) => [chat.guid, chat.displayName]));
+      return result.value.map((item) => mapScheduledMessage(item, namesByGuid.get(item.payload.chatGuid) ?? item.payload.chatGuid))
+        .sort((a, b) => a.sendAt - b.sendAt).map((row): Infer<typeof scheduledDoc> => ({
       _id: id(`scheduled-${row.id}`), _creationTime: FIXTURE_NOW, bbId: row.id,
       conversationId: id(row.chatGuid), chatGuid: row.chatGuid, text: row.text,
       sendAt: row.sendAt, status: row.status,
       ...(row.error !== null ? { error: row.error } : {}),
       ...(row.sentAt !== null ? { sentAt: row.sentAt } : {}), updatedAt: FIXTURE_NOW,
-    })),
+    }));
+    },
     "comma/queries:getDraft": async (args) => drafts.get(String(args.conversationId)) ?? null,
     "comma/queries:getSuggestions": async () => null,
     "comma/suggestions:getSuggestions": async (args) => {
@@ -388,7 +409,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return { _id: id(`shelf-${chat._id}-${args.model}`), _creationTime: generatedAt, conversationId: chat._id,
         model: args.model, anchorGuid: basedOnMessageGuid, createdAt: generatedAt, payload };
     },
-    "comma/suggestions:aiStatus": async () => read<AiStatus>("/api/ai/status"),
+    "comma/suggestions:aiStatus": async () => aiStatus(),
     "comma/queries:syncStatus": async () => [],
     "comma/drafts:setDraft": async (args) => {
       const conversationId = String(args.conversationId);
