@@ -57,6 +57,7 @@ const listQueryValidator = v.union(
 export const getItemsByView = authedQuery({
   args: {
     list: listQueryValidator,
+    now: v.optional(v.number()),
   },
   handler: async (
     ctx,
@@ -81,17 +82,19 @@ export const getItemsByView = authedQuery({
       if (list.range === "today") {
         return ctx.runQuery(api.todoist.queries.getDueTodayItems.getDueTodayItems, {
           timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+          now: args.now,
         });
       }
 
       if (list.range === "upcoming") {
         return ctx.runQuery(api.todoist.queries.getDueNext7DaysItems.getDueNext7DaysItems, {
           timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+          now: args.now,
         });
       }
 
       if (list.range === "overdue") {
-        return ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, {});
+        return ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, { now: args.now });
       }
 
       if (list.range === "no-date") {

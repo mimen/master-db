@@ -61,7 +61,8 @@ export const generateDailyRoutineTasks = internalAction({
 
     // Step 4: Get routines needing generation
     const routines = await ctx.runQuery(
-      internal.routines.internalQueries.getRoutinesNeedingGeneration.getRoutinesNeedingGeneration
+      internal.routines.internalQueries.getRoutinesNeedingGeneration.getRoutinesNeedingGeneration,
+      { now: Date.now() }
     );
 
     // Step 5: Generate tasks for each routine

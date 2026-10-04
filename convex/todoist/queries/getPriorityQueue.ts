@@ -10,6 +10,7 @@ export const getPriorityQueue = authedQuery({
     include_assigned_to_others: v.optional(v.boolean()),
     max_tasks: v.optional(v.number()),
     target_hours: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const maxTasks = args.max_tasks || 7;
@@ -147,7 +148,7 @@ export const getPriorityQueue = authedQuery({
     for (const segmentConfig of segments) {
       if (priorityItems.length >= maxTasks) break;
 
-      const segmentItems = processQueue(allItems, segmentConfig, userId, projectMetadataMap);
+      const segmentItems = processQueue(allItems, segmentConfig, userId, projectMetadataMap, args.now);
 
       // Add unique items from this segment with grouping info
       for (const item of segmentItems) {
@@ -178,7 +179,7 @@ export const getPriorityQueue = authedQuery({
         maxTasks: maxTasks - priorityItems.length,
       };
 
-      const fillItems = processQueue(allItems, fillConfig, userId, projectMetadataMap)
+      const fillItems = processQueue(allItems, fillConfig, userId, projectMetadataMap, args.now)
         .filter(item => !seenIds.has(item.todoist_id));
 
       // Add fill items with grouping info

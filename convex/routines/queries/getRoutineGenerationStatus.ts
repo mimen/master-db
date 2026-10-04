@@ -1,3 +1,5 @@
+import { v } from "convex/values";
+
 import { internal } from "../../_generated/api";
 import { authedQuery } from "../../_lib/authed";
 
@@ -6,10 +8,12 @@ import { authedQuery } from "../../_lib/authed";
  * Returns counts for routines needing generation and pending tasks
  */
 export const getRoutineGenerationStatus = authedQuery({
-  handler: async (ctx) => {
+  args: { now: v.optional(v.number()) },
+  handler: async (ctx, { now }) => {
     // Get routines that need generation
     const routinesNeedingGeneration = await ctx.runQuery(
-      internal.routines.internalQueries.getRoutinesNeedingGeneration.getRoutinesNeedingGeneration
+      internal.routines.internalQueries.getRoutinesNeedingGeneration.getRoutinesNeedingGeneration,
+      { now: now ?? Date.now() }
     );
 
     // Get all pending routine tasks

@@ -7,6 +7,7 @@ import { authedQuery } from "../../_lib/authed";
 export const getTimeFilterCounts = authedQuery({
   args: {
     timezoneOffsetMinutes: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<{
     totalRawTasks: number;
@@ -34,7 +35,7 @@ export const getTimeFilterCounts = authedQuery({
 
     // Get current time in user's timezone
     const offsetMs = (args.timezoneOffsetMinutes ?? 0) * 60 * 1000;
-    const nowUTC = Date.now();
+    const nowUTC = args.now ?? Date.now();
     const nowLocal = new Date(nowUTC + offsetMs);
 
     // Get today's date string in user's local timezone (YYYY-MM-DD)

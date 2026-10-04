@@ -93,6 +93,7 @@ export const presence = query({
   handler: async (ctx, { conversationId }) => {
     await assertAllowed(ctx);
     const row = await ctx.db.query("comma_presence").withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).unique();
-    return row ? { peerTyping: row.peerTyping && row.expiresAt > Date.now(), updatedAt: row.updatedAt, expiresAt: row.expiresAt } : null;
+    // Callers judge expiry against their own clock; a query that read it would never re-run when it lapsed.
+    return row ? { peerTyping: row.peerTyping, updatedAt: row.updatedAt, expiresAt: row.expiresAt } : null;
   },
 });

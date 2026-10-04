@@ -21,6 +21,7 @@ export const getFocusedTasks = authedQuery({
     )),
     include_assigned_to_others: v.optional(v.boolean()),
     limit: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const context = args.context || "all";
@@ -136,8 +137,8 @@ export const getFocusedTasks = authedQuery({
         maxTasks: Math.ceil(limit * 0.6), // 60% for today
       };
 
-      const overdueItems = processQueue(allItems, overdueConfig, userId);
-      const todayItems = processQueue(allItems, todayConfig, userId);
+      const overdueItems = processQueue(allItems, overdueConfig, userId, undefined, args.now);
+      const todayItems = processQueue(allItems, todayConfig, userId, undefined, args.now);
 
       // Combine and deduplicate
       const seenIds = new Set<string>();
@@ -159,7 +160,7 @@ export const getFocusedTasks = authedQuery({
         }
       }
     } else {
-      processedItems = processQueue(allItems, queueConfig, userId);
+      processedItems = processQueue(allItems, queueConfig, userId, undefined, args.now);
     }
 
     // Apply global filters

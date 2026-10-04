@@ -6,8 +6,10 @@ export const getScheduledProjects = authedQuery({
   args: {
     from: v.optional(v.string()), // ISO date string
     to: v.optional(v.string()), // ISO date string
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const now = args.now ?? Date.now();
     // Get all metadata with scheduled dates
     const metadataWithDates = await ctx.db
       .query("todoist_project_metadata")
@@ -70,12 +72,12 @@ export const getScheduledProjects = authedQuery({
           computed: {
             daysUntilDue: metadata.scheduled_date
               ? Math.ceil(
-                  (new Date(metadata.scheduled_date).getTime() - Date.now()) /
+                  (new Date(metadata.scheduled_date).getTime() - now) /
                   (1000 * 60 * 60 * 24)
                 )
               : null,
             isOverdue: metadata.scheduled_date
-              ? new Date(metadata.scheduled_date) < new Date()
+              ? new Date(metadata.scheduled_date).getTime() < now
               : false,
           },
         };

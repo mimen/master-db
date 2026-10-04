@@ -35,7 +35,7 @@ test("incoming typing on, off, expiry and old retries use one canonical row", as
   await t.mutation(publish, { state: on });
   expect(await as.query(presence, { conversationId })).toMatchObject({ peerTyping: true });
   clock.mockReturnValue(13_000);
-  expect(await as.query(presence, { conversationId })).toMatchObject({ peerTyping: false });
+  expect(await as.query(presence, { conversationId })).toEqual({ peerTyping: true, updatedAt: 1000, expiresAt: 13_000 });
   await t.mutation(publish, { state: { ...on, peerTyping: false, updatedAt: 14_000, expiresAt: 14_000 } });
   expect(await t.mutation(publish, { state: on })).toBe(false);
   expect(await as.query(presence, { conversationId })).toEqual({ peerTyping: false, updatedAt: 14_000, expiresAt: 14_000 });

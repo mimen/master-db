@@ -318,9 +318,10 @@ export function aggregateDashboardStats(input: {
 export const getDashboardStats = authedQuery({
   args: {
     timezoneOffsetMinutes: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<DashboardStats> => {
-    const nowMs = Date.now();
+    const nowMs = args.now ?? Date.now();
     const { todayISO, sevenDaysISO } = computeDayBoundariesISO(
       args.timezoneOffsetMinutes ?? 0,
       nowMs

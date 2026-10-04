@@ -18,6 +18,7 @@ export const getDueNext7DaysItems = authedQuery({
       )
     ),
     timezoneOffsetMinutes: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -34,7 +35,7 @@ export const getDueNext7DaysItems = authedQuery({
 
     // Get current time in user's timezone
     const offsetMs = (args.timezoneOffsetMinutes ?? 0) * 60 * 1000;
-    const nowUTC = Date.now();
+    const nowUTC = args.now ?? Date.now();
     const nowLocal = new Date(nowUTC + offsetMs);
 
     // Get today's date string in user's local timezone (YYYY-MM-DD)

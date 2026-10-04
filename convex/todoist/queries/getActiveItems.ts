@@ -5,8 +5,8 @@ import { Doc } from "../../_generated/dataModel";
 import { authedQuery } from "../../_lib/authed";
 
 // Date comparison helper functions
-const getDateComparisons = () => {
-  const today = new Date();
+const getDateComparisons = (now: number) => {
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString().split('T')[0];
 
@@ -116,6 +116,7 @@ export const getActiveItems = authedQuery({
     )),
     includeDeadlines: v.optional(v.boolean()),
     combineDueAndDeadline: v.optional(v.boolean()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -134,7 +135,7 @@ export const getActiveItems = authedQuery({
 
     let filteredItems: Doc<"todoist_items">[] = items;
     if (args.timeFilter) {
-      const dateComparisons = getDateComparisons();
+      const dateComparisons = getDateComparisons(args.now ?? Date.now());
       filteredItems = items.filter(item =>
         itemMatchesTimeFilter(
           item,

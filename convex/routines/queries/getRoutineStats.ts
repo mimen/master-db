@@ -10,8 +10,9 @@ import { RoutineTaskStatus } from "../types/status";
 export const getRoutineStats = authedQuery({
   args: {
     routineId: v.id("routines"),
+    now: v.optional(v.number()),
   },
-  handler: async (ctx, { routineId }) => {
+  handler: async (ctx, { routineId, now }) => {
     // Get the routine
     const routine = await ctx.db.get(routineId);
     if (!routine) {
@@ -25,7 +26,7 @@ export const getRoutineStats = authedQuery({
       .collect();
 
     // Filter to recent tasks (last 30 days)
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = (now ?? Date.now()) - 30 * 24 * 60 * 60 * 1000;
     const recentTasks = allTasks
       .filter((task) => task.readyDate >= thirtyDaysAgo)
       .sort((a, b) => b.readyDate - a.readyDate); // Most recent first

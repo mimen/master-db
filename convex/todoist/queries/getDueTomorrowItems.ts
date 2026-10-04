@@ -17,6 +17,7 @@ export const getDueTomorrowItems = authedQuery({
         v.literal('not-assigned-to-others')
       )
     ),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -31,7 +32,7 @@ export const getDueTomorrowItems = authedQuery({
       }
     );
 
-    const tomorrow = new Date();
+    const tomorrow = new Date(args.now ?? Date.now());
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
     const tomorrowISODate = tomorrow.toISOString().split('T')[0];

@@ -70,8 +70,8 @@ export interface QueueConfig {
 }
 
 // Date helper functions
-const getDateComparisons = () => {
-  const today = new Date();
+const getDateComparisons = (now: number) => {
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString().split('T')[0];
 
@@ -134,9 +134,9 @@ const applyLabelFilter = (items: Doc<"todoist_items">[], filter: LabelFilter): D
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyDateFilter = (items: Doc<"todoist_items">[], filter: DateFilter): Doc<"todoist_items">[] => {
+const applyDateFilter = (items: Doc<"todoist_items">[], filter: DateFilter, now: number): Doc<"todoist_items">[] => {
   const { range, includeDeadlines = false, combineDueAndDeadline = false, mode = "include" } = filter;
-  const { todayISO, tomorrowISO, next7DaysISO } = getDateComparisons();
+  const { todayISO, tomorrowISO, next7DaysISO } = getDateComparisons(now);
 
   const matchesDateRange = (dateStr: string | undefined): boolean => {
     if (!dateStr) return range === "none";
@@ -182,9 +182,9 @@ const applyDateFilter = (items: Doc<"todoist_items">[], filter: DateFilter): Doc
     : items.filter(item => !matchesFilter(item));
 };
 
-const applyCustomFilter = (items: Doc<"todoist_items">[], filter: CustomFilter): Doc<"todoist_items">[] => {
+const applyCustomFilter = (items: Doc<"todoist_items">[], filter: CustomFilter, now: number): Doc<"todoist_items">[] => {
   const { condition, mode = "include" } = filter;
-  const { todayISO } = getDateComparisons();
+  const { todayISO } = getDateComparisons(now);
 
   const matchesFilter = (item: Doc<"todoist_items">) => {
     switch (condition) {
@@ -264,7 +264,8 @@ export const applyQueueFilters = (
   items: Doc<"todoist_items">[],
   filters: QueueFilter[],
   currentUserId?: string,
-  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>
+  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>,
+  now: number = Date.now()
 ): Doc<"todoist_items">[] => {
   let filteredItems = items;
 
@@ -280,10 +281,10 @@ export const applyQueueFilters = (
         filteredItems = applyLabelFilter(filteredItems, filter);
         break;
       case "date":
-        filteredItems = applyDateFilter(filteredItems, filter);
+        filteredItems = applyDateFilter(filteredItems, filter, now);
         break;
       case "custom":
-        filteredItems = applyCustomFilter(filteredItems, filter);
+        filteredItems = applyCustomFilter(filteredItems, filter, now);
         break;
       case "assignee":
         filteredItems = applyAssigneeFilter(filteredItems, filter, currentUserId);
@@ -368,10 +369,11 @@ export const processQueue = (
   items: Doc<"todoist_items">[],
   config: QueueConfig,
   currentUserId?: string,
-  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>
+  projectMetadata?: Map<string, Doc<"todoist_project_metadata">>,
+  now: number = Date.now()
 ): Doc<"todoist_items">[] => {
   // Apply filters
-  let processedItems = applyQueueFilters(items, config.filters, currentUserId, projectMetadata);
+  let processedItems = applyQueueFilters(items, config.filters, currentUserId, projectMetadata, now);
 
   // Apply ordering
   processedItems = applyQueueOrdering(processedItems, config.ordering, projectMetadata);

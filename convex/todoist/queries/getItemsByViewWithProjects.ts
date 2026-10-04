@@ -87,6 +87,7 @@ export type TodoistItemWithProject = Doc<"todoist_items"> & {
 export const getItemsByViewWithProjects = authedQuery({
   args: {
     list: listQueryValidator,
+    now: v.optional(v.number()),
   },
   handler: async (
     ctx,
@@ -111,13 +112,15 @@ export const getItemsByViewWithProjects = authedQuery({
       if (list.range === "today") {
         items = await ctx.runQuery(api.todoist.queries.getDueTodayItems.getDueTodayItems, {
           timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+          now: args.now,
         });
       } else if (list.range === "upcoming") {
         items = await ctx.runQuery(api.todoist.queries.getDueNext7DaysItems.getDueNext7DaysItems, {
           timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+          now: args.now,
         });
       } else if (list.range === "overdue") {
-        items = await ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, {});
+        items = await ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, { now: args.now });
       } else if (list.range === "no-date") {
         items = await ctx.runQuery(api.todoist.queries.getNoDueDateItems.getNoDueDateItems, {});
       }
@@ -145,7 +148,7 @@ export const getItemsByViewWithProjects = authedQuery({
 
       // Get timezone info
       const offsetMs = (list.timezoneOffsetMinutes ?? 0) * 60 * 1000;
-      const nowUTC = Date.now();
+      const nowUTC = args.now ?? Date.now();
       const nowLocal = new Date(nowUTC + offsetMs);
       const year = nowLocal.getUTCFullYear();
       const month = String(nowLocal.getUTCMonth() + 1).padStart(2, '0');

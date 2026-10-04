@@ -1,10 +1,13 @@
+import { v } from "convex/values";
+
 import { internalQuery } from "../../_generated/server";
 import { Frequency } from "../types/frequency";
 import { RoutineTaskStatus } from "../types/status";
 import { addDays } from "../utils/dateCalculation";
 
 export const getRoutinesNeedingGeneration = internalQuery({
-  handler: async (ctx) => {
+  args: { now: v.number() },
+  handler: async (ctx, { now }) => {
     // Get all active (non-deferred) routines
     const routines = await ctx.db
       .query("routines")
@@ -12,7 +15,7 @@ export const getRoutinesNeedingGeneration = internalQuery({
       .collect();
 
     const routinesNeedingGeneration = [];
-    const sevenDaysFromNow = addDays(Date.now(), 7);
+    const sevenDaysFromNow = addDays(now, 7);
 
     for (const routine of routines) {
       // Get pending tasks for this routine

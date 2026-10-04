@@ -18,6 +18,7 @@ export const getContextBatch = authedQuery({
     ),
     include_low_priority: v.optional(v.boolean()),
     max_tasks: v.optional(v.number()),
+    now: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const contextType = args.context_type;
@@ -108,7 +109,7 @@ export const getContextBatch = authedQuery({
     };
 
     // Process the queue
-    const processedItems = processQueue(allItems, queueConfig, userId);
+    const processedItems = processQueue(allItems, queueConfig, userId, undefined, args.now);
 
     return processedItems;
   },
