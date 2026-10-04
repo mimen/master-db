@@ -69,9 +69,14 @@ export function startBridge(deps: {
           reactionSuggestions: deps.bb.hasPrivateApi, whisperAvailable: false, whisperDetail: "Whisper capabilities were not supplied" })) });
       reconcile = new ReconcileBridge(writer, deps.config, { chatDbPath: deps.chatDbPath, now: deps.now });
       if (deps.suggestions) suggestions = new SuggestionsBridge({ ...deps.suggestions, db: deps.db, ingest, now: deps.now });
-      live = new LiveBridge(writer, deps.now, (rows) => suggestions?.observe(rows));
-      overlay = new OverlayMirror(writer);
       scheduled = new ScheduledMirror(deps.bb, ingest);
+      live = new LiveBridge(writer, deps.now, (rows) => {
+        suggestions?.observe(rows);
+        // A scheduled message firing arrives as an ordinary outgoing message; refresh the
+        // mirror then instead of leaving Scheduled stale until its five-minute poll.
+        if (rows.some((row) => row.isFromMe)) scheduled?.request();
+      });
+      overlay = new OverlayMirror(writer);
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
       outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now, handlers: { ...deps.handlers, typing: typingHandler(typing, deps.now) } });
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
