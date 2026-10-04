@@ -102,6 +102,14 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string; result?: CommandResult }>();
   const shelves = new Map<string, ReplySuggestions>();
   const inFlight = new Map<string, Promise<string>>();
+  const peerTyping = new Map<string, { peerTyping: boolean; updatedAt: number; expiresAt: number }>();
+  const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const unsubscribeTyping = bb.onEvent((event) => {
+    if (event.kind === "typing") {
+      const now = Date.now();
+      peerTyping.set(controls.directory.canonicalGuid(event.chatGuid), { peerTyping: event.display, updatedAt: now, expiresAt: now + (event.display ? 12_000 : 0) });
+    } else if (event.kind === "stream-connected") peerTyping.clear();
+  });
   const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
   const read = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const response = await app.request(path, init);
@@ -176,6 +184,18 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "rename": accept(await commands.rename(chatGuid, payload.name)); break;
       case "schedule": accept(await commands.schedule({ ...payload, chatGuid })); break;
       case "editScheduled": accept(await commands.schedule({ ...payload, chatGuid }, payload.bbId)); break;
+      case "typing": {
+        if (payload.active && payload.expiresAt <= Date.now()) break;
+        const timer = typingTimers.get(chatGuid);
+        if (timer) clearTimeout(timer);
+        typingTimers.delete(chatGuid);
+        accept(await bb.setTyping(chatGuid, payload.active));
+        if (payload.active) {
+          const expiry = setTimeout(() => { typingTimers.delete(chatGuid); void bb.setTyping(chatGuid, false); }, Math.max(0, payload.expiresAt - Date.now()));
+          expiry.unref(); typingTimers.set(chatGuid, expiry);
+        }
+        break;
+      }
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
       case "suggestions": {
         const generated = await read<ReplySuggestions>(`/api/ai/suggestions/${encodeURIComponent(chatGuid)}?model=${payload.model}${payload.refresh ? "&refresh=1" : ""}`);
@@ -215,6 +235,14 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const row = (await conversations()).find((row) => row.chatGuids.includes(String(args.chatGuid)));
       return row ? { guid: String(args.chatGuid), displayName: row.rawDisplayName || null, isGroup: row.isGroup,
         participants: row.participants.map((p) => ({ address: p.address, name: names.lookup(p.address) ?? p.name ?? p.address, is_favorite: names.personCrm(p.address)?.is_favorite })) } : null;
+    "comma/presence:presence": async (args) => {
+      const row = peerTyping.get(controls.directory.canonicalGuid(String(args.conversationId)));
+      return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > Date.now() } : null;
+    },
+    "comma/bridgeState:bridgeState": async () => {
+      const health = await read<{ privateApi: boolean }>("/api/health");
+      const ai = await read<{ suggestions: boolean; reactionSuggestions: boolean }>("/api/ai/status");
+      return { key: "mini", ...health, ...ai, whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
     },
     "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
@@ -305,5 +333,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); shelves.clear(); };
+  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); shelves.clear(); peerTyping.clear();
+    unsubscribeTyping(); for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

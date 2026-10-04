@@ -11,6 +11,7 @@ import { checkBridgeAuth } from "./bridgeAuth";
  * authenticates and routes. See apps/imsg/docs/convex-ingest-contract.md.
  */
 const ROUTES = {
+  ephemeral: (internal.comma as typeof internal.comma & { presence: { publish: import("convex/server").FunctionReference<"mutation", "internal", { state: import("convex/values").Infer<typeof import("./presence").ephemeralInput> }, boolean> } }).presence.publish,
   conversations: internal.comma.internal.upsertConversations,
   messages: internal.comma.internal.upsertMessages,
   attachments: internal.comma.internal.upsertAttachments,

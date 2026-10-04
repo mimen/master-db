@@ -207,3 +207,14 @@ test("fixture contact search, normalized DM lookup and raw chat info use the fix
   const capped = await call<unknown[]>("identity/queries:searchContacts", { key: "fixture-only", q: "contact", limit: 100 });
   expect(capped.length).toBeLessThanOrEqual(25);
 });
+
+test("presence and bridge capabilities queries support the typing command fixture", async () => {
+  const state = await call<{ privateApi: boolean; suggestions: boolean; whisperAvailable: boolean; lastSeenAt: number }>("comma/bridgeState:bridgeState");
+  expect(state).toMatchObject({ privateApi: true, suggestions: false, whisperAvailable: false });
+  expect(state.lastSeenAt).toBeGreaterThan(0);
+  expect(await call("comma/presence:presence", { conversationId: CHAT_GUIDS.needs })).toBeNull();
+  const receipt = await command({ kind: "typing", active: true, expiresAt: Date.now() + 1000 });
+  expect(await call("comma/outbox:getCommand", { commandId: receipt })).toMatchObject({ status: "sent", result: { kind: "typing", ok: true } });
+  await command({ kind: "typing", active: false, expiresAt: Date.now() });
+  await command({ kind: "typing", active: true, expiresAt: Date.now() - 1 });
+});

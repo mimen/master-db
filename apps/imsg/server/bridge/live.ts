@@ -5,6 +5,7 @@ import type { OverlayDb } from "../db";
 import type { NameSource } from "../name-resolver";
 import type { AttachmentRow, ConvexIngest, MessageRow } from "./convex-ingest";
 import { sourceVersion, toAttachmentRows, toConversationInputs, toMessageRow } from "./mapper";
+import { PresenceBridge } from "./presence";
 import { RetryWork } from "./retry";
 
 export function bbValue<T>(result: Result<T>): T {
@@ -119,6 +120,7 @@ export class MessageWriter {
 
 export class LiveBridge {
   private messages = new Map<string, BBMessage>();
+  readonly presence: PresenceBridge;
   private refreshRevision = 1;
   private refreshedRevision = 0;
   private unsubscribe: () => void;
@@ -126,6 +128,7 @@ export class LiveBridge {
   lastEventAt: number | null = null;
 
   constructor(readonly writer: MessageWriter, private now = Date.now, onMessages?: (rows: MessageRow[]) => void) {
+    this.presence = new PresenceBridge(writer, now);
     this.work = new RetryWork("live", () => writer.exclusive(async () => {
       const revision = this.refreshRevision;
       if (revision !== this.refreshedRevision) {
@@ -148,6 +151,7 @@ export class LiveBridge {
       }
     }));
     this.unsubscribe = writer.deps.bb.onEvent((event) => {
+      this.presence.observe(event);
       if (event.kind === "new-message" || event.kind === "updated-message" || event.kind === "message-send-error") {
         const message = event.kind === "message-send-error"
           ? { ...event.message, error: event.message.error || 1 } : event.message;
@@ -155,7 +159,7 @@ export class LiveBridge {
         this.lastEventAt = this.now();
         this.messages.set(message.guid, { ...this.messages.get(message.guid), ...message });
         this.work.request(100);
-      } else if (event.kind === "group-changed") {
+      } else if (event.kind === "group-changed" || event.kind === "stream-connected") {
         this.lastEventAt = this.now();
         this.refreshRevision++;
         this.work.request(100);
@@ -164,7 +168,7 @@ export class LiveBridge {
     this.work.request();
   }
 
-  get pending(): number { return this.messages.size + this.work.pending; }
-  flush(): Promise<void> { return this.work.flush(); }
-  stop(): void { this.unsubscribe(); this.work.stop(); }
+  get pending(): number { return this.messages.size + this.work.pending + this.presence.pending; }
+  async flush(): Promise<void> { await this.work.flush(); await this.presence.flush(); }
+  stop(): void { this.unsubscribe(); this.work.stop(); this.presence.stop(); }
 }

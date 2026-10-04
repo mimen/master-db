@@ -191,6 +191,11 @@ const commands = new ChatCommands(bb, directory, names, () => commaBridge.schedu
 const commaBridge = startBridge({ config, bb, db, names, now, commands,
   backgroundServices: deps.backgroundServices, ingest: deps.bridgeIngest, chatDbPath: deps.bridgeChatDbPath,
   avatarDirectory: deps.bridgeAvatarDirectory,
+  capabilities: () => {
+    const status = whisper.availability();
+    return { privateApi: bb.hasPrivateApi, suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi,
+      whisperAvailable: status.available, ...(status.available ? {} : { whisperDetail: status.detail }) };
+  },
   suggestions: { ai, getChat: async (chatGuid) => {
     const result = await directory.summaries();
     return result.ok ? result.chats.find((chat) => chat.guid === directory.canonicalGuid(chatGuid)) ?? null : null;
