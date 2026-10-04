@@ -1,6 +1,7 @@
 import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
+import { readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
@@ -27,7 +28,13 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
     if (status === "CanLoadMore") loadMore(200);
   }, [status, loadMore]);
   const chats = useMemo(() => results.map(conversationToChat), [results]);
-  return { chats: status !== "LoadingFirstPage" ? chats : null };
+  const live = status !== "LoadingFirstPage";
+  // Read once per mount: the snapshot only bridges the gap until the first live page.
+  const [snapshot] = useState(() => readChatSnapshot(webStore()));
+  useEffect(() => {
+    if (status === "Exhausted") writeChatSnapshot(webStore(), chats);
+  }, [status, chats]);
+  return { chats: live ? chats : snapshot };
 }
 
 /**

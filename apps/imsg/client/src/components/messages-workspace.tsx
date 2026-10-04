@@ -1,3 +1,4 @@
+import { formatAddress } from "@shared/address";
 import { settleActionFor, settleLeavesLens } from "@shared/chat-state";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
@@ -88,7 +89,7 @@ export function MessagesWorkspace({
       const known = allChats.find((chat) => chat.guid === selection.guid);
       const chat = known ?? {
         guid: selection.guid,
-        displayName: selection.name ?? selection.guid,
+        displayName: selection.name ?? placeholderName(selection.guid),
         isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
         known: true,
         isSpam: false,
@@ -126,13 +127,13 @@ export function MessagesWorkspace({
     if (!selection) return;
     const known = allChats.find((chat) => chat.guid === selection.guid);
     // Re-resolve a placeholder once the directory loads, so a deep link stops showing its guid.
-    if (selected?.guid === selection.guid && (!known || selected.displayName !== selection.guid)) return;
+    if (selected?.guid === selection.guid && (!known || selected.displayName !== placeholderName(selection.guid))) return;
     setJumpTarget(selection.jumpTarget ?? null);
     setSelectionIntent(selection.intent);
     setSelected(
       known ?? {
         guid: selection.guid,
-        displayName: selection.name ?? selection.guid,
+        displayName: selection.name ?? placeholderName(selection.guid),
         isGroup: selection.isGroup ?? selection.guid.includes(";+;"),
         known: true,
         isSpam: false,
@@ -389,4 +390,9 @@ export function MessagesWorkspace({
       />
     </DesktopSplit>
   );
+}
+
+/** Before the directory loads, a deep-linked chat shows its handle rather than its raw guid. */
+function placeholderName(guid: string): string {
+  return guid.includes(";+;") ? "Group conversation" : formatAddress(guid.split(";").pop() ?? guid);
 }
