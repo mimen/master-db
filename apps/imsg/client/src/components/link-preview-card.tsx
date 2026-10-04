@@ -47,9 +47,10 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 
   if (!preview) return null;
 
-  const textColor = mine ? theme.onAccent : theme.text;
-  // Dimmed white, not a solid onAccent — no token for this specific alpha.
-  const secondary = mine ? "rgba(255,255,255,0.7)" : theme.textSecondary;
+  // The card renders outside the bubble, on the thread background, so it uses neutral colors
+  // for both directions; white-on-tint was invisible against the page.
+  const textColor = theme.text;
+  const secondary = theme.textSecondary;
 
   return (
     <Pressable
@@ -58,9 +59,10 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
       onPress={() => void openExternalUrl(url)}
       style={({ hovered, pressed }) => [
         styles.card,
-        { backgroundColor: mine ? "rgba(255,255,255,0.14)" : theme.backgroundElement },
-        hovered && !pressed && { backgroundColor: mine ? "rgba(255,255,255,0.22)" : theme.backgroundSelected },
-        pressed && { backgroundColor: mine ? "rgba(255,255,255,0.28)" : theme.backgroundSelected, opacity: HOVER_DIM },
+        mine && styles.mine,
+        { backgroundColor: theme.backgroundElement },
+        hovered && !pressed && { backgroundColor: theme.backgroundSelected },
+        pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM },
       ]}
     >
       {preview.image && (
@@ -91,6 +93,9 @@ const styles = StyleSheet.create({
     borderRadius: Radii.input,
     overflow: "hidden",
     maxWidth: 280,
+  },
+  mine: {
+    alignSelf: "flex-end",
   },
   image: {
     width: "100%",
