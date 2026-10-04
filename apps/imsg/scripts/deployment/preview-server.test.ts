@@ -39,51 +39,42 @@ describe("UI-only preview server", () => {
       .toMatchObject({ branch: "feat/test", lastActivityAt: expect.any(String) });
   });
 
-  test("streams /events and proxies /api requests to production", async () => {
+  test("proxies only session, release and health routes and preserves the API boundary", async () => {
+    const requests: string[] = [];
     const upstream = Bun.serve({
       port: 0,
       fetch(request) {
         const url = new URL(request.url);
-        if (url.pathname === "/events") {
-          return new Response("data: one\n\ndata: two\n\n", { headers: { "content-type": "text/event-stream" } });
-        }
-        if (url.pathname === "/api/chats") {
-          return new Response(Bun.gzipSync(new TextEncoder().encode('{"chats":[]}')), {
-            headers: { "content-type": "application/json", "content-encoding": "gzip" },
+        requests.push(url.pathname);
+        if (url.pathname === "/api/desktop-release/artifact/shell.tar.gz") {
+          return new Response(Bun.gzipSync(new TextEncoder().encode("shell bytes")), {
+            headers: { "content-type": "application/octet-stream", "content-encoding": "gzip" },
           });
         }
-        if (url.pathname === "/api/deploy/status") {
-          return Response.json({ environment: "production", branch: null, webSha: "f".repeat(40) });
-        }
-        return Response.json({
-          method: request.method,
-          body: request.method === "POST" ? "accepted" : null,
-          preview: request.headers.get("x-comma-preview"),
-        });
+        return Response.json({ path: url.pathname, query: url.search, preview: request.headers.get("x-comma-preview") });
       },
     });
     servers.push(upstream);
     const files = await fixture();
-    const fetchPreview = createPreviewFetch({
-      staticRoot: files.root,
-      upstreamUrl: `http://127.0.0.1:${upstream.port}`,
-      manifestPath: files.manifestPath,
-    });
-
-    const api = await fetchPreview(new Request("http://preview/api/send", { method: "POST", body: "accepted" }));
-    expect(await api.json()).toEqual({ method: "POST", body: "accepted", preview: "production-proxy" });
+    const fetchPreview = createPreviewFetch({ staticRoot: files.root, upstreamUrl: `http://127.0.0.1:${upstream.port}`, manifestPath: files.manifestPath });
+    for (const path of ["/api/health", "/api/convex-token", "/api/desktop-release", "/api/desktop-version"]) {
+      expect(await (await fetchPreview(new Request(`http://preview${path}?test=1`))).json())
+        .toEqual({ path, query: "?test=1", preview: "production-proxy" });
+    }
     const deployStatus = await fetchPreview(new Request("http://preview/api/deploy/status"));
-    expect(await deployStatus.json()).toEqual({
-      environment: "preview",
-      branch: "feat/test",
-      webSha: "a".repeat(40),
-    });
-    const chats = await fetchPreview(new Request("http://preview/api/chats", { headers: { "accept-encoding": "gzip" } }));
-    expect(chats.headers.get("content-encoding")).toBe("gzip");
-    expect(new TextDecoder().decode(Bun.gunzipSync(new Uint8Array(await chats.arrayBuffer())))).toBe('{"chats":[]}');
-    const events = await fetchPreview(new Request("http://preview/events"));
-    expect(events.headers.get("content-type")).toContain("text/event-stream");
-    expect(await events.text()).toBe("data: one\n\ndata: two\n\n");
+    expect(await deployStatus.json()).toEqual({ environment: "preview", branch: "feat/test", webSha: "a".repeat(40) });
+    const artifact = await fetchPreview(new Request("http://preview/api/desktop-release/artifact/shell.tar.gz"));
+    expect(artifact.headers.get("content-encoding")).toBe("gzip");
+    expect(new TextDecoder().decode(Bun.gunzipSync(new Uint8Array(await artifact.arrayBuffer())))).toBe("shell bytes");
+    const before = requests.length;
+    for (const path of ["/api/chats", "/api/not-real", "/api/desktop-release/extra", "/api/desktop-release/artifact/a/b"]) {
+      const response = await fetchPreview(new Request(`http://preview${path}`));
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "Not found" });
+    }
+    expect((await fetchPreview(new Request("http://preview/api/convex-token", { method: "POST" }))).status).toBe(404);
+    expect(await (await fetchPreview(new Request("http://preview/events"))).text()).toContain("branch client");
+    expect(requests.length).toBe(before);
   });
 
   test("serves precompressed siblings by Accept-Encoding with production cache headers", async () => {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deflateSync } from "node:zlib";
 import { downloadFailureReason } from "./bluebubbles";
-import { canThumbnail, parseThumbnailWidth, thumbnailAttachment } from "./thumbnail";
+import { canThumbnail, thumbnailAttachment } from "./thumbnail";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -57,18 +57,7 @@ async function dimensions(path: string): Promise<[number, number]> {
   return [w!, h!];
 }
 
-describe("thumbnail width", () => {
-  test("snaps requests up to a fixed bucket and rejects junk", () => {
-    expect(parseThumbnailWidth("520")).toBe(520);
-    expect(parseThumbnailWidth("300")).toBe(520);
-    expect(parseThumbnailWidth("100")).toBe(260);
-    expect(parseThumbnailWidth("5000")).toBe(1040);
-    expect(parseThumbnailWidth(undefined)).toBeNull();
-    expect(parseThumbnailWidth("0")).toBeNull();
-    expect(parseThumbnailWidth("52O")).toBeNull();
-    expect(parseThumbnailWidth("-4")).toBeNull();
-  });
-
+describe("thumbnail eligibility", () => {
   test("keeps GIFs whole and skips non-images", () => {
     expect(canThumbnail("image/gif", "tmp.gif")).toBe(false);
     expect(canThumbnail("image/heic", "IMG_1.HEIC")).toBe(true);

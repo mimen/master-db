@@ -31,7 +31,6 @@ const config: Config = {
 const entry = "/_expo/static/js/web/entry-abc.js";
 const entrySource = "console.log('comma');\n".repeat(400);
 const html = `<!doctype html><html><body><div id="root"></div>${" ".repeat(2000)}</body></html>`;
-const attachmentJson = JSON.stringify({ rows: "x".repeat(4000) });
 
 let root: string;
 let app: Awaited<ReturnType<typeof createApp>>["app"];
@@ -45,19 +44,7 @@ beforeAll(async () => {
     writeFileSync(join(root, `${path}.br`), brotliCompressSync(text));
     writeFileSync(join(root, `${path}.gz`), Bun.gzipSync(new TextEncoder().encode(text)));
   }
-  const bb = new FakeBlueBubbles({
-    chats: Array.from({ length: 40 }, (_, index) => ({
-      guid: `iMessage;-;+1555000${String(index).padStart(4, "0")}`,
-      participants: [{ address: `+1555000${String(index).padStart(4, "0")}` }],
-      messages: [{ guid: `m${index}`, text: `message ${index}`, dateCreated: 2000 + index, isFromMe: false }],
-    })),
-    attachments: {
-      "att-json": {
-        meta: { guid: "att-json", mimeType: "application/json", transferName: "data.json" },
-        bytes: new TextEncoder().encode(attachmentJson),
-      },
-    },
-  });
+  const bb = new FakeBlueBubbles({ chats: [] });
   ({ app, dispose } = await createApp({
     config,
     bb,
@@ -118,42 +105,5 @@ describe("static asset negotiation", () => {
     const response = await get(entry, { "Accept-Encoding": "br, gzip", Range: "bytes=0-9" });
     expect(response.headers.get("Content-Encoding")).toBeNull();
     expect(await response.text()).toBe(entrySource);
-  });
-});
-
-describe("JSON compression", () => {
-  test("/api/chats?state=any is gzipped with Vary when accepted", async () => {
-    const plain = await get("/api/chats?state=any");
-    const plainText = await plain.text();
-    expect(plain.headers.get("Content-Encoding")).toBeNull();
-    expect(plain.headers.get("Vary")).toBe("Accept-Encoding");
-    expect(plainText.length).toBeGreaterThan(1024);
-
-    const gzip = await get("/api/chats?state=any", { "Accept-Encoding": "gzip, br" });
-    expect(gzip.headers.get("Content-Encoding")).toBe("gzip");
-    expect(gzip.headers.get("Vary")).toBe("Accept-Encoding");
-    expect(gzip.headers.get("Content-Type")).toStartWith("application/json");
-    expect(new TextDecoder().decode(Bun.gunzipSync(await bytes(gzip)))).toBe(plainText);
-  });
-
-  test("a range request on a compressed route stays identity", async () => {
-    const response = await get("/api/chats?state=any", { "Accept-Encoding": "gzip", Range: "bytes=0-9" });
-    expect(response.headers.get("Content-Encoding")).toBeNull();
-  });
-});
-
-describe("never compressed", () => {
-  test("the SSE event stream", async () => {
-    const response = await get("/events", { "Accept-Encoding": "gzip, br" });
-    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
-    expect(response.headers.get("Content-Encoding")).toBeNull();
-    await response.body!.cancel();
-  });
-
-  test("an attachment, even when its bytes are JSON", async () => {
-    const response = await get("/api/attachments/att-json", { "Accept-Encoding": "gzip, br" });
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Encoding")).toBeNull();
-    expect(await response.text()).toBe(attachmentJson);
   });
 });

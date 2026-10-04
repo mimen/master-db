@@ -3,7 +3,8 @@ const https = require("node:https");
 
 function shouldProxy(url) {
   const pathname = new URL(url ?? "/", "http://localhost").pathname;
-  return pathname === "/events" || pathname === "/api" || pathname.startsWith("/api/");
+  return ["/api/health", "/api/convex-token", "/api/deploy/status", "/api/desktop-release", "/api/desktop-version"].includes(pathname)
+    || /^\/api\/desktop-release\/artifact\/[^/]+$/.test(pathname);
 }
 
 function proxyRequest(request, response, upstreamUrl) {
@@ -44,8 +45,14 @@ function createDevRealDataMiddleware(next, upstreamUrl) {
     throw new Error("IMSG_DEV_UPSTREAM_URL must be an absolute HTTP(S) URL");
   }
   return (request, response, nextCallback) => {
-    if (shouldProxy(request.url)) {
+    if ((request.method === "GET" || request.method === "HEAD") && shouldProxy(request.url)) {
       proxyRequest(request, response, parsed);
+      return;
+    }
+    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    if (pathname === "/api" || pathname.startsWith("/api/")) {
+      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: "Not found" }));
       return;
     }
     next(request, response, nextCallback);

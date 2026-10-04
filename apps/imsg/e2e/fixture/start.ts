@@ -158,7 +158,6 @@ const { app, dispose } = await createApp({
       resetOverlay();
       resetConvex();
       controls.directory.invalidate(true);
-      controls.broadcast({ kind: "resync" });
       return c.json({ ok: true, now: FIXTURE_NOW });
     });
 

@@ -247,7 +247,8 @@ describe("manifest", () => {
       productionUrl: "https://alternate.example:9443",
     });
     expect(ui.previewUrl).toBe("https://milads-mac-mini.taild31e9a.ts.net:9001");
-    expect(ui.backend.warning).toContain("single production server");
+    expect(ui.backend.warning).toContain("session, release and health routes proxy to the Mini");
+    expect(ui.backend.warning).toContain("feature reads and writes use Convex");
     expect(ui.backend.upstreamUrl).toBe("https://alternate.example:9443");
 
     const scratch = createBranchManifest({

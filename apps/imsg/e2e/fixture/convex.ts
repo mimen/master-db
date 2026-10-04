@@ -117,7 +117,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       peerTyping.set(controls.directory.canonicalGuid(event.chatGuid), { peerTyping: event.display, updatedAt: now, expiresAt: now + (event.display ? 12_000 : 0) });
     } else if (event.kind === "stream-connected") peerTyping.clear();
   });
-  const commands = new ChatCommands(bb, controls.directory, names, () => controls.broadcast({ kind: "chats-changed" }));
+  const commands = new ChatCommands(bb, controls.directory, names);
   const ai = controls.ai;
   const search = new MessageSearch(bb, names);
   const health = () => controls.health();
@@ -192,7 +192,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       }
       case "transcribe": {
         transcripts.set(payload.attachmentGuid, { state: "working" });
-        controls.broadcast({ kind: "chats-changed" });
         const transcript = await WhisperService.forCache(db)!.transcribe(payload.attachmentGuid);
         transcripts.set(payload.attachmentGuid, transcript);
         return { kind: "transcribe" as const, transcript };
@@ -416,12 +415,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const text = String(args.text);
       if (text) drafts.set(conversationId, { _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId), text, updatedAt: FIXTURE_NOW });
       else drafts.delete(conversationId);
-      controls.broadcast({ kind: "chats-changed" });
       return null;
     },
     "comma/drafts:clearDraft": async (args) => {
       drafts.delete(String(args.conversationId));
-      controls.broadcast({ kind: "chats-changed" });
       return null;
     },
     "comma/outbox:enqueue": async (args) => {
@@ -441,7 +438,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (payload.kind === "send") drafts.delete(chatGuid);
         const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
         receipts.set(clientKey, receipt);
-        controls.broadcast({ kind: "chats-changed" });
         return receipt.id;
       })();
       inFlight.set(clientKey, execution);

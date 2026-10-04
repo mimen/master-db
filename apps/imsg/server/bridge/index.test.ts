@@ -81,7 +81,7 @@ test("bridge failures and misconfiguration cannot throw into startup", async () 
   log.mockRestore();
 });
 
-test("health and schedule edit/create/cancel routes use the bridge without waiting on Convex", async () => {
+test("health reports bridge progress without waiting on Convex", async () => {
   const deps = fixture();
   const identity = { refresh: async () => {}, start() {}, stop() {}, search: () => [] };
   const { app, dispose } = await createApp({ ...deps, identity, bridgeIngest: deps.ingest, bridgeChatDbPath: deps.chatDbPath, bridgeAvatarDirectory: deps.avatarDirectory });
@@ -94,27 +94,9 @@ test("health and schedule edit/create/cancel routes use the bridge without waiti
     }
     throw new Error("Bridge did not settle");
   }
-  const sendAt = Date.now() + 60_000;
-  const headers = { "Content-Type": "application/json" };
   try {
     await settled();
-    deps.ingest.calls.length = 0;
-    const created = await app.request("/api/scheduled", { method: "POST", headers,
-      body: JSON.stringify({ chatGuid: CHAT, text: "scheduled", sendAt }) });
-    expect(created.status).toBe(200);
-    const row = await created.json() as { id: number };
-    await settled();
-    expect(deps.ingest.calls.at(-1)?.body).toMatchObject({ items: [{ bbId: row.id, text: "scheduled" }] });
-    expect((await app.request(`/api/scheduled/${row.id}`, { method: "PUT", headers,
-      body: JSON.stringify({ chatGuid: CHAT, text: "edited", sendAt }) })).status).toBe(200);
-    await settled();
-    expect(deps.ingest.calls.at(-1)?.body).toMatchObject({ items: [{ text: "edited" }] });
-    expect((await app.request(`/api/scheduled/${row.id}/send-now`, { method: "POST" })).status).toBe(200);
-    await settled();
-    const scheduled = deps.ingest.calls.filter((call) => call.kind === "scheduled").at(-1)!;
-    expect(scheduled.body.items[0].sendAt).toBeLessThan(sendAt);
-    expect((await app.request(`/api/scheduled/${row.id}`, { method: "DELETE" })).status).toBe(200);
-    await settled();
-    expect(deps.ingest.calls.at(-1)).toEqual({ kind: "scheduled", body: { items: [] } });
+    expect(deps.ingest.calls.map((call) => call.kind)).toContain("conversations");
+    expect(deps.ingest.calls.map((call) => call.kind)).toContain("scheduled");
   } finally { dispose(); }
 });

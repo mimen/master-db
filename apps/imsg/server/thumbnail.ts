@@ -9,14 +9,6 @@ export type ThumbnailWidth = (typeof WIDTHS)[number];
 
 export type ThumbnailResult = { ok: true; path: string } | { ok: false; reason: string };
 
-/** Snaps a requested `?w=` up to a fixed bucket so each image caches a bounded set of sizes. */
-export function parseThumbnailWidth(raw: string | undefined): ThumbnailWidth | null {
-  if (!raw || !/^\d+$/.test(raw)) return null;
-  const requested = Number(raw);
-  if (requested <= 0) return null;
-  return WIDTHS.find((width) => width >= requested) ?? WIDTHS[WIDTHS.length - 1]!;
-}
-
 /** GIFs keep their animation, so they are always served whole. */
 export function canThumbnail(mimeType: string | null, filename: string | null): boolean {
   if (mimeType) return mimeType.startsWith("image/") && mimeType !== "image/gif";

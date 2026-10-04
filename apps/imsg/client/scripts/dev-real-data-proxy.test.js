@@ -20,14 +20,14 @@ function listen(server) {
 }
 
 describe("development real-data proxy", () => {
-  test("recognizes only API and event-stream paths", () => {
-    expect(shouldProxy("/api/chats?state=all")).toBe(true);
-    expect(shouldProxy("/events")).toBe(true);
+  test("recognizes only retained Mini paths", () => {
+    for (const path of ["/api/health", "/api/convex-token?test=1", "/api/deploy/status", "/api/desktop-release", "/api/desktop-version", "/api/desktop-release/artifact/shell.tar.gz"]) expect(shouldProxy(path)).toBe(true);
+    for (const path of ["/api/chats?state=all", "/api", "/events", "/api/desktop-release/extra", "/api/desktop-release/artifact/a/b"]) expect(shouldProxy(path)).toBe(false);
     expect(shouldProxy("/apiary")).toBe(false);
     expect(shouldProxy("/_expo/static/app.js")).toBe(false);
   });
 
-  test("proxies methods, bodies, query strings, and preview identity", async () => {
+  test("proxies retained requests, query strings, and preview identity", async () => {
     const upstreamPort = await listen(http.createServer((request, response) => {
       let body = "";
       request.setEncoding("utf8");
@@ -48,24 +48,21 @@ describe("development real-data proxy", () => {
     );
     const previewPort = await listen(http.createServer((request, response) => middleware(request, response)));
 
-    const result = await fetch(`http://127.0.0.1:${previewPort}/api/send?mode=test`, {
-      method: "POST",
-      body: "hello",
-    });
+    const result = await fetch(`http://127.0.0.1:${previewPort}/api/convex-token?mode=test`);
 
     expect(await result.json()).toEqual({
-      method: "POST",
-      url: "/api/send?mode=test",
-      body: "hello",
+      method: "GET",
+      url: "/api/convex-token?mode=test",
+      body: "",
       preview: "production-proxy",
     });
   });
 
   test("propagates truncated upstream responses", async () => {
     const upstreamPort = await listen(http.createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.writeHead(200, { "content-type": "application/octet-stream" });
       response.flushHeaders();
-      response.write("data: partial\n\n");
+      response.write("partial artifact");
       setTimeout(() => response.socket.destroy(), 10);
     }));
     const middleware = createDevRealDataMiddleware(
@@ -74,24 +71,29 @@ describe("development real-data proxy", () => {
     );
     const previewPort = await listen(http.createServer((request, response) => middleware(request, response)));
 
-    await expect(fetch(`http://127.0.0.1:${previewPort}/events`).then((response) => response.text())).rejects.toThrow();
+    await expect(fetch(`http://127.0.0.1:${previewPort}/api/desktop-release/artifact/shell.tar.gz`).then((response) => response.text())).rejects.toThrow();
   });
 
-  test("streams events and leaves Metro routes untouched", async () => {
-    const upstreamPort = await listen(http.createServer((request, response) => {
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      response.write("data: one\n\n");
-      response.end("data: two\n\n");
+  test("rejects feature APIs locally and leaves Metro and event paths untouched", async () => {
+    let upstreamRequests = 0;
+    const upstreamPort = await listen(http.createServer((_request, response) => {
+      upstreamRequests++;
+      response.end("upstream");
     }));
     const middleware = createDevRealDataMiddleware(
       (_request, response) => response.end("metro"),
       `http://127.0.0.1:${upstreamPort}`,
     );
     const previewPort = await listen(http.createServer((request, response) => middleware(request, response)));
-
-    const events = await fetch(`http://127.0.0.1:${previewPort}/events`);
-    expect(events.headers.get("content-type")).toContain("text/event-stream");
-    expect(await events.text()).toBe("data: one\n\ndata: two\n\n");
-    expect(await fetch(`http://127.0.0.1:${previewPort}/index.bundle`).then((response) => response.text())).toBe("metro");
+    for (const path of ["/api/chats", "/api/not-real", "/api/desktop-release/extra"]) {
+      const response = await fetch(`http://127.0.0.1:${previewPort}${path}`);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "Not found" });
+    }
+    expect((await fetch(`http://127.0.0.1:${previewPort}/api/convex-token`, { method: "POST" })).status).toBe(404);
+    for (const path of ["/events", "/index.bundle"]) {
+      expect(await fetch(`http://127.0.0.1:${previewPort}${path}`).then((response) => response.text())).toBe("metro");
+    }
+    expect(upstreamRequests).toBe(0);
   });
 });

@@ -412,7 +412,7 @@ export function createBranchManifest(input: {
       scratchDbPath: scratch ? input.scratchDbPath ?? null : null,
       warning: scratch
         ? "SERVER-CHANGING PREVIEW: server behavior and overlay writes use a scratch database; production imsg.db is never opened."
-        : "UI-ONLY PREVIEW: /api and /events proxy to the single production server, including live read/write behavior.",
+        : "UI-ONLY PREVIEW: session, release and health routes proxy to the Mini; feature reads and writes use Convex.",
     },
     desktop: {
       required: input.desktopRequired,

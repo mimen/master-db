@@ -23,10 +23,13 @@ export function createPreviewFetch(options: PreviewServerOptions): (request: Req
         headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
       });
     }
-    if (url.pathname === "/api/deploy/status") {
+    if (url.pathname === "/api/deploy/status" && (request.method === "GET" || request.method === "HEAD")) {
       return branchDeployStatus(options.manifestPath);
     }
-    if (url.pathname === "/events" || url.pathname.startsWith("/api/")) {
+    const pathname = url.pathname;
+    const retained = ["/api/health", "/api/convex-token", "/api/desktop-release", "/api/desktop-version"].includes(pathname)
+      || /^\/api\/desktop-release\/artifact\/[^/]+$/.test(pathname);
+    if ((request.method === "GET" || request.method === "HEAD") && retained) {
       const upstream = new URL(`${url.pathname}${url.search}`, options.upstreamUrl);
       const headers = new Headers(request.headers);
       headers.delete("host");
@@ -42,6 +45,7 @@ export function createPreviewFetch(options: PreviewServerOptions): (request: Req
       });
     }
 
+    if (pathname === "/api" || pathname.startsWith("/api/")) return Response.json({ error: "Not found" }, { status: 404 });
     return statics.fetch(request);
   };
 }
