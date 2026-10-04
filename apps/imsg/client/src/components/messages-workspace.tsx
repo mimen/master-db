@@ -84,7 +84,8 @@ export function MessagesWorkspace({
   useEffect(() => {
     if (!wide) return;
     return onSelectChat((selection) => {
-      const known = chats.find((chat) => chat.guid === selection.guid);
+      // Search the unfiltered list: a chat outside the active queue still has a real name.
+      const known = allChats.find((chat) => chat.guid === selection.guid);
       const chat = known ?? {
         guid: selection.guid,
         displayName: selection.name ?? selection.guid,
@@ -117,13 +118,15 @@ export function MessagesWorkspace({
         },
       });
     });
-  }, [chats, commitChatSelection, wide]);
+  }, [allChats, commitChatSelection, wide]);
 
   useEffect(() => {
     if (!wide) return;
     const selection = shell.state.messages.selection;
-    if (!selection || selected?.guid === selection.guid) return;
-    const known = chats.find((chat) => chat.guid === selection.guid);
+    if (!selection) return;
+    const known = allChats.find((chat) => chat.guid === selection.guid);
+    // Re-resolve a placeholder once the directory loads, so a deep link stops showing its guid.
+    if (selected?.guid === selection.guid && (!known || selected.displayName !== selection.guid)) return;
     setJumpTarget(selection.jumpTarget ?? null);
     setSelectionIntent(selection.intent);
     setSelected(
@@ -145,7 +148,7 @@ export function MessagesWorkspace({
         },
       },
     );
-  }, [chats, selected?.guid, shell.state.messages.selection, wide]);
+  }, [allChats, selected?.guid, selected?.displayName, shell.state.messages.selection, wide]);
 
   // The shell owns the one rail and the one utility surface. Messages keeps
   // its filters and selection local so they survive workspace switches, then
