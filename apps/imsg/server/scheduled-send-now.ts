@@ -11,6 +11,8 @@ export interface ScheduledSendNowSeam {
   ): Promise<Result<BBScheduledMessage>>;
 }
 
+const claimsBySeam = new WeakMap<ScheduledSendNowSeam, Set<number>>();
+
 /**
  * Hands "Send now" back to BlueBubbles' durable scheduler instead of deleting
  * the row and sending through a second path. Moving the existing one-shot job
@@ -18,14 +20,19 @@ export interface ScheduledSendNowSeam {
  * and concurrent requests; the scheduler remains the only sender.
  */
 export class ScheduledSendNow {
-  private claims = new Set<number>();
+  private claims: Set<number>;
 
   constructor(
     private seam: ScheduledSendNowSeam,
     private now: () => number = Date.now,
-  ) {}
+  ) {
+    // REST and outbox commands share the same scheduler claim guard.
+    this.claims = claimsBySeam.get(seam) ?? new Set<number>();
+    claimsBySeam.set(seam, this.claims);
+  }
 
   async send(id: number): Promise<Result<BBScheduledMessage>> {
+    if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "invalid schedule id" };
     if (this.claims.has(id)) return { ok: false, error: "scheduled message is already claimed" };
     this.claims.add(id);
     try {
@@ -40,7 +47,7 @@ export class ScheduledSendNow {
 
       // A tiny future offset gives the scheduler time to persist and observe the
       // update without introducing a second outbound send path.
-      return this.seam.updateScheduledMessage(id, chatGuid, text, this.now() + 250);
+      return await this.seam.updateScheduledMessage(id, chatGuid, text, this.now() + 250);
     } finally {
       this.claims.delete(id);
     }

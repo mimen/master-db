@@ -1,7 +1,7 @@
 import { BASE_URL } from "./config";
 import { attachmentSource, messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
-import { enqueueVia, type CommandClient, type CommandPayload } from "./convex-commands";
+import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from "./convex-commands";
 import { convexClient } from "./identity";
 import type {
   AttachmentSummary,
@@ -49,6 +49,13 @@ function messageChatGuid(messageGuid: string): string | undefined {
 export async function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<{ ok: boolean }> {
   await enqueueVia(convexClient as unknown as CommandClient, chatGuid, payload);
   return { ok: true };
+}
+
+async function scheduledChatGuid(id: number): Promise<string> {
+  const rows = await convexClient.query(commaApi.listScheduled, {});
+  const scheduled = rows.find((row) => row.bbId === id);
+  if (!scheduled) throw new Error("Scheduled message is unavailable");
+  return scheduled.chatGuid;
 }
 
 export const api = {
@@ -192,23 +199,17 @@ export const api = {
   deleteChat(chatGuid: string): Promise<{ ok: boolean }> {
     return request(`/api/chats/${encodeURIComponent(chatGuid)}/delete`, { method: "POST" });
   },
-  schedule(chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
-    return request("/api/scheduled", {
-      method: "POST",
-      body: JSON.stringify({ chatGuid, text, sendAt }),
-    });
+  async schedule(chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
+    return (await runCommand(chatGuid, { kind: "schedule", text, sendAt })).scheduled;
   },
-  updateScheduled(id: number, chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
-    return request(`/api/scheduled/${id}`, {
-      method: "PUT",
-      body: JSON.stringify({ chatGuid, text, sendAt }),
-    });
+  async updateScheduled(id: number, chatGuid: string, text: string, sendAt: number): Promise<ScheduledMessage> {
+    return (await runCommand(chatGuid, { kind: "editScheduled", bbId: id, text, sendAt })).scheduled;
   },
-  cancelScheduled(id: number): Promise<{ ok: boolean }> {
-    return request(`/api/scheduled/${id}`, { method: "DELETE" });
+  async cancelScheduled(id: number): Promise<{ ok: boolean }> {
+    return runCommand(await scheduledChatGuid(id), { kind: "cancelScheduled", bbId: id });
   },
-  sendScheduledNow(id: number): Promise<{ ok: true }> {
-    return request(`/api/scheduled/${id}/send-now`, { method: "POST" });
+  async sendScheduledNow(id: number): Promise<{ ok: true }> {
+    return runCommand(await scheduledChatGuid(id), { kind: "sendScheduledNow", bbId: id });
   },
   transcriptState(attachmentGuid: string): Promise<TranscriptState> {
     return request(`/api/attachments/${encodeURIComponent(attachmentGuid)}/transcript`);

@@ -1,10 +1,11 @@
+import type { CommaScheduledDoc } from "../../../../../convex/schema/comma/validators";
 import { useQuery } from "convex/react";
 import { useCallback, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { scheduledToScheduled } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { useChatDirectory } from "./use-chat-directory";
-import type { ScheduledMessage } from "@shared/types";
+import type { ChatSummary, ScheduledMessage } from "@shared/types";
 
 export { formatScheduledWhen } from "@/lib/scheduled";
 
@@ -19,6 +20,14 @@ export interface UseScheduledResult {
 export function useScheduled(): UseScheduledResult {
   const rows = useQuery(commaApi.listScheduled, {});
   const chats = useChatDirectory();
+  return useScheduledState(rows, chats, api);
+}
+
+export function useScheduledState(
+  rows: CommaScheduledDoc[] | undefined,
+  chats: readonly ChatSummary[] | null,
+  actions: Pick<typeof api, "cancelScheduled" | "sendScheduledNow" | "updateScheduled">,
+): UseScheduledResult {
   const [hidden, setHidden] = useState<ReadonlySet<number>>(new Set());
   const items = useMemo(
     () => (rows ?? []).filter((row) => !hidden.has(row.bbId)).map((row) => scheduledToScheduled(row, chats ?? [])),
@@ -29,19 +38,19 @@ export function useScheduled(): UseScheduledResult {
   }, []);
   const cancel = useCallback((id: number) => {
     setHidden((current) => new Set([...current, id]));
-    void api.cancelScheduled(id).catch(() => restore(id));
-  }, [restore]);
+    void actions.cancelScheduled(id).catch(() => restore(id));
+  }, [actions, restore]);
   const sendNow = useCallback(async (id: number): Promise<void> => {
     setHidden((current) => new Set([...current, id]));
     try {
-      await api.sendScheduledNow(id);
+      await actions.sendScheduledNow(id);
     } catch (error) {
       restore(id);
       throw error;
     }
-  }, [restore]);
+  }, [actions, restore]);
   const edit = useCallback(async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
-    await api.updateScheduled(item.id, item.chatGuid, text, sendAt);
-  }, []);
+    await actions.updateScheduled(item.id, item.chatGuid, text, sendAt);
+  }, [actions]);
   return { items, loading: rows === undefined, cancel, sendNow, edit };
 }
