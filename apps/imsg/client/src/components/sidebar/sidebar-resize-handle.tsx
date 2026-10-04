@@ -22,12 +22,17 @@ export function SidebarResizeHandle({ width, onResize }: SidebarResizeHandleProp
       if (!origin) return;
       onResize(origin.startWidth + (e.pageX - origin.startX));
     };
+    if (typeof window === "undefined") return;
+    // The pointer crosses page text during a drag; without this the drag also selects it.
+    const body = document.body.style;
+    const priorSelect = body.userSelect;
+    body.userSelect = "none";
     const up = (): void => {
       drag.current = null;
+      body.userSelect = priorSelect;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
-    if (typeof window === "undefined") return;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };

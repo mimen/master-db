@@ -112,5 +112,15 @@ export function hideSelfEchoes(messages: readonly Message[]): Message[] {
   // chat (someone repeating your words) must not hide their message.
   const echoes = messages.filter(isEcho).length;
   if (outgoing.length === 0 || echoes < Math.max(2, outgoing.length * 0.8)) return [...messages];
-  return messages.filter((m) => !isEcho(m));
+  // Once the thread is a note-to-self, an unsent message leaves its two or three inbound
+  // copies with no outgoing original to match; keep the first of each burst.
+  const kept: Message[] = [];
+  for (const m of [...messages].sort((a, b) => a.dateCreated - b.dateCreated)) {
+    if (isEcho(m)) continue;
+    const repeat = !m.isFromMe && m.text !== "" && kept.some((k) =>
+      !k.isFromMe && k.text === m.text && m.dateCreated - k.dateCreated <= SELF_ECHO_WINDOW_MS);
+    if (!repeat) kept.push(m);
+  }
+  const keep = new Set(kept);
+  return messages.filter((m) => keep.has(m));
 }

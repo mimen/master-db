@@ -193,6 +193,16 @@ describe("hideSelfEchoes", () => {
     const thread = [msg("out", true, 1000), msg("reply", false, 1000 + 60_000)];
     expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["out", "reply"]);
   });
+  test("an unsent note-to-self keeps one of its inbound copies", () => {
+    const thread = [msg("out", true, 1000, "one"), msg("echo", false, 1080, "one"),
+      msg("out2", true, 2000, "two"), msg("echo2", false, 2050, "two"),
+      msg("u1", false, 3000, "unsent"), msg("u2", false, 3090, "unsent"), msg("u3", false, 3090, "unsent")];
+    expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["out", "out2", "u1"]);
+  });
+  test("a real chat keeps someone's repeated message", () => {
+    const thread = [msg("a", false, 1000, "hello?"), msg("b", false, 2000, "hello?"), msg("c", true, 9000, "hey")];
+    expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["a", "b", "c"]);
+  });
   test("a real chat where someone once repeats your words keeps their message", () => {
     const thread = [msg("a", true, 1000, "ok"), msg("b", false, 1500, "ok"), msg("c", true, 5000, "see you at 8"), msg("d", true, 9000, "bring the cables")];
     expect(hideSelfEchoes(thread).map((m) => m.guid)).toEqual(["a", "b", "c", "d"]);
