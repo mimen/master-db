@@ -14,7 +14,6 @@ const removed = [
   "/api/scheduled",
   "/api/ai/status",
   "/api/link-preview?url=https%3A%2F%2Fexample.com",
-  "/events",
 ];
 
 let failed = 0;
@@ -31,6 +30,11 @@ for (const path of removed) {
   const response = await fetch(origin + path, { signal: AbortSignal.timeout(5000) }).catch(() => null);
   check(response?.status === 404, `removed ${path} -> ${response?.status ?? "no response"}`);
 }
+
+// Non-API paths fall through to the app shell, so the old stream is gone when /events is HTML.
+const events = await fetch(`${origin}/events`, { signal: AbortSignal.timeout(5000) }).catch(() => null);
+check(!events?.headers.get("content-type")?.includes("text/event-stream"), `removed /events stream -> ${events?.headers.get("content-type") ?? "no response"}`);
+await events?.body?.cancel();
 
 const tokenResponse = await fetch(`${origin}/api/convex-token`);
 const { token } = (await tokenResponse.json()) as { token?: string };
