@@ -21,7 +21,20 @@ for (const response of [
   () => { throw new Error("offline"); },
 ]) {
   test("token failure returns null without exposing an error or credentials", async () => {
-    const fetcher = Object.assign(async () => response(), { preconnect: fetch.preconnect });
-    expect(await fetchAccessToken("", { forceRefreshToken: false }, fetcher)).toBeNull();
+    let calls = 0;
+    const fetcher = Object.assign(async () => { calls++; return response(); }, { preconnect: fetch.preconnect });
+    expect(await fetchAccessToken("", { forceRefreshToken: false }, fetcher, async () => {})).toBeNull();
+    expect(calls).toBe(5);
   });
 }
+
+test("a Mini blip is retried instead of signing the client out", async () => {
+  const replies = [503, 503, 200];
+  const waits: number[] = [];
+  const fetcher = Object.assign(async () => {
+    const status = replies.shift()!;
+    return status === 200 ? Response.json({ token: "access-token" }) : Response.json({ error: "unavailable" }, { status });
+  }, { preconnect: fetch.preconnect });
+  expect(await fetchAccessToken("", { forceRefreshToken: false }, fetcher, async (ms) => { waits.push(ms); })).toBe("access-token");
+  expect(waits).toEqual([250, 750]);
+});
