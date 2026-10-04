@@ -201,13 +201,16 @@ export const completeOutbox = internalMutation({
       resultGuid,
       result,
     });
-    // A failed or unknown send keeps its temp bubble so the client can show the state.
-    if (status !== "sent" && row.payload.kind === "send") {
+    if (row.payload.kind === "send") {
       const temp = await ctx.db
         .query("comma_messages")
         .withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey)))
         .unique();
-      if (temp) await ctx.db.patch(temp._id, { error: status === "failed" ? 1 : 0 });
+      // BlueBubbles echoes often omit tempGuid, so a confirmed send cannot wait for a
+      // clientKey-tagged echo to retire its temp row; the real row arrives by guid.
+      if (temp && status === "sent") await ctx.db.delete(temp._id);
+      // A failed or unknown send keeps its temp bubble so the client can show the state.
+      else if (temp) await ctx.db.patch(temp._id, { error: status === "failed" ? 1 : 0 });
     }
     return true;
   },

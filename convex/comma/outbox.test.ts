@@ -106,6 +106,15 @@ describe("claim and complete", () => {
     expect(status).toEqual({ s: "unknown", p: "pending" });
   });
 
+  test("a successful send retires its temp bubble even when the echo carries no clientKey", async () => {
+    const { t, as, c } = await setup();
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "sent", resultGuid: "REAL-GUID" });
+    const guids = await t.run(async (ctx) => (await ctx.db.query("comma_messages").collect()).map((m) => m.guid));
+    expect(guids).toEqual([]);
+  });
+
   test("complete records the outcome", async () => {
     const { t, as, c } = await setup();
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
