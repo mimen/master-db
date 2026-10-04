@@ -60,6 +60,10 @@ export function usePaginatedQuery<Ref extends PaginatedQueryReference>(ref: Ref,
   };
 }
 
+export function useConvex() {
+  return convexClient;
+}
+
 export function useConvexAuth() {
   return { isLoading: false, isAuthenticated: true };
 }

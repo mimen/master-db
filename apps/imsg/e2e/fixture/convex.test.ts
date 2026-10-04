@@ -4,7 +4,7 @@ import type { Config } from "../../server/config";
 import { OverlayDb } from "../../server/db";
 import type { ChatSummary, Message } from "../../shared/types";
 import type { CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
-import { registerConvexFixture } from "./convex";
+import { fixtureMessageWindow, registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
 
@@ -25,7 +25,9 @@ beforeEach(async () => {
   const identity = new FixtureIdentity();
   fixture = await createApp({
     config, bb, db, now: () => FIXTURE_NOW, names: identity, identity, backgroundServices: false,
-    configureFixtureRoutes: (app, controls) => { reset = registerConvexFixture(app, controls, bb, db, identity); },
+    configureFixtureRoutes: (app, controls) => { reset = registerConvexFixture(app, controls, bb, db, identity, {
+      "comma/history:messageWindow": (args) => fixtureMessageWindow(bb, identity, args),
+    }); },
   });
 });
 afterEach(() => fixture.dispose());
@@ -167,4 +169,22 @@ test("link preview actions return deterministic public previews and null for blo
   for (const blocked of ["http://localhost/", "http://10.0.0.1/", "https://device.ts.net/", "not a URL"]) {
     expect(await call(name, { url: blocked })).toBeNull();
   }
+});
+
+const history = (bounds: { before?: number; after?: number; around?: number }) => call<Array<Message & { attachments: unknown[] }>>(
+  "comma/history:messageWindow", { conversationId: CHAT_GUIDS.needs, ...bounds },
+);
+
+test("history fixture serves strict windows, joins reactions and stays live", async () => {
+  const rows = (await messages()).page.toReversed();
+  expect((await history({ around: rows[0].dateCreated })).map((row) => row.guid)).toEqual(["needs-1", "needs-2"]);
+  expect((await history({ before: rows[1].dateCreated })).map((row) => row.guid)).toEqual(["needs-1"]);
+  expect((await history({ after: rows[0].dateCreated })).map((row) => row.guid)).toEqual(["needs-2"]);
+  expect(await history({ before: rows[0].dateCreated })).toEqual([]);
+  await command({ kind: "react", messageGuid: "needs-2", reaction: "love", remove: false });
+  expect((await history({ around: rows[0].dateCreated }))[1].reactions).toMatchObject([{ type: "love", isFromMe: true }]);
+  bb.receiveMessage(CHAT_GUIDS.needs, "live history");
+  expect((await history({ around: rows[0].dateCreated })).at(-1)?.text).toBe("live history");
+  await expect(history({})).rejects.toThrow("Exactly one");
+  await expect(history({ before: 0, around: 0 })).rejects.toThrow("Exactly one");
 });

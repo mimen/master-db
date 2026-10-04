@@ -1,3 +1,4 @@
+import { makeFunctionReference, type ApiFromModules } from "convex/server";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
@@ -6,6 +7,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
+import type { searchMessages } from "./queries";
 import { commaModules } from "./testModules.vitest";
 
 const paginationOpts = { numItems: 2, cursor: null };
@@ -155,6 +157,25 @@ describe("Comma read queries", () => {
     const scoped = await t.query(api.comma.queries.searchMessages, { query: "comet", conversationId: id });
     expect(scoped.map((row) => row.guid)).toEqual(["match"]);
     expect(await t.query(api.comma.queries.searchMessages, { query: "missing" })).toEqual([]);
+  });
+
+  test("sender search filters inside the full-text index before the limit", async () => {
+    // Depends on isFromMe landing in search_text.filterFields on the sibling schema branch.
+    const searchRef = makeFunctionReference("comma/queries:searchMessages") as ApiFromModules<{
+      queries: { searchMessages: typeof searchMessages };
+    }>["queries"]["searchMessages"];
+    const t = authed();
+    const id = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("comma_conversations", conversation("one", 1));
+      for (let i = 0; i < 55; i++) await ctx.db.insert("comma_messages", message(id, "inbound-" + i, i));
+      await ctx.db.insert("comma_messages", { ...message(id, "outgoing", 60), isFromMe: true });
+      await ctx.db.insert("comma_messages", { ...message(id, "outgoing-tombstone", 61), isFromMe: true, retracted: true });
+      return id;
+    });
+    expect((await t.query(searchRef, { query: "comet", conversationId: id, from: "me" })).map((row) => row.guid)).toEqual(["outgoing"]);
+    const inbound = await t.query(searchRef, { query: "comet", from: "them" });
+    expect(inbound).toHaveLength(50);
+    expect(inbound.every((row) => !row.isFromMe)).toBe(true);
   });
 
   test("draft, scheduled and sync queries reject unauthenticated callers", async () => {

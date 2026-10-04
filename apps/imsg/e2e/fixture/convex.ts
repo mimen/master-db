@@ -4,6 +4,7 @@ import type { GenericId, Infer } from "convex/values";
 import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import type { FixtureRouteControls } from "../../server/app";
+import { buildThread } from "../../server/map";
 import { ChatCommands } from "../../server/commands";
 import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Message, ScheduledMessage } from "../../shared/types";
@@ -79,7 +80,24 @@ class FixtureError extends Error {
   constructor(message: string, readonly status = 502) { super(message); }
 }
 
-export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity) {
+export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: FixtureIdentity, args: Record<string, unknown>) {
+  const bounds = [args.before, args.after, args.around].filter((value) => value !== undefined);
+  if (bounds.length !== 1 || typeof bounds[0] !== "number" || !Number.isFinite(bounds[0])) {
+    throw new FixtureError("Exactly one numeric before, after, or around must be provided", 400);
+  }
+  const chatGuid = String(args.conversationId);
+  const result = await bb.chatMessages(chatGuid, { limit: Number.MAX_SAFE_INTEGER });
+  if (!result.ok) throw new FixtureError(result.error);
+  const rows = buildThread(result.value, chatGuid, names);
+  const bound = bounds[0];
+  const window = args.around !== undefined
+    ? [...rows.filter((row) => row.dateCreated <= bound).slice(-40), ...rows.filter((row) => row.dateCreated > bound).slice(0, 40)]
+    : args.before !== undefined ? rows.filter((row) => row.dateCreated < bound).slice(-40)
+      : rows.filter((row) => row.dateCreated > bound).slice(0, 40);
+  return window.map((message) => messageRow(message, bb.clientKeyFor(message.guid)));
+}
+
+export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
   const drafts = new Map<string, Infer<typeof draftDoc>>();
   const receipts = new Map<string, { id: string; status: "sent"; resultGuid?: string }>();
   const inFlight = new Map<string, Promise<string>>();
@@ -148,6 +166,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const url = typeof args.url === "string" ? parsePublicPreviewUrl(args.url) : null;
       return url ? extractLinkPreview('<title>Fixture link preview</title><meta name="description" content="A deterministic preview for fixture messages.">', url) : null;
     },
+    ...additionalHandlers,
     "comma/queries:listConversations": async (args) => paginate(await conversations(), args.paginationOpts as Pagination),
     "comma/queries:resolveChat": async (args) => (await conversations()).find((row) => row.primaryChatGuid === args.chatGuid) ?? null,
     "comma/queries:getConversation": async (args) => (await conversations()).find((row) => row._id === args.conversationId) ?? null,
@@ -155,6 +174,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "comma/queries:searchMessages": async (args) => {
       const params = new URLSearchParams({ q: String(args.query) });
       if (args.conversationId) params.set("chat", String(args.conversationId));
+      if (args.from) params.set("from", String(args.from));
       return (await read<Message[]>(`/api/search?${params}`)).map((message) => {
         const { attachments: _attachments, ...row } = messageRow(message, bb.clientKeyFor(message.guid));
         return row;
