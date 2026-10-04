@@ -48,6 +48,14 @@ export const test = base.extend<DeskFixture>({
     const reset = await request.post("/__fixture/reset");
     expect(reset.ok()).toBe(true);
 
+    const miniRequests: string[] = [];
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname;
+      const allowed = path === "/api/convex-token" || path === "/api/deploy/status" ||
+        path === "/api/desktop-version" || path.startsWith("/api/desktop-release");
+      if (path === "/events" || (path.startsWith("/api/") && !allowed)) miniRequests.push(path);
+    });
+
     await provide({
       chats: CHAT_GUIDS,
       page,
@@ -65,6 +73,8 @@ export const test = base.extend<DeskFixture>({
         expect(response.ok()).toBe(true);
       },
     });
+    await page.unrouteAll({ behavior: "wait" });
+    expect(miniRequests, "the client uses only allowed Mini endpoints").toEqual([]);
   },
 });
 

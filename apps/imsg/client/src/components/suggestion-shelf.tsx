@@ -19,7 +19,7 @@ import { aiApi, shelfSuggestions } from "@/lib/ai-api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";
 import { openExternalUrl } from "@/lib/external-link";
 import { fillComposer } from "@/lib/composer-fill";
-import { useServerEvents } from "@/lib/sse";
+import { commaApi } from "@/lib/convex-api";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
@@ -28,11 +28,6 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
 import { TAPBACK_EMOJI } from "./bubble";
 import type { ReplySuggestion, ReplySuggestions, SuggestionModel } from "@shared/types";
-
-// BlueBubbles' DB lags the SSE event; regenerating immediately would answer
-// the previous message.
-// ponytail: fixed delay, compare basedOnMessageGuid to the event guid if lag outgrows it.
-const AUTO_REFRESH_DELAY_MS = 1500;
 
 /**
  * Precomputed suggestions for this chat when they answer its current last
@@ -66,26 +61,29 @@ export function SuggestionShelf({
   const selectedModel = useSuggestionModel();
   const showSheet = useActionSheet();
   const [result, setResult] = useState<ReplySuggestions | null>(null);
+  const currentResult = useRef(result);
+  currentResult.current = result;
   const [loading, setLoading] = useState(false);
-  const [stale, setStale] = useState(false);
   const [failed, setFailed] = useState(false);
   const [resolved, setResolved] = useState(false);
   const activeRequest = useRef(0);
-  const messageEpoch = useRef(0);
-  const autoRefresh = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const conversation = useQuery(commaApi.resolveChat, { chatGuid });
+  const anchorGuid = conversation?.lastMessage?.guid;
+  const currentAnchor = useRef(anchorGuid);
+  currentAnchor.current = anchorGuid;
+  const stale = !!result && (result.stale || !anchorGuid || result.basedOnMessageGuid !== anchorGuid);
 
   const load = useCallback(
     async (refresh: boolean) => {
       const requestId = ++activeRequest.current;
-      const startedAtMessageEpoch = messageEpoch.current;
+      const startedAtAnchor = currentAnchor.current;
       setLoading(true);
       setFailed(false);
       try {
         const next = await api.aiSuggestions(chatGuid, selectedModel, refresh);
         if (activeRequest.current !== requestId) return;
-        setResult(next);
+        setResult({ ...next, stale: next.stale || currentAnchor.current !== startedAtAnchor });
         setResolved(true);
-        setStale(next.stale || messageEpoch.current !== startedAtMessageEpoch);
       } catch {
         if (activeRequest.current === requestId) setFailed(true);
       } finally {
@@ -101,41 +99,35 @@ export function SuggestionShelf({
 
   useEffect(() => {
     activeRequest.current++;
-    messageEpoch.current = 0;
-    if (autoRefresh.current) clearTimeout(autoRefresh.current);
+    currentResult.current = null;
     setResult(null);
     setLoading(false);
     setResolved(false);
-    setStale(false);
     setFailed(false);
-    if (!enabled || !awaitingReply || mode !== "auto") return;
-    if (precomputed === undefined) return;
+  }, [chatGuid, enabled, awaitingReply, mode, selectedModel]);
+
+  useEffect(() => {
+    if (!enabled || !awaitingReply || mode !== "auto" || !anchorGuid || precomputed === undefined) return;
     if (precomputed) {
+      // A delayed copy of the already displayed shelf must not clear a
+      // manual refresh failure or replace its pending request.
+      const displayed = currentResult.current;
+      if (displayed && !displayed.stale && displayed.basedOnMessageGuid === precomputed.basedOnMessageGuid &&
+        displayed.generatedAt >= precomputed.generatedAt) return;
+      activeRequest.current++;
       setResult(precomputed);
       setResolved(true);
-      return;
+      setLoading(false);
+      setFailed(false);
+    } else {
+      void load(false);
     }
-    void load(false);
-  }, [chatGuid, enabled, awaitingReply, mode, selectedModel, load, precomputed]);
+  }, [chatGuid, enabled, awaitingReply, mode, selectedModel, anchorGuid, precomputed, load]);
 
-  useEffect(() => () => {
-    if (autoRefresh.current) clearTimeout(autoRefresh.current);
+  useEffect(() => {
+    const request = activeRequest;
+    return () => { request.current++; };
   }, []);
-
-  useServerEvents(
-    useCallback(
-      (event) => {
-        if (event.kind !== "new-message" || event.chatGuid !== chatGuid) return;
-        messageEpoch.current++;
-        setStale(true);
-        if (event.message.isFromMe) return;
-        if (mode !== "auto" || !enabled || !awaitingReply) return;
-        if (autoRefresh.current) clearTimeout(autoRefresh.current);
-        autoRefresh.current = setTimeout(() => void load(false), AUTO_REFRESH_DELAY_MS);
-      },
-      [chatGuid, mode, enabled, awaitingReply, load],
-    ),
-  );
 
   const applyTextSuggestion = (suggestion: ReplySuggestion): void => {
     if (!result || stale) return;
@@ -210,7 +202,7 @@ export function SuggestionShelf({
 
   return (
     <View style={[styles.container, styles.shelfRow, shelf]}>
-      {loading ? (
+      {loading && !stale ? (
         <SkeletonPills wide={wide} />
       ) : (
         <PillRow wide={wide}>
@@ -271,7 +263,7 @@ export function SuggestionShelf({
           })}
         </PillRow>
       )}
-      {!loading && (
+      {(!loading || stale) && (
         <Reanimated.View entering={FadeIn.delay(150)}>
           <Pressable
             accessibilityRole="button"

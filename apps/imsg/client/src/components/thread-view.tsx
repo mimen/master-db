@@ -18,7 +18,8 @@ import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatDayDivider, sameDay } from "@/lib/format";
 import { hapticSelect } from "@/lib/haptics";
-import { useServerEvents } from "@/lib/sse";
+import { usePeerTyping } from "@/lib/presence-api";
+import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
@@ -26,7 +27,6 @@ import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
 import type { Message, Participant } from "@shared/types";
 import { useMessages, type JumpTarget } from "@/hooks/use-messages";
-import { foldReaction } from "@/lib/message-window";
 import { usePrivateApi } from "@/hooks/use-health";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
@@ -97,7 +97,7 @@ export function ThreadView({
   const paneRef = useRef<View>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, reconcile } =
+  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, newestMessages } =
     useMessages(chatGuid, jumpTarget);
   messagesRef.current = messages;
   // Milad owes a reply when the newest real message is inbound. Drives whether
@@ -118,7 +118,8 @@ export function ThreadView({
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [highlightGuid, setHighlightGuid] = useState<string | null>(null);
-  const [peerTyping, setPeerTyping] = useState(false);
+  const peerTyping = usePeerTyping(chatGuid);
+  const readObserver = useRef(createInboundReadObserver());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [matchIndex, setMatchIndex] = useState(0);
@@ -148,7 +149,6 @@ export function ThreadView({
     if (scrollingEndTimer.current) clearTimeout(scrollingEndTimer.current);
     scrollingEndTimer.current = setTimeout(() => { scrollingRef.current = false; }, 180);
   }, []);
-  const typingClear = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<Row>>(null);
 
   /**
@@ -169,7 +169,7 @@ export function ThreadView({
     setSearchOpen(false);
     setSearchText("");
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
-    if (!previewOnly) void api.markRead(chatGuid);
+    if (!previewOnly) void api.markRead(chatGuid).catch(() => undefined);
   }, [chatGuid, previewOnly]);
 
   useEffect(() => {
@@ -228,39 +228,11 @@ export function ThreadView({
     return () => node.removeEventListener("wheel", onWheel, { capture: true });
   }, [beginDayChipScroll, chatGuid, endDayChipScroll, messages.length]);
 
-  useServerEvents(
-    useCallback(
-      (event) => {
-        if (
-          (event.kind === "new-message" || event.kind === "updated-message") &&
-          event.chatGuid === chatGuid
-        ) {
-          upsert(event.message);
-          if (event.kind === "new-message" && !event.message.isFromMe) {
-            if (!previewOnly) void api.markRead(chatGuid);
-            setPeerTyping(false);
-          }
-        } else if (event.kind === "reaction" && event.chatGuid === chatGuid) {
-          // Fold the tapback into its target message live — same shape the
-          // server produces on reload — instead of rendering a "Loved …" row.
-          const target = messagesRef.current.find((m) => m.guid === event.targetGuid);
-          if (target) upsert(foldReaction(target, event));
-        } else if (event.kind === "typing" && event.chatGuid === chatGuid) {
-          setPeerTyping(event.display);
-          if (typingClear.current) clearTimeout(typingClear.current);
-          if (event.display) {
-            typingClear.current = setTimeout(() => setPeerTyping(false), 12000);
-          }
-        } else if (event.kind === "resync") {
-          // The event stream had a gap — anything sent or received meanwhile
-          // never arrived as an event. Pull the thread current again.
-          reconcile();
-          if (!previewOnly) void api.markRead(chatGuid);
-        }
-      },
-      [chatGuid, upsert, reconcile, previewOnly],
-    ),
-  );
+  useEffect(() => {
+    if (readObserver.current.observe(chatGuid, [...messages, ...newestMessages], !previewOnly)) {
+      void api.markRead(chatGuid).catch(() => undefined);
+    }
+  }, [chatGuid, messages, newestMessages, previewOnly]);
 
   const rows = useMemo<Row[]>(() => {
     const visible = messages.filter((m) => !m.isGroupEvent || m.text);

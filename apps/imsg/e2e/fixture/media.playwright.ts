@@ -7,10 +7,11 @@ for (const surface of ["bubble", "gallery", "lightbox"] as const) {
     page.on("request", (request) => { if (new URL(request.url()).pathname.startsWith("/api/attachments/")) miniRequests.push(request.url()); });
     await page.route("**/__fixture/convex", async (route) => {
       const body = route.request().postDataJSON() as { name: string };
-      const response = await route.fetch();
+      if (!["comma/queries:listMessages", "comma/history:messageWindow", "comma/media:gallery", "comma/media:attachmentMedia"].includes(body.name)) return route.continue();
+      const response = await desk.request.post("/__fixture/convex", { data: body });
       const result = await response.json();
-      if (body.name === "comma/queries:listMessages") {
-        for (const message of result.page) for (const attachment of message.attachments) {
+      if (body.name === "comma/queries:listMessages" || body.name === "comma/history:messageWindow") {
+        for (const message of body.name === "comma/history:messageWindow" ? result : result.page) for (const attachment of message.attachments) {
           attachment.originalUrl = null;
           if (surface === "bubble") attachment.thumbUrl = null;
         }

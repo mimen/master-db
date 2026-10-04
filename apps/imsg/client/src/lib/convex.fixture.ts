@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { getFunctionName, type FunctionArgs, type FunctionReference, type FunctionReturnType } from "convex/server";
 import type { PaginatedQueryArgs, PaginatedQueryReference } from "convex/react";
 import { fixtureCommandWatch } from "./fixture-command-watch";
-import { subscribeServerEvents } from "./sse";
 
 type Query = FunctionReference<"query">;
 type Mutation = FunctionReference<"mutation">;
@@ -43,9 +42,8 @@ export function useQuery<Ref extends Query>(ref: Ref, args: FunctionArgs<Ref> | 
       } finally { inFlight = false; }
     };
     void load();
-    const unsubscribe = subscribeServerEvents(() => { void load(); });
     const timer = setInterval(() => { void load(); }, 500);
-    return () => { active = false; clearInterval(timer); unsubscribe(); };
+    return () => { active = false; clearInterval(timer); };
   }, [key, name]);
   return snapshot?.key === key ? snapshot.value : undefined;
 }
@@ -69,4 +67,8 @@ export function useConvex() {
 
 export function useConvexAuth() {
   return { isLoading: false, isAuthenticated: true };
+}
+
+export function useConvexConnectionState() {
+  return { isWebSocketConnected: true };
 }

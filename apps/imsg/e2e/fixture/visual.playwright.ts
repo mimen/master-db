@@ -245,8 +245,9 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
       held = false;
       waiting.splice(0).forEach((resolve) => resolve());
     };
-    await page.route("**/api/ai/suggestions/**", async (route) => {
-      if (route.request().method() !== "GET") return route.continue();
+    await page.route("**/__fixture/convex", async (route) => {
+      const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
+      if (body.name !== "comma/outbox:enqueue" || body.args.payload?.kind !== "suggestions") return route.continue();
       if (fail) return route.fulfill({ status: 502, json: { error: "gateway down" } });
       if (held) await new Promise<void>((resolve) => waiting.push(resolve));
       return route.continue();
@@ -268,13 +269,19 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
     expect(Math.abs(loadedBox!.y - loadingBox!.y)).toBeLessThanOrEqual(1);
     await expect(page.getByText("Suggestions unavailable")).toHaveCount(0);
 
-    const regenerated = page.waitForRequest((request) => request.url().includes("/api/ai/suggestions/"));
+    held = true;
+    const regenerated = page.waitForRequest((request) => {
+      if (!request.url().endsWith("/__fixture/convex")) return false;
+      const body = request.postDataJSON() as { name: string; args: { payload?: { kind: string } } };
+      return body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "suggestions";
+    });
     await desk.request.post("/__fixture/receive", {
       data: { chatGuid: "iMessage;-;+16195550101", text: "Also, is parking validated?", handle: "+16195550101" },
     });
     await expect(page.getByRole("button", { name: "New message, refresh suggestions" })).toBeVisible();
     await page.screenshot({ path: `/tmp/comma-shelf-stale-${scheme}.png`, animations: "disabled" });
     await regenerated;
+    release();
     await expect(page.getByRole("button", { name: /^Regenerate suggestions/ })).toBeVisible();
 
     fail = true;
@@ -285,7 +292,7 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
     fail = false;
     await page.getByRole("button", { name: "Retry suggestions" }).click();
     await expect(pill).toBeVisible();
-    await page.unroute("**/api/ai/suggestions/**");
+    await page.unroute("**/__fixture/convex");
 
     await page.evaluate(() => localStorage.setItem(
       "imsg.settings.v2",
@@ -633,7 +640,7 @@ test("typing indicator renders from peer presence", async ({ desk }) => {
   expect(Math.max(...reducedPositions) - Math.min(...reducedPositions)).toBeLessThan(0.1);
 });
 
-test("messages send through the real UI and fixture replies arrive over SSE", async ({ desk }) => {
+test("messages send through the real UI and fixture replies arrive through Convex", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const page = desk.page;
   await page.getByTestId("conversation-row").first().click();

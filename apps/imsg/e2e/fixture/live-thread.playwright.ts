@@ -22,9 +22,7 @@ async function holdThreadFetches(page: Page, chatGuid: string): Promise<() => vo
 for (const history of ["opened earlier", "never opened"] as const) {
   test(`a message seen in the sidebar is in the thread before its fetch lands: chat ${history}`, async ({ desk }) => {
     const page = desk.page;
-    const stream = page.waitForRequest((request) => request.url().endsWith("/events"));
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await stream;
     const rows = page.getByTestId("conversation-row");
     const thread = page.getByTestId("thread-view");
     const nina = rows.filter({ hasText: "Nina Park" });
@@ -51,3 +49,38 @@ for (const history of ["opened earlier", "never opened"] as const) {
     }
   });
 }
+
+test("Convex updates edit and retract a confirmed send without reviving its optimistic row", async ({ desk }) => {
+  const page = desk.page;
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  const thread = page.getByTestId("thread-view");
+  const composer = page.getByPlaceholder("iMessage");
+  await composer.fill("A live query send");
+  await composer.press("Enter");
+  await expect(thread.getByText("A live query send", { exact: true })).toHaveCount(1);
+  let guid = "";
+  await expect.poll(async () => {
+    const response = await desk.request.post("/__fixture/convex", {
+      data: { name: "comma/queries:listMessages", args: { conversationId: desk.chats.needs, paginationOpts: { numItems: 100, cursor: null } } },
+    });
+    const { page: messages } = await response.json() as { page: Array<{ guid: string; text: string }> };
+    guid = messages.find((message) => message.text === "A live query send")?.guid ?? "";
+    return guid;
+  }).toMatch(/^out-/);
+  const command = async (payload: { kind: string; messageGuid: string; text?: string; reaction?: string; remove?: boolean }) => {
+    const result = await desk.request.post("/__fixture/convex", {
+      data: { name: "comma/outbox:enqueue", args: { conversationId: desk.chats.needs,
+        clientKey: `live-${payload.kind}`, payload } },
+    });
+    expect(result.ok()).toBe(true);
+  };
+  await command({ kind: "edit", messageGuid: guid, text: "Edited in Convex" });
+  await expect(thread.getByText("Edited in Convex", { exact: true })).toHaveCount(1);
+  await expect(thread.getByText("A live query send", { exact: true })).toHaveCount(0);
+  await command({ kind: "react", messageGuid: guid, reaction: "like", remove: false });
+  await expect(thread.getByText("👍", { exact: true })).toBeVisible();
+  await command({ kind: "unsend", messageGuid: guid });
+  await expect(thread.getByText("Edited in Convex", { exact: true })).toHaveCount(0);
+  await expect(thread.getByText("A live query send", { exact: true })).toHaveCount(0);
+});

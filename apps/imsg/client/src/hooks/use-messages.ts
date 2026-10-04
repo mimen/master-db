@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { registerMessageActions } from "@/lib/api";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
-import { liveMessagePreview } from "@/lib/live-message";
-import { settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
+import { messageWindow } from "@/lib/history-api";
+import { reconcileWindow, settleTemp, sortByDate, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import type { Message } from "@shared/types";
 import { useMessageWindow } from "./use-message-window";
@@ -28,8 +28,8 @@ export interface UseMessagesResult {
   upsert: (message: Message) => void;
   replaceTemp: (tempGuid: string, message: Message) => void;
   remove: (guid: string) => void;
-  /** Refetch the newest window and fold it in — for after an event-stream gap. */
-  reconcile: () => void;
+  /** Latest live window, including while viewing anchored history. */
+  newestMessages: Message[];
 }
 
 /**
@@ -38,7 +38,7 @@ export interface UseMessagesResult {
  * (matched by clientKey or guid) arrives, so the optimistic bubble never
  * blinks.
  */
-function useConvexMessages(conversationId: string | null, chatGuid: string | null): UseMessagesResult {
+function useConvexMessages(conversationId: string | null, chatGuid: string | null, newest: readonly Message[]): UseMessagesResult {
   const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listMessages,
     conversationId ? { conversationId: conversationId as never } : "skip",
@@ -50,7 +50,16 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
     if (chatGuid && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(chatGuid, true));
   }, [chatGuid, status]);
   const remote = useMemo(() => sortByDate(results.map(messageToMessage)), [results]);
-  const messages = useMemo(() => mergeConvexMessages(liveMessagePreview.withHistory(chatGuid, remote), local), [chatGuid, remote, local]);
+  const mirrored = useMemo(() => reconcileWindow(remote, [...newest]), [newest, remote]);
+  const messages = useMemo(() => mergeConvexMessages(mirrored, local), [mirrored, local]);
+  // Retire overlays once a real mirrored row owns the send. Otherwise an unsent
+  // message could reappear from its old local acknowledgement after retraction.
+  useEffect(() => {
+    const confirmed = mirrored.filter((message) => !message.guid.startsWith("temp-"));
+    const remaining = local.filter((message) => !confirmed.some((row) => row.guid === message.guid ||
+      (message.clientKey && row.clientKey === message.clientKey)));
+    if (remaining.length !== local.length) setLocal(remaining);
+  }, [mirrored, local]);
   const upsert = useCallback((message: Message) => {
     setLocal((current) => upsertMessage(current, message));
   }, []);
@@ -76,19 +85,24 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
     upsert,
     replaceTemp,
     remove,
-    // Convex queries are live; there is no stream gap to reconcile.
-    reconcile: noop,
+    newestMessages: [...newest],
   };
 }
 
 export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
   const resolved = useQuery(commaApi.resolveChat, chatGuid ? { chatGuid } : "skip");
   const conversationId = resolved?._id ?? null;
-  const convex = useConvexMessages(!target ? conversationId : null, !target ? chatGuid : null);
+  // This window can render the sidebar's newest message while pagination loads,
+  // and keeps the active thread's read observer live during a historical jump.
+  const newestRows = useQuery(messageWindow, conversationId && resolved?.lastMessage
+    ? { conversationId, before: resolved.lastMessage.dateCreated + 1 } : "skip");
+  const newest = useMemo(() => newestRows?.map(messageToMessage) ?? [], [newestRows]);
+  const convex = useConvexMessages(!target ? conversationId : null, !target ? chatGuid : null, target ? [] : newest);
   const anchored = useMessageWindow(target ? conversationId : null, target ? chatGuid : null, target);
   const selected = target ? anchored : convex;
   const result = {
     ...selected,
+    newestMessages: newest,
     loading: chatGuid !== null && selected.messages.length === 0 && (resolved === undefined || selected.loading),
   };
   useEffect(() => registerMessageActions(result.messages), [result.messages]);

@@ -24,6 +24,7 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
   const pagingNewer = useRef(false);
   const loadedOlder = useRef(false);
   const loadedNewer = useRef(false);
+  const pageSubscriptions = useRef(new Map<string, () => void>());
 
   useEffect(() => {
     generation.current++;
@@ -36,6 +37,12 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
     setHasMore(false);
     setHasNewer(false);
     if (chatGuid) markOpenStart(chatGuid);
+    const subscriptions = pageSubscriptions.current;
+    return () => {
+      generation.current++;
+      for (const unsubscribe of subscriptions.values()) unsubscribe();
+      subscriptions.clear();
+    };
   }, [conversationId, chatGuid, around, targetGuid]);
 
   useEffect(() => {
@@ -58,13 +65,32 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
     if (!conversationId || !edge || latch.current) return;
     const gen = generation.current;
     latch.current = true;
-    void convexClient.query(messageWindow, {
-      conversationId: conversationId as MessageWindowArgs["conversationId"], [direction]: edge.dateCreated,
-    }).then((rows) => {
+    const args = { conversationId: conversationId as MessageWindowArgs["conversationId"], [direction]: edge.dateCreated };
+    void convexClient.query(messageWindow, args).then((rows) => {
       if (generation.current !== gen) return;
       (direction === "before" ? loadedOlder : loadedNewer).current = true;
       const remote = rows.map(messageToMessage);
       setMessages((current) => reconcileWindow(current, remote));
+      const key = JSON.stringify(args);
+      if (!pageSubscriptions.current.has(key)) {
+        // Every loaded historical page stays live for edits, reactions and
+        // retractions, including pages outside the original anchored window.
+        let previous = remote;
+        const watch = convexClient.watchQuery(messageWindow, args);
+        const refresh = () => {
+          if (generation.current !== gen) return;
+          const batch = watch.localQueryResult();
+          if (!batch) return;
+          const next = batch.map(messageToMessage);
+          const fetched = new Set(next.map((message) => message.guid));
+          const removed = new Set(previous.filter((message) => !fetched.has(message.guid)).map((message) => message.guid));
+          previous = next;
+          setMessages((current) => reconcileWindow(current.filter((message) => !removed.has(message.guid)), next));
+        };
+        const unsubscribe = watch.onUpdate(refresh);
+        pageSubscriptions.current.set(key, unsubscribe);
+        refresh();
+      }
       (direction === "before" ? setHasMore : setHasNewer)(rows.length >= 40);
     }).catch(() => undefined).finally(() => {
       if (generation.current === gen) latch.current = false;
@@ -79,7 +105,6 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
   return {
     messages, loading: conversationId !== null && batch === undefined, failed: false,
     retry: noop, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove,
-    // The anchored subscription reconciles live changes without a REST refresh.
-    reconcile: noop,
+    newestMessages: [],
   };
 }

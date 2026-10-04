@@ -26,7 +26,7 @@ import {
 } from "@/lib/keyboard/controller";
 import { onSelectChat } from "@/lib/selection";
 import { playReceive } from "@/lib/sounds";
-import { useServerEvents } from "@/lib/sse";
+import { useReceiveSound } from "@/hooks/use-receive-sound";
 import { openThreadSearch } from "@/lib/thread-search";
 import { showToast } from "@/lib/toast";
 
@@ -77,9 +77,7 @@ export function MessagesWorkspace({
     });
   }, [shell.dispatch]);
 
-  useServerEvents(useCallback((event) => {
-    if (event.kind === "new-message" && !event.message.isFromMe) playReceive();
-  }, []));
+  useReceiveSound(loading ? null : allChats, playReceive);
 
   // Wide-mode overlays (and the Contacts tab's "message them" action)
   // publish chats to open here instead of navigating.
