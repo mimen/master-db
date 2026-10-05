@@ -6,12 +6,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Reanimated, {
   FadeIn,
   FadeInUp,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withTiming,
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
@@ -22,7 +16,7 @@ import { fillComposer } from "@/lib/composer-fill";
 import { commaApi } from "@/lib/convex-api";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { useType } from "@/hooks/use-type";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
@@ -55,7 +49,7 @@ export function SuggestionShelf({
   reactionPreview,
 }: SuggestionShelfProps) {
   const theme = useTheme();
-  const type = useType();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const { wide } = useLayoutMode();
   const mode = useSuggestionMode();
   const selectedModel = useSuggestionModel();
@@ -185,7 +179,7 @@ export function SuggestionShelf({
   const event = result?.event ?? null;
   const eventUrl = event ? calendarTemplateUrl(event) : null;
   const shelf = { borderTopColor: theme.divider, backgroundColor: theme.background };
-  const pillText = { fontSize: type.secondary, lineHeight: Math.round(type.secondary * 1.3) };
+  const pillText = { fontSize: wide ? 12.5 : 15, lineHeight: wide ? 16 : 20 };
 
 
   if (mode === "on-demand" && !resolved && !loading && !failed) {
@@ -226,9 +220,8 @@ export function SuggestionShelf({
                 style={({ hovered, pressed }) => [
                   styles.pill,
                   styles.eventPill,
-                  { backgroundColor: theme.background, borderColor: theme.accent, opacity: stale ? 0.5 : 1 },
-                  !stale && hovered && !pressed && { backgroundColor: theme.backgroundElement },
-                  !stale && pressed && { backgroundColor: theme.backgroundSelected },
+                  { backgroundColor: signal.chipBg, borderColor: theme.accent, opacity: stale ? 0.5 : 1 },
+                  !stale && (hovered || pressed) && { backgroundColor: signal.chipHover },
                 ]}
               >
                 {() => <>
@@ -256,9 +249,8 @@ export function SuggestionShelf({
                   onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
                   style={({ hovered, pressed }) => [
                     styles.pill,
-                    { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder, opacity: stale ? 0.5 : 1 },
-                    !stale && hovered && !pressed && { backgroundColor: theme.backgroundSelected },
-                    !stale && pressed && { backgroundColor: theme.backgroundSelected, opacity: 0.8 },
+                    { backgroundColor: signal.chipBg, borderColor: signal.chipBorder, opacity: stale ? 0.5 : 1 },
+                    !stale && (hovered || pressed) && { backgroundColor: signal.chipHover },
                   ]}
                 >
                   {() => <>
@@ -334,27 +326,20 @@ function SkeletonPills({ wide }: { wide: boolean }): React.JSX.Element {
       role="status"
       style={[styles.pillRow, !wide && styles.noWrap]}
     >
-      {SKELETON_WIDTHS.map((width, index) => <SkeletonPill key={width} width={width} index={index} />)}
+      {SKELETON_WIDTHS.map((width) => <SkeletonPill key={width} width={width} />)}
     </View>
   );
 }
 
-function SkeletonPill({ width, index }: { width: number; index: number }): React.JSX.Element {
-  const theme = useTheme();
-  const reduceMotion = useReducedMotion();
-  const glow = useSharedValue(0);
-  useEffect(() => {
-    if (reduceMotion) return;
-    glow.value = withDelay(index * 160, withRepeat(withTiming(1, { duration: 900 }), -1, true));
-  }, [glow, index, reduceMotion]);
-  const breathe = useAnimatedStyle(() => ({ opacity: 0.45 + glow.value * 0.55 }));
+/** Skeletons hold still at the skeleton ink; no shimmer. */
+function SkeletonPill({ width }: { width: number }): React.JSX.Element {
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   return (
-    <Reanimated.View
+    <View
       style={[
         styles.pill,
         styles.skeleton,
-        { width, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
-        breathe,
+        { width, backgroundColor: signal.skeleton, borderColor: "transparent" },
       ]}
     />
   );
@@ -367,7 +352,8 @@ function GhostPill({ icon, label, accent = false, onPress }: {
   onPress: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
-  const type = useType();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const { wide } = useLayoutMode();
   const rest = accent ? theme.accent : theme.textSecondary;
   return (
     <Reanimated.View entering={FadeIn} style={styles.pillWrap}>
@@ -378,14 +364,13 @@ function GhostPill({ icon, label, accent = false, onPress }: {
         style={({ hovered, pressed }) => [
           styles.pill,
           styles.ghost,
-          { borderColor: theme.cardBorder },
-          hovered && !pressed && { backgroundColor: theme.backgroundElement },
-          pressed && { backgroundColor: theme.backgroundSelected },
+          { backgroundColor: signal.chipBg, borderColor: signal.chipBorder },
+          (hovered || pressed) && { backgroundColor: signal.chipHover },
         ]}
       >
         {({ hovered, pressed }) => <>
           <Ionicons name={icon} size={14} color={hovered || pressed ? theme.text : rest} />
-          <Text style={[styles.ghostText, { color: hovered || pressed ? theme.text : rest, fontSize: type.secondary }]}>
+          <Text style={[styles.ghostText, { color: hovered || pressed ? theme.text : rest, fontSize: wide ? 12.5 : 15 }]}>
             {label}
           </Text>
         </>}
@@ -393,6 +378,12 @@ function GhostPill({ icon, label, accent = false, onPress }: {
     </Reanimated.View>
   );
 }
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: { chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)", chipHover: "#F4F4F5", skeleton: "rgba(0,0,0,0.06)" },
+  dark: { chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)", chipHover: "#232326", skeleton: "rgba(255,255,255,0.07)" },
+} as const;
 
 const styles = StyleSheet.create({
   container: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },
@@ -402,9 +393,9 @@ const styles = StyleSheet.create({
   scroller: { flex: 1 },
   scrollRow: { flexDirection: "row", gap: 8 },
   noWrap: { flexWrap: "nowrap", overflow: "hidden" },
-  eventPill: { borderWidth: 1 },
-  pill: { borderRadius: 17, borderWidth: StyleSheet.hairlineWidth, minHeight: 34, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
-  skeleton: { height: 34 },
+  eventPill: {},
+  pill: { borderRadius: 999, borderWidth: 1, minHeight: 32, paddingHorizontal: 12, paddingVertical: 8, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 7 },
+  skeleton: { height: 32 },
   ghost: { alignSelf: "flex-start", gap: 6, paddingHorizontal: 11 },
   ghostText: { fontWeight: "500" },
   refresh: { alignItems: "center", borderRadius: 13, height: 26, justifyContent: "center", marginTop: 4, width: 26 },

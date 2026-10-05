@@ -97,7 +97,7 @@ for (const order of [
     const text = `Flicker probe ${order.name}`;
     await traceBubble(page, text);
     await sendText(page, text);
-    await expect(page.getByText(" · Sent")).toBeVisible();
+    await expect(page.getByText("Sent", { exact: true })).toBeVisible();
     await page.waitForTimeout(800);
     expect(await readTrace(page)).toEqual({ nodes: 1, dips: 0 });
     await expect(page.getByTestId("thread-view").getByText(text, { exact: true })).toHaveCount(1);
@@ -117,7 +117,7 @@ test("a slow send renders at full color and only says Sending… once it is actu
   await page.screenshot({ path: "/tmp/comma-send-pending-early.png" });
   await expect(page.getByText("Sending…")).toBeVisible({ timeout: 2000 });
   await page.screenshot({ path: "/tmp/comma-send-pending-slow.png" });
-  await expect(page.getByText(" · Sent")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText("Sent", { exact: true })).toBeVisible({ timeout: 5000 });
   await expect(page.getByText("Sending…")).toHaveCount(0);
   await page.screenshot({ path: "/tmp/comma-send-settled.png" });
   expect(await readTrace(page)).toEqual({ nodes: 1, dips: 0 });

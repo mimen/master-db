@@ -1,6 +1,6 @@
 import { expect, test } from "../fixtures/desk";
 
-test("a burst of failed sends raises one toast and keeps every Not Delivered bubble", async ({ desk }) => {
+test("a burst of failed sends raises one toast and keeps every Not delivered bubble", async ({ desk }) => {
   const page = desk.page;
   await page.addInitScript(() => {
     const seen: string[] = [];
@@ -8,7 +8,7 @@ test("a burst of failed sends raises one toast and keeps every Not Delivered bub
     new MutationObserver(() => {
       for (const node of document.querySelectorAll("div")) {
         const text = node.textContent ?? "";
-        if (text === "Couldn't send. Check the Mini connection." && node.children.length === 0 && !node.dataset.counted) {
+        if (text === "Couldn't send. Check the Mac mini connection." && node.children.length === 0 && !node.dataset.counted) {
           node.dataset.counted = "1";
           seen.push(text);
         }
@@ -27,13 +27,13 @@ test("a burst of failed sends raises one toast and keeps every Not Delivered bub
     await composer.press("Enter");
     await page.waitForTimeout(150);
   }
-  await expect(page.getByText(/Not Delivered/)).toHaveCount(3);
-  const toast = page.getByText("Couldn't send. Check the Mini connection.");
+  await expect(page.getByText("Not delivered", { exact: true })).toHaveCount(3);
+  const toast = page.getByText("Couldn't send. Check the Mac mini connection.");
   await expect(toast).toBeVisible();
   await expect(toast).toHaveCount(0, { timeout: 4_000 });
   await composer.fill("fourth failed probe, same burst");
   await composer.press("Enter");
-  await expect(page.getByText(/Not Delivered/)).toHaveCount(4);
+  await expect(page.getByText("Not delivered", { exact: true })).toHaveCount(4);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts.length)).toBe(1);
   await desk.request.post("/__fixture/fault", { data: { method: null } });

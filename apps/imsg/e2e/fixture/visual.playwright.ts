@@ -592,29 +592,32 @@ test("typing indicator renders from peer presence", async ({ desk }) => {
   const positions = await firstDot.evaluate(async (dot) => {
     const samples: number[] = [];
     for (let index = 0; index < 8; index += 1) {
-      samples.push(dot.getBoundingClientRect().y);
+      samples.push(Number(getComputedStyle(dot).opacity));
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return samples;
   });
-  expect(Math.max(...positions) - Math.min(...positions)).toBeGreaterThan(1);
+  expect(Math.max(...positions) - Math.min(...positions)).toBeGreaterThan(0.2);
   await desk.page.screenshot({ path: "/tmp/imsg-typing-indicator-after.png" });
 
   await desk.setTyping(desk.chats.needs, false);
   await expect(indicator).toBeHidden();
 
+  // Reduce Motion is read once at app start, so the reduced case needs a fresh page.
   await desk.page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await desk.page.reload();
+  await desk.page.getByTestId("conversation-row").first().click();
   await desk.setTyping(desk.chats.needs, true);
   await expect(indicator).toBeVisible();
   const reducedPositions = await firstDot.evaluate(async (dot) => {
     const samples: number[] = [];
     for (let index = 0; index < 4; index += 1) {
-      samples.push(dot.getBoundingClientRect().y);
+      samples.push(Number(getComputedStyle(dot).opacity));
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return samples;
   });
-  expect(Math.max(...reducedPositions) - Math.min(...reducedPositions)).toBeLessThan(0.1);
+  expect(Math.max(...reducedPositions) - Math.min(...reducedPositions)).toBeLessThan(0.01);
 });
 
 test("messages send through the real UI and fixture replies arrive through Convex", async ({ desk }) => {

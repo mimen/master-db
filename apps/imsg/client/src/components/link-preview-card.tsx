@@ -5,8 +5,8 @@ import { Image } from "expo-image";
 import { useAction } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { LinkPreview } from "@shared/link-preview";
-import { useTheme } from "@/hooks/use-theme";
-import { HOVER_DIM, Radii, Type } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { HOVER_DIM } from "@/constants/theme";
 
 const fetchLinkPreviewRef = makeFunctionReference<"action", { url: string }, LinkPreview | null>("comma/linkPreview:fetchLinkPreview");
 
@@ -18,7 +18,7 @@ export function firstUrl(text: string): string | null {
 }
 
 export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
-  const theme = useTheme();
+  const scheme = useColorScheme();
   const fetchLinkPreview = useAction(fetchLinkPreviewRef);
   const [preview, setPreview] = useState<LinkPreview | null | undefined>(
     cache.has(url) ? cache.get(url) : undefined,
@@ -47,22 +47,19 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 
   if (!preview) return null;
 
-  // The card renders outside the bubble, on the thread background, so it uses neutral colors
-  // for both directions; white-on-tint was invisible against the page.
-  const textColor = theme.text;
-  const secondary = theme.textSecondary;
+  const signal = SIGNAL[scheme === "dark" ? "dark" : "light"];
+  const host = new URL(url).hostname.replace(/^www\./, "");
 
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={preview.title ? `${preview.title}, ${new URL(url).hostname}` : new URL(url).hostname}
+      accessibilityLabel={preview.title ? `${preview.title}, ${host}` : host}
       onPress={() => void openExternalUrl(url)}
       style={({ hovered, pressed }) => [
         styles.card,
         mine && styles.mine,
-        { backgroundColor: theme.backgroundElement },
-        hovered && !pressed && { backgroundColor: theme.backgroundSelected },
-        pressed && { backgroundColor: theme.backgroundSelected, opacity: HOVER_DIM },
+        { backgroundColor: signal.surface, borderColor: signal.bubbleTheirsBorder },
+        (hovered || pressed) && { opacity: HOVER_DIM },
       ]}
     >
       {preview.image && (
@@ -70,51 +67,51 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
       )}
       <View style={styles.body}>
         {preview.title && (
-          <Text numberOfLines={2} style={[styles.title, { color: textColor }]}>
+          <Text numberOfLines={2} style={[styles.title, { color: signal.text }]}>
             {preview.title}
           </Text>
         )}
-        {preview.description && (
-          <Text numberOfLines={2} style={[styles.description, { color: secondary }]}>
-            {preview.description}
-          </Text>
-        )}
-        <Text numberOfLines={1} style={[styles.site, { color: secondary }]}>
-          {(preview.siteName ?? new URL(url).hostname).toUpperCase()}
+        <Text numberOfLines={1} style={[styles.site, { color: signal.textSecondary }]}>
+          {preview.siteName ?? host}
         </Text>
       </View>
     </Pressable>
   );
 }
 
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: { surface: "#FFFFFF", bubbleTheirsBorder: "rgba(0,0,0,0.07)", text: "#17171A", textSecondary: "#55555C" },
+  dark: { surface: "#1C1C1F", bubbleTheirsBorder: "rgba(255,255,255,0.05)", text: "#EDEDEF", textSecondary: "#A6A6AD" },
+} as const;
+
 const styles = StyleSheet.create({
   card: {
-    marginTop: 6,
-    borderRadius: Radii.input,
+    borderRadius: 14,
+    borderWidth: 1,
     overflow: "hidden",
-    maxWidth: 280,
+    width: 340,
+    maxWidth: "100%",
   },
   mine: {
     alignSelf: "flex-end",
   },
   image: {
     width: "100%",
-    height: 130,
+    height: 150,
   },
   body: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 13,
+    paddingTop: 10,
+    paddingBottom: 11,
+    gap: 2,
   },
   title: {
-    fontSize: Type.secondary,
+    fontSize: 14,
     fontWeight: "600",
-  },
-  description: {
-    fontSize: 12,
-    marginTop: 1,
+    lineHeight: 18,
   },
   site: {
-    fontSize: 10,
-    marginTop: 3,
+    fontSize: 12.5,
   },
 });
