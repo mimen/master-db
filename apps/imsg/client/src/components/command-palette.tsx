@@ -4,7 +4,8 @@ import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
@@ -15,27 +16,31 @@ import {
   flattenSections,
   type PaletteCommand,
   type PaletteItem,
+  type PaletteSection,
 } from "@/lib/palette/model";
+import { commandQuery, peopleFirstSections, recencyAge, turnAge, type RowAge } from "@/lib/palette-people";
+import { splitAroundMatch } from "@/lib/split-match";
+import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { openPersonPane } from "@/lib/person-pane";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { openSettingsPane } from "@/lib/settings-pane";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
 import type { AirtableHumanRow } from "@/lib/identity";
 
-import { ChatAvatar } from "./avatar";
+import { ChatAvatar, PersonAvatar } from "./avatar";
 import {
   PaletteListRow,
   PaletteSectionHeader,
   paletteStyles,
+  usePaletteColors,
   usePaletteCursor,
 } from "./palette/palette-list";
 
 const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  state: "funnel-outline",
-  type: "funnel-outline",
+  state: "filter-outline",
+  type: "people-outline",
   tab: "arrow-forward-outline",
   action: "flash-outline",
 };
@@ -105,27 +110,29 @@ function PaletteRoot({
   onCompose: () => void;
   onShowHelp: () => void;
 }) {
-  const theme = useTheme();
-  const visual = useTriageTheme();
+  const c = usePaletteColors();
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
+  // One clock per open: ages must not tick while the cursor moves.
+  const [now] = useState(() => Date.now());
+  const commandFilter = commandQuery(query);
+  const searchText = commandFilter === null ? query.trim() : "";
 
   // Async sources, tagged by query so a late landing never pollutes a newer
   // view (same policy as the sidebar's deep search).
   useEffect(() => {
-    const q = query.trim();
     setMessages([]);
     setContacts([]);
-    if (q.length < 2) {
+    if (searchText.length < 2) {
       setSearching(false);
       return;
     }
     setSearching(true);
     let cancelled = false;
     const handle = setTimeout(() => {
-      Promise.all([api.search(q).catch(() => []), api.contacts(q).catch(() => [])]).then(
+      Promise.all([api.search(searchText).catch(() => []), api.contacts(searchText).catch(() => [])]).then(
         ([messageHits, contactHits]) => {
           if (cancelled) return;
           setMessages(messageHits);
@@ -138,12 +145,17 @@ function PaletteRoot({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [query]);
+  }, [searchText]);
 
-  const sections = useMemo(
-    () => buildPaletteSections({ query, chats, messages, contacts }),
-    [query, chats, messages, contacts],
-  );
+  const people = useMemo(() => peopleFirstSections(chats, now), [chats, now]);
+  const sections = useMemo((): PaletteSection[] => {
+    if (commandFilter !== null) {
+      // ">" asks for commands only: the engine with no conversations yields just its command list.
+      return buildPaletteSections({ query: commandFilter, chats: [], messages: [], contacts: [] });
+    }
+    if (query.trim() === "") return people.sections;
+    return buildPaletteSections({ query, chats, messages, contacts });
+  }, [commandFilter, query, chats, messages, contacts, people]);
   const flat = useMemo(() => flattenSections(sections), [sections]);
   const flatRef = useRef(flat);
   flatRef.current = flat;
@@ -228,83 +240,162 @@ function PaletteRoot({
       }
       cursorRef.current.move(e.key === "ArrowDown" ? 1 : -1);
     };
+    // ⌘E settles the highlighted conversation, not the one open behind the palette. Window capture
+    // runs before the global dispatcher's document listener, so stopping it here keeps ⌘E single.
+    const onSettle = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== "e" || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const item = flatRef.current[cursorRef.current.indexRef.current];
+      if (item?.kind !== "conversation" && item?.kind !== "group") return;
+      e.preventDefault();
+      e.stopPropagation();
+      void toggleSettleChat(item.chat);
+    };
     document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keydown", onSettle, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keydown", onSettle, true);
+    };
   }, []);
 
+  const typed = query.trim() !== "";
+  const needle = commandFilter ?? query;
   let flatIndex = -1;
 
   return (
-    <View style={{ flex: 1, backgroundColor: visual.overlay }}>
-      <View style={[styles.inputRow, { borderBottomColor: theme.divider }]}>
-        <Ionicons aria-hidden name="search" size={18} color={theme.textSecondary} />
+    <PaletteFrame>
+      <View style={[styles.inputRow, { borderBottomColor: c.divider }]}>
+        <Ionicons aria-hidden name="search" size={17} color={c.icon} />
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search or jump to…"
-          placeholderTextColor={theme.textSecondary}
+          placeholder="Search people and messages, or type a command"
+          placeholderTextColor={c.popTertiary}
           accessibilityLabel="Search or jump to"
           {...({ role: "combobox", "aria-expanded": true, "aria-controls": "command-palette-results" } as object)}
           autoFocus
-          style={[styles.input, { color: theme.text }]}
+          style={[styles.input, { color: c.text }]}
         />
         {query.length > 0 && (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" onPress={() => setQuery("")} hitSlop={8}>
-            {({ hovered, pressed }) => <Ionicons name="close-circle" size={17} color={hovered || pressed ? theme.text : theme.textSecondary} />}
+            {({ hovered, pressed }) => <Ionicons name="close-circle" size={16} color={hovered || pressed ? c.text : c.popTertiary} />}
           </Pressable>
         )}
+        <Text aria-hidden style={[paletteStyles.kbd, { borderColor: c.dividerStrong, color: c.popTertiary }]}>esc</Text>
       </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContent}
         {...({ id: "command-palette-results", role: "listbox", "aria-label": "Results" } as object)}
       >
-        {sections.length === 0 && query.trim().length >= 2 && (
-          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
-            {searching ? "Searching…" : `No results for “${query.trim()}”`}
+        {sections.length === 0 && searchText.length >= 2 && (
+          <Text style={[paletteStyles.empty, { color: c.textSecondary }]}>
+            {searching ? "Searching…" : `No results for “${searchText}”`}
           </Text>
         )}
         {sections.map((section) => (
           <Fragment key={section.title}>
-            {!section.hideHeader && <PaletteSectionHeader title={section.title} />}
+            <PaletteSectionHeader title={section.title} />
             {section.items.map((item) => {
               flatIndex += 1;
               const index = flatIndex;
-              const selected = index === cursor.selectedIndex;
               return (
                 <PaletteListRow
                   key={item.key}
                   paletteKey={item.key}
-                  selected={selected}
+                  selected={index === cursor.selectedIndex}
                   onPress={() => execute(item)}
                   onHover={() => cursor.setSelectedIndex(index)}
                 >
-                  <PaletteRowContent item={item} />
-                  {selected && (
-                    <Text aria-hidden style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>
-                  )}
+                  <PaletteRowContent item={item} needle={needle} age={people.ages.get(item.key)} now={now} />
                 </PaletteListRow>
               );
             })}
           </Fragment>
         ))}
       </ScrollView>
-    </View>
+      <View style={[styles.footer, { borderTopColor: c.divider }]}>
+        <FooterHint keys="↑↓" label="move" />
+        <FooterHint keys="↵" label="open" />
+        {!typed && <FooterHint keys="⌘E" label="settle" />}
+        <View style={{ flex: 1 }} />
+        {!typed && <Text style={[styles.footerText, { color: c.popTertiary }]}>Commands appear as you type</Text>}
+      </View>
+    </PaletteFrame>
   );
 }
 
-function PaletteRowContent({ item }: { item: PaletteItem }) {
-  const theme = useTheme();
+function FooterHint({ keys, label }: { keys: string; label: string }) {
+  const c = usePaletteColors();
+  return (
+    <Text style={[styles.footerText, { color: c.popTertiary }]}>
+      <Text style={[styles.footerKeys, { color: c.textSecondary }]}>{keys}</Text> {label}
+    </Text>
+  );
+}
+
+// TODO(signal-motion): use springs.ts
+const SNAPPY = { stiffness: 566.4, damping: 42.84, mass: 1 } as const;
+
+/** The palette card: scales 0.98 to 1 and fades in on the snappy spring; Reduce Motion lands it at rest. */
+function PaletteFrame({ children }: { children: React.ReactNode }) {
+  const c = usePaletteColors();
+  const reduceMotion = useReducedMotion();
+  const shown = useSharedValue(reduceMotion ? 1 : 0);
+  useEffect(() => {
+    shown.value = reduceMotion ? 1 : withSpring(1, SNAPPY);
+  }, [reduceMotion, shown]);
+  const entrance = useAnimatedStyle(() => ({
+    opacity: Math.min(1, shown.value),
+    transform: [{ scale: 0.98 + 0.02 * shown.value }],
+  }));
+  return (
+    <Reanimated.View style={[styles.frame, { backgroundColor: c.popBg, boxShadow: c.popShadow }, entrance]}>
+      {children}
+    </Reanimated.View>
+  );
+}
+
+/** Title text with the query match bolded. */
+function Highlighted({ text, needle, color, style }: { text: string; needle: string; color: string; style: StyleProp<TextStyle> }) {
+  const split = splitAroundMatch(text, needle);
+  return (
+    <Text numberOfLines={1} style={[style, { color }]}>
+      {split ? (
+        <>
+          {split.before}
+          <Text style={styles.match}>{split.match}</Text>
+          {split.after}
+        </>
+      ) : (
+        text
+      )}
+    </Text>
+  );
+}
+
+function Age({ age }: { age: RowAge | null | undefined }) {
+  const c = usePaletteColors();
+  if (!age) return null;
+  return (
+    <Text style={[styles.age, age.late ? { color: c.turn, fontWeight: "600" } : { color: c.popTertiary }]}>{age.text}</Text>
+  );
+}
+
+function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; needle: string; age?: RowAge; now: number }) {
+  const c = usePaletteColors();
   switch (item.kind) {
     case "command":
       return (
         <>
-          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons aria-hidden name={COMMAND_ICONS[item.command.id.kind]} size={16} color={theme.accent} />
+          <View style={[paletteStyles.iconBadge, { backgroundColor: c.field }]}>
+            <Ionicons aria-hidden name={COMMAND_ICONS[item.command.id.kind]} size={14} color={c.icon} />
           </View>
-          <Text style={[paletteStyles.title, { color: theme.text, flex: 1 }]}>{item.command.title}</Text>
+          <View style={paletteStyles.textCol}>
+            <Highlighted text={item.command.title} needle={needle} color={c.text} style={paletteStyles.title} />
+          </View>
           {item.command.shortcut && (
-            <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>{item.command.shortcut}</Text>
+            <Text style={[paletteStyles.kbd, { borderColor: c.dividerStrong, color: c.popTertiary }]}>{item.command.shortcut}</Text>
           )}
         </>
       );
@@ -316,63 +407,43 @@ function PaletteRowContent({ item }: { item: PaletteItem }) {
           ? item.matchedMember
             ? `Includes ${item.matchedMember}`
             : `${chat.participants.length} people`
-          : (chat.lastMessage?.text ?? "");
+          : "";
       return (
         <>
-          <ChatAvatar chat={chat} size={30} />
-          <View style={paletteStyles.textCol}>
-            <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
-              {chat.displayName}
-            </Text>
+          <ChatAvatar chat={chat} size={22} />
+          <View style={[paletteStyles.textCol, styles.inline]}>
+            <Highlighted text={chat.displayName} needle={needle} color={c.text} style={[paletteStyles.title, styles.shrink]} />
             {subtitle !== "" && (
-              <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
-                {subtitle}
-              </Text>
+              <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: c.popTertiary }]}>{subtitle}</Text>
             )}
           </View>
+          <Age age={age ?? turnAge(chat, now) ?? recencyAge(chat, now)} />
         </>
       );
     }
     case "message": {
       const m = item.message;
+      const sender = m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?");
       return (
         <>
-          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons aria-hidden name="chatbubble-outline" size={15} color={theme.textSecondary} />
+          <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={sender} size={22} />
+          <View style={[paletteStyles.textCol, styles.inline]}>
+            <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: c.text }]}>{sender}</Text>
+            <Highlighted text={m.text} needle={needle} color={c.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
           </View>
-          <View style={paletteStyles.textCol}>
-            <View style={styles.messageTop}>
-              <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
-                {m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?")}
-              </Text>
-              <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>
-                {formatListTimestamp(m.dateCreated)}
-              </Text>
-            </View>
-            <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
-              {m.text}
-            </Text>
-          </View>
+          <Text style={[styles.age, { color: c.popTertiary }]}>{formatListTimestamp(m.dateCreated)}</Text>
         </>
       );
     }
     case "contact":
       return (
         <>
-          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
-            <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
-              {initials(item.contact.name)}
-            </Text>
+          <PersonAvatar address={item.contact.address} name={item.contact.name} size={22} />
+          <View style={[paletteStyles.textCol, styles.inline]}>
+            <Highlighted text={item.contact.name} needle={needle} color={c.text} style={[paletteStyles.title, styles.noShrink]} />
+            <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: c.popTertiary }]}>{item.contact.address}</Text>
           </View>
-          <View style={paletteStyles.textCol}>
-            <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
-              {item.contact.name}
-            </Text>
-            <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
-              {item.contact.address}
-            </Text>
-          </View>
-          <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>Contact card</Text>
+          <Text style={[styles.age, { color: c.popTertiary }]}>Contact card</Text>
         </>
       );
   }
@@ -387,7 +458,7 @@ type ComposeRow =
  * the same cursor/row primitives as the root view. */
 function PaletteCompose({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
-  const visual = useTriageTheme();
+  const c = usePaletteColors();
   const [recipients, setRecipients] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
@@ -524,8 +595,8 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   const canSend = recipients.length > 0 && text.trim().length > 0 && !sending;
 
   return (
-    <View style={{ flex: 1, backgroundColor: visual.overlay }}>
-      <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: theme.divider }]}>
+    <PaletteFrame>
+      <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: c.divider }]}>
         <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>To:</Text>
         <View style={styles.chipWrap}>
           {recipients.map((contact) => (
@@ -566,7 +637,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
                 onPress={() => void addAirtableContact(row.human)}
                 onHover={() => cursor.setSelectedIndex(index)}
               >
-                <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+                <View style={[paletteStyles.iconBadge, { backgroundColor: c.field }]}>
                   <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
                     {initials(row.human.display_name)}
                   </Text>
@@ -588,7 +659,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
               onPress={() => addRecipient(row.contact)}
               onHover={() => cursor.setSelectedIndex(index)}
             >
-              <View style={[paletteStyles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
+              <View style={[paletteStyles.iconBadge, { backgroundColor: c.field }]}>
                 <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
                   {initials(row.contact.name)}
                 </Text>
@@ -601,7 +672,6 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
                   {row.contact.address}
                 </Text>
               </View>
-              {selected && <Text aria-hidden style={[paletteStyles.enterHint, { color: theme.textSecondary }]}>↵</Text>}
             </PaletteListRow>
           );
         })}
@@ -611,7 +681,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           </Text>
         )}
       </ScrollView>
-      <View style={[styles.composeBar, { borderTopColor: theme.divider }]}>
+      <View style={[styles.composeBar, { borderTopColor: c.divider }]}>
         <TextInput
           ref={messageInputRef}
           value={text}
@@ -630,31 +700,64 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           <Ionicons name="arrow-up" size={17} color={canSend ? theme.onAccent : theme.textSecondary} />
         </Pressable>
       </View>
-    </View>
+    </PaletteFrame>
   );
 }
 
 const styles = StyleSheet.create({
+  frame: {
+    borderRadius: 16,
+    flexShrink: 1,
+    maxHeight: "100%",
+    overflow: "hidden",
+  },
   inputRow: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     flexDirection: "row",
     gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    minHeight: 52,
+    paddingHorizontal: 18,
   },
   input: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
   },
   listContent: {
-    paddingBottom: 10,
+    paddingBottom: 8,
+    paddingTop: 6,
   },
-  messageTop: {
+  inline: {
     alignItems: "baseline",
     flexDirection: "row",
     gap: 8,
-    justifyContent: "space-between",
+  },
+  shrink: {
+    flexShrink: 1,
+  },
+  noShrink: {
+    flexShrink: 0,
+  },
+  match: {
+    fontWeight: "700",
+  },
+  age: {
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
+  },
+  footer: {
+    alignItems: "center",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 16,
+    height: 38,
+    paddingHorizontal: 18,
+  },
+  footerText: {
+    fontSize: 11.5,
+  },
+  footerKeys: {
+    fontWeight: "600",
   },
   composeToRow: {
     alignItems: "flex-start",
