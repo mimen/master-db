@@ -109,18 +109,20 @@ export function DesktopAuxPane({
 export function DesktopUtilityPane({
   open,
   onClose,
-  width = AUX_PANE_WIDTH,
+  width: preferredWidth = AUX_PANE_WIDTH,
   children,
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
-  /** Settings asks for more room than the 312px inspector so its rows stay on one line. */
+  /** The width it would like. It takes what the detail column can spare, never under 312. */
   readonly width?: number;
   readonly children: ReactNode;
 }): JSX.Element {
   const { width: windowWidth } = useWindowDimensions();
   const [sidebarWidth] = useSidebarWidth();
   const visual = useTriageTheme();
+  const spare = calculatePaneAdmission({ windowWidth, sidebarWidth }).spareAfterMinimumDetail;
+  const width = Math.max(AUX_PANE_WIDTH, Math.min(preferredWidth, spare));
   const panePresentation = calculatePaneAdmission({
     windowWidth,
     sidebarWidth,
