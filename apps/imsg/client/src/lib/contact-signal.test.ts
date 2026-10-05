@@ -42,6 +42,11 @@ describe("serviceIndex", () => {
     expect(serviceIndex(chats)("(555) 014-2298")).toBe("SMS");
   });
 
+  test("an RCS thread is SMS, as the bubble color is", () => {
+    const chats = [chat("iMessage;-;+15550142298", ["+15550142298"], 300), chat("RCS;-;+15550142298", ["+15550142298"], 10)];
+    expect(serviceIndex(chats)("(555) 014-2298")).toBe("SMS");
+  });
+
   test("with no thread a handle defaults to iMessage", () => {
     const lookup = serviceIndex([chat("SMS;-;t@x.example", ["T@x.example"], 5)]);
     expect(lookup("t@x.example")).toBe("SMS");
