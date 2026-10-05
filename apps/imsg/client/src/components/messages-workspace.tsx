@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { Platform, Text, View } from "react-native";
 
+import { UnknownSenderBanner } from "@/components/contacts-add-panel";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
@@ -412,6 +413,7 @@ export function MessagesWorkspace({
               advancedFrom={selected.guid === advanced?.guid ? advanced.from : undefined}
               toastActive={active}
             />
+            <UnknownSenderBanner key={selected.guid} chat={selected} />
           </ThreadEnter>
         ) : (
           <EmptyState

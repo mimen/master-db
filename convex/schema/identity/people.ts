@@ -51,6 +51,14 @@ export const people = defineTable({
   is_self: v.boolean(), // the cluster that is Milad himself
 
   notes: v.optional(v.string()),
+  notes_updated_at: v.optional(v.string()),
+  // The normalized phone/email Comma reaches this person on first. Absent
+  // means the first phone, then the first email. Set by setPrimaryHandle.
+  primary_handle: v.optional(v.string()),
+  // People the owner said are NOT the same person as this one, so the
+  // duplicate check stops pairing them. Written symmetrically by
+  // markNotDuplicate.
+  not_duplicate_of: v.optional(v.array(v.id("people"))),
   photoStorageId: v.optional(v.id("_storage")),
   photoHash: v.optional(v.string()),
 

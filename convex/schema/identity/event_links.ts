@@ -26,6 +26,8 @@ export const event_links = defineTable({
   chat_guid: v.optional(v.string()),
   airtable_event_id: v.string(),
   event_name: v.string(),
+  // Airtable "Start Date", denormalized at link time like event_name.
+  start_date: v.optional(v.string()),
   created_at: v.string(),
 })
   .index("by_person", ["person_id"])

@@ -16,7 +16,7 @@ import { normalizeEmail, normalizePhone } from "./normalize";
  * READ-ONLY ChatSummary.crm it feeds deliberately do NOT carry it further —
  * see apps/imsg/server/name-resolver.ts's CrmData and shared/types.ts's
  * ChatSummary.crm, which only ever display, never edit. */
-type EventRef = { id: string; name: string; linkId: Id<"event_links"> };
+type EventRef = { id: string; name: string; linkId: Id<"event_links">; start_date?: string };
 
 /** A person's personal tags, alphabetized — the unified `tags` table (see
  * schema/identity/tags.ts) lives separately from the person doc, so unlike
@@ -45,7 +45,7 @@ async function personEventsFor(ctx: QueryCtx, personId: Id<"people">): Promise<E
     .query("event_links")
     .withIndex("by_person", (q) => q.eq("person_id", personId))
     .collect();
-  return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id }));
+  return rows.map((r) => ({ id: r.airtable_event_id, name: r.event_name, linkId: r._id, start_date: r.start_date }));
 }
 
 /** A GROUP chat's linked events — the chat-side twin of personEventsFor. */
@@ -83,7 +83,7 @@ async function personCrmMaps(ctx: QueryCtx): Promise<{
   const eventsByPerson = new Map<Id<"people">, EventRef[]>();
   for (const row of await ctx.db.query("event_links").collect()) {
     if (!row.person_id) continue;
-    const ref: EventRef = { id: row.airtable_event_id, name: row.event_name, linkId: row._id };
+    const ref: EventRef = { id: row.airtable_event_id, name: row.event_name, linkId: row._id, start_date: row.start_date };
     const list = eventsByPerson.get(row.person_id);
     if (list) list.push(ref);
     else eventsByPerson.set(row.person_id, [ref]);
@@ -175,6 +175,7 @@ export const whoIs = query({
         normalized: i.normalized,
         display_name: i.display_name,
         chat_count: i.chat_count,
+        first_seen_at: i.first_seen_at,
       })),
     };
   },
@@ -289,6 +290,10 @@ export const listPeople = query({
         priority: numericPriority(p.priority),
         tags: tagsByPerson.get(p._id) ?? [],
         events: eventsByPerson.get(p._id) ?? [],
+        message_count: p.message_count,
+        primary_handle: p.primary_handle,
+        not_duplicate_of: p.not_duplicate_of,
+        created_at: p.created_at,
       });
     }
     return out;
