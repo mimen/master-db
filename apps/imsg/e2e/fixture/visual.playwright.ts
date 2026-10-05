@@ -525,7 +525,7 @@ test("global command palette applies Messages views from Contacts", async ({ des
   const page = desk.page;
   await page.getByRole("button", { name: "Contacts" }).click();
   await page.keyboard.press("Meta+k");
-  const paletteSearch = page.getByPlaceholder("Search or jump to…");
+  const paletteSearch = page.getByPlaceholder("Search people and messages, or type a command");
   await paletteSearch.fill("Waiting");
   await page.getByText("Waiting", { exact: true }).last().click();
 
