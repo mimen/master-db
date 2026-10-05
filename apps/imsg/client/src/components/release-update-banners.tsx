@@ -1,7 +1,9 @@
 import { shellUpdateAvailable, webUpdateAvailable } from "@shared/release-identity";
-import { useState, useSyncExternalStore, type JSX } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
+import { useSpring } from "@/constants/springs";
 import { Radii, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { reloadWebClient } from "@/lib/deploy-reload";
@@ -36,7 +38,7 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
       testID="release-update-banners"
     >
       {webReady && (
-        <View style={[styles.banner, surface]}>
+        <Banner style={surface}>
           <Text style={[styles.message, { color: theme.text }]}>Web update ready</Text>
           <Text style={[styles.separator, { color: theme.textSecondary }]}>—</Text>
           <Pressable
@@ -47,10 +49,10 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
           >
             {({ hovered, pressed }) => <Text style={[styles.actionText, { color: hovered || pressed ? theme.text : theme.accent }]}>Reload</Text>}
           </Pressable>
-        </View>
+        </Banner>
       )}
       {shellReady && (
-        <View style={[styles.banner, surface]}>
+        <Banner style={surface}>
           <Text style={[styles.message, { color: restartFailed ? theme.destructive : theme.text }]}>
             {restartFailed ? "Restart failed" : "Shell update ready"}
           </Text>
@@ -81,10 +83,21 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
               {restarting ? "Restarting…" : restartFailed ? "Retry" : "Restart"}
             </Text>}
           </Pressable>
-        </View>
+        </Banner>
       )}
     </View>
   );
+}
+
+/** Rises 10pt and fades in on snappy, like a toast; Reduce Motion shows it in place. */
+function Banner({ style, children }: { style: StyleProp<ViewStyle>; children: ReactNode }): JSX.Element {
+  const snappy = useSpring("snappy");
+  const shown = useSharedValue(0);
+  useEffect(() => {
+    shown.value = withSpring(1, snappy);
+  }, [shown, snappy]);
+  const rise = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: 10 * (1 - shown.value) }] }));
+  return <Animated.View style={[styles.banner, style, rise]}>{children}</Animated.View>;
 }
 
 const styles = StyleSheet.create({
