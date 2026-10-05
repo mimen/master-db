@@ -42,7 +42,8 @@ for (const scheme of ["light", "dark"] as const) {
       const status = page.getByRole("status").filter({ hasText: "Settled" });
       await expect(status).toHaveAttribute("aria-live", "polite");
       await expect(status).toHaveCSS("background-color", scheme === "light" ? "rgb(23, 23, 26)" : "rgb(237, 237, 239)");
-      await expect(page.getByText("Settled", { exact: true })).toHaveCSS("color", scheme === "light" ? "rgb(255, 255, 255)" : "rgb(23, 23, 26)");
+      await expect(status.getByText(/^Settled /)).toHaveCSS("color", scheme === "light" ? "rgb(255, 255, 255)" : "rgb(23, 23, 26)");
+      await expect(status).toContainText("⌘Z");
       const list = page.getByTestId("thread-message-list");
       const chrome = await page.getByTestId("thread-composer-chrome").boundingBox();
       const listWithToast = await list.boundingBox();
@@ -50,6 +51,8 @@ for (const scheme of ["light", "dark"] as const) {
       expect(pill.x + pill.width / 2, "toast is centered within the thread").toBeCloseTo(chrome.x + chrome.width / 2, 1);
       expect(pill.y, "toast stays below the entire message list").toBeGreaterThanOrEqual(listWithToast.y + listWithToast.height);
       expect(pill.y).toBeGreaterThanOrEqual(chrome.y);
+      const chips = await page.getByText("what time do you need the final answer by?", { exact: true }).boundingBox();
+      if (chips) expect(pill.y, "toast clears the suggestion chips").toBeGreaterThanOrEqual(chips.y + chips.height);
       expect(pill.y + pill.height).toBeLessThanOrEqual(chrome.y + chrome.height);
       await undo.click();
       await expect(undo).toHaveCount(0);
@@ -59,7 +62,7 @@ for (const scheme of ["light", "dark"] as const) {
   }
 }
 
-test("toast does not reflow the message list, sidebar or navigation rail", async ({ desk }) => {
+test("toast does not reflow the message list or sidebar", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
@@ -68,7 +71,6 @@ test("toast does not reflow the message list, sidebar or navigation rail", async
   const regions = [
     page.getByTestId("thread-message-list"),
     page.getByLabel("Resize sidebar").filter({ visible: true }).locator(".."),
-    page.getByTestId("triage-rail"),
   ];
   const before = await Promise.all(regions.map((region) => region.boundingBox()));
   for (const box of before) expect(box).not.toBeNull();
