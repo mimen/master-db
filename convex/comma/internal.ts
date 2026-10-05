@@ -31,6 +31,18 @@ function serviceOf(chatGuid: string): string {
 }
 
 /** Newest activity wins; ties prefer iMessage, then RCS, then SMS, then guid order. */
+export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string {
+  const ranked = [...chats].sort(
+    (a, b) =>
+      b.lastMessageAt - a.lastMessageAt ||
+      (SERVICE_RANK[serviceOf(a.chatGuid)] ?? 9) - (SERVICE_RANK[serviceOf(b.chatGuid)] ?? 9) ||
+      a.chatGuid.localeCompare(b.chatGuid),
+  );
+  const first = ranked[0];
+  if (!first) throw new Error("conversation has no chats");
+  return first.chatGuid;
+}
+
 /** Structural equality over Convex values, ignoring object key order. */
 function sameValue(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -43,18 +55,6 @@ function sameValue(a: unknown, b: unknown): boolean {
 
 function sameFields<T extends object>(existing: T, fields: Partial<T>): boolean {
   return Object.entries(fields).every(([key, value]) => sameValue(existing[key as keyof T], value));
-}
-
-export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string {
-  const ranked = [...chats].sort(
-    (a, b) =>
-      b.lastMessageAt - a.lastMessageAt ||
-      (SERVICE_RANK[serviceOf(a.chatGuid)] ?? 9) - (SERVICE_RANK[serviceOf(b.chatGuid)] ?? 9) ||
-      a.chatGuid.localeCompare(b.chatGuid),
-  );
-  const first = ranked[0];
-  if (!first) throw new Error("conversation has no chats");
-  return first.chatGuid;
 }
 
 const conversationInput = v.object({
