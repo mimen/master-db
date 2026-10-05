@@ -6,6 +6,7 @@ import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
+import { Springs } from "@/constants/springs";
 
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
@@ -34,7 +35,6 @@ import {
   PaletteListRow,
   PaletteSectionHeader,
   paletteStyles,
-  usePaletteColors,
   usePaletteCursor,
 } from "./palette/palette-list";
 
@@ -110,7 +110,7 @@ function PaletteRoot({
   onCompose: () => void;
   onShowHelp: () => void;
 }) {
-  const c = usePaletteColors();
+  const theme = useTheme();
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -264,24 +264,24 @@ function PaletteRoot({
 
   return (
     <PaletteFrame>
-      <View style={[styles.inputRow, { borderBottomColor: c.divider }]}>
-        <Ionicons aria-hidden name="search" size={17} color={c.icon} />
+      <View style={[styles.inputRow, { borderBottomColor: theme.divider }]}>
+        <Ionicons aria-hidden name="search" size={17} color={theme.icon} />
         <TextInput
           value={query}
           onChangeText={setQuery}
           placeholder="Search people and messages, or type a command"
-          placeholderTextColor={c.popTertiary}
+          placeholderTextColor={theme.popTertiary}
           accessibilityLabel="Search or jump to"
           {...({ role: "combobox", "aria-expanded": true, "aria-controls": "command-palette-results" } as object)}
           autoFocus
-          style={[styles.input, { color: c.text }]}
+          style={[styles.input, { color: theme.text }]}
         />
         {query.length > 0 && (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" onPress={() => setQuery("")} hitSlop={8}>
-            {({ hovered, pressed }) => <Ionicons name="close-circle" size={16} color={hovered || pressed ? c.text : c.popTertiary} />}
+            {({ hovered, pressed }) => <Ionicons name="close-circle" size={16} color={hovered || pressed ? theme.text : theme.popTertiary} />}
           </Pressable>
         )}
-        <Text aria-hidden style={[paletteStyles.kbd, { borderColor: c.dividerStrong, color: c.popTertiary }]}>esc</Text>
+        <Text aria-hidden style={[paletteStyles.kbd, { borderColor: theme.dividerStrong, color: theme.popTertiary }]}>esc</Text>
       </View>
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -289,7 +289,7 @@ function PaletteRoot({
         {...({ id: "command-palette-results", role: "listbox", "aria-label": "Results" } as object)}
       >
         {sections.length === 0 && searchText.length >= 2 && (
-          <Text style={[paletteStyles.empty, { color: c.textSecondary }]}>
+          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
             {searching ? "Searching…" : `No results for “${searchText}”`}
           </Text>
         )}
@@ -314,43 +314,40 @@ function PaletteRoot({
           </Fragment>
         ))}
       </ScrollView>
-      <View style={[styles.footer, { borderTopColor: c.divider }]}>
+      <View style={[styles.footer, { borderTopColor: theme.divider }]}>
         <FooterHint keys="↑↓" label="move" />
         <FooterHint keys="↵" label="open" />
         {!typed && <FooterHint keys="⌘E" label="settle" />}
         <View style={{ flex: 1 }} />
-        {!typed && <Text style={[styles.footerText, { color: c.popTertiary }]}>Commands appear as you type</Text>}
+        {!typed && <Text style={[styles.footerText, { color: theme.popTertiary }]}>Commands appear as you type</Text>}
       </View>
     </PaletteFrame>
   );
 }
 
 function FooterHint({ keys, label }: { keys: string; label: string }) {
-  const c = usePaletteColors();
+  const theme = useTheme();
   return (
-    <Text style={[styles.footerText, { color: c.popTertiary }]}>
-      <Text style={[styles.footerKeys, { color: c.textSecondary }]}>{keys}</Text> {label}
+    <Text style={[styles.footerText, { color: theme.popTertiary }]}>
+      <Text style={[styles.footerKeys, { color: theme.textSecondary }]}>{keys}</Text> {label}
     </Text>
   );
 }
 
-// TODO(signal-motion): use springs.ts
-const SNAPPY = { stiffness: 566.4, damping: 42.84, mass: 1 } as const;
-
 /** The palette card: scales 0.98 to 1 and fades in on the snappy spring; Reduce Motion lands it at rest. */
 function PaletteFrame({ children }: { children: React.ReactNode }) {
-  const c = usePaletteColors();
+  const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const shown = useSharedValue(reduceMotion ? 1 : 0);
   useEffect(() => {
-    shown.value = reduceMotion ? 1 : withSpring(1, SNAPPY);
+    shown.value = reduceMotion ? 1 : withSpring(1, Springs.snappy);
   }, [reduceMotion, shown]);
   const entrance = useAnimatedStyle(() => ({
     opacity: Math.min(1, shown.value),
     transform: [{ scale: 0.98 + 0.02 * shown.value }],
   }));
   return (
-    <Reanimated.View style={[styles.frame, { backgroundColor: c.popBg, boxShadow: c.popShadow }, entrance]}>
+    <Reanimated.View style={[styles.frame, { backgroundColor: theme.popBg, boxShadow: theme.popShadow }, entrance]}>
       {children}
     </Reanimated.View>
   );
@@ -375,27 +372,27 @@ function Highlighted({ text, needle, color, style }: { text: string; needle: str
 }
 
 function Age({ age }: { age: RowAge | null | undefined }) {
-  const c = usePaletteColors();
+  const theme = useTheme();
   if (!age) return null;
   return (
-    <Text style={[styles.age, age.late ? { color: c.turn, fontWeight: "600" } : { color: c.popTertiary }]}>{age.text}</Text>
+    <Text style={[styles.age, age.late ? { color: theme.turn, fontWeight: "600" } : { color: theme.popTertiary }]}>{age.text}</Text>
   );
 }
 
 function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; needle: string; age?: RowAge; now: number }) {
-  const c = usePaletteColors();
+  const theme = useTheme();
   switch (item.kind) {
     case "command":
       return (
         <>
-          <View style={[paletteStyles.iconBadge, { backgroundColor: c.field }]}>
-            <Ionicons aria-hidden name={COMMAND_ICONS[item.command.id.kind]} size={14} color={c.icon} />
+          <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
+            <Ionicons aria-hidden name={COMMAND_ICONS[item.command.id.kind]} size={14} color={theme.icon} />
           </View>
           <View style={paletteStyles.textCol}>
-            <Highlighted text={item.command.title} needle={needle} color={c.text} style={paletteStyles.title} />
+            <Highlighted text={item.command.title} needle={needle} color={theme.text} style={paletteStyles.title} />
           </View>
           {item.command.shortcut && (
-            <Text style={[paletteStyles.kbd, { borderColor: c.dividerStrong, color: c.popTertiary }]}>{item.command.shortcut}</Text>
+            <Text style={[paletteStyles.kbd, { borderColor: theme.dividerStrong, color: theme.popTertiary }]}>{item.command.shortcut}</Text>
           )}
         </>
       );
@@ -412,9 +409,9 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
         <>
           <ChatAvatar chat={chat} size={22} />
           <View style={[paletteStyles.textCol, styles.inline]}>
-            <Highlighted text={chat.displayName} needle={needle} color={c.text} style={[paletteStyles.title, styles.shrink]} />
+            <Highlighted text={chat.displayName} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
             {subtitle !== "" && (
-              <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: c.popTertiary }]}>{subtitle}</Text>
+              <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: theme.popTertiary }]}>{subtitle}</Text>
             )}
           </View>
           <Age age={age ?? turnAge(chat, now) ?? recencyAge(chat, now)} />
@@ -428,10 +425,10 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
         <>
           <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={sender} size={22} />
           <View style={[paletteStyles.textCol, styles.inline]}>
-            <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: c.text }]}>{sender}</Text>
-            <Highlighted text={m.text} needle={needle} color={c.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
+            <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: theme.text }]}>{sender}</Text>
+            <Highlighted text={m.text} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
           </View>
-          <Text style={[styles.age, { color: c.popTertiary }]}>{formatListTimestamp(m.dateCreated)}</Text>
+          <Text style={[styles.age, { color: theme.popTertiary }]}>{formatListTimestamp(m.dateCreated)}</Text>
         </>
       );
     }
@@ -440,10 +437,10 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
         <>
           <PersonAvatar address={item.contact.address} name={item.contact.name} size={22} />
           <View style={[paletteStyles.textCol, styles.inline]}>
-            <Highlighted text={item.contact.name} needle={needle} color={c.text} style={[paletteStyles.title, styles.noShrink]} />
-            <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: c.popTertiary }]}>{item.contact.address}</Text>
+            <Highlighted text={item.contact.name} needle={needle} color={theme.text} style={[paletteStyles.title, styles.noShrink]} />
+            <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: theme.popTertiary }]}>{item.contact.address}</Text>
           </View>
-          <Text style={[styles.age, { color: c.popTertiary }]}>Contact card</Text>
+          <Text style={[styles.age, { color: theme.popTertiary }]}>Contact card</Text>
         </>
       );
   }
@@ -458,7 +455,6 @@ type ComposeRow =
  * the same cursor/row primitives as the root view. */
 function PaletteCompose({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
-  const c = usePaletteColors();
   const [recipients, setRecipients] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
@@ -596,7 +592,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
 
   return (
     <PaletteFrame>
-      <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: c.divider }]}>
+      <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: theme.divider }]}>
         <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>To:</Text>
         <View style={styles.chipWrap}>
           {recipients.map((contact) => (
@@ -637,7 +633,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
                 onPress={() => void addAirtableContact(row.human)}
                 onHover={() => cursor.setSelectedIndex(index)}
               >
-                <View style={[paletteStyles.iconBadge, { backgroundColor: c.field }]}>
+                <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
                   <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
                     {initials(row.human.display_name)}
                   </Text>
@@ -659,7 +655,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
               onPress={() => addRecipient(row.contact)}
               onHover={() => cursor.setSelectedIndex(index)}
             >
-              <View style={[paletteStyles.iconBadge, { backgroundColor: c.field }]}>
+              <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
                 <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
                   {initials(row.contact.name)}
                 </Text>
@@ -681,7 +677,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           </Text>
         )}
       </ScrollView>
-      <View style={[styles.composeBar, { borderTopColor: c.divider }]}>
+      <View style={[styles.composeBar, { borderTopColor: theme.divider }]}>
         <TextInput
           ref={messageInputRef}
           value={text}

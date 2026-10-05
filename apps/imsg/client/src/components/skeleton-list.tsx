@@ -1,13 +1,10 @@
 import { StyleSheet, View } from "react-native";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = { light: { skeleton: "rgba(0,0,0,0.06)" }, dark: { skeleton: "rgba(255,255,255,0.07)" } } as const;
+import { useTheme } from "@/hooks/use-theme";
 
 /** Still placeholder rows, in the conversation row's geometry, shown while the chat list first loads. */
 export function SkeletonList({ rows = 9 }: { rows?: number }) {
-  const { skeleton } = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const { skeleton } = useTheme();
   return (
     <View role="progressbar" aria-busy accessibilityLabel="Loading conversations" style={styles.list}>
       {Array.from({ length: rows }, (_, i) => (

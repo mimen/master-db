@@ -14,12 +14,12 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
+import { Springs } from "@/constants/springs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Radius } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
-import { useSignalColors } from "@/lib/signal-colors";
 
 import { initialIndex, menuKey, placeMenu, type Rect } from "./dropdown-model";
 import { focusVisible, type InteractionState } from "./interaction";
@@ -46,9 +46,6 @@ export interface DropdownProps<T extends string | number> {
   readonly style?: StyleProp<ViewStyle>;
 }
 
-// TODO(signal-motion): use springs.ts. Snappy is 0.22 s with bounce 0.1.
-const SNAPPY = { duration: 220, dampingRatio: 0.9 } as const;
-
 const web = Platform.OS === "web";
 
 // RN's Role union omits "listbox"; react-native-web renders it, VoiceOver on iOS ignores it.
@@ -61,7 +58,6 @@ const LISTBOX = { role: "listbox" } as object;
  */
 export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, style }: DropdownProps<T>): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   const type = useTypeRamp();
   const fieldRef = useRef<View>(null);
   const [anchor, setAnchor] = useState<Rect | null>(null);
@@ -112,18 +108,18 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
         onPress={open}
         style={(state: InteractionState) => [
           styles.field,
-          { backgroundColor: signal.surface, borderColor: signal.fieldBorder },
+          { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
           state.hovered && { backgroundColor: theme.backgroundElement },
-          (anchor !== null || focusVisible(state)) && ({ outlineColor: signal.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as ViewStyle),
+          (anchor !== null || focusVisible(state)) && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as ViewStyle),
           style,
         ]}
       >
         {current?.dot && <View style={[styles.dot, { backgroundColor: current.dot }]} />}
         <Text numberOfLines={1} style={[styles.value, { color: theme.text, fontSize: type.body }]}>
           {current?.label ?? ""}
-          {current?.detail && <Text style={{ color: signal.tertiary, fontSize: type.secondary }}>{`  ${current.detail}`}</Text>}
+          {current?.detail && <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{`  ${current.detail}`}</Text>}
         </Text>
-        <Ionicons name="chevron-expand" size={14} color={signal.icon} />
+        <Ionicons name="chevron-expand" size={14} color={theme.icon} />
       </Pressable>
       {web ? (
         <WebMenu
@@ -158,7 +154,6 @@ interface MenuProps<T extends string | number> {
 
 function WebMenu<T extends string | number>({ label, anchor, options, value, active, menuWidth, onActive, onChoose, onClose }: MenuProps<T>): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   const type = useTypeRamp();
   const viewport = useWindowDimensions();
   const reduceMotion = useReducedMotion();
@@ -201,7 +196,7 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
   const place = anchor && size ? placeMenu(anchor, size, viewport) : null;
   useEffect(() => {
     if (!place) return;
-    progress.value = reduceMotion ? 1 : withSpring(1, SNAPPY);
+    progress.value = reduceMotion ? 1 : withSpring(1, Springs.snappy);
     listRef.current?.focus();
   }, [place !== null, reduceMotion, progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -226,7 +221,7 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
           onLayout={onLayout}
           style={[
             styles.menu,
-            { width, backgroundColor: signal.popBg, boxShadow: signal.popShadow, maxHeight: viewport.height - 16 },
+            { width, backgroundColor: theme.popBg, boxShadow: theme.popShadow, maxHeight: viewport.height - 16 },
             place ? { left: place.left, top: place.top } : { left: anchor.x, top: anchor.y + anchor.height + 4 },
             animated,
             { transformOrigin: place && place.top < anchor.y ? "bottom right" : "top right" } as ViewStyle,
@@ -259,7 +254,7 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
                       if (index !== active) onActive(index);
                     }}
                     onPress={() => onChoose(index)}
-                    style={[styles.option, index === active && { backgroundColor: signal.popSelected }]}
+                    style={[styles.option, index === active && { backgroundColor: theme.popSelected }]}
                   >
                     <View style={styles.check}>
                       {selected && <Ionicons name="checkmark" size={15} color={theme.text} />}
@@ -269,11 +264,11 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
                         {option.dot && <View style={[styles.dot, { backgroundColor: option.dot }]} />}
                         <Text style={{ color: theme.text, fontSize: type.body }}>{option.label}</Text>
                         {option.detail && !option.description && (
-                          <Text style={{ color: signal.tertiary, fontSize: type.secondary }}>{option.detail}</Text>
+                          <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{option.detail}</Text>
                         )}
                       </View>
                       {option.description && (
-                        <Text style={[styles.description, { color: signal.tertiary, fontSize: type.secondary }]}>{option.description}</Text>
+                        <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>
                       )}
                     </View>
                   </Pressable>
@@ -298,15 +293,14 @@ interface SheetProps<T extends string | number> {
 
 function NativeSheet<T extends string | number>({ label, visible, options, value, onChoose, onClose }: SheetProps<T>): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   const type = useTypeRamp();
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityRole="button" accessibilityLabel="Cancel" style={[StyleSheet.absoluteFill, { backgroundColor: theme.backdrop }]} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
-        <View {...LISTBOX} aria-label={label} style={[styles.sheetGroup, { backgroundColor: signal.popBg }]}>
-          <Text style={[styles.sheetTitle, { color: signal.tertiary, fontSize: type.secondary }]}>{label}</Text>
+        <View {...LISTBOX} aria-label={label} style={[styles.sheetGroup, { backgroundColor: theme.popBg }]}>
+          <Text style={[styles.sheetTitle, { color: theme.textTertiary, fontSize: type.secondary }]}>{label}</Text>
           {options.map((option, index) => {
             const selected = option.value === value;
             return (
@@ -318,16 +312,16 @@ function NativeSheet<T extends string | number>({ label, visible, options, value
                 style={({ pressed }) => [
                   styles.sheetOption,
                   { borderTopColor: theme.divider },
-                  pressed && { backgroundColor: signal.popSelected },
+                  pressed && { backgroundColor: theme.popSelected },
                 ]}
               >
                 <View style={styles.optionBody}>
                   <View style={styles.optionTitle}>
                     {option.dot && <View style={[styles.dot, { backgroundColor: option.dot }]} />}
                     <Text style={{ color: theme.text, fontSize: type.title }}>{option.label}</Text>
-                    {option.detail && !option.description && <Text style={{ color: signal.tertiary, fontSize: type.body }}>{option.detail}</Text>}
+                    {option.detail && !option.description && <Text style={{ color: theme.textTertiary, fontSize: type.body }}>{option.detail}</Text>}
                   </View>
-                  {option.description && <Text style={[styles.description, { color: signal.tertiary, fontSize: type.secondary }]}>{option.description}</Text>}
+                  {option.description && <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>}
                 </View>
                 {selected && <Ionicons name="checkmark" size={20} color={theme.accent} />}
               </Pressable>
@@ -337,7 +331,7 @@ function NativeSheet<T extends string | number>({ label, visible, options, value
         <Pressable
           accessibilityRole="button"
           onPress={onClose}
-          style={({ pressed }) => [styles.sheetCancel, { backgroundColor: signal.popBg }, pressed && { opacity: 0.7 }]}
+          style={({ pressed }) => [styles.sheetCancel, { backgroundColor: theme.popBg }, pressed && { opacity: 0.7 }]}
         >
           <Text style={{ color: theme.accent, fontSize: type.title, fontWeight: "600" }}>Cancel</Text>
         </Pressable>

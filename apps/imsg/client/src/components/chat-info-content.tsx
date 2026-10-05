@@ -24,7 +24,6 @@ import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion } from "@shared/types";
 import { formatAddress } from "@shared/address";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTypeRamp } from "@/hooks/use-type";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
@@ -37,25 +36,11 @@ import { MediaUnavailable } from "./media";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
 import { ServiceLabel } from "./service-label";
+import { useTheme } from "@/hooks/use-theme";
+import type { ThemeColors } from "@/components/ui/interaction";
 
 const GRID_GAP = 4;
 const GRID_MAX = 6;
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    background: "#FFFFFF", surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", rowHover: "rgba(0,0,0,0.04)",
-    text: "#17171A", textSecondary: "#55555C", textTertiary: "#64646B", icon: "#5E5E66",
-    divider: "rgba(0,0,0,0.075)", dividerStrong: "rgba(0,0,0,0.13)", danger: "#C4261B", disabled: "#A2A2A8",
-    switchOn: "#17171A", switchOff: "#8E8E95", chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)",
-  },
-  dark: {
-    background: "#141416", surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", rowHover: "rgba(255,255,255,0.045)",
-    text: "#EDEDEF", textSecondary: "#A6A6AD", textTertiary: "#8F8F96", icon: "#97979E",
-    divider: "rgba(255,255,255,0.07)", dividerStrong: "rgba(255,255,255,0.12)", danger: "#FF6B5E", disabled: "#5E5E64",
-    switchOn: "#EDEDEF", switchOff: "#727279", chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)",
-  },
-} as const;
 
 export interface ChatInfoContentProps {
   guid: string;
@@ -76,7 +61,7 @@ export function ChatInfoContent({
   showHeader = false,
   onOpenPerson,
 }: ChatInfoContentProps) {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const type = useTypeRamp();
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
@@ -124,25 +109,25 @@ export function ChatInfoContent({
   useEffect(load, [load]);
 
   const header = showHeader ? (
-    <View style={[styles.paneHeader, { borderBottomColor: signal.divider }]}>
-      <Text style={[styles.paneHeaderTitle, { color: signal.text, fontSize: type.body }]}>Details</Text>
+    <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
+      <Text style={[styles.paneHeaderTitle, { color: theme.text, fontSize: type.body }]}>Details</Text>
       <Pressable
         accessibilityRole="button"
         onPress={onClose}
         hitSlop={8}
         accessibilityLabel="Close details"
-        style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+        style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
       >
-        {({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? signal.text : signal.icon} />}
+        {({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.icon} />}
       </Pressable>
     </View>
   ) : null;
 
   if (!guid || !info) {
     return (
-      <View style={{ flex: 1, backgroundColor: signal.background }}>
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
         {header}
-        {showHeader ? null : <CenteredSpinner style={{ backgroundColor: signal.background }} />}
+        {showHeader ? null : <CenteredSpinner style={{ backgroundColor: theme.background }} />}
       </View>
     );
   }
@@ -216,7 +201,7 @@ export function ChatInfoContent({
     });
 
   return (
-    <View style={{ flex: 1, backgroundColor: signal.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       {header}
       <ScrollView
         style={[
@@ -236,16 +221,16 @@ export function ChatInfoContent({
               autoFocus
               onSubmitEditing={saveName}
               placeholder="Group name"
-              placeholderTextColor={signal.textTertiary}
-              style={[styles.renameInput, { color: signal.text, borderColor: signal.dividerStrong }]}
+              placeholderTextColor={theme.textTertiary}
+              style={[styles.renameInput, { color: theme.text, borderColor: theme.dividerStrong }]}
             />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Save name"
               onPress={saveName}
-              style={({ hovered, pressed }) => [styles.inlineTextAction, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+              style={({ hovered, pressed }) => [styles.inlineTextAction, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
             >
-              <Text style={{ color: signal.text, fontSize: type.body, fontWeight: "600" }}>Save</Text>
+              <Text style={{ color: theme.text, fontSize: type.body, fontWeight: "600" }}>Save</Text>
             </Pressable>
           </View>
         ) : (
@@ -256,34 +241,34 @@ export function ChatInfoContent({
             style={styles.titleRow}
             onPress={() => setRenaming(true)}
           >
-            <Text style={[styles.title, { color: signal.text }]}>
+            <Text style={[styles.title, { color: theme.text }]}>
               {info.isGroup ? info.displayName || `${info.participants.length} people` : peerName ?? "Details"}
             </Text>
-            {crm?.is_favorite && <Ionicons name="star" size={16} color={signal.text} accessibilityLabel="Favorite" />}
-            {info.isGroup && <Ionicons name="pencil" size={14} color={signal.icon} />}
+            {crm?.is_favorite && <Ionicons name="star" size={16} color={theme.text} accessibilityLabel="Favorite" />}
+            {info.isGroup && <Ionicons name="pencil" size={14} color={theme.icon} />}
           </Pressable>
         )}
         {info.isGroup ? (
-          <Text style={[styles.subtitle, { color: signal.textSecondary, fontSize: type.secondary }]}>
+          <Text style={[styles.subtitle, { color: theme.textSecondary, fontSize: type.secondary }]}>
             {`You and ${info.participants.length} ${info.participants.length === 1 ? "other" : "others"}`}
           </Text>
         ) : aiStatus?.suggestions && !peer?.name ? (
           <View style={styles.identifyBlock}>
             {identity ? (
-              <View style={[styles.identityCard, { backgroundColor: signal.field }]}>
+              <View style={[styles.identityCard, { backgroundColor: theme.field }]}>
                 <View style={styles.identityHead}>
-                  <Ionicons name="sparkles" size={13} color={signal.icon} />
-                  <Text style={{ color: signal.text, fontSize: type.body, fontWeight: "600", flex: 1 }}>
+                  <Ionicons name="sparkles" size={13} color={theme.icon} />
+                  <Text style={{ color: theme.text, fontSize: type.body, fontWeight: "600", flex: 1 }}>
                     {identity.name ?? "Couldn't place them"}
                   </Text>
-                  <Text style={[styles.confidence, { color: signal.textTertiary }]}>{identity.confidence}</Text>
+                  <Text style={[styles.confidence, { color: theme.textTertiary }]}>{identity.confidence}</Text>
                 </View>
-                <Text style={{ color: signal.textSecondary, fontSize: type.secondary, lineHeight: 18 }}>{identity.reasoning}</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: type.secondary, lineHeight: 18 }}>{identity.reasoning}</Text>
               </View>
             ) : (
               <Pressable onPress={identify} disabled={identifying} style={styles.suggestTrigger} hitSlop={6}>
-                {identifying ? <ActivityIndicator size="small" /> : <Ionicons name="help-circle-outline" size={15} color={signal.textSecondary} />}
-                <Text style={{ color: signal.textSecondary, fontSize: type.secondary, fontWeight: "500" }}>
+                {identifying ? <ActivityIndicator size="small" /> : <Ionicons name="help-circle-outline" size={15} color={theme.textSecondary} />}
+                <Text style={{ color: theme.textSecondary, fontSize: type.secondary, fontWeight: "500" }}>
                   {identifying ? "Looking…" : "Who is this?"}
                 </Text>
               </Pressable>
@@ -294,12 +279,12 @@ export function ChatInfoContent({
         {(tags.length > 0 || info.isGroup) && (
           <View style={styles.tags}>
             {tags.map((tag) => (
-              <View key={tag} style={[styles.tag, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
-                <Text style={[styles.tagText, { color: signal.textSecondary }]}>{tag}</Text>
+              <View key={tag} style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
+                <Text style={[styles.tagText, { color: theme.textSecondary }]}>{tag}</Text>
               </View>
             ))}
             {info.isGroup && (tagging ? (
-              <View style={[styles.tag, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
+              <View style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
                 <TextInput
                   autoFocus
                   value={tagInput}
@@ -307,9 +292,9 @@ export function ChatInfoContent({
                   onSubmitEditing={submitTag}
                   onBlur={submitTag}
                   placeholder="Tag"
-                  placeholderTextColor={signal.textTertiary}
+                  placeholderTextColor={theme.textTertiary}
                   accessibilityLabel="New tag"
-                  style={[styles.tagText, styles.tagInput, { color: signal.text }]}
+                  style={[styles.tagText, styles.tagInput, { color: theme.text }]}
                 />
               </View>
             ) : (
@@ -317,17 +302,17 @@ export function ChatInfoContent({
                 accessibilityRole="button"
                 accessibilityLabel="Add tag"
                 onPress={() => setTagging(true)}
-                style={({ hovered, pressed }) => [styles.tag, { borderColor: signal.chipBorder }, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+                style={({ hovered, pressed }) => [styles.tag, { borderColor: theme.dividerStrong }, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
               >
-                <Ionicons name="add" size={13} color={signal.textSecondary} />
-                <Text style={[styles.tagText, { color: signal.textSecondary }]}>Tag</Text>
+                <Ionicons name="add" size={13} color={theme.textSecondary} />
+                <Text style={[styles.tagText, { color: theme.textSecondary }]}>Tag</Text>
               </Pressable>
             ))}
           </View>
         )}
 
         {peer ? (
-          <Section title={`Reach ${(peerName ?? "").split(" ")[0] || "them"} at`} divider={signal.divider} labelColor={signal.textSecondary}>
+          <Section title={`Reach ${(peerName ?? "").split(" ")[0] || "them"} at`} divider={theme.divider} labelColor={theme.textSecondary}>
             {info.participants.map((p) => {
               const service = contactService(p.address, chats);
               return (
@@ -336,10 +321,10 @@ export function ChatInfoContent({
                   accessibilityRole="button"
                   accessibilityLabel={p.name ?? formatAddress(p.address)}
                   onPress={() => openPerson(p)}
-                  style={({ hovered, pressed }) => [styles.handleRow, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+                  style={({ hovered, pressed }) => [styles.handleRow, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
                 >
-                  <Text style={[styles.handleKind, { color: signal.textTertiary, fontSize: type.caption }]}>{p.address.includes("@") ? "email" : "phone"}</Text>
-                  <Text numberOfLines={1} style={[styles.handleValue, { color: signal.text, fontSize: type.body }]}>{formatAddress(p.address)}</Text>
+                  <Text style={[styles.handleKind, { color: theme.textTertiary, fontSize: type.caption }]}>{p.address.includes("@") ? "email" : "phone"}</Text>
+                  <Text numberOfLines={1} style={[styles.handleValue, { color: theme.text, fontSize: type.body }]}>{formatAddress(p.address)}</Text>
                   {service && <ServiceLabel service={service} size={type.caption} />}
                 </Pressable>
               );
@@ -348,8 +333,8 @@ export function ChatInfoContent({
         ) : (
           <Section
             title="Members"
-            divider={signal.divider}
-            labelColor={signal.textSecondary}
+            divider={theme.divider}
+            labelColor={theme.textSecondary}
             action={addingParticipant ? undefined : { label: "Add person", onPress: () => setAddingParticipant(true) }}
           >
             {info.participants.map((p) => {
@@ -359,7 +344,7 @@ export function ChatInfoContent({
                   key={p.address}
                   paddingHorizontal={8}
                   titleWeight="400"
-                  hoverFill={signal.rowHover}
+                  hoverFill={theme.rowHover}
                   style={styles.memberRow}
                   onPress={() => openPerson(p)}
                   onLongPress={() => removeParticipant(p)}
@@ -382,11 +367,11 @@ export function ChatInfoContent({
                     void runCommand(guid, { kind: "participant", address, action: "add" }).then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, (error: unknown) => showToast(messagingCommandError(error, "Could not add person")));
                   }}
                   placeholder="Phone number or email"
-                  placeholderTextColor={signal.textTertiary}
-                  style={[styles.addPersonInput, { color: signal.text, backgroundColor: signal.field }]}
+                  placeholderTextColor={theme.textTertiary}
+                  style={[styles.addPersonInput, { color: theme.text, backgroundColor: theme.field }]}
                 />
-                <Pressable accessibilityRole="button" accessibilityLabel="Cancel adding person" onPress={() => setAddingParticipant(false)} style={({ hovered, pressed }) => [styles.inlineIconAction, (hovered || pressed) && { backgroundColor: signal.rowHover }]}>
-                  <Ionicons name="close" size={18} color={signal.icon} />
+                <Pressable accessibilityRole="button" accessibilityLabel="Cancel adding person" onPress={() => setAddingParticipant(false)} style={({ hovered, pressed }) => [styles.inlineIconAction, (hovered || pressed) && { backgroundColor: theme.rowHover }]}>
+                  <Ionicons name="close" size={18} color={theme.icon} />
                 </Pressable>
               </View>
             )}
@@ -396,8 +381,8 @@ export function ChatInfoContent({
         {gallery.length > 0 && (
           <Section
             title="Shared media"
-            divider={signal.divider}
-            labelColor={signal.textSecondary}
+            divider={theme.divider}
+            labelColor={theme.textSecondary}
             action={gallery.length > GRID_MAX ? { label: `See all ${gallery.length}`, onPress: () => openLightbox(gallery, 0) } : undefined}
           >
             {/* Fixed-pixel square tiles from the measured width: aspectRatio +
@@ -429,19 +414,19 @@ export function ChatInfoContent({
         )}
 
         {summary && (
-          <View style={[styles.section, { borderTopColor: signal.divider }]}>
+          <View style={[styles.section, { borderTopColor: theme.divider }]}>
             <ToggleRow
               icon="pin-outline"
               label="Pin conversation"
               value={pinned}
-              signal={signal}
+              theme={theme}
               onChange={(next) => {
                 pinChat(summary, next);
                 showToast(next ? "Pinned" : "Unpinned");
               }}
             />
             {/* TODO(signal-states): no mute command yet */}
-            <ToggleRow icon="notifications-off-outline" label="Hide alerts" value={false} signal={signal} />
+            <ToggleRow icon="notifications-off-outline" label="Hide alerts" value={false} theme={theme} />
           </View>
         )}
 
@@ -451,40 +436,38 @@ export function ChatInfoContent({
             server/map.ts's mapChat), shown read-only here with a pointer to
             the real edit surface, so there's never a second, driftable copy. */}
         {info.isGroup ? (
-          <View style={[styles.section, { borderTopColor: signal.divider }]}>
+          <View style={[styles.section, { borderTopColor: theme.divider }]}>
             <ChatCrmSection chatGuid={guid} />
           </View>
         ) : (
           crm && <DmCrmNote crm={crm} />
         )}
 
-        <View style={[styles.section, styles.danger, { borderTopColor: signal.divider }]}>
+        <View style={[styles.section, styles.danger, { borderTopColor: theme.divider }]}>
           {info.isGroup && (
             <Pressable
               accessibilityRole="button"
-              style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+              style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
               onPress={confirmLeave}
             >
-              <Ionicons name="exit-outline" size={17} color={signal.danger} />
-              <Text style={[styles.dangerText, { color: signal.danger, fontSize: type.body }]}>Leave conversation</Text>
+              <Ionicons name="exit-outline" size={17} color={theme.destructive} />
+              <Text style={[styles.dangerText, { color: theme.destructive, fontSize: type.body }]}>Leave conversation</Text>
             </Pressable>
           )}
           <Pressable
             accessibilityRole="button"
-            style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+            style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
             onPress={confirmDelete}
           >
-            <Ionicons name="trash-outline" size={17} color={signal.danger} />
-            <Text style={[styles.dangerText, { color: signal.danger, fontSize: type.body }]}>Delete conversation</Text>
+            <Ionicons name="trash-outline" size={17} color={theme.destructive} />
+            <Text style={[styles.dangerText, { color: theme.destructive, fontSize: type.body }]}>Delete conversation</Text>
           </Pressable>
-          <Text style={[styles.dangerNote, { color: signal.textTertiary, fontSize: type.caption }]}>Removes it from Messages on all your devices.</Text>
+          <Text style={[styles.dangerNote, { color: theme.textTertiary, fontSize: type.caption }]}>Removes it from Messages on all your devices.</Text>
         </View>
       </ScrollView>
     </View>
   );
 }
-
-type SignalColors = (typeof SIGNAL)["light"] | (typeof SIGNAL)["dark"];
 
 function Section({
   title,
@@ -521,28 +504,28 @@ function ToggleRow({
   icon,
   label,
   value,
-  signal,
+  theme,
   onChange,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: boolean;
-  signal: SignalColors;
+  theme: ThemeColors;
   onChange?: (next: boolean) => void;
 }) {
   const type = useTypeRamp();
   return (
     <View style={styles.toggleRow}>
-      <Ionicons name={icon} size={17} color={onChange ? signal.icon : signal.disabled} />
-      <Text style={[styles.toggleLabel, { color: onChange ? signal.text : signal.disabled, fontSize: type.body }]}>{label}</Text>
+      <Ionicons name={icon} size={17} color={onChange ? theme.icon : theme.disabled} />
+      <Text style={[styles.toggleLabel, { color: onChange ? theme.text : theme.disabled, fontSize: type.body }]}>{label}</Text>
       <Switch
         accessibilityLabel={label}
         value={value}
         disabled={!onChange}
         onValueChange={onChange}
-        trackColor={{ true: signal.switchOn, false: signal.switchOff }}
-        thumbColor={value ? signal.surface : "#FFFFFF"}
-        {...({ activeThumbColor: signal.surface } as object)}
+        trackColor={{ true: theme.text, false: theme.switchOff }}
+        thumbColor={value ? theme.surface : "#FFFFFF"}
+        {...({ activeThumbColor: theme.surface } as object)}
       />
     </View>
   );
@@ -555,29 +538,29 @@ function ToggleRow({
  * No edit affordances on purpose: the contact card is the one editable copy.
  */
 function DmCrmNote({ crm }: { crm: NonNullable<ChatSummary["crm"]> }) {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const type = useTypeRamp();
   const events = crm.events ?? [];
   if (crm.priority === undefined && events.length === 0) return null;
   return (
-    <View style={[styles.section, { borderTopColor: signal.divider }]}>
+    <View style={[styles.section, { borderTopColor: theme.divider }]}>
       <View style={styles.sectionHead}>
-        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: signal.textSecondary, fontSize: type.secondary }]}>CRM</Text>
+        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: theme.textSecondary, fontSize: type.secondary }]}>CRM</Text>
         {crm.priority !== undefined && (
-          <Text style={[styles.sectionAction, { color: signal.textSecondary, fontSize: type.secondary }]}>{`P${crm.priority}`}</Text>
+          <Text style={[styles.sectionAction, { color: theme.textSecondary, fontSize: type.secondary }]}>{`P${crm.priority}`}</Text>
         )}
       </View>
       {events.length > 0 && (
         <View style={styles.eventRow}>
           {events.map((e) => (
-            <View key={e.id} style={[styles.tag, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
-              <Ionicons name="calendar-outline" size={11} color={signal.textSecondary} />
-              <Text style={[styles.tagText, { color: signal.textSecondary }]}>{e.name}</Text>
+            <View key={e.id} style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
+              <Ionicons name="calendar-outline" size={11} color={theme.textSecondary} />
+              <Text style={[styles.tagText, { color: theme.textSecondary }]}>{e.name}</Text>
             </View>
           ))}
         </View>
       )}
-      <Text style={{ color: signal.textTertiary, fontSize: type.caption, marginTop: 8 }}>
+      <Text style={{ color: theme.textTertiary, fontSize: type.caption, marginTop: 8 }}>
         Inherited from contact. Edit on their contact card.
       </Text>
     </View>

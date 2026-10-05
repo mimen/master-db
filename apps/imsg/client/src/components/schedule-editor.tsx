@@ -1,15 +1,9 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { parseScheduleInput, scheduleInputParts } from "@/lib/scheduled";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { OverlayShell } from "./overlay-shell";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { text: "#17171A", textSecondary: "#55555C", textTertiary: "#64646B", field: "rgba(0,0,0,0.045)", rowHover: "rgba(0,0,0,0.04)", dividerStrong: "rgba(0,0,0,0.13)", danger: "#C4261B", ink: "#17171A", onInk: "#FFFFFF" },
-  dark: { text: "#EDEDEF", textSecondary: "#A6A6AD", textTertiary: "#8F8F96", field: "rgba(255,255,255,0.06)", rowHover: "rgba(255,255,255,0.045)", dividerStrong: "rgba(255,255,255,0.12)", danger: "#FF6B5E", ink: "#EDEDEF", onInk: "#141416" },
-} as const;
+import { useTheme } from "@/hooks/use-theme";
 
 interface ScheduleEditorProps {
   visible: boolean;
@@ -33,7 +27,7 @@ export function ScheduleEditor({
   onClose,
   onSubmit,
 }: ScheduleEditorProps): ReactElement {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const initial = scheduleInputParts(initialSendAt);
   const [text, setText] = useState(initialText);
   const [date, setDate] = useState(initial.date);
@@ -82,69 +76,69 @@ export function ScheduleEditor({
         anchor && { alignItems: "flex-end", justifyContent: "flex-end", paddingRight: anchor.right, paddingBottom: anchor.bottom },
       ]}
     >
-      <Text style={[styles.title, { color: signal.text }]}>{title}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
       {textEditable && (
         <TextInput
           value={text}
           onChangeText={setText}
           multiline
           placeholder="Message"
-          placeholderTextColor={signal.textTertiary}
+          placeholderTextColor={theme.textTertiary}
           style={[
             styles.message,
-            { color: signal.text, backgroundColor: signal.field, borderColor: signal.dividerStrong },
+            { color: theme.text, backgroundColor: theme.field, borderColor: theme.dividerStrong },
           ]}
         />
       )}
       <View style={styles.fields}>
         <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: signal.textSecondary }]}>Date</Text>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>Date</Text>
           <TextInput
             value={date}
             onChangeText={setDate}
             autoCapitalize="none"
             placeholder="YYYY-MM-DD"
-            placeholderTextColor={signal.textTertiary}
+            placeholderTextColor={theme.textTertiary}
             style={[
               styles.field,
-              { color: signal.text, backgroundColor: signal.field, borderColor: signal.dividerStrong },
+              { color: theme.text, backgroundColor: theme.field, borderColor: theme.dividerStrong },
             ]}
           />
         </View>
         <View style={styles.fieldWrap}>
-          <Text style={[styles.label, { color: signal.textSecondary }]}>Time</Text>
+          <Text style={[styles.label, { color: theme.textSecondary }]}>Time</Text>
           <TextInput
             value={time}
             onChangeText={setTime}
             autoCapitalize="none"
             placeholder="HH:MM"
-            placeholderTextColor={signal.textTertiary}
+            placeholderTextColor={theme.textTertiary}
             style={[
               styles.field,
-              { color: signal.text, backgroundColor: signal.field, borderColor: signal.dividerStrong },
+              { color: theme.text, backgroundColor: theme.field, borderColor: theme.dividerStrong },
             ]}
           />
         </View>
       </View>
-      {error && <Text style={{ color: signal.danger, fontSize: 13 }}>{error}</Text>}
+      {error && <Text style={{ color: theme.destructive, fontSize: 13 }}>{error}</Text>}
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Cancel"
           onPress={onClose}
           disabled={busy}
-          style={({ hovered, pressed }) => [styles.button, { borderColor: signal.dividerStrong, borderWidth: 1 }, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+          style={({ hovered, pressed }) => [styles.button, { borderColor: theme.dividerStrong, borderWidth: 1 }, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
         >
-          <Text style={{ color: signal.text, fontSize: 13, fontWeight: "600" }}>Cancel</Text>
+          <Text style={{ color: theme.text, fontSize: 13, fontWeight: "600" }}>Cancel</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Save schedule"
           onPress={() => void submit()}
           disabled={busy}
-          style={({ hovered, pressed }) => [styles.button, styles.primary, { backgroundColor: signal.ink }, !busy && hovered && !pressed && { opacity: HOVER_DIM }, !busy && pressed && { opacity: PRESS_DIM }, busy && { opacity: 0.55 }]}
+          style={({ hovered, pressed }) => [styles.button, styles.primary, { backgroundColor: theme.text }, !busy && hovered && !pressed && { opacity: HOVER_DIM }, !busy && pressed && { opacity: PRESS_DIM }, busy && { opacity: 0.55 }]}
         >
-          <Text style={{ color: signal.onInk, fontSize: 13, fontWeight: "600" }}>
+          <Text style={{ color: theme.background, fontSize: 13, fontWeight: "600" }}>
             {busy ? "Saving…" : "Save"}
           </Text>
         </Pressable>

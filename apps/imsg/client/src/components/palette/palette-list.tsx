@@ -1,42 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    popBg: "#FFFFFF",
-    popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)",
-    popSelected: "rgba(0,0,0,0.075)",
-    popTertiary: "#64646B",
-    field: "rgba(0,0,0,0.045)",
-    text: "#17171A",
-    textSecondary: "#55555C",
-    icon: "#5E5E66",
-    turn: "#BE3A06",
-    divider: "rgba(0,0,0,0.075)",
-    dividerStrong: "rgba(0,0,0,0.13)",
-  },
-  dark: {
-    popBg: "#232326",
-    popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)",
-    popSelected: "rgba(255,255,255,0.06)",
-    popTertiary: "#A0A0A7",
-    field: "rgba(255,255,255,0.06)",
-    text: "#EDEDEF",
-    textSecondary: "#A6A6AD",
-    icon: "#97979E",
-    turn: "#FF8A57",
-    divider: "rgba(255,255,255,0.07)",
-    dividerStrong: "rgba(255,255,255,0.12)",
-  },
-} as const;
-
-/** Signal colors for every palette surface. Popovers read tertiary text as popTertiary. */
-export function usePaletteColors(): (typeof SIGNAL)[keyof typeof SIGNAL] {
-  return SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
-}
+import { useTheme } from "@/hooks/use-theme";
 
 /**
  * Shared list behavior for every palette surface (root search, compose, and
@@ -118,7 +83,7 @@ export function PaletteListRow({
   onHover: () => void;
   children: React.ReactNode;
 }) {
-  const c = usePaletteColors();
+  const c = useTheme();
   return (
     <Pressable
       // RNW renders dataSet as data-* attributes; RN's types don't know it.
@@ -139,7 +104,7 @@ export function PaletteListRow({
 }
 
 export function PaletteSectionHeader({ title, trailing }: { title: string; trailing?: string }) {
-  const c = usePaletteColors();
+  const c = useTheme();
   return (
     <View style={paletteStyles.sectionHeader}>
       <Text style={[paletteStyles.sectionHeaderText, { color: c.popTertiary }]}>{title}</Text>

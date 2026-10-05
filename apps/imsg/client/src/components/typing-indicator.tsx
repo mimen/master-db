@@ -1,18 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "react-native-reanimated";
 import { Animated, Easing, Platform, StyleSheet, View, type ViewStyle } from "react-native";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useTheme } from "@/hooks/use-theme";
 
 // The one loop motion allows besides the send ring: each dot steps between full and 0.4 opacity, staggered.
 const DOT_DELAYS_MS = [0, 200, 400] as const;
 const STEP_MS = 600;
 const REST_OPACITY = [1, 0.75, 0.5] as const;
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { bubbleTheirs: "#FFFFFF", bubbleTheirsBorder: "rgba(0,0,0,0.07)", textTertiary: "#64646B" },
-  dark: { bubbleTheirs: "#232326", bubbleTheirsBorder: "rgba(255,255,255,0.05)", textTertiary: "#8F8F96" },
-} as const;
 
 interface TypingIndicatorProps {
   /** Ignored by the bubble variant, which draws the Signal theirs-bubble. */
@@ -31,8 +25,8 @@ export function TypingIndicator({
   variant = "bubble",
 }: TypingIndicatorProps) {
   const reduceMotion = useReducedMotion();
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
-  const dotColor = variant === "bare" && color ? color : signal.textTertiary;
+  const theme = useTheme();
+  const dotColor = variant === "bare" && color ? color : theme.textTertiary;
 
   return (
     <View
@@ -43,7 +37,7 @@ export function TypingIndicator({
       style={[
         styles.dots,
         variant === "bubble" && styles.bubble,
-        variant === "bubble" && { backgroundColor: signal.bubbleTheirs, borderColor: signal.bubbleTheirsBorder },
+        variant === "bubble" && { backgroundColor: theme.bubbleTheirs, borderColor: theme.bubbleTheirsBorder },
         style,
       ]}
     >

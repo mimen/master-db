@@ -5,8 +5,8 @@ import { Image } from "expo-image";
 import { useAction } from "convex/react";
 import { makeFunctionReference } from "convex/server";
 import type { LinkPreview } from "@shared/link-preview";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { HOVER_DIM } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 
 const fetchLinkPreviewRef = makeFunctionReference<"action", { url: string }, LinkPreview | null>("comma/linkPreview:fetchLinkPreview");
 
@@ -18,7 +18,7 @@ export function firstUrl(text: string): string | null {
 }
 
 export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
-  const scheme = useColorScheme();
+  const theme = useTheme();
   const fetchLinkPreview = useAction(fetchLinkPreviewRef);
   const [preview, setPreview] = useState<LinkPreview | null | undefined>(
     cache.has(url) ? cache.get(url) : undefined,
@@ -47,7 +47,6 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
 
   if (!preview) return null;
 
-  const signal = SIGNAL[scheme === "dark" ? "dark" : "light"];
   const host = new URL(url).hostname.replace(/^www\./, "");
 
   return (
@@ -58,7 +57,7 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
       style={({ hovered, pressed }) => [
         styles.card,
         mine && styles.mine,
-        { backgroundColor: signal.surface, borderColor: signal.bubbleTheirsBorder },
+        { backgroundColor: theme.surface, borderColor: theme.bubbleTheirsBorder },
         (hovered || pressed) && { opacity: HOVER_DIM },
       ]}
     >
@@ -67,23 +66,17 @@ export function LinkPreviewCard({ url, mine }: { url: string; mine: boolean }) {
       )}
       <View style={styles.body}>
         {preview.title && (
-          <Text numberOfLines={2} style={[styles.title, { color: signal.text }]}>
+          <Text numberOfLines={2} style={[styles.title, { color: theme.text }]}>
             {preview.title}
           </Text>
         )}
-        <Text numberOfLines={1} style={[styles.site, { color: signal.textSecondary }]}>
+        <Text numberOfLines={1} style={[styles.site, { color: theme.textSecondary }]}>
           {preview.siteName ?? host}
         </Text>
       </View>
     </Pressable>
   );
 }
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { surface: "#FFFFFF", bubbleTheirsBorder: "rgba(0,0,0,0.07)", text: "#17171A", textSecondary: "#55555C" },
-  dark: { surface: "#1C1C1F", bubbleTheirsBorder: "rgba(255,255,255,0.05)", text: "#EDEDEF", textSecondary: "#A6A6AD" },
-} as const;
 
 const styles = StyleSheet.create({
   card: {

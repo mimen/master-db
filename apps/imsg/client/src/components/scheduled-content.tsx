@@ -5,28 +5,14 @@ import type { ChatSummary, ScheduledMessage } from "@shared/types";
 import { CenteredSpinner, EmptyState } from "@/components/empty-state";
 import { ScheduleEditor } from "@/components/schedule-editor";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { formatScheduledWhen, useScheduled } from "@/hooks/use-scheduled";
 import { useTypeRamp } from "@/hooks/use-type";
 import { chatIsSMS } from "@/lib/chat-service";
 import { groupScheduled, isNotSent } from "@/lib/scheduled-groups";
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    background: "#F4F4F5", surface: "#FFFFFF", rowHover: "rgba(0,0,0,0.04)", text: "#17171A", textSecondary: "#55555C",
-    textTertiary: "#64646B", icon: "#5E5E66", divider: "rgba(0,0,0,0.075)", dividerStrong: "rgba(0,0,0,0.13)",
-    danger: "#C4261B", ink: "#17171A", onInk: "#FFFFFF",
-  },
-  dark: {
-    background: "#0F0F11", surface: "#1C1C1F", rowHover: "rgba(255,255,255,0.045)", text: "#EDEDEF", textSecondary: "#A6A6AD",
-    textTertiary: "#8F8F96", icon: "#97979E", divider: "rgba(255,255,255,0.07)", dividerStrong: "rgba(255,255,255,0.12)",
-    danger: "#FF6B5E", ink: "#EDEDEF", onInk: "#141416",
-  },
-} as const;
-type SignalColors = (typeof SIGNAL)["light"] | (typeof SIGNAL)["dark"];
+import { useTheme } from "@/hooks/use-theme";
+import type { ThemeColors } from "@/components/ui/interaction";
 
 export interface ScheduledContentProps {
   /** Desktop pane wants its own header with a close button. */
@@ -43,7 +29,7 @@ const timeOf = (ms: number): string => new Date(ms).toLocaleTimeString([], { hou
  * /scheduled modal and the desktop right pane.
  */
 export function ScheduledContent({ showHeader = false, onClose }: ScheduledContentProps) {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const type = useTypeRamp();
   const chats = useChatDirectory();
   const { items, loading, cancel, sendNow, edit } = useScheduled();
@@ -53,9 +39,9 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
   const pendingCount = items.filter((item) => item.status !== "complete").length;
 
   const header = showHeader ? (
-    <View style={[styles.paneHeader, { borderBottomColor: signal.divider }]}>
-      <Text accessibilityRole="header" style={[styles.paneHeaderTitle, { color: signal.text }]}>Scheduled</Text>
-      {pendingCount > 0 && <Text style={[styles.count, { color: signal.textTertiary }]}>{pendingCount}</Text>}
+    <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
+      <Text accessibilityRole="header" style={[styles.paneHeaderTitle, { color: theme.text }]}>Scheduled</Text>
+      {pendingCount > 0 && <Text style={[styles.count, { color: theme.textTertiary }]}>{pendingCount}</Text>}
       <View style={{ flex: 1 }} />
       {onClose && (
         <Pressable
@@ -63,9 +49,9 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
           onPress={onClose}
           hitSlop={8}
           accessibilityLabel="Close scheduled"
-          style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+          style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
         >
-          <Ionicons name="close" size={18} color={signal.icon} />
+          <Ionicons name="close" size={18} color={theme.icon} />
         </Pressable>
       )}
     </View>
@@ -79,7 +65,7 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: signal.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.thread }}>
       {header}
       <ScheduleEditor
         visible={editing !== null}
@@ -100,11 +86,11 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
           {groups.map((group) => (
             <View key={group.key}>
               <View style={styles.groupHead}>
-                <Text accessibilityRole="header" style={[styles.groupTitle, { color: signal.textSecondary, fontSize: type.secondary }]}>{group.title}</Text>
-                <Text style={[styles.groupTitle, styles.num, { color: signal.textSecondary, fontSize: type.secondary }]}>{group.items.length}</Text>
+                <Text accessibilityRole="header" style={[styles.groupTitle, { color: theme.textSecondary, fontSize: type.secondary }]}>{group.title}</Text>
+                <Text style={[styles.groupTitle, styles.num, { color: theme.textSecondary, fontSize: type.secondary }]}>{group.items.length}</Text>
               </View>
               {group.items.map((item) => (
-                <ScheduledRow key={item.id} item={item} chat={chats?.find((c) => c.guid === item.chatGuid) ?? null} signal={signal} actions={actions} roomy={listWidth >= 560} />
+                <ScheduledRow key={item.id} item={item} chat={chats?.find((c) => c.guid === item.chatGuid) ?? null} theme={theme} actions={actions} roomy={listWidth >= 560} />
               ))}
             </View>
           ))}
@@ -117,13 +103,13 @@ export function ScheduledContent({ showHeader = false, onClose }: ScheduledConte
 function ScheduledRow({
   item,
   chat,
-  signal,
+  theme,
   actions,
   roomy,
 }: {
   item: ScheduledMessage;
   chat: ChatSummary | null;
-  signal: SignalColors;
+  theme: ThemeColors;
   roomy: boolean;
   actions: Record<"edit" | "cancel" | "sendNow", (item: ScheduledMessage) => void>;
 }) {
@@ -146,12 +132,12 @@ function ScheduledRow({
       onPress={(event) => { event.stopPropagation(); onPress(); }}
       style={({ hovered: h, pressed }) => [
         styles.button,
-        primary ? { backgroundColor: signal.ink } : { backgroundColor: signal.surface, borderColor: signal.dividerStrong, borderWidth: 1 },
-        (h || pressed) && { opacity: primary ? 0.86 : 1, backgroundColor: primary ? signal.ink : signal.rowHover },
+        primary ? { backgroundColor: theme.text } : { backgroundColor: theme.surface, borderColor: theme.dividerStrong, borderWidth: 1 },
+        (h || pressed) && { opacity: primary ? 0.86 : 1, backgroundColor: primary ? theme.text : theme.rowHover },
       ]}
     >
-      {icon && <Ionicons name={icon} size={13} color={primary ? signal.onInk : signal.text} />}
-      <Text style={[styles.buttonText, { color: primary ? signal.onInk : signal.text }]}>{label}</Text>
+      {icon && <Ionicons name={icon} size={13} color={primary ? theme.background : theme.text} />}
+      <Text style={[styles.buttonText, { color: primary ? theme.background : theme.text }]}>{label}</Text>
     </Pressable>
   );
 
@@ -163,9 +149,9 @@ function ScheduledRow({
   );
   const quietActions = (
     <>
-      <QuietAction label="Edit" a11y={`Edit scheduled message to ${item.chatName}`} signal={signal} onPress={() => actions.edit(item)} />
-      <QuietAction label="Send now" a11y={`Send scheduled message to ${item.chatName} now`} signal={signal} onPress={() => actions.sendNow(item)} />
-      <QuietAction icon="close" a11y={`Cancel scheduled message to ${item.chatName}`} signal={signal} onPress={() => actions.cancel(item)} />
+      <QuietAction label="Edit" a11y={`Edit scheduled message to ${item.chatName}`} theme={theme} onPress={() => actions.edit(item)} />
+      <QuietAction label="Send now" a11y={`Send scheduled message to ${item.chatName} now`} theme={theme} onPress={() => actions.sendNow(item)} />
+      <QuietAction icon="close" a11y={`Cancel scheduled message to ${item.chatName}`} theme={theme} onPress={() => actions.cancel(item)} />
     </>
   );
 
@@ -176,21 +162,21 @@ function ScheduledRow({
       onHoverOut={() => setHovered(false)}
       style={[
         styles.row,
-        failed && { backgroundColor: signal.surface, borderColor: signal.divider, borderWidth: 1 },
-        !failed && hovered && { backgroundColor: signal.rowHover },
+        failed && { backgroundColor: theme.surface, borderColor: theme.divider, borderWidth: 1 },
+        !failed && hovered && { backgroundColor: theme.rowHover },
       ]}
     >
       {chat ? <ChatAvatar chat={chat} size={30} /> : <PersonAvatar address={null} name={item.chatName} size={30} />}
       <View style={styles.rowBody}>
         <View style={styles.who}>
-          <Text numberOfLines={1} style={[styles.name, { color: signal.text, fontSize: type.body }]}>{item.chatName}</Text>
-          <Text numberOfLines={1} style={[styles.meta, { color: signal.textTertiary }]}>{meta}</Text>
+          <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: type.body }]}>{item.chatName}</Text>
+          <Text numberOfLines={1} style={[styles.meta, { color: theme.textTertiary }]}>{meta}</Text>
         </View>
-        <Text numberOfLines={3} style={[styles.text, { color: signal.text }]}>{item.text}</Text>
+        <Text numberOfLines={3} style={[styles.text, { color: theme.text }]}>{item.text}</Text>
         {failed && (
           <View style={styles.error}>
-            <Ionicons name="alert-circle-outline" size={15} color={signal.danger} />
-            <Text style={[styles.errorText, { color: signal.danger }]}>{`Not sent.${item.error ? ` ${item.error}` : ""}`}</Text>
+            <Ionicons name="alert-circle-outline" size={15} color={theme.destructive} />
+            <Text style={[styles.errorText, { color: theme.destructive }]}>{`Not sent.${item.error ? ` ${item.error}` : ""}`}</Text>
           </View>
         )}
         {failed && !roomy && <View style={[styles.buttons, styles.buttonsBelow]}>{failedButtons}</View>}
@@ -198,27 +184,27 @@ function ScheduledRow({
       </View>
       {failed && roomy && <View style={styles.buttons}>{failedButtons}</View>}
       {!failed && (
-        <Text style={[styles.when, { color: signal.textSecondary }]}>
+        <Text style={[styles.when, { color: theme.textSecondary }]}>
           {item.status === "complete" ? "Sent" : item.status === "in-progress" ? "Sending…" : timeOf(item.sendAt)}
         </Text>
       )}
       {!failed && editable && hoverActions && hovered && (
-        <View style={[styles.floating, { backgroundColor: signal.surface, borderColor: signal.divider }]}>{quietActions}</View>
+        <View style={[styles.floating, { backgroundColor: theme.surface, borderColor: theme.divider }]}>{quietActions}</View>
       )}
     </Pressable>
   );
 }
 
-function QuietAction({ label, icon, a11y, signal, onPress }: { label?: string; icon?: keyof typeof Ionicons.glyphMap; a11y: string; signal: SignalColors; onPress: () => void }) {
+function QuietAction({ label, icon, a11y, theme, onPress }: { label?: string; icon?: keyof typeof Ionicons.glyphMap; a11y: string; theme: ThemeColors; onPress: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={a11y}
       hitSlop={6}
       onPress={(event) => { event.stopPropagation(); onPress(); }}
-      style={({ hovered, pressed }) => [styles.quietAction, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+      style={({ hovered, pressed }) => [styles.quietAction, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
     >
-      {icon ? <Ionicons name={icon} size={15} color={signal.icon} /> : <Text style={[styles.buttonText, { color: signal.textSecondary }]}>{label}</Text>}
+      {icon ? <Ionicons name={icon} size={15} color={theme.icon} /> : <Text style={[styles.buttonText, { color: theme.textSecondary }]}>{label}</Text>}
     </Pressable>
   );
 }

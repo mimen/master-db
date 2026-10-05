@@ -34,7 +34,6 @@ import {
   type SuggestionMode,
   type ThemePreference,
 } from "@/lib/settings";
-import { useSignalColors } from "@/lib/signal-colors";
 import { showToast } from "@/lib/toast";
 
 export interface SettingsContentProps {
@@ -86,7 +85,6 @@ const FIELD_WIDTH = 196;
 /** One version line; the full release identity is a click away for debugging. */
 function ReleaseIdentityFooter(): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   const [expanded, setExpanded] = useState(false);
   const snapshot = useSyncExternalStore(
     releaseStatus.subscribe,
@@ -126,7 +124,7 @@ function ReleaseIdentityFooter(): JSX.Element {
         <View style={styles.releaseDetails} testID="release-identity-footer">
           {rows.map(([label, value]) => (
             <View key={label} style={styles.releaseRow}>
-              <Text style={[styles.releaseLabel, { color: signal.tertiary }]}>{label}</Text>
+              <Text style={[styles.releaseLabel, { color: theme.textTertiary }]}>{label}</Text>
               <Text selectable style={[styles.releaseLabel, styles.releaseValue, { color: theme.textSecondary }]}>{value}</Text>
             </View>
           ))}
@@ -138,11 +136,10 @@ function ReleaseIdentityFooter(): JSX.Element {
 
 function Group({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   return (
     <View style={styles.group}>
       <Text role="heading" style={[styles.groupTitle, { color: theme.text }]}>{title}</Text>
-      <View style={[styles.card, { backgroundColor: signal.surface, borderColor: signal.divider }]}>{children}</View>
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.divider }]}>{children}</View>
     </View>
   );
 }
@@ -153,13 +150,12 @@ const InlineContext = createContext(false);
 
 function SettingRow({ title, caption, first = false, children }: { title: string; caption?: string; first?: boolean; children: ReactNode }): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   const inline = useContext(InlineContext);
   return (
-    <View style={[styles.row, !inline && styles.rowStacked, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: signal.divider }]}>
+    <View style={[styles.row, !inline && styles.rowStacked, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.divider }]}>
       <View style={styles.rowLabel}>
         <Text style={[styles.rowTitle, { color: theme.text }]}>{title}</Text>
-        {caption && <Text style={[styles.rowCaption, { color: signal.tertiary }]}>{caption}</Text>}
+        {caption && <Text style={[styles.rowCaption, { color: theme.textTertiary }]}>{caption}</Text>}
       </View>
       <View style={inline ? { width: FIELD_WIDTH } : styles.fieldStacked}>{children}</View>
     </View>
@@ -175,7 +171,6 @@ function SettingRow({ title, caption, first = false, children }: { title: string
  */
 export function SettingsContent({ showHeader = false, onClose, onBack, backLabel = "Back" }: SettingsContentProps): JSX.Element {
   const theme = useTheme();
-  const signal = useSignalColors();
   const { wide } = useLayoutMode();
   const nameOrder = useNameOrder();
   const openOn = useOpenOn();
@@ -201,7 +196,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   });
 
   const header = showHeader ? (
-    <View style={[styles.paneHeader, { borderBottomColor: signal.divider }]}>
+    <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
       {onBack ? (
         <Pressable
           accessibilityRole="button"
@@ -226,14 +221,14 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
           accessibilityLabel="Close settings"
           style={({ hovered, pressed }) => [styles.headerIcon, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
         >
-          {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : signal.icon} />}
+          {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.icon} />}
         </Pressable>
       )}
     </View>
   ) : null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: signal.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.thread }}>
       {header}
       <ScrollView
         style={{ flex: 1 }}
@@ -271,7 +266,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
                   onPress={clearLearning}
                   style={({ hovered, pressed }) => [styles.quietButton, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
                 >
-                  <Text style={[styles.quietButtonText, { color: signal.danger }]}>Clear suggestion learning</Text>
+                  <Text style={[styles.quietButtonText, { color: theme.destructive }]}>Clear suggestion learning</Text>
                 </Pressable>
               </SettingRow>
             </Group>
@@ -293,12 +288,12 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
               >
                 <View style={styles.rowLabel}>
                   <Text style={[styles.rowTitle, { color: theme.text }]}>Keyboard shortcuts</Text>
-                  <Text style={[styles.rowCaption, { color: signal.tertiary }]}>Every shortcut, including J and K to move and ⌘E to settle.</Text>
+                  <Text style={[styles.rowCaption, { color: theme.textTertiary }]}>Every shortcut, including J and K to move and ⌘E to settle.</Text>
                 </View>
                 <View style={styles.link}>
                   <Text style={[styles.linkText, { color: theme.textSecondary }]}>View shortcuts</Text>
-                  <Text style={[styles.kbd, { color: theme.textSecondary, borderColor: signal.fieldBorder }]}>{shortcutFor("help.open")}</Text>
-                  <Ionicons name="chevron-forward" size={15} color={signal.icon} />
+                  <Text style={[styles.kbd, { color: theme.textSecondary, borderColor: theme.dividerStrong }]}>{shortcutFor("help.open")}</Text>
+                  <Ionicons name="chevron-forward" size={15} color={theme.icon} />
                 </View>
               </Pressable>
             </Group>

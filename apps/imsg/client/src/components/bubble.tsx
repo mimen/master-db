@@ -11,7 +11,6 @@ import type { Message, SpecialContent } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { HOVER_DIM, Radii } from "@/constants/theme";
 import { AudioBubble, FileCard, VideoBubble, MediaUnavailable } from "./media";
 import { PersonAvatar } from "./avatar";
@@ -19,42 +18,6 @@ import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 import { receiptText } from "./message-meta";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    text: "#17171A",
-    textSecondary: "#55555C",
-    textTertiary: "#64646B",
-    dividerStrong: "rgba(0,0,0,0.13)",
-    bubbleMine: "#007AFF",
-    bubbleSms: "#34C759",
-    onBubbleMine: "#FFFFFF",
-    bubbleTheirs: "#FFFFFF",
-    bubbleTheirsBorder: "rgba(0,0,0,0.07)",
-    bubbleTheirsText: "#17171A",
-    danger: "#C4261B",
-    skeleton: "rgba(0,0,0,0.06)",
-    tapbackBg: "#FFFFFF",
-    tapbackBorder: "rgba(0,0,0,0.1)",
-  },
-  dark: {
-    text: "#EDEDEF",
-    textSecondary: "#A6A6AD",
-    textTertiary: "#8F8F96",
-    dividerStrong: "rgba(255,255,255,0.12)",
-    bubbleMine: "#0A84FF",
-    bubbleSms: "#30D158",
-    onBubbleMine: "#FFFFFF",
-    bubbleTheirs: "#232326",
-    bubbleTheirsBorder: "rgba(255,255,255,0.05)",
-    bubbleTheirsText: "#EDEDEF",
-    danger: "#FF6B5E",
-    skeleton: "rgba(255,255,255,0.07)",
-    tapbackBg: "#2C2C30",
-    tapbackBorder: "rgba(255,255,255,0.08)",
-  },
-} as const;
 
 const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
   contact: { icon: "person-circle-outline", label: "Contact card" },
@@ -153,8 +116,8 @@ export const TAPBACK_EMOJI = new Map([
 
 /** Holds still under a thread image until its thumbnail paints. */
 function ImageSkeleton() {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
-  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: signal.skeleton }]} />;
+  const theme = useTheme();
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: theme.skeleton }]} />;
 }
 
 function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
@@ -303,13 +266,12 @@ export const Bubble = memo(function Bubble({
   onShowReactions,
 }: BubbleProps) {
   const theme = useTheme();
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
   const slowSend = useSlowSend(message.pending === true);
   const mine = message.isFromMe;
-  const mineColor = message.service === "SMS" ? signal.bubbleSms : signal.bubbleMine;
+  const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
   const senderName =
     message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
   const groupGutter = !mine && isGroupChat;
@@ -324,7 +286,7 @@ export const Bubble = memo(function Bubble({
   const url = message.text ? firstUrl(message.text) : null;
   const delivery = deliveryState(message, latestInboundAt, Date.now());
   const notDelivered = delivery === "failed";
-  const caption = { fontSize: wide ? 11 : 12, color: signal.textTertiary };
+  const caption = { fontSize: wide ? 11 : 12, color: theme.textTertiary };
   const tapbacks = Object.entries(
     message.reactions.reduce<Record<string, number>>((acc, r) => {
       const glyph = r.type === "emoji" ? (r.emoji ?? "🙂") : r.type;
@@ -343,7 +305,7 @@ export const Bubble = memo(function Bubble({
       }}
     >
       {groupGutter && groupStart && senderName !== "" && (
-        <Text style={[styles.senderName, { fontSize: wide ? 11.5 : 13, color: signal.textTertiary }]}>{senderName}</Text>
+        <Text style={[styles.senderName, { fontSize: wide ? 11.5 : 13, color: theme.textTertiary }]}>{senderName}</Text>
       )}
 
       {message.replyToPreview !== null && (
@@ -351,14 +313,14 @@ export const Bubble = memo(function Bubble({
           style={[
             styles.quote,
             {
-              borderLeftColor: signal.dividerStrong,
+              borderLeftColor: theme.dividerStrong,
               alignSelf: mine ? "flex-end" : "flex-start",
               marginLeft: groupGutter ? AVATAR + GUTTER_GAP : 0,
             },
           ]}
         >
-          <Text numberOfLines={2} style={{ fontSize: wide ? 12.5 : 15, color: signal.textSecondary }}>
-            {message.replyToFromMe && <Text style={{ fontWeight: "600", color: signal.text }}>You </Text>}
+          <Text numberOfLines={2} style={{ fontSize: wide ? 12.5 : 15, color: theme.textSecondary }}>
+            {message.replyToFromMe && <Text style={{ fontWeight: "600", color: theme.text }}>You </Text>}
             {message.replyToPreview || "Original message"}
           </Text>
         </View>
@@ -403,7 +365,7 @@ export const Bubble = memo(function Bubble({
                   wide ? styles.bubbleDesk : styles.bubblePhone,
                   mine
                     ? { backgroundColor: mineColor, borderColor: mineColor }
-                    : { backgroundColor: signal.bubbleTheirs, borderColor: signal.bubbleTheirsBorder },
+                    : { backgroundColor: theme.bubbleTheirs, borderColor: theme.bubbleTheirsBorder },
                   !groupEnd && (mine ? styles.runBelowMine : styles.runBelowTheirs),
                   !groupStart && (mine ? styles.runAboveMine : styles.runAboveTheirs),
                   highlighted && { borderWidth: 2, borderColor: theme.accent },
@@ -416,7 +378,7 @@ export const Bubble = memo(function Bubble({
                     style={{
                       fontSize: wide ? 14 : 17,
                       lineHeight: wide ? 19 : 22,
-                      color: mine ? signal.onBubbleMine : signal.bubbleTheirsText,
+                      color: mine ? theme.onAccent : theme.bubbleTheirsText,
                       // Break long unbroken strings (URLs) so they never overflow.
                       ...(Platform.OS === "web"
                         ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
@@ -426,8 +388,8 @@ export const Bubble = memo(function Bubble({
                     {renderMessageText(
                       message.text,
                       message.mentions ?? [],
-                      mine ? signal.onBubbleMine : signal.bubbleTheirsText,
-                      mine ? signal.onBubbleMine : theme.accent,
+                      mine ? theme.onAccent : theme.bubbleTheirsText,
+                      mine ? theme.onAccent : theme.accent,
                     )}
                   </Text>
                 )}
@@ -442,10 +404,10 @@ export const Bubble = memo(function Bubble({
                     accessibilityRole="button"
                     accessibilityLabel={`${TAPBACK_LABEL[type] ?? type}${count > 1 ? `, ${count}` : ""}`}
                     onPress={() => onShowReactions(message)}
-                    style={[styles.reactionChip, { backgroundColor: signal.tapbackBg, borderColor: signal.tapbackBorder }]}
+                    style={[styles.reactionChip, { backgroundColor: theme.tapbackBg, borderColor: theme.tapbackBorder }]}
                   >
                     <Text style={{ fontSize: 12 }}>{TAPBACK_EMOJI.get(type) ?? type}</Text>
-                    {count > 1 && <Text style={[styles.reactionCount, { color: signal.textSecondary }]}>{count}</Text>}
+                    {count > 1 && <Text style={[styles.reactionCount, { color: theme.textSecondary }]}>{count}</Text>}
                   </Pressable>
                 ))}
               </View>
@@ -454,7 +416,7 @@ export const Bubble = memo(function Bubble({
 
           {notDelivered ? (
             <View style={styles.failedRow}>
-              <Text style={[styles.failedLabel, { color: signal.danger }]}>Not delivered</Text>
+              <Text style={[styles.failedLabel, { color: theme.destructive }]}>Not delivered</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Retry sending"
@@ -462,7 +424,7 @@ export const Bubble = memo(function Bubble({
                 hitSlop={6}
                 style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}
               >
-                <Text style={[styles.failedAction, { color: signal.text }]}>Retry</Text>
+                <Text style={[styles.failedAction, { color: theme.text }]}>Retry</Text>
               </Pressable>
               {onSendAsText && (
                 <Pressable
@@ -471,7 +433,7 @@ export const Bubble = memo(function Bubble({
                   hitSlop={6}
                   style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}
                 >
-                  <Text style={[styles.failedAction, { color: signal.text }]}>Send as text</Text>
+                  <Text style={[styles.failedAction, { color: theme.text }]}>Send as text</Text>
                 </Pressable>
               )}
             </View>
@@ -485,7 +447,7 @@ export const Bubble = memo(function Bubble({
         </View>
 
         {notDelivered && (
-          <Ionicons name="alert-circle-outline" size={20} color={signal.danger} style={styles.failedIcon} accessibilityElementsHidden />
+          <Ionicons name="alert-circle-outline" size={20} color={theme.destructive} style={styles.failedIcon} accessibilityElementsHidden />
         )}
       </View>
     </View>

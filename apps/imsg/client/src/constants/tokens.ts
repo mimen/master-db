@@ -128,6 +128,16 @@ export const Colors = {
     // A fill white text sits on (5.4:1); success itself is a text color in dark.
     successFill: Palette.light.success,
     backdrop: "rgba(23,23,26,0.16)",
+    /** Popovers: menus, the command palette, dropdown lists. */
+    popBg: "#FFFFFF",
+    popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)",
+    popSelected: "rgba(0,0,0,0.075)",
+    popTertiary: "#64646B",
+    skeleton: "rgba(0,0,0,0.06)",
+    tapbackBg: "#FFFFFF",
+    tapbackBorder: "rgba(0,0,0,0.1)",
+    disabled: "#A2A2A8",
+    switchOff: "#8E8E95",
   },
   dark: {
     ...Palette.dark,
@@ -156,5 +166,14 @@ export const Colors = {
     onAccent: "#fff",
     successFill: Palette.light.success,
     backdrop: "rgba(0,0,0,0.5)",
+    popBg: "#232326",
+    popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)",
+    popSelected: "rgba(255,255,255,0.06)",
+    popTertiary: "#A0A0A7",
+    skeleton: "rgba(255,255,255,0.07)",
+    tapbackBg: "#2C2C30",
+    tapbackBorder: "rgba(255,255,255,0.08)",
+    disabled: "#5E5E64",
+    switchOff: "#727279",
   },
 } as const;

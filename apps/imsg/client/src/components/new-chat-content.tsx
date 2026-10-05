@@ -20,7 +20,6 @@ import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact } from "@shared/types";
 import { formatAddress } from "@shared/address";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { contactService, splitPrefix } from "@/lib/contact-service";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
@@ -28,23 +27,8 @@ import { type AirtableHumanRow } from "@/lib/identity";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { PersonAvatar } from "./avatar";
 import { ServiceDot, ServiceLabel } from "./service-label";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    background: "#F4F4F5", surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", rowHover: "rgba(0,0,0,0.04)", text: "#17171A",
-    textTertiary: "#64646B", icon: "#5E5E66", divider: "rgba(0,0,0,0.075)", dividerStrong: "rgba(0,0,0,0.13)",
-    bubbleMine: "#007AFF", chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)", popBg: "#FFFFFF",
-    popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)", popSelected: "rgba(0,0,0,0.075)",
-  },
-  dark: {
-    background: "#0F0F11", surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", rowHover: "rgba(255,255,255,0.045)", text: "#EDEDEF",
-    textTertiary: "#8F8F96", icon: "#97979E", divider: "rgba(255,255,255,0.07)", dividerStrong: "rgba(255,255,255,0.12)",
-    bubbleMine: "#0A84FF", chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)", popBg: "#232326",
-    popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)", popSelected: "rgba(255,255,255,0.06)",
-  },
-} as const;
-type SignalColors = (typeof SIGNAL)["light"] | (typeof SIGNAL)["dark"];
+import { useTheme } from "@/hooks/use-theme";
+import type { ThemeColors } from "@/components/ui/interaction";
 
 type Row =
   | { kind: "recent-header"; key: string }
@@ -73,7 +57,7 @@ export function NewChatContent({
   /** Pre-fills the recipient — used by the person-view's "Message" action for someone with no existing thread. */
   initialContact?: Contact;
 }) {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const { wide } = useLayoutMode();
   const [activeIndex, setActiveIndex] = useState(0);
   const toInput = useRef<TextInput>(null);
@@ -170,7 +154,7 @@ export function NewChatContent({
     <View
       style={[
         wide ? styles.popover : styles.inlineList,
-        wide && { backgroundColor: signal.popBg, boxShadow: signal.popShadow } as object,
+        wide && { backgroundColor: theme.popBg, boxShadow: theme.popShadow } as object,
       ]}
     >
       <FlatList
@@ -180,7 +164,7 @@ export function NewChatContent({
         renderItem={({ item }) => {
           if (item.kind === "airtable-header" || item.kind === "recent-header") {
             return (
-              <Text style={[styles.sectionHeader, { color: signal.textTertiary }]}>
+              <Text style={[styles.sectionHeader, { color: theme.textTertiary }]}>
                 {item.kind === "recent-header" ? "Recent" : "From Airtable"}
               </Text>
             );
@@ -193,12 +177,12 @@ export function NewChatContent({
                 selected={selectedRow}
                 disabled={adding}
                 onPress={() => pick(item)}
-                signal={signal}
+                theme={theme}
                 avatar={<PersonAvatar address={null} name={item.human.display_name} size={28} />}
                 name={item.human.display_name}
                 query={needle}
                 handle={item.human.phone ?? item.human.email ?? undefined}
-                trailing={adding ? <ActivityIndicator size="small" /> : <Ionicons name="add-circle-outline" size={18} color={signal.icon} />}
+                trailing={adding ? <ActivityIndicator size="small" /> : <Ionicons name="add-circle-outline" size={18} color={theme.icon} />}
               />
             );
           }
@@ -208,7 +192,7 @@ export function NewChatContent({
             <SuggestionRow
               selected={selectedRow}
               onPress={() => pick(item)}
-              signal={signal}
+              theme={theme}
               avatar={<PersonAvatar address={item.contact.address} name={item.contact.name} size={28} />}
               name={item.contact.name}
               query={needle}
@@ -223,25 +207,25 @@ export function NewChatContent({
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: signal.background }}
+      style={{ flex: 1, backgroundColor: theme.thread }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {wide && (
-        <View style={[styles.header, { borderBottomColor: signal.divider }]}>
-          <Text accessibilityRole="header" style={[styles.headerTitle, { color: signal.text }]}>New message</Text>
+        <View style={[styles.header, { borderBottomColor: theme.divider }]}>
+          <Text accessibilityRole="header" style={[styles.headerTitle, { color: theme.text }]}>New message</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close new message"
             onPress={onClose}
             hitSlop={8}
-            style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+            style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
           >
-            <Ionicons name="close" size={18} color={signal.icon} />
+            <Ionicons name="close" size={18} color={theme.icon} />
           </Pressable>
         </View>
       )}
-      <View style={[styles.toRow, { borderBottomColor: signal.divider }]}>
-        <Text style={[styles.toLabel, { color: signal.textTertiary }]}>To</Text>
+      <View style={[styles.toRow, { borderBottomColor: theme.divider }]}>
+        <Text style={[styles.toLabel, { color: theme.textTertiary }]}>To</Text>
         {selected.map((contact) => {
           const service = contactService(contact.address, chats);
           return (
@@ -250,10 +234,10 @@ export function NewChatContent({
               accessibilityRole="button"
               accessibilityLabel={`Remove ${contact.name}`}
               onPress={() => setSelected((cur) => cur.filter((c) => c.address !== contact.address))}
-              style={({ hovered, pressed }) => [styles.token, { backgroundColor: hovered || pressed ? signal.rowHover : signal.chipBg, borderColor: signal.chipBorder }]}
+              style={({ hovered, pressed }) => [styles.token, { backgroundColor: hovered || pressed ? theme.rowHover : theme.surface, borderColor: theme.dividerStrong }]}
             >
               <PersonAvatar address={contact.address} name={contact.name} size={18} />
-              <Text numberOfLines={1} style={[styles.tokenText, { color: signal.text }]}>{contact.name}</Text>
+              <Text numberOfLines={1} style={[styles.tokenText, { color: theme.text }]}>{contact.name}</Text>
               {service && <ServiceDot service={service} />}
             </Pressable>
           );
@@ -266,7 +250,7 @@ export function NewChatContent({
             setActiveIndex(0);
           }}
           placeholder={selected.length === 0 ? "Name, number, or email" : ""}
-          placeholderTextColor={signal.textTertiary}
+          placeholderTextColor={theme.textTertiary}
           autoFocus
           // react-native-web reads blurOnSubmit, not submitBehavior; Enter picks and keeps typing.
           blurOnSubmit={false}
@@ -280,33 +264,33 @@ export function NewChatContent({
               if (value) addContact({ address: value, name: value });
             }
           }}
-          style={[styles.toInput, { color: signal.text }]}
+          style={[styles.toInput, { color: theme.text }]}
         />
       </View>
 
       <View style={{ flex: 1 }}>{suggestions}</View>
 
       <View style={styles.composerWrap}>
-        <View style={[styles.composer, { backgroundColor: signal.surface, borderColor: signal.dividerStrong }]}>
+        <View style={[styles.composer, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
           <TextInput
             value={text}
             onChangeText={setText}
             placeholder="Message"
-            placeholderTextColor={signal.textTertiary}
+            placeholderTextColor={theme.textTertiary}
             multiline
-            style={[styles.msgInput, { color: signal.text }]}
+            style={[styles.msgInput, { color: theme.text }]}
           />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send"
             onPress={() => void create()}
             disabled={!canSend || sending}
-            style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? signal.bubbleMine : signal.field }, canSend && !sending && hovered && !pressed && { opacity: HOVER_DIM }, canSend && !sending && pressed && { opacity: PRESS_DIM }]}
+            style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? theme.bubbleMine : theme.field }, canSend && !sending && hovered && !pressed && { opacity: HOVER_DIM }, canSend && !sending && pressed && { opacity: PRESS_DIM }]}
           >
             {sending ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Ionicons name="arrow-up" size={16} color={canSend ? "#FFFFFF" : signal.icon} />
+              <Ionicons name="arrow-up" size={16} color={canSend ? "#FFFFFF" : theme.icon} />
             )}
           </Pressable>
         </View>
@@ -323,7 +307,7 @@ function SuggestionRow({
   trailing,
   selected,
   disabled,
-  signal,
+  theme,
   onPress,
 }: {
   avatar: React.ReactNode;
@@ -333,7 +317,7 @@ function SuggestionRow({
   trailing?: React.ReactNode;
   selected: boolean;
   disabled?: boolean;
-  signal: SignalColors;
+  theme: ThemeColors;
   onPress: () => void;
 }) {
   const { match, rest } = splitPrefix(name, query);
@@ -344,15 +328,15 @@ function SuggestionRow({
       aria-selected={selected}
       disabled={disabled}
       onPress={onPress}
-      style={({ hovered, pressed }) => [styles.suggestion, (selected || hovered || pressed) && { backgroundColor: selected ? signal.popSelected : signal.rowHover }]}
+      style={({ hovered, pressed }) => [styles.suggestion, (selected || hovered || pressed) && { backgroundColor: selected ? theme.popSelected : theme.rowHover }]}
     >
       {avatar}
       <View style={styles.suggestionBody}>
-        <Text numberOfLines={1} style={[styles.suggestionName, { color: signal.text }]}>
+        <Text numberOfLines={1} style={[styles.suggestionName, { color: theme.text }]}>
           {match ? <Text style={{ fontWeight: "700" }}>{match}</Text> : null}
           {rest}
         </Text>
-        {handle ? <Text numberOfLines={1} style={[styles.suggestionHandle, { color: signal.textTertiary }]}>{handle}</Text> : null}
+        {handle ? <Text numberOfLines={1} style={[styles.suggestionHandle, { color: theme.textTertiary }]}>{handle}</Text> : null}
       </View>
       {trailing}
     </Pressable>

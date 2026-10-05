@@ -11,19 +11,13 @@ import {
   useSetChatPriority,
   useUnlinkEvent,
 } from "@/lib/identity";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { HOVER_DIM, Type } from "@/constants/theme";
 import { showToast } from "@/lib/toast";
 import { CrmEventsEditor } from "./crm-events-editor";
 import { crmSummary } from "@/lib/crm-summary";
 import { CrmDisclosure, NO_PRIORITY, PRIORITY_OPTIONS } from "./person-crm-section";
 import { Dropdown } from "./ui/dropdown";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { text: "#17171A", textSecondary: "#55555C", textTertiary: "#64646B", icon: "#5E5E66", rowHover: "rgba(0,0,0,0.04)", chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)", onText: "#FFFFFF" },
-  dark: { text: "#EDEDEF", textSecondary: "#A6A6AD", textTertiary: "#8F8F96", icon: "#97979E", rowHover: "rgba(255,255,255,0.045)", chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)", onText: "#141416" },
-} as const;
+import { useTheme } from "@/hooks/use-theme";
 
 export interface ChatCrmSectionProps {
   chatGuid: string;
@@ -40,7 +34,7 @@ export interface ChatCrmSectionProps {
  * imsg server's REST chat list) so edits reflect immediately.
  */
 export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const crm = useChatCrm(chatGuid);
   const setFavorite = useSetChatFavorite();
   const setPriority = useSetChatPriority();
@@ -88,17 +82,17 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
             aria-selected={isFavorite}
             hitSlop={8}
             onPress={toggleFavorite}
-            style={({ hovered, pressed }) => [styles.favoriteBtn, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+            style={({ hovered, pressed }) => [styles.favoriteBtn, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
           >
             <Ionicons
               name={isFavorite ? "star" : "star-outline"}
               size={19}
-              color={isFavorite ? signal.text : signal.icon}
+              color={isFavorite ? theme.text : theme.icon}
             />
             <Text
               style={[
                 styles.favoriteLabel,
-                { color: isFavorite ? signal.text : signal.textSecondary },
+                { color: isFavorite ? theme.text : theme.textSecondary },
               ]}
             >
               Favorite
@@ -116,34 +110,34 @@ export function ChatCrmSection({ chatGuid }: ChatCrmSectionProps) {
 
         <View style={styles.tagRow}>
           {crm.tags.map((tag) => (
-            <View key={tag} style={[styles.tagChip, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
-              <Text style={[styles.tagLabel, { color: signal.textSecondary }]}>{tag}</Text>
+            <View key={tag} style={[styles.tagChip, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
+              <Text style={[styles.tagLabel, { color: theme.textSecondary }]}>{tag}</Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Remove tag ${tag}`}
                 hitSlop={6}
                 onPress={() => removeTag({ chatGuid, tag }).catch(() => showToast("Couldn't remove the tag. Try again."))}
               >
-                {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? signal.text : signal.textTertiary} />}
+                {({ hovered, pressed }) => <Ionicons name="close" size={12} color={hovered || pressed ? theme.text : theme.textTertiary} />}
               </Pressable>
             </View>
           ))}
-          <View style={[styles.tagInputWrap, { borderColor: signal.chipBorder }]}>
+          <View style={[styles.tagInputWrap, { borderColor: theme.dividerStrong }]}>
             <TextInput
               value={tagInput}
               onChangeText={setTagInput}
               onSubmitEditing={submitTag}
               placeholder="Add tag"
-              placeholderTextColor={signal.textTertiary}
+              placeholderTextColor={theme.textTertiary}
               returnKeyType="done"
-              style={[styles.tagInput, { color: signal.text }]}
+              style={[styles.tagInput, { color: theme.text }]}
             />
             {addingTag ? (
               <ActivityIndicator size="small" />
             ) : (
               tagInput.trim().length > 0 && (
                 <Pressable accessibilityRole="button" accessibilityLabel="Add tag" hitSlop={6} onPress={submitTag} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
-                  <Ionicons name="add-circle" size={16} color={signal.text} />
+                  <Ionicons name="add-circle" size={16} color={theme.text} />
                 </Pressable>
               )
             )}

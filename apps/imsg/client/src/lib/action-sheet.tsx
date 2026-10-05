@@ -12,10 +12,11 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { presentActions, type IconName } from "@/lib/action-presentation";
+import { useTheme } from "@/hooks/use-theme";
+import type { ThemeColors } from "@/components/ui/interaction";
 
 export interface SheetAction {
   label: string;
@@ -32,49 +33,8 @@ export interface SheetAction {
   onPress: () => void;
 }
 
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    popBg: "#FFFFFF",
-    popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)",
-    popSelected: "rgba(0,0,0,0.075)",
-    popTertiary: "#64646B",
-    text: "#17171A",
-    textSecondary: "#55555C",
-    icon: "#5E5E66",
-    disabled: "#A2A2A8",
-    danger: "#C4261B",
-    divider: "rgba(0,0,0,0.075)",
-    bubbleMine: "#007AFF",
-    onBubbleMine: "#FFFFFF",
-    scrim: "rgba(23,23,26,0.16)",
-    focusRing: "#E0500F",
-  },
-  dark: {
-    popBg: "#232326",
-    popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)",
-    popSelected: "rgba(255,255,255,0.06)",
-    popTertiary: "#A0A0A7",
-    text: "#EDEDEF",
-    textSecondary: "#A6A6AD",
-    icon: "#97979E",
-    disabled: "#5E5E64",
-    danger: "#FF6B5E",
-    divider: "rgba(255,255,255,0.07)",
-    bubbleMine: "#0A84FF",
-    onBubbleMine: "#FFFFFF",
-    scrim: "rgba(0,0,0,0.5)",
-    focusRing: "#FF7A40",
-  },
-} as const;
-type SignalColors = (typeof SIGNAL)[keyof typeof SIGNAL];
-
-function useSignal(): SignalColors {
-  return SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
-}
-
-function actionColor(c: SignalColors, action: SheetAction): string {
-  return action.disabled ? c.disabled : action.destructive ? c.danger : c.text;
+function actionColor(c: ThemeColors, action: SheetAction): string {
+  return action.disabled ? c.disabled : action.destructive ? c.destructive : c.text;
 }
 
 export interface SheetTapback {
@@ -126,7 +86,7 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
   const lastRequestRef = useRef<SheetRequest | null>(null);
   if (request !== null) lastRequestRef.current = request;
   const rendered = request ?? lastRequestRef.current;
-  const theme = useSignal();
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const { wide } = useLayoutMode();
@@ -341,7 +301,7 @@ function PopoverMenu({
   winH: number;
   onDone: () => void;
 }) {
-  const c = useSignal();
+  const c = useTheme();
   const { anchor, tapbacks, actions } = request;
   const width = tapbacks ? Math.max(POP_W, tapbacks.length * 40 + 6) : POP_W;
   const requestedLeft = anchor.align === "end" ? anchor.x - POP_W + 18 : anchor.x;
@@ -370,7 +330,7 @@ function PopoverMenu({
                 t.active && { backgroundColor: c.bubbleMine },
               ]}
             >
-              <TapbackGlyph tapback={t} color={t.active ? c.onBubbleMine : c.textSecondary} />
+              <TapbackGlyph tapback={t} color={t.active ? c.onAccent : c.textSecondary} />
             </Pressable>
           ))}
         </View>
@@ -380,7 +340,7 @@ function PopoverMenu({
           {actions.map((action, i) => {
             const p = presented[i]!;
             const color = actionColor(c, action);
-            const iconColor = action.disabled ? c.disabled : action.destructive ? c.danger : c.icon;
+            const iconColor = action.disabled ? c.disabled : action.destructive ? c.destructive : c.icon;
             return (
               <View key={action.label}>
                 {p.separatorBefore && <View style={[styles.menuSeparator, { backgroundColor: c.divider }]} />}

@@ -16,7 +16,6 @@ import { fillComposer } from "@/lib/composer-fill";
 import { commaApi } from "@/lib/convex-api";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useSuggestionMode, useSuggestionModel } from "@/lib/settings";
 import { useActionSheet } from "@/lib/action-sheet";
 import { showToast } from "@/lib/toast";
@@ -49,7 +48,6 @@ export function SuggestionShelf({
   reactionPreview,
 }: SuggestionShelfProps) {
   const theme = useTheme();
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const { wide } = useLayoutMode();
   const mode = useSuggestionMode();
   const selectedModel = useSuggestionModel();
@@ -220,8 +218,8 @@ export function SuggestionShelf({
                 style={({ hovered, pressed }) => [
                   styles.pill,
                   styles.eventPill,
-                  { backgroundColor: signal.chipBg, borderColor: theme.accent, opacity: stale ? 0.5 : 1 },
-                  !stale && (hovered || pressed) && { backgroundColor: signal.chipHover },
+                  { backgroundColor: theme.surface, borderColor: theme.accent, opacity: stale ? 0.5 : 1 },
+                  !stale && (hovered || pressed) && { backgroundColor: theme.backgroundElement },
                 ]}
               >
                 {() => <>
@@ -249,8 +247,8 @@ export function SuggestionShelf({
                   onPress={() => suggestion.kind === "reaction" ? confirmReaction(suggestion) : applyTextSuggestion(suggestion)}
                   style={({ hovered, pressed }) => [
                     styles.pill,
-                    { backgroundColor: signal.chipBg, borderColor: signal.chipBorder, opacity: stale ? 0.5 : 1 },
-                    !stale && (hovered || pressed) && { backgroundColor: signal.chipHover },
+                    { backgroundColor: theme.surface, borderColor: theme.dividerStrong, opacity: stale ? 0.5 : 1 },
+                    !stale && (hovered || pressed) && { backgroundColor: theme.backgroundElement },
                   ]}
                 >
                   {() => <>
@@ -333,13 +331,13 @@ function SkeletonPills({ wide }: { wide: boolean }): React.JSX.Element {
 
 /** Skeletons hold still at the skeleton ink; no shimmer. */
 function SkeletonPill({ width }: { width: number }): React.JSX.Element {
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   return (
     <View
       style={[
         styles.pill,
         styles.skeleton,
-        { width, backgroundColor: signal.skeleton, borderColor: "transparent" },
+        { width, backgroundColor: theme.skeleton, borderColor: "transparent" },
       ]}
     />
   );
@@ -352,7 +350,6 @@ function GhostPill({ icon, label, accent = false, onPress }: {
   onPress: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
-  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const { wide } = useLayoutMode();
   const rest = accent ? theme.accent : theme.textSecondary;
   return (
@@ -364,8 +361,8 @@ function GhostPill({ icon, label, accent = false, onPress }: {
         style={({ hovered, pressed }) => [
           styles.pill,
           styles.ghost,
-          { backgroundColor: signal.chipBg, borderColor: signal.chipBorder },
-          (hovered || pressed) && { backgroundColor: signal.chipHover },
+          { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
+          (hovered || pressed) && { backgroundColor: theme.backgroundElement },
         ]}
       >
         {({ hovered, pressed }) => <>
@@ -378,12 +375,6 @@ function GhostPill({ icon, label, accent = false, onPress }: {
     </Reanimated.View>
   );
 }
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)", chipHover: "#F4F4F5", skeleton: "rgba(0,0,0,0.06)" },
-  dark: { chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)", chipHover: "#232326", skeleton: "rgba(255,255,255,0.07)" },
-} as const;
 
 const styles = StyleSheet.create({
   container: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 8 },

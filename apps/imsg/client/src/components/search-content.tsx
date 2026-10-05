@@ -5,30 +5,8 @@ import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { selectChat } from "@/lib/selection";
 import type { Contact, Message } from "@shared/types";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ListRow } from "./list-row";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: {
-    sidebar: "#FFFFFF",
-    field: "rgba(0,0,0,0.045)",
-    rowHover: "rgba(0,0,0,0.04)",
-    rowSelected: "rgba(0,0,0,0.075)",
-    text: "#17171A",
-    textSecondary: "#55555C",
-    textTertiary: "#64646B",
-  },
-  dark: {
-    sidebar: "#141416",
-    field: "rgba(255,255,255,0.06)",
-    rowHover: "rgba(255,255,255,0.045)",
-    rowSelected: "rgba(255,255,255,0.085)",
-    text: "#EDEDEF",
-    textSecondary: "#A6A6AD",
-    textTertiary: "#8F8F96",
-  },
-} as const;
+import { useTheme } from "@/hooks/use-theme";
 
 type SearchRow =
   | { kind: "header"; key: string; label: string }
@@ -48,7 +26,7 @@ export function SearchContent({
   scopeLabel?: string;
   onClose: () => void;
 }) {
-  const theme = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const theme = useTheme();
   const [query, setQuery] = useState(initialQuery ?? "");
 
   useEffect(() => {
@@ -125,7 +103,7 @@ export function SearchContent({
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.sidebar }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <TextInput
         value={query}
         onChangeText={setQuery}
