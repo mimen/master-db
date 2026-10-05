@@ -166,7 +166,7 @@ function MergeCard({ person, kept, onKeep, serviceOf }: {
       aria-checked={kept}
       accessibilityLabel={`Keep ${person.display_name}, ${person.organization ?? "no organization"}, ${n} messages`}
       onPress={onKeep}
-      style={[styles.card, { backgroundColor: colors.surface, borderColor: kept ? colors.text : colors.divider, borderWidth: kept ? 2 : 1 }]}
+      style={[styles.card, { backgroundColor: colors.surface, borderColor: kept ? colors.text : colors.divider, borderWidth: kept ? 2 : 1, margin: kept ? -1 : 0 }]}
     >
       <View style={styles.cardHead}>
         <PersonAvatar address={primaryHandle(person)} name={person.display_name} size={36} />
@@ -196,13 +196,13 @@ function MergeCard({ person, kept, onKeep, serviceOf }: {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1, minWidth: 0 },
-  body: { alignSelf: "center", gap: 14, maxWidth: 1140, paddingHorizontal: 40, paddingVertical: 36, width: "100%" },
+  body: { alignSelf: "center", gap: 14, maxWidth: 860, paddingHorizontal: 32, paddingVertical: 28, width: "100%" },
   bodyPhone: { paddingHorizontal: 16, paddingVertical: 12 },
   h1: { fontSize: 20, letterSpacing: -0.3 },
   lede: { fontSize: 13, marginBottom: 12, marginTop: -6 },
-  cards: { flexDirection: "row", gap: 14, marginBottom: 14 },
+  cards: { flexDirection: "row", gap: 12, marginBottom: 14 },
   cardsPhone: { flexDirection: "column" },
-  card: { borderRadius: 14, flex: 1, paddingBottom: 6, paddingHorizontal: 16, paddingTop: 14 },
+  card: { borderRadius: 12, flex: 1, paddingBottom: 6, paddingHorizontal: 16, paddingTop: 14 },
   cardHead: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 10 },
   cardName: { fontSize: 14, fontWeight: "600" },
   cardSub: { fontSize: 12.5, marginTop: 1 },

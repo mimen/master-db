@@ -299,6 +299,7 @@ function FoundPerson({
           <ScrollView style={styles.fill} contentContainerStyle={styles.stack}>
             {main}
             {relationship}
+            {narrow ? <OtherNetworksSection person={person} identities={identities} chats={chats} /> : null}
           </ScrollView>
         )}
       </EnterFromBelow>
@@ -389,19 +390,31 @@ function HandlesSection({ person, identities, chats, firstName, grouped }: {
           </View>
         ) : null}
       </Card>
-      {grouped && rows.some((r) => !r.reachable) ? (
-        <View style={styles.sectionGap}>
-          <SectionHeader title="Other networks" />
-          <Card>
-            {rows.filter((r) => !r.reachable).map((row, i) => (
-              <View key={row.key} style={[styles.hrowGrouped, rowDivider(colors, i === 0)]}>
-                <Text style={[styles.kGrouped, { color: colors.textSecondary }]}>{row.label}</Text>
-                <Text style={[styles.vGrouped, { color: colors.text }]}>{row.display}</Text>
-              </View>
-            ))}
-          </Card>
-        </View>
-      ) : null}
+    </View>
+  );
+}
+
+/** The phone page's last section: handles Messages can't reach, such as Instagram. */
+function OtherNetworksSection({ person, identities, chats }: {
+  readonly person: Person;
+  readonly identities: Parameters<typeof handleRows>[1];
+  readonly chats: readonly ChatSummary[];
+}) {
+  const colors = useTheme();
+  const serviceOf = useMemo(() => serviceIndex(chats), [chats]);
+  const rows = handleRows(person, identities, serviceOf).filter((r) => !r.reachable);
+  if (rows.length === 0) return null;
+  return (
+    <View>
+      <SectionHeader title="Other networks" />
+      <Card>
+        {rows.map((row, i) => (
+          <View key={row.key} style={[styles.hrowGrouped, rowDivider(colors, i === 0)]}>
+            <Text style={[styles.kGrouped, { color: colors.textSecondary }]}>{row.label}</Text>
+            <Text style={[styles.vGrouped, { color: colors.text }]}>{row.display}</Text>
+          </View>
+        ))}
+      </Card>
     </View>
   );
 }
@@ -539,7 +552,6 @@ const styles = StyleSheet.create({
   svcTextGrouped: { fontSize: 15 },
   stateSlot: { alignItems: "flex-end", minWidth: 82 },
   prim: { borderRadius: 6, fontSize: 11.5, fontWeight: "600", overflow: "hidden", paddingHorizontal: 7, paddingVertical: 2 },
-  sectionGap: { marginTop: 22 },
   conv: { alignItems: "center", flexDirection: "row", gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   t1: { fontSize: 13, fontWeight: "600" },
   t2: { fontSize: 12.5, marginTop: 1 },
