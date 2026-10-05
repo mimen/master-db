@@ -17,8 +17,7 @@ interface UndoEntry {
  * rapid-triage burst where it matters most.
  *
  * Ten is the bound because that is the whole span a user can still remember
- * having triaged. The sweep overlay's own cleared log shows the last three, and
- * a misfire run longer than ten is one the Settled lens recovers better than a
+ * having triaged, and a misfire run longer than ten is one the Settled lens recovers better than a
  * keypress can. Each entry also pins a conversation snapshot in its closure, so
  * the depth doubles as the fixed ceiling on what the stack keeps alive.
  */

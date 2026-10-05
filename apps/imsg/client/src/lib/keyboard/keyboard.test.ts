@@ -64,8 +64,10 @@ describe("global chords", () => {
     expect(binding?.scope).toBe("global");
   });
 
-  test("⌘Z is left alone so the composer keeps its own text undo", () => {
-    expect(matchBinding(stroke({ key: "z", metaKey: true }))).toBeNull();
+  test("⌘Z undoes only outside text fields, so the composer keeps its own text undo", () => {
+    const binding = matchBinding(stroke({ key: "z", metaKey: true }));
+    expect(binding?.commandId).toBe("action.undo");
+    expect(binding?.allowInEditable).toBe(false);
   });
 
   test("retired chords are gone: ⌘⇧E, ⌘⇧U, ⌘↑/⌘↓", () => {
@@ -146,9 +148,9 @@ describe("registry", () => {
   test("help advertises the triage chords and hides the shell-only ones", () => {
     const entries = helpEntries();
     expect(entries.find((e) => e.title === "Next conversation")?.keys).toEqual(["J", "↓"]);
-    expect(entries.find((e) => e.title === "Settle / un-settle conversation")?.keys).toEqual(["⌘E"]);
+    expect(entries.find((e) => e.title === "Settle / un-settle")?.keys).toEqual(["⌘E"]);
     expect(entries.find((e) => e.title === "Mark unread")?.keys).toEqual(["⌘U"]);
-    expect(entries.find((e) => e.title === "Undo last action")?.keys).toEqual(["⌘⇧Z"]);
+    expect(entries.find((e) => e.title === "Undo last action")?.keys).toEqual(["⌘Z", "⌘⇧Z"]);
     expect(entries.find((e) => e.title === "Close panel / window")).toBeUndefined();
     // ⌘N is browser-reserved (so: hidden) and bare `c` is gone, which leaves New
     // message with no advertised key. The native menu is where the shell shows it.

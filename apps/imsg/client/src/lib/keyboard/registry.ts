@@ -8,7 +8,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
   { id: "conversation.previous", title: "Previous conversation", group: "Navigation" },
   { id: "conversation.activate", title: "Open / reply", group: "Navigation" },
   { id: "composer.focus", title: "Open / reply", group: "Navigation" },
-  { id: "conversation.settle", title: "Settle / un-settle conversation", group: "Conversation" },
+  { id: "conversation.settle", title: "Settle / un-settle", group: "Conversation" },
   { id: "conversation.markUnread", title: "Mark unread", group: "Conversation" },
   { id: "action.undo", title: "Undo last action", group: "Conversation" },
   { id: "conversation.new", title: "New message", group: "Conversation" },
@@ -50,8 +50,9 @@ export const BINDINGS: readonly KeyBinding[] = [
   // Triage. Editable-safe on purpose: the composer is where the user lives.
   { commandId: "conversation.settle", combo: "mod+e", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
   { commandId: "conversation.markUnread", combo: "mod+u", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
-  // ⌘⇧Z, not ⌘Z. The dispatcher listens on the capture phase, so binding ⌘Z
-  // would take text undo away from the composer entirely rather than share it.
+  // ⌘Z only outside text fields: the dispatcher listens on the capture phase, so
+  // an editable-safe ⌘Z would take text undo away from the composer. ⌘⇧Z works anywhere.
+  { commandId: "action.undo", combo: "mod+z", scope: "global", allowInEditable: false, allowRepeat: false, preventDefault: true },
   { commandId: "action.undo", combo: "mod+shift+z", scope: "global", allowInEditable: true, allowRepeat: false, preventDefault: true },
 
   // Navigation glides from anywhere (app load included) whenever focus is NOT
