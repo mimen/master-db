@@ -139,6 +139,8 @@ export const Colors = {
     disabled: "#A2A2A8",
     switchOn: "#17171A",
     switchOff: "#8E8E95",
+    chipBg: "#FFFFFF",
+    chipBorder: "rgba(0,0,0,0.13)",
     /** The state strip on top of the composer card. */
     strip: "#FFFFFF",
     toastBg: "#17171A",
@@ -183,6 +185,8 @@ export const Colors = {
     disabled: "#5E5E64",
     switchOn: "#EDEDEF",
     switchOff: "#727279",
+    chipBg: "#1C1C1F",
+    chipBorder: "rgba(255,255,255,0.12)",
     strip: "#19191C",
     toastBg: "#EDEDEF",
     toastText: "#17171A",

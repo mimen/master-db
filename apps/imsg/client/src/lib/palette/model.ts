@@ -1,6 +1,8 @@
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { shortcutFor } from "@/lib/keyboard/registry";
 
+import { inboxFilterSnapshot, type SavedView } from "./saved-views";
+
 /**
  * Headless ⌘K palette engine — pure derivation, no React, no platform code.
  * The desktop overlay renders these sections today; a future mobile sheet
@@ -12,7 +14,8 @@ export type PaletteCommandId =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter }
   | { kind: "tab"; value: "messages" | "contacts" }
-  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" };
+  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" }
+  | { kind: "view"; value: string };
 
 export interface PaletteCommand {
   id: PaletteCommandId;
@@ -41,7 +44,7 @@ interface LensCommand {
 const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
   all: { title: "All conversations", keywords: ["view", "filter", "inbox"] },
   unread: { title: "Unread", keywords: ["view", "filter"] },
-  unresponded: { title: "Needs reply", keywords: ["view", "filter", "unresponded"] },
+  unresponded: { title: "Needs reply", keywords: ["view", "filter", "your turn", "unresponded"] },
   waiting: { title: "Waiting", keywords: ["view", "filter", "awaiting reply"] },
   settled: { title: "Settled", keywords: ["view", "filter", "done", "handled", "archive"] },
 };
@@ -136,6 +139,17 @@ export interface PaletteInput {
   messages: readonly Message[];
   /** Contact-directory hits for the CURRENT query; [] while pending. */
   contacts: readonly Contact[];
+  /** Saved filter views; defaults to the stored set. */
+  views?: readonly SavedView[];
+}
+
+/** Each saved view is an "Open <name>" command. */
+export function viewCommands(views: readonly SavedView[]): PaletteCommand[] {
+  return views.map((view) => ({
+    id: { kind: "view", value: view.id },
+    title: `Open ${view.name}`,
+    keywords: ["view", "saved", "filter"],
+  }));
 }
 
 /** Section order is the approved ranking: Commands (only when matched) →
@@ -144,12 +158,13 @@ export interface PaletteInput {
 export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
   const needle = input.query.trim().toLowerCase();
   const sections: PaletteSection[] = [];
+  const commandList = [...PALETTE_COMMANDS, ...viewCommands(input.views ?? inboxFilterSnapshot().views)];
 
   if (needle.length === 0) {
     sections.push({
       title: "Commands",
       hideHeader: true,
-      items: PALETTE_COMMANDS.map((command) => ({
+      items: commandList.map((command) => ({
         kind: "command",
         key: commandKey(command.id),
         command,
@@ -171,7 +186,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
       .map((e) => e.item);
 
   const commands = scored(
-    PALETTE_COMMANDS.map((command) => ({
+    commandList.map((command) => ({
       score: Math.max(
         matchScore(needle, command.title),
         ...command.keywords.map((k) => matchScore(needle, k)),

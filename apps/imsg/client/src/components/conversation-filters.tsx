@@ -1,543 +1,474 @@
+import { Ionicons } from "@expo/vector-icons";
 import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect } from "react";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from "react-native";
+import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 
-import { useTheme } from "@/hooks/use-theme";
+import { Dropdown, type DropdownOption } from "./ui/dropdown";
+import { LiquidTabs } from "./motion/liquid-tabs";
+import { RollingNumber } from "./motion/rolling-number";
+import { Springs } from "@/constants/springs";
 import { headerFace } from "@/lib/header-font";
-import { CardShadow, Radii, Type } from "@/constants/theme";
-import { TriageGeometry } from "@/constants/triage-theme";
-import { OverlayShell } from "./overlay-shell";
+import { useTheme } from "@/hooks/use-theme";
+
+type ThemeColors = ReturnType<typeof useTheme>;
 import {
-  activeInboxFilterCount,
-  resetInboxFilters,
-  selectInboxFilter,
-  type InboxFilterSelection,
-  type InboxFilters,
+  INCLUDE_LABELS,
+  LENSES,
+  lensOf,
+  ONLY_LABELS,
+  PEOPLE_LABELS,
+  PEOPLE_ORDER,
+  PRIORITY_LABELS,
+  SERVICE_LABELS,
+  TIME_LABELS,
+  toggled,
+  type FilterChip,
+  type IncludeKey,
+  type Lens,
+  type OnlyKey,
+  type PriorityLevel,
+  type Refinements,
+  type Service,
+  type TimeRange,
 } from "@/lib/inbox-model";
+import type { SavedView } from "@/lib/palette/saved-views";
 
-interface FilterOption<Value extends StateFilter | TypeFilter> {
-  value: Value;
-  label: string;
-}
-
-export const STATE_FILTERS = [
-  { value: "unresponded", label: "Needs reply" },
-  { value: "waiting", label: "Waiting" },
-  { value: "unread", label: "Unread" },
-  { value: "all", label: "All" },
-  { value: "settled", label: "Settled" },
-] as const satisfies readonly FilterOption<StateFilter>[];
-
-/** The three working queues. Unread, Settled, and the type lens live in the filter menu. */
-const SEGMENTS = [
-  { value: "unresponded", label: "Needs reply" },
-  { value: "waiting", label: "Waiting" },
-  { value: "all", label: "All" },
-] as const satisfies readonly FilterOption<StateFilter>[];
-
-export const TYPE_FILTERS = [
-  { value: "all", label: "Everyone" },
-  { value: "known", label: "Known" },
-  { value: "dm", label: "DMs" },
-  { value: "group", label: "Groups" },
-  { value: "unknown", label: "Unknown" },
-] as const satisfies readonly FilterOption<TypeFilter>[];
-
-export interface ConversationFiltersProps {
-  filters: InboxFilters;
-  counts: StateCounts | null;
-  onFiltersChange: (filters: InboxFilters) => void;
-}
+const WEB = Platform.OS === "web";
+const NO_SELECT = WEB ? ({ userSelect: "none", cursor: "pointer" } as object) : null;
 
 function formatCount(count: number): string {
   return count > 999 ? "999+" : String(count);
 }
 
-function filterAccessibilityLabel(label: string, count: number | undefined): string {
-  if (count === undefined) return label;
-  return `${label}, ${formatCount(count)} conversations`;
+/**
+ * The lens tab row, the app's only segmented control. Needs reply carries a turn-colored count,
+ * Unread a gray one. On the phone the tabs are the page title and scroll sideways, without the bar.
+ */
+export function LensTabs({
+  state,
+  counts,
+  onSelect,
+  phone = false,
+}: {
+  state: StateFilter;
+  counts: StateCounts | null;
+  onSelect: (lens: Lens) => void;
+  phone?: boolean;
+}) {
+  const theme = useTheme();
+  const tabs = LENSES.map((lens, index) => {
+    const count = lens.count ? counts?.[lens.value] : undefined;
+    return {
+      key: lens.value,
+      label: lens.label,
+      accessibilityLabel: count === undefined ? lens.label : `${lens.label}, ${count}`,
+      accessibilityHint: WEB && !phone ? `Command ${index + 1}` : undefined,
+    };
+  });
+  const row = (
+    <LiquidTabs
+      tabs={tabs}
+      // Settled has no tab; the bar rests under nothing.
+      value={lensOf(state) ?? ("settled" as Lens)}
+      onChange={onSelect}
+      underline={!phone}
+      style={phone ? styles.tabsPhone : styles.tabs}
+      tabStyle={phone ? styles.tabPhone : null}
+      renderLabel={(tab, color) => {
+        const lens = LENSES.find((l) => l.value === tab.key)!;
+        const count = lens.count ? counts?.[lens.value] : undefined;
+        const turnCount = lens.count === "turn" && (count ?? 0) > 0;
+        return (
+          <>
+            <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
+            {count === undefined ? null : lens.count === "turn" && count <= 999 ? (
+              // The Needs reply count is the app badge; it rolls on snappy as it changes.
+              <View style={phone ? styles.rollPhone : styles.roll}>
+                <RollingNumber value={count} style={[phone ? styles.tabCountPhone : styles.tabCount, styles.rollText, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]} />
+              </View>
+            ) : (
+              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, { color: theme.textTertiary }]}>{formatCount(count)}</Text>
+            )}
+          </>
+        );
+      }}
+    />
+  );
+  return phone ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>{row}</ScrollView>
+  ) : row;
 }
 
-/**
- * The lens tabs: Needs reply, Waiting, All, set in the header face with a
- * persimmon bar under the active one. A state picked from the filter menu
- * (Unread, Settled) leaves every tab unselected. `size="large"` is the phone's
- * page title; the strip scrolls sideways there.
- */
-export function StateSegments({ filters, counts, onFiltersChange, size = "regular" }: ConversationFiltersProps & { size?: "regular" | "large" }) {
+/** Saved views, then the active filter chips, then Clear all. Phone puts the count line first. */
+export function FilterChipRow({
+  chips,
+  views,
+  onRemove,
+  onClearAll,
+  onOpenView,
+  onDeleteView,
+  countLine,
+  phone = false,
+}: {
+  chips: FilterChip[];
+  views: readonly SavedView[];
+  onRemove: (chip: FilterChip) => void;
+  onClearAll: () => void;
+  onOpenView: (view: SavedView) => void;
+  onDeleteView: (view: SavedView) => void;
+  countLine?: string;
+  phone?: boolean;
+}) {
   const theme = useTheme();
-  const large = size === "large";
-  const tabs = SEGMENTS.map((segment) => {
-    const selected = filters.state === segment.value;
-    const count = counts?.[segment.value];
-    const turnCount = segment.value === "unresponded" && count !== undefined && count > 0;
+  if (chips.length === 0 && views.length === 0) return null;
+  const clearAll = chips.length > 0 ? (
+    <Pressable accessibilityRole="button" onPress={onClearAll} hitSlop={6} style={NO_SELECT}>
+      <Text style={[styles.clearAll, { color: theme.textSecondary }]}>Clear all</Text>
+    </Pressable>
+  ) : null;
+  const chipViews = (
+    <>
+      {views.map((view) => (
+        <View key={view.id} style={[styles.chip, styles.viewChip, { backgroundColor: theme.chipBg, borderColor: theme.chipBorder }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open view ${view.name}`} onPress={() => onOpenView(view)} style={[styles.chipBody, NO_SELECT]}>
+            <Ionicons aria-hidden name="bookmark-outline" size={11} color={theme.icon} />
+            <Text numberOfLines={1} style={[styles.chipLabel, { color: theme.text }]}>{view.name}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Delete view ${view.name}`} onPress={() => onDeleteView(view)} hitSlop={6} style={[styles.chipX, NO_SELECT]}>
+            <Ionicons aria-hidden name="close" size={11} color={theme.icon} />
+          </Pressable>
+        </View>
+      ))}
+      {chips.map((chip) => (
+        <View key={chip.key} style={[styles.chip, phone && styles.chipPhone, { backgroundColor: theme.chipBg, borderColor: theme.chipBorder }]}>
+          <Text numberOfLines={1} style={[styles.chipLabel, phone && styles.chipLabelPhone, { color: theme.text }]}>
+            {chip.prefix ? <Text style={{ color: theme.textSecondary, fontWeight: "400" }}>{chip.prefix} </Text> : null}
+            {chip.label}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Remove filter ${chip.prefix ? `${chip.prefix} ` : ""}${chip.label}`}
+            onPress={() => onRemove(chip)}
+            hitSlop={6}
+            style={[styles.chipX, NO_SELECT]}
+          >
+            <Ionicons aria-hidden name="close" size={phone ? 14 : 11} color={theme.icon} />
+          </Pressable>
+        </View>
+      ))}
+    </>
+  );
+  if (phone) {
     return (
-      <Pressable
-        key={segment.value}
-        accessibilityRole="radio"
-        accessibilityLabel={filterAccessibilityLabel(segment.label, count)}
-        aria-checked={selected}
-        onPress={() => onFiltersChange(selectInboxFilter(filters, { kind: "state", value: segment.value }))}
-        style={[styles.tab, large && styles.tabLarge]}
-      >
-        {({ hovered }: { hovered?: boolean }) => (
-          <>
-            <View style={styles.tabLabelRow}>
-              <Text numberOfLines={1} style={[large ? styles.tabLabelLarge : styles.tabLabel, { color: selected || hovered ? theme.text : theme.textTertiary }]}>
-                {segment.label}
-              </Text>
-              {count !== undefined && segment.value !== "all" ? (
-                <Text style={[large ? styles.tabCountLarge : styles.tabCount, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]}>
-                  {formatCount(count)}
-                </Text>
-              ) : null}
-            </View>
-            {selected && !large ? <View style={[styles.tabBar, { backgroundColor: theme.lensBar }]} /> : null}
-          </>
-        )}
-      </Pressable>
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsPhone}>{chipViews}</ScrollView>
+        {countLine ? (
+          <View style={styles.countLine}>
+            <Text style={[styles.countLineText, { color: theme.textSecondary }]}>{countLine}</Text>
+            {clearAll}
+          </View>
+        ) : null}
+      </View>
     );
-  });
+  }
+  return <View style={styles.chips}>{chipViews}{clearAll}</View>;
+}
+
+/** A labeled row around the shared dropdown: a form row in the popover, a settings row on the sheet. */
+function Field<V extends string>({
+  label,
+  icon,
+  phone,
+  ...dropdown
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  phone: boolean;
+  value: V;
+  options: readonly DropdownOption<V>[];
+  onChange: (value: V) => void;
+}) {
+  const theme = useTheme();
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
-      {large ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsLarge}>
-          {tabs}
-        </ScrollView>
-      ) : (
-        <View style={styles.tabs}>{tabs}</View>
-      )}
+    <View style={[phone ? [styles.sheetRow, { borderBottomColor: theme.divider }] : styles.fieldRow]}>
+      {phone ? <Ionicons aria-hidden name={icon} size={20} color={theme.icon} style={styles.sheetIcon} /> : null}
+      <Text style={[phone ? styles.sheetLabel : styles.fieldLabel, { color: phone ? theme.text : theme.textSecondary }]}>{label}</Text>
+      <Dropdown label={label} {...dropdown} style={phone ? styles.sheetField : styles.field} />
     </View>
   );
 }
 
-function FilterMenuOption({
+function Toggle({
   label,
+  icon,
   count,
-  selected,
-  selection,
-  onSelect,
-  compact = false,
+  checked,
+  onToggle,
+  phone,
+  theme,
 }: {
   label: string;
-  count?: number;
-  selected: boolean;
-  selection: InboxFilterSelection;
-  onSelect: (selection: InboxFilterSelection) => void;
-  compact?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  count: number;
+  checked: boolean;
+  onToggle: () => void;
+  phone: boolean;
+  theme: ThemeColors;
 }) {
-  const theme = useTheme();
+  if (phone) {
+    return (
+      <View style={[styles.sheetRow, { borderBottomColor: theme.divider }]}>
+        <Ionicons aria-hidden name={icon} size={20} color={theme.icon} style={styles.sheetIcon} />
+        <Text style={[styles.sheetLabel, { color: theme.text }]}>{label}</Text>
+        <Switch
+          accessibilityLabel={`${label}, ${count}`}
+          value={checked}
+          onValueChange={onToggle}
+          trackColor={{ false: theme.switchOff, true: theme.switchOn }}
+          thumbColor="#FFFFFF"
+        />
+      </View>
+    );
+  }
   return (
     <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={filterAccessibilityLabel(label, count)}
-      aria-checked={selected}
-      onPress={() => onSelect(selection)}
-      style={({ pressed }) => [
-        styles.menuOption,
-        compact && styles.popoverOption,
-        pressed && { backgroundColor: theme.backgroundSelected },
-      ]}
+      role="checkbox"
+      aria-checked={checked}
+      accessibilityLabel={`${label}, ${count}`}
+      onPress={onToggle}
+      style={[styles.check, NO_SELECT]}
     >
-      <Text
-        accessibilityElementsHidden
-        style={[styles.check, compact && styles.popoverCheck, { color: theme.accent }]}
-      >
-        {selected ? "✓" : ""}
-      </Text>
-      <Text
-        style={[styles.menuOptionLabel, compact && styles.popoverOptionLabel, { color: theme.text }]}
-      >
-        {label}
-      </Text>
-      {count !== undefined && (
-        <Text
-          style={[
-            styles.menuOptionCount,
-            compact && styles.popoverOptionCount,
-            { color: theme.textSecondary },
-          ]}
-        >
-          {formatCount(count)}
-        </Text>
-      )}
+      <View style={[styles.box, checked ? { backgroundColor: theme.switchOn, borderColor: theme.switchOn } : { borderColor: theme.switchOff }]}>
+        {checked ? <Ionicons aria-hidden name="checkmark" size={12} color={theme.background} /> : null}
+      </View>
+      <Ionicons aria-hidden name={icon} size={15} color={theme.icon} />
+      <Text style={[styles.checkLabel, { color: theme.text }]}>{label}</Text>
+      <Text style={[styles.checkCount, { color: theme.textTertiary }]}>{count}</Text>
     </Pressable>
   );
 }
 
-export interface FilterAnchor {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+const ONLY_ICONS: Record<OnlyKey, keyof typeof Ionicons.glyphMap> = {
+  attachments: "attach-outline",
+  links: "link-outline",
+  pinned: "pin-outline",
+  favorites: "star-outline",
+};
+const INCLUDE_ICONS: Record<IncludeKey, keyof typeof Ionicons.glyphMap> = {
+  settled: "checkmark-circle-outline",
+  scheduled: "time-outline",
+};
+const ONLY_KEYS: OnlyKey[] = ["attachments", "links", "pinned", "favorites"];
+const INCLUDE_KEYS: IncludeKey[] = ["settled", "scheduled"];
+const SERVICES: Service[] = ["any", "iMessage", "SMS"];
+const TIMES: TimeRange[] = ["any", "today", "week", "month"];
+const PRIORITIES: PriorityLevel[] = ["any", "high", "medium", "low"];
+const ANY_TAG = "";
 
-export interface ConversationFiltersModalProps extends ConversationFiltersProps {
+export interface FilterPanelProps {
   visible: boolean;
   onClose: () => void;
-  /** Desktop: render as a popover anchored to the filter button instead of a sheet. */
-  anchor?: FilterAnchor | null;
+  /** Desktop: a popover anchored under the filter icon. Absent: the phone bottom sheet. */
+  anchor: { x: number; y: number; width: number; height: number } | null;
+  type: TypeFilter;
+  refinements: Refinements;
+  onTypeChange: (type: TypeFilter) => void;
+  onRefinementsChange: (refinements: Refinements) => void;
+  onClearAll: () => void;
+  onSaveView: () => void;
+  tags: readonly string[];
+  counts: Record<OnlyKey | IncludeKey, number>;
+  showing: number;
+  total: number;
+  lensLabel: string;
 }
 
-/**
- * Adapter for the same two-lens model. On mobile it's a bottom sheet; on desktop
- * (when an anchor is supplied) it's a popover mounted at the filter button.
- * Selections stay open so a person can combine state and type before dismissing.
- */
-export function ConversationFiltersModal({
-  visible,
-  onClose,
-  filters,
-  counts,
-  onFiltersChange,
-  anchor = null,
-}: ConversationFiltersModalProps) {
+/** The filter controls, as the desktop popover or the phone sheet. Every change applies live. */
+export function ConversationFiltersPanel(props: FilterPanelProps) {
+  const { visible, onClose, anchor, type, refinements: r, onRefinementsChange, counts } = props;
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
-  const select = (selection: InboxFilterSelection): void => {
-    onFiltersChange(selectInboxFilter(filters, selection));
-  };
+  const phone = anchor === null;
+  const scale = useSharedValue(0.98);
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    if (!visible) {
+      scale.value = 0.98;
+      opacity.value = 0;
+      return;
+    }
+    scale.value = reduceMotion ? 1 : withSpring(1, Springs.snappy);
+    opacity.value = reduceMotion ? 1 : withSpring(1, Springs.snappy);
+  }, [visible, reduceMotion, scale, opacity]);
+  const grow = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+
+  const set = (patch: Partial<Refinements>) => onRefinementsChange({ ...r, ...patch });
+  const controls = (
+    <View style={[phone ? [styles.sheetCard, { backgroundColor: theme.surface, borderColor: theme.divider }] : [styles.band, { borderBottomColor: theme.divider }], styles.raised]}>
+      <Field label="People" icon="people-outline" phone={phone} value={type}
+        options={PEOPLE_ORDER.map((value) => ({ value, label: PEOPLE_LABELS[value] }))}
+        onChange={props.onTypeChange} />
+      <Field label="Service" icon="chatbubble-outline" phone={phone} value={r.service}
+        options={SERVICES.map((value) => ({ value, label: SERVICE_LABELS[value], dot: value === "iMessage" ? theme.accent : value === "SMS" ? theme.sms : undefined }))}
+        onChange={(service) => set({ service })} />
+      <Field label="Time" icon="time-outline" phone={phone} value={r.time}
+        options={TIMES.map((value) => ({ value, label: TIME_LABELS[value] }))}
+        onChange={(time) => set({ time })} />
+      <Field label="Priority" icon="star-outline" phone={phone} value={r.priority}
+        options={PRIORITIES.map((value) => ({ value, label: PRIORITY_LABELS[value] }))}
+        onChange={(priority) => set({ priority })} />
+      {/* The shared dropdown picks one value, so Tags narrows to a single tag. */}
+      <Field label="Tags" icon="pricetag-outline" phone={phone} value={r.tags[0] ?? ANY_TAG}
+        options={[{ value: ANY_TAG, label: "Any tag" }, ...props.tags.map((value) => ({ value, label: value }))]}
+        onChange={(tag) => set({ tags: tag === ANY_TAG ? [] : [tag] })} />
+    </View>
+  );
+  const toggles = (title: string, keys: readonly (OnlyKey | IncludeKey)[]) => (
+    <View style={phone ? null : [styles.band, { borderBottomColor: theme.divider }]}>
+      <Text style={[phone ? styles.sheetGroup : styles.bandTitle, { color: theme.textSecondary }]}>{title}</Text>
+      <View style={phone ? [styles.sheetCard, { backgroundColor: theme.surface, borderColor: theme.divider }] : null}>
+        {keys.map((key) => {
+          const only = (ONLY_KEYS as readonly string[]).includes(key);
+          const checked = only ? r.only.includes(key as OnlyKey) : r.include.includes(key as IncludeKey);
+          return (
+            <Toggle
+              key={key}
+              theme={theme}
+              phone={phone}
+              label={only ? ONLY_LABELS[key as OnlyKey] : phone && key === "scheduled" ? "Scheduled" : INCLUDE_LABELS[key as IncludeKey]}
+              icon={only ? ONLY_ICONS[key as OnlyKey] : INCLUDE_ICONS[key as IncludeKey]}
+              count={counts[key]}
+              checked={checked}
+              onToggle={() => (only ? set({ only: toggled(r.only, key as OnlyKey) }) : set({ include: toggled(r.include, key as IncludeKey) }))}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
 
   if (anchor) {
-    // Stays over the queue it filters instead of covering the navigation rail.
-    const popoverWidth = Math.min(TriageGeometry.queueWidth - 16, windowWidth - 16);
-    const left = Math.min(
-      Math.max(8, anchor.x + anchor.width - popoverWidth),
-      windowWidth - popoverWidth - 8,
-    );
-    const top = anchor.y + anchor.height + 6;
+    const width = Math.min(380, windowWidth - 16);
+    const left = Math.max(8, Math.min(anchor.x, windowWidth - width - 8));
     return (
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close conversation filters"
-          onPress={onClose}
-          style={styles.popoverBackdrop}
-        />
-        <View
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={StyleSheet.absoluteFill} />
+        <Reanimated.View
           role="dialog"
-          aria-modal
-          aria-label="Conversation filters"
-          style={[
-            styles.popover,
-            {
-              backgroundColor: theme.backgroundElement,
-              borderColor: theme.divider,
-              top,
-              left,
-              width: popoverWidth,
-            },
-          ]}
+          aria-label="Filter conversations"
+          style={[styles.popover, { top: anchor.y + anchor.height + 6, left, width, backgroundColor: theme.popBg }, WEB && ({ boxShadow: theme.popShadow, transformOrigin: "top left" } as object), grow]}
         >
-          <View style={styles.popoverBody}>
-            <View
-              accessibilityRole="radiogroup"
-              accessibilityLabel="Conversation state"
-              style={styles.popoverStateColumn}
-            >
-              <Text style={[styles.popoverGroupTitle, { color: theme.textSecondary }]}>State</Text>
-              {STATE_FILTERS.map((filter) => (
-                <FilterMenuOption
-                  key={filter.value}
-                  compact
-                  label={filter.label}
-                  count={counts?.[filter.value]}
-                  selected={filters.state === filter.value}
-                  selection={{ kind: "state", value: filter.value }}
-                  onSelect={select}
-                />
-              ))}
-            </View>
-            <View style={[styles.popoverColumnDivider, { backgroundColor: theme.divider }]} />
-            <View
-              accessibilityRole="radiogroup"
-              accessibilityLabel="Conversation type"
-              style={styles.popoverTypeColumn}
-            >
-              <Text style={[styles.popoverGroupTitle, { color: theme.textSecondary }]}>Type</Text>
-              {TYPE_FILTERS.map((filter) => (
-                <FilterMenuOption
-                  key={filter.value}
-                  compact
-                  label={filter.label}
-                  selected={filters.type === filter.value}
-                  selection={{ kind: "type", value: filter.value }}
-                  onSelect={select}
-                />
-              ))}
-            </View>
+          <View style={[styles.popHeader, { borderBottomColor: theme.divider }]}>
+            <Text style={[styles.popTitle, { color: theme.text }]}>Filter</Text>
+            <Text style={[styles.popCount, { color: theme.textSecondary }]}>Showing {props.showing} of {props.total} in {props.lensLabel}</Text>
           </View>
-          <View style={[styles.popoverFooter, { borderTopColor: theme.divider }]}>
+          {controls}
+          {toggles("Only show", ONLY_KEYS)}
+          {toggles("Also include", INCLUDE_KEYS)}
+          <View style={styles.popFooter}>
+            <Pressable accessibilityRole="button" onPress={props.onClearAll} hitSlop={6} style={NO_SELECT}>
+              <Text style={[styles.footerClear, { color: theme.textSecondary }]}>Clear all</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Reset conversation filters"
-              onPress={() => onFiltersChange(resetInboxFilters())}
+              onPress={props.onSaveView}
+              style={({ hovered }) => [styles.saveView, { borderColor: theme.dividerStrong }, hovered && { backgroundColor: theme.rowHover }, NO_SELECT]}
             >
-              <Text style={[styles.popoverResetLabel, { color: theme.accent }]}>Reset</Text>
+              <Ionicons aria-hidden name="bookmark-outline" size={14} color={theme.text} />
+              <Text style={[styles.saveLabel, { color: theme.text }]}>Save as view</Text>
             </Pressable>
           </View>
-        </View>
+        </Reanimated.View>
       </Modal>
     );
   }
 
   return (
-    <OverlayShell
-      visible={visible}
-      onClose={onClose}
-      animationType="slide"
-      // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
-      backdropColor="rgba(0,0,0,0.35)"
-      backdropStyle={styles.modalRoot}
-      backdropAccessibilityRole="button"
-      backdropAccessibilityLabel="Close conversation filters"
-      card={false}
-      cardStyle={styles.sheetWrapper}
-    >
-      <View
-        accessibilityViewIsModal
-        accessibilityLabel="Conversation filters"
-        style={[styles.menu, { backgroundColor: theme.backgroundElement }]}
-      >
-        <View style={styles.menuHeader}>
-          <Text style={[styles.menuTitle, { color: theme.text }]}>Filters</Text>
-          <Text style={[styles.menuSummary, { color: theme.textSecondary }]}>
-            {activeInboxFilterCount(filters)} active
-          </Text>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: theme.backdrop }]} />
+      <View role="dialog" aria-label="Filter conversations" style={[styles.sheet, { backgroundColor: theme.popBg }]}>
+        <View style={[styles.grabber, { backgroundColor: theme.dividerStrong }]} />
+        <View style={styles.sheetHeader}>
+          <Pressable accessibilityRole="button" onPress={props.onClearAll} hitSlop={8} style={NO_SELECT}>
+            <Text style={[styles.sheetAction, { color: theme.textSecondary }]}>Clear</Text>
+          </Pressable>
+          <Text style={[styles.sheetTitle, { color: theme.text }]}>Filter</Text>
+          <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8} style={NO_SELECT}>
+            <Text style={[styles.sheetAction, styles.sheetDone, { color: theme.text }]}>Done</Text>
+          </Pressable>
         </View>
-        <ScrollView
-          style={styles.menuContent}
-          contentContainerStyle={styles.menuContentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
-            <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>State</Text>
-            {STATE_FILTERS.map((filter) => (
-              <FilterMenuOption
-                key={filter.value}
-                label={filter.label}
-                count={counts?.[filter.value]}
-                selected={filters.state === filter.value}
-                selection={{ kind: "state", value: filter.value }}
-                onSelect={select}
-              />
-            ))}
-          </View>
-          <View style={[styles.menuDivider, { backgroundColor: theme.divider }]} />
-          <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type">
-            <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>Type</Text>
-            {TYPE_FILTERS.map((filter) => (
-              <FilterMenuOption
-                key={filter.value}
-                label={filter.label}
-                selected={filters.type === filter.value}
-                selection={{ kind: "type", value: filter.value }}
-                onSelect={select}
-              />
-            ))}
-          </View>
+        <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+          {controls}
+          {toggles("Only show", ONLY_KEYS)}
+          {toggles("Also include", INCLUDE_KEYS)}
         </ScrollView>
-        <View style={styles.menuActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Reset conversation filters"
-            onPress={() => onFiltersChange(resetInboxFilters())}
-            style={({ pressed }) => [styles.resetButton, pressed && { opacity: 0.65 }]}
-          >
-            <Text style={[styles.resetButtonLabel, { color: theme.accent }]}>Reset</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Done filtering conversations"
-            onPress={onClose}
-            style={({ pressed }) => [
-              styles.doneButton,
-              { backgroundColor: theme.accent },
-              pressed && { opacity: 0.75 },
-            ]}
-          >
-            <Text style={[styles.doneButtonLabel, { color: theme.background }]}>Done</Text>
-          </Pressable>
-        </View>
+        <Pressable accessibilityRole="button" onPress={onClose} style={[styles.showButton, { backgroundColor: theme.switchOn }]}>
+          <Text style={[styles.showLabel, { color: theme.background }]}>
+            Show {props.showing} {props.showing === 1 ? "conversation" : "conversations"}
+          </Text>
+        </Pressable>
       </View>
-    </OverlayShell>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  tabs: { flexDirection: "row", gap: 14 },
-  tabsLarge: { alignItems: "flex-end", gap: 22, paddingRight: 24 },
-  tab: { paddingBottom: 10 },
-  tabLarge: { paddingBottom: 0 },
-  tabLabelRow: { alignItems: "baseline", flexDirection: "row", gap: 5 },
-  tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.15 },
-  tabLabelLarge: { ...headerFace, fontSize: 26, letterSpacing: -0.5, lineHeight: 32 },
-  tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500" },
-  tabCountLarge: { alignSelf: "flex-start", fontSize: 13, fontVariant: ["tabular-nums"], fontWeight: "500", marginTop: 2 },
+  tabs: { gap: 14 },
+  tabsPhone: { gap: 22, paddingHorizontal: 20 },
+  tabPhone: { paddingBottom: 6 },
+  tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.15, lineHeight: 18 },
+  tabLabelPhone: { ...headerFace, fontSize: 26, letterSpacing: -0.5, lineHeight: 32 },
+  tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18, marginLeft: 5 },
+  tabCountPhone: { alignSelf: "flex-start", fontSize: 13, lineHeight: 16, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
   tabCountTurn: { fontWeight: "600" },
-  tabBar: { borderRadius: 2, bottom: -1, height: 2, left: 0, position: "absolute", right: 0 },
-  popoverBackdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  popover: {
-    borderRadius: Radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-    position: "absolute",
-    ...CardShadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
-  },
-  popoverBody: {
-    flexDirection: "row",
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-  },
-  popoverStateColumn: {
-    flex: 1.3,
-  },
-  popoverTypeColumn: {
-    flex: 1,
-  },
-  popoverColumnDivider: {
-    alignSelf: "stretch",
-    marginHorizontal: 6,
-    marginVertical: 2,
-    width: StyleSheet.hairlineWidth,
-  },
-  popoverGroupTitle: {
-    fontSize: Type.caption,
-    fontWeight: "700",
-    paddingBottom: 4,
-    paddingHorizontal: 12,
-  },
-  popoverFooter: {
-    alignItems: "flex-end",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  popoverResetLabel: {
-    fontSize: Type.secondary,
-    fontWeight: "600",
-  },
-  // Color + press-dismiss live on OverlayShell's own backdrop; this anchors
-  // `menu` to the bottom. alignItems MUST be reset too: the shell centers its
-  // child by default (correct for a dialog), which made this sheet shrink to
-  // its content width and float as a narrow column instead of spanning the
-  // screen like a bottom sheet.
-  modalRoot: {
-    alignItems: "stretch",
-    justifyContent: "flex-end",
-  },
-  // OverlayShell's press-swallowing wrapper. It gets the sheet's SIZE because
-  // it's the direct child of the (flex:1) backdrop, so a percentage has a
-  // definite parent to resolve against. Putting maxHeight on `menu` instead
-  // asked Yoga to size a child by a percentage of a parent whose own height
-  // was being derived from that child — the circularity left the sheet
-  // stretched to the cap with dead space above the buttons.
-  sheetWrapper: {
-    maxHeight: "88%",
-    width: "100%",
-  },
-  menu: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    flexShrink: 1,
-    paddingBottom: 20,
-    paddingTop: 18,
-  },
-  menuContent: {
-    flexShrink: 1,
-  },
-  menuContentContainer: {
-    paddingBottom: 4,
-  },
-  menuHeader: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: 12,
-    paddingHorizontal: 20,
-  },
-  menuTitle: {
-    fontSize: 21,
-    fontWeight: "700",
-  },
-  menuSummary: {
-    fontSize: 14,
-  },
-  groupTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    paddingBottom: 4,
-    paddingHorizontal: 20,
-  },
-  menuOption: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 44,
-    paddingHorizontal: 20,
-  },
-  popoverOption: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-  },
-  check: {
-    fontSize: 16,
-    fontWeight: "700",
-    width: 24,
-  },
-  popoverCheck: {
-    fontSize: 14,
-    width: 18,
-  },
-  menuOptionLabel: {
-    flex: 1,
-    fontSize: 16,
-  },
-  popoverOptionLabel: {
-    fontSize: 14,
-  },
-  menuOptionCount: {
-    fontSize: 14,
-    fontVariant: ["tabular-nums"],
-  },
-  popoverOptionCount: {
-    fontSize: 12,
-  },
-  menuDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 20,
-    marginVertical: 10,
-  },
-  menuActions: {
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "flex-end",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  resetButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 14,
-  },
-  resetButtonLabel: {
-    fontSize: Type.body,
-    fontWeight: "600",
-  },
-  doneButton: {
-    alignItems: "center",
-    borderRadius: Radii.chip,
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 84,
-    paddingHorizontal: 16,
-  },
-  doneButtonLabel: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  roll: { alignSelf: "flex-start", marginLeft: 5 },
+  rollPhone: { alignSelf: "flex-start", marginLeft: 3, marginTop: 2 },
+  rollText: { alignSelf: "auto", marginLeft: 0, marginTop: 0 },
+  chips: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6, paddingBottom: 2, paddingLeft: 14, paddingRight: 12, paddingTop: 10 },
+  chipsPhone: { gap: 8, paddingHorizontal: 20, paddingTop: 8 },
+  chip: { alignItems: "center", borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 5, height: 24, paddingLeft: 9, paddingRight: 4 },
+  chipPhone: { height: 32, paddingLeft: 12, paddingRight: 8 },
+  viewChip: { paddingLeft: 7 },
+  chipBody: { alignItems: "center", flexDirection: "row", gap: 4 },
+  chipLabel: { fontSize: 12, fontWeight: "500", maxWidth: 180 },
+  chipLabelPhone: { fontSize: 15 },
+  chipX: { alignItems: "center", borderRadius: 8, height: 16, justifyContent: "center", width: 16 },
+  clearAll: { fontSize: 12, fontWeight: "500", marginLeft: 4 },
+  countLine: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 10 },
+  countLineText: { fontSize: 13, fontVariant: ["tabular-nums"] },
+  popover: { borderRadius: 14, position: "absolute" },
+  popHeader: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", height: 46, justifyContent: "space-between", paddingHorizontal: 16 },
+  popTitle: { fontSize: 14, fontWeight: "600" },
+  popCount: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  raised: { position: "relative", zIndex: 2 },
+  band: { borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 10 },
+  bandTitle: { fontSize: 12, fontWeight: "600", paddingBottom: 4 },
+  fieldRow: { alignItems: "center", flexDirection: "row", minHeight: 36, paddingVertical: 3 },
+  field: { width: 190 },
+  sheetField: { borderWidth: 0, maxWidth: 200, minWidth: 150 },
+  fieldLabel: { flex: 1, fontSize: 13 },
+  check: { alignItems: "center", flexDirection: "row", gap: 10, height: 30 },
+  box: { alignItems: "center", borderRadius: 4.5, borderWidth: 1.5, height: 16, justifyContent: "center", width: 16 },
+  checkLabel: { flex: 1, fontSize: 13 },
+  checkCount: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  popFooter: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  footerClear: { fontSize: 13, fontWeight: "600" },
+  saveView: { alignItems: "center", borderRadius: 8, borderWidth: 1, flexDirection: "row", gap: 6, height: 30, paddingHorizontal: 12 },
+  saveLabel: { fontSize: 13, fontWeight: "600" },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, bottom: 0, left: 0, maxHeight: "92%", paddingBottom: 28, position: "absolute", right: 0 },
+  grabber: { alignSelf: "center", borderRadius: 3, height: 5, marginTop: 8, width: 36 },
+  sheetHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 },
+  sheetTitle: { fontSize: 17, fontWeight: "600" },
+  sheetAction: { fontSize: 17 },
+  sheetDone: { fontWeight: "600" },
+  sheetBody: { gap: 8, paddingBottom: 16, paddingHorizontal: 16 },
+  sheetCard: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, overflow: "visible" },
+  sheetGroup: { fontSize: 13, paddingBottom: 6, paddingHorizontal: 14, paddingTop: 14 },
+  sheetRow: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", minHeight: 44, paddingHorizontal: 14, position: "relative" },
+  sheetIcon: { marginRight: 12 },
+  sheetLabel: { flex: 1, fontSize: 17 },
+  showButton: { alignItems: "center", borderRadius: 12, height: 50, justifyContent: "center", marginHorizontal: 16, marginTop: 4 },
+  showLabel: { fontSize: 17, fontWeight: "600" },
 });

@@ -27,7 +27,7 @@ test("advance goes to the next conversation, or back from the last", () => {
 });
 
 test("position is one-based and absent outside the lens", () => {
-  expect(queuePosition(order, "new")).toEqual({ index: 3, total: 4 });
+  expect(queuePosition(order, "new")).toEqual({ index: 3, total: 4, guid: "new" });
   expect(queuePosition(order, "elsewhere")).toBeNull();
   expect(queuePosition(order, undefined)).toBeNull();
 });

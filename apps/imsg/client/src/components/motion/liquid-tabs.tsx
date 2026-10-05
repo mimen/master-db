@@ -1,20 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 
 import { springConfig } from "@/constants/springs";
 import { Space } from "@/constants/tokens";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 
 import { edgeSprings } from "./math";
 
-// TODO(signal-tokens): round4/tokens.json color.lensBar.
-const LENS_BAR = { light: "#EC5A1E", dark: "#FF6A2B" } as const;
-
 export interface LiquidTab<K extends string> {
   readonly key: K;
   readonly label: string;
+  /** Spoken instead of the label, e.g. with its count. */
+  readonly accessibilityLabel?: string;
+  readonly accessibilityHint?: string;
 }
 
 export interface LiquidTabsProps<K extends string> {
@@ -23,6 +22,10 @@ export interface LiquidTabsProps<K extends string> {
   readonly onChange: (key: K) => void;
   /** Draws a tab's label (and any count) in the color that marks its selection. */
   readonly renderLabel: (tab: LiquidTab<K>, color: string) => ReactNode;
+  /** Off where the tabs are a page title (the phone list). */
+  readonly underline?: boolean;
+  readonly style?: StyleProp<ViewStyle>;
+  readonly tabStyle?: StyleProp<ViewStyle>;
 }
 
 type Edges = { left: number; right: number };
@@ -32,9 +35,8 @@ type Edges = { left: number; right: number };
  * so it stretches toward the new tab and then contracts. Label color changes instantly; under
  * Reduce Motion the underline jumps.
  */
-export function LiquidTabs<K extends string>({ tabs, value, onChange, renderLabel }: LiquidTabsProps<K>): React.JSX.Element {
+export function LiquidTabs<K extends string>({ tabs, value, onChange, renderLabel, underline: showUnderline = true, style, tabStyle }: LiquidTabsProps<K>): React.JSX.Element {
   const theme = useTheme();
-  const scheme = useColorScheme() === "dark" ? "dark" : "light";
   const reduceMotion = useReducedMotion();
   const [rowWidth, setRowWidth] = useState(0);
   const [boxes, setBoxes] = useState<Partial<Record<K, { x: number; width: number }>>>({});
@@ -64,7 +66,7 @@ export function LiquidTabs<K extends string>({ tabs, value, onChange, renderLabe
   const underline = useAnimatedStyle(() => ({ left: left.value, right: right.value }));
 
   return (
-    <View role="tablist" style={styles.row} onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
+    <View role="tablist" style={[styles.row, style]} onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
       {tabs.map((tab) => {
         const selected = tab.key === value;
         const color = selected ? theme.text : theme.textTertiary;
@@ -74,21 +76,26 @@ export function LiquidTabs<K extends string>({ tabs, value, onChange, renderLabe
             role="tab"
             aria-selected={selected}
             accessibilityState={{ selected }}
+            accessibilityLabel={tab.accessibilityLabel}
+            accessibilityHint={tab.accessibilityHint}
             onPress={() => onChange(tab.key)}
             onLayout={(e) => {
               const { x, width } = e.nativeEvent.layout;
               setBoxes((current) => ({ ...current, [tab.key]: { x, width } }));
             }}
-            style={styles.tab}
+            style={[styles.tab, tabStyle, NO_SELECT]}
           >
             {renderLabel(tab, color)}
           </Pressable>
         );
       })}
-      {box && <Animated.View aria-hidden style={[styles.underline, { backgroundColor: LENS_BAR[scheme] }, underline]} />}
+      {showUnderline && box && <Animated.View aria-hidden style={[styles.underline, { backgroundColor: theme.lensBar }, underline]} />}
     </View>
   );
 }
+
+// A tab is a control, not text: a drag across the row must not select the labels.
+const NO_SELECT = { userSelect: "none", cursor: "pointer" } as ViewStyle;
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: Space.lg },

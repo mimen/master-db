@@ -32,6 +32,7 @@ export function conversationRow(chat: ChatSummary): Conversation {
     lastMessageAt: chat.lastMessage?.dateCreated ?? 0, isSpam: chat.isSpam,
     hasGroupPhoto: chat.hasGroupPhoto ?? false, groupPhotoUrl: chat.groupPhotoUrl ?? null, updatedAt: FIXTURE_NOW,
     flags: chat.flags, unreadCount: chat.unreadCount,
+    ...(chat.crm ? { crm: chat.crm } : {}),
   };
 }
 

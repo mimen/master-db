@@ -31,7 +31,44 @@ const conversationView = v.object({
   }),
   unreadCount: v.number(),
   groupPhotoUrl: v.union(v.string(), v.null()),
+  /** The private CRM layer: a group's own row, a DM's person. Absent when nothing is set. */
+  crm: v.optional(v.object({
+    is_favorite: v.optional(v.boolean()),
+    priority: v.optional(v.number()),
+    tags: v.optional(v.array(v.string())),
+  })),
 });
+
+/** Reads the same CRM ChatSummary.crm carries: groups own theirs, a DM inherits its person's. */
+async function conversationCrm(
+  ctx: QueryCtx,
+  conversation: CommaConversationDoc,
+  person: Awaited<ReturnType<typeof personForAddress>>,
+) {
+  let base: { is_favorite?: boolean; priority?: number; tags: string[] };
+  if (conversation.isGroup) {
+    const row = await ctx.db.query("chat_crm")
+      .withIndex("by_chat_guid", (q) => q.eq("chat_guid", conversation.primaryChatGuid)).first();
+    const tags = await ctx.db.query("tags")
+      .withIndex("by_chat", (q) => q.eq("chat_guid", conversation.primaryChatGuid)).collect();
+    base = { is_favorite: row?.is_favorite, priority: row?.priority, tags: tags.map((t) => t.tag) };
+  } else if (person) {
+    const tags = await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", person._id)).collect();
+    base = {
+      is_favorite: person.is_favorite,
+      priority: typeof person.priority === "number" ? person.priority : undefined,
+      tags: tags.map((t) => t.tag),
+    };
+  } else {
+    return undefined;
+  }
+  if (!base.is_favorite && base.priority === undefined && base.tags.length === 0) return undefined;
+  return {
+    ...(base.is_favorite ? { is_favorite: true } : {}),
+    ...(base.priority !== undefined ? { priority: base.priority } : {}),
+    ...(base.tags.length > 0 ? { tags: base.tags.sort() } : {}),
+  };
+}
 
 async function withConversationState(ctx: QueryCtx, conversation: CommaConversationDoc) {
   const state = await ctx.db
@@ -53,10 +90,12 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
     conversation.lastMessage ?? null,
     unreadCount,
   );
-  const participants = await Promise.all(conversation.participants.map(async (participant) => {
-    const person = await personForAddress(ctx, participant.address);
+  const people = await Promise.all(conversation.participants.map((participant) => personForAddress(ctx, participant.address)));
+  const participants = await Promise.all(conversation.participants.map(async (participant, index) => {
+    const person = people[index];
     return { ...participant, name: person?.display_name ?? participant.name, photoUrl: person?.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null };
   }));
+  const crm = await conversationCrm(ctx, conversation, !conversation.isGroup && people.length === 1 ? people[0] ?? null : null);
   const displayName = conversation.isGroup
     ? conversation.rawDisplayName === undefined ? conversation.displayName
       : conversation.rawDisplayName.trim() || participants.map((p) => p.name ?? p.address).join(", ")
@@ -70,7 +109,7 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
     const person = senderAddress ? await personForAddress(ctx, senderAddress) : null;
     senderName = person?.display_name ?? senderName;
   }
-  return { ...conversation, displayName, participants, flags, unreadCount,
+  return { ...conversation, displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
     ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
     groupPhotoUrl: conversation.groupPhotoStorageId ? await ctx.storage.getUrl(conversation.groupPhotoStorageId) : null,
   };

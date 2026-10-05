@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ChatSummary } from "@shared/types";
-import { compactAge, waitingLongest, yourTurnLongest } from "./turn-age";
+import { compactAge, isLateTurn, waitingLongest, yourTurnLongest } from "./turn-age";
 
 const NOW = 1_800_000_000_000;
 const H = 3_600_000;
@@ -13,8 +13,16 @@ function chat(guid: string, flags: Partial<ChatSummary["flags"]>, lastAt: number
   };
 }
 
-test("compact ages step from minutes to weeks", () => {
-  expect([0, 5 * 60_000, 5 * H, 6 * 24 * H, 15 * 24 * H].map(compactAge)).toEqual(["1m", "5m", "5h", "6d", "2w"]);
+test("compact ages step from minutes to weeks and years", () => {
+  expect([0, 5 * 60_000, 5 * H, 6 * 24 * H, 15 * 24 * H, 400 * 24 * H].map(compactAge)).toEqual(["1m", "5m", "5h", "6d", "2w", "1y"]);
+});
+
+test("a your-turn age is late from 48 hours, and never while waiting", () => {
+  const at = (hours: number) => ({ dateCreated: NOW - hours * H });
+  expect(isLateTurn({ flags: { unresponded: true }, lastMessage: at(48) }, NOW)).toBe(true);
+  expect(isLateTurn({ flags: { unresponded: true }, lastMessage: at(47.9) }, NOW)).toBe(false);
+  expect(isLateTurn({ flags: { unresponded: false }, lastMessage: at(100) }, NOW)).toBe(false);
+  expect(isLateTurn({ flags: { unresponded: true }, lastMessage: null }, NOW)).toBe(false);
 });
 
 test("your turn the longest ranks Needs reply by the oldest unread, oldest first", () => {

@@ -1,4 +1,5 @@
 import type { ChatSummary, StateCounts } from "@shared/types";
+import { useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,7 +8,7 @@ import { FlashList } from "@shopify/flash-list";
 
 import { disambiguators } from "@shared/address";
 import { ChatRow } from "./chat-row";
-import { ConversationFiltersModal, StateSegments, type FilterAnchor } from "./conversation-filters";
+import { ConversationFiltersPanel, FilterChipRow, LensTabs } from "./conversation-filters";
 import { EmptyLens } from "./empty-lens";
 import { Collapse } from "./motion/collapse";
 import { SkeletonList } from "./skeleton-list";
@@ -27,23 +28,60 @@ import { useConversationSearch } from "./conversations/use-conversation-search";
 import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
 import { TriageGeometry } from "@/constants/triage-theme";
 
-import { queueOrder } from "@/hooks/use-queue-position";
+import { publishRenderedOrder } from "@/hooks/use-queue-position";
 import { onTriageResolved, onTriageUndo } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { deriveInboxModel, desktopInboxTitle, type InboxFilters } from "@/lib/inbox-model";
+import { commaApi } from "@/lib/convex-api";
+import {
+  activeChips,
+  checkboxCounts,
+  DEFAULT_INBOX_FILTERS,
+  DEFAULT_REFINEMENTS,
+  deriveInboxModel,
+  desktopInboxTitle,
+  filterInbox,
+  LENSES,
+  lensOf,
+  tagsInUse,
+  viewName,
+  type InboxFilters,
+  type InboxRow,
+  type Lens,
+  type Refinements,
+} from "@/lib/inbox-model";
+import {
+  deleteView,
+  hydrateInboxFilters,
+  inboxFilterSnapshot,
+  lensFilters,
+  saveView,
+  setLensFilters,
+  subscribeInboxFilters,
+  takePendingView,
+  type SavedView,
+} from "@/lib/palette/saved-views";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
 import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
+
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
 
 // FlashList 2 RecyclerView commitLayout increments internal state until
 // measured item sizes settle. On RN-web they don't (fractional flex + chrome
 // header) — that's React #185 in commitLayout, stack pointing at FlashList
 // inside ConversationListPane. Contacts already uses FlatList for this reason.
 const ConversationScrollList = Platform.OS === "web" ? FlatList : FlashList;
-const SEGMENT_LABELS = new Set(["Needs reply", "Waiting"]);
-const rowKey = (chat: ChatSummary): string => chat.conversationId ?? chat.guid;
+const PENDING_SCHEDULED = new Set(["pending", "in-progress"]);
+const rowKey = (row: InboxRow): string => row.key;
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -85,7 +123,50 @@ export function ConversationListPane({
   const iosMobile = Platform.OS === "ios" && !wide;
   const search = useConversationSearch({ filters, onFiltersChange });
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filterAnchor, setFilterAnchor] = useState<FilterAnchor | null>(null);
+  const [filterAnchor, setFilterAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const store = useSyncExternalStore(subscribeInboxFilters, inboxFilterSnapshot, inboxFilterSnapshot);
+  useEffect(() => { void hydrateInboxFilters(); }, []);
+  // Refinements belong to the lens; People is the workspace's type lens, remembered per lens too.
+  const refinements: Refinements = store.byLens[filters.state]?.refinements ?? DEFAULT_REFINEMENTS;
+  const setRefinements = useCallback((next: Refinements) => {
+    setLensFilters(filters.state, { type: filters.type, refinements: next });
+  }, [filters.state, filters.type]);
+  const setType = useCallback((type: InboxFilters["type"]) => {
+    setLensFilters(filters.state, { type, refinements });
+    onFiltersChange({ ...filters, type });
+  }, [filters, refinements, onFiltersChange]);
+  const selectLens = useCallback((lens: InboxFilters["state"]) => {
+    const remembered = lensFilters(lens, DEFAULT_INBOX_FILTERS.type);
+    search.applyFilters({ state: lens, type: remembered.type });
+  }, [search]);
+  const openView = useCallback((view: SavedView) => {
+    setLensFilters(view.state, { type: view.type, refinements: view.refinements });
+    search.applyFilters({ state: view.state, type: view.type });
+  }, [search]);
+  // The palette's "Open <view>" lands here.
+  useEffect(() => {
+    if (store.pending) {
+      const view = takePendingView();
+      if (view) openView(view);
+    }
+  }, [store.pending, openView]);
+  // ⌘1..⌘4 switch lenses. Editable-safe: a chord never types.
+  useEffect(() => {
+    if (Platform.OS !== "web" || !wide) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const lens = LENSES[Number(event.key) - 1];
+      if (!lens) return;
+      event.preventDefault();
+      selectLens(lens.value);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [wide, selectLens]);
+  const scheduledRows = useQuery(commaApi.listScheduled, {});
+  const scheduled = useMemo(() => new Set((scheduledRows ?? [])
+    .filter((row) => PENDING_SCHEDULED.has(row.status))
+    .flatMap((row) => [row.chatGuid, ...(row.conversationId ? [row.conversationId] : [])])), [scheduledRows]);
   useEffect(() => {
     const stopResolved = onTriageResolved(onRefresh);
     const stopUndo = onTriageUndo(onRefresh);
@@ -123,39 +204,56 @@ export function ConversationListPane({
   // remount theory that motivated a single array was disproved by the
   // Playwright trap — the blur was keyboardDismissMode.)
   const browseGuids = useMemo(() => new Set(chats.map((c) => c.guid)), [chats]);
-  // Explicitly memoised rather than left to the compiler: this is four full
-  // passes over every conversation plus a per-chat participant scan while
-  // searching, and it used to re-run on every render of this pane.
-  const model = useMemo(
-    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids),
-    [allChats, filters, search.query, search.deepMatches, browseGuids],
+  // Minute resolution: ages and the Today / This week boundary move with it.
+  const now = useMinuteClock();
+  const refine = useMemo(() => ({ refinements, scheduled, now }), [refinements, scheduled, now]);
+  // Explicitly memoised: full passes over every conversation, plus a per-chat
+  // participant scan while searching.
+  const deskModel = useMemo(
+    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids, refine),
+    [allChats, filters, search.query, search.deepMatches, browseGuids, refine],
   );
-  const deskChats = useMemo(() => queueOrder(model.listChats), [model.listChats]);
-  const deskModel = useMemo(() => wide ? ({
-    ...model,
-    listChats: deskChats,
-    navigationEntries: deskChats.map((chat, index) => ({ chat, index })),
-  }) : model, [model, deskChats, wide]);
+  const lensTotal = useMemo(() => filterInbox(allChats, filters, "", undefined, browseGuids).length, [allChats, filters, browseGuids]);
+  const toggleCounts = useMemo(() => checkboxCounts(allChats, filters, browseGuids, refine), [allChats, filters, browseGuids, refine]);
+  const tags = useMemo(() => tagsInUse(allChats), [allChats]);
+  const chips = activeChips(filters, refinements);
+  const lensLabel = LENSES.find((lens) => lens.value === filters.state)?.label ?? "Settled";
+  const clearAll = useCallback(() => {
+    setLensFilters(filters.state, { type: DEFAULT_INBOX_FILTERS.type, refinements: DEFAULT_REFINEMENTS });
+    onFiltersChange({ ...filters, type: DEFAULT_INBOX_FILTERS.type });
+  }, [filters, onFiltersChange]);
+  const removeChip = useCallback((chip: (typeof chips)[number]) => {
+    const next = chip.remove(filters, refinements);
+    setLensFilters(filters.state, { type: next.filters.type, refinements: next.refinements });
+    if (next.filters.type !== filters.type) onFiltersChange(next.filters);
+  }, [filters, refinements, onFiltersChange]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // A row that leaves the view (settle, swipe, a reply landing) stays in its slot and collapses
   // on smooth while the rows below close the gap. Switching lens or query cuts as before.
   // Tracked during render, not in an effect, so the row is never missing for a frame.
-  const listChats = deskModel.listChats;
+  // Section rows ride the same path, so an emptied age group folds away with its last row.
+  const modelRows = deskModel.rows;
   const [seen, setSeen] = useState<{
     viewKey: string;
-    chats: readonly ChatSummary[];
-    leaving: ReadonlyMap<string, LeavingRow<ChatSummary>>;
-  }>({ viewKey: search.viewKey, chats: listChats, leaving: new Map() });
-  if (seen.viewKey !== search.viewKey || seen.chats !== listChats) {
+    rows: readonly InboxRow[];
+    leaving: ReadonlyMap<string, LeavingRow<InboxRow>>;
+  }>({ viewKey: search.viewKey, rows: modelRows, leaving: new Map() });
+  if (seen.viewKey !== search.viewKey || seen.rows !== modelRows) {
     setSeen({
       viewKey: search.viewKey,
-      chats: listChats,
-      leaving: seen.viewKey === search.viewKey ? nextLeaving(seen.chats, listChats, seen.leaving, rowKey) : new Map(),
+      rows: modelRows,
+      leaving: seen.viewKey === search.viewKey ? nextLeaving(seen.rows, modelRows, seen.leaving, rowKey) : new Map(),
     });
   }
   const leaving = seen.leaving;
-  const rows = useMemo(() => withLeaving(listChats, leaving, rowKey), [listChats, leaving]);
+  const rows = useMemo(() => withLeaving(modelRows, leaving, rowKey), [modelRows, leaving]);
+  // The thread's "2 of 41" and auto-advance read the order this list renders.
+  useEffect(() => {
+    if (!wide) return;
+    publishRenderedOrder(deskModel.listChats);
+  }, [deskModel.listChats, wide]);
+  useEffect(() => (wide ? () => publishRenderedOrder(null) : undefined), [wide]);
   const dropLeaving = useCallback((key: string): void => {
     setSeen((current) => {
       if (!current.leaving.has(key)) return current;
@@ -185,30 +283,40 @@ export function ConversationListPane({
   // re-renders every mounted row on every render of this pane.
   // One person's second number or email reads as a duplicate row without its handle.
   const handles = useMemo(() => disambiguators(allChats), [allChats]);
+  const renderChat = useCallback(
+    (item: ChatSummary) => (
+      <ChatRow
+        chat={item}
+        handle={handles.get(item.guid)}
+        selected={wide && selectedGuid === item.guid}
+        keyboardFocused={wide && glide && selectedGuid === item.guid}
+        onPress={() => onOpenChat(item)}
+      />
+    ),
+    [wide, glide, selectedGuid, onOpenChat, handles],
+  );
   const renderRow = useCallback(
-    ({ item }: { item: ChatSummary }) => {
-      const key = rowKey(item);
-      const gone = leaving.has(key);
+    ({ item: row }: { item: InboxRow }) => {
+      const gone = leaving.has(row.key);
       return (
         // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
         <View pointerEvents={gone ? "none" : "auto"}>
-          <Collapse collapsed={gone} onCollapsed={() => dropLeaving(key)}>
-            <ChatRow
-              chat={item}
-              handle={handles.get(item.guid)}
-              selected={wide && selectedGuid === item.guid}
-              keyboardFocused={wide && glide && selectedGuid === item.guid}
-              onPress={() => onOpenChat(item)}
-            />
+          <Collapse collapsed={gone} onCollapsed={() => dropLeaving(row.key)}>
+            {row.kind === "section" ? (
+              <View style={styles.group}>
+                <Text accessibilityRole="header" style={[styles.groupLabel, { color: theme.textTertiary }]}>{row.label}</Text>
+                <Text style={[styles.groupCount, { color: theme.textTertiary }]}>{row.count}</Text>
+              </View>
+            ) : renderChat(row.chat)}
           </Collapse>
         </View>
       );
     },
-    [wide, glide, selectedGuid, onOpenChat, handles, leaving, dropLeaving],
+    [theme, renderChat, leaving, dropLeaving],
   );
   // Needs reply and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
-  const emptyLens = !search.query && (filters.state === "unresponded" || filters.state === "unread") ? filters.state : null;
+  const emptyLens = !search.query && chips.length === 0 && (filters.state === "unresponded" || filters.state === "unread") ? filters.state : null;
 
   useConversationListKeyboard({
     enabled: wide,
@@ -232,10 +340,24 @@ export function ConversationListPane({
   );
 
   const filterButton = (
-    <ChromeIconButton ref={filterBtnRef} hugeIcon={FilterHorizontalIcon} accessibilityLabel="Filter conversations" onPress={openFilters} />
+    <View>
+      <ChromeIconButton
+        ref={filterBtnRef}
+        hugeIcon={FilterHorizontalIcon}
+        accessibilityLabel={chips.length > 0 ? `Filter conversations, ${chips.length} active` : "Filter conversations"}
+        onPress={openFilters}
+      />
+      {chips.length > 0 ? (
+        <View pointerEvents="none" style={[styles.badge, { backgroundColor: theme.text, borderColor: theme.popBg }]}>
+          <Text style={[styles.badgeText, { color: theme.popBg }]}>{chips.length}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+  const lensTabs = (
+    <LensTabs state={filters.state} counts={counts} onSelect={(lens: Lens) => selectLens(lens)} phone={!wide} />
   );
   const newButton = <ChromeIconButton hugeIcon={PencilEdit02Icon} accessibilityLabel="New message" onPress={onNewMessage} />;
-  const lensTabs = <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} size={wide ? "regular" : "large"} />;
   const chrome = wide ? (
     <SidebarHeader
       testID="triage-queue-header"
@@ -273,6 +395,7 @@ export function ConversationListPane({
           ref={viewport.listRef as never}
           data={rows}
           keyExtractor={rowKey}
+          {...(Platform.OS === "web" ? {} : { getItemType: (row: InboxRow) => row.kind })}
           // Native-only: FlatList has no drawDistance, and FlashList's is what
           // keeps a fast iOS flick from showing blanks (default is 250px).
           {...(Platform.OS === "web" ? {} : { drawDistance: 1500 })}
@@ -319,14 +442,21 @@ export function ConversationListPane({
                   <View style={styles.phoneSearch}>{searchField}</View>
                 </>
               )}
-              {/* Name the view only when the segments can't: a menu-only
-                  state or a type lens. Wide names it in the header title. */}
-              {!wide && model.sectionLabel !== "Recent" && !SEGMENT_LABELS.has(model.sectionLabel) && (
-                <View style={styles.sectionHeading}>
-                  <Text style={[styles.sectionTitle, { color: theme.text, fontSize: type.title }]}>{model.sectionLabel}</Text>
-                  <Text style={[styles.sectionCount, { color: theme.textSecondary, fontSize: type.secondary }]}>{model.sectionCount}</Text>
-                </View>
-              )}
+                            {lensOf(filters.state) === null && !search.active ? (
+                <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>
+              ) : null}
+              {!search.active ? (
+                <FilterChipRow
+                  chips={chips}
+                  views={store.views}
+                  phone={!wide}
+                  countLine={`${deskModel.listChats.length} of ${lensTotal} match`}
+                  onRemove={removeChip}
+                  onClearAll={clearAll}
+                  onOpenView={openView}
+                  onDeleteView={(view) => deleteView(view.id)}
+                />
+              ) : null}
             </View>
           }
           ListEmptyComponent={
@@ -353,13 +483,21 @@ export function ConversationListPane({
           }
           renderItem={renderRow}
         />
-      <ConversationFiltersModal
+      <ConversationFiltersPanel
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
         anchor={filterAnchor}
-        filters={filters}
-        counts={counts}
-        onFiltersChange={onFiltersChange}
+        type={filters.type}
+        refinements={refinements}
+        onTypeChange={setType}
+        onRefinementsChange={setRefinements}
+        onClearAll={clearAll}
+        onSaveView={() => saveView({ name: viewName(filters, refinements), state: filters.state, type: filters.type, refinements })}
+        tags={tags}
+        counts={toggleCounts}
+        showing={deskModel.listChats.length}
+        total={lensTotal}
+        lensLabel={lensLabel}
       />
     </SidebarFrame>
   );
@@ -370,25 +508,14 @@ const styles = StyleSheet.create({
   visuallyHidden: { height: 1, overflow: "hidden", position: "absolute", width: 1, opacity: 0 },
   offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 4, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
   offlineText: { flex: 1, fontSize: 12, minWidth: 0 },
-  phoneLenses: { marginHorizontal: -TriageGeometry.listGutter, paddingLeft: 20, paddingTop: 8 },
-  phoneSearch: { flexDirection: "row", paddingBottom: 6, paddingHorizontal: 8, paddingTop: 22 },
-  sectionHeading: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    gap: 7,
-    paddingBottom: 6,
-    paddingHorizontal: 10,
-    paddingTop: 15,
-  },
-  sectionTitle: {
-    fontSize: 19,
-    fontWeight: "700",
-    letterSpacing: -0.2,
-  },
-  sectionCount: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
+  phoneLenses: { marginHorizontal: -TriageGeometry.listGutter, paddingTop: 8 },
+  phoneSearch: { flexDirection: "row", paddingBottom: 6, paddingHorizontal: 8, paddingTop: 14 },
+  lensNote: { fontWeight: "600", paddingHorizontal: 18, paddingTop: 10 },
+  group: { flexDirection: "row", justifyContent: "space-between", paddingBottom: 6, paddingHorizontal: 18, paddingTop: 14 },
+  groupLabel: { fontSize: 11.5 },
+  groupCount: { fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  badge: { alignItems: "center", borderRadius: 8, borderWidth: 1.5, height: 16, justifyContent: "center", minWidth: 16, paddingHorizontal: 3, position: "absolute", right: -3, top: -3 },
+  badgeText: { fontSize: 10, fontVariant: ["tabular-nums"], fontWeight: "700" },
   empty: {
     alignItems: "center",
     paddingHorizontal: 24,
