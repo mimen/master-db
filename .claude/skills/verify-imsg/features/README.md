@@ -22,7 +22,7 @@ This directory is the maintained source for verifying imsg's user-facing behavio
 - Capture a screenshot before acting, and another after the UI settles.
 - Write an ARIA snapshot of the changed region to `aria.txt`.
 - Record the side effect from a second view: the Convex command the client enqueued, plus the stored row read back through a Convex query.
-- Evidence lives in `$TMPDIR/verify-imsg/evidence/<feature-id>/` and survives cleanup.
+- Evidence lives in `<state dir>/evidence/<feature-id>/` (path printed by `drive.sh`) and survives cleanup.
 - Report an unreachable path with the attempted step and the unmet precondition.
 - Do not report a skipped entry point as verified through a different path.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Stop only the instance this skill started. Evidence under $TMPDIR/verify-imsg/evidence survives.
+# Stop only the instance this skill started. Evidence under the checkout's state dir survives.
 set -uo pipefail
 
-state="${TMPDIR:-/tmp}/verify-imsg"
+. "$(dirname "$0")/state.sh"
 if [[ -f "$state/pid" ]]; then
   pid="$(cat "$state/pid")"
   if kill -0 "$pid" 2>/dev/null; then

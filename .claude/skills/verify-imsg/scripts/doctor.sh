@@ -2,8 +2,7 @@
 # Read-only: is the instance this skill started worth driving? Exit 0 only if every check passes.
 set -uo pipefail
 
-repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-state="${TMPDIR:-/tmp}/verify-imsg"
+. "$(dirname "$0")/state.sh"
 failed=0
 check() { # check <ok?> <pass message> <fail message>
   if [[ "$1" == 1 ]]; then echo "OK    $2"; else echo "FAIL  $3"; failed=1; fi

@@ -2,15 +2,14 @@
 # Run one Playwright drive script against the instance launch.sh started.
 # Usage: drive.sh <spec.ts> <feature-id>
 #   <spec.ts> imports { test, expect } from "../fixtures/desk" (see SKILL.md).
-#   Evidence lands in $TMPDIR/verify-imsg/evidence/<feature-id>/.
+#   Evidence lands in <state dir>/evidence/<feature-id>/ (see state.sh).
 set -uo pipefail
 
 spec="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 feature="${2:?feature id required, e.g. send-text}"
 here="$(cd "$(dirname "$0")" && pwd)"
-repo="$(git -C "$here" rev-parse --show-toplevel)"
+. "$here/state.sh"
 imsg="$repo/apps/imsg"
-state="${TMPDIR:-/tmp}/verify-imsg"
 
 "$here/doctor.sh" >/dev/null || { "$here/doctor.sh"; exit 1; }
 

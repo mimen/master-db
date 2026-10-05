@@ -22,7 +22,7 @@ Scripts live in `.claude/skills/verify-imsg/scripts/`. Feature recipes live in [
 ```
 
 - **Ready** when it prints `verify-imsg: ready at http://127.0.0.1:8399 (pid N, build SHA)`. The build takes 1-3 minutes; startup takes seconds.
-- It records the pid, port and build SHA in `$TMPDIR/verify-imsg/`.
+- It records the pid, port and build SHA in the checkout's state dir, `$TMPDIR/verify-imsg/<checkout>-<hash>/` (`scripts/state.sh` derives it from the git toplevel). Each worktree gets its own, so parallel worktrees on separate ports never see each other's instance.
 - It refuses to start if this skill already has an instance running, or if anything else holds port 8399. Never drive an instance this skill did not start.
 - Override the port with `IMSG_FIXTURE_PORT=8400`.
 - **One instance per checkout.** The fixture always writes its overlay DB to `apps/imsg/e2e/fixture/.runtime/`, so two instances in the same checkout corrupt each other. To run in parallel, use separate worktrees and separate ports.
@@ -102,7 +102,7 @@ The `desk` fixture gives every drive four things:
 
 ## Evidence
 
-Everything goes to `$TMPDIR/verify-imsg/evidence/<feature-id>/`:
+Everything goes to `<state dir>/evidence/<feature-id>/`; `drive.sh` prints the full path:
 - **`run.log`:** the Playwright output.
 - **`video.webm`:** a recording of the whole drive, made on every run, passing or failing. Review it to audit timing, flicker and what the user actually saw.
 - **`playwright/`:** the trace (`trace.zip`, open with `bunx playwright show-trace`) and end-of-test screenshots.
@@ -122,7 +122,7 @@ The fixture's fake BlueBubbles and fake Convex are the production boundary. Do n
 .claude/skills/verify-imsg/scripts/cleanup.sh
 ```
 
-This stops only the pid `launch.sh` recorded, removes the run state and keeps `$TMPDIR/verify-imsg/evidence/`. Run it after every run, including failed ones, so a broken attempt does not leave port 8399 held. Never kill by process name: other sessions run their own Playwright Chromium and fixture servers.
+This stops only the pid `launch.sh` recorded, removes the run state and keeps `<state dir>/evidence/`. Run it after every run, including failed ones, so a broken attempt does not leave port 8399 held. Never kill by process name: other sessions run their own Playwright Chromium and fixture servers.
 
 ## Gotchas
 

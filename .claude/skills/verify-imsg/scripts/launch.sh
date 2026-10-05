@@ -3,10 +3,9 @@
 # Usage: launch.sh [--skip-build]
 set -euo pipefail
 
-repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+. "$(dirname "$0")/state.sh"
 imsg="$repo/apps/imsg"
 port="${IMSG_FIXTURE_PORT:-8399}"
-state="${TMPDIR:-/tmp}/verify-imsg"
 mkdir -p "$state"
 
 if [[ -f "$state/pid" ]] && kill -0 "$(cat "$state/pid")" 2>/dev/null; then
