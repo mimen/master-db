@@ -49,9 +49,11 @@ const SLIDE_EASE = Easing.out(Easing.cubic);
 
 export function DesktopAuxPane({
   open,
+  width: paneWidth = AUX_PANE_WIDTH,
   children,
 }: {
   readonly open: boolean;
+  readonly width?: number;
   readonly children: ReactNode;
 }): JSX.Element | null {
   const visual = useTriageTheme();
@@ -64,13 +66,13 @@ export function DesktopAuxPane({
   useEffect(() => {
     if (open) {
       setMounted(true);
-      width.value = withTiming(AUX_PANE_WIDTH, { duration: SLIDE_MS, easing: SLIDE_EASE });
+      width.value = withTiming(paneWidth, { duration: SLIDE_MS, easing: SLIDE_EASE });
       return;
     }
     width.value = withTiming(0, { duration: 180, easing: Easing.in(Easing.cubic) }, (finished) => {
       if (finished) runOnJS(setMounted)(false);
     });
-  }, [open, width]);
+  }, [open, paneWidth, width]);
 
   const slide = useAnimatedStyle(() => ({
     borderLeftWidth: width.value > 2 ? 0.5 : 0,
@@ -93,7 +95,7 @@ export function DesktopAuxPane({
         slide,
       ]}
     >
-      <View style={[{ flex: 1, width: AUX_PANE_WIDTH }, Platform.OS === "web" ? ({ backdropFilter: "blur(40px) saturate(1.5)", WebkitBackdropFilter: "blur(40px) saturate(1.5)" } as object) : null]}>{held.current}</View>
+      <View style={[{ flex: 1, width: paneWidth }, Platform.OS === "web" ? ({ backdropFilter: "blur(40px) saturate(1.5)", WebkitBackdropFilter: "blur(40px) saturate(1.5)" } as object) : null]}>{held.current}</View>
     </Animated.View>
   );
 }
@@ -107,10 +109,13 @@ export function DesktopAuxPane({
 export function DesktopUtilityPane({
   open,
   onClose,
+  width = AUX_PANE_WIDTH,
   children,
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
+  /** Settings asks for more room than the 312px inspector so its rows stay on one line. */
+  readonly width?: number;
   readonly children: ReactNode;
 }): JSX.Element {
   const { width: windowWidth } = useWindowDimensions();
@@ -119,7 +124,7 @@ export function DesktopUtilityPane({
   const panePresentation = calculatePaneAdmission({
     windowWidth,
     sidebarWidth,
-    sidePaneWidth: AUX_PANE_WIDTH,
+    sidePaneWidth: width,
   }).sidePane === "pane";
   const auxPresentation = useRef(panePresentation);
   const wasOpen = useRef(open);
@@ -134,20 +139,20 @@ export function DesktopUtilityPane({
   const content = (
     <View
       testID="desktop-utility-pane-content"
-      style={styles.utilityContent}
+      style={[styles.utilityContent, { width }]}
       {...({ dataSet: { utilityPresentation: auxPresentation.current ? "pane" : "overlay" } } as object)}
     >
       {held.current}
     </View>
   );
 
-  if (auxPresentation.current) return <DesktopAuxPane open={open}>{content}</DesktopAuxPane>;
+  if (auxPresentation.current) return <DesktopAuxPane open={open} width={width}>{content}</DesktopAuxPane>;
   return (
     <OverlayShell
       visible={open}
       onClose={onClose}
       backdropStyle={styles.utilityOverlayBackdrop}
-      cardStyle={[styles.utilityOverlayCard, { backgroundColor: visual.inspector, borderColor: visual.hairline }]}
+      cardStyle={[styles.utilityOverlayCard, { width, backgroundColor: visual.inspector, borderColor: visual.hairline }]}
     >
       {content}
     </OverlayShell>
@@ -157,7 +162,6 @@ export function DesktopUtilityPane({
 const styles = StyleSheet.create({
   utilityContent: {
     flex: 1,
-    width: AUX_PANE_WIDTH,
   },
   utilityOverlayBackdrop: {
     alignItems: "flex-end",
@@ -167,6 +171,5 @@ const styles = StyleSheet.create({
     borderLeftWidth: 0.5,
     borderRadius: 0,
     height: "100%",
-    width: AUX_PANE_WIDTH,
   },
 });

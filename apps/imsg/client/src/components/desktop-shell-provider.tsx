@@ -54,6 +54,8 @@ function desktopProjection(
 }
 
 const HELP_ENTRIES = helpEntries();
+/** Room for round4 desk-settings: label and dropdown on one line in a 576px column. */
+const SETTINGS_PANE_WIDTH = 640;
 
 function utilityForPerson(
   workspace: "messages" | "contacts",
@@ -277,7 +279,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     <SettingsContent key="settings" showHeader onClose={closeUtility} />
   ) : null;
   const utilityPane = (
-    <DesktopUtilityPane open={utility !== null} onClose={closeUtility}>
+    <DesktopUtilityPane open={utility !== null} onClose={closeUtility} width={utility?.kind === "settings" ? SETTINGS_PANE_WIDTH : undefined}>
       {utilityContent}
     </DesktopUtilityPane>
   );
@@ -363,6 +365,8 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
               onClose={() => setPaletteOpen(false)}
               accessibilityLabel="Command palette"
               backdropStyle={styles.paletteBackdrop}
+              // The palette draws its own popover card, radius and shadow included.
+              card={false}
               cardStyle={styles.paletteCard}
             >
               <CommandPalette
@@ -394,7 +398,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
               visible={helpOpen}
               accessibilityLabel="Keyboard shortcuts"
               onClose={() => setHelpOpen(false)}
-              backdropStyle={styles.paletteBackdrop}
+              backdropStyle={[styles.paletteBackdrop, styles.helpBackdrop]}
               cardStyle={[styles.helpCard, { borderColor: theme.cardBorder }]}
             >
               <Text style={[styles.helpTitle, { color: theme.text }]}>Keyboard Shortcuts</Text>
@@ -475,16 +479,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
+  // No color here: OverlayShell's default is the scheme's scrim (tokens `backdrop`).
   paletteBackdrop: {
-    backgroundColor: "rgba(18,18,22,0.34)",
     justifyContent: "flex-start",
     paddingTop: 72,
   },
+  helpBackdrop: { backgroundColor: "rgba(18,18,22,0.34)" },
   paletteCard: {
-    borderRadius: 16,
     maxHeight: "80%",
-    maxWidth: 720,
-    overflow: "hidden",
+    maxWidth: 620,
     width: "90%",
   },
   routeOverlayBackdrop: {
