@@ -45,34 +45,36 @@ test("live system theme changes update every mounted desktop surface", async ({ 
 
   const header = page.getByTestId("triage-queue-header");
   const rows = page.getByTestId("conversation-row");
-  await expect(header).toHaveCSS("background-color", "rgba(26, 26, 30, 0.78)");
+  await expect(header).toHaveCSS("background-color", "rgb(20, 20, 22)");
   expect(await rows.count()).toBeGreaterThan(0);
-  const darkRowColors = new Set(["rgba(0, 0, 0, 0)", "rgb(44, 44, 46)"]);
+  // Chromium rounds the 0.085 selected tint to 0.09.
+  const darkRowColors = new Set(["rgba(0, 0, 0, 0)", "rgba(255, 255, 255, 0.09)", "rgba(255, 255, 255, 0.045)"]);
   for (const row of await rows.all()) {
-    expect(darkRowColors.has(await row.evaluate((element) => getComputedStyle(element).backgroundColor))).toBe(true);
+    const fill = await row.evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(darkRowColors.has(fill), `dark row fill ${fill}`).toBe(true);
   }
-  await expect(page.getByTestId("thread-view")).toHaveCSS("background-color", "rgb(26, 26, 28)");
+  await expect(page.getByTestId("thread-view")).toHaveCSS("background-color", "rgb(15, 15, 17)");
   await page.screenshot({ path: "/tmp/comma-live-theme-dark-after.png", animations: "disabled" });
 });
 
-test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }, testInfo) => {
+test("desktop width, theme, sidebar footer, row, and hover matrix", async ({ desk }, testInfo) => {
   test.setTimeout(180_000);
   for (const scheme of SCHEMES) {
     for (const width of WIDTHS) {
       await resetAndOpen(desk, width, scheme);
       const page = desk.page;
-      const rail = page.getByTestId("triage-rail").first();
+      const footer = page.getByRole("navigation", { name: "Workspaces" }).filter({ visible: true });
       const header = page.getByTestId("triage-queue-header");
-      const messagesItem = rail.getByRole("button", { name: "Messages" });
+      const brand = header.getByRole("heading", { name: "Comma" });
       const rows = page.getByTestId("conversation-row");
 
-      await expect(rail).toBeVisible();
+      await expect(footer).toBeVisible();
       await expect(header).toBeVisible();
+      await expect(page.getByTestId("triage-rail")).toHaveCount(0);
       await expect(page.getByTestId("window-controls")).toHaveCount(0);
-      expect(await rail.getAttribute("data-tauri-drag-region")).toBe("");
-      await expect(rail.locator("svg")).toHaveCount(4);
-      for (const control of await rail.getByRole("button").all()) {
-        expect(await control.getAttribute("data-tauri-drag-region")).toBe("false");
+      expect(await brand.locator("..").getAttribute("data-tauri-drag-region")).toBe("");
+      await expect(footer.locator("svg")).toHaveCount(3);
+      for (const control of await footer.getByRole("button").all()) {
         const icon = control.locator("svg");
         await expect(icon).toHaveCount(1);
         await expect(icon).toBeVisible();
@@ -85,13 +87,8 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
         );
         expect(strokes.every((stroke) => stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")).toBe(true);
       }
-      await expect(messagesItem.locator("svg")).toBeVisible();
-      const railBox = await rail.boundingBox();
-      const headerBox = await header.boundingBox();
-      const messagesBox = await messagesItem.boundingBox();
-      expect(railBox?.width).toBeCloseTo(64, 1);
-      expect(headerBox?.height).toBeCloseTo(120, 1);
-      expect(messagesBox?.y).toBeGreaterThanOrEqual(38);
+      // The brand row clears the 68px traffic-light reserve in the desktop shell.
+      expect((await brand.boundingBox())?.x).toBeGreaterThanOrEqual(68);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
       await expect(rows.getByRole("button", { name: "Fill AI draft" })).toHaveCount(0);
@@ -104,12 +101,14 @@ test("desktop width, theme, glass, rail, row, and hover matrix", async ({ desk }
       await expect(actionRow.getByRole("button", { name: /More actions for/ })).toBeVisible();
       await expect(actionRow.getByText("Reply", { exact: true })).toHaveCount(0);
       const rowAfter = await actionRow.boundingBox();
-      expect(rowBefore?.height).toBeCloseTo(68, 1);
       expect(rowAfter).toEqual(rowBefore);
-      expect(await actionRow.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("0px");
+      // Flat inset pill: 10px radius, no shadow or scale in any state.
+      expect(await actionRow.evaluate((element) => getComputedStyle(element).borderRadius)).toBe("10px");
+      expect(await actionRow.evaluate((element) => getComputedStyle(element).boxShadow)).toBe("none");
+      expect(await actionRow.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
       await page.screenshot({ path: `/tmp/comma-row-hover-${scheme}-${width}.png`, animations: "disabled" });
 
-      for (const button of await rail.getByRole("button").all()) {
+      for (const button of await footer.getByRole("button").all()) {
         if (!(await button.isEnabled())) continue;
         const before = await button.boundingBox();
         await button.hover();
@@ -131,11 +130,11 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await row.hover();
   const settle = row.getByRole("button", { name: /^Settle / });
   await expect(settle).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(settle.getByText("Settle", { exact: true })).toHaveCSS("color", "rgb(138, 138, 144)");
+  await expect(settle.getByText("Settle", { exact: true })).toHaveCSS("color", "rgb(85, 85, 92)");
   await settle.hover();
-  await expect(settle).toHaveCSS("background-color", "rgba(118, 118, 128, 0.12)");
-  await expect(settle.getByText("Settle", { exact: true })).toHaveCSS("color", "rgb(26, 26, 28)");
-  await page.getByRole("heading", { name: "Needs reply" }).hover();
+  await expect(settle).toHaveCSS("background-color", "rgba(0, 0, 0, 0.04)");
+  await expect(settle.getByText("Settle", { exact: true })).toHaveCSS("color", "rgb(23, 23, 26)");
+  await page.getByRole("heading", { name: "Comma" }).first().hover();
   await row.focus();
   await expect(row.getByText("Settle", { exact: true })).toBeVisible();
   await page.keyboard.press("Tab");
@@ -308,13 +307,12 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
 
 test("native window chrome reserves space only while AppKit controls are visible", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
-  const rail = desk.page.getByTestId("triage-rail").first();
-  const messagesItem = rail.getByRole("button", { name: "Messages" });
+  const toggle = desk.page.getByTestId("triage-queue-header").getByRole("button", { name: "Toggle sidebar" });
 
   await expect(desk.page.getByTestId("window-controls")).toHaveCount(0);
-  await expect(messagesItem.locator("svg")).toBeVisible();
-  const windowedBox = await messagesItem.boundingBox();
-  expect(windowedBox?.y).toBeGreaterThanOrEqual(38);
+  await expect(toggle).toBeVisible();
+  const windowedBox = await toggle.boundingBox();
+  expect(windowedBox?.x).toBeGreaterThanOrEqual(68);
   await expect
     .poll(() => desk.page.evaluate(() =>
       (window as Window & { __fixtureHasFullscreenListener?: () => boolean }).__fixtureHasFullscreenListener?.() ?? false,
@@ -325,15 +323,15 @@ test("native window chrome reserves space only while AppKit controls are visible
     (window as Window & { __fixtureSetFullscreen?: (value: boolean) => void }).__fixtureSetFullscreen?.(true);
   });
   await expect
-    .poll(async () => (await messagesItem.boundingBox())?.y)
-    .toBeLessThanOrEqual(18);
+    .poll(async () => (await toggle.boundingBox())?.x)
+    .toBeLessThan(20);
 
   await desk.page.evaluate(() => {
     (window as Window & { __fixtureSetFullscreen?: (value: boolean) => void }).__fixtureSetFullscreen?.(false);
   });
   await expect
-    .poll(async () => (await messagesItem.boundingBox())?.y)
-    .toBeGreaterThanOrEqual(38);
+    .poll(async () => (await toggle.boundingBox())?.x)
+    .toBeGreaterThanOrEqual(68);
 });
 
 test("Scheduled uses the same responsive pane on Messages and Contacts", async ({ desk }) => {
@@ -363,11 +361,10 @@ test("Scheduled uses the same responsive pane on Messages and Contacts", async (
   }
 });
 
-test("persistent desktop workspaces keep one rail, selections, and independent searches", async ({ desk }) => {
+test("persistent desktop workspaces keep selections and independent searches", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "light");
   const page = desk.page;
 
-  await expect(page.getByTestId("triage-rail")).toHaveCount(1);
   const messageSearch = page.getByLabel("Search conversations and messages");
   await messageSearch.fill("Alex");
   await page.getByTestId("conversation-row").first().click();
@@ -375,12 +372,11 @@ test("persistent desktop workspaces keep one rail, selections, and independent s
 
   await page.getByRole("button", { name: "Contacts" }).click();
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
-  await expect(page.getByTestId("triage-rail")).toHaveCount(1);
   const contactSearch = page.getByLabel("Search contacts");
   await contactSearch.fill("Jordan");
   await page.getByText("Jordan Lee", { exact: true }).first().click();
 
-  await page.getByTestId("triage-rail").getByRole("button", { name: "Messages" }).click();
+  await page.getByRole("button", { name: "Messages", exact: true }).click();
   await expect(messageSearch).toHaveValue("Alex");
   await expect(page.getByTestId("thread-settle")).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-persistent-messages.png", animations: "disabled" });
@@ -391,7 +387,7 @@ test("persistent desktop workspaces keep one rail, selections, and independent s
   await page.screenshot({ path: "/tmp/comma-persistent-workspaces.png", animations: "disabled" });
 });
 
-test("Scheduled and Settings remain open across every rail destination", async ({ desk }) => {
+test("Scheduled and Settings remain open across every workspace", async ({ desk }) => {
   await resetAndOpen(desk, 1300, "dark");
   const page = desk.page;
   const visiblePane = page.locator('[data-testid="desktop-utility-pane-content"]:visible');
@@ -406,7 +402,7 @@ test("Scheduled and Settings remain open across every rail destination", async (
   await expect(page.getByTestId("desktop-shell")).toHaveAttribute("data-utility-workspace", "contacts");
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
-  await page.getByTestId("triage-rail").getByRole("button", { name: "Messages" }).click();
+  await page.getByRole("button", { name: "Messages", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
@@ -416,7 +412,7 @@ test("Scheduled and Settings remain open across every rail destination", async (
 
   await page.getByLabel("Close scheduled").click();
   await page.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("button", { name: "Contacts" }).click();
+  await page.getByRole("button", { name: "Contacts", exact: true }).click();
   await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
   await expect(visiblePane).toHaveCount(1);
 });
@@ -424,12 +420,12 @@ test("Scheduled and Settings remain open across every rail destination", async (
 test("compact tabs keep their eager route structure", async ({ desk }) => {
   await desk.page.setViewportSize({ width: 390, height: 844 });
   await desk.page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(desk.page.getByTestId("triage-rail")).toHaveCount(0);
-  await expect(desk.page.getByRole("tab", { name: "Messages" })).toBeVisible();
+  await expect(desk.page.getByRole("navigation", { name: "Workspaces" })).toHaveCount(0);
+  await expect(desk.page.getByRole("tab", { name: /^Messages/ })).toBeVisible();
   await desk.page.getByRole("tab", { name: "Contacts" }).click();
   await expect(desk.page.getByLabel("Search contacts")).toBeVisible();
   await expect(desk.page).toHaveURL(/\/contacts$/);
-  await desk.page.getByRole("tab", { name: "Messages" }).click();
+  await desk.page.getByRole("tab", { name: /^Messages/ }).click();
   await expect(desk.page.getByLabel("Search conversations and messages")).toBeVisible();
 });
 
@@ -439,7 +435,7 @@ test("wide cold routes project into the persistent desktop shell", async ({ desk
   await page.setViewportSize({ width: 1300, height: 820 });
 
   await page.goto("/settings?workspace=contacts", { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("triage-rail")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Workspaces" }).filter({ visible: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
   await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
 
@@ -609,8 +605,9 @@ test("typing indicator renders from peer presence", async ({ desk }) => {
   await expect(indicator).toBeVisible();
   await expect(indicator.locator("div")).toHaveCount(3);
   const indicatorBox = await indicator.boundingBox();
-  const threadBox = await desk.page.getByTestId("thread-view").boundingBox();
-  expect(indicatorBox?.x).toBeCloseTo((threadBox?.x ?? 0) + 14, 1);
+  // The indicator sits on the inbound edge of the centered thread column.
+  const inbound = await desk.page.getByTestId("message-bubble").filter({ hasText: "Can you send the final arrival time?" }).boundingBox();
+  expect(indicatorBox?.x).toBeCloseTo(inbound?.x ?? 0, 1);
 
   const positions = await firstDot.evaluate(async (dot) => {
     const samples: number[] = [];

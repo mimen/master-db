@@ -675,7 +675,9 @@ export function ThreadView({
           onMomentumScrollEnd={endDayChipScroll}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
-          contentContainerStyle={headerChat ? styles.threadColumn : { paddingVertical: 10 }}
+          contentContainerStyle={headerChat
+            ? { paddingVertical: 14, paddingHorizontal: Math.max(18, (paneW - TriageGeometry.threadMaxWidth) / 2) }
+            : { paddingVertical: 10 }}
           ListHeaderComponent={
             peerTyping ? (
               <View style={styles.typingRow}>
@@ -821,7 +823,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   headerIconButton: { borderRadius: 7, height: 30, width: 30 },
-  threadColumn: { alignSelf: "center", maxWidth: TriageGeometry.threadMaxWidth + 64, paddingHorizontal: 18, paddingVertical: 14, width: "100%" },
   crumb: { flexShrink: 1, fontSize: 13.5 },
   crumbSlash: { fontSize: 14, marginHorizontal: 8 },
   threadTitle: { ...headerFace, flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },

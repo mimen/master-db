@@ -29,7 +29,7 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { onTriageResolved, onTriageUndo, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import { deriveInboxModel, desktopInboxTitle, type InboxFilters } from "@/lib/inbox-model";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
@@ -224,7 +224,13 @@ export function ConversationListPane({
           {startSweep ? <ChromeIconButton hugeIcon={FlashIcon} accessibilityLabel={`Start sweep, ${sweepableChats.length} conversations`} onPress={startSweep} /> : null}
         </>
       }
-      below={lensTabs}
+      below={
+        <>
+          {/* The tabs show the lens; this names it for screen readers and the page outline. */}
+          <Text accessibilityRole="header" style={styles.visuallyHidden}>{desktopInboxTitle(filters)}</Text>
+          {lensTabs}
+        </>
+      }
     />
   ) : (
     <SidebarChrome actions={<>{filterButton}{newButton}</>} />
@@ -326,6 +332,7 @@ export function ConversationListPane({
 }
 
 const styles = StyleSheet.create({
+  visuallyHidden: { height: 1, overflow: "hidden", position: "absolute", width: 1, opacity: 0 },
   offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 4, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
   offlineText: { flex: 1, fontSize: 12, minWidth: 0 },
   phoneLenses: { marginHorizontal: -TriageGeometry.listGutter, paddingLeft: 20, paddingTop: 8 },

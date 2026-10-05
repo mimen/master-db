@@ -39,10 +39,10 @@ for (const scheme of ["light", "dark"] as const) {
         && pill.y < message.y + message.height && pill.y + pill.height > message.y;
       expect(overlaps, "toast must not cover the last message").toBe(false);
       expect(pill.y + pill.height).toBeLessThanOrEqual(size.height);
-      const status = page.getByRole("status");
+      const status = page.getByRole("status").filter({ hasText: "Settled" });
       await expect(status).toHaveAttribute("aria-live", "polite");
-      await expect(status).toHaveCSS("background-color", scheme === "light" ? "rgb(26, 26, 28)" : "rgb(255, 255, 255)");
-      await expect(page.getByText("Settled", { exact: true })).toHaveCSS("color", scheme === "light" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)");
+      await expect(status).toHaveCSS("background-color", scheme === "light" ? "rgb(20, 20, 22)" : "rgb(255, 255, 255)");
+      await expect(page.getByText("Settled", { exact: true })).toHaveCSS("color", scheme === "light" ? "rgb(237, 237, 239)" : "rgb(23, 23, 26)");
       const list = page.getByTestId("thread-message-list");
       const chrome = await page.getByTestId("thread-composer-chrome").boundingBox();
       const listWithToast = await list.boundingBox();
@@ -59,7 +59,7 @@ for (const scheme of ["light", "dark"] as const) {
   }
 }
 
-test("toast does not reflow the message list, sidebar or navigation rail", async ({ desk }) => {
+test("toast does not reflow the message list, sidebar or its footer", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
@@ -68,7 +68,7 @@ test("toast does not reflow the message list, sidebar or navigation rail", async
   const regions = [
     page.getByTestId("thread-message-list"),
     page.getByLabel("Resize sidebar").filter({ visible: true }).locator(".."),
-    page.getByTestId("triage-rail"),
+    page.getByRole("navigation", { name: "Workspaces" }).filter({ visible: true }),
   ];
   const before = await Promise.all(regions.map((region) => region.boundingBox()));
   for (const box of before) expect(box).not.toBeNull();
@@ -92,7 +92,7 @@ for (const scheme of ["light", "dark"] as const) {
     const sidebar = page.getByLabel("Resize sidebar").filter({ visible: true }).locator("..");
     const before = await sidebar.boundingBox();
     await page.keyboard.press("Meta+e");
-    const status = page.getByRole("status");
+    const status = page.getByRole("status").filter({ hasText: "Select a conversation first" });
     await expect(status).toHaveText("Select a conversation first");
     await expect(status).toHaveCSS("opacity", "1");
     const pill = await status.boundingBox();
