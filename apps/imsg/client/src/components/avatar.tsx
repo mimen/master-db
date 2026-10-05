@@ -21,14 +21,17 @@ export function PersonAvatar({
   address,
   name,
   size,
+  photoUrl: knownPhotoUrl,
 }: {
   address: string | null;
   name: string;
   size: number;
+  /** A photo the caller already has (null for none). Skips the per-avatar identity lookup. */
+  photoUrl?: string | null;
 }) {
-  const identity = useWhoIs(address);
+  const identity = useWhoIs(knownPhotoUrl === undefined ? address : null);
   const person: (Person & { photoUrl?: string | null }) | undefined = identity?.found ? identity.person : undefined;
-  const photoUrl = person?.photoUrl;
+  const photoUrl = knownPhotoUrl === undefined ? person?.photoUrl : knownPhotoUrl;
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const uri = address ? avatarUrl(address, photoUrl === failedPhoto ? null : photoUrl) : undefined;
   const theme = useTheme();
@@ -82,6 +85,7 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
         address={chat.participants[0]?.address ?? null}
         name={chat.displayName}
         size={size}
+        photoUrl={chat.participants[0]?.photoUrl}
       />
     );
   }
@@ -98,6 +102,7 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
           address={first?.address ?? null}
           name={first?.name ?? first?.address ?? "?"}
           size={face}
+          photoUrl={first?.photoUrl}
         />
       </View>
       <View style={[styles.ring, { position: "absolute", bottom: -2, right: -2, borderColor: ringColor }]}>
@@ -105,6 +110,7 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
           address={second?.address ?? null}
           name={second?.name ?? second?.address ?? "?"}
           size={face}
+          photoUrl={second?.photoUrl}
         />
       </View>
       {uri && uri !== failedPhoto ? (

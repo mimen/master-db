@@ -8,6 +8,8 @@ export type TypeFilter = "all" | "known" | "dm" | "group" | "unknown";
 export interface Participant {
   address: string;
   name: string | null;
+  /** The contact photo the conversation list already resolved; absent when unknown. */
+  photoUrl?: string | null;
 }
 
 export interface AttachmentSummary {

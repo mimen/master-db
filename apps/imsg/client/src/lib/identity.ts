@@ -87,6 +87,8 @@ export type WhoIsResult =
 export type ContactListRow = {
   _id: string;
   display_name: string;
+  /** listPeople resolves it; absent where a source does not. */
+  photoUrl?: string | null;
   first_name?: string;
   last_name?: string;
   nickname?: string;

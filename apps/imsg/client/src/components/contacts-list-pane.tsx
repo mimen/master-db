@@ -153,7 +153,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
         title={item.title}
         duplicate={duplicateIds.has(person._id)}
         secondary={contactSecondary(person)}
-        avatar={<PersonAvatar address={primaryHandle(person)} name={person.display_name} size={wide ? 32 : 42} />}
+        avatar={<PersonAvatar address={primaryHandle(person)} name={person.display_name} size={wide ? 32 : 42} photoUrl={person.photoUrl} />}
         trailing={
           <View style={styles.dots} accessibilityLabel={handles.map(serviceOf).join(", ")}>
             {handles.slice(0, 3).map((h) => <ServiceDot key={h} service={serviceOf(h)} size={wide ? 7 : 9} />)}
