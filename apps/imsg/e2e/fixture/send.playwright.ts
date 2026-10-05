@@ -125,3 +125,23 @@ test("a slow send renders at full color and only says Sending… once it is actu
   await page.screenshot({ path: "/tmp/comma-send-settled.png" });
   expect(await readTrace(page)).toEqual({ nodes: 1, dips: 0 });
 });
+
+test("a burst of send taps queued behind a busy frame sends the message once", async ({ desk }) => {
+  const page = await openThread(desk);
+  const enqueued: string[] = [];
+  page.on("request", (request) => {
+    if (!request.url().endsWith("/__fixture/convex") || request.method() !== "POST") return;
+    const body = request.postDataJSON() as { name: string; args: { payload?: { kind: string; text?: string } } };
+    if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "send") enqueued.push(body.args.payload.text ?? "");
+  });
+  await page.getByPlaceholder("iMessage").fill("once only");
+  // Taps that land while JS is busy reach the handler in one task, before React re-renders.
+  await page.evaluate(() => {
+    const send = document.querySelector('[aria-label="Send"]') as HTMLElement;
+    for (let i = 0; i < 7; i++) send.click();
+  });
+  await expect(page.getByTestId("thread-view").getByText("once only", { exact: true })).toHaveCount(1);
+  await page.waitForTimeout(1000);
+  expect(enqueued).toEqual(["once only"]);
+  await expect(page.getByTestId("thread-view").getByText("once only", { exact: true })).toHaveCount(1);
+});
