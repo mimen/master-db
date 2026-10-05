@@ -8,6 +8,8 @@ import { FlashList } from "@shopify/flash-list";
 import { disambiguators } from "@shared/address";
 import { ChatRow } from "./chat-row";
 import { ConversationFiltersModal, StateSegments, type FilterAnchor } from "./conversation-filters";
+import { EmptyLens } from "./empty-lens";
+import { Collapse } from "./motion/collapse";
 import { SkeletonList } from "./skeleton-list";
 
 import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
@@ -25,12 +27,14 @@ import { useConversationSearch } from "./conversations/use-conversation-search";
 import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
 import { TriageGeometry } from "@/constants/triage-theme";
 
-import { onTriageResolved, onTriageUndo, toggleSettleChat } from "@/hooks/use-triage-actions";
+import { queueOrder } from "@/hooks/use-queue-position";
+import { onTriageResolved, onTriageUndo } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { deriveInboxModel, desktopInboxTitle, type InboxFilters } from "@/lib/inbox-model";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
-import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
+import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
+import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
 
 // FlashList 2 RecyclerView commitLayout increments internal state until
@@ -39,6 +43,7 @@ import { useSyncExternalStore } from "react";
 // inside ConversationListPane. Contacts already uses FlatList for this reason.
 const ConversationScrollList = Platform.OS === "web" ? FlatList : FlashList;
 const SEGMENT_LABELS = new Set(["Needs reply", "Waiting"]);
+const rowKey = (chat: ChatSummary): string => chat.conversationId ?? chat.guid;
 
 interface ConversationListPaneProps {
   chats: ChatSummary[];
@@ -125,20 +130,40 @@ export function ConversationListPane({
     () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids),
     [allChats, filters, search.query, search.deepMatches, browseGuids],
   );
-  const deskChats = useMemo(() => {
-    return [...model.listChats].sort((a, b) => {
-      const aRank = a.flags.pinned ? 0 : a.crm?.priority !== undefined && a.crm.priority <= 2 ? 1 : 2;
-      const bRank = b.flags.pinned ? 0 : b.crm?.priority !== undefined && b.crm.priority <= 2 ? 1 : 2;
-      if (aRank !== bRank) return aRank - bRank;
-      return (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0);
-    });
-  }, [model.listChats]);
+  const deskChats = useMemo(() => queueOrder(model.listChats), [model.listChats]);
   const deskModel = useMemo(() => wide ? ({
     ...model,
     listChats: deskChats,
     navigationEntries: deskChats.map((chat, index) => ({ chat, index })),
   }) : model, [model, deskChats, wide]);
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
+
+  // A row that leaves the view (settle, swipe, a reply landing) stays in its slot and collapses
+  // on smooth while the rows below close the gap. Switching lens or query cuts as before.
+  // Tracked during render, not in an effect, so the row is never missing for a frame.
+  const listChats = deskModel.listChats;
+  const [seen, setSeen] = useState<{
+    viewKey: string;
+    chats: readonly ChatSummary[];
+    leaving: ReadonlyMap<string, LeavingRow<ChatSummary>>;
+  }>({ viewKey: search.viewKey, chats: listChats, leaving: new Map() });
+  if (seen.viewKey !== search.viewKey || seen.chats !== listChats) {
+    setSeen({
+      viewKey: search.viewKey,
+      chats: listChats,
+      leaving: seen.viewKey === search.viewKey ? nextLeaving(seen.chats, listChats, seen.leaving, rowKey) : new Map(),
+    });
+  }
+  const leaving = seen.leaving;
+  const rows = useMemo(() => withLeaving(listChats, leaving, rowKey), [listChats, leaving]);
+  const dropLeaving = useCallback((key: string): void => {
+    setSeen((current) => {
+      if (!current.leaving.has(key)) return current;
+      const next = new Map(current.leaving);
+      next.delete(key);
+      return { ...current, leaving: next };
+    });
+  }, []);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
   // recovery) and the synthetic thumb live in the viewport hook.
@@ -161,21 +186,25 @@ export function ConversationListPane({
   // One person's second number or email reads as a duplicate row without its handle.
   const handles = useMemo(() => disambiguators(allChats), [allChats]);
   const renderRow = useCallback(
-    ({ item }: { item: ChatSummary }) => (
-      <ChatRow
-        chat={item}
-        handle={handles.get(item.guid)}
-        selected={wide && selectedGuid === item.guid}
-        keyboardFocused={wide && glide && selectedGuid === item.guid}
-        onPress={() => onOpenChat(item)}
-        // Offered on every lens and every width. The row reads the
-        // conversation's own state to decide settle vs un-settle, and the
-        // gesture toasts whatever it did.
-        onSettle={() => { void toggleSettleChat(item); }}
-      />
-    ),
-    [wide, glide, selectedGuid, onOpenChat, handles],
+    ({ item }: { item: ChatSummary }) => {
+      const key = rowKey(item);
+      return (
+        <Collapse collapsed={leaving.has(key)} onCollapsed={() => dropLeaving(key)}>
+          <ChatRow
+            chat={item}
+            handle={handles.get(item.guid)}
+            selected={wide && selectedGuid === item.guid}
+            keyboardFocused={wide && glide && selectedGuid === item.guid}
+            onPress={() => onOpenChat(item)}
+          />
+        </Collapse>
+      );
+    },
+    [wide, glide, selectedGuid, onOpenChat, handles, leaving, dropLeaving],
   );
+  // Needs reply and Unread show what happened and the next step once they empty; other lenses
+  // and searches keep the plain line.
+  const emptyLens = !search.query && (filters.state === "unresponded" || filters.state === "unread") ? filters.state : null;
 
   useConversationListKeyboard({
     enabled: wide,
@@ -238,8 +267,8 @@ export function ConversationListPane({
           // FlashListRef and FlatList's ref don't overlap; callers only use
           // scrollToOffset / scrollToIndex (ConversationListHandle).
           ref={viewport.listRef as never}
-          data={deskModel.listChats}
-          keyExtractor={(chat) => chat.conversationId ?? chat.guid}
+          data={rows}
+          keyExtractor={rowKey}
           // Native-only: FlatList has no drawDistance, and FlashList's is what
           // keeps a fast iOS flick from showing blanks (default is 250px).
           {...(Platform.OS === "web" ? {} : { drawDistance: 1500 })}
@@ -299,6 +328,19 @@ export function ConversationListPane({
           ListEmptyComponent={
             loading && chats.length === 0 ? (
               <SkeletonList />
+            ) : emptyLens ? (
+              <EmptyLens
+                lens={emptyLens}
+                chats={allChats}
+                counts={{ unresponded: counts?.unresponded ?? 0 }}
+                now={Date.now()}
+                onOpenChat={(chat) => {
+                  onOpenChat(chat);
+                  requestFocus("composer");
+                }}
+                onSeeAllWaiting={() => search.applyFilters({ ...filters, state: "waiting" })}
+                onGoToNeedsReply={() => search.applyFilters({ ...filters, state: "unresponded" })}
+              />
             ) : (
               <View style={styles.empty}>
                 <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No conversations</Text>

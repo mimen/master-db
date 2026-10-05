@@ -14,8 +14,10 @@ import Reanimated, {
   type SharedValue,
 } from "react-native-reanimated";
 
+import { Springs } from "@/constants/springs";
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { useRowSettle } from "@/hooks/use-triage-actions";
 import { markOpenStart } from "@/lib/open-timing";
 import { useTheme } from "@/hooks/use-theme";
 import { TriageGeometry } from "@/constants/triage-theme";
@@ -29,9 +31,6 @@ import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
 import { FAVORITE_GOLD } from "./person-crm-section";
-
-// TODO(signal-motion): use springs.ts
-const SMOOTH_SPRING = { duration: 380, dampingRatio: 0.92 } as const;
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const theme = useTheme();
@@ -97,7 +96,6 @@ function ChatRowInner({
   selected,
   keyboardFocused = false,
   onPress,
-  onSettle,
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another with the same name. */
@@ -106,12 +104,11 @@ function ChatRowInner({
   /** Glide-mode cursor: the persimmon ring on the selected row while navigating. */
   keyboardFocused?: boolean;
   onPress: () => void;
-  /** Runs the one triage gesture. Absent on surfaces that don't triage. */
-  onSettle?: () => void;
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
   const { openMenu } = useChatActions(compact);
+  const settle = useRowSettle(chat);
   const [hovered, setHovered] = useState(false);
   const [focusedWithin, setFocusedWithin] = useState(false);
   const [settleHovered, setSettleHovered] = useState(false);
@@ -121,7 +118,7 @@ function ChatRowInner({
   // One rule for the chip and the swipe alike: the row offers Settle exactly
   // when the toggle has something to do, whatever lens the list is showing.
   const settleAction = settleActionFor(chat);
-  const settleOffered = onSettle !== undefined && settleAction !== "none";
+  const settleOffered = settleAction !== "none";
   const settleLabel = settleAction === "unsettle" ? "Un-settle" : "Settle";
   const snippet = last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
@@ -186,9 +183,10 @@ function ChatRowInner({
     .onFinalize(() => {
       dragging.value = false;
       const committed = Math.abs(offset.value) >= SWIPE_THRESHOLD;
-      if (committed && offset.value < 0 && onSettle) runOnJS(onSettle)();
+      if (committed && offset.value < 0 && settleOffered) runOnJS(settle)();
       else if (committed && offset.value > 0) runOnJS(toggleRead)();
-      offset.value = withSpring(0, { ...SMOOTH_SPRING, reduceMotion: ReduceMotion.System });
+      // An armed release slides home on smooth; an unarmed one springs back on snappy.
+      offset.value = withSpring(0, { ...(committed ? Springs.smooth : Springs.snappy), reduceMotion: ReduceMotion.System });
     });
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
@@ -238,7 +236,7 @@ function ChatRowInner({
                 accessibilityLabel={`${settleLabel} ${chat.displayName}`}
                 // One tab stop per row: ⌘E settles the focused row, so these stay pointer-only.
                 tabIndex={-1}
-                onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
+                onPress={(event) => { event.stopPropagation(); settle(); }}
                 onHoverIn={() => setSettleHovered(true)}
                 onHoverOut={() => setSettleHovered(false)}
                 hitSlop={5}
