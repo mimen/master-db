@@ -5,6 +5,8 @@ import { useEventListener } from "expo";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useTheme } from "@/hooks/use-theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { formatFileSize } from "./message-meta";
 import { HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
 import { useQuery } from "convex/react";
 import { mediaApi } from "@/lib/media-api";
@@ -48,6 +50,7 @@ export function MediaUnavailable({ onMac }: { onMac?: boolean }) {
 
 export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatGuid: string; url: string; mine: boolean }) {
   const theme = useTheme();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const player = useAudioPlayer({ uri: url });
   const status = useAudioPlayerStatus(player);
   const playing = status.playing;
@@ -91,11 +94,12 @@ export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatG
   const playedBars = Math.round(progress * WAVEFORM_BARS);
   const active = playing || status.currentTime > 0;
 
+  // Transcript lines sit on the thread background, outside the colored pill.
   const transcriptColor = mine ? "rgba(255,255,255,0.85)" : theme.textSecondary;
   return (
     <View style={styles.audioStack}>
-      <View style={[styles.audio, { backgroundColor: mine ? "rgba(255,255,255,0.15)" : theme.backgroundElement }]}>
-        <Pressable onPress={toggle} hitSlop={8} style={({ hovered, pressed }) => [styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.background }, hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
+      <View style={[styles.audio, mine ? { backgroundColor: signal.bubbleMine, borderColor: signal.bubbleMine } : { backgroundColor: signal.bubbleTheirs, borderColor: signal.bubbleTheirsBorder }]}>
+        <Pressable onPress={toggle} hitSlop={8} style={({ hovered, pressed }) => [styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : signal.field }, hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
           {/* mine's play button sits on a near-white translucent circle regardless
               of theme — black icon is deliberate, not a theme.text substitute. */}
           <Ionicons name={playing ? "pause" : "play"} size={16} color={mine ? "#000" : theme.text} />
@@ -126,29 +130,62 @@ export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatG
       </View>
       {transcript.state === "not-requested" && (
         <Pressable onPress={() => void requestTranscript()} hitSlop={6} style={({ hovered, pressed }) => [hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
-          <Text style={[styles.transcriptAction, { color: mine ? theme.onAccent : theme.accent }]}>Transcribe</Text>
+          <Text style={[styles.transcriptAction, { color: theme.accent }]}>Transcribe</Text>
         </Pressable>
       )}
       {transcript.state === "working" && (
-        <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>Transcribing on the Mini…</Text>
+        <Text style={[styles.transcriptMeta, { color: signal.textSecondary }]}>Transcribing on the Mini…</Text>
       )}
       {transcript.state === "ready" && (
-        <Text selectable style={[styles.transcriptText, { color: mine ? theme.onAccent : theme.text }]}>
+        <Text selectable style={[styles.transcriptText, { color: signal.text }]}>
           {transcript.text}
         </Text>
       )}
       {transcript.state === "unavailable" && (
-        <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>Transcription unavailable · {transcript.detail}</Text>
+        <Text style={[styles.transcriptMeta, { color: signal.textSecondary }]}>Transcription unavailable · {transcript.detail}</Text>
       )}
       {transcript.state === "failed" && (
         <View style={{ gap: 3 }}>
-          <Text style={[styles.transcriptMeta, { color: transcriptColor }]}>{transcript.error}</Text>
+          <Text style={[styles.transcriptMeta, { color: signal.textSecondary }]}>{transcript.error}</Text>
           <Pressable onPress={() => void requestTranscript()} hitSlop={6} style={({ hovered, pressed }) => [hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
-            <Text style={[styles.transcriptAction, { color: mine ? theme.onAccent : theme.accent }]}>Retry transcription</Text>
+            <Text style={[styles.transcriptAction, { color: theme.accent }]}>Retry transcription</Text>
           </Pressable>
         </View>
       )}
     </View>
+  );
+}
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: { surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", text: "#17171A", textSecondary: "#55555C", dividerStrong: "rgba(0,0,0,0.13)", rowHover: "rgba(0,0,0,0.04)", bubbleMine: "#007AFF", bubbleTheirs: "#FFFFFF", bubbleTheirsBorder: "rgba(0,0,0,0.07)" },
+  dark: { surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", text: "#EDEDEF", textSecondary: "#A6A6AD", dividerStrong: "rgba(255,255,255,0.12)", rowHover: "rgba(255,255,255,0.045)", bubbleMine: "#0A84FF", bubbleTheirs: "#232326", bubbleTheirsBorder: "rgba(255,255,255,0.05)" },
+} as const;
+
+/** A non-media attachment: a download glyph, its name, and its size when known. */
+export function FileCard({ filename, bytes, onPress }: { filename: string; bytes: number | null; onPress: () => void }) {
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const action = Platform.OS === "web" ? "Click to download" : "Tap to download";
+  const detail = bytes !== null && bytes > 0 ? `${formatFileSize(bytes)}. ${action}` : action;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${filename}, ${detail}`}
+      onPress={onPress}
+      style={({ hovered, pressed }) => [
+        styles.file,
+        { backgroundColor: signal.surface, borderColor: signal.dividerStrong },
+        (hovered || pressed) && { backgroundColor: signal.rowHover },
+      ]}
+    >
+      <View style={[styles.fileGlyph, { backgroundColor: signal.field }]}>
+        <Ionicons name="arrow-down" size={18} color={signal.text} />
+      </View>
+      <View style={styles.fileText}>
+        <Text numberOfLines={1} style={[styles.fileName, { color: signal.text }]}>{filename}</Text>
+        <Text numberOfLines={1} style={[styles.fileDetail, { color: signal.textSecondary }]}>{detail}</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -232,6 +269,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 6,
     borderRadius: 20,
+    borderWidth: 1,
   },
   playButton: {
     width: 30,
@@ -278,8 +316,28 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     maxWidth: 280,
   },
+  file: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    height: 64,
+    paddingHorizontal: 13,
+    width: 268,
+  },
+  fileGlyph: {
+    alignItems: "center",
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  fileText: { flex: 1, gap: 2 },
+  fileName: { fontSize: 12.5, fontWeight: "600" },
+  fileDetail: { fontSize: 12, fontVariant: ["tabular-nums"] },
   video: {
-    borderRadius: Radii.card,
+    borderRadius: 14,
     overflow: "hidden",
     // Letterbox background for the video frame — always black, theme-invariant.
     backgroundColor: "#000",

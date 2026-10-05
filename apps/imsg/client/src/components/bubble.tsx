@@ -1,25 +1,60 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { memo, useEffect, useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle } from "react-native";
+import { useConvexConnectionState } from "convex/react";
 import { deliveryState } from "@/lib/delivery-state";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Path } from "react-native-svg";
 import { attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
-import { formatBubbleTime } from "@/lib/format";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";
 import type { MentionAnnotation } from "@shared/mentions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { useType } from "@/hooks/use-type";
-import { CardShadow, HOVER_DIM, Radii, Type } from "@/constants/theme";
-import { AudioBubble, VideoBubble, MediaUnavailable } from "./media";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { HOVER_DIM, Radii } from "@/constants/theme";
+import { AudioBubble, FileCard, VideoBubble, MediaUnavailable } from "./media";
 import { PersonAvatar } from "./avatar";
 import { useLightbox } from "@/lib/lightbox";
-import { useReducedMotion } from "react-native-reanimated";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
+import { receiptText } from "./message-meta";
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: {
+    text: "#17171A",
+    textSecondary: "#55555C",
+    textTertiary: "#64646B",
+    dividerStrong: "rgba(0,0,0,0.13)",
+    bubbleMine: "#007AFF",
+    bubbleSms: "#34C759",
+    onBubbleMine: "#FFFFFF",
+    bubbleTheirs: "#FFFFFF",
+    bubbleTheirsBorder: "rgba(0,0,0,0.07)",
+    bubbleTheirsText: "#17171A",
+    danger: "#C4261B",
+    skeleton: "rgba(0,0,0,0.06)",
+    tapbackBg: "#FFFFFF",
+    tapbackBorder: "rgba(0,0,0,0.1)",
+  },
+  dark: {
+    text: "#EDEDEF",
+    textSecondary: "#A6A6AD",
+    textTertiary: "#8F8F96",
+    dividerStrong: "rgba(255,255,255,0.12)",
+    bubbleMine: "#0A84FF",
+    bubbleSms: "#30D158",
+    onBubbleMine: "#FFFFFF",
+    bubbleTheirs: "#232326",
+    bubbleTheirsBorder: "rgba(255,255,255,0.05)",
+    bubbleTheirsText: "#EDEDEF",
+    danger: "#FF6B5E",
+    skeleton: "rgba(255,255,255,0.07)",
+    tapbackBg: "#2C2C30",
+    tapbackBorder: "rgba(255,255,255,0.08)",
+  },
+} as const;
 
 const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
   contact: { icon: "person-circle-outline", label: "Contact card" },
@@ -90,24 +125,6 @@ function renderMessageText(
   return parts;
 }
 
-/** Clean iMessage-style bubble tail via SVG — hugs the bottom outer corner. */
-function BubbleTail({ color, mine }: { color: string; mine: boolean }) {
-  return (
-    <Svg
-      width={14}
-      height={16}
-      viewBox="0 0 14 16"
-      style={[styles.tailSvg, mine ? { right: -5 } : { left: -5, transform: [{ scaleX: -1 }] }]}
-      pointerEvents="none"
-    >
-      <Path
-        d="M0 0 C0 8 2 14 12 15 C6 15 1 12 1 6 Z"
-        fill={color}
-      />
-    </Svg>
-  );
-}
-
 function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean }) {
   const theme = useTheme();
   const meta = SPECIAL_META[special.kind];
@@ -134,29 +151,10 @@ export const TAPBACK_EMOJI = new Map([
   ["question", "❓"],
 ]);
 
-/** Pulses under a thread image until its thumbnail paints. */
+/** Holds still under a thread image until its thumbnail paints. */
 function ImageSkeleton() {
-  const theme = useTheme();
-  const opacity = useRef(new Animated.Value(0.55)).current;
-  const reduceMotion = useReducedMotion();
-  useEffect(() => {
-    if (reduceMotion) return;
-    const native = Platform.OS !== "web";
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 650, useNativeDriver: native }),
-        Animated.timing(opacity, { toValue: 0.55, duration: 650, useNativeDriver: native }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity, reduceMotion]);
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { backgroundColor: theme.backgroundElement, opacity }]}
-    />
-  );
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: signal.skeleton }]} />;
 }
 
 function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
@@ -218,7 +216,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               </Pressable>
             );
           }
-          const tile = { width: mediaW, aspectRatio: ratio, borderRadius: Radii.card };
+          const tile = { width: mediaW, aspectRatio: ratio, borderRadius: 14 };
           return (
             <Pressable
               key={att.guid}
@@ -246,9 +244,12 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
           );
         }
         return (
-          <Pressable key={att.guid} accessibilityRole="link" onPress={() => void openExternalUrl(url!)}>
-            <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={[styles.attachmentLink, { color: theme.accent }]}>{att.filename ?? "Attachment"}</Text>
-          </Pressable>
+          <FileCard
+            key={att.guid}
+            filename={att.filename ?? "Attachment"}
+            bytes={att.totalBytes}
+            onPress={() => void openExternalUrl(url!)}
+          />
         );
       })}
     </View>
@@ -268,6 +269,8 @@ interface BubbleProps {
   highlighted?: boolean;
   onLongPress: (message: Message, anchor?: { x: number; y: number }) => void;
   onRetry: (message: Message) => void;
+  /** Resend the failed message over SMS. The button shows only when this is given. */
+  onSendAsText?: (message: Message) => void;
   onShowReactions: (message: Message) => void;
 }
 
@@ -296,78 +299,68 @@ export const Bubble = memo(function Bubble({
   highlighted = false,
   onLongPress,
   onRetry,
+  onSendAsText,
   onShowReactions,
 }: BubbleProps) {
   const theme = useTheme();
-  const type = useType();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const { width: winW, wide } = useLayoutMode();
   const contextRef = useWebContextMenu<View>((anchor) => onLongPress(message, anchor));
   const [showTime, setShowTime] = useState(false);
   const slowSend = useSlowSend(message.pending === true);
   const mine = message.isFromMe;
-  // SMS (green bubble) vs iMessage (blue).
-  const mineColor = message.service === "SMS" ? theme.sms : theme.bubbleMine;
+  const mineColor = message.service === "SMS" ? signal.bubbleSms : signal.bubbleMine;
   const senderName =
     message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
+  const groupGutter = !mine && isGroupChat;
   // Cap bubble width so long messages neither stretch across a wide pane nor
   // overflow a narrow one (Details/Assistant open). Pane-relative when known.
   const bubbleMaxWidth =
     paneWidth > 0
-      ? Math.min(paneWidth * 0.72, 560)
+      ? Math.min(paneWidth * (groupGutter ? 0.58 : 0.64), 520)
       : wide
-        ? Math.min(winW * 0.5, 560)
-        : "78%";
+        ? Math.min(winW * 0.5, 520)
+        : "76%";
   const url = message.text ? firstUrl(message.text) : null;
   const delivery = deliveryState(message, latestInboundAt, Date.now());
   const notDelivered = delivery === "failed";
-  // Tail only on the last text bubble of a group (not on media/failed). A pending
-  // send already has it, so settling changes nothing about the bubble itself.
-  const hasTail = groupEnd && !notDelivered && message.text !== "";
+  const caption = { fontSize: wide ? 11 : 12, color: signal.textTertiary };
+  const tapbacks = Object.entries(
+    message.reactions.reduce<Record<string, number>>((acc, r) => {
+      const glyph = r.type === "emoji" ? (r.emoji ?? "🙂") : r.type;
+      acc[glyph] = (acc[glyph] ?? 0) + 1;
+      return acc;
+    }, {}),
+  );
 
   return (
     <View
       style={{
         paddingHorizontal: 14,
-        marginBottom: groupEnd ? 8 : 2,
-        // A tapback chip overhangs the bubble top by 12px; give reacted
-        // messages that much extra headroom so the chip never slides under
-        // the neighboring bubble (iMessage does the same).
-        marginTop: message.reactions.length > 0 ? 12 : 0,
+        marginBottom: groupEnd ? 8 : 3,
+        // Tapback chips overhang the bubble top; reserve that headroom so they never slide under the neighbor.
+        marginTop: tapbacks.length > 0 ? 16 : 0,
       }}
     >
+      {groupGutter && groupStart && senderName !== "" && (
+        <Text style={[styles.senderName, { fontSize: wide ? 11.5 : 13, color: signal.textTertiary }]}>{senderName}</Text>
+      )}
+
       {message.replyToPreview !== null && (
-        // The quote block anchors to the REPLY's side (a cross-side connector
-        // reads as an orphaned squiggle); who's being quoted is carried by the
-        // outline color — blue = quoting me, gray = quoting them.
         <View
-          style={{
-            alignItems: mine ? "flex-end" : "flex-start",
-            marginLeft: !mine && isGroupChat ? 34 : 0,
-          }}
+          style={[
+            styles.quote,
+            {
+              borderLeftColor: signal.dividerStrong,
+              alignSelf: mine ? "flex-end" : "flex-start",
+              marginLeft: groupGutter ? AVATAR + GUTTER_GAP : 0,
+            },
+          ]}
         >
-          <View
-            style={[
-              styles.quote,
-              { borderColor: message.replyToFromMe ? theme.bubbleMine : theme.textSecondary },
-            ]}
-          >
-            <Text
-              numberOfLines={2}
-              style={{
-                fontSize: Type.secondary,
-                color: message.replyToFromMe ? theme.bubbleMine : theme.textSecondary,
-              }}
-            >
-              {message.replyToPreview || "Original message"}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.replyStem,
-              { backgroundColor: theme.textSecondary },
-              mine ? { marginRight: 26 } : { marginLeft: 26 },
-            ]}
-          />
+          <Text numberOfLines={2} style={{ fontSize: wide ? 12.5 : 15, color: signal.textSecondary }}>
+            {message.replyToFromMe && <Text style={{ fontWeight: "600", color: signal.text }}>You </Text>}
+            {message.replyToPreview || "Original message"}
+          </Text>
         </View>
       )}
 
@@ -376,24 +369,20 @@ export const Bubble = memo(function Bubble({
           flexDirection: "row",
           justifyContent: mine ? "flex-end" : "flex-start",
           alignItems: "flex-end",
-          gap: 6,
+          gap: GUTTER_GAP,
         }}
       >
-        {/* Avatar gutter only in group threads — Apple shows none in 1:1 DMs. */}
-        {!mine && isGroupChat && (
-          <View style={{ width: 28 }}>
+        {/* Avatar gutter only in group threads; Apple shows none in 1:1 DMs. */}
+        {groupGutter && (
+          <View style={{ width: AVATAR }}>
             {groupEnd && (
-              <PersonAvatar address={message.sender?.address ?? null} name={senderName} size={28} />
+              <PersonAvatar address={message.sender?.address ?? null} name={senderName} size={AVATAR} />
             )}
           </View>
         )}
 
         <View style={{ maxWidth: bubbleMaxWidth, alignItems: mine ? "flex-end" : "flex-start", gap: 4 }}>
-          {!mine && isGroupChat && groupStart && senderName !== "" && (
-            <Text style={[styles.senderName, { color: theme.textSecondary }]}>{senderName}</Text>
-          )}
-
-          {/* Media and link cards render bare — no colored bubble around them. */}
+          {/* Media and link cards render bare, no colored bubble around them. */}
           {message.attachments.length > 0 && (
             <Attachments message={message} mine={mine} paneWidth={paneWidth} />
           )}
@@ -411,11 +400,13 @@ export const Bubble = memo(function Bubble({
                 delayLongPress={280}
                 style={[
                   styles.bubble,
-                  highlighted && styles.highlighted,
-                  highlighted && { borderColor: theme.accent },
-                  { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
-                  hasTail && (mine ? styles.bubbleTailMine : styles.bubbleTailTheirs),
-                  notDelivered && { backgroundColor: "rgba(255,69,58,0.25)" },
+                  wide ? styles.bubbleDesk : styles.bubblePhone,
+                  mine
+                    ? { backgroundColor: mineColor, borderColor: mineColor }
+                    : { backgroundColor: signal.bubbleTheirs, borderColor: signal.bubbleTheirsBorder },
+                  !groupEnd && (mine ? styles.runBelowMine : styles.runBelowTheirs),
+                  !groupStart && (mine ? styles.runAboveMine : styles.runAboveTheirs),
+                  highlighted && { borderWidth: 2, borderColor: theme.accent },
                 ]}
               >
                 {message.special && <SpecialCard special={message.special} mine={mine} />}
@@ -423,9 +414,9 @@ export const Bubble = memo(function Bubble({
                   <Text
                     selectable
                     style={{
-                      fontSize: wide ? type.body : 17,
-                      lineHeight: wide ? 18 : 22,
-                      color: mine ? theme.onAccent : theme.bubbleTheirsText,
+                      fontSize: wide ? 14 : 17,
+                      lineHeight: wide ? 19 : 22,
+                      color: mine ? signal.onBubbleMine : signal.bubbleTheirsText,
                       // Break long unbroken strings (URLs) so they never overflow.
                       ...(Platform.OS === "web"
                         ? ({ overflowWrap: "anywhere", wordBreak: "break-word" } as object)
@@ -435,33 +426,26 @@ export const Bubble = memo(function Bubble({
                     {renderMessageText(
                       message.text,
                       message.mentions ?? [],
-                      mine ? theme.onAccent : theme.bubbleTheirsText,
-                      mine ? theme.onAccent : theme.accent,
+                      mine ? signal.onBubbleMine : signal.bubbleTheirsText,
+                      mine ? signal.onBubbleMine : theme.accent,
                     )}
                   </Text>
                 )}
-                {hasTail && <BubbleTail color={mine ? mineColor : theme.bubbleTheirs} mine={mine} />}
               </Pressable>
             )}
 
-            {message.reactions.length > 0 && (
-              <View style={[styles.reactionRow, mine ? { left: -10 } : { right: -10 }]}>
-                {Object.entries(
-                  message.reactions.reduce<Record<string, number>>((acc, r) => {
-                    const glyph = r.type === "emoji" ? (r.emoji ?? "🙂") : r.type;
-                    acc[glyph] = (acc[glyph] ?? 0) + 1;
-                    return acc;
-                  }, {}),
-                ).map(([type, count]) => (
+            {tapbacks.length > 0 && (
+              <View style={[styles.reactionRow, mine ? { left: -18 } : { right: -14 }]}>
+                {tapbacks.map(([type, count]) => (
                   <Pressable
                     key={type}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${TAPBACK_LABEL[type] ?? type}${count > 1 ? `, ${count}` : ""}`}
                     onPress={() => onShowReactions(message)}
-                    style={[styles.reactionChip, { backgroundColor: theme.backgroundElement }]}
+                    style={[styles.reactionChip, { backgroundColor: signal.tapbackBg, borderColor: signal.tapbackBorder }]}
                   >
-                    <Text style={{ fontSize: 12 }}>
-                      {TAPBACK_EMOJI.get(type) ?? type}
-                      {count > 1 ? ` ${count}` : ""}
-                    </Text>
+                    <Text style={{ fontSize: 12 }}>{TAPBACK_EMOJI.get(type) ?? type}</Text>
+                    {count > 1 && <Text style={[styles.reactionCount, { color: signal.textSecondary }]}>{count}</Text>}
                   </Pressable>
                 ))}
               </View>
@@ -469,100 +453,134 @@ export const Bubble = memo(function Bubble({
           </View>
 
           {notDelivered ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Retry sending" onPress={() => onRetry(message)} style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}>
-              <Text style={[styles.failed, { color: theme.destructive }]}>Not delivered. Select to retry.</Text>
-            </Pressable>
+            <View style={styles.failedRow}>
+              <Text style={[styles.failedLabel, { color: signal.danger }]}>Not delivered</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry sending"
+                onPress={() => onRetry(message)}
+                hitSlop={6}
+                style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}
+              >
+                <Text style={[styles.failedAction, { color: signal.text }]}>Retry</Text>
+              </Pressable>
+              {onSendAsText && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => onSendAsText(message)}
+                  hitSlop={6}
+                  style={({ hovered, pressed }) => [(hovered || pressed) && { opacity: HOVER_DIM }]}
+                >
+                  <Text style={[styles.failedAction, { color: signal.text }]}>Send as text</Text>
+                </Pressable>
+              )}
+            </View>
           ) : delivery === "uncertain" ? (
-            <Text style={[styles.meta, { color: theme.textSecondary }]}>May not have delivered</Text>
+            <Text style={[styles.meta, caption]}>May not have delivered</Text>
+          ) : mine && isLatestOutgoing && message.pending && slowSend ? (
+            <PendingReceipt style={[styles.meta, caption]} />
           ) : (
-            (groupEnd || message.edited || showTime) && (
-              <Text style={[styles.meta, { color: theme.textSecondary }]}>
-                {message.edited ? "Edited · " : ""}
-                {groupEnd || showTime ? formatBubbleTime(message.dateCreated) : ""}
-                {mine && isLatestOutgoing
-                  ? message.pending
-                    ? slowSend ? " · Sending…" : ""
-                    : message.dateRead
-                    ? ` · Read ${formatBubbleTime(message.dateRead)}`
-                    : message.dateDelivered
-                      ? " · Delivered"
-                      : " · Sent"
-                  : ""}
-              </Text>
-            )
+            <Receipt style={[styles.meta, caption]} text={receiptText({ message, isLatestOutgoing, slowSend, groupEnd, showTime })} />
           )}
         </View>
+
+        {notDelivered && (
+          <Ionicons name="alert-circle-outline" size={20} color={signal.danger} style={styles.failedIcon} accessibilityElementsHidden />
+        )}
       </View>
     </View>
   );
 });
 
+function Receipt({ text, style }: { text: string | null; style: StyleProp<TextStyle> }) {
+  return text === null ? null : <Text style={style}>{text}</Text>;
+}
+
+/** A send still out after the slow-send delay names why when the connection is down. */
+function PendingReceipt({ style }: { style: StyleProp<TextStyle> }) {
+  const { isWebSocketConnected } = useConvexConnectionState();
+  return <Text style={style}>{isWebSocketConnected ? "Sending…" : "Waiting for connection"}</Text>;
+}
+
+const AVATAR = 30;
+const GUTTER_GAP = 8;
+
 const styles = StyleSheet.create({
-  highlighted: {
-    borderWidth: 2,
-    // borderColor comes from theme.accent inline at the call site — this only
-    // fixes the width; the old hardcoded #0A84FF always rendered dark-mode blue.
-  },
-  tailSvg: {
-    position: "absolute",
-    bottom: 0,
-  },
   bubble: {
     borderRadius: 18,
+    borderWidth: 1,
+  },
+  // Padding is one point under the mockup on each side to make room for the 1px border.
+  bubbleDesk: {
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingTop: 6,
+    paddingBottom: 7,
   },
-  bubbleTailMine: {
-    borderBottomRightRadius: 4,
+  bubblePhone: {
+    paddingHorizontal: 12,
+    paddingTop: 7,
+    paddingBottom: 8,
   },
-  bubbleTailTheirs: {
-    borderBottomLeftRadius: 4,
-  },
+  runBelowMine: { borderBottomRightRadius: 5 },
+  runAboveMine: { borderTopRightRadius: 5 },
+  runBelowTheirs: { borderBottomLeftRadius: 5 },
+  runAboveTheirs: { borderTopLeftRadius: 5 },
   quote: {
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    maxWidth: "70%",
-  },
-  replyStem: {
-    borderRadius: 1,
-    height: 8,
-    marginBottom: 1,
-    marginTop: 1,
-    opacity: 0.55,
-    width: 2,
+    borderLeftWidth: 2,
+    paddingLeft: 9,
+    paddingVertical: 1,
+    marginTop: 6,
+    marginBottom: 4,
+    maxWidth: "56%",
   },
   senderName: {
-    fontSize: Type.caption,
-    marginBottom: 2,
-    marginLeft: 4,
+    marginTop: 8,
+    marginBottom: 3,
+    marginLeft: AVATAR + GUTTER_GAP + 6,
   },
   reactionRow: {
     position: "absolute",
-    top: -12,
+    top: -16,
     flexDirection: "row",
     gap: 2,
   },
   reactionChip: {
-    borderRadius: Radii.chip,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    ...CardShadow,
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 3,
+    height: 24,
+    justifyContent: "center",
+    minWidth: 24,
+    paddingHorizontal: 6,
+  },
+  reactionCount: {
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "600",
   },
   meta: {
-    fontSize: Type.caption,
-    marginTop: 2,
+    marginTop: 0,
     marginHorizontal: 4,
   },
-  failed: {
-    // color comes from theme.destructive inline at the call site.
-    fontSize: 12,
+  failedRow: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: 4,
+  },
+  failedLabel: {
+    fontSize: 11.5,
+    fontWeight: "500",
+  },
+  failedAction: {
+    fontSize: 11.5,
     fontWeight: "600",
-    marginTop: 2,
+  },
+  failedIcon: {
+    alignSelf: "center",
+    marginBottom: 18,
   },
   imageUnavailable: {
     alignItems: "center",
@@ -576,10 +594,5 @@ const styles = StyleSheet.create({
   imageUnavailableText: {
     fontSize: 13,
     fontWeight: "500",
-  },
-  attachmentLink: {
-    // color comes from theme.accent inline at the call site.
-    fontSize: 14,
-    textDecorationLine: "underline",
   },
 });
