@@ -36,13 +36,17 @@ import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { settleActionFor } from "@shared/chat-state";
-import { formatAddress } from "@shared/address";
 import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
-import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
+import { IconButton } from "./ui/icon-button";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { TriageGeometry } from "@/constants/triage-theme";
+import { headerFace } from "@/lib/header-font";
 import { TypingIndicator } from "./typing-indicator";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -74,6 +78,8 @@ interface ThreadViewProps {
   headerOffset?: number;
   /** When set (wide split-pane), render an in-pane header for this chat. */
   headerChat?: ChatSummary | null;
+  /** The lens the chat was opened from: the muted first crumb of the header. */
+  lensLabel?: string;
   /** Glide-mode preview: render without marking the conversation read. */
   previewOnly?: boolean;
   /** Sweep mode advances only after a real send settles successfully. */
@@ -86,6 +92,7 @@ export function ThreadView({
   isGroup,
   jumpTarget = null,
   headerChat = null,
+  lensLabel,
   previewOnly = false,
   onMessageSent,
   toastActive = true,
@@ -499,16 +506,13 @@ export function ThreadView({
       ref={paneRef}
       testID="thread-view"
       onLayout={(e) => onPaneLayout(e.nativeEvent.layout.width)}
-      style={{ flex: 1, backgroundColor: theme.background, paddingBottom: bottomInset }}
+      style={{ flex: 1, backgroundColor: headerChat ? theme.thread : theme.background, paddingBottom: bottomInset }}
     >
       {headerChat && (
-        <View
-          style={[
-            styles.paneHeader,
-            { backgroundColor: theme.background, borderBottomColor: theme.divider },
-          ]}
-        >
+        <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={headerChat.isGroup ? `Group details for ${headerChat.displayName}` : `Contact details for ${headerChat.displayName}`}
             style={styles.paneIdentity}
             onPress={() => {
               if (headerChat.isGroup) {
@@ -519,42 +523,17 @@ export function ThreadView({
               }
             }}
           >
-            {headerChat.isGroup ? (
-              <GroupAvatarStack chat={headerChat} size={34} />
-            ) : (
-              <ChatAvatar chat={headerChat} size={30} />
-            )}
-            <View style={styles.paneIdentityText}>
-              <Text role="heading" aria-level={2} numberOfLines={1} style={{ color: theme.text, fontSize: type.title, fontWeight: "600" }}>
-                {headerChat.displayName}
-              </Text>
-              <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                {headerChat.isGroup
-                  ? `${headerChat.participants.length} people ›`
-                  : `${formatAddress(headerChat.participants[0]?.address ?? headerChat.guid.split(";").pop() ?? "")} · ${headerChat.flags.unresponded ? "needs reply" : headerChat.flags.waiting ? "waiting" : "conversation"}${headerChat.unreadCount && !headerChat.lastMessage?.isFromMe ? ` · ${headerChat.unreadCount} unread` : ""}`}
-              </Text>
-            </View>
+            {lensLabel ? (
+              <>
+                <Text numberOfLines={1} style={[styles.crumb, { color: theme.textSecondary }]}>{lensLabel}</Text>
+                <Text aria-hidden style={[styles.crumbSlash, { color: theme.textTertiary }]}>/</Text>
+              </>
+            ) : null}
+            <Text role="heading" aria-level={2} numberOfLines={1} style={[styles.threadTitle, { color: theme.text }]}>
+              {headerChat.displayName}
+            </Text>
           </Pressable>
           <View style={styles.paneHeaderActions}>
-            <FaceTimeButton
-              chatGuid={chatGuid}
-              isGroup={isGroup}
-              address={isGroup ? null : (participants[0]?.address ?? null)}
-              color={theme.textSecondary}
-              compact
-              onSent={(message) => {
-                upsert(message);
-              }}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Search conversation"
-              onPress={() => setSearchOpen(true)}
-              hitSlop={8}
-              style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-            >
-              {({ hovered, pressed }) => <Ionicons name="search" size={21} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-            </Pressable>
             {settleActionFor(headerChat) === "settle" && (
               <Pressable
                 ref={(node) => { if (Platform.OS === "web") (node as unknown as HTMLElement | null)?.setAttribute("title", "Settle (⌘E)"); }}
@@ -562,21 +541,33 @@ export function ThreadView({
                 accessibilityRole="button"
                 accessibilityLabel="Settle (⌘E)"
                 onPress={() => { void toggleSettleChat(headerChat); }}
-                hitSlop={8}
-                style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+                style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [
+                  styles.settle,
+                  (hovered || pressed) && { backgroundColor: pressed ? theme.rowSelected : theme.rowHover },
+                ]}
               >
-                {({ hovered, pressed }) => <Ionicons name="checkmark-circle-outline" size={22} color={hovered || pressed ? theme.text : theme.textSecondary} />}
+                <Ionicons name="checkmark" size={15} color={theme.text} />
+                <Text style={[styles.settleLabel, { color: theme.text }]}>Settle</Text>
+                <Text style={[styles.settleKey, { color: theme.textTertiary }]}>⌘E</Text>
               </Pressable>
             )}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Conversation info"
-              onPress={() => openChatInfo(chatGuid)}
-              hitSlop={8}
-              style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-            >
-              {({ hovered, pressed }) => <Ionicons name="information-circle-outline" size={24} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-            </Pressable>
+            <View style={[styles.vsep, { backgroundColor: theme.divider }]} />
+            <FaceTimeButton
+              chatGuid={chatGuid}
+              isGroup={isGroup}
+              address={isGroup ? null : (participants[0]?.address ?? null)}
+              color={theme.icon}
+              compact
+              onSent={(message) => {
+                upsert(message);
+              }}
+            />
+            <IconButton label="Search conversation" onPress={() => setSearchOpen(true)} style={styles.headerIconButton}>
+              {({ active }) => <HugeiconsIcon icon={Search01Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
+            </IconButton>
+            <IconButton label="Conversation info" onPress={() => openChatInfo(chatGuid)} style={styles.headerIconButton}>
+              {({ active }) => <HugeiconsIcon icon={SidebarRightIcon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
+            </IconButton>
           </View>
         </View>
       )}
@@ -684,7 +675,7 @@ export function ThreadView({
           onMomentumScrollEnd={endDayChipScroll}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
-          contentContainerStyle={{ paddingVertical: 10 }}
+          contentContainerStyle={headerChat ? styles.threadColumn : { paddingVertical: 10 }}
           ListHeaderComponent={
             peerTyping ? (
               <View style={styles.typingRow}>
@@ -722,7 +713,7 @@ export function ThreadView({
                   </View>
                 )}
                 {item.newDay && (
-                  <Text style={[styles.dayDivider, { color: theme.textSecondary }]}>
+                  <Text style={[styles.dayDivider, { color: theme.textTertiary }]}>
                     {formatDayDivider(item.message.dateCreated)}
                   </Text>
                 )}
@@ -816,11 +807,12 @@ export function ThreadView({
 const styles = StyleSheet.create({
   paneHeader: {
     alignItems: "center",
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    height: 52,
+    height: TriageGeometry.threadHeaderHeight,
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingLeft: 22,
+    paddingRight: 12,
   },
   paneHeaderActions: {
     alignItems: "center",
@@ -828,13 +820,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: 4,
   },
-  headerIconButton: {
-    alignItems: "center",
-    borderRadius: 7,
-    height: 28,
-    justifyContent: "center",
-    width: 32,
-  },
+  headerIconButton: { borderRadius: 7, height: 30, width: 30 },
+  threadColumn: { alignSelf: "center", maxWidth: TriageGeometry.threadMaxWidth + 64, paddingHorizontal: 18, paddingVertical: 14, width: "100%" },
+  crumb: { flexShrink: 1, fontSize: 13.5 },
+  crumbSlash: { fontSize: 14, marginHorizontal: 8 },
+  threadTitle: { ...headerFace, flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },
+  settle: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 6, height: 28, paddingHorizontal: 8 },
+  settleLabel: { fontSize: 12.5, fontWeight: "600" },
+  settleKey: { fontSize: 11, fontWeight: "500" },
+  vsep: { height: 16, marginHorizontal: 6, width: 1 },
   retryButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },
   searchShelf: {
@@ -860,15 +854,10 @@ const styles = StyleSheet.create({
   },
   paneIdentity: {
     alignItems: "center",
-    flex: 1,
     flexDirection: "row",
-    gap: 10,
+    flexShrink: 1,
     minWidth: 0,
     paddingRight: 12,
-  },
-  paneIdentityText: {
-    flex: 1,
-    minWidth: 0,
   },
   dropOverlay: {
     ...StyleSheet.absoluteFill,
@@ -932,9 +921,9 @@ const styles = StyleSheet.create({
   },
   dayDivider: {
     textAlign: "center",
-    fontSize: 12,
-    fontWeight: "500",
-    marginVertical: 12,
+    fontSize: 11.5,
+    marginBottom: 8,
+    marginTop: 16,
   },
   groupEvent: {
     textAlign: "center",

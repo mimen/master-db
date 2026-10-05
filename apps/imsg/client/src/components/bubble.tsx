@@ -4,7 +4,6 @@ import { deliveryState } from "@/lib/delivery-state";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import Svg, { Path } from "react-native-svg";
 import { attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { formatBubbleTime } from "@/lib/format";
 import { formatAddress } from "@shared/address";
@@ -88,24 +87,6 @@ function renderMessageText(
   }
   if (cursor < text.length) parts.push(linkifyText(text.slice(cursor), linkColor, `segment-${cursor}`));
   return parts;
-}
-
-/** Clean iMessage-style bubble tail via SVG — hugs the bottom outer corner. */
-function BubbleTail({ color, mine }: { color: string; mine: boolean }) {
-  return (
-    <Svg
-      width={14}
-      height={16}
-      viewBox="0 0 14 16"
-      style={[styles.tailSvg, mine ? { right: -5 } : { left: -5, transform: [{ scaleX: -1 }] }]}
-      pointerEvents="none"
-    >
-      <Path
-        d="M0 0 C0 8 2 14 12 15 C6 15 1 12 1 6 Z"
-        fill={color}
-      />
-    </Svg>
-  );
 }
 
 function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean }) {
@@ -320,9 +301,10 @@ export const Bubble = memo(function Bubble({
   const url = message.text ? firstUrl(message.text) : null;
   const delivery = deliveryState(message, latestInboundAt, Date.now());
   const notDelivered = delivery === "failed";
-  // Tail only on the last text bubble of a group (not on media/failed). A pending
-  // send already has it, so settling changes nothing about the bubble itself.
-  const hasTail = groupEnd && !notDelivered && message.text !== "";
+  // Bubbles in a run join on the sender's side: 5px on each corner that meets a neighbor.
+  const joined = mine
+    ? { borderTopRightRadius: groupStart ? 18 : 5, borderBottomRightRadius: groupEnd ? 18 : 5 }
+    : { borderTopLeftRadius: groupStart ? 18 : 5, borderBottomLeftRadius: groupEnd ? 18 : 5 };
 
   return (
     <View
@@ -414,7 +396,8 @@ export const Bubble = memo(function Bubble({
                   highlighted && styles.highlighted,
                   highlighted && { borderColor: theme.accent },
                   { backgroundColor: mine ? mineColor : theme.bubbleTheirs },
-                  hasTail && (mine ? styles.bubbleTailMine : styles.bubbleTailTheirs),
+                  !mine && { borderColor: theme.bubbleTheirsBorder, borderWidth: StyleSheet.hairlineWidth },
+                  joined,
                   notDelivered && { backgroundColor: "rgba(255,69,58,0.25)" },
                 ]}
               >
@@ -423,8 +406,8 @@ export const Bubble = memo(function Bubble({
                   <Text
                     selectable
                     style={{
-                      fontSize: wide ? type.body : 17,
-                      lineHeight: wide ? 18 : 22,
+                      fontSize: wide ? 14 : 17,
+                      lineHeight: wide ? 19 : 22,
                       color: mine ? theme.onAccent : theme.bubbleTheirsText,
                       // Break long unbroken strings (URLs) so they never overflow.
                       ...(Platform.OS === "web"
@@ -440,7 +423,6 @@ export const Bubble = memo(function Bubble({
                     )}
                   </Text>
                 )}
-                {hasTail && <BubbleTail color={mine ? mineColor : theme.bubbleTheirs} mine={mine} />}
               </Pressable>
             )}
 
@@ -503,20 +485,10 @@ const styles = StyleSheet.create({
     // borderColor comes from theme.accent inline at the call site — this only
     // fixes the width; the old hardcoded #0A84FF always rendered dark-mode blue.
   },
-  tailSvg: {
-    position: "absolute",
-    bottom: 0,
-  },
   bubble: {
     borderRadius: 18,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 7,
-  },
-  bubbleTailMine: {
-    borderBottomRightRadius: 4,
-  },
-  bubbleTailTheirs: {
-    borderBottomLeftRadius: 4,
   },
   quote: {
     borderWidth: 1.5,

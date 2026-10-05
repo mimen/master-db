@@ -17,7 +17,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
-import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
+import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
 import {
   getListAdapter,
   isListMode,
@@ -367,6 +367,7 @@ export function MessagesWorkspace({
             isGroup={selected.isGroup}
             jumpTarget={jumpTarget}
             headerChat={selected}
+            lensLabel={desktopInboxTitle({ state, type })}
             previewOnly={selectionIntent === "preview"}
             toastActive={active}
           />

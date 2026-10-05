@@ -44,6 +44,8 @@ import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { useComposerDraft } from "@/hooks/use-composer-draft";
 import { HOVER_DIM, PRESS_DIM, Radii } from "@/constants/theme";
 import {
@@ -262,6 +264,8 @@ export function Composer({
 }: ComposerProps) {
   const theme = useTheme();
   const type = useType();
+  // Wide: one rounded card on the gray thread. Phone keeps the iOS bar and pill field.
+  const { wide: card } = useLayoutMode();
   const insets = useSafeAreaInsets();
   const showSheet = useActionSheet();
   const [keyboardUp, setKeyboardUp] = useState(false);
@@ -951,13 +955,14 @@ ${url}` : url;
       ref={containerRef}
       style={[
         styles.container,
+        card && styles.cardHost,
         {
-          borderTopColor: theme.divider,
+          borderTopColor: card ? "transparent" : theme.divider,
           // Keep native controls clear of the keyboard and rounded display
           // edges — see barPadV above for why both edges share one value.
           paddingTop: barPadV,
-          paddingBottom: barPadV,
-          paddingHorizontal: Platform.OS === "web" ? 18 : keyboardUp ? 16 : 20,
+          paddingBottom: card ? 22 : barPadV,
+          paddingHorizontal: card ? 32 : Platform.OS === "web" ? 18 : keyboardUp ? 16 : 20,
         },
       ]}
     >
@@ -1074,7 +1079,7 @@ ${url}` : url;
           ))}
         </View>
       )}
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, card && [styles.card, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]]}>
         <View style={styles.actionCol}>
           <Pressable
             ref={attachBtnRef}
@@ -1145,6 +1150,7 @@ ${url}` : url;
                 },
                 Platform.OS === "web" && styles.webInput,
                 { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background, fontSize: type.body },
+                card && [styles.cardInput, { backgroundColor: "transparent", fontSize: 14 }],
               ]}
             />
           </View>
@@ -1308,6 +1314,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
+  },
+  cardHost: {
+    alignSelf: "center",
+    borderTopWidth: 0,
+    maxWidth: TriageGeometry.threadMaxWidth + 64,
+    width: "100%",
+  },
+  card: {
+    alignItems: "flex-end",
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  cardInput: {
+    borderWidth: 0,
+    minHeight: 40,
+    paddingHorizontal: 6,
   },
   growthMirror: {
     // Same metrics as the input's TEXT AREA — inset by padding + border, not
