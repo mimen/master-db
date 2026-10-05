@@ -56,6 +56,7 @@ if CommandLine.arguments.contains("--self-test") {
 } else if CommandLine.arguments.contains("--run") {
   let args = CommandLine.arguments
   let output = args.firstIndex(of: "--output").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+  let only = args.firstIndex(of: "--only").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
   let budget = args.firstIndex(of: "--budget-ms").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 82_000
   let repeats = args.firstIndex(of: "--repeats").flatMap { $0 + 1 < args.count ? Int(args[$0 + 1]) : nil } ?? 5
   guard budget >= 1000 && budget <= 82_000, (1...10).contains(repeats), let output, output.hasPrefix("/Users/mimen/Programming/Repos/convex-db/apps/imsg/artifacts/latency/") else { fatalError("--output must be under the main checkout latency artifacts; repeats 1...10") }
@@ -66,7 +67,7 @@ if CommandLine.arguments.contains("--self-test") {
   for app in apps where (!args.contains("--messages-only") || app.bundleIdentifier == "com.apple.MobileSMS") && (!(args.contains("--preview-only") || args.contains("--comma-only")) || app.executableURL?.lastPathComponent == "imsg-desktop") {
     do {
       let session = try Session(app: app, directory: directory, budgetMs: budget)
-      let run = session.perform(repeats: repeats, previewOnly: args.contains("--preview-only"))
+      let run = session.perform(repeats: repeats, previewOnly: args.contains("--preview-only"), onlyInteraction: only)
       runs.append(run)
       try writeJSON(run, directory.appendingPathComponent("\(run.app.lowercased())-native.json"))
       if !run.cleanupVerified || run.error?.contains("cursor moved") == true { break }

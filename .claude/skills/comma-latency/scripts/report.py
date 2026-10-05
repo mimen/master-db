@@ -64,7 +64,8 @@ def main():
         runs["Messages"] = baseline["run"]
         sources["Messages"] = args.baseline.parent
     for source in args.native:
-        for run in json.loads(source.read_text()):
+        content = json.loads(source.read_text())
+        for run in ([content] if isinstance(content, dict) else content):
             for trial in run["trials"]:
                 if trial.get("evidence"):
                     trial["evidence"] = str((source.parent / trial["evidence"]).resolve())
@@ -79,7 +80,7 @@ def main():
                 for name in {t["interaction"] for t in run["trials"]}:
                     incoming = [t for t in run["trials"] if t["interaction"] == name]
                     existing = [t for t in previous["trials"] if t["interaction"] == name]
-                    if sum(t["repetition"] > 0 for t in incoming) > sum(t["repetition"] > 0 for t in existing):
+                    if sum(t["repetition"] > 0 for t in incoming) >= sum(t["repetition"] > 0 for t in existing):
                         previous["trials"] = [t for t in previous["trials"] if t["interaction"] != name] + incoming
                 if run.get("error"):
                     previous["error"] = "; ".join(filter(None, [previous.get("error"), f"{source}: {run['error']}"]))
@@ -166,6 +167,7 @@ def main():
                               "Visual settling is 300ms of quiet after a response, not proof that backend work finished. Search watches results, not its input field.",
                               "Capture is one pixel per point at requested 240 Hz on a 120 Hz maximum display. Spatial threshold is two pixels with summed RGB delta >12. Plus/minus one frame accuracy is an aim, not validated.",
                               "The runs were sequential on a busy development Mac. Native build identity comes from Settings, not the server release endpoint.",
+                              "The isolated palette retry has light appearance while earlier captures are dark; these are not fully controlled laboratory conditions.",
                               "Keyboard preview is supplemental, not mouse-click parity. Thread scrolling used the already-open Messages chat and a Comma preview, not a matched self-chat pair.",
                               "Messages search ROI was inspected in its retained strip. Matching conversations and inline message results appeared there; the broad query was a. The matched proxy repeats query a and the 16-pulse, 24-point, 8ms scroll schedule. Native and browser event delivery still differ."]}
     if running_build == "unverified" or not args.build.startswith(running_build):

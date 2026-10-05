@@ -132,7 +132,17 @@ final class Session {
     let roi = relative(region)
     guard roi.width > 2, roi.height > 2 else { throw Abort.setup("empty measurement region") }
     capture.watch([roi])
-    sleepMs(100)
+    let baselineStart = now()
+    while true {
+      try check()
+      let lastChange = capture.snapshot().last(where: { $0.changed[0] >= 2 })?.t ?? baselineStart
+      if ms(max(baselineStart, lastChange), now()) >= 300 { break }
+      if ms(baselineStart, now()) >= 1500 {
+        run.trials.append(Trial(app: run.app, interaction: name, repetition: repetition, status: "unstable-baseline", reason: "Region was still changing before input; no input was issued"))
+        return
+      }
+      sleepMs(12)
+    }
     capture.reset()
     let input = try action(), lastInput = now()
     var measurement = Measurement(first: nil, settled: nil, confirmed: nil)
@@ -180,7 +190,14 @@ final class Session {
     guard axValueText(field).isEmpty else { throw Abort.unsafe("temporary text not cleared") }
     ownedField = nil; ownedText = nil
   }
-  func perform(repeats: Int, previewOnly: Bool = false) -> AppRun {
+  func palette(repeats: Int) throws {
+    let region = CGRect(x: frame.minX + frame.width * 0.25, y: frame.minY + 130, width: frame.width * 0.5, height: min(370, frame.height - 150))
+    for i in 1...repeats {
+      try measure("command-palette", repetition: i, region: region) { try driver.key(.k, cmd: true) }
+      try driver.key(.escape)
+    }
+  }
+  func perform(repeats: Int, previewOnly: Bool = false, onlyInteraction: String? = nil) -> AppRun {
     do {
     let front = NSWorkspace.shared.frontmostApplication
     do { try driver.startWatchdog() } catch { run.error = String(describing: error); return run }
@@ -213,7 +230,10 @@ final class Session {
       let list: CGRect
       if let search { let s = axFrame(search); list = CGRect(x: s.minX, y: s.maxY + (isComma ? 60 : 10), width: isComma ? 410 : 300, height: min(500, frame.maxY - s.maxY - 90)) }
       else { throw Abort.setup("AX search anchor not found") }
-      if previewOnly {
+      if onlyInteraction == "command-palette" {
+        guard isComma else { throw Abort.setup("palette is Comma-only") }
+        try palette(repeats: repeats)
+      } else if previewOnly {
         guard isComma, let all = controls().first(where: { axString($0, kAXRoleAttribute) == "AXRadioButton" && label($0).hasPrefix("All,") }),
               let divider = controls().first(where: { axString($0, kAXRoleAttribute) == "AXSlider" && label($0).contains("Resize sidebar") }) else { throw Abort.setup("preview navigation anchors absent") }
         try driver.click(midpoint(axFrame(all)))
@@ -262,11 +282,7 @@ final class Session {
         if tabs.count == 2 {
           for i in 1...repeats { try measure("lens-tabs", repetition: i, region: list) { try driver.click(midpoint(axFrame(tabs[(i - 1) % 2]))) } }
         } else { skip("lens-tabs", "Expected All/Waiting AX radio controls were not found") }
-        for i in 1...repeats {
-          let region = CGRect(x: frame.minX + frame.width * 0.25, y: frame.minY + 80, width: frame.width * 0.5, height: min(420, frame.height - 100))
-          try measure("command-palette", repetition: i, region: region) { try driver.key(.k, cmd: true) }
-          try driver.key(.escape); sleepMs(100)
-        }
+        try palette(repeats: repeats)
         skip("details", "No active conversation details control exposed; normal selection would auto-mark the thread.")
       }
       }
