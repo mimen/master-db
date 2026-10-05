@@ -5,8 +5,30 @@ import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { selectChat } from "@/lib/selection";
 import type { Contact, Message } from "@shared/types";
-import { useTheme } from "@/hooks/use-theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ListRow } from "./list-row";
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: {
+    sidebar: "#FFFFFF",
+    field: "rgba(0,0,0,0.045)",
+    rowHover: "rgba(0,0,0,0.04)",
+    rowSelected: "rgba(0,0,0,0.075)",
+    text: "#17171A",
+    textSecondary: "#55555C",
+    textTertiary: "#64646B",
+  },
+  dark: {
+    sidebar: "#141416",
+    field: "rgba(255,255,255,0.06)",
+    rowHover: "rgba(255,255,255,0.045)",
+    rowSelected: "rgba(255,255,255,0.085)",
+    text: "#EDEDEF",
+    textSecondary: "#A6A6AD",
+    textTertiary: "#8F8F96",
+  },
+} as const;
 
 type SearchRow =
   | { kind: "header"; key: string; label: string }
@@ -26,7 +48,7 @@ export function SearchContent({
   scopeLabel?: string;
   onClose: () => void;
 }) {
-  const theme = useTheme();
+  const theme = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const [query, setQuery] = useState(initialQuery ?? "");
 
   useEffect(() => {
@@ -103,14 +125,14 @@ export function SearchContent({
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.sidebar }}>
       <TextInput
         value={query}
         onChangeText={setQuery}
         placeholder={scopeLabel ? `Search in ${scopeLabel}` : "Search contacts and messages…"}
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={theme.textTertiary}
         autoFocus
-        style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
+        style={[styles.input, { color: theme.text, backgroundColor: theme.field }]}
       />
       <FlatList
         data={rows}
@@ -118,15 +140,22 @@ export function SearchContent({
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           query.trim().length >= 2 ? (
-            <Text style={[styles.empty, { color: theme.textSecondary }]}>
-              {searching ? "Searching…" : `No results for “${query.trim()}”`}
-            </Text>
+            searching ? (
+              <Text style={[styles.emptyDetail, styles.emptyBlock, { color: theme.textSecondary }]}>Searching…</Text>
+            ) : (
+              <View style={styles.emptyBlock}>
+                <Text style={[styles.emptyTitle, { color: theme.text }]}>No results for “{query.trim()}”</Text>
+                <Text style={[styles.emptyDetail, { color: theme.textSecondary }]}>
+                  {scopeLabel ? `Searched every message in ${scopeLabel}.` : "Searched contacts and the text of every message."}
+                </Text>
+              </View>
+            )
           ) : null
         }
         renderItem={({ item }) => {
           if (item.kind === "header") {
             return (
-              <Text style={[styles.sectionHeader, { color: theme.textSecondary }]}>
+              <Text style={[styles.sectionHeader, { color: theme.textTertiary }]}>
                 {item.label}
               </Text>
             );
@@ -145,8 +174,8 @@ export function SearchContent({
             <Pressable
               style={({ hovered, pressed }) => [
                 styles.row,
-                hovered && !pressed && { backgroundColor: theme.backgroundElement },
-                pressed && { backgroundColor: theme.backgroundSelected },
+                hovered && !pressed && { backgroundColor: theme.rowHover },
+                pressed && { backgroundColor: theme.rowSelected },
               ]}
               onPress={() => openMessage(m)}
             >
@@ -154,7 +183,7 @@ export function SearchContent({
                 <Text style={[styles.rowTitle, { color: theme.text }]}>
                   {m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?")}
                 </Text>
-                <Text style={[styles.rowSub, { color: theme.textSecondary }]}>
+                <Text style={[styles.rowSub, { color: theme.textTertiary }]}>
                   {formatListTimestamp(m.dateCreated)}
                 </Text>
               </View>
@@ -172,15 +201,13 @@ export function SearchContent({
 const styles = StyleSheet.create({
   input: {
     margin: 12,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 17,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 15,
   },
   sectionHeader: {
-    fontSize: 13,
-    fontWeight: "600",
-    textTransform: "uppercase",
+    fontSize: 12,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 4,
@@ -202,9 +229,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 8,
   },
-  empty: {
+  emptyBlock: {
+    alignItems: "center",
+    gap: 6,
+    marginTop: 64,
+    paddingHorizontal: 22,
+  },
+  emptyTitle: {
+    fontSize: 13.5,
+    fontWeight: "600",
     textAlign: "center",
-    marginTop: 40,
-    fontSize: 15,
+  },
+  emptyDetail: {
+    fontSize: 12.5,
+    lineHeight: 17.5,
+    textAlign: "center",
   },
 });
