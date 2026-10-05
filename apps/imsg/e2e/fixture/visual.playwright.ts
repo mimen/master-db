@@ -203,11 +203,23 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   await expect(page.getByText("React 👍", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Settings" }).click();
-  await expect(page.getByText("Opus", { exact: true })).toBeVisible();
-  await expect(page.getByText("Terra", { exact: true })).toBeVisible();
-  await expect(page.getByText("Claude", { exact: true })).toBeVisible();
-  await expect(page.getByText("ChatGPT", { exact: true })).toBeVisible();
+  const model = page.getByRole("button", { name: "Model, Opus", exact: true });
+  await expect(model).toBeVisible();
+  await model.click();
+  const menu = page.getByRole("listbox", { name: "Model" });
+  await expect(menu.getByRole("option", { name: /Opus/ })).toHaveAttribute("aria-selected", "true");
+  await expect(menu.getByRole("option", { name: /Opus/ })).toContainText("Claude. Best at tone and long threads.");
+  await expect(menu.getByRole("option", { name: /Terra/ })).toContainText("ChatGPT. Faster on short replies.");
   await page.screenshot({ path: "/tmp/comma-suggestion-settings.png", animations: "disabled" });
+  const terraRequest = page.waitForRequest((request) => {
+    if (!request.url().endsWith("/__fixture/convex") || request.method() !== "POST") return false;
+    const body = request.postDataJSON() as { args?: { model?: string } };
+    return body.args?.model === "terra";
+  });
+  await menu.getByRole("option", { name: /Terra/ }).click();
+  await expect(page.getByRole("button", { name: "Model, Terra", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await terraRequest;
 
   await desk.request.post("/__fixture/reset");
   await page.setViewportSize({ width: 390, height: 820 });
@@ -461,7 +473,16 @@ test("Scheduled edit state survives crossing the utility-pane breakpoint", async
     await resetAndOpen(desk, startWidth, "dark");
     const page = desk.page;
     await page.getByRole("button", { name: "Scheduled" }).click();
-    await page.getByRole("button", { name: "Edit scheduled message to Jordan Lee" }).click();
+    // Row actions reveal on hover; they stay in the accessibility tree either way.
+    const edit = page.getByRole("button", { name: "Edit scheduled message to Jordan Lee" });
+    await expect(edit).toHaveCount(1);
+    const groupOpacity = () => edit.evaluate((element) => getComputedStyle(element.parentElement!).opacity);
+    await edit.focus();
+    expect(await groupOpacity()).toBe("1");
+    await edit.blur();
+    expect(await groupOpacity()).toBe("0");
+    await page.getByText("Checking back tomorrow morning.", { exact: true }).hover();
+    await edit.click();
     const message = page.getByPlaceholder("Message");
     await expect(message).toHaveValue("Checking back tomorrow morning.");
     await message.fill(`Preserved across ${startWidth}-${endWidth}`);

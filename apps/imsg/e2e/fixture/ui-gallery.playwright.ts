@@ -60,10 +60,14 @@ test("settling shows a bottom toast whose Undo restores the conversation", async
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
   const before = await page.getByTestId("conversation-row").count();
   await page.getByTestId("conversation-row").first().click();
+  const name = (await page.getByTestId("thread-view").getByRole("heading", { level: 2 }).textContent())?.trim();
+  if (!name) throw new Error("open thread has no name");
   await page.keyboard.press("Meta+e");
   const undo = page.getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeVisible();
-  await expect(page.getByText("Settled", { exact: true })).toBeVisible();
+  const toast = page.getByRole("status").filter({ has: undo });
+  await expect(toast.getByText(`Settled ${name}`, { exact: true })).toBeVisible();
+  await expect(toast.getByText("⌘Z", { exact: true })).toBeVisible();
   const box = await undo.boundingBox();
   expect(box!.y).toBeGreaterThan(820 / 2);
   await page.screenshot({ path: `${OUT}/toast-undo.png`, animations: "disabled" });

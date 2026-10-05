@@ -59,7 +59,7 @@ test("release banners and Settings expose deployed, running, and staged identity
   await expect(banners.getByText("Shell update ready")).toBeVisible();
 
   await desk.page.getByRole("button", { name: "Settings" }).first().click();
-  await desk.page.getByRole("button", { name: "Show version details" }).click();
+  await desk.page.getByRole("button", { name: "Show release details" }).click();
   const footer = desk.page.getByTestId("release-identity-footer");
   await expect(footer).toContainText("preview");
   await expect(footer).toContainText("feat/release-ui");
