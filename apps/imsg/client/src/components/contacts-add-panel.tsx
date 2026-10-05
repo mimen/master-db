@@ -9,6 +9,7 @@ import { type ContactListRow, primaryHandle, useAddHandle, useCreatePerson, useL
 import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
 import { useTheme } from "@/hooks/use-theme";
+import { chatIsSMS } from "@/lib/chat-service";
 import { ServiceDot } from "./contacts-theme";
 import { ContactsButton, IconAction } from "./contacts-ui";
 
@@ -155,7 +156,7 @@ export function UnknownSenderBanner({ chat }: { readonly chat: ChatSummary }) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   if (!address || who?.found !== false || dismissed) return null;
-  const service: HandleService = chat.guid.startsWith("SMS;") ? "SMS" : "iMessage";
+  const service: HandleService = chatIsSMS(chat.guid) ? "SMS" : "iMessage";
   const inbound = chat.lastMessage && !chat.lastMessage.isFromMe ? chat.lastMessage.text : undefined;
   return (
     <View pointerEvents="box-none" style={styles.overlay}>
