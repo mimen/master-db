@@ -41,7 +41,6 @@ import { StateStrip } from "./state-strip";
 import { ErrorState } from "./empty-state";
 import { BlurSwap } from "./motion/blur-swap";
 import { ThreadSkeleton } from "./thread-skeleton";
-import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
 import { IconButton } from "./ui/icon-button";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
@@ -735,15 +734,14 @@ export function ThreadView({
         </View>
       )}
       <ToastAnchor active={toastActive}>
-        <SuggestionShelf
-          chatGuid={chatGuid}
-          enabled={aiStatus?.suggestions === true && !editing}
-          awaitingReply={awaitingReply}
-          reactionSuggestions={aiStatus?.reactionSuggestions === true}
-          reactionPreview={reactionPreview}
-        />
-        <StateStrip chatGuid={chatGuid} messages={messages} historyComplete={!hasMore} />
         <Composer
+          suggestions={{
+            enabled: aiStatus?.suggestions === true && !editing,
+            awaitingReply,
+            reactionSuggestions: aiStatus?.reactionSuggestions === true,
+            reactionPreview,
+          }}
+          strip={<StateStrip chatGuid={chatGuid} messages={messages} historyComplete={!hasMore} />}
           chatGuid={chatGuid}
           isGroup={isGroup}
           participants={participants}
