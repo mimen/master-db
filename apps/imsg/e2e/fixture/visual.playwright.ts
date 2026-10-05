@@ -143,7 +143,7 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await expect(page.getByTestId("thread-settle")).toHaveAccessibleName("Settle (⌘E)");
   await expect(page.getByTestId("thread-settle")).toHaveAttribute("title", "Settle (⌘E)");
 
-  await page.getByRole("radio", { name: /^All,/ }).click();
+  await page.getByRole("tab", { name: "All", exact: true }).click();
   await expect(page.getByRole("heading", { name: "All messages" })).toBeVisible();
   row = page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" });
   await row.hover();
@@ -213,7 +213,7 @@ test("reply suggestions show vibe, fallback model, reaction confirmation, and mo
   await page.setViewportSize({ width: 390, height: 820 });
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/?visual=dark-390", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("radio", { name: /All, 16 conversations/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "All", exact: true })).toBeVisible();
   await page.getByText("Alex Rivera", { exact: true }).first().click();
   await expect(page.getByText("what time do you need the final answer by?", { exact: true })).toBeVisible();
   await page.screenshot({ path: "/tmp/comma-suggestion-narrow.png", animations: "disabled" });
@@ -392,7 +392,7 @@ test("Scheduled and Settings remain open across every workspace", async ({ desk 
   await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 
-  await page.getByRole("radio", { name: /^Waiting/ }).click();
+  await page.getByRole("tab", { name: /^Waiting/ }).click();
   await expect(page.getByRole("heading", { name: "Waiting" })).toBeVisible();
   await expect(page.getByLabel("Close scheduled")).toBeVisible();
 

@@ -24,6 +24,7 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
+import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
 import { rubberBand, SWIPE_THRESHOLD } from "@/lib/row-swipe";
 import { hapticCommit } from "@/lib/haptics";
@@ -251,7 +252,7 @@ function ChatRowInner({
               </Pressable>
             ) : last ? (
               <Text style={[styles.time, { color: theme.textTertiary, fontSize: compact ? 12 : 15 }]}>
-                {formatListTimestamp(last.dateCreated)}
+                <RowAge chat={chat} />
               </Text>
             ) : null}
           </View>

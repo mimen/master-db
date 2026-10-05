@@ -6,7 +6,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     await page.goto(`/?shelf=${scheme}`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("radio", { name: /All, 16 conversations/ })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "All", exact: true })).toBeVisible();
     await page.waitForTimeout(800);
     await page.getByText("Alex Rivera", { exact: true }).filter({ visible: true }).first().click();
 

@@ -1,4 +1,5 @@
 import { runCommand } from "@/lib/convex-commands";
+import { requestSavedView } from "@/lib/palette/saved-views";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
@@ -43,6 +44,7 @@ const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   type: "people-outline",
   tab: "arrow-forward-outline",
   action: "flash-outline",
+  view: "bookmark-outline",
 };
 
 export interface CommandPaletteProps {
@@ -171,6 +173,10 @@ function PaletteRoot({
         return onApplyState(id.value);
       case "type":
         return onApplyType(id.value);
+      case "view":
+        requestSavedView(id.value);
+        router.navigate("/");
+        return;
       case "tab":
         router.navigate(id.value === "contacts" ? "/contacts" : "/");
         return;

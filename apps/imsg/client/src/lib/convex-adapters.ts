@@ -7,8 +7,10 @@ export type ConvexMessage = FunctionReturnType<typeof commaApi.listMessages>["pa
 export type ConvexSearchMessage = FunctionReturnType<typeof commaApi.searchMessages>[number];
 export type ConvexScheduled = FunctionReturnType<typeof commaApi.listScheduled>[number];
 
-// `unread` is optional until the committed generated API catches up with the schema.
-export function conversationToChat(row: ConvexConversation & { unread?: { firstAt: number } }): ChatSummary {
+// `unread` and `crm` are optional until the committed generated API catches up with the view.
+export function conversationToChat(
+  row: ConvexConversation & { unread?: { firstAt: number }; crm?: ChatSummary["crm"] },
+): ChatSummary {
   return {
     conversationId: row._id,
     guid: row.primaryChatGuid,
@@ -25,6 +27,7 @@ export function conversationToChat(row: ConvexConversation & { unread?: { firstA
     firstUnreadAt: row.unreadCount ? row.unread?.firstAt ?? null : null,
     flags: row.flags,
     searchNames: [],
+    ...(row.crm ? { crm: row.crm } : {}),
   };
 }
 

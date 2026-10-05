@@ -14,3 +14,4 @@ export function rowSignal(chat: {
   if (chat.unreadCount > 0) return "unread";
   return null;
 }
+

@@ -17,3 +17,4 @@ describe("rowSignal", () => {
     expect(rowSignal({ unreadCount: 0, flags })).toBeNull();
   });
 });
+
