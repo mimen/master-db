@@ -2,13 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   clampSidebarWidth,
-  SIDEBAR_NAV_HEIGHT,
-  SIDEBAR_TITLE_HEIGHT,
-  SIDEBAR_TOOLBAR_HEIGHT,
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
-  sidebarChromeHeight,
 } from "./sidebar-metrics";
 
 describe("clampSidebarWidth", () => {
@@ -24,17 +20,5 @@ describe("clampSidebarWidth", () => {
   test("rounds and rejects non-finite", () => {
     expect(clampSidebarWidth(380.6)).toBe(381);
     expect(clampSidebarWidth(Number.NaN)).toBe(SIDEBAR_WIDTH_DEFAULT);
-  });
-});
-
-describe("sidebarChromeHeight", () => {
-  test("mobile is the title row only", () => {
-    expect(sidebarChromeHeight(false)).toBe(SIDEBAR_TITLE_HEIGHT);
-  });
-
-  test("wide stacks title, search, and nav", () => {
-    expect(sidebarChromeHeight(true)).toBe(
-      SIDEBAR_TITLE_HEIGHT + SIDEBAR_TOOLBAR_HEIGHT + SIDEBAR_NAV_HEIGHT,
-    );
   });
 });

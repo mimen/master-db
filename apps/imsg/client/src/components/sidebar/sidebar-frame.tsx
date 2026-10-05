@@ -1,28 +1,26 @@
-import { Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { isDesktopShell } from "@/lib/desktop-shell";
 
 export interface SidebarFrameProps {
-  /** The fixed glass bar content — a SidebarChrome. */
+  /** Wide: the SidebarHeader, in the flow. Phone: the floating SidebarChrome. */
   readonly chrome: React.ReactNode;
-  /** Wide: settings footer. */
+  /** Wide: the workspace footer. */
   readonly footer?: React.ReactNode;
   /** Synthetic scroll thumb overlay, if the pane renders one. */
   readonly thumb?: React.ReactNode;
   /** The scrolling body (the list). */
   readonly children: React.ReactNode;
-  readonly chromeHeight?: number;
 }
 
 /**
  * Structural shell shared by the Messages and Contacts sidebars: safe area,
- * a relative body host whose content scrolls BEHIND the fixed chrome, and
- * the thumb overlay seam. Owns only the left pane — the desktop split is
- * screen-level layout and must never live here.
+ * the chrome, a relative body host for the list and thumb, then the footer.
+ * Wide chrome stacks above the list; the phone bar floats over it. Owns only
+ * the left pane; the desktop split is screen-level layout.
  */
 export function SidebarFrame({
   chrome,
@@ -31,27 +29,19 @@ export function SidebarFrame({
   children,
 }: SidebarFrameProps): React.JSX.Element {
   const theme = useTheme();
-  const visual = useTriageTheme();
   const { wide } = useLayoutMode();
   const shell = isDesktopShell();
-  const wideSurface = wide && Platform.OS === "web" ? ({
-    backgroundColor: visual.queue,
-    backdropFilter: "blur(40px) saturate(1.5)",
-    WebkitBackdropFilter: "blur(40px) saturate(1.5)",
-  } as object) : { backgroundColor: wide ? visual.queue : theme.background };
   return (
-    <SafeAreaView
-      style={[styles.pane, wideSurface]}
-      edges={shell ? [] : ["top"]}
-    >
+    <SafeAreaView style={[styles.pane, { backgroundColor: theme.background }]} edges={shell || wide ? [] : ["top"]}>
+      {wide ? chrome : null}
       <View style={styles.listWrap}>
-        {/* Chrome is absolutely positioned on top, but comes first in the DOM so Tab and
-            screen readers reach search and filters before the rows. */}
-        {chrome}
+        {/* The phone bar floats over the list but comes first in the DOM, so Tab and
+            screen readers reach its actions before the rows. */}
+        {wide ? null : chrome}
         {children}
         {thumb}
-        {footer}
       </View>
+      {footer}
     </SafeAreaView>
   );
 }

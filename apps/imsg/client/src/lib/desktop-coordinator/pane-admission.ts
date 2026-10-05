@@ -1,12 +1,11 @@
 import { AUX_PANE_WIDTH } from "../desktop-frame";
 
-export const DESKTOP_RAIL_WIDTH = 64;
 export const DESKTOP_DETAIL_MIN_WIDTH = 420;
 export const DESKTOP_SIDE_PANE_WIDTH = AUX_PANE_WIDTH;
 
 export interface PaneAdmissionInput {
   readonly windowWidth: number;
-  /** Actual current sidebar width, excluding the fixed desktop rail. */
+  /** Actual current sidebar width. */
   readonly sidebarWidth: number;
   readonly sidePaneWidth?: number;
 }
@@ -21,11 +20,11 @@ export interface PaneAdmission {
 
 /**
  * A side pane is admitted only when the detail column keeps its 420px minimum
- * after subtracting the 64px rail, actual sidebar, and side-pane width.
+ * after subtracting the actual sidebar and side-pane width.
  */
 export function calculatePaneAdmission(input: PaneAdmissionInput): PaneAdmission {
   const sidePaneWidth = input.sidePaneWidth ?? DESKTOP_SIDE_PANE_WIDTH;
-  const detailBudget = input.windowWidth - DESKTOP_RAIL_WIDTH - input.sidebarWidth;
+  const detailBudget = input.windowWidth - input.sidebarWidth;
   const spareAfterMinimumDetail = detailBudget - DESKTOP_DETAIL_MIN_WIDTH;
   return {
     detailBudget,

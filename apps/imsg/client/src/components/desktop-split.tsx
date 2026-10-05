@@ -31,7 +31,7 @@ export interface DesktopSplitProps {
 export function DesktopSplit({ list, detail, children }: DesktopSplitProps): JSX.Element {
   const { frame, listWidth, setListWidth } = useDesktopFrame();
   const visual = useTriageTheme();
-  const deskGround = Platform.OS === "web" ? ({ backgroundImage: visual.deskGradient } as object) : { backgroundColor: visual.desk };
+  const deskGround = Platform.OS === "web" ? ({ backgroundColor: visual.desk } as object) : { backgroundColor: visual.desk };
   return (
     <View style={[frame.split, deskGround]}>
       <View style={[frame.pane, frame.listPane, { flexBasis: listWidth, width: listWidth }]}>

@@ -15,6 +15,11 @@ export function formatScheduledWhen(ms: number, now: Date = new Date()): string 
   return `${d.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
 }
 
+/** Scheduled messages that have not gone out yet: the sidebar footer's count. */
+export function pendingScheduledCount(rows: readonly { status: ScheduledMessageStatus }[] | undefined): number {
+  return rows?.filter((row) => row.status === "pending" || row.status === "in-progress").length ?? 0;
+}
+
 export function scheduledStatusLabel(status: ScheduledMessageStatus): string {
   switch (status) {
     case "pending":

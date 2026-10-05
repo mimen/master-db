@@ -1,22 +1,9 @@
-export const SIDEBAR_WIDTH_DEFAULT = 352;
+export const SIDEBAR_WIDTH_DEFAULT = 320;
 export const SIDEBAR_WIDTH_MIN = 280;
 export const SIDEBAR_WIDTH_MAX = 560;
 
-/** App-name row. Lights sit at y:20 (12px), so the row is 52 to center them. */
+/** The phone list's fixed top bar. */
 export const SIDEBAR_TITLE_HEIGHT = 52;
-/** Sticky search + new-message under the title on wide/desktop. */
-export const SIDEBAR_TOOLBAR_HEIGHT = 44;
-/** Messages/Contacts switcher row under search. */
-export const SIDEBAR_NAV_HEIGHT = 56;
-/** Scroll-edge fade length. */
-export const SIDEBAR_SCROLL_FADE = 28;
-
-/** Fixed top chrome: title+search+nav on wide, title-only (search inline) on mobile. */
-export function sidebarChromeHeight(wide: boolean): number {
-  return wide
-    ? SIDEBAR_TITLE_HEIGHT + SIDEBAR_TOOLBAR_HEIGHT + SIDEBAR_NAV_HEIGHT
-    : SIDEBAR_TITLE_HEIGHT;
-}
 
 export function clampSidebarWidth(value: number): number {
   if (!Number.isFinite(value)) return SIDEBAR_WIDTH_DEFAULT;

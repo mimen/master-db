@@ -1,22 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
 
 export interface SidebarSearchFieldProps {
   readonly value: string;
   readonly accessibilityLabel: string;
-  /** "list-header": rides the scroll (desktop). "chrome": inline in the
-   * fixed glass bar (mobile), where the bar owns the margins. */
-  readonly placement: "list-header" | "chrome";
   readonly inputRef?: React.Ref<TextInput>;
   readonly onChangeText: (value: string) => void;
   readonly onClear: () => void;
   readonly returnKeyType?: TextInputProps["returnKeyType"];
+  /** Wide only: the shortcut drawn at the field's trailing edge while it is empty. */
+  readonly shortcut?: string;
+  readonly placeholder?: string;
 }
 
 /**
@@ -27,14 +26,14 @@ export interface SidebarSearchFieldProps {
 export function SidebarSearchField({
   value,
   accessibilityLabel,
-  placement,
   inputRef,
   onChangeText,
   onClear,
   returnKeyType = "search",
+  shortcut,
+  placeholder = "Search",
 }: SidebarSearchFieldProps): React.JSX.Element {
   const theme = useTheme();
-  const visual = useTriageTheme();
   const type = useType();
   const { wide } = useLayoutMode();
   const [clearHovered, setClearHovered] = useState(false);
@@ -42,18 +41,17 @@ export function SidebarSearchField({
     <View
       style={[
         styles.field,
-        placement === "chrome" && styles.fieldChrome,
-        { backgroundColor: wide ? visual.controlFill : theme.backgroundElement, height: wide ? 30 : 38 },
+        { backgroundColor: theme.field, height: wide ? 30 : 40, borderRadius: wide ? 8 : 10, gap: wide ? 7 : 8, paddingLeft: wide ? 9 : 12 },
       ]}
     >
-      <Ionicons name="search" size={17} color={theme.textSecondary} />
+      <Ionicons name="search" size={wide ? 14 : 17} color={theme.textTertiary} />
       <TextInput
         ref={inputRef}
         accessibilityLabel={accessibilityLabel}
         value={value}
         onChangeText={onChangeText}
-        placeholder="Search"
-        placeholderTextColor={theme.textSecondary}
+        placeholder={placeholder}
+        placeholderTextColor={theme.textTertiary}
         returnKeyType={returnKeyType}
         // Explicitly OFF. iOS renders a native clear button for this, which
         // web ignores — so on device you got two ✕ side by side. Worse, the
@@ -63,6 +61,9 @@ export function SidebarSearchField({
         clearButtonMode="never"
         style={[styles.input, { color: theme.text, fontSize: type.body }]}
       />
+      {shortcut && wide && value.length === 0 ? (
+        <Text aria-hidden style={[styles.shortcut, { color: theme.textTertiary }]}>{shortcut}</Text>
+      ) : null}
       {value.trim().length > 0 && (
         <Pressable
           accessibilityRole="button"
@@ -82,21 +83,11 @@ export function SidebarSearchField({
 const styles = StyleSheet.create({
   field: {
     alignItems: "center",
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 8,
-    height: 38,
-    marginBottom: 12,
-    marginHorizontal: 18,
-    marginTop: 4,
-    paddingHorizontal: 12,
-  },
-  fieldChrome: {
     flex: 1,
-    marginBottom: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
+    flexDirection: "row",
+    paddingRight: 8,
   },
+  shortcut: { fontSize: 11, fontVariant: ["tabular-nums"], marginRight: 2 },
   input: {
     flex: 1,
     fontSize: 15,

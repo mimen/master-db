@@ -1,12 +1,6 @@
 import { useRef, useState } from "react";
 import { Animated, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 
-import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
-
-/** Height of the mobile/title frosted-glass bar. Wide chrome is taller —
- * use `sidebarChromeHeight(wide)` from sidebar-metrics. Styled, not measured. */
-export const SIDEBAR_CHROME_HEIGHT = SIDEBAR_TITLE_HEIGHT;
-
 export interface SyntheticThumbState {
   readonly visible: boolean;
   /** Track starts just below the fixed chrome. */

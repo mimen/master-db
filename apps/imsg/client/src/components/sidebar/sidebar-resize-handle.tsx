@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
-import { useTheme } from "@/hooks/use-theme";
 
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 
@@ -10,9 +9,8 @@ export interface SidebarResizeHandleProps {
   readonly onResize: (next: number) => void;
 }
 
-/** Drag the list/detail hairline to resize the sidebar. */
+/** Drag the list/detail divider to resize the sidebar. The 6px hit area is invisible; the pane border draws the line. */
 export function SidebarResizeHandle({ width, onResize }: SidebarResizeHandleProps): React.JSX.Element {
-  const theme = useTheme();
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const onPointerDown = (event: { nativeEvent: { pageX: number } }): void => {
@@ -46,7 +44,6 @@ export function SidebarResizeHandle({ width, onResize }: SidebarResizeHandleProp
       onResponderGrant={(e) => onPointerDown(e)}
       style={[
         styles.handle,
-        { backgroundColor: theme.divider },
         Platform.OS === "web"
           ? ({ cursor: "col-resize", userSelect: "none" } as object)
           : null,

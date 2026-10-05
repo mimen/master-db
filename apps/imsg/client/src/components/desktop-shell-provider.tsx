@@ -20,7 +20,6 @@ import { PersonContent } from "@/components/person-content";
 import { SearchContent } from "@/components/search-content";
 import { ScheduledContent } from "@/components/scheduled-content";
 import { SettingsContent } from "@/components/settings-content";
-import { TriageNavigationRail } from "@/components/triage-navigation-rail";
 import { Type } from "@/constants/theme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -331,9 +330,6 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
             accessibilityElementsHidden={!shellOwnsRoute}
             importantForAccessibility={shellOwnsRoute ? "auto" : "no-hide-descendants"}
           >
-            <TriageNavigationRail
-              destination={activeWorkspace}
-            />
             <View style={styles.workspaceHost}>
               <View
                 style={[styles.workspace, activeWorkspace !== "messages" && styles.inactiveWorkspace]}

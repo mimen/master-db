@@ -1,7 +1,6 @@
 export {
   calculatePaneAdmission,
   DESKTOP_DETAIL_MIN_WIDTH,
-  DESKTOP_RAIL_WIDTH,
   DESKTOP_SIDE_PANE_WIDTH,
   type PaneAdmission,
   type PaneAdmissionInput,

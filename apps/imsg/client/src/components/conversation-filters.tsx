@@ -2,7 +2,7 @@ import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
+import { headerFace } from "@/lib/header-font";
 import { CardShadow, Radii, Type } from "@/constants/theme";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { OverlayShell } from "./overlay-shell";
@@ -58,42 +58,54 @@ function filterAccessibilityLabel(label: string, count: number | undefined): str
 }
 
 /**
- * The state segmented control: Needs reply, Waiting, All. A state picked from
- * the filter menu (Unread, Settled) leaves every segment unselected, and the
- * list title names it.
+ * The lens tabs: Needs reply, Waiting, All, set in the header face with a
+ * persimmon bar under the active one. A state picked from the filter menu
+ * (Unread, Settled) leaves every tab unselected. `size="large"` is the phone's
+ * page title; the strip scrolls sideways there.
  */
-export function StateSegments({ filters, counts, onFiltersChange }: ConversationFiltersProps) {
-  const visual = useTriageTheme();
+export function StateSegments({ filters, counts, onFiltersChange, size = "regular" }: ConversationFiltersProps & { size?: "regular" | "large" }) {
+  const theme = useTheme();
+  const large = size === "large";
+  const tabs = SEGMENTS.map((segment) => {
+    const selected = filters.state === segment.value;
+    const count = counts?.[segment.value];
+    const turnCount = segment.value === "unresponded" && count !== undefined && count > 0;
+    return (
+      <Pressable
+        key={segment.value}
+        accessibilityRole="radio"
+        accessibilityLabel={filterAccessibilityLabel(segment.label, count)}
+        aria-checked={selected}
+        onPress={() => onFiltersChange(selectInboxFilter(filters, { kind: "state", value: segment.value }))}
+        style={[styles.tab, large && styles.tabLarge]}
+      >
+        {({ hovered }: { hovered?: boolean }) => (
+          <>
+            <View style={styles.tabLabelRow}>
+              <Text numberOfLines={1} style={[large ? styles.tabLabelLarge : styles.tabLabel, { color: selected || hovered ? theme.text : theme.textTertiary }]}>
+                {segment.label}
+              </Text>
+              {count !== undefined && segment.value !== "all" ? (
+                <Text style={[large ? styles.tabCountLarge : styles.tabCount, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]}>
+                  {formatCount(count)}
+                </Text>
+              ) : null}
+            </View>
+            {selected && !large ? <View style={[styles.tabBar, { backgroundColor: theme.lensBar }]} /> : null}
+          </>
+        )}
+      </Pressable>
+    );
+  });
   return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel="Conversation state"
-      style={[styles.segments, { backgroundColor: visual.controlFill }]}
-    >
-      {SEGMENTS.map((segment) => {
-        const selected = filters.state === segment.value;
-        const count = counts?.[segment.value];
-        return (
-          <Pressable
-            key={segment.value}
-            accessibilityRole="radio"
-            accessibilityLabel={filterAccessibilityLabel(segment.label, count)}
-            aria-checked={selected}
-            onPress={() => onFiltersChange(selectInboxFilter(filters, { kind: "state", value: segment.value }))}
-            style={({ hovered, pressed }) => [
-              styles.segment,
-              selected
-                ? [styles.segmentSelected, { backgroundColor: visual.card }]
-                : (hovered || pressed) && { backgroundColor: visual.controlFill },
-            ]}
-          >
-            <Text numberOfLines={1} style={[styles.segmentLabel, { color: selected ? visual.text : visual.meta }]}>
-              {segment.label}
-              {count !== undefined ? <Text style={[styles.segmentCount, { color: visual.meta }]}>  {formatCount(count)}</Text> : null}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
+      {large ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsLarge}>
+          {tabs}
+        </ScrollView>
+      ) : (
+        <View style={styles.tabs}>{tabs}</View>
+      )}
     </View>
   );
 }
@@ -189,7 +201,7 @@ export function ConversationFiltersModal({
     // Stays over the queue it filters instead of covering the navigation rail.
     const popoverWidth = Math.min(TriageGeometry.queueWidth - 16, windowWidth - 16);
     const left = Math.min(
-      Math.max(TriageGeometry.railWidth + 8, anchor.x + anchor.width - popoverWidth),
+      Math.max(8, anchor.x + anchor.width - popoverWidth),
       windowWidth - popoverWidth - 8,
     );
     const top = anchor.y + anchor.height + 6;
@@ -352,35 +364,17 @@ export function ConversationFiltersModal({
 }
 
 const styles = StyleSheet.create({
-  segments: {
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 2,
-    height: 28,
-    padding: 2,
-  },
-  segment: {
-    alignItems: "center",
-    borderRadius: 6,
-    // Content-sized so the active label keeps its count; flex: 1 split the track in equal thirds.
-    flexBasis: "auto",
-    flexGrow: 1,
-    flexShrink: 1,
-    justifyContent: "center",
-    minWidth: 0,
-    paddingHorizontal: 6,
-  },
-  segmentSelected: {
-    boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
-  } as object,
-  segmentLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  segmentCount: {
-    fontVariant: ["tabular-nums"],
-    fontWeight: "500",
-  },
+  tabs: { flexDirection: "row", gap: 14 },
+  tabsLarge: { alignItems: "flex-end", gap: 22, paddingRight: 24 },
+  tab: { paddingBottom: 10 },
+  tabLarge: { paddingBottom: 0 },
+  tabLabelRow: { alignItems: "baseline", flexDirection: "row", gap: 5 },
+  tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.15 },
+  tabLabelLarge: { ...headerFace, fontSize: 26, letterSpacing: -0.5, lineHeight: 32 },
+  tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500" },
+  tabCountLarge: { alignSelf: "flex-start", fontSize: 13, fontVariant: ["tabular-nums"], fontWeight: "500", marginTop: 2 },
+  tabCountTurn: { fontWeight: "600" },
+  tabBar: { borderRadius: 2, bottom: -1, height: 2, left: 0, position: "absolute", right: 0 },
   popoverBackdrop: {
     ...StyleSheet.absoluteFill,
   },

@@ -1,6 +1,6 @@
 import type { ChatSummary, StateCounts } from "@shared/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 
@@ -9,24 +9,28 @@ import { disambiguators } from "@shared/address";
 import { ChatRow } from "./chat-row";
 import { ConversationFiltersModal, StateSegments, type FilterAnchor } from "./conversation-filters";
 import { SkeletonList } from "./skeleton-list";
-import { TriageQueueHeader, TRIAGE_QUEUE_HEADER_HEIGHT } from "./triage-queue-header";
 
+import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
+import FlashIcon from "@hugeicons/core-free-icons/FlashIcon";
+import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
-import SquarePenIcon from "@hugeicons/core-free-icons/SquarePenIcon";
-import { SettingsButton } from "./sidebar/settings-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
+import { SidebarFooter } from "./sidebar/sidebar-footer";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
+import { SidebarHeader } from "./sidebar/sidebar-header";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { useConversationListKeyboard } from "./conversations/use-conversation-list-keyboard";
 import { useConversationListViewport } from "./conversations/use-conversation-list-viewport";
 import { useConversationSearch } from "./conversations/use-conversation-search";
+import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
+import { TriageGeometry } from "@/constants/triage-theme";
 
 import { onTriageResolved, onTriageUndo, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
-import { deriveInboxModel, desktopInboxTitle, type InboxFilters } from "@/lib/inbox-model";
-import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
+import { deriveInboxModel, type InboxFilters } from "@/lib/inbox-model";
+import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 import { isListMode, subscribeListMode } from "@/lib/keyboard/controller";
 import { useSyncExternalStore } from "react";
 
@@ -88,10 +92,10 @@ export function ConversationListPane({
       stopUndo();
     };
   }, [onRefresh]);
-  const topBarH = wide ? TRIAGE_QUEUE_HEADER_HEIGHT : sidebarChromeHeight(false);
+  // Wide chrome sits in the flow above the list; the phone bar floats over it.
+  const topBarH = wide ? 0 : SIDEBAR_TITLE_HEIGHT;
   const filterBtnRef = useRef<View>(null);
   const selectedPositionRef = useRef<{ guid: string; index: number } | null>(null);
-  const deskTitle = desktopInboxTitle(filters);
 
   // Desktop opens filters as a popover mounted at the button; mobile as a sheet.
   // useCallback, not a bare arrow: the compiler can't prove a render-scope
@@ -194,42 +198,42 @@ export function ConversationListPane({
     <SidebarSearchField
       value={search.query}
       accessibilityLabel="Search conversations and messages"
-      placement="chrome"
       inputRef={search.inputRef}
       onChangeText={search.setQuery}
       onClear={() => search.clear()}
+      shortcut="⌘K"
     />
   );
 
   const filterButton = (
-    <ChromeIconButton ref={filterBtnRef} icon="options-outline" accessibilityLabel="Filter conversations" onPress={openFilters} />
+    <ChromeIconButton ref={filterBtnRef} hugeIcon={FilterHorizontalIcon} accessibilityLabel="Filter conversations" onPress={openFilters} />
   );
+  const newButton = <ChromeIconButton hugeIcon={PencilEdit02Icon} accessibilityLabel="New message" onPress={onNewMessage} />;
+  const startSweep = filters.state === "unresponded" && sweepableChats.length > 0
+    ? () => onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid)
+    : null;
+  const lensTabs = <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} size={wide ? "regular" : "large"} />;
   const chrome = wide ? (
-    <TriageQueueHeader
-      title={deskTitle}
-      sweepCount={sweepableChats.length}
+    <SidebarHeader
+      testID="triage-queue-header"
       search={searchField}
-      action={<>{filterButton}<ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} /></>}
-      controls={<StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />}
-      onSweep={filters.state === "unresponded" ? () => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); } : undefined}
-    />
-  ) : (
-    <SidebarChrome
-      leading={searchField}
       actions={
         <>
-          <SettingsButton />
           {filterButton}
-          <ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} />
+          {newButton}
+          {startSweep ? <ChromeIconButton hugeIcon={FlashIcon} accessibilityLabel={`Start sweep, ${sweepableChats.length} conversations`} onPress={startSweep} /> : null}
         </>
       }
+      below={lensTabs}
     />
+  ) : (
+    <SidebarChrome actions={<>{filterButton}{newButton}</>} />
   );
 
   const pane = (
     <SidebarFrame
       chrome={chrome}
-      chromeHeight={topBarH}
+      footer={wide ? <SidebarFooter workspace="messages" /> : null}
       thumb={<SyntheticScrollThumb state={viewport.thumb} />}
     >
       {/* Filters ride the list header, passing behind the glass top bar.
@@ -253,8 +257,9 @@ export function ConversationListPane({
           onViewableItemsChanged={viewport.onViewableItemsChanged}
           contentContainerStyle={{
             paddingTop: Platform.OS === "web" ? 0 : topBarH,
-            paddingBottom: 12,
-            paddingHorizontal: 0,
+            // The phone's floating tab bar covers the last rows otherwise.
+            paddingBottom: wide ? 12 : PHONE_TAB_BAR_CLEARANCE,
+            paddingHorizontal: TriageGeometry.listGutter,
           }}
           automaticallyAdjustContentInsets={iosMobile ? false : undefined}
           automaticallyAdjustsScrollIndicatorInsets={iosMobile ? false : undefined}
@@ -281,9 +286,10 @@ export function ConversationListPane({
                 )}
               </View>
               {!wide && (
-                <View style={styles.phoneSegments}>
-                  <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />
-                </View>
+                <>
+                  <View style={styles.phoneLenses}>{lensTabs}</View>
+                  <View style={styles.phoneSearch}>{searchField}</View>
+                </>
               )}
               {/* Name the view only when the segments can't: a menu-only
                   state or a type lens. Wide names it in the header title. */}
@@ -320,15 +326,16 @@ export function ConversationListPane({
 }
 
 const styles = StyleSheet.create({
-  offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 12, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 4, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
   offlineText: { flex: 1, fontSize: 12, minWidth: 0 },
-  phoneSegments: { paddingBottom: 4, paddingHorizontal: 16, paddingTop: 4 },
+  phoneLenses: { marginHorizontal: -TriageGeometry.listGutter, paddingLeft: 20, paddingTop: 8 },
+  phoneSearch: { flexDirection: "row", paddingBottom: 6, paddingHorizontal: 8, paddingTop: 22 },
   sectionHeading: {
     alignItems: "baseline",
     flexDirection: "row",
     gap: 7,
     paddingBottom: 6,
-    paddingHorizontal: 18,
+    paddingHorizontal: 10,
     paddingTop: 15,
   },
   sectionTitle: {

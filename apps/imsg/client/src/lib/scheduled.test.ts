@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   formatScheduledWhen,
   parseScheduleInput,
+  pendingScheduledCount,
   scheduledStatusLabel,
   scheduleInputParts,
 } from "./scheduled";
@@ -62,4 +63,9 @@ describe("custom schedule date and time", () => {
       error: "Choose a future date and time",
     });
   });
+});
+
+test("the footer counts only scheduled messages that have not gone out", () => {
+  expect(pendingScheduledCount(undefined)).toBe(0);
+  expect(pendingScheduledCount([{ status: "pending" }, { status: "in-progress" }, { status: "complete" }, { status: "failed" }])).toBe(2);
 });

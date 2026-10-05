@@ -1,17 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import ReanimatedSwipeable, {
-  type SwipeableMethods,
-} from "react-native-gesture-handler/ReanimatedSwipeable";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
-  Extrapolation,
-  interpolate,
+  ReduceMotion,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
+  useSharedValue,
+  withSpring,
   type SharedValue,
 } from "react-native-reanimated";
 
@@ -19,20 +18,20 @@ import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { markOpenStart } from "@/lib/open-timing";
 import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { useType } from "@/hooks/use-type";
-import { Colors, Type } from "@/constants/theme";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
+import { rubberBand, SWIPE_THRESHOLD } from "@/lib/row-swipe";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
-const ACTION_WIDTH = 84;
+// TODO(signal-motion): use springs.ts
+const SMOOTH_SPRING = { duration: 380, dampingRatio: 0.92 } as const;
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const theme = useTheme();
@@ -45,56 +44,49 @@ function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element 
 }
 
 /**
- * iMessage/Mail-style action pane: the colored panel tracks the finger (its
- * width follows the drag), and the icon pops as you approach the commit
- * threshold — so a decisive full swipe commits, a hesitant one springs back.
+ * The block under a phone row while it is dragged. It sits flush and square:
+ * a quiet gray icon until the threshold, then the action's fill and label.
  */
 function SwipeAction({
-  translation,
+  offset,
+  side,
   icon,
   label,
-  color,
-  side,
-  commit,
+  armedFill,
 }: {
-  translation: SharedValue<number>;
+  offset: SharedValue<number>;
+  side: "left" | "right";
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  color: string;
-  side: "left" | "right";
-  commit: number;
-}) {
+  armedFill: string;
+}): React.JSX.Element {
   const theme = useTheme();
-  const containerStyle = useAnimatedStyle(() => ({
-    width: Math.max(ACTION_WIDTH, Math.abs(translation.value)),
-  }));
-  // Buzz once as the drag arms the action, not on release — this is the signal
-  // that tells you the swipe will commit if you let go now.
+  const [armed, setArmed] = useState(false);
   useAnimatedReaction(
-    () => Math.abs(translation.value) >= commit,
-    (armed, wasArmed) => {
-      if (armed && wasArmed === false) runOnJS(hapticCommit)();
+    () => (side === "right" ? -offset.value : offset.value) >= SWIPE_THRESHOLD,
+    (now, before) => {
+      if (now !== before) runOnJS(setArmed)(now);
     },
   );
-  const contentStyle = useAnimatedStyle(() => {
-    const dist = Math.abs(translation.value);
-    return {
-      opacity: interpolate(dist, [10, 42], [0, 1], Extrapolation.CLAMP),
-      transform: [{ scale: interpolate(dist, [commit - 26, commit], [1, 1.18], Extrapolation.CLAMP) }],
-    };
+  const block = useAnimatedStyle(() => {
+    const width = Math.max(0, side === "right" ? -offset.value : offset.value);
+    return { width };
   });
+  const color = armed ? theme.onSwipe : theme.onSwipeIdle;
   return (
     <Reanimated.View
+      aria-hidden
       style={[
-        styles.swipeAction,
-        { backgroundColor: color, alignItems: side === "left" ? "flex-start" : "flex-end" },
-        containerStyle,
+        styles.swipeBlock,
+        side === "right" ? styles.swipeRight : styles.swipeLeft,
+        { backgroundColor: armed ? armedFill : theme.swipeIdle },
+        block,
       ]}
     >
-      <Reanimated.View style={[styles.swipeActionInner, contentStyle]}>
-        <Ionicons name={icon} size={23} color={theme.onAccent} />
-        <Text style={styles.swipeActionLabel}>{label}</Text>
-      </Reanimated.View>
+      <View style={styles.swipeContent}>
+        <Ionicons name={icon} size={22} color={color} />
+        {armed ? <Text numberOfLines={1} style={[styles.swipeLabel, { color }]}>{label}</Text> : null}
+      </View>
     </Reanimated.View>
   );
 }
@@ -111,23 +103,20 @@ function ChatRowInner({
   /** The handle that separates this row from another with the same name. */
   handle?: string;
   selected: boolean;
-  /** Glide-mode cursor: accent edge on the selected row while navigating. */
+  /** Glide-mode cursor: the persimmon ring on the selected row while navigating. */
   keyboardFocused?: boolean;
   onPress: () => void;
   /** Runs the one triage gesture. Absent on surfaces that don't triage. */
   onSettle?: () => void;
 }) {
   const theme = useTheme();
-  const visual = useTriageTheme();
-  const type = useType();
-  const { width: winW, wide: compact } = useLayoutMode();
+  const { wide: compact } = useLayoutMode();
   const { openMenu } = useChatActions(compact);
   const [hovered, setHovered] = useState(false);
   const [focusedWithin, setFocusedWithin] = useState(false);
   const [settleHovered, setSettleHovered] = useState(false);
   const [moreHovered, setMoreHovered] = useState(false);
   const actionsVisible = compact && (hovered || focusedWithin || keyboardFocused);
-  const swipeRef = useRef<SwipeableMethods>(null);
   const last = chat.lastMessage;
   // One rule for the chip and the swipe alike: the row offers Settle exactly
   // when the toggle has something to do, whatever lens the list is showing.
@@ -148,12 +137,8 @@ function ChatRowInner({
     if (Platform.OS !== "web") return;
     const node = contextRef.current as unknown as HTMLElement | null;
     if (!node || typeof node.addEventListener !== "function") return;
-    const enter = () => {
-      setHovered(true);
-    };
-    const leave = () => {
-      setHovered(false);
-    };
+    const enter = () => setHovered(true);
+    const leave = () => setHovered(false);
     const focusIn = () => setFocusedWithin(true);
     const focusOut = (event: FocusEvent) => {
       if (!(event.relatedTarget instanceof Node) || !node.contains(event.relatedTarget)) {
@@ -172,177 +157,168 @@ function ChatRowInner({
     };
   }, [chat.guid, contextRef]);
 
-  // Commit distance scales with row width so it's a deliberate full swipe on a
-  // phone, not a hair-trigger. Capped so a tablet/desktop doesn't need a marathon.
-  // Overshoot stays ON: disabling it collapses the Swipeable's interpolation to a
-  // zero slope past the pane width, which clamped travel at ACTION_WIDTH while
-  // commit still measured the raw finger — a dead zone the icon pop never reached.
-  const commit = Math.min(190, Math.max(120, winW * 0.42));
+  // Phone swipe: left settles, right toggles unread. The row follows the
+  // finger 1:1, rubber-bands past the threshold, buzzes once as it arms, and
+  // commits on release; dragging back under the threshold disarms.
+  const offset = useSharedValue(0);
+  const dragging = useSharedValue(false);
+  const toggleRead = (): void => {
+    if (chat.flags.unread) markChatRead(chat);
+    else markChatUnread(chat);
+  };
+  useAnimatedReaction(
+    () => Math.abs(offset.value) >= SWIPE_THRESHOLD && dragging.value,
+    (armed, wasArmed) => {
+      if (armed && wasArmed === false) runOnJS(hapticCommit)();
+    },
+  );
+  const pan = Gesture.Pan()
+    .enabled(!compact)
+    .activeOffsetX([-12, 12])
+    .failOffsetY([-10, 10])
+    .onBegin(() => {
+      dragging.value = true;
+    })
+    .onUpdate((event) => {
+      const dx = !settleOffered && event.translationX < 0 ? 0 : event.translationX;
+      offset.value = rubberBand(dx);
+    })
+    .onFinalize(() => {
+      dragging.value = false;
+      const committed = Math.abs(offset.value) >= SWIPE_THRESHOLD;
+      if (committed && offset.value < 0 && onSettle) runOnJS(onSettle)();
+      else if (committed && offset.value > 0) runOnJS(toggleRead)();
+      offset.value = withSpring(0, { ...SMOOTH_SPRING, reduceMotion: ReduceMotion.System });
+    });
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
-  return (
-    <ReanimatedSwipeable
-      ref={swipeRef}
-      containerStyle={compact ? styles.desktopRowWrap : undefined}
-      friction={1}
-      leftThreshold={commit}
-      rightThreshold={commit}
-      renderLeftActions={(_progress, translation) => (
-        <SwipeAction
-          translation={translation}
-          icon={chat.flags.unread ? "mail-open-outline" : "mail-unread-outline"}
-          label={chat.flags.unread ? "Read" : "Unread"}
-          color={theme.accent}
-          side="left"
-          commit={commit}
-        />
-      )}
-      renderRightActions={settleOffered ? (_progress, translation) => (
-        <SwipeAction
-          translation={translation}
-          icon={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark-circle-outline"}
-          label={settleLabel}
-          color={theme.successFill}
-          side="right"
-          commit={commit}
-        />
-      ) : undefined}
-      onSwipeableOpen={(direction) => {
-        // `direction` is the swipe direction, not the pane side: swiping LEFT
-        // reveals the right-hand (Settle) pane, swiping RIGHT reveals the
-        // left-hand (Read/Unread) pane. Phones have no keyboard, so this is
-        // the primary triage gesture there.
-        if (direction === "left") onSettle?.();
-        else if (chat.flags.unread) markChatRead(chat);
-        else markChatUnread(chat);
-        swipeRef.current?.close();
-      }}
+  const fill = selected ? theme.rowSelected : hovered || focusedWithin ? theme.rowHover : "transparent";
+
+  const row = (
+    <Pressable
+      testID="conversation-row"
+      ref={contextRef as never}
+      role="button"
+      // The dot is drawn, so unread has to be spoken here too.
+      aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, snippet, last ? formatListTimestamp(last.dateCreated) : null].filter(Boolean).join(", ")}
+      aria-selected={selected}
+      onPress={onPress}
+      onPressIn={() => markOpenStart(chat.guid)}
+      onLongPress={() => openMenu(chat)}
+      style={({ pressed }) => [
+        styles.row,
+        compact ? styles.rowWide : styles.rowPhone,
+        { backgroundColor: pressed && !selected ? theme.rowSelected : fill },
+        // Drawn inside the pill so the neighbor never clips it, and no content shifts.
+        keyboardFocused && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: -2 } as object),
+      ]}
     >
-      <Pressable
-        testID="conversation-row"
-        ref={contextRef as never}
-        role="button"
-        // The dot is drawn, so unread has to be spoken here too.
-        aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, snippet, last ? formatListTimestamp(last.dateCreated) : null].filter(Boolean).join(", ")}
-        aria-selected={selected}
-        onPress={onPress}
-        onPressIn={() => markOpenStart(chat.guid)}
-        onLongPress={() => openMenu(chat)}
-        style={({ pressed }) => [
-          styles.row,
-          compact && styles.desktopRow,
-          { height: compact ? 68 : undefined, minHeight: compact ? 68 : 92 },
-          compact
-            ? {
-                backgroundColor: selected ? visual.cardSelected : hovered || focusedWithin || keyboardFocused || pressed ? visual.cardHover : "transparent",
-              }
-            : {
-                backgroundColor: selected ? theme.backgroundSelected : pressed ? theme.backgroundElement : theme.background,
-              },
-        ]}
-      >
-        {/* Glide cursor — absolutely positioned so it never shifts layout. */}
-        {keyboardFocused && (
-          <View style={[styles.glideCursor, { backgroundColor: theme.accent }]} />
-        )}
-        <ChatAvatar chat={chat} size={compact ? 40 : 52} />
-        {/* Messages-style hairline: starts after the avatar, not under it. */}
-        <View
-          style={[
-            styles.separator,
-            {
-              backgroundColor: theme.divider,
-              left: 16 + (compact ? 40 : 52) + 11,
-              opacity: 1,
-            },
-          ]}
-        />
-        <View style={styles.content}>
-          <View style={styles.topLine}>
-            <View style={styles.nameGroup}>
-              <Text numberOfLines={1} style={[styles.name, { color: compact ? visual.text : theme.text, fontSize: compact ? 13 : type.title, fontWeight: chat.flags.unread ? "700" : "600" }]}>
-                {chat.displayName}
+      <ChatAvatar chat={chat} size={compact ? 32 : 44} />
+      <View style={styles.content}>
+        <View style={styles.topLine}>
+          <View style={styles.nameGroup}>
+            <Text numberOfLines={1} style={[styles.name, { color: theme.text, fontSize: compact ? 13 : 17 }]}>
+              {chat.displayName}
+            </Text>
+            {handle && (
+              <Text numberOfLines={1} style={[styles.handle, { color: theme.textSecondary }]}>
+                {handle}
               </Text>
-              {handle && (
-                <Text numberOfLines={1} style={[styles.handle, { color: theme.textSecondary }]}>
-                  {handle}
-                </Text>
-              )}
-              {/* Private CRM layer (favorite/priority) — mirrors the star shown
-                  on favorited rows in contacts-list-pane.tsx. */}
-              {chat.crm?.is_favorite && (
-                <Ionicons
-                  name="star"
-                  size={13}
-                  color={FAVORITE_GOLD}
-                  accessibilityLabel="Favorite"
-                  style={styles.favoriteStar}
-                />
-              )}
-            </View>
-            {compact ? (
-              <View style={styles.timeSlot}>
-                {actionsVisible && settleOffered ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${settleLabel} ${chat.displayName}`}
-                    // One tab stop per row: E settles the focused row, so these stay pointer-only.
-                    tabIndex={-1}
-                    onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
-                    onHoverIn={() => setSettleHovered(true)}
-                    onHoverOut={() => setSettleHovered(false)}
-                    hitSlop={5}
-                    style={({ pressed }) => [
-                      styles.inlineSettle,
-                      settleHovered && !pressed && { backgroundColor: visual.controlFill },
-                      pressed && { backgroundColor: visual.controlFillHover },
-                    ]}
-                  >
-                    <Ionicons name={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark"} size={13} color={settleHovered ? visual.text : visual.muted} />
-                    <Text numberOfLines={1} style={[styles.inlineSettleText, { color: settleHovered ? visual.text : visual.muted }]}>{settleLabel}</Text>
-                  </Pressable>
-                ) : last ? (
-                  <Text style={[styles.time, { color: visual.muted, fontSize: 11 }]}>
-                    {formatListTimestamp(last.dateCreated)}
-                  </Text>
-                ) : null}
-              </View>
+            )}
+            {/* Private CRM layer (favorite/priority). Mirrors the star on favorited contacts. */}
+            {chat.crm?.is_favorite && (
+              <Ionicons name="star" size={12} color={FAVORITE_GOLD} accessibilityLabel="Favorite" style={styles.favoriteStar} />
+            )}
+          </View>
+          {/* Trailing slot: the time, or the hover actions on desktop. */}
+          <View style={compact ? styles.timeSlot : null}>
+            {compact && actionsVisible && settleOffered ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${settleLabel} ${chat.displayName}`}
+                // One tab stop per row: ⌘E settles the focused row, so these stay pointer-only.
+                tabIndex={-1}
+                onPress={(event) => { event.stopPropagation(); onSettle?.(); }}
+                onHoverIn={() => setSettleHovered(true)}
+                onHoverOut={() => setSettleHovered(false)}
+                hitSlop={5}
+                style={({ pressed }) => [
+                  styles.inlineSettle,
+                  settleHovered && !pressed && { backgroundColor: theme.rowHover },
+                  pressed && { backgroundColor: theme.rowSelected },
+                ]}
+              >
+                <Ionicons name={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark"} size={13} color={settleHovered ? theme.text : theme.textSecondary} />
+                <Text numberOfLines={1} style={[styles.inlineSettleText, { color: settleHovered ? theme.text : theme.textSecondary }]}>{settleLabel}</Text>
+              </Pressable>
             ) : last ? (
-              <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
+              <Text style={[styles.time, { color: theme.textTertiary, fontSize: compact ? 12 : 15 }]}>
                 {formatListTimestamp(last.dateCreated)}
               </Text>
             ) : null}
           </View>
-          <View style={styles.messageRow}>
-            <Text numberOfLines={compact ? 2 : 1} style={[styles.messagePreview, { color: compact ? visual.snippet : theme.textSecondary, fontSize: compact ? 12 : 14, lineHeight: compact ? 15 : 18, fontWeight: chat.flags.unread ? "500" : "400" }]}>{snippet}</Text>
-            {compact && actionsVisible ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`More actions for ${chat.displayName}`}
-                tabIndex={-1}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  openMenu(chat, { ...pressAnchor(event), align: "end" });
-                }}
-                onHoverIn={() => setMoreHovered(true)}
-                onHoverOut={() => setMoreHovered(false)}
-                hitSlop={6}
-                style={({ pressed }) => [
-                  styles.inlineMore,
-                  moreHovered && !pressed && { backgroundColor: visual.controlFill },
-                  pressed && { backgroundColor: visual.controlFillHover },
-                ]}
-              >
-                <Ionicons name="ellipsis-horizontal" size={16} color={moreHovered ? visual.text : visual.muted} />
-              </Pressable>
-            ) : (
-              <View style={styles.messageSignal}>
-                <RowSignal chat={chat} />
-              </View>
-            )}
-          </View>
         </View>
-      </Pressable>
-    </ReanimatedSwipeable>
+        <View style={styles.messageRow}>
+          <Text
+            numberOfLines={compact ? 2 : 1}
+            style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
+          >
+            {snippet}
+          </Text>
+          {compact && actionsVisible ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`More actions for ${chat.displayName}`}
+              tabIndex={-1}
+              onPress={(event) => {
+                event.stopPropagation();
+                openMenu(chat, { ...pressAnchor(event), align: "end" });
+              }}
+              onHoverIn={() => setMoreHovered(true)}
+              onHoverOut={() => setMoreHovered(false)}
+              hitSlop={6}
+              style={({ pressed }) => [
+                styles.inlineMore,
+                moreHovered && !pressed && { backgroundColor: theme.rowHover },
+                pressed && { backgroundColor: theme.rowSelected },
+              ]}
+            >
+              <Ionicons name="ellipsis-horizontal" size={16} color={moreHovered ? theme.text : theme.textSecondary} />
+            </Pressable>
+          ) : (
+            <View style={styles.messageSignal}>
+              <RowSignal chat={chat} />
+            </View>
+          )}
+        </View>
+      </View>
+    </Pressable>
+  );
+
+  if (compact) return <View style={styles.gap}>{row}</View>;
+
+  return (
+    <View style={[styles.gap, styles.swipeHost]}>
+      <SwipeAction
+        offset={offset}
+        side="left"
+        icon={chat.flags.unread ? "mail-open-outline" : "radio-button-on-outline"}
+        label={chat.flags.unread ? "Mark read" : "Mark unread"}
+        armedFill={theme.swipeUnread}
+      />
+      {settleOffered ? (
+        <SwipeAction
+          offset={offset}
+          side="right"
+          icon={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark"}
+          label={settleLabel}
+          armedFill={theme.swipeSettle}
+        />
+      ) : null}
+      <GestureDetector gesture={pan}>
+        <Reanimated.View style={[styles.slide, { backgroundColor: theme.background }, slide]}>{row}</Reanimated.View>
+      </GestureDetector>
+    </View>
   );
 }
 
@@ -355,40 +331,32 @@ function ChatRowInner({
 export const ChatRow = memo(ChatRowInner);
 
 const styles = StyleSheet.create({
-  desktopRowWrap: {
-    overflow: "visible",
-  },
+  gap: { marginBottom: TriageGeometry.rowGap },
+  // Square and full-bleed while dragging: the swipe host cancels the list's
+  // 8px gutter so the action block reaches the screen edge.
+  swipeHost: { marginHorizontal: -TriageGeometry.listGutter, overflow: "hidden" },
+  slide: { paddingHorizontal: TriageGeometry.listGutter },
   row: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
-    minHeight: 80,
-    paddingLeft: 16,
-    paddingRight: 16,
-    paddingVertical: 14,
   },
-  desktopRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  rowWide: {
+    borderRadius: TriageGeometry.rowRadius,
+    gap: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 9,
   },
-  separator: {
-    bottom: 0,
-    height: StyleSheet.hairlineWidth,
-    position: "absolute",
-    right: 0,
-  },
-  glideCursor: {
-    borderRadius: 2,
-    bottom: 8,
-    left: 0,
-    position: "absolute",
-    top: 8,
-    width: 3,
+  rowPhone: {
+    alignItems: "center",
+    borderRadius: TriageGeometry.rowRadiusMobile,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   content: {
     flex: 1,
-    marginLeft: 11,
     minWidth: 0,
-    paddingVertical: 2,
   },
   topLine: {
     alignItems: "baseline",
@@ -404,13 +372,12 @@ const styles = StyleSheet.create({
   },
   name: {
     flexShrink: 1,
-    fontSize: 17,
-    letterSpacing: -0.2,
+    fontWeight: "600",
     minWidth: 0,
   },
   time: {
     flexShrink: 0,
-    fontSize: 13,
+    fontVariant: ["tabular-nums"],
   },
   favoriteStar: {
     flexShrink: 0,
@@ -426,10 +393,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
     marginTop: 1,
-    minHeight: 30,
   },
   messageSignal: {
-    alignSelf: "center",
+    alignSelf: "flex-start",
   },
   messagePreview: {
     flex: 1,
@@ -439,9 +405,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     flexShrink: 0,
     justifyContent: "center",
-    // Wide enough for the longest chip label ("Un-settle") on one line; the
-    // chip also bleeds 5px each side, so this has slack over the tightest fit.
-    width: 78,
+    minWidth: 22,
   },
   inlineSettle: {
     alignItems: "center",
@@ -449,20 +413,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 3,
     justifyContent: "center",
-    // Chip bleeds past the 13px text box via negative margins so the hover
-    // fill has breathing room without shifting row spacing.
+    // Bleeds past the 13px text box so the hover fill has room without shifting the row.
     marginHorizontal: -5,
     marginVertical: -3,
     paddingHorizontal: 5,
     paddingVertical: 3,
   },
   inlineSettleText: {
-    fontSize: 11,
-    fontWeight: "600",
-    lineHeight: 13,
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 14,
   },
   inlineMore: {
-    alignSelf: "center",
     alignItems: "center",
     borderRadius: ROW_SIGNAL_SIZE / 2,
     flexShrink: 0,
@@ -483,18 +445,15 @@ const styles = StyleSheet.create({
     height: UNREAD_DOT_SIZE,
     width: UNREAD_DOT_SIZE,
   },
-  swipeAction: {
-    width: ACTION_WIDTH,
+  swipeBlock: {
+    bottom: 0,
     justifyContent: "center",
+    overflow: "hidden",
+    position: "absolute",
+    top: 0,
   },
-  swipeActionInner: {
-    alignItems: "center",
-    gap: 3,
-    width: ACTION_WIDTH,
-  },
-  swipeActionLabel: {
-    color: Colors.light.onAccent,
-    fontSize: Type.secondary,
-    fontWeight: "600",
-  },
+  swipeLeft: { alignItems: "flex-start", left: 0 },
+  swipeRight: { alignItems: "flex-end", right: 0 },
+  swipeContent: { alignItems: "center", flexDirection: "row", gap: 10, paddingHorizontal: 30 },
+  swipeLabel: { fontSize: 16, fontWeight: "600" },
 });

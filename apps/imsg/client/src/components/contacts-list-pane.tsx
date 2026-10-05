@@ -17,20 +17,21 @@ import { useTheme } from "@/hooks/use-theme";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { TriageGeometry } from "@/constants/triage-theme";
 import { PersonAvatar } from "./avatar";
-import { ContactsSummary } from "./contacts-summary";
-import { DeskHeader, DESK_HEADER_HEIGHT } from "./desk-header";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { ListRow } from "./list-row";
 import { FAVORITE_GOLD } from "./person-crm-section";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
-import SquarePenIcon from "@hugeicons/core-free-icons/SquarePenIcon";
-import { SettingsButton } from "./sidebar/settings-button";
+import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
+import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
+import { SidebarFooter } from "./sidebar/sidebar-footer";
 import { SidebarFrame } from "./sidebar/sidebar-frame";
+import { SidebarHeader } from "./sidebar/sidebar-header";
 import { SidebarSearchField } from "./sidebar/sidebar-search-field";
 import { SyntheticScrollThumb } from "./sidebar/synthetic-scroll-thumb";
 import { useSyntheticScrollMetrics } from "./sidebar/use-synthetic-scroll-metrics";
-import { sidebarChromeHeight } from "@/lib/sidebar-metrics";
+import { headerFace } from "@/lib/header-font";
+import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
 
 type Row =
   | { kind: "header"; key: string; letter: string }
@@ -70,9 +71,8 @@ export interface ContactsListPaneProps {
 }
 
 /**
- * Contacts list. On wide layouts this renders the SAME shell as Messages —
- * the navigation rail plus the shared DeskHeader over floating cards — so the
- * two destinations are one window, not two apps. Search state stays local and
+ * Contacts list. On wide layouts this renders the SAME sidebar as Messages,
+ * header and footer included, so the two destinations are one window. Search state stays local and
  * independent (name filter + Airtable lookup — no inbox lenses, no deep
  * message search). Plain FlatList by design.
  */
@@ -81,7 +81,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
   const visual = useTriageTheme();
   const nameOrder = useNameOrder();
   const [query, setQuery] = useState("");
-  const topBarH = wide ? DESK_HEADER_HEIGHT : sidebarChromeHeight(false);
+  const topBarH = wide ? 0 : SIDEBAR_TITLE_HEIGHT;
   const needle = query.trim().toLowerCase();
 
   const { results: airtableResults, people, add: addAirtableContact, addingId } = useAirtableSearch(
@@ -133,7 +133,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
     <SidebarSearchField
       value={query}
       accessibilityLabel="Search contacts"
-      placement="chrome"
+      placeholder={wide ? "Search people, numbers, orgs" : "Search"}
       onChangeText={setQuery}
       onClear={() => setQuery("")}
     />
@@ -141,7 +141,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
 
   const composeButton = (
     <ChromeIconButton
-      hugeIcon={SquarePenIcon}
+      hugeIcon={PencilEdit02Icon}
       accessibilityLabel="New message"
       onPress={() => router.push("/new-chat")}
     />
@@ -152,7 +152,7 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
       style={[
         styles.sectionHeader,
         wide && styles.sectionHeaderWide,
-        { color: wide ? visual.meta : theme.textSecondary },
+        { color: theme.textTertiary },
         wide ? null : { backgroundColor: theme.background },
       ]}
     >
@@ -168,9 +168,9 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
       const adding = addingId === item.human.record_id;
       return (
         <ListRow
-          paddingHorizontal={wide ? 12 : 18}
+          paddingHorizontal={wide ? 10 : 12}
           minHeight={wide ? TriageGeometry.rowHeight : undefined}
-          style={wide ? styles.rowWide : undefined}
+          style={wide ? styles.rowWide : styles.rowPhone}
           hoverFill={wide ? visual.cardHover : undefined}
           titleWeight="400"
           disabled={adding}
@@ -189,9 +189,9 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
     }
     return (
       <ListRow
-        paddingHorizontal={wide ? 12 : 18}
+        paddingHorizontal={wide ? 10 : 12}
         minHeight={wide ? TriageGeometry.rowHeight : undefined}
-        style={wide ? styles.rowWide : undefined}
+        style={wide ? styles.rowWide : styles.rowPhone}
         hoverFill={wide ? visual.cardHover : undefined}
         selectedFill={wide ? visual.cardSelected : undefined}
         titleWeight="400"
@@ -210,29 +210,25 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
     );
   };
 
+  const total = people ? people.length : null;
+  const heading = (
+    <View style={styles.heading}>
+      <Text accessibilityRole="header" style={[styles.headingTitle, { color: theme.text }]}>Contacts</Text>
+      <Text style={[styles.headingMeta, { color: theme.textTertiary }]}>
+        {total === null ? "Loading…" : `${total} ${total === 1 ? "person" : "people"}${favoriteCount > 0 ? ` · ${favoriteCount} favorite${favoriteCount === 1 ? "" : "s"}` : ""}`}
+      </Text>
+    </View>
+  );
   const chrome = wide ? (
-    <DeskHeader
-      testID="contacts-desk-header"
-      summary={<ContactsSummary total={people ? people.length : null} favorites={favoriteCount} />}
-      search={searchField}
-      action={composeButton}
-    />
+    <SidebarHeader testID="contacts-desk-header" search={searchField} actions={composeButton} below={heading} />
   ) : (
-    <SidebarChrome
-      leading={searchField}
-      actions={
-        <>
-          <SettingsButton />
-          {composeButton}
-        </>
-      }
-    />
+    <SidebarChrome actions={composeButton} />
   );
 
   const pane = (
     <SidebarFrame
       chrome={chrome}
-      chromeHeight={topBarH}
+      footer={wide ? <SidebarFooter workspace="contacts" /> : null}
       thumb={<SyntheticScrollThumb state={metrics.thumb} />}
     >
       {people === undefined ? (
@@ -248,17 +244,15 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
           keyboardDismissMode={Platform.OS === "web" ? "none" : "on-drag"}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: 12,
-            paddingHorizontal: wide ? TriageGeometry.listGutter : 0,
-            paddingTop: Platform.OS === "web" && wide ? 0 : topBarH + 8,
+            paddingBottom: wide ? 12 : PHONE_TAB_BAR_CLEARANCE,
+            paddingHorizontal: TriageGeometry.listGutter,
+            paddingTop: wide ? 8 : topBarH + 8,
           }}
           onLayout={(e) => metrics.onViewportHeight(e.nativeEvent.layout.height)}
           onContentSizeChange={(_w, h) => metrics.onContentHeight(h)}
           onScroll={metrics.onScroll}
           scrollEventThrottle={16}
-          ListHeaderComponent={
-            wide ? <View style={{ paddingTop: Platform.OS === "web" ? topBarH + 8 : 0 }} /> : null
-          }
+          ListHeaderComponent={wide ? null : <View style={styles.phoneSearch}>{searchField}</View>}
           ListEmptyComponent={<EmptyState message="No contacts found." style={styles.center} />}
           renderItem={renderRow}
         />
@@ -271,12 +265,18 @@ export function ContactsListPane({ wide, selectedId, hasSelection = false, onSel
 
 const styles = StyleSheet.create({
   center: { alignItems: "center", flex: 1, justifyContent: "center", paddingTop: 36 },
-  rowWide: { borderRadius: TriageGeometry.rowRadius },
-  sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 18, paddingVertical: 4 },
+  rowWide: { borderRadius: TriageGeometry.rowRadius, marginBottom: TriageGeometry.rowGap },
+  rowPhone: { borderRadius: TriageGeometry.rowRadiusMobile, marginBottom: TriageGeometry.rowGap },
+  heading: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between", paddingBottom: 12 },
+  headingTitle: { ...headerFace, fontSize: 15, letterSpacing: -0.15 },
+  headingMeta: { fontSize: 12.5 },
+  phoneSearch: { flexDirection: "row", paddingBottom: 8 },
+  sectionHeader: { fontSize: 13, fontWeight: "600", paddingHorizontal: 10, paddingVertical: 4 },
   sectionHeaderWide: {
     fontSize: 12,
     paddingBottom: 4,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    fontWeight: "400",
+    paddingHorizontal: 10,
+    paddingTop: 14,
   },
 });
