@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react";
 import { useEffect, useRef } from "react";
 import { commaApi, commaDraftsApi } from "@/lib/convex-api";
+import { useConversationRef } from "@/hooks/use-chat-directory";
 import { useConvexAuth } from "@/lib/convex-auth";
 import { createDraftSync } from "@/lib/draft-sync";
 import { getDraft, setDraft, subscribeDrafts, uploadLocalDrafts } from "@/lib/drafts";
@@ -10,8 +11,8 @@ import { showToast } from "@/lib/toast";
 export function useComposerDraft(chatGuid: string, editing: boolean, onRemote: (text: string) => void) {
   const { isAuthenticated } = useConvexAuth();
   const enabled = isAuthenticated;
-  const conversation = useQuery(commaApi.resolveChat, enabled ? { chatGuid } : "skip");
-  const remote = useQuery(commaApi.getDraft, enabled && conversation ? { conversationId: conversation._id } : "skip");
+  const { conversationId } = useConversationRef(enabled ? chatGuid : null);
+  const remote = useQuery(commaApi.getDraft, conversationId ? { conversationId } : "skip");
   const sync = useRef<ReturnType<typeof createDraftSync> | null>(null);
   const focused = useRef(false);
 

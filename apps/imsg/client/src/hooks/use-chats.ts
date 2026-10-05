@@ -1,12 +1,12 @@
 import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Platform } from "react-native";
 import { readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { useChatDirectory } from "./use-chat-directory";
+import { ChatDirectoryContext, useChatDirectory } from "./use-chat-directory";
 
 interface UseChatsResult {
   chats: ChatSummary[];
@@ -39,6 +39,16 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
     if (status === "Exhausted") writeChatSnapshot(webStore(), chats);
   }, [status, chats]);
   return { chats: live ? chats : snapshot };
+}
+
+/**
+ * Owns the app's one listConversations subscription. Each paginated query carries its own id,
+ * so every hook that subscribed separately re-read all ~1,000 conversations, and a thread open
+ * that mounted another held the thread's first query behind a second-long list page.
+ */
+export function ChatDirectoryProvider({ children }: { readonly children: ReactNode }) {
+  const { chats } = useConvexChats();
+  return createElement(ChatDirectoryContext.Provider, { value: chats }, children);
 }
 
 /**

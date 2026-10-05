@@ -3,7 +3,7 @@ import type { GenericId, ObjectType } from "convex/values";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import type { bridgeStateFields, presenceFields } from "../../../../../convex/schema/comma/validators";
-import { commaApi } from "./convex-api";
+import { useConversationRef } from "@/hooks/use-chat-directory";
 import { runCommand } from "./convex-commands";
 
 export type BridgeState = ObjectType<typeof bridgeStateFields>;
@@ -36,7 +36,7 @@ export function usePeerTypingValue(presence: PeerPresence | null | undefined): b
 
 export function usePeerTyping(chatGuid: string | null): boolean {
   const { isAuthenticated } = useConvexAuth();
-  const conversation = useQuery(commaApi.resolveChat, isAuthenticated && chatGuid ? { chatGuid } : "skip");
-  const presence = useQuery(presenceApi.presence, conversation ? { conversationId: conversation._id } : "skip");
+  const { conversationId } = useConversationRef(isAuthenticated ? chatGuid : null);
+  const presence = useQuery(presenceApi.presence, conversationId ? { conversationId } : "skip");
   return usePeerTypingValue(presence);
 }

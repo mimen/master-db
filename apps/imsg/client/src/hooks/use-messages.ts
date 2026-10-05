@@ -7,6 +7,7 @@ import { messageWindow } from "@/lib/history-api";
 import { reconcileWindow, settleTemp, sortByDate, upsertMessage, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import type { Message } from "@shared/types";
+import { useConversationRef } from "./use-chat-directory";
 import { useMessageWindow } from "./use-message-window";
 
 export interface JumpTarget {
@@ -90,12 +91,11 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
 }
 
 export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
-  const resolved = useQuery(commaApi.resolveChat, chatGuid ? { chatGuid } : "skip");
-  const conversationId = resolved?._id ?? null;
+  const { conversationId, lastMessageAt, resolving } = useConversationRef(chatGuid);
   // This window can render the sidebar's newest message while pagination loads,
   // and keeps the active thread's read observer live during a historical jump.
-  const newestRows = useQuery(messageWindow, conversationId && resolved?.lastMessage
-    ? { conversationId, before: resolved.lastMessage.dateCreated + 1 } : "skip");
+  const newestRows = useQuery(messageWindow, conversationId && lastMessageAt !== null
+    ? { conversationId, before: lastMessageAt + 1 } : "skip");
   const newest = useMemo(() => newestRows?.map(messageToMessage) ?? [], [newestRows]);
   const convex = useConvexMessages(!target ? conversationId : null, !target ? chatGuid : null, target ? [] : newest);
   const anchored = useMessageWindow(target ? conversationId : null, target ? chatGuid : null, target);
@@ -103,7 +103,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const result = {
     ...selected,
     newestMessages: newest,
-    loading: chatGuid !== null && selected.messages.length === 0 && (resolved === undefined || selected.loading),
+    loading: chatGuid !== null && selected.messages.length === 0 && (resolving || selected.loading),
   };
   useEffect(() => registerMessageActions(result.messages), [result.messages]);
   return result;

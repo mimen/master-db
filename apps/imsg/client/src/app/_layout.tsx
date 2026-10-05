@@ -9,7 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { DesktopShellProvider } from "@/components/desktop-shell-provider";
-import { ChatDirectoryProvider } from "@/hooks/use-chat-directory";
+import { ChatDirectoryProvider } from "@/hooks/use-chats";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
