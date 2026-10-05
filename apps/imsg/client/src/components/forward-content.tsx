@@ -3,17 +3,24 @@ import { messagingCommandError } from "@/lib/messaging-api";
 import type { ChatSummary } from "@shared/types";
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { takeForwardText } from "@/lib/forward";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
-import { useTheme } from "@/hooks/use-theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { chatIsSMS } from "@/lib/chat-service";
 
 import { ChatAvatar } from "./avatar";
 import { CenteredSpinner, EmptyState } from "./empty-state";
-import { ListRow } from "./list-row";
+import { ServiceLabel } from "./service-label";
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: { background: "#F4F4F5", surface: "#FFFFFF", rowHover: "rgba(0,0,0,0.04)", text: "#17171A", textTertiary: "#64646B", divider: "rgba(0,0,0,0.075)", dividerStrong: "rgba(0,0,0,0.13)" },
+  dark: { background: "#0F0F11", surface: "#1C1C1F", rowHover: "rgba(255,255,255,0.045)", text: "#EDEDEF", textTertiary: "#8F8F96", divider: "rgba(255,255,255,0.07)", dividerStrong: "rgba(255,255,255,0.12)" },
+} as const;
 
 export interface ForwardContentProps {
   readonly onClose: () => void;
@@ -22,7 +29,7 @@ export interface ForwardContentProps {
 
 /** Forward picker shared by the compact route and the wide desktop shell. */
 export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): React.JSX.Element | null {
-  const theme = useTheme();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   const { wide } = useLayoutMode();
   const { results, loading, query, setQuery } = useForwardTargets();
   const [text] = useState(() => takeForwardText());
@@ -49,20 +56,23 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
   if (!text) return wide ? null : <Redirect href="/" />;
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
-      <View style={[styles.preview, { backgroundColor: theme.backgroundElement }]}>
-        <Text numberOfLines={2} style={{ color: theme.text, fontSize: 14 }}>
+    <View style={[styles.root, { backgroundColor: signal.background }]}>
+      <View style={[styles.toRow, { borderBottomColor: signal.divider }]}>
+        <Text style={[styles.toLabel, { color: signal.textTertiary }]}>To</Text>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Forward to…"
+          placeholderTextColor={signal.textTertiary}
+          autoFocus
+          style={[styles.input, { color: signal.text }]}
+        />
+      </View>
+      <View style={[styles.preview, { backgroundColor: signal.surface, borderColor: signal.dividerStrong }]}>
+        <Text numberOfLines={2} style={{ color: signal.text, fontSize: 13.5, lineHeight: 19 }}>
           {text}
         </Text>
       </View>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Forward to…"
-        placeholderTextColor={theme.textSecondary}
-        autoFocus
-        style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement }]}
-      />
       {loading ? (
         <CenteredSpinner />
       ) : (
@@ -70,14 +80,19 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
           data={results}
           keyExtractor={(chat) => chat.guid}
           keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.list}
           ListEmptyComponent={<EmptyState message="No matching chats" />}
           renderItem={({ item }) => (
-            <ListRow
-              titleWeight="400"
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={item.displayName}
               onPress={() => forwardTo(item)}
-              leading={<ChatAvatar chat={item} size={40} />}
-              title={item.displayName}
-            />
+              style={({ hovered, pressed }) => [styles.row, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+            >
+              <ChatAvatar chat={item} size={28} />
+              <Text numberOfLines={1} style={[styles.name, { color: signal.text }]}>{item.displayName}</Text>
+              <ServiceLabel service={chatIsSMS(item.guid) ? "SMS" : "iMessage"} size={12} />
+            </Pressable>
           )}
         />
       )}
@@ -87,6 +102,11 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  preview: { margin: 12, marginBottom: 0, borderRadius: 12, padding: 12 },
-  input: { margin: 12, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 17 },
+  toRow: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 6, minHeight: 52, paddingHorizontal: 22, paddingVertical: 10 },
+  toLabel: { fontSize: 13.5, marginRight: 4 },
+  input: { flex: 1, fontSize: 13.5, paddingVertical: 2 },
+  preview: { borderRadius: 12, borderWidth: 1, marginHorizontal: 16, marginTop: 12, padding: 12 },
+  list: { padding: 8 },
+  row: { alignItems: "center", borderRadius: 10, flexDirection: "row", gap: 11, minHeight: 44, paddingHorizontal: 10 },
+  name: { flex: 1, fontSize: 13.5 },
 });

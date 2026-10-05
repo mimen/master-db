@@ -443,7 +443,7 @@ test("wide cold routes project into the persistent desktop shell", async ({ desk
   await expect(page.getByPlaceholder("Search contacts and messages…")).toHaveValue("Alex");
 
   await page.goto("/new-chat", { waitUntil: "domcontentloaded" });
-  await expect(page.getByText("To:", { exact: true })).toBeVisible();
+  await expect(page.getByText("To", { exact: true })).toBeVisible();
 
   await page.goto("/forward", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("desktop-shell")).toBeVisible();

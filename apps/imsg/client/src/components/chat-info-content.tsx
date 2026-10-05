@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -16,15 +17,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api, attachmentThumbnailUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { markChatUnread, pinChat } from "@/lib/chat-actions";
+import { pinChat } from "@/lib/chat-actions";
+import { contactService } from "@/lib/contact-service";
+import { useAddChatTag } from "@/lib/identity";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion } from "@shared/types";
 import { formatAddress } from "@shared/address";
-import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { useType } from "@/hooks/use-type";
-import { PRESS_DIM, Type } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useTypeRamp } from "@/hooks/use-type";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
@@ -35,9 +36,26 @@ import { mediaApi } from "@/lib/media-api";
 import { MediaUnavailable } from "./media";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
-import { FAVORITE_GOLD } from "./person-crm-section";
+import { ServiceLabel } from "./service-label";
 
-const GRID_GAP = 5;
+const GRID_GAP = 4;
+const GRID_MAX = 6;
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: {
+    background: "#FFFFFF", surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", rowHover: "rgba(0,0,0,0.04)",
+    text: "#17171A", textSecondary: "#55555C", textTertiary: "#64646B", icon: "#5E5E66",
+    divider: "rgba(0,0,0,0.075)", dividerStrong: "rgba(0,0,0,0.13)", danger: "#C4261B", disabled: "#A2A2A8",
+    switchOn: "#17171A", switchOff: "#8E8E95", chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)",
+  },
+  dark: {
+    background: "#141416", surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", rowHover: "rgba(255,255,255,0.045)",
+    text: "#EDEDEF", textSecondary: "#A6A6AD", textTertiary: "#8F8F96", icon: "#97979E",
+    divider: "rgba(255,255,255,0.07)", dividerStrong: "rgba(255,255,255,0.12)", danger: "#FF6B5E", disabled: "#5E5E64",
+    switchOn: "#EDEDEF", switchOff: "#727279", chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)",
+  },
+} as const;
 
 export interface ChatInfoContentProps {
   guid: string;
@@ -58,9 +76,8 @@ export function ChatInfoContent({
   showHeader = false,
   onOpenPerson,
 }: ChatInfoContentProps) {
-  const theme = useTheme();
-  const visual = useTriageTheme();
-  const type = useType();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const type = useTypeRamp();
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
   const chats = useChatDirectory();
@@ -83,6 +100,9 @@ export function ChatInfoContent({
   const [identifying, setIdentifying] = useState(false);
   const [addingParticipant, setAddingParticipant] = useState(false);
   const [participantAddress, setParticipantAddress] = useState("");
+  const [tagging, setTagging] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const addChatTag = useAddChatTag();
 
   const identify = () => {
     setIdentifying(true);
@@ -104,25 +124,25 @@ export function ChatInfoContent({
   useEffect(load, [load]);
 
   const header = showHeader ? (
-    <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
-      <Text style={[styles.paneHeaderTitle, { color: theme.text, fontSize: type.title }]}>Details</Text>
+    <View style={[styles.paneHeader, { borderBottomColor: signal.divider }]}>
+      <Text style={[styles.paneHeaderTitle, { color: signal.text, fontSize: type.body }]}>Details</Text>
       <Pressable
         accessibilityRole="button"
         onPress={onClose}
         hitSlop={8}
         accessibilityLabel="Close details"
-        style={({ hovered, pressed }) => [styles.headerIcon, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
+        style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
       >
-        {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
+        {({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? signal.text : signal.icon} />}
       </Pressable>
     </View>
   ) : null;
 
   if (!guid || !info) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View style={{ flex: 1, backgroundColor: signal.background }}>
         {header}
-        {showHeader ? null : <CenteredSpinner style={{ backgroundColor: theme.background }} />}
+        {showHeader ? null : <CenteredSpinner style={{ backgroundColor: signal.background }} />}
       </View>
     );
   }
@@ -150,393 +170,479 @@ export function ChatInfoContent({
     });
   };
 
-  const galleryMedia = gallery;
   const summary = chats?.find((c) => c.guid === guid) ?? null;
   const peer = info.isGroup ? null : info.participants[0];
+  const peerName = peer ? peer.name ?? formatAddress(peer.address) : null;
+  const crm = summary?.crm;
+  const tags = crm?.tags ?? [];
+  const pinned = summary?.flags.pinned ?? false;
+  const tile = gridWidth > 0 ? (gridWidth - 2 * GRID_GAP) / 3 : 0;
+  const openPerson = (p: Contact): void => {
+    const nm = p.name ?? formatAddress(p.address);
+    if (onOpenPerson) onOpenPerson(p.address, nm);
+    else router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } });
+  };
+  const submitTag = (): void => {
+    const tag = tagInput.trim();
+    setTagInput("");
+    setTagging(false);
+    if (tag) addChatTag({ chatGuid: guid, tag }).catch(() => showToast("Couldn't add the tag. Try again."));
+  };
+  const confirmDelete = (): void =>
+    showSheet({
+      title: "Delete this conversation? This can't be undone.",
+      actions: [
+        {
+          label: "Delete conversation",
+          destructive: true,
+          onPress: () =>
+            runCommand(guid, { kind: "deleteChat", chatGuid: guid })
+              .then(() => onDeleted())
+              .catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't delete the conversation. Try again."))),
+        },
+      ],
+    });
+  const confirmLeave = (): void =>
+    showSheet({
+      title: "Leave this conversation? You'll stop getting its messages.",
+      actions: [
+        {
+          label: "Leave conversation",
+          destructive: true,
+          onPress: () =>
+            runCommand(guid, { kind: "leaveGroup" }).then(() => onClose()).catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't leave the conversation. Try again."))),
+        },
+      ],
+    });
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: signal.background }}>
       {header}
       <ScrollView
         style={[
           { flex: 1 },
           Platform.OS === "web" ? ({ scrollbarGutter: "stable" } as object) : null,
         ]}
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={styles.body}
       >
         <View style={styles.hero}>
-          {summary ? <ChatAvatar chat={summary} size={72} /> : peer ? <PersonAvatar address={peer.address} name={peer.name ?? formatAddress(peer.address)} size={72} /> : <GroupPhotoAvatar guid={guid} size={72} />}
+          {summary ? <ChatAvatar chat={summary} size={64} /> : peer ? <PersonAvatar address={peer.address} name={peerName ?? ""} size={64} /> : <GroupPhotoAvatar guid={guid} size={64} />}
         </View>
-        {info.isGroup ? (
-          renaming ? (
-            <View>
-              <View style={styles.renameRow}>
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  autoFocus
-                  onSubmitEditing={saveName}
-                  placeholder="Group name"
-                  placeholderTextColor={theme.textSecondary}
-                  style={[styles.renameInput, { color: theme.text, borderColor: theme.divider }]}
-                />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save name"
-                  onPress={saveName}
-                  style={({ hovered, pressed }) => [styles.inlineTextAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-                >
-                  {({ hovered, pressed }) => <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: Type.body, fontWeight: "600" }}>Save</Text>}
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Rename group" style={styles.titleRow} onPress={() => setRenaming(true)}>
-                <Text style={[styles.title, { color: theme.text, fontSize: type.title, fontWeight: "600" }]}>
-                  {info.displayName || `${info.participants.length} people`}
-                </Text>
-                <Ionicons name="pencil" size={16} color={theme.textSecondary} />
-              </Pressable>
-            </View>
-          )
+        {info.isGroup && renaming ? (
+          <View style={styles.renameRow}>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              autoFocus
+              onSubmitEditing={saveName}
+              placeholder="Group name"
+              placeholderTextColor={signal.textTertiary}
+              style={[styles.renameInput, { color: signal.text, borderColor: signal.dividerStrong }]}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save name"
+              onPress={saveName}
+              style={({ hovered, pressed }) => [styles.inlineTextAction, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+            >
+              <Text style={{ color: signal.text, fontSize: type.body, fontWeight: "600" }}>Save</Text>
+            </Pressable>
+          </View>
         ) : (
-          <View>
-            <Text style={[styles.title, { color: theme.text, fontSize: type.title }]}>
-              {info.participants[0]?.name ??
-                (info.participants[0]?.address ? formatAddress(info.participants[0].address) : "Details")}
+          <Pressable
+            accessibilityRole={info.isGroup ? "button" : undefined}
+            accessibilityLabel={info.isGroup ? "Rename group" : undefined}
+            disabled={!info.isGroup}
+            style={styles.titleRow}
+            onPress={() => setRenaming(true)}
+          >
+            <Text style={[styles.title, { color: signal.text }]}>
+              {info.isGroup ? info.displayName || `${info.participants.length} people` : peerName ?? "Details"}
             </Text>
-            {aiStatus?.suggestions && !info.participants[0]?.name && (
-              <View style={styles.identifyBlock}>
-                {identity ? (
-                  <View style={[styles.identityCard, { backgroundColor: theme.backgroundElement }]}>
-                    <View style={styles.identityHead}>
-                      <Ionicons name="sparkles" size={13} color={theme.accent} />
-                      <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600", flex: 1 }}>
-                        {identity.name ?? "Couldn't place them"}
-                      </Text>
-                      <Text style={[styles.confidence, { color: theme.textSecondary }]}>
-                        {identity.confidence}
-                      </Text>
-                    </View>
-                    <Text style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 18 }}>
-                      {identity.reasoning}
-                    </Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={identify}
-                    disabled={identifying}
-                    style={styles.suggestTrigger}
-                    hitSlop={6}
-                  >
-                    {identifying ? (
-                      <ActivityIndicator size="small" />
-                    ) : (
-                      <Ionicons name="help-circle-outline" size={15} color={theme.accent} />
-                    )}
-                    <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>
-                      {identifying ? "Looking…" : "Who is this?"}
-                    </Text>
-                  </Pressable>
-                )}
+            {crm?.is_favorite && <Ionicons name="star" size={16} color={signal.text} accessibilityLabel="Favorite" />}
+            {info.isGroup && <Ionicons name="pencil" size={14} color={signal.icon} />}
+          </Pressable>
+        )}
+        {info.isGroup ? (
+          <Text style={[styles.subtitle, { color: signal.textSecondary, fontSize: type.secondary }]}>
+            {`You and ${info.participants.length} ${info.participants.length === 1 ? "other" : "others"}`}
+          </Text>
+        ) : aiStatus?.suggestions && !peer?.name ? (
+          <View style={styles.identifyBlock}>
+            {identity ? (
+              <View style={[styles.identityCard, { backgroundColor: signal.field }]}>
+                <View style={styles.identityHead}>
+                  <Ionicons name="sparkles" size={13} color={signal.icon} />
+                  <Text style={{ color: signal.text, fontSize: type.body, fontWeight: "600", flex: 1 }}>
+                    {identity.name ?? "Couldn't place them"}
+                  </Text>
+                  <Text style={[styles.confidence, { color: signal.textTertiary }]}>{identity.confidence}</Text>
+                </View>
+                <Text style={{ color: signal.textSecondary, fontSize: type.secondary, lineHeight: 18 }}>{identity.reasoning}</Text>
               </View>
+            ) : (
+              <Pressable onPress={identify} disabled={identifying} style={styles.suggestTrigger} hitSlop={6}>
+                {identifying ? <ActivityIndicator size="small" /> : <Ionicons name="help-circle-outline" size={15} color={signal.textSecondary} />}
+                <Text style={{ color: signal.textSecondary, fontSize: type.secondary, fontWeight: "500" }}>
+                  {identifying ? "Looking…" : "Who is this?"}
+                </Text>
+              </Pressable>
             )}
           </View>
-        )}
+        ) : null}
 
-        {summary && (
-          <View style={styles.quickRow}>
-            {([
-              {
-                icon: (summary.flags.pinned ? "pin" : "pin-outline") as keyof typeof Ionicons.glyphMap,
-                label: summary.flags.pinned ? "Unpin" : "Pin",
-                onPress: () => {
-                  pinChat(summary, !summary.flags.pinned);
-                  showToast(summary.flags.pinned ? "Unpinned" : "Pinned");
-                },
-              },
-              {
-                icon: "mail-unread-outline" as keyof typeof Ionicons.glyphMap,
-                label: "Mark unread",
-                onPress: () => {
-                  markChatUnread(summary);
-                  showToast("Marked unread");
-                  onClose();
-                },
-              },
-            ] as const).map((a) => (
+        {(tags.length > 0 || info.isGroup) && (
+          <View style={styles.tags}>
+            {tags.map((tag) => (
+              <View key={tag} style={[styles.tag, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
+                <Text style={[styles.tagText, { color: signal.textSecondary }]}>{tag}</Text>
+              </View>
+            ))}
+            {info.isGroup && (tagging ? (
+              <View style={[styles.tag, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
+                <TextInput
+                  autoFocus
+                  value={tagInput}
+                  onChangeText={setTagInput}
+                  onSubmitEditing={submitTag}
+                  onBlur={submitTag}
+                  placeholder="Tag"
+                  placeholderTextColor={signal.textTertiary}
+                  accessibilityLabel="New tag"
+                  style={[styles.tagText, styles.tagInput, { color: signal.text }]}
+                />
+              </View>
+            ) : (
               <Pressable
-                key={a.label}
                 accessibilityRole="button"
-                style={({ hovered, pressed }) => [styles.quickAction, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }]}
-                onPress={a.onPress}
+                accessibilityLabel="Add tag"
+                onPress={() => setTagging(true)}
+                style={({ hovered, pressed }) => [styles.tag, { borderColor: signal.chipBorder }, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
               >
-                <Ionicons name={a.icon} size={15} color={theme.text} />
-                <Text style={{ color: theme.text, fontSize: Type.secondary, fontWeight: "600" }}>{a.label}</Text>
+                <Ionicons name="add" size={13} color={signal.textSecondary} />
+                <Text style={[styles.tagText, { color: signal.textSecondary }]}>Tag</Text>
               </Pressable>
             ))}
           </View>
         )}
-        {info.isGroup && (
-          <Text style={[styles.section, { color: theme.textSecondary }]}>
-            {`${info.participants.length} people`}
-          </Text>
-        )}
-        <View style={[styles.card, !info.isGroup && styles.cardGap, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
-          {info.participants.map((p, i) => (
-            <View key={p.address}>
-              {i > 0 && <View style={[styles.rowDivider, { backgroundColor: theme.divider }]} />}
-              <ListRow
-                paddingHorizontal={14}
-                minHeight={56}
-                titleWeight="400"
-                onPress={() => {
-                  const nm = p.name ?? formatAddress(p.address);
-                  if (onOpenPerson) onOpenPerson(p.address, nm);
-                  else router.push({ pathname: "/person", params: { address: p.address, name: p.name ?? "" } });
-                }}
-                onLongPress={info.isGroup ? () => removeParticipant(p) : undefined}
-                leading={<PersonAvatar address={p.address} name={p.name ?? formatAddress(p.address)} size={40} />}
-                title={p.name ?? formatAddress(p.address)}
-                subtitle={p.name ? formatAddress(p.address) : undefined}
-                trailing={<Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />}
-              />
-            </View>
-          ))}
-          {info.isGroup && (addingParticipant ? (
-            <View style={[styles.addPersonEditor, { borderTopColor: visual.hairline }]}>
-              <TextInput
-                autoFocus
-                value={participantAddress}
-                onChangeText={setParticipantAddress}
-                onSubmitEditing={() => {
-                  const address = participantAddress.trim();
-                  if (!address) return;
-                  void runCommand(guid, { kind: "participant", address, action: "add" }).then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, (error: unknown) => showToast(messagingCommandError(error, "Could not add person")));
-                }}
-                placeholder="Phone number or email"
-                placeholderTextColor={theme.textSecondary}
-                style={[styles.addPersonInput, { color: theme.text, backgroundColor: theme.backgroundElement }]}
-              />
-              <Pressable accessibilityRole="button" accessibilityLabel="Cancel adding person" onPress={() => setAddingParticipant(false)} style={({ hovered, pressed }) => [styles.inlineIconAction, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}>{({ hovered, pressed }) => <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}</Pressable>
-            </View>
-          ) : (
-            <Pressable accessibilityRole="button" onPress={() => setAddingParticipant(true)} style={[styles.addPersonRow, { borderTopColor: visual.hairline }]}>
-              <View style={[styles.addPersonIcon, { backgroundColor: theme.accentTint }]}><Ionicons name="person-add" size={15} color={theme.accent} /></View>
-              <Text style={{ color: theme.accent, fontSize: 13, fontWeight: "500" }}>Add person</Text>
-            </Pressable>
-          ))}
-        </View>
 
-        {/* CRM: a GROUP gets its own editable favorite/priority/tags/event
-            section (ChatCrmSection — Convex-native, chat_guid-keyed). A DM
-            has no CRM of its own; it INHERITS the linked person's (see
-            server/map.ts's mapChat) — shown read-only here with a pointer to
-            the real edit surface, so there's never a second, driftable copy. */}
-        {info.isGroup ? (
-          <ChatCrmSection chatGuid={guid} />
+        {peer ? (
+          <Section title={`Reach ${(peerName ?? "").split(" ")[0] || "them"} at`} divider={signal.divider} labelColor={signal.textSecondary}>
+            {info.participants.map((p) => {
+              const service = contactService(p.address, chats);
+              return (
+                <Pressable
+                  key={p.address}
+                  accessibilityRole="button"
+                  accessibilityLabel={p.name ?? formatAddress(p.address)}
+                  onPress={() => openPerson(p)}
+                  style={({ hovered, pressed }) => [styles.handleRow, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+                >
+                  <Text style={[styles.handleKind, { color: signal.textTertiary, fontSize: type.caption }]}>{p.address.includes("@") ? "email" : "phone"}</Text>
+                  <Text numberOfLines={1} style={[styles.handleValue, { color: signal.text, fontSize: type.body }]}>{formatAddress(p.address)}</Text>
+                  {service && <ServiceLabel service={service} size={type.caption} />}
+                </Pressable>
+              );
+            })}
+          </Section>
         ) : (
-          summary?.crm && <DmCrmNote crm={summary.crm} />
+          <Section
+            title="Members"
+            divider={signal.divider}
+            labelColor={signal.textSecondary}
+            action={addingParticipant ? undefined : { label: "Add person", onPress: () => setAddingParticipant(true) }}
+          >
+            {info.participants.map((p) => {
+              const service = contactService(p.address, chats);
+              return (
+                <ListRow
+                  key={p.address}
+                  paddingHorizontal={8}
+                  titleWeight="400"
+                  hoverFill={signal.rowHover}
+                  style={styles.memberRow}
+                  onPress={() => openPerson(p)}
+                  onLongPress={() => removeParticipant(p)}
+                  leading={<PersonAvatar address={p.address} name={p.name ?? formatAddress(p.address)} size={36} />}
+                  title={p.name ?? formatAddress(p.address)}
+                  subtitle={p.name ? formatAddress(p.address) : undefined}
+                  trailing={service ? <ServiceLabel service={service} size={type.caption} /> : undefined}
+                />
+              );
+            })}
+            {addingParticipant && (
+              <View style={styles.addPersonEditor}>
+                <TextInput
+                  autoFocus
+                  value={participantAddress}
+                  onChangeText={setParticipantAddress}
+                  onSubmitEditing={() => {
+                    const address = participantAddress.trim();
+                    if (!address) return;
+                    void runCommand(guid, { kind: "participant", address, action: "add" }).then(() => { setParticipantAddress(""); setAddingParticipant(false); load(); }, (error: unknown) => showToast(messagingCommandError(error, "Could not add person")));
+                  }}
+                  placeholder="Phone number or email"
+                  placeholderTextColor={signal.textTertiary}
+                  style={[styles.addPersonInput, { color: signal.text, backgroundColor: signal.field }]}
+                />
+                <Pressable accessibilityRole="button" accessibilityLabel="Cancel adding person" onPress={() => setAddingParticipant(false)} style={({ hovered, pressed }) => [styles.inlineIconAction, (hovered || pressed) && { backgroundColor: signal.rowHover }]}>
+                  <Ionicons name="close" size={18} color={signal.icon} />
+                </Pressable>
+              </View>
+            )}
+          </Section>
         )}
 
         {gallery.length > 0 && (
-          <>
-            <Text style={[styles.section, { color: theme.textSecondary }]}>Photos and videos</Text>
-            {/* Fixed-pixel square tiles from the measured width — aspectRatio +
+          <Section
+            title="Shared media"
+            divider={signal.divider}
+            labelColor={signal.textSecondary}
+            action={gallery.length > GRID_MAX ? { label: `See all ${gallery.length}`, onPress: () => openLightbox(gallery, 0) } : undefined}
+          >
+            {/* Fixed-pixel square tiles from the measured width: aspectRatio +
                 percentage widths stagger under RN-web, so size them explicitly. */}
             <View style={styles.grid} onLayout={(e) => onGridLayout(e.nativeEvent.layout.width)}>
-              {gallery.map((item, index) => {
-                const tileSize = gridWidth > 0 ? (gridWidth - 2 * GRID_GAP) / 3 : 0;
-                const thumbnail = attachmentThumbnailUrl(item, tileSize);
+              {gallery.slice(0, GRID_MAX).map((item, index) => {
+                const thumbnail = attachmentThumbnailUrl(item, tile);
                 return (
-                <Pressable
-                  key={item.guid}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.isVideo ? `Open video ${index + 1}` : `Open photo ${index + 1}`}
-                  style={{ width: tileSize, height: tileSize }}
-                  onPress={() => openLightbox(galleryMedia, index)}
-                >
-                  {thumbnail ? <Image
-                    source={{ uri: thumbnail }}
-                    style={styles.tileImg}
-                    contentFit="cover"
-                  /> : <MediaUnavailable />}
-                  {item.isVideo && (
-                    // Play badge sits on a fixed dark scrim over media thumbnails —
-                    // theme-invariant by design, not a theme.onAccent site.
-                    <View style={styles.playBadge}>
-                      <Ionicons name="play" size={14} color="#fff" />
-                    </View>
-                  )}
-                </Pressable>
+                  <Pressable
+                    key={item.guid}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.isVideo ? `Open video ${index + 1}` : `Open photo ${index + 1}`}
+                    style={[styles.tile, { width: tile, height: tile }]}
+                    onPress={() => openLightbox(gallery, index)}
+                  >
+                    {thumbnail ? <Image source={{ uri: thumbnail }} style={styles.tileImg} contentFit="cover" /> : <MediaUnavailable />}
+                    {item.isVideo && (
+                      // Play badge sits on a fixed dark scrim over media thumbnails:
+                      // theme-invariant by design.
+                      <View style={styles.playBadge}>
+                        <Ionicons name="play" size={14} color="#fff" />
+                      </View>
+                    )}
+                  </Pressable>
                 );
               })}
             </View>
-          </>
+          </Section>
         )}
 
-        <View style={[styles.card, styles.cardGap, { backgroundColor: visual.card, boxShadow: `0 1px 3px ${visual.cardShadow}` } as object]}>
+        {summary && (
+          <View style={[styles.section, { borderTopColor: signal.divider }]}>
+            <ToggleRow
+              icon="pin-outline"
+              label="Pin conversation"
+              value={pinned}
+              signal={signal}
+              onChange={(next) => {
+                pinChat(summary, next);
+                showToast(next ? "Pinned" : "Unpinned");
+              }}
+            />
+            {/* TODO(signal-states): no mute command yet */}
+            <ToggleRow icon="notifications-off-outline" label="Hide alerts" value={false} signal={signal} />
+          </View>
+        )}
+
+        {/* CRM: a GROUP gets its own editable favorite/priority/tags/event
+            section (ChatCrmSection, Convex-native, chat_guid-keyed). A DM
+            has no CRM of its own; it INHERITS the linked person's (see
+            server/map.ts's mapChat), shown read-only here with a pointer to
+            the real edit surface, so there's never a second, driftable copy. */}
+        {info.isGroup ? (
+          <View style={[styles.section, { borderTopColor: signal.divider }]}>
+            <ChatCrmSection chatGuid={guid} />
+          </View>
+        ) : (
+          crm && <DmCrmNote crm={crm} />
+        )}
+
+        <View style={[styles.section, styles.danger, { borderTopColor: signal.divider }]}>
           {info.isGroup && (
-            <>
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
-                onPress={() =>
-                  showSheet({
-                    title: "Leave this conversation? You'll stop getting its messages.",
-                    actions: [
-                      {
-                        label: "Leave conversation",
-                        destructive: true,
-                        onPress: () =>
-                          runCommand(guid, { kind: "leaveGroup" }).then(() => onClose()).catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't leave the conversation. Try again."))),
-                      },
-                    ],
-                  })
-                }
-              >
-                <Text style={[styles.actionDanger, { color: theme.destructive }]}>Leave conversation</Text>
-              </Pressable>
-              <View style={[styles.rowDivider, { backgroundColor: theme.divider, marginLeft: 0 }]} />
-            </>
+            <Pressable
+              accessibilityRole="button"
+              style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+              onPress={confirmLeave}
+            >
+              <Ionicons name="exit-outline" size={17} color={signal.danger} />
+              <Text style={[styles.dangerText, { color: signal.danger, fontSize: type.body }]}>Leave conversation</Text>
+            </Pressable>
           )}
           <Pressable
             accessibilityRole="button"
-            style={({ pressed }) => [styles.dangerRow, pressed && { opacity: PRESS_DIM }]}
-            onPress={() =>
-              showSheet({
-                title: "Delete this conversation? This can't be undone.",
-                actions: [
-                  {
-                    label: "Delete conversation",
-                    destructive: true,
-                    onPress: () =>
-                      runCommand(guid, { kind: "deleteChat", chatGuid: guid })
-                        .then(() => onDeleted())
-                        .catch((error: unknown) => showToast(messagingCommandError(error, "Couldn't delete the conversation. Try again."))),
-                  },
-                ],
-              })
-            }
+            style={({ hovered, pressed }) => [styles.dangerRow, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+            onPress={confirmDelete}
           >
-            <Text style={[styles.actionDanger, { color: theme.destructive }]}>Delete conversation</Text>
+            <Ionicons name="trash-outline" size={17} color={signal.danger} />
+            <Text style={[styles.dangerText, { color: signal.danger, fontSize: type.body }]}>Delete conversation</Text>
           </Pressable>
+          <Text style={[styles.dangerNote, { color: signal.textTertiary, fontSize: type.caption }]}>Removes it from Messages on all your devices.</Text>
         </View>
       </ScrollView>
     </View>
   );
 }
 
-/**
- * A DM's read-only inherited CRM — favorite star, priority badge, tag/event
- * chips, all sourced from `ChatSummary.crm` (already resolved server-side by
- * mapChat's inheritance rule, see server/map.ts). No edit affordances here on
- * purpose: the person's own contact screen is the one editable copy.
- */
-function DmCrmNote({ crm }: { crm: NonNullable<ChatSummary["crm"]> }) {
-  const theme = useTheme();
-  const hasChips = (crm.tags?.length ?? 0) > 0 || (crm.events?.length ?? 0) > 0;
+type SignalColors = (typeof SIGNAL)["light"] | (typeof SIGNAL)["dark"];
+
+function Section({
+  title,
+  action,
+  divider,
+  labelColor,
+  children,
+}: {
+  title: string;
+  action?: { label: string; onPress: () => void };
+  divider: string;
+  labelColor: string;
+  children: React.ReactNode;
+}) {
+  const type = useTypeRamp();
   return (
-    <View style={dmCrmStyles.wrap}>
-      <View style={dmCrmStyles.row}>
-        {crm.is_favorite && (
-          <View style={dmCrmStyles.item}>
-            <Ionicons name="star" size={15} color={FAVORITE_GOLD} />
-            <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Favorite</Text>
-          </View>
-        )}
-        {crm.priority !== undefined && (
-          <View style={[dmCrmStyles.priorityPill, { backgroundColor: theme.backgroundElement }]}>
-            <Text style={{ color: theme.text, fontSize: 11, fontWeight: "600" }}>{`P${crm.priority}`}</Text>
-          </View>
+    <View style={[styles.section, { borderTopColor: divider }]}>
+      <View style={styles.sectionHead}>
+        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: labelColor, fontSize: type.secondary }]}>{title}</Text>
+        {action && (
+          <Pressable accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} hitSlop={6}>
+            {({ hovered, pressed }) => (
+              <Text style={[styles.sectionAction, { color: labelColor, fontSize: type.secondary }, (hovered || pressed) && { textDecorationLine: "underline" }]}>{action.label}</Text>
+            )}
+          </Pressable>
         )}
       </View>
-      {hasChips && (
-        <View style={dmCrmStyles.chipRow}>
-          {crm.tags?.map((tag) => (
-            <View key={tag} style={[dmCrmStyles.chip, { backgroundColor: theme.backgroundElement }]}>
-              <Text style={{ color: theme.text, fontSize: 12 }}>{tag}</Text>
-            </View>
-          ))}
-          {crm.events?.map((e) => (
-            <View key={e.id} style={[dmCrmStyles.chip, { backgroundColor: theme.backgroundElement }]}>
-              <Ionicons name="calendar-outline" size={11} color={theme.textSecondary} />
-              <Text style={{ color: theme.text, fontSize: 12 }}>{e.name}</Text>
+      {children}
+    </View>
+  );
+}
+
+function ToggleRow({
+  icon,
+  label,
+  value,
+  signal,
+  onChange,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: boolean;
+  signal: SignalColors;
+  onChange?: (next: boolean) => void;
+}) {
+  const type = useTypeRamp();
+  return (
+    <View style={styles.toggleRow}>
+      <Ionicons name={icon} size={17} color={onChange ? signal.icon : signal.disabled} />
+      <Text style={[styles.toggleLabel, { color: onChange ? signal.text : signal.disabled, fontSize: type.body }]}>{label}</Text>
+      <Switch
+        accessibilityLabel={label}
+        value={value}
+        disabled={!onChange}
+        onValueChange={onChange}
+        trackColor={{ true: signal.switchOn, false: signal.switchOff }}
+        thumbColor={value ? signal.surface : "#FFFFFF"}
+        {...({ activeThumbColor: signal.surface } as object)}
+      />
+    </View>
+  );
+}
+
+/**
+ * A DM's read-only inherited CRM, sourced from `ChatSummary.crm` (resolved
+ * server-side by mapChat's inheritance rule, see server/map.ts). The favorite
+ * star and tags show in the hero; this section carries priority and events.
+ * No edit affordances on purpose: the contact card is the one editable copy.
+ */
+function DmCrmNote({ crm }: { crm: NonNullable<ChatSummary["crm"]> }) {
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const type = useTypeRamp();
+  const events = crm.events ?? [];
+  if (crm.priority === undefined && events.length === 0) return null;
+  return (
+    <View style={[styles.section, { borderTopColor: signal.divider }]}>
+      <View style={styles.sectionHead}>
+        <Text accessibilityRole="header" style={[styles.sectionTitle, { color: signal.textSecondary, fontSize: type.secondary }]}>CRM</Text>
+        {crm.priority !== undefined && (
+          <Text style={[styles.sectionAction, { color: signal.textSecondary, fontSize: type.secondary }]}>{`P${crm.priority}`}</Text>
+        )}
+      </View>
+      {events.length > 0 && (
+        <View style={styles.eventRow}>
+          {events.map((e) => (
+            <View key={e.id} style={[styles.tag, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
+              <Ionicons name="calendar-outline" size={11} color={signal.textSecondary} />
+              <Text style={[styles.tagText, { color: signal.textSecondary }]}>{e.name}</Text>
             </View>
           ))}
         </View>
       )}
-      <Text style={[dmCrmStyles.caption, { color: theme.textSecondary }]}>
-        Inherited from contact — edit on their contact card.
+      <Text style={{ color: signal.textTertiary, fontSize: type.caption, marginTop: 8 }}>
+        Inherited from contact. Edit on their contact card.
       </Text>
     </View>
   );
 }
 
-const dmCrmStyles = StyleSheet.create({
-  wrap: { gap: 8, marginTop: 20 },
-  row: { alignItems: "center", flexDirection: "row", gap: 12 },
-  item: { alignItems: "center", flexDirection: "row", gap: 6 },
-  priorityPill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: {
-    alignItems: "center",
-    borderRadius: 10,
-    flexDirection: "row",
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  caption: { fontSize: 11 },
-});
-
 const styles = StyleSheet.create({
   paneHeader: {
     alignItems: "center",
-    borderBottomWidth: 0.5,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     height: 52,
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingLeft: 20,
+    paddingRight: 10,
   },
   paneHeaderTitle: { fontWeight: "600" },
-  headerIcon: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 28 },
-  inlineTextAction: { borderRadius: 6, marginHorizontal: -5, marginVertical: -3, paddingHorizontal: 5, paddingVertical: 3 },
-  inlineIconAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", margin: -3, padding: 3 },
-  hero: { alignItems: "center", marginBottom: 12, marginTop: 4 },
-  quickRow: { flexDirection: "row", gap: 8, marginTop: 14 },
-  quickAction: { alignItems: "center", borderRadius: 8, flex: 1, flexDirection: "row", gap: 6, height: 32, justifyContent: "center" },
-  titleRow: { flexDirection: "row", alignItems: "center", alignSelf: "center", gap: 8 },
-  title: { fontWeight: "600", textAlign: "center" },
-  renameRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  renameInput: { flex: 1, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 18 },
-  suggestTrigger: { flexDirection: "row", alignItems: "center", gap: 6 },
-  addPersonRow: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", gap: 10, minHeight: 46, paddingHorizontal: 12 },
-  addPersonIcon: { alignItems: "center", borderRadius: 15, height: 30, justifyContent: "center", width: 30 },
-  addPersonEditor: { alignItems: "center", borderTopWidth: 0.5, flexDirection: "row", gap: 8, minHeight: 50, paddingHorizontal: 10 },
-  addPersonInput: { borderRadius: 9, flex: 1, fontSize: 13, paddingHorizontal: 10, paddingVertical: 7 },
+  headerIcon: { alignItems: "center", borderRadius: 6, height: 28, justifyContent: "center", width: 28 },
+  body: { paddingBottom: 20, paddingHorizontal: 20, paddingTop: 22 },
+  inlineTextAction: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
+  inlineIconAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", padding: 3 },
+  hero: { alignItems: "center", marginBottom: 12 },
+  titleRow: { alignItems: "center", alignSelf: "center", flexDirection: "row", gap: 6 },
+  title: { fontSize: 20, fontWeight: "600", letterSpacing: -0.3, textAlign: "center" },
+  subtitle: { marginTop: 2, textAlign: "center" },
+  renameRow: { alignItems: "center", flexDirection: "row", gap: 10 },
+  renameInput: { borderRadius: 8, borderWidth: 1, flex: 1, fontSize: 15, paddingHorizontal: 10, paddingVertical: 6 },
+  suggestTrigger: { alignItems: "center", alignSelf: "center", flexDirection: "row", gap: 6 },
   identifyBlock: { marginTop: 8 },
-  identityCard: { borderRadius: 12, padding: 12, gap: 5 },
-  identityHead: { flexDirection: "row", alignItems: "center", gap: 7 },
+  identityCard: { borderRadius: 10, gap: 5, padding: 12 },
+  identityHead: { alignItems: "center", flexDirection: "row", gap: 7 },
   confidence: { fontSize: 11 },
-  section: { fontSize: 12, fontWeight: "600", marginTop: 18, marginBottom: 6 },
-  card: { borderRadius: 10, overflow: "hidden" },
-  cardGap: { marginTop: 18 },
-  rowDivider: { height: 0.5, marginLeft: 51 },
-  dangerRow: { alignItems: "flex-start", justifyContent: "center", minHeight: 50, paddingHorizontal: 14 },
-  actionDanger: { fontSize: 13, fontWeight: "500" },
-  grid: { flexDirection: "row", flexWrap: "wrap", columnGap: GRID_GAP, rowGap: GRID_GAP, marginTop: 2 },
-  tileImg: { width: "100%", height: "100%", borderRadius: 6 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "center", marginTop: 12 },
+  eventRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  tag: { alignItems: "center", borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 4, height: 24, paddingHorizontal: 9 },
+  tagText: { fontSize: 12, fontWeight: "500" },
+  tagInput: { minWidth: 60, paddingVertical: 0 },
+  section: { borderTopWidth: 1, marginTop: 18, paddingBottom: 6, paddingTop: 14 },
+  sectionHead: { alignItems: "baseline", flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  sectionTitle: { fontWeight: "600" },
+  sectionAction: { fontWeight: "500" },
+  handleRow: { alignItems: "center", borderRadius: 6, flexDirection: "row", gap: 10, marginHorizontal: -6, paddingHorizontal: 6, paddingVertical: 5 },
+  handleKind: { width: 46 },
+  handleValue: { flex: 1, fontVariant: ["tabular-nums"] },
+  memberRow: { borderRadius: 10, marginHorizontal: -8 },
+  addPersonEditor: { alignItems: "center", flexDirection: "row", gap: 8, marginTop: 6 },
+  addPersonInput: { borderRadius: 8, flex: 1, fontSize: 13, paddingHorizontal: 10, paddingVertical: 7 },
+  toggleRow: { alignItems: "center", flexDirection: "row", gap: 10, paddingVertical: 7 },
+  toggleLabel: { flex: 1 },
+  danger: { paddingTop: 12 },
+  dangerRow: { alignItems: "center", alignSelf: "flex-start", borderRadius: 6, flexDirection: "row", gap: 8, height: 30, marginHorizontal: -6, paddingHorizontal: 6 },
+  dangerText: { fontWeight: "500" },
+  dangerNote: { marginBottom: 6, marginLeft: 25 },
+  grid: { columnGap: GRID_GAP, flexDirection: "row", flexWrap: "wrap", rowGap: GRID_GAP },
+  tile: { borderRadius: 8, overflow: "hidden" },
+  tileImg: { height: "100%", width: "100%" },
   playBadge: {
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 11,
+    bottom: 4,
+    height: 22,
+    justifyContent: "center",
     position: "absolute",
     right: 4,
-    bottom: 4,
     width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });
