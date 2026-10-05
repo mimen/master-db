@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { avatarUrl, groupPhotoUrl } from "@/lib/api";
 import { useQuery } from "convex/react";
 import { commaApi } from "@/lib/convex-api";
-import { avatarColor } from "@/lib/avatar-color";
 import { initials } from "@/lib/format";
 import { useWhoIs, type Person } from "@/lib/identity";
 import type { ChatSummary } from "@shared/types";
@@ -14,7 +12,7 @@ import { useTheme } from "@/hooks/use-theme";
 
 
 /**
- * The base primitive: a gradient-initials circle with the cached contact
+ * The base primitive: a neutral initials circle with the cached contact
  * photo (if any) overlaid on top. Every 1:1 avatar in the app — inbox rows,
  * headers, hero profile views, sender gutters — renders through this; do not
  * hand-roll another initials-circle-plus-photo block, extend this one.
@@ -33,7 +31,7 @@ export function PersonAvatar({
   const photoUrl = person?.photoUrl;
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const uri = address ? avatarUrl(address, photoUrl === failedPhoto ? null : photoUrl) : undefined;
-  const color = avatarColor(address ?? name);
+  const theme = useTheme();
   return (
     <View
       style={[
@@ -42,16 +40,11 @@ export function PersonAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
+          backgroundColor: theme.avatar[avatarSlot(address ?? name, theme.avatar.length)],
         },
       ]}
     >
-      <LinearGradient
-        colors={[color.start, color.end]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <Text style={{ fontSize: size * 0.34, fontWeight: "600", color: color.fg }}>
+      <Text style={{ fontSize: Math.round(size * 0.36), fontWeight: "600", letterSpacing: 0.2, color: theme.avatarText }}>
         {initials(name)}
       </Text>
       {uri ? (
@@ -71,7 +64,16 @@ export function PersonAvatar({
   );
 }
 
+/** A stable ramp slot per contact, so neighbors differ by a shade without carrying meaning. */
+export function avatarSlot(key: string, slots: number): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return h % slots;
+}
+
 export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) {
+  const theme = useTheme();
+  const ringColor = theme.background;
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
   const uri = groupPhotoUrl(chat);
   if (!chat.isGroup) {
@@ -86,22 +88,23 @@ export function ChatAvatar({ chat, size }: { chat: ChatSummary; size: number }) 
   const sorted = [...chat.participants].sort(
     (a, b) => Number(b.name !== null) - Number(a.name !== null),
   );
-  const back = sorted[0];
-  const front = sorted[1] ?? sorted[0];
+  const first = sorted[0];
+  const second = sorted[1] ?? sorted[0];
+  const face = Math.round(size * 0.6);
   return (
     <View style={{ width: size, height: size }}>
-      <View style={{ position: "absolute", top: 0, right: 0 }}>
+      <View style={{ position: "absolute", top: 0, left: 0 }}>
         <PersonAvatar
-          address={back?.address ?? null}
-          name={back?.name ?? back?.address ?? "?"}
-          size={size * 0.68}
+          address={first?.address ?? null}
+          name={first?.name ?? first?.address ?? "?"}
+          size={face}
         />
       </View>
-      <View style={{ position: "absolute", bottom: 0, left: 0 }}>
+      <View style={[styles.ring, { position: "absolute", bottom: -2, right: -2, borderColor: ringColor }]}>
         <PersonAvatar
-          address={front?.address ?? null}
-          name={front?.name ?? front?.address ?? "?"}
-          size={size * 0.58}
+          address={second?.address ?? null}
+          name={second?.name ?? second?.address ?? "?"}
+          size={face}
         />
       </View>
       {uri && uri !== failedPhoto ? (
@@ -205,6 +208,7 @@ export function GroupPhotoAvatar({
 }
 
 const styles = StyleSheet.create({
+  ring: { borderRadius: 999, borderWidth: 2 },
   circle: {
     alignItems: "center",
     justifyContent: "center",

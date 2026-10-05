@@ -25,7 +25,6 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
     failImage = props.onError;
     return createElement("img", { src: props.source.uri });
   } }));
-  mock.module("expo-linear-gradient", () => ({ LinearGradient: () => null }));
   mock.module("@expo/vector-icons", () => ({ Ionicons: () => null }));
   mock.module("react-native", () => ({
     View: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
@@ -40,10 +39,17 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
       return handle ? { found: true, person: { _id: "person", photoUrl } } : undefined;
     },
   }));
-  mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({}) }));
+  mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({ avatar: ["#ECECEE", "#E6E6E9"], avatarText: "#3C3C42" }) }));
   let groupPhotoUrl: string | null = null;
   mock.module("convex/react", () => ({ useQuery: () => ({ groupPhotoUrl }) }));
-  const { PersonAvatar, GroupPhotoAvatar } = await import("./avatar");
+  const { PersonAvatar, GroupPhotoAvatar, avatarSlot } = await import("./avatar");
+
+  test("a contact keeps one ramp slot, and the slot stays inside the ramp", () => {
+    expect(avatarSlot("+16195550101", 6)).toBe(avatarSlot("+16195550101", 6));
+    const slots = new Set(Array.from({ length: 60 }, (_, i) => avatarSlot(`k${i}`, 6)));
+    expect([...slots].every((slot) => slot >= 0 && slot < 6)).toBe(true);
+    expect(slots.size).toBe(6);
+  });
   const { avatarUrl } = await import("../lib/api");
 
   test("renders cloud photos, falls back on errors, and accepts a changed cloud photo", async () => {

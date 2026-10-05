@@ -6,9 +6,9 @@ mock.module("@/global.css", () => ({}));
 const { GLOBAL_WEB_CSS } = await import("./web-css");
 
 describe("GLOBAL_WEB_CSS", () => {
-  test("draws an accent focus ring for keyboard focus in both schemes", () => {
-    expect(GLOBAL_WEB_CSS).toContain(":focus-visible{outline:2px solid #007AFF;outline-offset:2px}");
-    expect(GLOBAL_WEB_CSS).toContain("@media (prefers-color-scheme:dark){:focus-visible{outline-color:#0A84FF}}");
+  test("draws the persimmon focus ring for keyboard focus in both schemes", () => {
+    expect(GLOBAL_WEB_CSS).toContain(":focus-visible{outline:2px solid #E0500F;outline-offset:2px}");
+    expect(GLOBAL_WEB_CSS).toContain("@media (prefers-color-scheme:dark){:focus-visible{outline-color:#FF7A40}}");
   });
 
   test("never suppresses focus-visible globally", () => {

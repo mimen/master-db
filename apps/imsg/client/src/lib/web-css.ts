@@ -5,14 +5,14 @@ import { Colors } from "@/constants/theme";
 /**
  * Global web CSS enforced from the BUNDLE, not just the HTML shell, so a stale
  * cached PWA shell still gets these the moment the JS loads. Keyboard focus
- * draws one accent ring; text fields already show a caret, so they keep none,
+ * draws one persimmon ring; text fields already show a caret, so they keep none,
  * and full-bleed list rows inset theirs so the scroller does not clip it.
  * Inputs are 16px so iOS Safari never auto-zooms on focus.
  */
 export const GLOBAL_WEB_CSS =
   `:focus{outline:none}` +
-  `:focus-visible{outline:2px solid ${Colors.light.accent};outline-offset:2px}` +
-  `@media (prefers-color-scheme:dark){:focus-visible{outline-color:${Colors.dark.accent}}}` +
+  `:focus-visible{outline:2px solid ${Colors.light.focusRing};outline-offset:2px}` +
+  `@media (prefers-color-scheme:dark){:focus-visible{outline-color:${Colors.dark.focusRing}}}` +
   "input:focus-visible,textarea:focus-visible{outline:none}" +
   '[data-testid="conversation-row"]:focus-visible{outline-offset:-2px}' +
   "input,textarea,select{font-size:16px!important}" +

@@ -23,12 +23,12 @@ import { hydrateSettings } from "@/lib/settings";
 import { hydrateSidebarWidth } from "@/lib/sidebar-width";
 import { ToastHost } from "@/lib/toast";
 import { ensureGlobalWebCss } from "@/lib/web-css";
-import { WORDMARK_FONT, WORDMARK_FONT_SOURCE } from "@/lib/wordmark-font";
+import { HEADER_FONT, HEADER_FONT_SOURCE } from "@/lib/header-font";
 
 ensureGlobalWebCss();
 
 export default function RootLayout() {
-  useFonts({ [WORDMARK_FONT]: WORDMARK_FONT_SOURCE });
+  useFonts({ [HEADER_FONT]: HEADER_FONT_SOURCE });
   const colorScheme = useColorScheme();
   useEffect(() => {
     void hydrateDrafts();

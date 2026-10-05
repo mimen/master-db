@@ -53,7 +53,7 @@ export function Row({ title, subtitle, leading, trailing, density = "regular", s
       onPress={onPress}
       style={(state: InteractionState) => [
         ...frame,
-        { backgroundColor: selected ? theme.backgroundSelected : stepFill(theme, state, "transparent") },
+        { backgroundColor: selected ? theme.rowSelected : stepFill(theme, state, "transparent") },
         focusVisible(state) && focusRing(theme),
         style,
       ]}

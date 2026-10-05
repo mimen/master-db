@@ -1,16 +1,17 @@
+import { Palette } from "../src/constants/tokens";
+
 /**
  * Painted while #root is still empty. React's first commit fills #root and the
- * selector stops matching, so nothing has to remove it. Grounds mirror
- * Palette.background in src/constants/tokens.ts; post-export.test.ts keeps the
- * two in step.
+ * selector stops matching, so nothing has to remove it. Grounds read
+ * Palette.background so the boot frame matches the first paint.
  */
 export const LOADING_SHELL_CSS =
   "body{margin:0}" +
-  "#root:empty{background:#ffffff}" +
-  "#root:empty::before{content:'';margin:auto;width:8px;height:8px;border-radius:50%;background:#8a8a90;" +
+  `#root:empty{background:${Palette.light.background}}` +
+  `#root:empty::before{content:'';margin:auto;width:8px;height:8px;border-radius:50%;background:${Palette.light.textTertiary};` +
   "animation:comma-boot 1.2s ease-in-out .4s infinite alternate backwards}" +
   "@keyframes comma-boot{from{opacity:0}to{opacity:.6}}" +
-  "@media (prefers-color-scheme:dark){#root:empty{background:#1a1a1c}#root:empty::before{background:#98989e}}" +
+  `@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}#root:empty::before{background:${Palette.dark.textTertiary}}}` +
   "@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}";
 
 /** Injects PWA head tags + a zoom-lock viewport into the exported SPA shell. */
@@ -34,8 +35,8 @@ const tags = [
   '<meta name="apple-mobile-web-app-title" content="Comma"/>',
   '<meta name="apple-mobile-web-app-capable" content="yes"/>',
   '<meta name="mobile-web-app-capable" content="yes"/>',
-  '<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)"/>',
-  '<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>',
+  `<meta name="theme-color" content="${Palette.dark.background}" media="(prefers-color-scheme: dark)"/>`,
+  `<meta name="theme-color" content="${Palette.light.background}" media="(prefers-color-scheme: light)"/>`,
   // 16px inputs stop iOS Safari from zooming on focus; fill the dynamic viewport so a
   // standalone PWA doesn't leave a white bar over the home-indicator area.
   "<style>input,textarea,select{font-size:16px!important}" +

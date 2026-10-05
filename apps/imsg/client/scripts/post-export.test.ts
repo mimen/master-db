@@ -41,8 +41,8 @@ describe("postExport", () => {
 
     const html = await Bun.file(join(root, "index.html")).text();
     expect(html).toContain("body{margin:0}");
-    expect(html).toContain("#root:empty{background:#ffffff}");
-    expect(html).toContain("@media (prefers-color-scheme:dark){#root:empty{background:#1a1a1c}");
+    expect(html).toContain(`#root:empty{background:${Palette.light.background}}`);
+    expect(html).toContain(`@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}`);
     expect(html).toContain("@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}");
   });
 

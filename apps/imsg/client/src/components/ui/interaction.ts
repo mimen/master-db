@@ -32,12 +32,12 @@ export function focusVisible(state: InteractionState): boolean {
 
 export function focusRing(theme: ThemeColors): ViewStyle {
   // outline* are web-only style keys RN's types do not list.
-  return { outlineColor: theme.accent, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 2 } as ViewStyle;
+  return { outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 2 } as ViewStyle;
 }
 
 /** Idle fill, then hover raises one step and press raises two. */
 export function stepFill(theme: ThemeColors, state: InteractionState, rest: string): string {
-  if (state.pressed) return theme.backgroundSelected;
-  if (state.hovered) return theme.backgroundElement;
+  if (state.pressed) return theme.rowSelected;
+  if (state.hovered) return theme.rowHover;
   return rest;
 }

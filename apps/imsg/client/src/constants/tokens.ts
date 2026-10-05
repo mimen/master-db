@@ -43,69 +43,118 @@ export const TypeRamp: { readonly desktop: TypeRampScale; readonly mobile: TypeR
 };
 
 /**
- * The one semantic palette. Text tokens pass 4.5:1 on `background` in their
- * scheme (textSecondary 5.94 / 6.06, textTertiary 5.07 / 5.06, success 5.39 /
- * 8.60, warning 5.28 / 8.45).
+ * The one semantic palette: Signal. Pure neutral with one persimmon accent
+ * that marks owed time (`turn`), the active lens (`lensBar`) and keyboard
+ * focus (`focusRing`). `accent` stays iMessage blue: it is the sent bubble,
+ * the unread dot and links, not chrome. Every text token was measured at
+ * 4.5:1 or better on `background`, `thread` and `surface` in its scheme
+ * (artifacts/2026-10-04-design-overhaul/round4/contrast.mjs).
  */
 export const Palette = {
   light: {
-    text: "#000000",
-    textSecondary: "#60646C",
-    textTertiary: "#6e6e73",
-    background: "#ffffff",
-    desk: "#e6e7ee",
+    text: "#17171A",
+    textSecondary: "#55555C",
+    textTertiary: "#64646B",
+    /** The sidebar page and every sheet. */
+    background: "#FFFFFF",
+    /** The gray the thread sits on. */
+    thread: "#F4F4F5",
+    surface: "#FFFFFF",
+    icon: "#5E5E66",
     accent: "#007AFF",
     accentTint: "rgba(0,122,255,0.10)",
+    turn: "#BE3A06",
+    onTurn: "#FFFFFF",
+    turnMark: "#EC5A1E",
+    lensBar: "#EC5A1E",
+    focusRing: "#E0500F",
     success: "#1F7A35",
     warning: "#C93400",
-    destructive: "#D70015",
+    destructive: "#C4261B",
   },
   dark: {
-    text: "#ffffff",
-    textSecondary: "#98989e",
-    textTertiary: "#8a8a90",
-    background: "#1a1a1c",
-    desk: "#0b0b0d",
+    text: "#EDEDEF",
+    textSecondary: "#A6A6AD",
+    textTertiary: "#8F8F96",
+    background: "#141416",
+    thread: "#0F0F11",
+    surface: "#1C1C1F",
+    icon: "#97979E",
     accent: "#0A84FF",
     accentTint: "rgba(10,132,255,0.18)",
+    turn: "#FF8A57",
+    onTurn: "#1A0B03",
+    turnMark: "#FF6A2B",
+    lensBar: "#FF6A2B",
+    focusRing: "#FF7A40",
     success: "#30D158",
     warning: "#FF9F0A",
-    destructive: "#FF453A",
+    destructive: "#FF6B5E",
   },
 } as const;
 
 export const Colors = {
   light: {
     ...Palette.light,
-    cardBorder: "rgba(0,0,0,0.08)",
-    backgroundElement: "#F0F0F3",
-    backgroundSelected: "#E0E1E6",
+    cardBorder: "rgba(0,0,0,0.075)",
+    /** Search fields and resting control fills. */
+    field: "rgba(0,0,0,0.045)",
+    rowHover: "rgba(0,0,0,0.04)",
+    rowSelected: "rgba(0,0,0,0.075)",
+    /** Opaque raised fill for chips and floating labels. */
+    backgroundElement: "#F4F4F5",
+    backgroundSelected: "#E4E4E7",
     // Sent bubbles keep Messages.app's blue and green on purpose: white text measures 4.0:1 on
     // the blue and 2.2:1 on the green. The owner chose parity over AA here (2026-10-04).
     bubbleMine: Palette.light.accent,
-    bubbleTheirs: "#E9E9EB",
+    bubbleTheirs: "#FFFFFF",
+    bubbleTheirsBorder: "rgba(0,0,0,0.07)",
     bubbleTheirsText: Palette.light.text,
-    divider: "#E5E5EA",
-    // "This will send as SMS" tint. The same literal on both schemes today.
+    divider: "rgba(0,0,0,0.075)",
+    dividerStrong: "rgba(0,0,0,0.13)",
+    // "This will send as SMS" tint.
     sms: "#34C759",
+    avatar: ["#ECECEE", "#E6E6E9", "#EFEFF1", "#E9E9EC", "#EDEDEF", "#E7E7EA"],
+    avatarText: "#3C3C42",
+    swipeIdle: "#E4E4E7",
+    onSwipeIdle: "#4A4A50",
+    swipeSettle: "#17171A",
+    swipeUnread: "#0B5FCC",
+    onSwipe: "#FFFFFF",
+    barBg: "rgba(255,255,255,0.88)",
+    barShadow: "0 1px 0 rgba(0,0,0,0.04), 0 10px 28px -12px rgba(0,0,0,0.3)",
     // Text and icons drawn on an accent, destructive or sms fill.
     onAccent: "#fff",
     // A fill white text sits on (5.4:1); success itself is a text color in dark.
     successFill: Palette.light.success,
-    backdrop: "rgba(0,0,0,0.45)",
+    backdrop: "rgba(23,23,26,0.16)",
   },
   dark: {
     ...Palette.dark,
     cardBorder: "rgba(255,255,255,0.07)",
-    backgroundElement: "#2c2c2e",
-    backgroundSelected: "#3a3a3c",
+    field: "rgba(255,255,255,0.06)",
+    rowHover: "rgba(255,255,255,0.045)",
+    rowSelected: "rgba(255,255,255,0.085)",
+    backgroundElement: "#232326",
+    backgroundSelected: "#2A2A2E",
     bubbleMine: Palette.dark.accent,
-    bubbleTheirs: "#363638",
+    bubbleTheirs: "#232326",
+    bubbleTheirsBorder: "rgba(255,255,255,0.05)",
     bubbleTheirsText: Palette.dark.text,
-    divider: "#38383a",
-    sms: "#34C759",
+    divider: "rgba(255,255,255,0.07)",
+    dividerStrong: "rgba(255,255,255,0.12)",
+    sms: "#30D158",
+    avatar: ["#2A2A2E", "#2E2E33", "#28282C", "#2C2C31", "#303035", "#29292D"],
+    avatarText: "#D6D6DB",
+    swipeIdle: "#2A2A2E",
+    onSwipeIdle: "#C4C4CA",
+    swipeSettle: "#EDEDEF",
+    swipeUnread: "#4BA3FF",
+    onSwipe: "#141416",
+    barBg: "rgba(28,28,31,0.88)",
+    barShadow: "0 0 0 1px rgba(255,255,255,0.06), 0 12px 30px -10px rgba(0,0,0,0.75)",
     onAccent: "#fff",
     successFill: Palette.light.success,
-    backdrop: "rgba(0,0,0,0.45)",
+    backdrop: "rgba(0,0,0,0.5)",
   },
 } as const;
