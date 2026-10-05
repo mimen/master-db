@@ -99,13 +99,14 @@ final class Session {
   let capture = Capture()
   let driver: Driver
   let directory: URL
+  let budgetMs: Double
   let start = now()
   var run: AppRun
   var ownedField: AXUIElement?
   var ownedText: String?
 
-  init(app: NSRunningApplication, directory: URL) throws {
-    self.app = app; self.directory = directory
+  init(app: NSRunningApplication, directory: URL, budgetMs: Double = 82_000) throws {
+    self.app = app; self.directory = directory; self.budgetMs = budgetMs
     root = AXUIElementCreateApplication(app.processIdentifier)
     AXUIElementSetMessagingTimeout(root, 0.3)
     guard let window = (ax(root, kAXWindowsAttribute) as? [AXUIElement])?.first else { throw Abort.setup("no AX window") }
@@ -116,7 +117,7 @@ final class Session {
   }
   func check() throws {
     try driver.check()
-    guard ms(start, now()) < 82_000 else { throw Abort.setup("82 second work budget exhausted; reserved cleanup time") }
+    guard ms(start, now()) < budgetMs else { throw Abort.setup("work budget exhausted; reserved cleanup time") }
     guard axFrame(window) == frame else { throw Abort.unsafe("window moved or resized") }
     _ = try capture.health()
   }
@@ -157,7 +158,7 @@ final class Session {
     try file.close()
     if let picture = capture.pictures().baseline { try writePNG(picture, target.appendingPathComponent("before.png")) }
     if let first = frames.first(where: { $0.changed[0] >= 2 })?.thumb { try writePNG(Thumb(w: trial.width, h: trial.height, bgra: first), target.appendingPathComponent("first.png")) }
-    if let picture = capture.pictures().latest { try writePNG(picture, target.appendingPathComponent("after.png")) }
+    if let pixels = frames.last?.thumb { try writePNG(Thumb(w: trial.width, h: trial.height, bgra: pixels), target.appendingPathComponent("after.png")) }
     trial.evidence = name
     try writeJSON(trial, target.appendingPathComponent("trial.json"))
     run.trials.append(trial)
@@ -179,10 +180,10 @@ final class Session {
     guard axValueText(field).isEmpty else { throw Abort.unsafe("temporary text not cleared") }
     ownedField = nil; ownedText = nil
   }
-  func perform(repeats: Int) -> AppRun {
+  func perform(repeats: Int, previewOnly: Bool = false) -> AppRun {
     do {
     let front = NSWorkspace.shared.frontmostApplication
-    driver.startWatchdog()
+    do { try driver.startWatchdog() } catch { run.error = String(describing: error); return run }
     defer {
       do { try clearOwned() } catch { run.cleanupVerified = false; run.error = "\(run.error ?? ""); cleanup incomplete: \(error)" }
       capture.stop(); driver.stopWatchdog()
@@ -212,6 +213,26 @@ final class Session {
       let list: CGRect
       if let search { let s = axFrame(search); list = CGRect(x: s.minX, y: s.maxY + (isComma ? 60 : 10), width: isComma ? 410 : 300, height: min(500, frame.maxY - s.maxY - 90)) }
       else { throw Abort.setup("AX search anchor not found") }
+      if previewOnly {
+        guard isComma, let all = controls().first(where: { axString($0, kAXRoleAttribute) == "AXRadioButton" && label($0).hasPrefix("All,") }),
+              let divider = controls().first(where: { axString($0, kAXRoleAttribute) == "AXSlider" && label($0).contains("Resize sidebar") }) else { throw Abort.setup("preview navigation anchors absent") }
+        try driver.click(midpoint(axFrame(all)))
+        sleepMs(200)
+        let left = axFrame(divider).maxX + 8
+        let thread = CGRect(x: left, y: frame.minY + 120, width: frame.maxX - left - 15, height: frame.height - 210)
+        for i in 1...repeats {
+          try measure("preview-switch", repetition: i, region: thread) { try driver.key(i % 2 == 1 ? .j : .k, app: root) }
+        }
+        for i in 1...repeats {
+          try driver.key(.j, app: root); sleepMs(80)
+          try measure("rapid-preview", repetition: i, region: thread) { try driver.key(.k, app: root) }
+        }
+        for i in 1...repeats { try measure("thread-scroll", repetition: i, region: thread) { try driver.scroll(at: midpoint(thread), dy: i % 2 == 1 ? -24 : 24, steps: 16, everyMs: 8) } }
+        for i in 1...repeats {
+          try measure("details", repetition: i, region: thread) { try driver.key(.i, cmd: true) }
+          try driver.key(.i, cmd: true); sleepMs(150)
+        }
+      } else {
       skip("switch", "Strict no-mark policy: selecting a conversation can automatically mark read. No read-state-changing operation was issued.")
       skip("rapid-switch", "Conversation switching is blocked by the no-mark policy; an overlapping load cannot be verified.")
       for i in 1...repeats {
@@ -247,6 +268,7 @@ final class Session {
           try driver.key(.escape); sleepMs(100)
         }
         skip("details", "No active conversation details control exposed; normal selection would auto-mark the thread.")
+      }
       }
     } catch { run.error = String(describing: error) }
     }

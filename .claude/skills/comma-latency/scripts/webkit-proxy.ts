@@ -11,15 +11,16 @@ const URL = "https://milads-mac-mini.taild31e9a.ts.net:8447";
 const { values: args } = parseArgs({
   options: {
     out: { type: "string" },
+    only: { type: "string" },
     reps: { type: "string", default: "5" },
     conversations: { type: "string", default: "Sprout Imen,Andrew Wilkinson" },
   },
 });
-if (!args.out) throw new Error("usage: webkit-proxy.ts --out <dir> [--reps 5] [--conversations \"A,B\"]");
-const OUT = resolve(args.out);
+if (import.meta.main && !args.out) throw new Error("usage: webkit-proxy.ts --out <dir> [--reps 5] [--conversations \"A,B\"]");
+const OUT = resolve(args.out ?? ".");
 const REPS = Number(args.reps);
 const [NAME_A, NAME_B] = args.conversations!.split(",").map((s) => s.trim());
-const SELF_ALIASES = ["Sprout Imen", "(925) 997-6370"];
+const SELF_ALIASES = ["Sprout Imen", "(925) 997-6370", "+1 925-997-6370"];
 const QUIET_MS = 300;
 const CAP_MS = 5000;
 
@@ -124,7 +125,7 @@ const tauriStandIn = (): void => {
   };
 };
 
-function analyze({ mark, inputIndex, scroll, quiet, cap }: { mark: number; inputIndex: number; scroll: boolean; quiet: number; cap: number }): Analysis {
+export function analyze({ mark, inputIndex, scroll, quiet, cap }: { mark: number; inputIndex: number; scroll: boolean; quiet: number; cap: number }): Analysis {
   const L = (window as unknown as {
     __lat: { frames: number[]; muts: number[]; scrolls: number[]; edits: number[]; inputs: { t: number }[]; wsIn: number[]; mqs: number[] };
   }).__lat;
@@ -137,18 +138,12 @@ function analyze({ mark, inputIndex, scroll, quiet, cap }: { mark: number; input
   const activity = [...after(L.muts, t0), ...after(L.edits, t0), ...(scroll ? scrolls : [])].sort((a, b) => a - b);
   // Incoming WS frames count toward quiet so a query still streaming results is not mistaken for settled.
   const ws = after(L.wsIn, t0);
-  const points = [t0, ...activity, ...ws].sort((a, b) => a - b);
-  let settleAt: number | null = null;
-  for (let i = 0; i < points.length; i++) {
-    const next = points[i + 1] ?? now;
-    if (next - points[i] >= quiet) {
-      settleAt = points[i];
-      break;
-    }
-  }
+  const lastInput = L.inputs[L.inputs.length - 1]?.t ?? t0;
+  const lastActivity = Math.max(t0, lastInput, ...activity, ...ws);
+  const settleAt = activity.length && now - lastActivity >= quiet ? lastActivity : null;
   const capped = settleAt === null && now - t0 >= cap;
   if (settleAt === null && !capped) return { done: false };
-  const end = settleAt === null ? t0 + cap : activity.filter((t) => t <= settleAt).pop() ?? t0;
+  const end = settleAt ?? t0 + cap;
   const frameAfter = (t: number, nth = 0): number | null => after(L.frames, t)[nth] ?? null;
   const first = scroll ? scrolls[0] : activity[0];
   const f1 = first === undefined ? null : frameAfter(first);
@@ -221,7 +216,7 @@ async function wheel(page: Page, target: Locator, total: number): Promise<void> 
   const box = await target.boundingBox();
   if (!box) throw new Error("scroll target has no box");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  const step = Math.sign(total) * 40;
+  const step = Math.sign(total) * 24;
   for (let moved = 0; Math.abs(moved) < Math.abs(total); moved += step) {
     await page.mouse.wheel(0, step);
     await sleep(8);
@@ -306,6 +301,7 @@ async function main(): Promise<void> {
     recordVideo: { dir: join(OUT, "webkit"), size: { width: 1280, height: 860 } },
   });
   let droppedMutations = 0;
+  let droppedMarkRead = 0;
   let blockedRequests = 0;
   const wsUrls = new Set<string>();
 
@@ -327,6 +323,7 @@ async function main(): Promise<void> {
       }
       if (type === undefined || type === "Mutation" || type === "Action") {
         droppedMutations++;
+        if (typeof message === "string" && message.includes("markRead")) droppedMarkRead++;
         return;
       }
       server.send(message);
@@ -348,6 +345,7 @@ async function main(): Promise<void> {
   const results: Result[] = [];
   const shot = (id: string): Promise<Buffer> => page.screenshot({ path: join(OUT, "webkit", `${id}.png`) });
   const run = async (id: string, fn: () => Promise<Result>): Promise<void> => {
+    if (args.only && !args.only.split(",").includes(id)) return;
     try {
       results.push(await fn());
       await shot(id);
@@ -369,6 +367,19 @@ async function main(): Promise<void> {
   const aNames = NAME_A === "Sprout Imen" ? SELF_ALIASES : [NAME_A];
   const openA = async (): Promise<Locator> => findRow(page, aNames);
   const openB = async (): Promise<Locator> => findRow(page, [NAME_B]);
+
+  if (args.only === "preview.switch") await run("preview.switch", async () => {
+    if (!allTab) throw new Error("All lens unavailable");
+    await allTab.tab.click();
+    await settle(page);
+    const before = droppedMarkRead;
+    const samples: Sample[] = [];
+    for (let i = 0; i < REPS; i++) samples.push(await measure(page, () => press(page, i % 2 === 0 ? "j" : "k")));
+    await settle(page);
+    const marks = droppedMarkRead - before;
+    if (marks !== 0) throw new Error(`preview attempted ${marks} markRead writes`);
+    return toResult("preview.switch", samples, ["j/k keyboard previews, not mouse conversation clicks", `markRead attempts during preview: ${marks}`]);
+  });
 
   await run("conversation.switch", async () => {
     const samples: Sample[] = [];
@@ -401,11 +412,10 @@ async function main(): Promise<void> {
     const samples: Sample[] = [];
     for (let i = 0; i < REPS; i++) {
       samples.push(await measure(page, async () => {
-        await wheel(page, target, 1200);
-        await wheel(page, target, -1200);
+        await wheel(page, target, i % 2 === 0 ? 384 : -384);
       }, true));
     }
-    return toResult(id, samples, ["wheel 1200px down then back in 40px steps at ~8ms"]);
+    return toResult(id, samples, ["16 wheel pulses of 24px, alternating direction by repetition, at ~8ms"]);
   });
   await scrollRun("list.scroll", "conversation-list-scroll");
   await (await openA()).click();
@@ -418,36 +428,47 @@ async function main(): Promise<void> {
     const samples: Sample[] = [];
     for (let i = 0; i < REPS; i++) {
       await field.click();
-      for (const ch of "an") samples.push(await measure(page, () => typeChar(page, ch)));
-      await shot("search.type");
-      await press(page, "Meta+a");
-      await press(page, "Backspace");
+      try {
+        for (const ch of "a") samples.push(await measure(page, () => typeChar(page, ch)));
+        await shot("search.type");
+      } finally {
+        const current = await field.inputValue();
+        if (!["", "a", "an"].includes(current)) throw new Error("search text changed outside harness; preserved");
+        await field.fill("");
+        if ((await field.inputValue()) !== "") throw new Error("search field not empty after clearing");
+      }
       await settle(page);
-      if ((await field.inputValue()) !== "") throw new Error("search field not empty after clearing");
     }
-    return toResult("search.type", samples, ["per keystroke of \"an\"; field cleared and verified empty after each rep"]);
+    return toResult("search.type", samples, ["per keystroke of \"a\"; field cleared and verified empty after each rep"]);
   });
 
   await run("compose.type", async () => {
-    await (await openA()).click();
+    const selfRow = await findRow(page, SELF_ALIASES);
+    const selfText = await selfRow.innerText();
+    if (!SELF_ALIASES.some((name) => selfText.split("\n").some((line) => line.trim() === name))) throw new Error("self row identity not exact; refused compose test");
+    await selfRow.click();
     await settle(page);
     const composer = page.getByPlaceholder("iMessage").first();
     if ((await composer.inputValue()) !== "") throw new Error("composer already has a draft; left untouched");
     const samples: Sample[] = [];
     for (let i = 0; i < REPS; i++) {
       await composer.click();
-      for (const ch of "abc") samples.push(await measure(page, () => typeChar(page, ch)));
-      await shot("compose.type");
-      await press(page, "Meta+a");
-      await press(page, "Backspace");
+      try {
+        for (const ch of "abc") samples.push(await measure(page, () => typeChar(page, ch)));
+        await shot("compose.type");
+      } finally {
+        const current = await composer.inputValue();
+        if (!["", "a", "ab", "abc"].includes(current)) throw new Error("composer text changed outside harness; preserved");
+        await composer.fill("");
+        if ((await composer.inputValue()) !== "") throw new Error("composer not empty after clearing");
+      }
       await settle(page);
-      if ((await composer.inputValue()) !== "") throw new Error("composer not empty after clearing");
     }
-    return toResult("compose.type", samples, [`self chat (${aNames.join(" / ")}); per key of "abc"; cleared and verified empty after each rep`]);
+    return toResult("compose.type", samples, [`self chat (${SELF_ALIASES.join(" / ")}); per key of "abc"; cleared and verified empty after each rep`]);
   });
 
   await run("lens.switch", async () => {
-    const present = await lensTabs(page);
+    const present = (await lensTabs(page)).filter((tab) => /^(Waiting|All)\b/.test(tab.label));
     if (present.length < 2) throw new Error(`need 2+ lens tabs, found ${present.length}`);
     const samples: Sample[] = [];
     let current = (await Promise.all(present.map((t) => isSelected(t.tab)))).indexOf(true);
@@ -505,9 +526,9 @@ async function main(): Promise<void> {
   await browser.close();
   if (video) renameSync(await video.path(), join(OUT, "webkit", "run.webm"));
 
-  const out = { kind: "webkit-proxy" as const, url: URL, startedAt, userAgent, droppedMutations, blockedRequests, results, notes };
+  const out = { kind: "webkit-proxy" as const, url: URL, startedAt, userAgent, droppedMutations, droppedMarkRead, blockedRequests, results, notes };
   writeFileSync(join(OUT, "webkit-proxy.json"), `${JSON.stringify(out, null, 2)}\n`);
   console.log(`wrote ${join(OUT, "webkit-proxy.json")} (dropped ${droppedMutations} mutations, blocked ${blockedRequests} requests)`);
 }
 
-await main();
+if (import.meta.main) await main();

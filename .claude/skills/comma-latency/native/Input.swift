@@ -22,7 +22,7 @@ func ms(_ from: UInt64, _ to: UInt64) -> Double {
 func sleepMs(_ v: Double) { RunLoop.current.run(until: Date().addingTimeInterval(max(0, v) / 1000)) }
 
 enum Key: CGKeyCode {
-  case a = 0, b = 11, c = 8, n = 45, i = 34, k = 40, delete = 51, escape = 53
+  case a = 0, b = 11, c = 8, n = 45, i = 34, j = 38, k = 40, delete = 51, escape = 53
   static func letter(_ ch: Character) -> Key? {
     switch ch { case "a": return .a; case "b": return .b; case "c": return .c; case "n": return .n; default: return nil }
   }
@@ -63,6 +63,9 @@ final class Driver {
   private var expected: [CGPoint]
   private var aborted = false
   private var timer: DispatchSourceTimer?
+  private var eventTap: CFMachPort?
+  private var tapSource: CFRunLoopSource?
+  private let marker = Int64.random(in: 1...Int64.max)
   let targetPid: () -> pid_t
 
   init(targetPid: @escaping () -> pid_t) {
@@ -72,19 +75,42 @@ final class Driver {
 
   var cursorAtStart: CGPoint { expected.first ?? .zero }
 
-  func startWatchdog() {
+  func startWatchdog() throws {
+    let mask = [CGEventType.mouseMoved, .leftMouseDragged, .rightMouseDragged].reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+    guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: { _, type, event, context in
+      guard let context else { return Unmanaged.passUnretained(event) }
+      let driver = Unmanaged<Driver>.fromOpaque(context).takeUnretainedValue()
+      if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput || event.getIntegerValueField(.eventSourceUserData) != driver.marker {
+        driver.lock.lock(); driver.aborted = true; driver.lock.unlock()
+      }
+      return Unmanaged.passUnretained(event)
+    }, userInfo: Unmanaged.passUnretained(self).toOpaque()) else { throw Abort.setup("cannot install mouse takeover monitor") }
+    eventTap = tap
+    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    tapSource = source
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
     let t = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
     t.schedule(deadline: .now(), repeating: .milliseconds(10))
     t.setEventHandler { [weak self] in
       guard let self, let loc = CGEvent(source: nil)?.location else { return }
       self.lock.lock(); defer { self.lock.unlock() }
-      if !self.expected.contains(where: { hypot($0.x - loc.x, $0.y - loc.y) < 3 }) { self.aborted = true }
+      if !self.expected.contains(where: { hypot($0.x - loc.x, $0.y - loc.y) < 0.5 }) { self.aborted = true }
     }
     t.resume()
     timer = t
   }
 
-  func stopWatchdog() { timer?.cancel(); timer = nil }
+  func stopWatchdog() {
+    timer?.cancel(); timer = nil
+    if let eventTap { CFMachPortInvalidate(eventTap) }
+    if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
+    eventTap = nil; tapSource = nil
+  }
+  private func post(_ event: CGEvent?) {
+    event?.setIntegerValueField(.eventSourceUserData, value: marker)
+    event?.post(tap: .cghidEventTap)
+  }
 
   func check() throws {
     lock.lock(); defer { lock.unlock() }
@@ -112,14 +138,14 @@ final class Driver {
     }
     guard pid == targetPid() else { throw Abort.unsafe("point \(p) belongs to pid \(pid), not the target") }
     expect(p)
-    CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+    post(CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left))
     sleepMs(30)
     let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)!
     let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)!
     let t = now()
-    down.post(tap: .cghidEventTap)
+    post(down)
     sleepMs(8)
-    up.post(tap: .cghidEventTap)
+    post(up)
     return t
   }
 
@@ -127,7 +153,13 @@ final class Driver {
   func key(_ k: Key, cmd: Bool = false, into focused: AXUIElement? = nil, app: AXUIElement? = nil) throws -> UInt64 {
     try check()
     try frontIsTarget()
-    if !cmd && k != .escape && (focused == nil || app == nil) { throw Abort.unsafe("text and deletion require verified field focus") }
+    let navigation = !cmd && (k == .j || k == .k) && app != nil && focused == nil
+    if navigation {
+      guard let app, let field = ax(app, kAXFocusedUIElementAttribute) else { throw Abort.unsafe("navigation focus is unavailable") }
+      let role = axString(field as! AXUIElement, kAXRoleAttribute)
+      if ["AXTextField", "AXTextArea", "AXComboBox"].contains(role) { throw Abort.unsafe("navigation key would type into a field") }
+    }
+    if !cmd && k != .escape && !navigation && (focused == nil || app == nil) { throw Abort.unsafe("text and deletion require verified field focus") }
     if k == .delete && cmd { throw Abort.unsafe("command-delete is forbidden") }
     if let focused, let app {
       guard let f = ax(app, kAXFocusedUIElementAttribute), CFEqual(f, focused) else {
@@ -139,9 +171,9 @@ final class Driver {
     down.flags = cmd ? .maskCommand : []
     up.flags = down.flags
     let t = now()
-    down.post(tap: .cghidEventTap)
+    post(down)
     sleepMs(6)
-    up.post(tap: .cghidEventTap)
+    post(up)
     return t
   }
 
@@ -149,7 +181,7 @@ final class Driver {
     try check()
     try frontIsTarget()
     expect(p)
-    CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+    post(CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left))
     sleepMs(30)
     var first: UInt64 = 0
     for i in 0..<steps {
@@ -160,7 +192,7 @@ final class Driver {
       e.setIntegerValueField(.scrollWheelEventScrollPhase, value: i == 0 ? 1 : (i == steps - 1 ? 4 : 2))
       let t = now()
       if i == 0 { first = t }
-      e.post(tap: .cghidEventTap)
+      post(e)
       sleepMs(everyMs)
     }
     return first
@@ -169,6 +201,6 @@ final class Driver {
   func restoreCursor() {
     let p = cursorAtStart
     expect(p)
-    CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+    post(CGEvent(mouseEventSource: src, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left))
   }
 }

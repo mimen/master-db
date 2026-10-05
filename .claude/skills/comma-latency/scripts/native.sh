@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+umask 077
 skill="$(cd "$(dirname "$0")/.." && pwd)"
 build="${TMPDIR:-/tmp}/comma-latency-build"
 mkdir -p "$build"
