@@ -34,12 +34,12 @@ import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast, ToastAnchor } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { toggleSettleChat } from "@/hooks/use-triage-actions";
-import { settleActionFor } from "@shared/chat-state";
 import { formatAddress } from "@shared/address";
 import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
 import { ChatAvatar, GroupAvatarStack } from "./avatar";
 import { Composer } from "./composer";
+import { QueuePosition } from "./queue-position";
+import { StateStrip } from "./state-strip";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
@@ -536,6 +536,7 @@ export function ThreadView({
             </View>
           </Pressable>
           <View style={styles.paneHeaderActions}>
+            <QueuePosition />
             <FaceTimeButton
               chatGuid={chatGuid}
               isGroup={isGroup}
@@ -555,19 +556,6 @@ export function ThreadView({
             >
               {({ hovered, pressed }) => <Ionicons name="search" size={21} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
-            {settleActionFor(headerChat) === "settle" && (
-              <Pressable
-                ref={(node) => { if (Platform.OS === "web") (node as unknown as HTMLElement | null)?.setAttribute("title", "Settle (⌘E)"); }}
-                testID="thread-settle"
-                accessibilityRole="button"
-                accessibilityLabel="Settle (⌘E)"
-                onPress={() => { void toggleSettleChat(headerChat); }}
-                hitSlop={8}
-                style={({ hovered, pressed }) => [styles.headerIconButton, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-              >
-                {({ hovered, pressed }) => <Ionicons name="checkmark-circle-outline" size={22} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-              </Pressable>
-            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Conversation info"
@@ -770,6 +758,7 @@ export function ThreadView({
           reactionSuggestions={aiStatus?.reactionSuggestions === true}
           reactionPreview={reactionPreview}
         />
+        <StateStrip chatGuid={chatGuid} messages={messages} historyComplete={!hasMore} />
         <Composer
           chatGuid={chatGuid}
           isGroup={isGroup}

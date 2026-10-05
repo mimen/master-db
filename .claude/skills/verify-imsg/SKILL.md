@@ -74,8 +74,9 @@ The `desk` fixture gives every drive four things:
 |---|---|
 | `getByTestId("conversation-row").filter({ hasText: "Alex Rivera" })` | A sidebar row |
 | `getByTestId("thread-view")` | The open thread |
-| `getByTestId("thread-settle")` | The thread header's settle button |
-| `getByTestId("triage-rail")`, `getByTestId("sweep-card")` | Triage UI |
+| `getByTestId("state-strip")` | The state strip above the composer |
+| `getByTestId("thread-settle")` | The strip's Settle / Un-settle button |
+| `getByTestId("triage-rail")` | Triage UI |
 | `getByPlaceholder("iMessage")` | The composer |
 | `getByRole("button", { name: "Send", exact: true })` | Send |
 | `getByRole("button", { name: "Schedule message" })` | Schedule |

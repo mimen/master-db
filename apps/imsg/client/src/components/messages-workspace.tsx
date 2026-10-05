@@ -1,20 +1,21 @@
 import { formatAddress } from "@shared/address";
 import { settleActionFor, settleLeavesLens } from "@shared/chat-state";
+import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { Platform, Text, View } from "react-native";
 
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
-import { SweepOverlay } from "@/components/sweep-overlay";
 import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
 import { type JumpTarget } from "@/hooks/use-messages";
 import { useTheme } from "@/hooks/use-theme";
-import { toggleSettleChat } from "@/hooks/use-triage-actions";
+import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
+import { advanceTarget, publishQueuePosition, queueOrder, queuePosition } from "@/hooks/use-queue-position";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
@@ -49,8 +50,12 @@ export function MessagesWorkspace({
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
-  const [sweep, setSweep] = useState<{ chats: ChatSummary[]; startGuid?: string } | null>(null);
+  // The conversation auto-advance opened. Only it slides in; a click cuts as before.
+  const [advancedGuid, setAdvancedGuid] = useState<string | null>(null);
   const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide);
+  const selectedRef = useRef(selected);
+  const stateRef = useRef(state);
+  const openChatRef = useRef<(chat: ChatSummary) => void>(() => undefined);
 
   // Wide selection has one synchronous write path. Previously local state and
   // DesktopShell mirrored each other in opposing effects; clicking B while A
@@ -176,17 +181,14 @@ export function MessagesWorkspace({
     });
     return () => shell.registerMessagesActions(null);
   }, [commitChatSelection, refresh, shell.registerMessagesActions, wide]);
-  useEffect(() => {
-    if (!wide || active) return;
-    setSweep(null);
-  }, [active, wide]);
 
-  // Keep the selected chat's flags fresh as the directory reconciles.
+  // Keep the selected chat's flags fresh as the directory reconciles. Read from the
+  // whole directory: a reply or a settle moves the open conversation out of the lens.
   useEffect(() => {
     if (!selected) return;
-    const updated = chats.find((chat) => chat.guid === selected.guid);
+    const updated = allChats.find((chat) => chat.guid === selected.guid);
     if (updated && updated !== selected) setSelected(updated);
-  }, [chats, selected]);
+  }, [allChats, selected]);
 
   const openChat = (chat: ChatSummary): void => {
     if (wide) {
@@ -217,6 +219,44 @@ export function MessagesWorkspace({
     });
   };
 
+  // Auto-advance (round4 ux.md daily loop): in Needs reply and Unread, a reply or a settle
+  // moves straight on to the next conversation in lens order with the composer focused.
+  const order = useMemo(() => queueOrder(chats), [chats]);
+  useEffect(() => {
+    if (!wide || !active) return;
+    publishQueuePosition(queuePosition(order, selected?.guid));
+    return () => publishQueuePosition(null);
+  }, [active, order, selected?.guid, wide]);
+  // The neighbor is remembered while the open conversation is still in the lens: by the time
+  // a send's echo or a settle lands, the conversation has already left Needs reply.
+  const nextRef = useRef<ChatSummary | null>(null);
+  useEffect(() => {
+    if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
+  }, [order, selected]);
+  const advanceFrom = useCallback((guid: string): void => {
+    if (!wide || (stateRef.current !== "unresponded" && stateRef.current !== "unread")) return;
+    if (selectedRef.current?.guid !== guid) return;
+    const next = nextRef.current;
+    if (!next || next.guid === guid) return;
+    setAdvancedGuid(next.guid);
+    openChatRef.current(next);
+  }, [wide]);
+  useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
+  // A reply is the open conversation turning to "you wrote last" while it stays open. Read
+  // off the directory rather than the composer, so text and attachments both count, and only
+  // once the send has landed. Holds long enough to see the reply arrive before moving on.
+  const openGuid = selected?.guid;
+  const lastGuid = selected?.lastMessage?.guid;
+  const lastFromMe = selected?.lastMessage?.isFromMe === true;
+  const lastSeenRef = useRef<{ guid: string | undefined; lastGuid: string | undefined }>({ guid: undefined, lastGuid: undefined });
+  useEffect(() => {
+    const prior = lastSeenRef.current;
+    lastSeenRef.current = { guid: openGuid, lastGuid };
+    if (!openGuid || !lastFromMe || prior.guid !== openGuid || prior.lastGuid === lastGuid) return;
+    const timer = setTimeout(() => advanceFrom(openGuid), SEND_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [advanceFrom, lastFromMe, lastGuid, openGuid]);
+
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
   const previewChat = (chat: ChatSummary): void => {
     commitChatSelection(chat, "preview");
@@ -237,12 +277,11 @@ export function MessagesWorkspace({
   // Synced in an effect, not during render: a render-phase ref write makes the
   // React Compiler bail on this entire screen, and the readers are all keyboard
   // handlers that run well after commit.
-  const selectedRef = useRef(selected);
-  const stateRef = useRef(state);
   const overlaysRef = useRef({ utilityOpen });
   useEffect(() => {
     selectedRef.current = selected;
     stateRef.current = state;
+    openChatRef.current = openChat;
     overlaysRef.current = { utilityOpen };
   });
   useEffect(() => {
@@ -269,9 +308,10 @@ export function MessagesWorkspace({
         // lens, and toggleSettleChat answers every press with a toast.
         const action = settleActionFor(sel);
         void toggleSettleChat(sel);
-        // Only glide off the row when the action actually drops it out of the
-        // lens on screen — settling from All or Unread leaves it in place.
-        if (settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.guid);
+        // Needs reply and Unread auto-advance on the settle itself (onTriageSettling).
+        // Elsewhere, glide off the row only when the action drops it out of the lens.
+        const advances = action === "settle" && (stateRef.current === "unresponded" || stateRef.current === "unread");
+        if (!advances && settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.guid);
       },
       markUnreadSelected: () => {
         const sel = selectedRef.current;
@@ -348,7 +388,7 @@ export function MessagesWorkspace({
       onPreviewChat={previewChat}
       onRefresh={refresh}
       onNewMessage={openNewMessage}
-      onStartSweep={(sweepChats, startGuid) => setSweep({ chats: sweepChats, startGuid })}
+      onStartSweep={() => undefined}
     />
   );
 
@@ -361,15 +401,16 @@ export function MessagesWorkspace({
       list={list}
       detail={
         selected ? (
-          <ThreadView
-            key={selected.guid + (jumpTarget?.guid ?? "")}
-            chatGuid={selected.guid}
-            isGroup={selected.isGroup}
-            jumpTarget={jumpTarget}
-            headerChat={selected}
-            previewOnly={selectionIntent === "preview"}
-            toastActive={active}
-          />
+          <ThreadEnter key={selected.guid + (jumpTarget?.guid ?? "")} animate={selected.guid === advancedGuid}>
+            <ThreadView
+              chatGuid={selected.guid}
+              isGroup={selected.isGroup}
+              jumpTarget={jumpTarget}
+              headerChat={selected}
+              previewOnly={selectionIntent === "preview"}
+              toastActive={active}
+            />
+          </ThreadEnter>
         ) : (
           <EmptyState
             icon="chatbubble-ellipses-outline"
@@ -380,16 +421,30 @@ export function MessagesWorkspace({
           />
         )
       }
-    >
-      <SweepOverlay
-        visible={sweep !== null}
-        chats={sweep?.chats ?? []}
-        startGuid={sweep?.startGuid}
-        onOpenFullThread={(chat) => { setSweep(null); openChat(chat); }}
-        onClose={() => setSweep(null)}
-      />
-    </DesktopSplit>
+    />
   );
+}
+
+const SEND_HOLD_MS = 1200;
+// TODO(signal-motion): use springs.ts
+const SMOOTH = { stiffness: 189.9, damping: 25.35, mass: 1 } as const;
+
+/**
+ * The next thread entering from 14px below on smooth (round4 motion.md, auto-advance).
+ * Keyed per conversation by the caller, so each advance mounts and plays it once.
+ */
+function ThreadEnter({ animate, children }: { readonly animate: boolean; readonly children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(animate ? 0 : 1);
+  useEffect(() => {
+    if (!animate) return;
+    progress.value = reduceMotion ? withTiming(1, { duration: 100 }) : withSpring(1, SMOOTH);
+  }, [animate, progress, reduceMotion]);
+  const style = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: reduceMotion ? [] : [{ translateY: (1 - progress.value) * 14 }],
+  }));
+  return <Reanimated.View style={[{ flex: 1 }, style]}>{children}</Reanimated.View>;
 }
 
 /** Before the directory loads, a deep-linked chat shows its handle rather than its raw guid. */
