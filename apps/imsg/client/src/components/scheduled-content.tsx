@@ -115,6 +115,7 @@ function ScheduledRow({
 }) {
   const type = useTypeRamp();
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
   const failed = isNotSent(item.status);
   const editable = item.status === "pending" || failed;
   const service = chatIsSMS(item.chatGuid) ? "SMS" : "iMessage";
@@ -188,8 +189,16 @@ function ScheduledRow({
           {item.status === "complete" ? "Sent" : item.status === "in-progress" ? "Sending…" : timeOf(item.sendAt)}
         </Text>
       )}
-      {!failed && editable && hoverActions && hovered && (
-        <View style={[styles.floating, { backgroundColor: theme.surface, borderColor: theme.divider }]}>{quietActions}</View>
+      {/* Always mounted so keyboard and screen-reader users reach the actions; shown on hover or focus. */}
+      {!failed && editable && hoverActions && (
+        <View
+          pointerEvents={hovered || focused ? "auto" : "none"}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={[styles.floating, { backgroundColor: theme.surface, borderColor: theme.divider, opacity: hovered || focused ? 1 : 0 }]}
+        >
+          {quietActions}
+        </View>
       )}
     </Pressable>
   );
