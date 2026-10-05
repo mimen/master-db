@@ -31,6 +31,20 @@ function serviceOf(chatGuid: string): string {
 }
 
 /** Newest activity wins; ties prefer iMessage, then RCS, then SMS, then guid order. */
+/** Structural equality over Convex values, ignoring object key order. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = (o: object) => Object.keys(o).filter((k) => (o as Record<string, unknown>)[k] !== undefined);
+  const ka = keys(a), kb = keys(b);
+  return ka.length === kb.length && ka.every((k) => sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+function sameFields<T extends object>(existing: T, fields: Partial<T>): boolean {
+  return Object.entries(fields).every(([key, value]) => sameValue(existing[key as keyof T], value));
+}
+
 export function choosePrimary(chats: { chatGuid: string; lastMessageAt: number }[]): string {
   const ranked = [...chats].sort(
     (a, b) =>
@@ -80,7 +94,7 @@ export const upsertConversations = internalMutation({
           }
         }
       }
-      const row = {
+      const fields = {
         conversationKey: input.conversationKey,
         primaryChatGuid,
         chatGuids,
@@ -93,10 +107,13 @@ export const upsertConversations = internalMutation({
         // Messages keep lastMessage current; a conversation snapshot only fills a gap.
         lastMessage: existing?.lastMessage ?? input.lastMessage,
         lastMessageAt: Math.max(existing?.lastMessageAt ?? 0, input.lastMessageAt),
-        updatedAt: now,
       };
-      const conversationId = existing ? existing._id : await ctx.db.insert("comma_conversations", row);
-      if (existing) await ctx.db.patch(existing._id, row);
+      const conversationId = existing ? existing._id : await ctx.db.insert("comma_conversations", { ...fields, updatedAt: now });
+      // The bridge re-sends every chat each reconcile. An unchanged row must not be written:
+      // any write re-runs every live conversation-list page that read it.
+      if (existing && !sameFields(existing, fields)) {
+        await ctx.db.patch(existing._id, { ...fields, updatedAt: now });
+      }
 
       for (const chatGuid of chatGuids) {
         const alias = await ctx.db

@@ -115,6 +115,23 @@ describe("upsertConversations", () => {
     const drafts = await t.run((ctx) => ctx.db.query("comma_drafts").collect());
     expect(drafts[0].conversationId).toBe(first);
   });
+  test("re-upserting an unchanged chat leaves the row untouched; a rename writes it", async () => {
+    const t = convexTest(schema, modules);
+    const chatGuid = "iMessage;-;+15550004444";
+    const input = { conversationKey: "dm:+15550004444", chats: [{ chatGuid, lastMessageAt: 1000 }],
+      displayName: "Ana", isGroup: false, participants: [{ address: "+15550004444", name: "Ana" }],
+      isSpam: false, hasGroupPhoto: false, lastMessageAt: 1000 };
+    const id = (await t.mutation(internal.comma.internal.upsertConversations, { conversations: [input] }))[chatGuid]!;
+    const before = await t.run((ctx) => ctx.db.get(id));
+    await t.run((ctx) => ctx.db.patch(id, { updatedAt: 1 }));
+    await t.mutation(internal.comma.internal.upsertConversations, { conversations: [input] });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.updatedAt).toBe(1);
+    await t.mutation(internal.comma.internal.upsertConversations, { conversations: [{ ...input, displayName: "Ana B" }] });
+    const after = await t.run((ctx) => ctx.db.get(id));
+    expect(after?.displayName).toBe("Ana B");
+    expect(after?.updatedAt).toBeGreaterThanOrEqual(before!.updatedAt);
+  });
+
   test("keeps numbers from different countries apart", async () => {
     const t = convexTest(schema, modules);
     const us = await seedDm(t, "+15550001111", [{ chatGuid: "SMS;-;+15550001111", lastMessageAt: 2000 }]);
