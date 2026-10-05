@@ -14,9 +14,8 @@ export interface OverlayShellProps {
   children: ReactNode;
   /** "fade" (default) springs the panel open from 0.98 on snappy; "slide" is the native bottom sheet. */
   animationType?: "fade" | "slide" | "none";
-  /** Backdrop scrim color. Defaults to the shared `backdrop` token — pass a
-   * literal rgba for a site with a documented lighter/heavier scrim (the
-   * token sweep in constants/theme.ts calls out 0.35/0.4 as intentional). */
+  /** Backdrop scrim color. Defaults to the shared `backdrop` token; pass a
+   * literal rgba for a site with a documented lighter or heavier scrim. */
   backdropColor?: string;
   /** Merged onto the backdrop Pressable. Default centers content on both
    * axes (`alignItems`/`justifyContent`: "center") — override for a site

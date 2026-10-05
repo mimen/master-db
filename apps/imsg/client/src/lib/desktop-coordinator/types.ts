@@ -1,5 +1,5 @@
 import type { JumpTarget } from "@/hooks/use-messages";
-import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
+import type { StateFilter, TypeFilter } from "@shared/types";
 
 export type Result<Value, Error> =
   | { readonly ok: true; readonly value: Value }
@@ -71,12 +71,7 @@ export type DesktopRouteOverlay =
 
 export type DesktopTransientOverlay =
   | { readonly kind: "command-palette"; readonly compose: boolean }
-  | { readonly kind: "keyboard-help" }
-  | {
-      readonly kind: "sweep";
-      readonly chats: readonly ChatSummary[];
-      readonly startGuid?: string;
-    };
+  | { readonly kind: "keyboard-help" };
 
 interface DesktopRouteBase {
   readonly pathname: string;

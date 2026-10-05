@@ -45,8 +45,7 @@ export interface ListRowProps {
  * The avatar + title/subtitle + trailing-accessory pressable row shared by
  * every contact/participant/conversation list in the app. Row metrics
  * (paddingVertical 10, the 12px leading↔body gap) are the codebase's
- * dominant values, standardized here rather than left to drift per site —
- * see apps/imsg CLAUDE.md for the sweep that unified them.
+ * dominant values, standardized here rather than left to drift per site.
  */
 export function ListRow({
   leading,

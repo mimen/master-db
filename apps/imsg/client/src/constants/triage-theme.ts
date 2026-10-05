@@ -60,5 +60,4 @@ export const TriageGeometry = {
   listGutter: 8,
   threadHeaderHeight: 48,
   threadMaxWidth: 760,
-  sweepWidth: 560,
 } as const;
