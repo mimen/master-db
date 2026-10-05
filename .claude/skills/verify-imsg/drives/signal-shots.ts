@@ -46,8 +46,8 @@ test("signal-shots: phone", async ({ desk }) => {
   await desk.page.goto("/");
   await expect(desk.page.getByTestId("conversation-row").first()).toBeVisible();
   await desk.page.waitForTimeout(800);
-  await desk.page.screenshot({ path: join(evidence, "phone-list.png") });
+  await desk.page.screenshot({ path: join(evidence, "phone-swipe.png") });
   await desk.page.emulateMedia({ colorScheme: "dark" });
   await desk.page.waitForTimeout(400);
-  await desk.page.screenshot({ path: join(evidence, "phone-list-dark.png") });
+  await desk.page.screenshot({ path: join(evidence, "phone-swipe-dark.png") });
 });
