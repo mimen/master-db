@@ -8,7 +8,8 @@ import { guessFromMessage, type HandleService } from "@/lib/contact-order";
 import { type ContactListRow, primaryHandle, useAddHandle, useCreatePerson, useListPeople, useWhoIs } from "@/lib/identity";
 import { showToast } from "@/lib/toast";
 import { PersonAvatar } from "./avatar";
-import { ServiceDot, useSignal } from "./contacts-theme";
+import { useTheme } from "@/hooks/use-theme";
+import { ServiceDot } from "./contacts-theme";
 import { ContactsButton, IconAction } from "./contacts-ui";
 
 /**
@@ -26,7 +27,7 @@ export function ContactAddPanel({ handle, service = "iMessage", message, title =
   readonly onDone: (personId: string | null, handle: string) => void;
   readonly onClose?: () => void;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const guess = useMemo(() => guessFromMessage(message), [message]);
   const people = useListPeople();
   const createPerson = useCreatePerson();
@@ -148,7 +149,7 @@ export function ContactAddPanel({ handle, service = "iMessage", message, title =
  * an unknown sender. Add contact opens the prefilled panel under it.
  */
 export function UnknownSenderBanner({ chat }: { readonly chat: ChatSummary }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const address = chat.isGroup ? null : (chat.participants[0]?.address ?? chat.guid.split(";").pop() ?? null);
   const who = useWhoIs(address);
   const [open, setOpen] = useState(false);

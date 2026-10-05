@@ -137,6 +137,7 @@ export const Colors = {
     tapbackBg: "#FFFFFF",
     tapbackBorder: "rgba(0,0,0,0.1)",
     disabled: "#A2A2A8",
+    switchOn: "#17171A",
     switchOff: "#8E8E95",
     /** The state strip on top of the composer card. */
     strip: "#FFFFFF",
@@ -180,6 +181,7 @@ export const Colors = {
     tapbackBg: "#2C2C30",
     tapbackBorder: "rgba(255,255,255,0.08)",
     disabled: "#5E5E64",
+    switchOn: "#EDEDEF",
     switchOff: "#727279",
     strip: "#19191C",
     toastBg: "#EDEDEF",

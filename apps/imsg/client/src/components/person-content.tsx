@@ -20,7 +20,8 @@ import { type Person, useAddHandle, useRenamePerson, useSetPrimaryHandle } from 
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
 import { ContactAddPanel } from "./contacts-add-panel";
-import { EnterFromBelow, HEADER_FONT, ServiceDot, useSignal } from "./contacts-theme";
+import { useTheme } from "@/hooks/use-theme";
+import { EnterFromBelow, HEADER_FONT, ServiceDot } from "./contacts-theme";
 import { Card, ContactsButton, ContactsTopBar, IconAction, rowDivider, SectionHeader, TextAction } from "./contacts-ui";
 import { PersonRelationship } from "./person-relationship";
 
@@ -54,7 +55,7 @@ const TWO_COLUMN_MIN = 820;
  * pane, the phone /person screen and the narrow auxiliary person pane.
  */
 export function PersonContent({ address, name, showHeader = false, onClose, onBack, backLabel = "Back", onBackToList }: PersonContentProps) {
-  const colors = useSignal();
+  const colors = useTheme();
   const chats = useChatDirectory();
   const { result, sortedChats, canCall, handleMessage, handleCall, openChat } = usePersonView(address, name);
   const [width, setWidth] = useState(0);
@@ -75,7 +76,7 @@ export function PersonContent({ address, name, showHeader = false, onClose, onBa
 
   if (result === undefined) {
     return (
-      <View style={[styles.fill, { backgroundColor: colors.background }]}>
+      <View style={[styles.fill, { backgroundColor: colors.thread }]}>
         {auxHeader}
         <ActivityIndicator style={styles.spinner} />
       </View>
@@ -84,7 +85,7 @@ export function PersonContent({ address, name, showHeader = false, onClose, onBa
 
   if (!result.found) {
     return (
-      <View style={[styles.fill, { backgroundColor: colors.background }]}>
+      <View style={[styles.fill, { backgroundColor: colors.thread }]}>
         {auxHeader}
         <ScrollView contentContainerStyle={styles.unknownWrap}>
           <ContactAddPanel handle={address} title="New contact" onDone={() => undefined} />
@@ -94,7 +95,7 @@ export function PersonContent({ address, name, showHeader = false, onClose, onBa
   }
 
   return (
-    <View style={[styles.fill, { backgroundColor: colors.background }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={[styles.fill, { backgroundColor: colors.thread }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       {auxHeader}
       {width === 0 ? null : (
         <FoundPerson
@@ -139,7 +140,7 @@ function FoundPerson({
   readonly onOpenChat: (chat: ChatSummary) => void;
   readonly onBackToList?: () => void;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const showSheet = useActionSheet();
   const renamePerson = useRenamePerson();
   const [editing, setEditing] = useState(false);
@@ -235,7 +236,7 @@ function FoundPerson({
               placeholderTextColor={colors.textTertiary}
               style={[
                 styles.inp,
-                { color: colors.text, borderColor: editing ? colors.dividerStrong : "transparent", backgroundColor: editing ? colors.background : "transparent" },
+                { color: colors.text, borderColor: editing ? colors.dividerStrong : "transparent", backgroundColor: editing ? colors.thread : "transparent" },
                 Platform.OS === "web" && ({ transition: "border-color 120ms, background-color 120ms", outlineColor: colors.focusRing } as object),
               ]}
             />
@@ -290,7 +291,7 @@ function FoundPerson({
         {twoColumn ? (
           <View style={styles.pp}>
             <ScrollView style={styles.fill} contentContainerStyle={styles.ppm}>{main}</ScrollView>
-            <ScrollView style={[styles.ppa, { backgroundColor: colors.sidebar, borderLeftColor: colors.divider }]} contentContainerStyle={styles.ppaContent}>
+            <ScrollView style={[styles.ppa, { backgroundColor: colors.background, borderLeftColor: colors.divider }]} contentContainerStyle={styles.ppaContent}>
               {relationship}
             </ScrollView>
           </View>
@@ -320,7 +321,7 @@ function QuickAction({ icon, label, onPress, disabled }: {
   readonly onPress: () => void;
   readonly disabled?: boolean;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -342,7 +343,7 @@ function HandlesSection({ person, identities, chats, firstName, grouped }: {
   readonly firstName: string;
   readonly grouped: boolean;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const setPrimary = useSetPrimaryHandle();
   const addHandle = useAddHandle();
   const [adding, setAdding] = useState(false);
@@ -383,7 +384,7 @@ function HandlesSection({ person, identities, chats, firstName, grouped }: {
               onBlur={submit}
               placeholder="Phone number or email"
               placeholderTextColor={colors.textTertiary}
-              style={[styles.inp, styles.flex, { color: colors.text, borderColor: colors.dividerStrong, backgroundColor: colors.background }]}
+              style={[styles.inp, styles.flex, { color: colors.text, borderColor: colors.dividerStrong, backgroundColor: colors.thread }]}
             />
           </View>
         ) : null}
@@ -411,7 +412,7 @@ function HandleLine({ row, first, grouped, onMakePrimary }: {
   readonly grouped: boolean;
   readonly onMakePrimary: () => void;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const service = (
     <View style={styles.svc}>
       <ServiceDot service={row.service} size={grouped ? 9 : 7} />
@@ -451,7 +452,7 @@ function ConversationsSection({ person, chats, onOpen, grouped }: {
   readonly onOpen: (chat: ChatSummary) => void;
   readonly grouped: boolean;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   if (chats.length === 0) return null;
   const now = Date.now();
   const handles = [...person.normalized_phones, ...person.normalized_emails];
@@ -513,10 +514,10 @@ const styles = StyleSheet.create({
   identText: { flex: 1, minWidth: 0 },
   identActions: { flexDirection: "row", gap: 6 },
   nameRow: { alignItems: "center", flexDirection: "row", gap: 8 },
-  name: { flexShrink: 1, fontSize: 24, fontWeight: "600", letterSpacing: -0.4 },
+  name: { flexShrink: 1, fontSize: 24, letterSpacing: -0.4 },
   sub: { fontSize: 13, marginTop: 2 },
   identPhone: { alignItems: "center", gap: 6 },
-  namePhone: { fontSize: 26, fontWeight: "600", letterSpacing: -0.5, marginTop: 10 },
+  namePhone: { fontSize: 26, letterSpacing: -0.5, marginTop: 10 },
   subPhone: { fontSize: 15 },
   quickRow: { alignSelf: "stretch", flexDirection: "row", gap: 10, marginTop: 14 },
   quick: { alignItems: "center", borderRadius: 14, borderWidth: 1, flex: 1, gap: 6, paddingVertical: 12 },

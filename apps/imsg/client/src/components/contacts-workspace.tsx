@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { ContactAddPanel } from "@/components/contacts-add-panel";
 import { ContactsListPane } from "@/components/contacts-list-pane";
 import { ContactsMerge } from "@/components/contacts-merge";
-import { useSignal } from "@/components/contacts-theme";
+import { useTheme } from "@/hooks/use-theme";
 import { ContactsTopBar } from "@/components/contacts-ui";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
@@ -15,7 +15,7 @@ import { type ContactListRow, primaryHandle } from "@/lib/identity";
 type Mode = "person" | "merge" | "add";
 
 export function ContactsWorkspace({ wide }: { readonly wide: boolean }): JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   const shell = useDesktopShellContext();
   const selection = shell.state.contacts.selection;
   const [mode, setMode] = useState<Mode>("person");
@@ -47,7 +47,7 @@ export function ContactsWorkspace({ wide }: { readonly wide: boolean }): JSX.Ele
   );
 
   const addPane = (
-    <View style={[styles.fill, { backgroundColor: colors.background }]}>
+    <View style={[styles.fill, { backgroundColor: colors.thread }]}>
       {wide ? <ContactsTopBar title="New contact" onCrumb={exitMode} /> : null}
       <ScrollView contentContainerStyle={styles.addWrap}>
         <ContactAddPanel
@@ -67,7 +67,7 @@ export function ContactsWorkspace({ wide }: { readonly wide: boolean }): JSX.Ele
   if (!wide) {
     if (mode === "merge") return <ContactsMerge wide={false} onExit={exitMode} onMerged={exitMode} />;
     if (mode === "add") return addPane;
-    return <View style={[styles.fill, { backgroundColor: colors.sidebar }]}>{list}</View>;
+    return <View style={[styles.fill, { backgroundColor: colors.background }]}>{list}</View>;
   }
 
   const detail = mode === "merge" ? (
@@ -75,7 +75,7 @@ export function ContactsWorkspace({ wide }: { readonly wide: boolean }): JSX.Ele
   ) : mode === "add" ? addPane : selection ? (
     <PersonContent key={selection.personId ?? selection.address} address={selection.address} name={selection.name} />
   ) : (
-    <View style={[styles.fill, styles.empty, { backgroundColor: colors.background }]}>
+    <View style={[styles.fill, styles.empty, { backgroundColor: colors.thread }]}>
       <Text style={{ color: colors.textTertiary, fontSize: 13 }}>Select a contact</Text>
     </View>
   );

@@ -15,7 +15,7 @@ import {
 } from "@/lib/identity";
 import { editedLine, eventTile, PRIORITY_OPTIONS, priorityFromOption, priorityOption } from "@/lib/crm-summary";
 import { showToast } from "@/lib/toast";
-import { useSignal } from "./contacts-theme";
+import { useTheme } from "@/hooks/use-theme";
 import { Card, ContactsDropdown, ContactsSwitch, rowDivider, SectionHeader, TextAction } from "./contacts-ui";
 import { CrmEventsEditor } from "./crm-events-editor";
 
@@ -33,7 +33,7 @@ export interface PersonRelationshipProps {
 
 /** The relationship column: Favorite, Priority, Tags, Notes and Linked events. */
 export function PersonRelationship({ personId, isFavorite, priority, tags, events, notes, notesUpdatedAt, grouped }: PersonRelationshipProps) {
-  const colors = useSignal();
+  const colors = useTheme();
   const setFavorite = useSetFavorite();
   const setPriority = useSetPriority();
   const fail = (what: string) => () => showToast(`Couldn't ${what}. Try again.`);
@@ -97,7 +97,7 @@ export function PersonRelationship({ personId, isFavorite, priority, tags, event
 }
 
 function TagChips({ personId, tags }: { readonly personId: string; readonly tags: string[] }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const addTag = useAddTag();
   const removeTag = useRemoveTag();
   const [adding, setAdding] = useState(false);
@@ -154,7 +154,7 @@ function TagChips({ personId, tags }: { readonly personId: string; readonly tags
 }
 
 function NotesBlock({ personId, notes, updatedAt }: { readonly personId: string; readonly notes: string | undefined; readonly updatedAt: string | undefined }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const setNotes = useSetNotes();
   const [draft, setDraft] = useState(notes ?? "");
   useEffect(() => setDraft(notes ?? ""), [notes]);
@@ -183,7 +183,7 @@ function NotesBlock({ personId, notes, updatedAt }: { readonly personId: string;
 }
 
 function LinkedEvents({ personId, events, grouped }: { readonly personId: string; readonly events: EventLink[]; readonly grouped: boolean }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const linkEvent = useLinkEvent();
   const unlinkEvent = useUnlinkEvent();
   const [linking, setLinking] = useState(false);

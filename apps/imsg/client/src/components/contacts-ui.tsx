@@ -4,7 +4,10 @@ import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSprin
 import { Ionicons } from "@expo/vector-icons";
 
 import { useActionSheet } from "@/lib/action-sheet";
-import { HEADER_FONT, useSignal, type SignalColors } from "./contacts-theme";
+import { Springs } from "@/constants/springs";
+import { useTheme } from "@/hooks/use-theme";
+import type { ThemeColors } from "./ui/interaction";
+import { HEADER_FONT } from "./contacts-theme";
 
 const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
@@ -26,7 +29,7 @@ export function ContactsDropdown<T extends string>({ label, value, options, onCh
   readonly onChange: (value: T) => void;
   readonly style?: StyleProp<ViewStyle>;
 }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   const showSheet = useActionSheet();
   const current = options.find((o) => o.value === value)?.label ?? "";
   const face = (
@@ -64,20 +67,17 @@ export function ContactsDropdown<T extends string>({ label, value, options, onCh
   );
 }
 
-// TODO(signal-motion): use springs.ts
-const SNAPPY = { duration: 220, dampingRatio: 0.9 } as const;
-
 /** The 34x20 Signal switch: ink track when on, the thumb slides on the snappy spring. */
 export function ContactsSwitch({ value, onChange, label }: {
   readonly value: boolean;
   readonly onChange: (value: boolean) => void;
   readonly label: string;
 }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   const reduce = useReducedMotion();
   const x = useSharedValue(value ? 14 : 0);
   useEffect(() => {
-    x.value = reduce ? (value ? 14 : 0) : withSpring(value ? 14 : 0, SNAPPY);
+    x.value = reduce ? (value ? 14 : 0) : withSpring(value ? 14 : 0, Springs.snappy);
   }, [value, reduce, x]);
   const thumb = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
   return (
@@ -93,7 +93,7 @@ export function ContactsSwitch({ value, onChange, label }: {
         focused && ({ outlineColor: colors.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 2 } as object),
       ]}
     >
-      <Animated.View style={[styles.thumb, { backgroundColor: value ? colors.sidebar : "#FFFFFF" }, thumb]} />
+      <Animated.View style={[styles.thumb, { backgroundColor: value ? colors.background : "#FFFFFF" }, thumb]} />
     </Pressable>
   );
 }
@@ -109,8 +109,8 @@ export function ContactsButton({ label, onPress, tone = "secondary", icon, disab
   readonly disabled?: boolean;
   readonly testID?: string;
 }): React.JSX.Element {
-  const colors = useSignal();
-  const fg = tone === "primary" ? colors.onPrimary : tone === "ghost" ? colors.textSecondary : colors.text;
+  const colors = useTheme();
+  const fg = tone === "primary" ? colors.background : tone === "ghost" ? colors.textSecondary : colors.text;
   return (
     <Pressable
       testID={testID}
@@ -141,7 +141,7 @@ export function TextAction({ label, onPress, accessibilityLabel }: {
   readonly onPress: () => void;
   readonly accessibilityLabel?: string;
 }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} onPress={onPress} hitSlop={6}>
       {({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => (
@@ -152,7 +152,7 @@ export function TextAction({ label, onPress, accessibilityLabel }: {
 }
 
 export function SectionHeader({ title, trailing }: { readonly title: string; readonly trailing?: ReactNode }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   return (
     <View style={styles.sectionHeader}>
       <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.textSecondary }]}>{title}</Text>
@@ -164,12 +164,12 @@ export function SectionHeader({ title, trailing }: { readonly title: string; rea
 }
 
 export function Card({ children, style, testID }: { readonly children: ReactNode; readonly style?: StyleProp<ViewStyle>; readonly testID?: string }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   return <View testID={testID} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.divider }, style]}>{children}</View>;
 }
 
 /** A hairline between card rows. */
-export function rowDivider(colors: SignalColors, first: boolean): ViewStyle {
+export function rowDivider(colors: ThemeColors, first: boolean): ViewStyle {
   return first ? {} : { borderTopWidth: StyleSheet.hairlineWidth * 2, borderTopColor: colors.divider };
 }
 
@@ -180,7 +180,7 @@ export function ContactsTopBar({ title, note, trailing, onCrumb }: {
   readonly trailing?: ReactNode;
   readonly onCrumb?: () => void;
 }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   return (
     <View style={[styles.topBar, { borderBottomColor: colors.divider }]} {...DRAG}>
       <Pressable accessibilityRole="link" disabled={!onCrumb} onPress={onCrumb} {...NO_DRAG}>
@@ -200,7 +200,7 @@ export function IconAction({ icon, label, onPress }: {
   readonly label: string;
   readonly onPress: () => void;
 }): React.JSX.Element {
-  const colors = useSignal();
+  const colors = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   topBar: { alignItems: "center", borderBottomWidth: 1, flexDirection: "row", gap: 6, height: 48, paddingLeft: 22, paddingRight: 12 },
   crumb: { fontSize: 13.5 },
   slash: { fontSize: 14, marginHorizontal: 4 },
-  topTitle: { flexShrink: 1, fontSize: 15.5, fontWeight: "600", letterSpacing: -0.15 },
+  topTitle: { flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },
   topNote: { fontSize: 12, marginLeft: 8 },
   topTrailing: { alignItems: "center", flexDirection: "row", gap: 2 },
   switch: { borderRadius: 999, height: 20, justifyContent: "center", paddingHorizontal: 2, width: 34 },

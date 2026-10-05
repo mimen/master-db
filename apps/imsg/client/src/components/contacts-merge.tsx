@@ -8,7 +8,8 @@ import { type ContactListRow, primaryHandle, useListPeople, useMarkNotDuplicate,
 import { showToast } from "@/lib/toast";
 import { formatAddress } from "@shared/address";
 import { PersonAvatar } from "./avatar";
-import { HEADER_FONT, ServiceDot, useSignal } from "./contacts-theme";
+import { useTheme } from "@/hooks/use-theme";
+import { HEADER_FONT, ServiceDot } from "./contacts-theme";
 import { Card, ContactsButton, ContactsTopBar, IconAction, rowDivider, SectionHeader } from "./contacts-ui";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -23,7 +24,7 @@ export function ContactsMerge({ onExit, onMerged, wide }: {
   readonly onMerged: (kept: ContactListRow) => void;
   readonly wide: boolean;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const people = useListPeople();
   const chats = useChatDirectory();
   const merge = useMergePeople();
@@ -52,7 +53,7 @@ export function ContactsMerge({ onExit, onMerged, wide }: {
     return () => window.removeEventListener("keydown", onKey);
   }, [pairs.length]);
 
-  if (!pair) return <View style={[styles.fill, { backgroundColor: colors.background }]} />;
+  if (!pair) return <View style={[styles.fill, { backgroundColor: colors.thread }]} />;
   const keep = keepOther ? pair.other : pair.keep;
   const gone = keepOther ? pair.keep : pair.other;
   const firstName = keep.first_name || keep.display_name.split(" ")[0];
@@ -91,7 +92,7 @@ export function ContactsMerge({ onExit, onMerged, wide }: {
   );
 
   return (
-    <View testID="contacts-merge" style={[styles.fill, { backgroundColor: colors.background }]}>
+    <View testID="contacts-merge" style={[styles.fill, { backgroundColor: colors.thread }]}>
       {wide ? (
         <ContactsTopBar title="Possible duplicates" note={`${at + 1} of ${pairs.length}`} onCrumb={onExit} trailing={nav} />
       ) : (
@@ -148,7 +149,7 @@ function MergeCard({ person, kept, onKeep, serviceOf }: {
   readonly onKeep: () => void;
   readonly serviceOf: ServiceLookup;
 }) {
-  const colors = useSignal();
+  const colors = useTheme();
   const n = person.message_count ?? 0;
   const facts: Array<[string, string]> = [
     ...person.normalized_phones.map((p, i): [string, string] => [i === 0 ? "phone" : `phone ${i + 1}`, `${formatAddress(p)}, ${serviceOf(p)}`]),
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   body: { alignSelf: "center", gap: 14, maxWidth: 1140, paddingHorizontal: 40, paddingVertical: 36, width: "100%" },
   bodyPhone: { paddingHorizontal: 16, paddingVertical: 12 },
-  h1: { fontSize: 20, fontWeight: "600", letterSpacing: -0.3 },
+  h1: { fontSize: 20, letterSpacing: -0.3 },
   lede: { fontSize: 13, marginBottom: 12, marginTop: -6 },
   cards: { flexDirection: "row", gap: 14, marginBottom: 14 },
   cardsPhone: { flexDirection: "column" },
