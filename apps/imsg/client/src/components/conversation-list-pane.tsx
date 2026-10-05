@@ -188,16 +188,20 @@ export function ConversationListPane({
   const renderRow = useCallback(
     ({ item }: { item: ChatSummary }) => {
       const key = rowKey(item);
+      const gone = leaving.has(key);
       return (
-        <Collapse collapsed={leaving.has(key)} onCollapsed={() => dropLeaving(key)}>
-          <ChatRow
-            chat={item}
-            handle={handles.get(item.guid)}
-            selected={wide && selectedGuid === item.guid}
-            keyboardFocused={wide && glide && selectedGuid === item.guid}
-            onPress={() => onOpenChat(item)}
-          />
-        </Collapse>
+        // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
+        <View pointerEvents={gone ? "none" : "auto"}>
+          <Collapse collapsed={gone} onCollapsed={() => dropLeaving(key)}>
+            <ChatRow
+              chat={item}
+              handle={handles.get(item.guid)}
+              selected={wide && selectedGuid === item.guid}
+              keyboardFocused={wide && glide && selectedGuid === item.guid}
+              onPress={() => onOpenChat(item)}
+            />
+          </Collapse>
+        </View>
       );
     },
     [wide, glide, selectedGuid, onOpenChat, handles, leaving, dropLeaving],
