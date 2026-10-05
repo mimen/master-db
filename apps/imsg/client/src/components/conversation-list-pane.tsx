@@ -55,7 +55,6 @@ interface ConversationListPaneProps {
   onPreviewChat: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
-  onStartSweep: (chats: ChatSummary[], startGuid?: string) => void;
 }
 
 export function ConversationListPane({
@@ -72,7 +71,6 @@ export function ConversationListPane({
   onPreviewChat,
   onRefresh,
   onNewMessage,
-  onStartSweep,
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const type = useType();
@@ -137,10 +135,6 @@ export function ConversationListPane({
     listChats: deskChats,
     navigationEntries: deskChats.map((chat, index) => ({ chat, index })),
   }) : model, [model, deskChats, wide]);
-  const sweepableChats = useMemo(
-    () => deskModel.listChats.filter((chat) => chat.flags.unresponded),
-    [deskModel.listChats],
-  );
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -207,11 +201,9 @@ export function ConversationListPane({
   const chrome = wide ? (
     <TriageQueueHeader
       title={deskTitle}
-      sweepCount={sweepableChats.length}
       search={searchField}
       action={<>{filterButton}<ChromeIconButton hugeIcon={SquarePenIcon} accessibilityLabel="New message" onPress={onNewMessage} /></>}
       controls={<StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} />}
-      onSweep={filters.state === "unresponded" ? () => { if (sweepableChats.length) onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid); } : undefined}
     />
   ) : (
     <SidebarChrome

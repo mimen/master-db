@@ -388,7 +388,6 @@ export function MessagesWorkspace({
       onPreviewChat={previewChat}
       onRefresh={refresh}
       onNewMessage={openNewMessage}
-      onStartSweep={() => undefined}
     />
   );
 
