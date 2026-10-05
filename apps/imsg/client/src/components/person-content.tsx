@@ -1,466 +1,547 @@
-import { useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { openExternalUrl } from "@/lib/external-link";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { formatListTimestamp } from "@/lib/format";
-import { useCreatePerson, useRenamePerson } from "@/lib/identity";
-import { airtableRecordUrl } from "@/lib/airtable";
+import type { ChatSummary } from "@shared/types";
+
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { usePersonView } from "@/hooks/use-person-view";
-import { useTheme } from "@/hooks/use-theme";
-import { HOVER_DIM, Spacing, Type } from "@/constants/theme";
+import { airtableRecordUrl } from "@/lib/airtable";
+import { useActionSheet } from "@/lib/action-sheet";
+import {
+  conversationState,
+  handleRows,
+  personSubline,
+  serviceIndex,
+  sharedGroupLine,
+  type HandleRow,
+} from "@/lib/contact-order";
+import { openExternalUrl } from "@/lib/external-link";
+import { type Person, useAddHandle, useRenamePerson, useSetPrimaryHandle } from "@/lib/identity";
 import { showToast } from "@/lib/toast";
-import { PersonAvatar } from "./avatar";
-import { CenteredSpinner } from "./empty-state";
-import { PersonConversationsList } from "./person-conversations-list";
-import { PersonCrmSection } from "./person-crm-section";
-import { PersonNetworksList } from "./person-networks-list";
+import { ChatAvatar, PersonAvatar } from "./avatar";
+import { ContactAddPanel } from "./contacts-add-panel";
+import { EnterFromBelow, HEADER_FONT, ServiceDot, useSignal } from "./contacts-theme";
+import { Card, ContactsButton, ContactsTopBar, IconAction, rowDivider, SectionHeader, TextAction } from "./contacts-ui";
+import { PersonRelationship } from "./person-relationship";
 
 export interface PersonContentProps {
   address: string;
   name?: string;
-  /** Desktop pane wants its own header with a close button. */
+  /** The narrow auxiliary pane wants its own header with a back or close control. */
   showHeader?: boolean;
   onClose?: () => void;
   /** When set, the header shows a back chevron with this label instead of a close X. */
   onBack?: () => void;
   backLabel?: string;
+  /** Phone: the stack's back button returns to the list. */
+  onBackToList?: () => void;
 }
 
-/** Editable state for the First/Last/Nickname/Organization/Display-override
- * form, shared by the not-found "Add Contact" flow and the found-person
- * rename affordance (person-content.tsx's two entry points into the same
- * structured-name edit surface — see convex/identity/mutations.ts's
- * createPerson/renamePerson, which both accept this same shape). `display`
- * is the optional override — left blank, the server derives "First Last". */
-interface NameFormState {
-  first: string;
-  last: string;
-  nickname: string;
-  organization: string;
-  display: string;
-}
+type NameField = "first" | "last" | "nickname" | "organization";
+const NAME_FIELDS: ReadonlyArray<{ key: NameField; label: string; placeholder: string }> = [
+  { key: "first", label: "First", placeholder: "Add first name" },
+  { key: "last", label: "Last", placeholder: "Add last name" },
+  { key: "nickname", label: "Nickname", placeholder: "Add nickname" },
+  { key: "organization", label: "Organization", placeholder: "Add organization" },
+];
 
-const EMPTY_NAME_FORM: NameFormState = { first: "", last: "", nickname: "", organization: "", display: "" };
-
-type Theme = ReturnType<typeof useTheme>;
+/** Below this width the page stacks into one column of inset grouped cards. */
+const TWO_COLUMN_MIN = 820;
 
 /**
- * Person-detail view, shared by the mobile /person modal and the desktop
- * contacts pane. Thin composition layer — data + matching lives in
- * usePersonView, the two list sections are their own components; this file
- * is just the header/avatar/actions chrome plus wiring.
+ * The person page: identity, Name (editable in place), Reach <name> at,
+ * Conversations, and the relationship column. Shared by the desktop Contacts
+ * pane, the phone /person screen and the narrow auxiliary person pane.
  */
-export function PersonContent({
-  address,
-  name,
-  showHeader = false,
-  onClose,
-  onBack,
-  backLabel = "Back",
-}: PersonContentProps) {
-  const theme = useTheme();
-  // A phone deep link opens this before the inbox has loaded the chat list;
-  // without it "Last contacted" read "No conversation yet" on phone only.
-  useChatDirectory();
-  const { result, sortedChats, lastContactedAt, canCall, handleMessage, handleCall, openChat } = usePersonView(
-    address,
-    name,
-  );
-  const createPerson = useCreatePerson();
-  const renamePerson = useRenamePerson();
-  const [creating, setCreating] = useState(false);
-  const [addForm, setAddForm] = useState<NameFormState>({ ...EMPTY_NAME_FORM, display: name ?? "" });
-  const [editingName, setEditingName] = useState(false);
-  const [nameForm, setNameForm] = useState<NameFormState>(EMPTY_NAME_FORM);
-  const [saving, setSaving] = useState(false);
+export function PersonContent({ address, name, showHeader = false, onClose, onBack, backLabel = "Back", onBackToList }: PersonContentProps) {
+  const colors = useSignal();
+  const chats = useChatDirectory();
+  const { result, sortedChats, canCall, handleMessage, handleCall, openChat } = usePersonView(address, name);
+  const [width, setWidth] = useState(0);
+  const twoColumn = width >= TWO_COLUMN_MIN;
+  const narrow = width > 0 && !twoColumn;
 
-  const header = showHeader ? (
-    <View style={[styles.paneHeader, { borderBottomColor: theme.divider }]}>
+  const auxHeader = showHeader ? (
+    <View style={[styles.auxHeader, { borderBottomColor: colors.divider }]}>
       {onBack ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onBack}
-          hitSlop={8}
-          accessibilityLabel={backLabel}
-          style={({ hovered, pressed }) => [styles.backBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-        >
-          {({ hovered, pressed }) => <>
-            <Ionicons name="chevron-back" size={20} color={hovered || pressed ? theme.text : theme.accent} />
-            <Text style={{ color: hovered || pressed ? theme.text : theme.accent, fontSize: 15 }}>{backLabel}</Text>
-          </>}
+        <Pressable accessibilityRole="button" accessibilityLabel={backLabel} onPress={onBack} hitSlop={8} style={styles.back}>
+          <Ionicons name="chevron-back" size={18} color={colors.textSecondary} />
+          <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{backLabel}</Text>
         </Pressable>
-      ) : (
-        <Text style={[styles.paneHeaderTitle, { color: theme.textSecondary }]}>Profile</Text>
-      )}
-      {onClose && !onBack && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClose}
-          hitSlop={8}
-          accessibilityLabel="Close contact"
-          style={({ hovered, pressed }) => [styles.headerIcon, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-        >
-          {({ hovered, pressed }) => <Ionicons name="close" size={20} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-        </Pressable>
-      )}
+      ) : <Text style={[styles.auxTitle, { color: colors.textSecondary }]}>Profile</Text>}
+      {onClose && !onBack ? <IconAction icon="close" label="Close contact" onPress={onClose} /> : null}
     </View>
   ) : null;
 
   if (result === undefined) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        {header}
-        <CenteredSpinner />
+      <View style={[styles.fill, { backgroundColor: colors.background }]}>
+        {auxHeader}
+        <ActivityIndicator style={styles.spinner} />
       </View>
     );
   }
 
   if (!result.found) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.background }}>
-        {header}
-        <View style={styles.container}>
-          <View style={styles.avatarWrap}>
-            <PersonAvatar address={address} name={name || address} size={96} />
-          </View>
-          <Text style={[styles.title, { color: theme.text }]}>{name || address}</Text>
-          <Text style={[styles.statusLine, { color: theme.textSecondary }]}>{address}</Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: 16, marginBottom: 16 }}>
-            No linked contact found.
-          </Text>
-          <NameFormFields
-            value={addForm}
-            onChange={(patch) => setAddForm((f) => ({ ...f, ...patch }))}
-            theme={theme}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add contact"
-            disabled={creating}
-            style={({ hovered, pressed }) => [styles.addButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]}
-            onPress={async () => {
-              setCreating(true);
-              try {
-                // Blank = "no info for this field" here (a fresh contact,
-                // not an edit of known data) — every field collapses to
-                // undefined rather than an explicit clear.
-                await createPerson({
-                  handle: address,
-                  display_name: addForm.display.trim() || undefined,
-                  first_name: addForm.first.trim() || undefined,
-                  last_name: addForm.last.trim() || undefined,
-                  nickname: addForm.nickname.trim() || undefined,
-                  organization: addForm.organization.trim() || undefined,
-                });
-                showToast("Contact added");
-              } catch {
-                showToast("Couldn't add the contact. Try again.");
-              } finally {
-                setCreating(false);
-              }
-            }}
-          >
-            {creating ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={{ color: theme.accent, fontSize: Type.body, fontWeight: "600" }}>Add contact</Text>
-            )}
-          </Pressable>
-        </View>
+      <View style={[styles.fill, { backgroundColor: colors.background }]}>
+        {auxHeader}
+        <ScrollView contentContainerStyle={styles.unknownWrap}>
+          <ContactAddPanel handle={address} title="New contact" onDone={() => undefined} />
+        </ScrollView>
       </View>
     );
   }
 
-  const { person, identities, tags, events } = result;
-  const airtableId = person.airtable_human_id;
-  const autoFromParts = [person.first_name, person.last_name].filter(Boolean).join(" ");
-  // Only pre-fill the override box when the current display_name isn't just
-  // "First Last" — i.e. it really was a deliberate override, not the
-  // ordinary derived value. Otherwise it stays blank with the auto-name
-  // placeholder, same as a never-edited person.
-  const displayIsOverride = Boolean(person.display_name) && person.display_name !== autoFromParts;
-
-  const startEditingName = () => {
-    setNameForm({
-      first: person.first_name ?? "",
-      last: person.last_name ?? "",
-      nickname: person.nickname ?? "",
-      organization: person.organization ?? "",
-      display: displayIsOverride ? (person.display_name ?? "") : "",
-    });
-    setEditingName(true);
-  };
-
-  const handleSaveName = async () => {
-    setSaving(true);
-    try {
-      // This is a full-form save of a known person's current values, so
-      // first_name/last_name/nickname/organization are sent as-is (even
-      // when empty) — an explicitly blanked field really does clear it.
-      // display_name keeps the "blank = no override, derive automatically"
-      // convention from the Add Contact flow.
-      await renamePerson({
-        personId: person._id,
-        display_name: nameForm.display.trim() || undefined,
-        first_name: nameForm.first.trim(),
-        last_name: nameForm.last.trim(),
-        nickname: nameForm.nickname.trim(),
-        organization: nameForm.organization.trim(),
-      });
-      setEditingName(false);
-    } catch {
-      showToast("Couldn't save the name. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {header}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container}>
-        <View style={styles.avatarWrap}>
-          <PersonAvatar address={address} name={person.display_name ?? address} size={96} />
-        </View>
-        {editingName ? (
-          <View style={styles.editNameBlock}>
-            <NameFormFields
-              value={nameForm}
-              onChange={(patch) => setNameForm((f) => ({ ...f, ...patch }))}
-              theme={theme}
-              autoFocusFirst
-            />
-            <View style={styles.editNameActions}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={saving}
-                hitSlop={8}
-                accessibilityLabel="Cancel"
-                style={({ hovered, pressed }) => [styles.editNameActionBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-                onPress={() => setEditingName(false)}
-              >
-                {({ hovered, pressed }) => <>
-                  <Ionicons name="close" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />
-                  <Text style={{ color: hovered || pressed ? theme.text : theme.textSecondary, fontSize: 15 }}>Cancel</Text>
-                </>}
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={saving}
-                hitSlop={8}
-                accessibilityLabel="Save name"
-                style={({ hovered, pressed }) => [styles.editNameActionBtn, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-                onPress={handleSaveName}
-              >
-                {saving ? (
-                  <ActivityIndicator />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark" size={18} color={theme.accent} />
-                    <Text style={{ color: theme.accent, fontSize: 15, fontWeight: "600" }}>Save</Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        ) : (
-          <>
-            <Pressable accessibilityRole="button" accessibilityLabel="Edit name" style={styles.titleRow} onPress={startEditingName}>
-              {({ hovered, pressed }) => <>
-                <Text style={[styles.title, { color: theme.text }]}>{person.display_name ?? address}</Text>
-                <Ionicons name="pencil" size={14} color={hovered || pressed ? theme.text : theme.textSecondary} />
-              </>}
-            </Pressable>
-            {person.organization && (
-              <Text style={[styles.orgLine, { color: theme.textSecondary }]}>{person.organization}</Text>
-            )}
-          </>
-        )}
-        <Text style={[styles.statusLine, { color: theme.textSecondary }]}>
-          {lastContactedAt ? `Last contacted ${formatListTimestamp(lastContactedAt)}` : "No conversation yet"}
-        </Text>
-
-        <View style={styles.actionRow}>
-          <Pressable accessibilityRole="button" style={({ hovered, pressed }) => [styles.actionButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]} onPress={handleMessage}>
-            <Ionicons name="chatbubble-ellipses" size={16} color={theme.text} />
-            <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>Message</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={({ hovered, pressed }) => [styles.actionButton, { backgroundColor: canCall && (hovered || pressed) ? theme.backgroundSelected : theme.backgroundElement, opacity: canCall ? (pressed ? HOVER_DIM : 1) : 0.4 }]}
-            disabled={!canCall}
-            onPress={handleCall}
-          >
-            <Ionicons name="call" size={16} color={theme.text} />
-            <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>Call</Text>
-          </Pressable>
-        </View>
-
-        <PersonNetworksList identities={identities} airtableId={airtableId} />
-        <PersonConversationsList chats={sortedChats} onOpenChat={openChat} />
-
-        <PersonCrmSection
-          personId={person._id}
-          isFavorite={person.is_favorite ?? false}
-          priority={person.priority}
-          tags={tags}
-          events={events}
+    <View style={[styles.fill, { backgroundColor: colors.background }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      {auxHeader}
+      {width === 0 ? null : (
+        <FoundPerson
+          key={result.person._id}
+          person={result.person}
+          tags={result.tags}
+          events={result.events}
+          identities={result.identities}
+          address={address}
+          chats={chats ?? []}
+          sortedChats={sortedChats}
+          twoColumn={twoColumn}
+          narrow={narrow}
+          showTopBar={!showHeader}
+          canCall={canCall}
+          onMessage={handleMessage}
+          onCall={handleCall}
+          onOpenChat={openChat}
+          onBackToList={onBackToList}
         />
-
-        {airtableId && (
-          <Pressable accessibilityRole="link" style={styles.footerLink} onPress={() => void openExternalUrl(airtableRecordUrl(airtableId))}>
-            <Text {...({ dataSet: { hoverUnderline: "true" } } as object)} style={{ color: theme.accent, fontSize: 14, fontWeight: "600" }}>View in Airtable</Text>
-          </Pressable>
-        )}
-      </ScrollView>
+      )}
     </View>
   );
 }
 
-/**
- * The First/Last/Nickname/Organization/Display-override input stack, shared
- * by the "Add Contact" and "edit person" flows above — same fields, same
- * layout, different submit handler and initial values at each call site.
- */
-function NameFormFields({
-  value,
-  onChange,
-  theme,
-  autoFocusFirst,
+function FoundPerson({
+  person, tags, events, identities, address, chats, sortedChats, twoColumn, narrow, showTopBar, canCall, onMessage, onCall, onOpenChat, onBackToList,
 }: {
-  value: NameFormState;
-  onChange: (patch: Partial<NameFormState>) => void;
-  theme: Theme;
-  autoFocusFirst?: boolean;
+  readonly person: Person;
+  readonly tags: string[];
+  readonly events: Parameters<typeof PersonRelationship>[0]["events"];
+  readonly identities: Parameters<typeof handleRows>[1];
+  readonly address: string;
+  readonly chats: readonly ChatSummary[];
+  readonly sortedChats: ChatSummary[];
+  readonly twoColumn: boolean;
+  readonly narrow: boolean;
+  readonly showTopBar: boolean;
+  readonly canCall: boolean;
+  readonly onMessage: () => void;
+  readonly onCall: () => void;
+  readonly onOpenChat: (chat: ChatSummary) => void;
+  readonly onBackToList?: () => void;
 }) {
-  const autoDisplay = [value.first.trim(), value.last.trim()].filter(Boolean).join(" ");
-  const row = (
-    label: string,
-    key: keyof NameFormState,
-    opts?: { placeholder?: string; autoFocus?: boolean; last?: boolean },
-  ) => (
-    <View style={[styles.fieldRow, { borderBottomColor: theme.divider }, opts?.last && styles.fieldRowLast]}>
-      <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>{label}</Text>
-      <TextInput
-        value={value[key]}
-        onChangeText={(t) => onChange({ [key]: t })}
-        placeholder={opts?.placeholder ?? label}
-        placeholderTextColor={theme.textSecondary}
-        autoFocus={opts?.autoFocus}
-        style={[styles.fieldInput, { color: theme.text }]}
-      />
+  const colors = useSignal();
+  const showSheet = useActionSheet();
+  const renamePerson = useRenamePerson();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Record<NameField, string>>(() => nameForm(person));
+  const displayName = person.display_name ?? address;
+  const firstName = person.first_name || displayName.split(" ")[0];
+
+  const startEdit = () => {
+    setForm(nameForm(person));
+    setEditing(true);
+  };
+  const finishEdit = async () => {
+    setEditing(false);
+    const before = nameForm(person);
+    if (NAME_FIELDS.every(({ key }) => form[key].trim() === before[key])) return;
+    // Keep a deliberate display override; otherwise let the server derive "First Last".
+    const derived = [person.first_name, person.last_name].filter(Boolean).join(" ");
+    const override = person.display_name && person.display_name !== derived ? person.display_name : undefined;
+    try {
+      await renamePerson({
+        personId: person._id,
+        display_name: override,
+        first_name: form.first.trim(),
+        last_name: form.last.trim(),
+        nickname: form.nickname.trim(),
+        organization: form.organization.trim(),
+      });
+    } catch {
+      showToast("Couldn't save the name. Try again.");
+    }
+  };
+
+  const airtableId = person.airtable_human_id;
+  const more = airtableId ? (
+    <IconAction
+      icon="ellipsis-horizontal"
+      label="More"
+      onPress={() => showSheet({ actions: [{ label: "View in Airtable", onPress: () => void openExternalUrl(airtableRecordUrl(airtableId)) }] })}
+    />
+  ) : null;
+
+  const actions = narrow ? null : (
+    <View style={styles.identActions}>
+      <ContactsButton label="Message" icon="chatbubble-outline" onPress={onMessage} />
+      {editing
+        ? <ContactsButton testID="person-done" label="Done" tone="primary" onPress={() => void finishEdit()} />
+        : <ContactsButton testID="person-edit" label="Edit" icon="pencil-outline" onPress={startEdit} />}
     </View>
   );
 
-  // Two grouped cards, iOS-Contacts style: the name identity up top, the
-  // optional display override on its own so it reads as a distinct concept
-  // (not just a fourth name part), with a caption spelling out the default.
+  const identity = narrow ? (
+    <View style={styles.identPhone}>
+      <PersonAvatar address={address} name={displayName} size={84} />
+      <View style={styles.nameRow}>
+        <Text accessibilityRole="header" style={[styles.namePhone, { color: colors.text, fontFamily: HEADER_FONT }]}>{displayName}</Text>
+        {person.is_favorite ? <Ionicons name="star" size={18} color={colors.text} accessibilityLabel="Favorite" /> : null}
+      </View>
+      {person.organization ? <Text style={[styles.subPhone, { color: colors.textSecondary }]}>{person.organization}</Text> : null}
+      <View style={styles.quickRow}>
+        <QuickAction icon="chatbubble-outline" label="Message" onPress={onMessage} />
+        <QuickAction icon="call-outline" label="Call" onPress={onCall} disabled={!canCall} />
+      </View>
+    </View>
+  ) : (
+    <View style={styles.ident}>
+      <PersonAvatar address={address} name={displayName} size={64} />
+      <View style={styles.identText}>
+        <View style={styles.nameRow}>
+          <Text accessibilityRole="header" numberOfLines={1} style={[styles.name, { color: colors.text, fontFamily: HEADER_FONT }]}>{displayName}</Text>
+          {person.is_favorite ? <Ionicons name="star" size={16} color={colors.text} accessibilityLabel="Favorite" /> : null}
+        </View>
+        <Text numberOfLines={1} style={[styles.sub, { color: colors.textSecondary }]}>{personSubline(person)}</Text>
+      </View>
+      {actions}
+    </View>
+  );
+
+  const nameCard = (
+    <View>
+      <SectionHeader title="Name" />
+      <Card>
+        {NAME_FIELDS.map(({ key, label, placeholder }, i) => (
+          <View key={key} style={[styles.fld, rowDivider(colors, i === 0)]}>
+            <Text style={[styles.k, { color: colors.textSecondary }]}>{label}</Text>
+            <TextInput
+              accessibilityLabel={label}
+              editable={editing}
+              autoFocus={editing && i === 0}
+              value={editing ? form[key] : nameForm(person)[key]}
+              onChangeText={(t) => setForm((f) => ({ ...f, [key]: t }))}
+              onSubmitEditing={() => void finishEdit()}
+              placeholder={placeholder}
+              placeholderTextColor={colors.textTertiary}
+              style={[
+                styles.inp,
+                { color: colors.text, borderColor: editing ? colors.dividerStrong : "transparent", backgroundColor: editing ? colors.background : "transparent" },
+                Platform.OS === "web" && ({ transition: "border-color 120ms, background-color 120ms", outlineColor: colors.focusRing } as object),
+              ]}
+            />
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+
+  const main = (
+    <>
+      {identity}
+      {narrow ? null : nameCard}
+      <HandlesSection person={person} identities={identities} chats={chats} firstName={firstName} grouped={narrow} />
+      <ConversationsSection person={person} chats={sortedChats} onOpen={onOpenChat} grouped={narrow} />
+      {narrow && editing ? nameCard : null}
+    </>
+  );
+
+  const relationship = (
+    <PersonRelationship
+      personId={person._id}
+      isFavorite={person.is_favorite ?? false}
+      priority={person.priority}
+      tags={tags}
+      events={events}
+      notes={person.notes}
+      notesUpdatedAt={person.notes_updated_at}
+      grouped={narrow}
+    />
+  );
+
   return (
-    <View style={styles.nameFormWrap}>
-      <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
-        {row("First", "first", { autoFocus: autoFocusFirst })}
-        {row("Last", "last")}
-        {row("Nickname", "nickname")}
-        {row("Company", "organization", { last: true })}
+    <View style={styles.fill}>
+      {showTopBar && !narrow ? (
+        <ContactsTopBar title={displayName} note={editing ? "Editing" : undefined} trailing={more} />
+      ) : null}
+      {narrow && showTopBar ? (
+        <View style={styles.phoneNav}>
+          {onBackToList ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Contacts" onPress={onBackToList} hitSlop={8} style={styles.back}>
+              <Ionicons name="chevron-back" size={24} color={colors.text} />
+              <Text style={[styles.phoneNavText, { color: colors.text }]}>Contacts</Text>
+            </Pressable>
+          ) : <View />}
+          <Pressable accessibilityRole="button" accessibilityLabel={editing ? "Done" : "Edit"} onPress={editing ? () => void finishEdit() : startEdit} hitSlop={8}>
+            <Text style={[styles.phoneNavText, styles.phoneNavAction, { color: colors.text }]}>{editing ? "Done" : "Edit"}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <EnterFromBelow motionKey={person._id}>
+        {twoColumn ? (
+          <View style={styles.pp}>
+            <ScrollView style={styles.fill} contentContainerStyle={styles.ppm}>{main}</ScrollView>
+            <ScrollView style={[styles.ppa, { backgroundColor: colors.sidebar, borderLeftColor: colors.divider }]} contentContainerStyle={styles.ppaContent}>
+              {relationship}
+            </ScrollView>
+          </View>
+        ) : (
+          <ScrollView style={styles.fill} contentContainerStyle={styles.stack}>
+            {main}
+            {relationship}
+          </ScrollView>
+        )}
+      </EnterFromBelow>
+    </View>
+  );
+}
+
+function nameForm(person: Person): Record<NameField, string> {
+  return {
+    first: person.first_name ?? "",
+    last: person.last_name ?? "",
+    nickname: person.nickname ?? "",
+    organization: person.organization ?? "",
+  };
+}
+
+function QuickAction({ icon, label, onPress, disabled }: {
+  readonly icon: React.ComponentProps<typeof Ionicons>["name"];
+  readonly label: string;
+  readonly onPress: () => void;
+  readonly disabled?: boolean;
+}) {
+  const colors = useSignal();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.quick, { backgroundColor: colors.surface, borderColor: colors.divider }, pressed && { backgroundColor: colors.rowHover }, disabled && { opacity: 0.4 }]}
+    >
+      <Ionicons name={icon} size={22} color={colors.text} />
+      <Text style={[styles.quickLabel, { color: colors.text }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function HandlesSection({ person, identities, chats, firstName, grouped }: {
+  readonly person: Person;
+  readonly identities: Parameters<typeof handleRows>[1];
+  readonly chats: readonly ChatSummary[];
+  readonly firstName: string;
+  readonly grouped: boolean;
+}) {
+  const colors = useSignal();
+  const setPrimary = useSetPrimaryHandle();
+  const addHandle = useAddHandle();
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const serviceOf = useMemo(() => serviceIndex(chats), [chats]);
+  const rows = handleRows(person, identities, serviceOf);
+  const submit = () => {
+    const handle = draft.trim();
+    setAdding(false);
+    setDraft("");
+    if (handle) {
+      void addHandle({ personId: person._id, handle }).catch((e: unknown) =>
+        showToast(e instanceof Error && e.message.includes("another contact") ? "That handle belongs to another contact." : "Couldn't add the handle. Try again."));
+    }
+  };
+  const visible = grouped ? rows.filter((r) => r.reachable) : rows;
+  return (
+    <View>
+      <SectionHeader title={`Reach ${firstName} at`} trailing={<TextAction label="Add handle" onPress={() => setAdding(true)} />} />
+      <Card>
+        {visible.map((row, i) => (
+          <HandleLine
+            key={row.key}
+            row={row}
+            first={i === 0}
+            grouped={grouped}
+            onMakePrimary={() => void setPrimary({ personId: person._id, handle: row.value }).catch(() => showToast("Couldn't change the primary handle. Try again."))}
+          />
+        ))}
+        {adding ? (
+          <View style={[styles.hrow, rowDivider(colors, visible.length === 0)]}>
+            <TextInput
+              autoFocus
+              accessibilityLabel="New phone number or email"
+              value={draft}
+              onChangeText={setDraft}
+              onSubmitEditing={submit}
+              onBlur={submit}
+              placeholder="Phone number or email"
+              placeholderTextColor={colors.textTertiary}
+              style={[styles.inp, styles.flex, { color: colors.text, borderColor: colors.dividerStrong, backgroundColor: colors.background }]}
+            />
+          </View>
+        ) : null}
+      </Card>
+      {grouped && rows.some((r) => !r.reachable) ? (
+        <View style={styles.sectionGap}>
+          <SectionHeader title="Other networks" />
+          <Card>
+            {rows.filter((r) => !r.reachable).map((row, i) => (
+              <View key={row.key} style={[styles.hrowGrouped, rowDivider(colors, i === 0)]}>
+                <Text style={[styles.kGrouped, { color: colors.textSecondary }]}>{row.label}</Text>
+                <Text style={[styles.vGrouped, { color: colors.text }]}>{row.display}</Text>
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function HandleLine({ row, first, grouped, onMakePrimary }: {
+  readonly row: HandleRow;
+  readonly first: boolean;
+  readonly grouped: boolean;
+  readonly onMakePrimary: () => void;
+}) {
+  const colors = useSignal();
+  const service = (
+    <View style={styles.svc}>
+      <ServiceDot service={row.service} size={grouped ? 9 : 7} />
+      <Text style={[grouped ? styles.svcTextGrouped : styles.svcText, { color: colors.textSecondary }]}>{row.service}</Text>
+    </View>
+  );
+  const state = row.primary ? (
+    <Text style={[styles.prim, { backgroundColor: colors.field, color: colors.text }]}>Primary</Text>
+  ) : row.reachable && !grouped ? (
+    <TextAction label="Make primary" accessibilityLabel={`Make ${row.display} primary`} onPress={onMakePrimary} />
+  ) : null;
+  if (grouped) {
+    return (
+      <View testID="handle-row" style={[styles.hrowGrouped, rowDivider(colors, first)]}>
+        <View style={styles.flex}>
+          <Text style={[styles.kGrouped, { color: colors.textSecondary }]}>{row.label}</Text>
+          <Text style={[styles.vGrouped, { color: colors.text }]}>{row.display}</Text>
+        </View>
+        {service}
+        {state}
       </View>
-      <View style={[styles.fieldGroup, { backgroundColor: theme.backgroundElement }]}>
-        {row("Display", "display", { placeholder: autoDisplay || "Display name", last: true })}
-      </View>
-      <Text style={[styles.fieldCaption, { color: theme.textSecondary }]}>
-        {value.display.trim()
-          ? "Shown everywhere instead of the name above."
-          : autoDisplay
-            ? `Leave blank to show “${autoDisplay}”.`
-            : "How this contact appears in chats and lists."}
-      </Text>
+    );
+  }
+  return (
+    <View testID="handle-row" style={[styles.hrow, rowDivider(colors, first)]}>
+      <Text style={[styles.k, { color: colors.textSecondary }]}>{row.label}</Text>
+      <Text numberOfLines={1} style={[styles.v, { color: colors.text }]}>{row.display}</Text>
+      {service}
+      <View style={styles.stateSlot}>{state}</View>
+    </View>
+  );
+}
+
+function ConversationsSection({ person, chats, onOpen, grouped }: {
+  readonly person: Person;
+  readonly chats: ChatSummary[];
+  readonly onOpen: (chat: ChatSummary) => void;
+  readonly grouped: boolean;
+}) {
+  const colors = useSignal();
+  if (chats.length === 0) return null;
+  const now = Date.now();
+  const handles = [...person.normalized_phones, ...person.normalized_emails];
+  const ordered = [...chats.filter((c) => !c.isGroup), ...chats.filter((c) => c.isGroup)];
+  return (
+    <View>
+      <SectionHeader title="Conversations" trailing={grouped ? undefined : String(chats.length)} />
+      <Card>
+        {ordered.map((chat, i) => {
+          const state = conversationState(chat, now);
+          const title = chat.isGroup ? chat.displayName : person.display_name ?? chat.displayName;
+          const line = chat.isGroup ? sharedGroupLine(chat, handles) : chat.lastMessage?.text ?? "";
+          if (grouped) {
+            const meta = chat.isGroup ? [state.label && `${state.label} ago`, `${chat.participants.length + 1} people`].filter(Boolean).join(", ") : state.label;
+            return (
+              <Pressable key={chat.guid} accessibilityRole="button" accessibilityLabel={`${title}, ${meta}`} onPress={() => onOpen(chat)} style={[styles.hrowGrouped, styles.convGrouped, rowDivider(colors, i === 0)]}>
+                <Text style={[styles.kGrouped, { color: state.yourTurn ? colors.turn : colors.textSecondary }]}>{meta}</Text>
+                <Text style={[styles.vGrouped, { color: colors.text }]}>{title}</Text>
+              </Pressable>
+            );
+          }
+          return (
+            <Pressable
+              key={chat.guid}
+              testID="person-conversation"
+              accessibilityRole="button"
+              accessibilityLabel={`${title}. ${line}. ${state.label}`}
+              onPress={() => onOpen(chat)}
+              style={({ hovered }: { hovered?: boolean }) => [styles.conv, rowDivider(colors, i === 0), hovered && { backgroundColor: colors.rowHover }]}
+            >
+              <ChatAvatar chat={chat} size={32} />
+              <View style={styles.flex}>
+                <Text numberOfLines={1} style={[styles.t1, { color: colors.text }]}>{title}</Text>
+                <Text numberOfLines={1} style={[styles.t2, { color: colors.textSecondary }]}>{line}</Text>
+              </View>
+              <Text style={[styles.age, { color: state.yourTurn ? colors.turn : colors.textTertiary }, state.yourTurn && styles.ageTurn]}>{state.label}</Text>
+            </Pressable>
+          );
+        })}
+      </Card>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerIcon: { alignItems: "center", borderRadius: 7, height: 28, justifyContent: "center", width: 28 },
-  paneHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 58,
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  paneHeaderTitle: { fontSize: 16, fontWeight: "600" },
-  backBtn: { flexDirection: "row", alignItems: "center", borderRadius: 7, gap: 1, marginLeft: -4, paddingHorizontal: 4, paddingVertical: 3 },
-  container: { flex: 1, alignItems: "center", padding: 24, paddingTop: 32 },
-  avatarWrap: { marginBottom: 14 },
-  title: { fontSize: 22, fontWeight: "700", marginBottom: 4, textAlign: "center" },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
-  orgLine: { fontSize: 14, textAlign: "center", marginBottom: 4 },
-  statusLine: { fontSize: 14, textAlign: "center", marginBottom: 4 },
-  nameInput: {
-    width: "100%",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  nameFormWrap: { width: "100%" },
-  fieldGroup: {
-    width: "100%",
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 10,
-  },
-  fieldRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 44,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  fieldRowLast: { borderBottomWidth: 0 },
-  fieldLabel: { width: 82, fontSize: 15 },
-  fieldInput: { flex: 1, fontSize: 16, paddingVertical: 11 },
-  fieldCaption: { fontSize: 12, marginTop: -2, marginBottom: 8, paddingHorizontal: 6 },
-  editNameBlock: { width: "100%", marginBottom: 4 },
-  editNameActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: Spacing.four,
-    marginTop: -2,
-  },
-  editNameActionBtn: { flexDirection: "row", alignItems: "center", borderRadius: 6, gap: 4, paddingHorizontal: 6, paddingVertical: 6 },
-  addButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
-    width: "100%",
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  footerLink: {
-    marginTop: 20,
-    paddingVertical: 8,
-  },
+  fill: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
+  spinner: { marginTop: 48 },
+  unknownWrap: { alignItems: "center", padding: 24 },
+  auxHeader: { alignItems: "center", borderBottomWidth: 1, flexDirection: "row", height: 48, justifyContent: "space-between", paddingHorizontal: 12 },
+  auxTitle: { fontSize: 13, fontWeight: "600" },
+  back: { alignItems: "center", flexDirection: "row", gap: 2 },
+  pp: { flex: 1, flexDirection: "row" },
+  ppm: { gap: 22, maxWidth: 1000, paddingBottom: 30, paddingHorizontal: 40, paddingTop: 26 },
+  ppa: { borderLeftWidth: 1, flexGrow: 0, width: 320 },
+  ppaContent: { paddingHorizontal: 22, paddingVertical: 26 },
+  stack: { gap: 22, paddingBottom: 40, paddingHorizontal: 16, paddingTop: 8 },
+  ident: { alignItems: "center", flexDirection: "row", gap: 16 },
+  identText: { flex: 1, minWidth: 0 },
+  identActions: { flexDirection: "row", gap: 6 },
+  nameRow: { alignItems: "center", flexDirection: "row", gap: 8 },
+  name: { flexShrink: 1, fontSize: 24, fontWeight: "600", letterSpacing: -0.4 },
+  sub: { fontSize: 13, marginTop: 2 },
+  identPhone: { alignItems: "center", gap: 6 },
+  namePhone: { fontSize: 26, fontWeight: "600", letterSpacing: -0.5, marginTop: 10 },
+  subPhone: { fontSize: 15 },
+  quickRow: { alignSelf: "stretch", flexDirection: "row", gap: 10, marginTop: 14 },
+  quick: { alignItems: "center", borderRadius: 14, borderWidth: 1, flex: 1, gap: 6, paddingVertical: 12 },
+  quickLabel: { fontSize: 13, fontWeight: "500" },
+  phoneNav: { alignItems: "center", flexDirection: "row", height: 44, justifyContent: "space-between", paddingHorizontal: 12 },
+  phoneNavText: { fontSize: 17 },
+  phoneNavAction: { fontWeight: "600" },
+  fld: { alignItems: "center", flexDirection: "row", minHeight: 42, paddingHorizontal: 14 },
+  k: { fontSize: 12.5, width: 110 },
+  inp: { borderRadius: 6, borderWidth: 1, flex: 1, fontSize: 13, height: 28, marginLeft: -9, paddingHorizontal: 8 },
+  hrow: { alignItems: "center", flexDirection: "row", gap: 12, minHeight: 44, paddingHorizontal: 14 },
+  hrowGrouped: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 52, paddingHorizontal: 14, paddingVertical: 10 },
+  convGrouped: { alignItems: "flex-start", flexDirection: "column", gap: 2 },
+  kGrouped: { fontSize: 13 },
+  vGrouped: { fontSize: 16, marginTop: 2 },
+  v: { flex: 1, fontSize: 13, fontVariant: ["tabular-nums"], minWidth: 0 },
+  svc: { alignItems: "center", flexDirection: "row", gap: 5 },
+  svcText: { fontSize: 12 },
+  svcTextGrouped: { fontSize: 15 },
+  stateSlot: { alignItems: "flex-end", minWidth: 82 },
+  prim: { borderRadius: 6, fontSize: 11.5, fontWeight: "600", overflow: "hidden", paddingHorizontal: 7, paddingVertical: 2 },
+  sectionGap: { marginTop: 22 },
+  conv: { alignItems: "center", flexDirection: "row", gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  t1: { fontSize: 13, fontWeight: "600" },
+  t2: { fontSize: 12.5, marginTop: 1 },
+  age: { fontSize: 12, fontVariant: ["tabular-nums"], textAlign: "right" },
+  ageTurn: { fontWeight: "600" },
 });

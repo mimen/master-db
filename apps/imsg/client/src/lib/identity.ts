@@ -25,6 +25,7 @@ export type IdentityRow = {
   normalized: string;
   display_name?: string;
   chat_count: number;
+  first_seen_at?: string;
 };
 
 /** P1–P5, ONE = HIGHEST PRIORITY — see convex/schema/identity/people.ts's
@@ -38,7 +39,7 @@ export type Priority = number;
  * convex/schema/identity/event_links.ts. `linkId` is what unlinkEvent
  * expects (NOT `id`, which is the Airtable record id used for display/
  * dedupe). */
-export type EventLink = { id: string; name: string; linkId: string };
+export type EventLink = { id: string; name: string; linkId: string; start_date?: string };
 
 export type Person = {
   _id: string;
@@ -65,6 +66,11 @@ export type Person = {
   is_self: boolean;
   airtable_human_id?: string;
   vault_entity?: string;
+  notes?: string;
+  notes_updated_at?: string;
+  /** The normalized handle Comma reaches this person on first; absent means the first phone, then email. */
+  primary_handle?: string;
+  created_at?: string;
 };
 
 export type WhoIsResult =
@@ -92,6 +98,11 @@ export type ContactListRow = {
   normalized_phones: string[];
   normalized_emails: string[];
   airtable_human_id?: string;
+  message_count?: number;
+  primary_handle?: string;
+  /** People the owner said are not the same person as this one. */
+  not_duplicate_of?: string[];
+  created_at?: string;
 };
 
 /** A GROUP chat's private CRM projection — the chat-side twin of the fields
@@ -248,9 +259,29 @@ const searchEventsRef = makeFunctionReference<
 
 const linkEventRef = makeFunctionReference<
   "mutation",
-  { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string },
+  { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string; start_date?: string },
   { linkId: string }
 >("identity/events:linkEvent");
+
+const setNotesRef = makeFunctionReference<"mutation", { personId: string; notes: string }, null>(
+  "identity/crm:setNotes",
+);
+
+const setPrimaryHandleRef = makeFunctionReference<"mutation", { personId: string; handle: string }, null>(
+  "identity/mutations:setPrimaryHandle",
+);
+
+const addHandleRef = makeFunctionReference<"mutation", { personId: string; handle: string }, null>(
+  "identity/mutations:addHandle",
+);
+
+const mergePeopleRef = makeFunctionReference<"mutation", { keepId: string; mergeId: string }, null>(
+  "identity/mutations:mergePeople",
+);
+
+const markNotDuplicateRef = makeFunctionReference<"mutation", { personId: string; otherId: string }, null>(
+  "identity/mutations:markNotDuplicate",
+);
 
 const unlinkEventRef = makeFunctionReference<"mutation", { linkId: string }, null>(
   "identity/events:unlinkEvent",
@@ -365,8 +396,33 @@ export function useSearchEvents() {
 
 export function useLinkEvent() {
   const mutate = useMutation(linkEventRef);
-  return (args: { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string }) =>
+  return (args: { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string; start_date?: string }) =>
     mutate(args);
+}
+
+export function useSetNotes() {
+  const mutate = useMutation(setNotesRef);
+  return (args: { personId: string; notes: string }) => mutate(args);
+}
+
+export function useSetPrimaryHandle() {
+  const mutate = useMutation(setPrimaryHandleRef);
+  return (args: { personId: string; handle: string }) => mutate(args);
+}
+
+export function useAddHandle() {
+  const mutate = useMutation(addHandleRef);
+  return (args: { personId: string; handle: string }) => mutate(args);
+}
+
+export function useMergePeople() {
+  const mutate = useMutation(mergePeopleRef);
+  return (args: { keepId: string; mergeId: string }) => mutate(args);
+}
+
+export function useMarkNotDuplicate() {
+  const mutate = useMutation(markNotDuplicateRef);
+  return (args: { personId: string; otherId: string }) => mutate(args);
 }
 
 export function useUnlinkEvent() {
@@ -374,7 +430,7 @@ export function useUnlinkEvent() {
   return (args: { linkId: string }) => mutate(args);
 }
 
-/** A person's first phone or email — enough to key the /person screen's whoIs lookup. */
-export function primaryHandle(p: ContactListRow): string | null {
-  return p.normalized_phones[0] ?? p.normalized_emails[0] ?? null;
+/** The handle Comma reaches a person on first: their chosen primary, else the first phone, then email. */
+export function primaryHandle(p: Pick<ContactListRow, "normalized_phones" | "normalized_emails" | "primary_handle">): string | null {
+  return p.primary_handle ?? p.normalized_phones[0] ?? p.normalized_emails[0] ?? null;
 }

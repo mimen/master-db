@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { Platform, Text, View } from "react-native";
 
+import { UnknownSenderBanner } from "@/components/contacts-add-panel";
 import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
@@ -361,15 +362,18 @@ export function MessagesWorkspace({
       list={list}
       detail={
         selected ? (
-          <ThreadView
-            key={selected.guid + (jumpTarget?.guid ?? "")}
-            chatGuid={selected.guid}
-            isGroup={selected.isGroup}
-            jumpTarget={jumpTarget}
-            headerChat={selected}
-            previewOnly={selectionIntent === "preview"}
-            toastActive={active}
-          />
+          <View style={{ flex: 1 }}>
+            <ThreadView
+              key={selected.guid + (jumpTarget?.guid ?? "")}
+              chatGuid={selected.guid}
+              isGroup={selected.isGroup}
+              jumpTarget={jumpTarget}
+              headerChat={selected}
+              previewOnly={selectionIntent === "preview"}
+              toastActive={active}
+            />
+            <UnknownSenderBanner key={selected.guid} chat={selected} />
+          </View>
         ) : (
           <EmptyState
             icon="chatbubble-ellipses-outline"
