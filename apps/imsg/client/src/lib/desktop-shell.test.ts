@@ -45,14 +45,14 @@ describe("desktopFrame", () => {
     divider: "#E5E5EA",
   };
 
-  test("wide split is flush with 1px pane dividers and a 320px sidebar", () => {
+  test("wide split is flush with 1px pane dividers and a 352px sidebar", () => {
     const frame = desktopFrame(theme);
     expect(frame.split.padding).toBeUndefined();
     expect(frame.split.gap).toBeUndefined();
     expect(frame.split.backgroundColor).toBe(theme.background);
     expect(frame.pane.borderRadius).toBeUndefined();
     expect(frame.listPane.borderRightWidth).toBe(1);
-    expect(frame.listPane.width).toBe(320);
+    expect(frame.listPane.width).toBe(352);
     expect(frame.auxPane.borderLeftWidth).toBe(1);
     expect(frame.auxPane.width).toBe(AUX_PANE_WIDTH);
   });

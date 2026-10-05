@@ -50,7 +50,7 @@ export const TriageTheme = {
 export type TriageThemeValue = (typeof TriageTheme)[keyof typeof TriageTheme];
 
 export const TriageGeometry = {
-  queueWidth: 320,
+  queueWidth: 352,
   inspectorWidth: 312,
   rowHeight: 62,
   /** Rows are inset pills: 8px from the sidebar edge, 4px apart. */

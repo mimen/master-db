@@ -13,7 +13,7 @@ import { EmptyLens } from "./empty-lens";
 import { Collapse } from "./motion/collapse";
 import { SkeletonList } from "./skeleton-list";
 
-import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
+import Menu08Icon from "@hugeicons/core-free-icons/Menu08Icon";
 import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
@@ -343,7 +343,7 @@ export function ConversationListPane({
     <View>
       <ChromeIconButton
         ref={filterBtnRef}
-        hugeIcon={FilterHorizontalIcon}
+        hugeIcon={Menu08Icon}
         accessibilityLabel={chips.length > 0 ? `Filter conversations, ${chips.length} active` : "Filter conversations"}
         onPress={openFilters}
       />

@@ -279,7 +279,7 @@ export function ChatInfoContent({
         {(tags.length > 0 || info.isGroup) && (
           <View style={styles.tags}>
             {tags.map((tag) => (
-              <View key={tag} style={[styles.tag, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
+              <View key={tag} style={[styles.tag, { backgroundColor: theme.field, borderColor: "transparent" }]}>
                 <Text style={[styles.tagText, { color: theme.textSecondary }]}>{tag}</Text>
               </View>
             ))}
