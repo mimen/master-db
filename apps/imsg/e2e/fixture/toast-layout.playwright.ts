@@ -39,10 +39,10 @@ for (const scheme of ["light", "dark"] as const) {
         && pill.y < message.y + message.height && pill.y + pill.height > message.y;
       expect(overlaps, "toast must not cover the last message").toBe(false);
       expect(pill.y + pill.height).toBeLessThanOrEqual(size.height);
-      const status = page.getByRole("status");
+      const status = page.getByRole("status").filter({ hasText: "Settled" });
       await expect(status).toHaveAttribute("aria-live", "polite");
-      await expect(status).toHaveCSS("background-color", scheme === "light" ? "rgb(26, 26, 28)" : "rgb(255, 255, 255)");
-      await expect(page.getByText("Settled", { exact: true })).toHaveCSS("color", scheme === "light" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)");
+      await expect(status).toHaveCSS("background-color", scheme === "light" ? "rgb(23, 23, 26)" : "rgb(237, 237, 239)");
+      await expect(page.getByText("Settled", { exact: true })).toHaveCSS("color", scheme === "light" ? "rgb(255, 255, 255)" : "rgb(23, 23, 26)");
       const list = page.getByTestId("thread-message-list");
       const chrome = await page.getByTestId("thread-composer-chrome").boundingBox();
       const listWithToast = await list.boundingBox();
@@ -92,8 +92,8 @@ for (const scheme of ["light", "dark"] as const) {
     const sidebar = page.getByLabel("Resize sidebar").filter({ visible: true }).locator("..");
     const before = await sidebar.boundingBox();
     await page.keyboard.press("Meta+e");
-    const status = page.getByRole("status");
-    await expect(status).toHaveText("Select a conversation first");
+    const status = page.getByRole("status").filter({ hasText: "Select a conversation first" });
+    await expect(status).toBeVisible();
     await expect(status).toHaveCSS("opacity", "1");
     const pill = await status.boundingBox();
     if (!pill) throw new Error("Toast has no layout");
@@ -116,7 +116,9 @@ test("toast stays visible when the selected thread's workspace is hidden", async
   await expect(undo).toBeVisible();
   await page.getByRole("button", { name: "Contacts", exact: true }).click();
   await expect(undo).toBeVisible();
-  const pill = await page.getByRole("status").boundingBox();
+  const status = page.getByRole("status").filter({ hasText: "Settled" });
+  await expect(status).toHaveCSS("opacity", "1");
+  const pill = await status.boundingBox();
   if (!pill) throw new Error("Toast has no layout");
   expect(pill.x + pill.width / 2).toBeCloseTo(650, 1);
   expect(pill.y + pill.height).toBe(812);

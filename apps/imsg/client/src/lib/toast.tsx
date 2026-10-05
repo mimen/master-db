@@ -1,16 +1,31 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { scheduleOnRN } from "react-native-worklets";
 import { useIsFocused } from "expo-router/react-navigation";
 
-import { CardShadow, Colors } from "@/constants/theme";
-import { Radius, Space, TypeRamp, Weight } from "@/constants/tokens";
+import { CardShadow } from "@/constants/theme";
+import { Space, TypeRamp, Weight } from "@/constants/tokens";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export interface ToastAction {
   readonly label: string;
   readonly onPress: () => void;
+  /** A keyboard shortcut that does the same thing, e.g. "⌘Z". */
+  readonly hint?: string;
 }
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: { toastBg: "#17171A", toastText: "#FFFFFF", toastAction: "#FFB08A", toastActionHover: "rgba(255,255,255,0.1)" },
+  dark: { toastBg: "#EDEDEF", toastText: "#17171A", toastAction: "#B23A06", toastActionHover: "rgba(0,0,0,0.06)" },
+} as const;
+
+// TODO(signal-motion): use springs.ts
+const SNAPPY = { stiffness: 566.4, damping: 42.84, mass: 1 };
+const SMOOTH = { stiffness: 189.9, damping: 25.35, mass: 1 };
+const RISE = 10;
 
 interface Toast {
   readonly message: string;
@@ -58,6 +73,8 @@ export function ToastAnchor({ children, active }: { readonly children: ReactNode
 
 export function ToastHost({ children }: { readonly children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
+  // The toast stays mounted while it fades out; `shown` drives the fade.
+  const [shown, setShown] = useState(false);
   const [anchors, setAnchors] = useState<ReadonlySet<symbol>>(() => new Set());
   const activeAnchor = Array.from(anchors).at(-1);
   const registerAnchor = useCallback((anchor: symbol) => {
@@ -69,8 +86,10 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
     });
   }, []);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dark = useColorScheme() === "dark";
-  const inverse = Colors[dark ? "light" : "dark"];
+  const c = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(0);
+  const clear = useCallback(() => setToast(null), []);
   const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -87,8 +106,9 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
   useEffect(() => {
     listener = (next) => {
       setToast(next);
+      setShown(true);
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setToast(null), next.action ? ACTION_MS : PLAIN_MS);
+      timer.current = setTimeout(() => setShown(false), next.action ? ACTION_MS : PLAIN_MS);
     };
     return () => {
       listener = null;
@@ -96,30 +116,51 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!toast) return;
+    if (reduceMotion) {
+      progress.value = shown ? 1 : 0;
+      if (!shown) clear();
+      return;
+    }
+    progress.value = shown
+      ? withSpring(1, SNAPPY)
+      : withSpring(0, SMOOTH, (finished) => {
+          if (finished) scheduleOnRN(clear);
+        });
+  }, [clear, progress, reduceMotion, shown, toast]);
+
+  // Enter rises and fades in; leave only fades, so the toast never drops back through the composer.
+  const motion = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: shown ? Math.max(0, 1 - progress.value) * RISE : 0 }],
+  }));
+
   const action = toast?.action;
   const pill = toast && (
-    <View
+    <Reanimated.View
       role="status"
       accessibilityLiveRegion="polite"
-      pointerEvents={action ? "box-none" : "none"}
-      style={[styles.toast, { backgroundColor: inverse.background }]}
+      pointerEvents={action && shown ? "box-none" : "none"}
+      style={[styles.toast, { backgroundColor: c.toastBg }, motion]}
     >
-      <Text style={[styles.text, { color: inverse.text }]}>{toast.message}</Text>
+      <Text style={[styles.text, { color: c.toastText }]}>{toast.message}</Text>
       {action && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={action.label}
           onPress={() => {
             if (timer.current) clearTimeout(timer.current);
-            setToast(null);
+            setShown(false);
             action.onPress();
           }}
-          style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: inverse.backgroundSelected }]}
+          style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: c.toastActionHover }]}
         >
-          <Text style={[styles.actionText, { color: inverse.text }]}>{action.label}</Text>
+          <Text style={[styles.actionText, { color: c.toastAction }]}>{action.label}</Text>
+          {action.hint && <Text style={[styles.hint, { color: c.toastAction }]}>{action.hint}</Text>}
         </Pressable>
       )}
-    </View>
+    </Reanimated.View>
   );
   return (
     <ToastContext.Provider value={{ pill, activeAnchor, registerAnchor }}>
@@ -146,11 +187,12 @@ const styles = StyleSheet.create({
   toast: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Space.lg,
-    borderRadius: Radius.full,
-    paddingLeft: Space.xl,
-    paddingRight: Space.xl,
-    paddingVertical: Space.md,
+    gap: 12,
+    borderRadius: 12,
+    minHeight: 44,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 7,
     flexShrink: 1,
     maxWidth: 420,
     ...CardShadow,
@@ -164,13 +206,21 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   action: {
-    borderRadius: Radius.full,
-    marginRight: -Space.md,
-    paddingHorizontal: Space.md,
-    paddingVertical: Space.xs,
+    alignItems: "center",
+    borderRadius: 7,
+    flexDirection: "row",
+    gap: 6,
+    height: 30,
+    paddingHorizontal: 8,
   },
   actionText: {
     fontSize: TypeRamp.desktop.body,
     fontWeight: Weight.semibold,
+  },
+  hint: {
+    fontSize: 11.5,
+    fontVariant: ["tabular-nums"],
+    fontWeight: "500",
+    opacity: 0.6,
   },
 });
