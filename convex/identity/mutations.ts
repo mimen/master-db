@@ -272,3 +272,142 @@ export const renamePerson = mutation({
     });
   },
 });
+
+/** The person's phones and emails, normalized, in the order Comma offers them. */
+function reachableHandles(person: { normalized_phones: string[]; normalized_emails: string[] }): string[] {
+  return [...person.normalized_phones, ...person.normalized_emails];
+}
+
+/** Mark one of a person's phones or emails as the handle Comma reaches them on first. */
+export const setPrimaryHandle = mutation({
+  args: { key: v.optional(v.string()), personId: v.id("people"), handle: v.string() },
+  handler: async (ctx, { key, personId, handle }) => {
+    await requireIdentityAccess(ctx, key);
+    const person = await ctx.db.get(personId);
+    if (!person) throw new Error("Person not found");
+    const normalized = normalizePhone(handle) || normalizeEmail(handle) || handle.trim();
+    if (!reachableHandles(person).includes(normalized)) throw new Error("Handle doesn't belong to this person");
+    if (person.primary_handle === normalized) return;
+    await ctx.db.patch(personId, { primary_handle: normalized, updated_at: new Date().toISOString() });
+  },
+});
+
+/** Attach a phone or email to an existing person: "Add handle" on the person
+ * page, and "Add here" when an unknown number turns out to be someone known.
+ * Orphan identity rows for the handle are linked; a handle that already
+ * belongs to a different live person is refused rather than silently moved. */
+export const addHandle = mutation({
+  args: { key: v.optional(v.string()), personId: v.id("people"), handle: v.string() },
+  handler: async (ctx, { key, personId, handle }) => {
+    await requireIdentityAccess(ctx, key);
+    const person = await ctx.db.get(personId);
+    if (!person || person.merged_into) throw new Error("Person not found");
+    const trimmed = handle.trim();
+    const phone = normalizePhone(trimmed);
+    const normalized = phone || normalizeEmail(trimmed);
+    if (!normalized) throw new Error("Enter a phone number or email");
+
+    const rows = await ctx.db
+      .query("identities")
+      .withIndex("by_normalized", (q) => q.eq("normalized", normalized))
+      .collect();
+    for (const r of rows) {
+      if (!r.person_id || r.person_id === personId) continue;
+      const owner = await ctx.db.get(r.person_id);
+      if (owner && !owner.merged_into) throw new Error("That handle belongs to another contact");
+    }
+    const now = new Date().toISOString();
+    for (const r of rows) {
+      if (r.person_id !== personId) await ctx.db.patch(r._id, { person_id: personId, updated_at: now });
+    }
+    if (!rows.some((r) => r.source === "manual")) {
+      await ctx.db.insert("identities", {
+        person_id: personId,
+        kind: phone ? "phone" : "email",
+        value: trimmed,
+        normalized,
+        message_count: 0,
+        chat_count: 0,
+        is_self: false,
+        source: "manual",
+        first_seen_at: now,
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+    await recomputePersonAggregates(ctx, personId);
+  },
+});
+
+/**
+ * Merge `mergeId` into `keepId`. The kept person's name and organization win;
+ * every identity, tag and event link moves to it; favorite and notes combine;
+ * the higher priority (lower P-number) wins. The merged person keeps a
+ * `merged_into` tombstone, so old references still resolve. No message or
+ * conversation is touched: threads stay separate and both appear on the page.
+ */
+export const mergePeople = mutation({
+  args: { key: v.optional(v.string()), keepId: v.id("people"), mergeId: v.id("people") },
+  handler: async (ctx, { key, keepId, mergeId }) => {
+    await requireIdentityAccess(ctx, key);
+    if (keepId === mergeId) throw new Error("Pick two different contacts");
+    const keep = await ctx.db.get(keepId);
+    const gone = await ctx.db.get(mergeId);
+    if (!keep || keep.merged_into || !gone || gone.merged_into) throw new Error("Person not found");
+    const now = new Date().toISOString();
+
+    for (const row of await ctx.db.query("identities").withIndex("by_person", (q) => q.eq("person_id", mergeId)).collect()) {
+      await ctx.db.patch(row._id, { person_id: keepId, updated_at: now });
+    }
+    const keptTags = new Set(
+      (await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", keepId)).collect()).map((t) => t.tag),
+    );
+    for (const row of await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", mergeId)).collect()) {
+      if (keptTags.has(row.tag)) await ctx.db.delete(row._id);
+      else await ctx.db.patch(row._id, { person_id: keepId });
+    }
+    const keptEvents = new Set(
+      (await ctx.db.query("event_links").withIndex("by_person", (q) => q.eq("person_id", keepId)).collect())
+        .map((e) => e.airtable_event_id),
+    );
+    for (const row of await ctx.db.query("event_links").withIndex("by_person", (q) => q.eq("person_id", mergeId)).collect()) {
+      if (keptEvents.has(row.airtable_event_id)) await ctx.db.delete(row._id);
+      else await ctx.db.patch(row._id, { person_id: keepId });
+    }
+
+    const priorities = [keep.priority, gone.priority].filter((p): p is number => typeof p === "number");
+    const notes = [keep.notes?.trim(), gone.notes?.trim()].filter(Boolean).join("\n\n");
+    await ctx.db.patch(keepId, {
+      // Lock the kept name so the next sync can't swap in the merged person's.
+      display_name_locked: true,
+      organization: keep.organization ?? gone.organization,
+      is_favorite: keep.is_favorite || gone.is_favorite || undefined,
+      ...(priorities.length > 0 ? { priority: Math.min(...priorities) } : {}),
+      ...(notes && notes !== keep.notes ? { notes, notes_updated_at: now } : {}),
+      airtable_human_id: keep.airtable_human_id ?? gone.airtable_human_id,
+      not_duplicate_of: keep.not_duplicate_of?.filter((id) => id !== mergeId),
+      updated_at: now,
+    });
+    await ctx.db.patch(mergeId, { merged_into: keepId, updated_at: now });
+    await recomputePersonAggregates(ctx, keepId);
+    await recomputePersonAggregates(ctx, mergeId);
+  },
+});
+
+/** "Not the same person": stop the duplicate check pairing these two. Symmetric and idempotent. */
+export const markNotDuplicate = mutation({
+  args: { key: v.optional(v.string()), personId: v.id("people"), otherId: v.id("people") },
+  handler: async (ctx, { key, personId, otherId }) => {
+    await requireIdentityAccess(ctx, key);
+    if (personId === otherId) return;
+    const now = new Date().toISOString();
+    for (const [self, other] of [[personId, otherId], [otherId, personId]] as const) {
+      const person = await ctx.db.get(self);
+      if (!person) throw new Error("Person not found");
+      const current = person.not_duplicate_of ?? [];
+      if (current.includes(other)) continue;
+      await ctx.db.patch(self, { not_duplicate_of: [...current, other], updated_at: now });
+    }
+  },
+});

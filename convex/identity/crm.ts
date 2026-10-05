@@ -104,6 +104,20 @@ export const removeTag = mutation({
   },
 });
 
+/** Replace a person's private notes. Blank clears them. No-op when unchanged. */
+export const setNotes = mutation({
+  args: { key: v.optional(v.string()), personId: v.id("people"), notes: v.string() },
+  handler: async (ctx, { key, personId, notes }) => {
+    await requireIdentityAccess(ctx, key);
+    const person = await ctx.db.get(personId);
+    if (!person) throw new Error("Person not found");
+    const next = notes.trim() || undefined;
+    if ((person.notes ?? undefined) === next) return;
+    const now = new Date().toISOString();
+    await ctx.db.patch(personId, { notes: next, notes_updated_at: next ? now : undefined, updated_at: now });
+  },
+});
+
 // ---------------------------------------------------------------- chat, CRM
 
 async function getChatCrmRow(ctx: MutationCtx, chatGuid: string) {

@@ -219,3 +219,33 @@ export const ingestContactsBatchRef = makeFunctionReference<
 >("identity/ingestContacts:ingestContactsBatch");
 
 export const TEST_KEY = "test-identity-key";
+
+export const setPrimaryHandleRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; handle: string },
+  null
+>("identity/mutations:setPrimaryHandle");
+
+export const addHandleRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; handle: string },
+  null
+>("identity/mutations:addHandle");
+
+export const mergePeopleRef = makeFunctionReference<
+  "mutation",
+  { key: string; keepId: Id<"people">; mergeId: Id<"people"> },
+  null
+>("identity/mutations:mergePeople");
+
+export const markNotDuplicateRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; otherId: Id<"people"> },
+  null
+>("identity/mutations:markNotDuplicate");
+
+export const setNotesRef = makeFunctionReference<
+  "mutation",
+  { key: string; personId: Id<"people">; notes: string },
+  null
+>("identity/crm:setNotes");

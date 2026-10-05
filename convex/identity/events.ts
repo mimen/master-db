@@ -77,8 +77,9 @@ export const linkEvent = mutation({
     chatGuid: v.optional(v.string()),
     airtable_event_id: v.string(),
     event_name: v.string(),
+    start_date: v.optional(v.string()),
   },
-  handler: async (ctx, { key, personId, chatGuid, airtable_event_id, event_name }) => {
+  handler: async (ctx, { key, personId, chatGuid, airtable_event_id, event_name, start_date }) => {
     await requireIdentityAccess(ctx, key);
     if (Boolean(personId) === Boolean(chatGuid)) {
       throw new Error("linkEvent requires exactly one of personId or chatGuid");
@@ -89,7 +90,9 @@ export const linkEvent = mutation({
       : await ctx.db.query("event_links").withIndex("by_chat", (q) => q.eq("chat_guid", chatGuid)).collect();
     const match = existing.find((e) => e.airtable_event_id === airtable_event_id);
     if (match) {
-      if (match.event_name !== event_name) await ctx.db.patch(match._id, { event_name });
+      if (match.event_name !== event_name || (start_date && match.start_date !== start_date)) {
+        await ctx.db.patch(match._id, { event_name, ...(start_date ? { start_date } : {}) });
+      }
       return { linkId: match._id };
     }
 
@@ -98,6 +101,7 @@ export const linkEvent = mutation({
       chat_guid: chatGuid,
       airtable_event_id,
       event_name,
+      start_date,
       created_at: new Date().toISOString(),
     });
     return { linkId };
