@@ -1,17 +1,23 @@
-import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
+import type { ChatSummary } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
 import {
-  activeInboxFilterCount,
+  activeChips,
+  checkboxCounts,
   DEFAULT_INBOX_FILTERS,
+  DEFAULT_REFINEMENTS,
   deriveInboxModel,
-  desktopInboxTitle,
+  groupByAge,
+  priorityLevel,
   resetInboxFilters,
-  selectInboxFilter,
+  tagsInUse,
+  viewName,
+  type RefineContext,
+  type Refinements,
 } from "./inbox-model";
 
-const states: StateFilter[] = ["all", "unread", "unresponded", "waiting", "settled"];
-const types: TypeFilter[] = ["all", "known", "dm", "group", "unknown"];
+const NOW = new Date(2026, 9, 4, 15, 0).getTime();
+const HOUR = 3_600_000;
 
 function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   return {
@@ -42,30 +48,6 @@ function makeChat(overrides: Partial<ChatSummary> = {}): ChatSummary {
   };
 }
 
-describe("selectInboxFilter", () => {
-  test("preserves every state/type combination when changing either lens", () => {
-    for (const state of states) {
-      for (const type of types) {
-        const filters = { state, type };
-
-        expect(selectInboxFilter(filters, { kind: "state", value: state })).toEqual(filters);
-        expect(selectInboxFilter(filters, { kind: "type", value: type })).toEqual(filters);
-      }
-    }
-  });
-
-  test("changes only the selected lens", () => {
-    expect(selectInboxFilter({ state: "waiting", type: "group" }, { kind: "state", value: "unread" })).toEqual({
-      state: "unread",
-      type: "group",
-    });
-    expect(selectInboxFilter({ state: "waiting", type: "group" }, { kind: "type", value: "dm" })).toEqual({
-      state: "waiting",
-      type: "dm",
-    });
-  });
-});
-
 describe("inbox filter defaults", () => {
   test("defaults to the Known lens, not Everyone", () => {
     expect(DEFAULT_INBOX_FILTERS).toEqual({ state: "all", type: "known" });
@@ -73,37 +55,8 @@ describe("inbox filter defaults", () => {
 
   test("returns a fresh copy of the default selection when reset", () => {
     const reset = resetInboxFilters();
-
     expect(reset).toEqual(DEFAULT_INBOX_FILTERS);
     expect(reset).not.toBe(DEFAULT_INBOX_FILTERS);
-  });
-
-  test("counts active state and type lenses independently", () => {
-    expect(activeInboxFilterCount({ state: "all", type: "known" })).toBe(0);
-    expect(activeInboxFilterCount({ state: "unread", type: "known" })).toBe(1);
-    expect(activeInboxFilterCount({ state: "all", type: "group" })).toBe(1);
-    expect(activeInboxFilterCount({ state: "waiting", type: "unknown" })).toBe(2);
-    // Everyone is now a deliberate widening past the default, so it counts.
-    expect(activeInboxFilterCount({ state: "all", type: "all" })).toBe(1);
-  });
-});
-
-describe("desktopInboxTitle", () => {
-  test("names the state alone while the type lens is at its default", () => {
-    expect(desktopInboxTitle({ state: "all", type: "known" })).toBe("All messages");
-    expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("Needs reply");
-    expect(desktopInboxTitle({ state: "waiting", type: "known" })).toBe("Waiting");
-    expect(desktopInboxTitle({ state: "unread", type: "known" })).toBe("Unread");
-    expect(desktopInboxTitle({ state: "settled", type: "known" })).toBe("Settled");
-  });
-
-  test("appends the type lens whenever it is off its default", () => {
-    // The defect this fixes. The header read "All messages" while the list
-    // showed nothing but strangers.
-    expect(desktopInboxTitle({ state: "all", type: "unknown" })).toBe("All messages · Unknown");
-    expect(desktopInboxTitle({ state: "all", type: "all" })).toBe("All messages · Everyone");
-    expect(desktopInboxTitle({ state: "unresponded", type: "group" })).toBe("Needs reply · Groups");
-    expect(desktopInboxTitle({ state: "settled", type: "dm" })).toBe("Settled · DMs");
   });
 });
 
@@ -113,19 +66,16 @@ describe("deriveInboxModel", () => {
       makeChat({ guid: `unread-${i}`, firstUnreadAt: i, flags: { ...makeChat().flags, unread: true } }),
     );
     const pinned = makeChat({ guid: "pinned", flags: { ...makeChat().flags, pinned: true } });
-    const priority = makeChat({ guid: "p1", crm: { priority: 1 } });
 
-    const model = deriveInboxModel([...chats, priority, pinned], DEFAULT_INBOX_FILTERS, "  ");
+    const model = deriveInboxModel([...chats, pinned], DEFAULT_INBOX_FILTERS, "  ");
 
     expect(model.listChats.map((c) => c.guid)).toEqual([
       "pinned",
       ...chats.map((c) => c.guid),
-      "p1",
     ]);
-    expect(model.navigationEntries.map((e) => e.index)).toEqual(model.listChats.map((_, i) => i));
-    expect(model.sectionLabel).toBe("Recent");
-    expect(model.sectionCount).toBe(16);
-  });
+    // Index 0 is the age section row, so keyboard indices point past it.
+    expect(model.navigationEntries.map((e) => e.index)).toEqual(model.listChats.map((_, i) => i + 1));
+      });
 
   test("hides unknown and spam by default, reveals them under Unknown and Everyone", () => {
     const known = makeChat({ guid: "known" });
@@ -141,8 +91,6 @@ describe("deriveInboxModel", () => {
     expect(
       deriveInboxModel([known, unknown, spam], { state: "all", type: "all" }, "").listChats,
     ).toEqual([known, unknown, spam]);
-    const everyone = deriveInboxModel([known, unknown, spam], { state: "all", type: "all" }, "");
-    expect(everyone.sectionLabel).toBe("Everyone");
   });
 
   test("search supersedes the state/type lenses (matches across everything)", () => {
@@ -172,8 +120,6 @@ describe("deriveInboxModel", () => {
 
     // Search is a mode: the unread/group lenses do NOT constrain results.
     expect(model.listChats).toEqual([groupUnread, directUnread, groupWaiting]);
-    expect(model.sectionLabel).toBe("Search results");
-    expect(model.sectionCount).toBe(3);
   });
 
   test("the settled lens lists only conversations with neither triage flag", () => {
@@ -192,8 +138,6 @@ describe("deriveInboxModel", () => {
     );
 
     expect(model.listChats).toEqual([settled]);
-    expect(model.sectionLabel).toBe("Settled");
-    expect(model.sectionCount).toBe(1);
   });
 
   test("labels the settled lens beside a type lens", () => {
@@ -202,7 +146,6 @@ describe("deriveInboxModel", () => {
     const model = deriveInboxModel([group], { state: "settled", type: "group" }, "");
 
     expect(model.listChats).toEqual([group]);
-    expect(model.sectionLabel).toBe("Settled · Groups");
   });
 
   test("keeps pinned conversations first in filtered views", () => {
@@ -220,19 +163,6 @@ describe("deriveInboxModel", () => {
     expect(model.listChats).toEqual([pinned, regular]);
   });
 
-  test("describes combined filters when there is no local search", () => {
-    const groupUnread = makeChat({
-      guid: "group-unread",
-      isGroup: true,
-      flags: { ...makeChat().flags, unread: true },
-    });
-
-    const model = deriveInboxModel([groupUnread], { state: "unread", type: "group" }, "");
-
-    expect(model.sectionLabel).toBe("Unread · Groups");
-    expect(model.sectionCount).toBe(1);
-  });
-
   test("matches message text searches and labels the results", () => {
     const chat = makeChat({
       guid: "message-match",
@@ -243,7 +173,100 @@ describe("deriveInboxModel", () => {
     const model = deriveInboxModel([chat], DEFAULT_INBOX_FILTERS, "invoices");
 
     expect(model.listChats).toEqual([chat]);
-    expect(model.sectionLabel).toBe("Search results");
-    expect(model.sectionCount).toBe(1);
+  });
+});
+
+const at = (hoursAgo: number) => NOW - hoursAgo * HOUR;
+function chatAt(guid: string, hoursAgo: number, overrides: Partial<ChatSummary> = {}): ChatSummary {
+  return makeChat({ guid, lastMessage: { ...makeChat().lastMessage!, dateCreated: at(hoursAgo) }, ...overrides });
+}
+const ctx = (refinements: Partial<Refinements>, scheduled: string[] = []): RefineContext => ({
+  refinements: { ...DEFAULT_REFINEMENTS, ...refinements },
+  scheduled: new Set(scheduled),
+  now: NOW,
+});
+const needsReply = { ...DEFAULT_INBOX_FILTERS, state: "unresponded" as const };
+const replyFlags = { ...makeChat().flags, unresponded: true };
+
+describe("groupByAge", () => {
+  test("sections Today, This week and Older with counts, skipping empty ones", () => {
+    const rows = groupByAge([chatAt("a", 1), chatAt("b", 30), chatAt("c", 50), chatAt("d", 24 * 20)], NOW);
+    expect(rows.map((r) => (r.kind === "section" ? `${r.label}:${r.count}` : r.chat.guid))).toEqual([
+      "Today:1", "a", "This week:2", "b", "c", "Older:1", "d",
+    ]);
+  });
+});
+
+describe("refinements", () => {
+  const sms = chatAt("SMS;-;+1555", 1, { flags: replyFlags });
+  const imsg = chatAt("iMessage;-;a@b.c", 1, { flags: replyFlags, crm: { priority: 1, tags: ["showcase"], is_favorite: true } });
+  const old = chatAt("iMessage;-;old", 24 * 10, { flags: replyFlags, crm: { priority: 4, tags: ["press"] } });
+  const settled = chatAt("iMessage;-;settled", 2, { conversationId: "conv-s" });
+  const chats = [sms, imsg, old, settled];
+  const guids = (r: Partial<Refinements>, scheduled?: string[]) =>
+    deriveInboxModel(chats, needsReply, "", undefined, undefined, ctx(r, scheduled)).listChats.map((c) => c.guid);
+
+  test("service, time, priority and tags narrow the lens", () => {
+    expect(guids({ service: "SMS" })).toEqual([sms.guid]);
+    expect(guids({ service: "iMessage" })).toEqual([imsg.guid, old.guid]);
+    expect(guids({ time: "week" })).toEqual([sms.guid, imsg.guid]);
+    expect(guids({ priority: "high" })).toEqual([imsg.guid]);
+    expect(guids({ priority: "low" })).toEqual([old.guid]);
+    expect(guids({ tags: ["press", "showcase"] })).toEqual([imsg.guid, old.guid]);
+  });
+
+  test("only-show boxes all have to hold", () => {
+    expect(guids({ only: ["favorites"] })).toEqual([imsg.guid]);
+    expect(guids({ only: ["favorites", "pinned"] })).toEqual([]);
+  });
+
+  test("also-include widens the lens with settled or scheduled conversations", () => {
+    expect(guids({})).not.toContain(settled.guid);
+    expect(guids({ include: ["settled"] })).toContain(settled.guid);
+    expect(guids({ include: ["scheduled"] }, ["conv-s"])).toContain(settled.guid);
+    expect(guids({ include: ["scheduled"] }, [])).not.toContain(settled.guid);
+  });
+
+  test("search ignores refinements", () => {
+    const model = deriveInboxModel(chats, needsReply, "hello", undefined, undefined, ctx({ service: "SMS" }));
+    expect(model.listChats).toHaveLength(4);
+  });
+
+  test("checkbox counts say what each box would leave", () => {
+    const counts = checkboxCounts(chats, needsReply, undefined, ctx({}));
+    expect(counts.favorites).toBe(1);
+    expect(counts.settled).toBe(4);
+    expect(counts.attachments).toBe(0);
+  });
+
+  test("tags in use are deduped and sorted", () => {
+    expect(tagsInUse(chats)).toEqual(["press", "showcase"]);
+  });
+
+  test("priority levels map P1-P2 high, P3 medium, P4-P5 low", () => {
+    expect([1, 2, 3, 4, 5, undefined].map(priorityLevel)).toEqual(["high", "high", "medium", "low", "low", null]);
+  });
+});
+
+describe("activeChips", () => {
+  const r: Refinements = { ...DEFAULT_REFINEMENTS, service: "SMS", time: "week", tags: ["showcase"] };
+  const filters = { state: "unresponded" as const, type: "known" as const };
+
+  test("one chip per active value, the People lens off its default included", () => {
+    expect(activeChips(filters, r).map((c) => [c.prefix, c.label])).toEqual([
+      [undefined, "SMS"], [undefined, "Last 7 days"], ["Tag", "showcase"],
+    ]);
+    expect(activeChips({ ...filters, type: "unknown" }, DEFAULT_REFINEMENTS).map((c) => c.label)).toEqual(["Unknown numbers"]);
+  });
+
+  test("removing a chip clears only its own value", () => {
+    const tag = activeChips(filters, r).find((c) => c.key === "tag-showcase")!;
+    expect(tag.remove(filters, r).refinements).toEqual({ ...r, tags: [] });
+    const people = activeChips({ ...filters, type: "group" }, r)[0]!;
+    expect(people.remove({ ...filters, type: "group" }, r).filters.type).toBe("known");
+  });
+
+  test("a saved view is named after its chips", () => {
+    expect(viewName(filters, r)).toBe("SMS, Last 7 days, Tag showcase");
   });
 });

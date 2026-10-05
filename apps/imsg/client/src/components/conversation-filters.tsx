@@ -1,549 +1,569 @@
+import { Ionicons } from "@expo/vector-icons";
 import type { StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from "react-native";
+import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 
-import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
-import { CardShadow, Radii, Type } from "@/constants/theme";
-import { TriageGeometry } from "@/constants/triage-theme";
-import { OverlayShell } from "./overlay-shell";
+import { useSignal, LAZY, SNAPPY, type SignalColors } from "./conversations/signal";
 import {
-  activeInboxFilterCount,
-  resetInboxFilters,
-  selectInboxFilter,
-  type InboxFilterSelection,
-  type InboxFilters,
+  INCLUDE_LABELS,
+  LENSES,
+  ONLY_LABELS,
+  PEOPLE_LABELS,
+  PEOPLE_ORDER,
+  PRIORITY_LABELS,
+  SERVICE_LABELS,
+  TIME_LABELS,
+  toggled,
+  type FilterChip,
+  type IncludeKey,
+  type Lens,
+  type OnlyKey,
+  type PriorityLevel,
+  type Refinements,
+  type Service,
+  type TimeRange,
 } from "@/lib/inbox-model";
+import type { SavedView } from "@/lib/palette/saved-views";
 
-interface FilterOption<Value extends StateFilter | TypeFilter> {
-  value: Value;
-  label: string;
-}
-
-export const STATE_FILTERS = [
-  { value: "unresponded", label: "Needs reply" },
-  { value: "waiting", label: "Waiting" },
-  { value: "unread", label: "Unread" },
-  { value: "all", label: "All" },
-  { value: "settled", label: "Settled" },
-] as const satisfies readonly FilterOption<StateFilter>[];
-
-/** The three working queues. Unread, Settled, and the type lens live in the filter menu. */
-const SEGMENTS = [
-  { value: "unresponded", label: "Needs reply" },
-  { value: "waiting", label: "Waiting" },
-  { value: "all", label: "All" },
-] as const satisfies readonly FilterOption<StateFilter>[];
-
-export const TYPE_FILTERS = [
-  { value: "all", label: "Everyone" },
-  { value: "known", label: "Known" },
-  { value: "dm", label: "DMs" },
-  { value: "group", label: "Groups" },
-  { value: "unknown", label: "Unknown" },
-] as const satisfies readonly FilterOption<TypeFilter>[];
-
-export interface ConversationFiltersProps {
-  filters: InboxFilters;
-  counts: StateCounts | null;
-  onFiltersChange: (filters: InboxFilters) => void;
-}
+const WEB = Platform.OS === "web";
+const NO_SELECT = WEB ? ({ userSelect: "none", cursor: "pointer" } as object) : null;
 
 function formatCount(count: number): string {
   return count > 999 ? "999+" : String(count);
 }
 
-function filterAccessibilityLabel(label: string, count: number | undefined): string {
-  if (count === undefined) return label;
-  return `${label}, ${formatCount(count)} conversations`;
-}
-
 /**
- * The state segmented control: Needs reply, Waiting, All. A state picked from
- * the filter menu (Unread, Settled) leaves every segment unselected, and the
- * list title names it.
+ * The lens tab row, the app's only segmented control. Needs reply carries a turn-colored count,
+ * Unread a gray one. The underline stretches toward the new tab: the leading edge on snappy,
+ * the trailing edge on lazy.
  */
-export function StateSegments({ filters, counts, onFiltersChange }: ConversationFiltersProps) {
-  const visual = useTriageTheme();
+export function LensTabs({
+  state,
+  counts,
+  onSelect,
+  phone = false,
+}: {
+  state: StateFilter;
+  counts: StateCounts | null;
+  onSelect: (lens: Lens) => void;
+  phone?: boolean;
+}) {
+  const signal = useSignal();
+  const reduceMotion = useReducedMotion();
+  const layouts = useRef(new Map<Lens, { x: number; width: number }>()).current;
+  const left = useSharedValue(0);
+  const right = useSharedValue(0);
+  const [measured, setMeasured] = useState(0);
+
+  useEffect(() => {
+    const target = layouts.get(state as Lens);
+    if (!target) return;
+    const toLeft = target.x;
+    const toRight = target.x + target.width;
+    if (reduceMotion || right.value === 0) {
+      left.value = toLeft;
+      right.value = toRight;
+      return;
+    }
+    const movingRight = toLeft > left.value;
+    left.value = withSpring(toLeft, movingRight ? LAZY : SNAPPY);
+    right.value = withSpring(toRight, movingRight ? SNAPPY : LAZY);
+  }, [state, measured, layouts, left, right, reduceMotion]);
+
+  const bar = useAnimatedStyle(() => ({ left: left.value, width: Math.max(0, right.value - left.value) }));
+  const active = LENSES.some((lens) => lens.value === state);
+
   return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel="Conversation state"
-      style={[styles.segments, { backgroundColor: visual.controlFill }]}
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      scrollEnabled={phone}
+      contentContainerStyle={[styles.tabs, phone && styles.tabsPhone]}
+      accessibilityRole="tablist"
+      accessibilityLabel="Lenses"
     >
-      {SEGMENTS.map((segment) => {
-        const selected = filters.state === segment.value;
-        const count = counts?.[segment.value];
+      {LENSES.map((lens, index) => {
+        const selected = lens.value === state;
+        const count = lens.count ? counts?.[lens.value] : undefined;
+        const turnCount = lens.count === "turn" && (count ?? 0) > 0;
         return (
           <Pressable
-            key={segment.value}
-            accessibilityRole="radio"
-            accessibilityLabel={filterAccessibilityLabel(segment.label, count)}
-            aria-checked={selected}
-            onPress={() => onFiltersChange(selectInboxFilter(filters, { kind: "state", value: segment.value }))}
-            style={({ hovered, pressed }) => [
-              styles.segment,
-              selected
-                ? [styles.segmentSelected, { backgroundColor: visual.card }]
-                : (hovered || pressed) && { backgroundColor: visual.controlFill },
-            ]}
+            key={lens.value}
+            accessibilityRole="tab"
+            aria-selected={selected}
+            accessibilityLabel={count === undefined ? lens.label : `${lens.label}, ${count}`}
+            accessibilityHint={WEB ? `Command ${index + 1}` : undefined}
+            onPress={() => onSelect(lens.value)}
+            onLayout={(e) => {
+              layouts.set(lens.value, { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width });
+              setMeasured((n) => n + 1);
+            }}
+            style={[styles.tab, phone && styles.tabPhone, NO_SELECT]}
           >
-            <Text numberOfLines={1} style={[styles.segmentLabel, { color: selected ? visual.text : visual.meta }]}>
-              {segment.label}
-              {count !== undefined ? <Text style={[styles.segmentCount, { color: visual.meta }]}>  {formatCount(count)}</Text> : null}
+            <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color: selected ? signal.text : signal.textTertiary }]}>
+              {lens.label}
             </Text>
+            {count !== undefined ? (
+              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, { color: turnCount ? signal.turn : signal.textTertiary }, turnCount && styles.tabCountTurn]}>
+                {formatCount(count)}
+              </Text>
+            ) : null}
           </Pressable>
         );
       })}
+      {active && !phone ? <Reanimated.View pointerEvents="none" style={[styles.underline, { backgroundColor: signal.lensBar }, bar]} /> : null}
+    </ScrollView>
+  );
+}
+
+/** Saved views, then the active filter chips, then Clear all. Phone puts the count line first. */
+export function FilterChipRow({
+  chips,
+  views,
+  onRemove,
+  onClearAll,
+  onOpenView,
+  onDeleteView,
+  countLine,
+  phone = false,
+}: {
+  chips: FilterChip[];
+  views: readonly SavedView[];
+  onRemove: (chip: FilterChip) => void;
+  onClearAll: () => void;
+  onOpenView: (view: SavedView) => void;
+  onDeleteView: (view: SavedView) => void;
+  countLine?: string;
+  phone?: boolean;
+}) {
+  const signal = useSignal();
+  if (chips.length === 0 && views.length === 0) return null;
+  const clearAll = chips.length > 0 ? (
+    <Pressable accessibilityRole="button" onPress={onClearAll} hitSlop={6} style={NO_SELECT}>
+      <Text style={[styles.clearAll, { color: signal.textSecondary }]}>Clear all</Text>
+    </Pressable>
+  ) : null;
+  const chipViews = (
+    <>
+      {views.map((view) => (
+        <View key={view.id} style={[styles.chip, styles.viewChip, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Open view ${view.name}`} onPress={() => onOpenView(view)} style={[styles.chipBody, NO_SELECT]}>
+            <Ionicons aria-hidden name="bookmark-outline" size={11} color={signal.icon} />
+            <Text numberOfLines={1} style={[styles.chipLabel, { color: signal.text }]}>{view.name}</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Delete view ${view.name}`} onPress={() => onDeleteView(view)} hitSlop={6} style={[styles.chipX, NO_SELECT]}>
+            <Ionicons aria-hidden name="close" size={11} color={signal.icon} />
+          </Pressable>
+        </View>
+      ))}
+      {chips.map((chip) => (
+        <View key={chip.key} style={[styles.chip, phone && styles.chipPhone, { backgroundColor: signal.chipBg, borderColor: signal.chipBorder }]}>
+          <Text numberOfLines={1} style={[styles.chipLabel, phone && styles.chipLabelPhone, { color: signal.text }]}>
+            {chip.prefix ? <Text style={{ color: signal.textSecondary, fontWeight: "400" }}>{chip.prefix} </Text> : null}
+            {chip.label}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Remove filter ${chip.prefix ? `${chip.prefix} ` : ""}${chip.label}`}
+            onPress={() => onRemove(chip)}
+            hitSlop={6}
+            style={[styles.chipX, NO_SELECT]}
+          >
+            <Ionicons aria-hidden name="close" size={phone ? 14 : 11} color={signal.icon} />
+          </Pressable>
+        </View>
+      ))}
+    </>
+  );
+  if (phone) {
+    return (
+      <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsPhone}>{chipViews}</ScrollView>
+        {countLine ? (
+          <View style={styles.countLine}>
+            <Text style={[styles.countLineText, { color: signal.textSecondary }]}>{countLine}</Text>
+            {clearAll}
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+  return <View style={styles.chips}>{chipViews}{clearAll}</View>;
+}
+
+interface Option<V extends string> {
+  value: V;
+  label: string;
+  dot?: string;
+}
+
+/**
+ * A value-showing dropdown with a check on the current choice.
+ * TODO(signal-dropdown): replace with components/ui/dropdown.tsx once the settings unit lands it.
+ */
+function Dropdown<V extends string>({
+  label,
+  icon,
+  options,
+  selected,
+  display,
+  onSelect,
+  multi = false,
+  open,
+  onOpenChange,
+  phone,
+}: {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  options: Option<V>[];
+  selected: readonly V[];
+  display: string;
+  onSelect: (value: V) => void;
+  multi?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  phone: boolean;
+}) {
+  const signal = useSignal();
+  const trigger = phone ? (
+    <View style={styles.sheetRowValue}>
+      <Text numberOfLines={1} style={[styles.sheetValue, { color: signal.textSecondary }]}>{display}</Text>
+      <Ionicons aria-hidden name="chevron-expand-outline" size={14} color={signal.textSecondary} />
+    </View>
+  ) : (
+    <View style={[styles.dd, { backgroundColor: signal.surface, borderColor: open ? signal.focusRing : signal.dividerStrong }, open && styles.ddOpen]}>
+      <Text numberOfLines={1} style={[styles.ddValue, { color: signal.text }]}>{display}</Text>
+      <Ionicons aria-hidden name="chevron-expand-outline" size={13} color={signal.icon} />
+    </View>
+  );
+  return (
+    <View style={[phone ? styles.sheetRow : styles.fieldRow, { zIndex: open ? 20 : 0 }, phone && { borderBottomColor: signal.divider }]}>
+      <Pressable
+        accessibilityRole="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        accessibilityLabel={`${label}, ${display}`}
+        onPress={() => onOpenChange(!open)}
+        style={[styles.fieldPress, NO_SELECT]}
+      >
+        {phone ? <Ionicons aria-hidden name={icon} size={20} color={signal.icon} style={styles.sheetIcon} /> : null}
+        <Text style={[phone ? styles.sheetLabel : styles.fieldLabel, { color: phone ? signal.text : signal.textSecondary }]}>{label}</Text>
+        {trigger}
+      </Pressable>
+      {open ? (
+        <View accessibilityRole="menu" aria-label={label} style={[styles.menu, phone && styles.menuPhone, { backgroundColor: signal.popBg }, WEB && ({ boxShadow: signal.popShadow } as object)]}>
+          {options.length === 0 ? <Text style={[styles.menuEmpty, { color: signal.textTertiary }]}>No tags yet</Text> : null}
+          {options.map((option) => {
+            const checked = selected.includes(option.value);
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole={multi ? "checkbox" : "radio"}
+                aria-checked={checked}
+                onPress={() => {
+                  onSelect(option.value);
+                  if (!multi) onOpenChange(false);
+                }}
+                style={({ hovered, pressed }) => [styles.menuItem, phone && styles.menuItemPhone, (checked || hovered || pressed) && { backgroundColor: signal.popSelected }, NO_SELECT]}
+              >
+                <View style={styles.menuCheck}>{checked ? <Ionicons aria-hidden name="checkmark" size={phone ? 17 : 14} color={signal.text} /> : null}</View>
+                {option.dot ? <View style={[styles.dot, { backgroundColor: option.dot }]} /> : null}
+                <Text numberOfLines={1} style={[styles.menuLabel, phone && styles.menuLabelPhone, { color: signal.text }]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function FilterMenuOption({
+function Toggle({
   label,
+  icon,
   count,
-  selected,
-  selection,
-  onSelect,
-  compact = false,
+  checked,
+  onToggle,
+  phone,
+  signal,
 }: {
   label: string;
-  count?: number;
-  selected: boolean;
-  selection: InboxFilterSelection;
-  onSelect: (selection: InboxFilterSelection) => void;
-  compact?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  count: number;
+  checked: boolean;
+  onToggle: () => void;
+  phone: boolean;
+  signal: SignalColors;
 }) {
-  const theme = useTheme();
+  if (phone) {
+    return (
+      <View style={[styles.sheetRow, { borderBottomColor: signal.divider }]}>
+        <Ionicons aria-hidden name={icon} size={20} color={signal.icon} style={styles.sheetIcon} />
+        <Text style={[styles.sheetLabel, { color: signal.text }]}>{label}</Text>
+        <Switch
+          accessibilityLabel={`${label}, ${count}`}
+          value={checked}
+          onValueChange={onToggle}
+          trackColor={{ false: signal.switchOff, true: signal.switchOn }}
+          thumbColor="#FFFFFF"
+        />
+      </View>
+    );
+  }
   return (
     <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={filterAccessibilityLabel(label, count)}
-      aria-checked={selected}
-      onPress={() => onSelect(selection)}
-      style={({ pressed }) => [
-        styles.menuOption,
-        compact && styles.popoverOption,
-        pressed && { backgroundColor: theme.backgroundSelected },
-      ]}
+      role="checkbox"
+      aria-checked={checked}
+      accessibilityLabel={`${label}, ${count}`}
+      onPress={onToggle}
+      style={[styles.check, NO_SELECT]}
     >
-      <Text
-        accessibilityElementsHidden
-        style={[styles.check, compact && styles.popoverCheck, { color: theme.accent }]}
-      >
-        {selected ? "✓" : ""}
-      </Text>
-      <Text
-        style={[styles.menuOptionLabel, compact && styles.popoverOptionLabel, { color: theme.text }]}
-      >
-        {label}
-      </Text>
-      {count !== undefined && (
-        <Text
-          style={[
-            styles.menuOptionCount,
-            compact && styles.popoverOptionCount,
-            { color: theme.textSecondary },
-          ]}
-        >
-          {formatCount(count)}
-        </Text>
-      )}
+      <View style={[styles.box, checked ? { backgroundColor: signal.switchOn, borderColor: signal.switchOn } : { borderColor: signal.switchOff }]}>
+        {checked ? <Ionicons aria-hidden name="checkmark" size={12} color={signal.onSwitch} /> : null}
+      </View>
+      <Ionicons aria-hidden name={icon} size={15} color={signal.icon} />
+      <Text style={[styles.checkLabel, { color: signal.text }]}>{label}</Text>
+      <Text style={[styles.checkCount, { color: signal.textTertiary }]}>{count}</Text>
     </Pressable>
   );
 }
 
-export interface FilterAnchor {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+const ONLY_ICONS: Record<OnlyKey, keyof typeof Ionicons.glyphMap> = {
+  attachments: "attach-outline",
+  links: "link-outline",
+  pinned: "pin-outline",
+  favorites: "star-outline",
+};
+const INCLUDE_ICONS: Record<IncludeKey, keyof typeof Ionicons.glyphMap> = {
+  settled: "checkmark-circle-outline",
+  scheduled: "time-outline",
+};
+const ONLY_KEYS: OnlyKey[] = ["attachments", "links", "pinned", "favorites"];
+const INCLUDE_KEYS: IncludeKey[] = ["settled", "scheduled"];
+const SERVICES: Service[] = ["any", "iMessage", "SMS"];
+const TIMES: TimeRange[] = ["any", "today", "week", "month"];
+const PRIORITIES: PriorityLevel[] = ["any", "high", "medium", "low"];
 
-export interface ConversationFiltersModalProps extends ConversationFiltersProps {
+export interface FilterPanelProps {
   visible: boolean;
   onClose: () => void;
-  /** Desktop: render as a popover anchored to the filter button instead of a sheet. */
-  anchor?: FilterAnchor | null;
+  /** Desktop: a popover anchored under the filter icon. Absent: the phone bottom sheet. */
+  anchor: { x: number; y: number; width: number; height: number } | null;
+  type: TypeFilter;
+  refinements: Refinements;
+  onTypeChange: (type: TypeFilter) => void;
+  onRefinementsChange: (refinements: Refinements) => void;
+  onClearAll: () => void;
+  onSaveView: () => void;
+  tags: readonly string[];
+  counts: Record<OnlyKey | IncludeKey, number>;
+  showing: number;
+  total: number;
+  lensLabel: string;
 }
 
-/**
- * Adapter for the same two-lens model. On mobile it's a bottom sheet; on desktop
- * (when an anchor is supplied) it's a popover mounted at the filter button.
- * Selections stay open so a person can combine state and type before dismissing.
- */
-export function ConversationFiltersModal({
-  visible,
-  onClose,
-  filters,
-  counts,
-  onFiltersChange,
-  anchor = null,
-}: ConversationFiltersModalProps) {
-  const theme = useTheme();
+/** The filter controls, as the desktop popover or the phone sheet. Every change applies live. */
+export function ConversationFiltersPanel(props: FilterPanelProps) {
+  const { visible, onClose, anchor, type, refinements: r, onRefinementsChange, counts } = props;
+  const signal = useSignal();
+  const reduceMotion = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
-  const select = (selection: InboxFilterSelection): void => {
-    onFiltersChange(selectInboxFilter(filters, selection));
-  };
+  const [menu, setMenu] = useState<string | null>(null);
+  const phone = anchor === null;
+  const scale = useSharedValue(0.98);
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    if (!visible) {
+      setMenu(null);
+      scale.value = 0.98;
+      opacity.value = 0;
+      return;
+    }
+    scale.value = reduceMotion ? 1 : withSpring(1, SNAPPY);
+    opacity.value = reduceMotion ? 1 : withSpring(1, SNAPPY);
+  }, [visible, reduceMotion, scale, opacity]);
+  const grow = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+
+  const set = (patch: Partial<Refinements>) => onRefinementsChange({ ...r, ...patch });
+  const menuProps = (key: string) => ({ open: menu === key, onOpenChange: (open: boolean) => setMenu(open ? key : null), phone });
+  const tagDisplay = r.tags.length === 0 ? "Any tag" : r.tags.length === 1 ? r.tags[0]! : `${r.tags.length} tags`;
+  const controls = (
+    <View style={[phone ? [styles.sheetCard, { backgroundColor: signal.surface, borderColor: signal.divider }] : [styles.band, { borderBottomColor: signal.divider }], styles.raised]}>
+      <Dropdown label="People" icon="people-outline" display={PEOPLE_LABELS[type]} selected={[type]}
+        options={PEOPLE_ORDER.map((value) => ({ value, label: PEOPLE_LABELS[value] }))}
+        onSelect={props.onTypeChange} {...menuProps("people")} />
+      <Dropdown label="Service" icon="chatbubble-outline" display={SERVICE_LABELS[r.service]} selected={[r.service]}
+        options={SERVICES.map((value) => ({ value, label: SERVICE_LABELS[value], dot: value === "iMessage" ? signal.imessage : value === "SMS" ? signal.sms : undefined }))}
+        onSelect={(service) => set({ service })} {...menuProps("service")} />
+      <Dropdown label="Time" icon="time-outline" display={TIME_LABELS[r.time]} selected={[r.time]}
+        options={TIMES.map((value) => ({ value, label: TIME_LABELS[value] }))}
+        onSelect={(time) => set({ time })} {...menuProps("time")} />
+      <Dropdown label="Priority" icon="star-outline" display={PRIORITY_LABELS[r.priority]} selected={[r.priority]}
+        options={PRIORITIES.map((value) => ({ value, label: PRIORITY_LABELS[value] }))}
+        onSelect={(priority) => set({ priority })} {...menuProps("priority")} />
+      <Dropdown label="Tags" icon="pricetag-outline" display={tagDisplay} selected={r.tags} multi
+        options={props.tags.map((value) => ({ value, label: value }))}
+        onSelect={(tag) => set({ tags: toggled(r.tags, tag) })} {...menuProps("tags")} />
+    </View>
+  );
+  const toggles = (title: string, keys: readonly (OnlyKey | IncludeKey)[]) => (
+    <View style={phone ? null : [styles.band, { borderBottomColor: signal.divider }]}>
+      <Text style={[phone ? styles.sheetGroup : styles.bandTitle, { color: signal.textSecondary }]}>{title}</Text>
+      <View style={phone ? [styles.sheetCard, { backgroundColor: signal.surface, borderColor: signal.divider }] : null}>
+        {keys.map((key) => {
+          const only = (ONLY_KEYS as readonly string[]).includes(key);
+          const checked = only ? r.only.includes(key as OnlyKey) : r.include.includes(key as IncludeKey);
+          return (
+            <Toggle
+              key={key}
+              signal={signal}
+              phone={phone}
+              label={only ? ONLY_LABELS[key as OnlyKey] : phone && key === "scheduled" ? "Scheduled" : INCLUDE_LABELS[key as IncludeKey]}
+              icon={only ? ONLY_ICONS[key as OnlyKey] : INCLUDE_ICONS[key as IncludeKey]}
+              count={counts[key]}
+              checked={checked}
+              onToggle={() => (only ? set({ only: toggled(r.only, key as OnlyKey) }) : set({ include: toggled(r.include, key as IncludeKey) }))}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
 
   if (anchor) {
-    // Stays over the queue it filters instead of covering the navigation rail.
-    const popoverWidth = Math.min(TriageGeometry.queueWidth - 16, windowWidth - 16);
-    const left = Math.min(
-      Math.max(TriageGeometry.railWidth + 8, anchor.x + anchor.width - popoverWidth),
-      windowWidth - popoverWidth - 8,
-    );
-    const top = anchor.y + anchor.height + 6;
+    const width = Math.min(380, windowWidth - 16);
+    const left = Math.max(8, Math.min(anchor.x, windowWidth - width - 8));
     return (
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close conversation filters"
-          onPress={onClose}
-          style={styles.popoverBackdrop}
-        />
-        <View
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={StyleSheet.absoluteFill} />
+        <Reanimated.View
           role="dialog"
-          aria-modal
-          aria-label="Conversation filters"
-          style={[
-            styles.popover,
-            {
-              backgroundColor: theme.backgroundElement,
-              borderColor: theme.divider,
-              top,
-              left,
-              width: popoverWidth,
-            },
-          ]}
+          aria-label="Filter conversations"
+          style={[styles.popover, { top: anchor.y + anchor.height + 6, left, width, backgroundColor: signal.popBg }, WEB && ({ boxShadow: signal.popShadow, transformOrigin: "top left" } as object), grow]}
         >
-          <View style={styles.popoverBody}>
-            <View
-              accessibilityRole="radiogroup"
-              accessibilityLabel="Conversation state"
-              style={styles.popoverStateColumn}
-            >
-              <Text style={[styles.popoverGroupTitle, { color: theme.textSecondary }]}>State</Text>
-              {STATE_FILTERS.map((filter) => (
-                <FilterMenuOption
-                  key={filter.value}
-                  compact
-                  label={filter.label}
-                  count={counts?.[filter.value]}
-                  selected={filters.state === filter.value}
-                  selection={{ kind: "state", value: filter.value }}
-                  onSelect={select}
-                />
-              ))}
-            </View>
-            <View style={[styles.popoverColumnDivider, { backgroundColor: theme.divider }]} />
-            <View
-              accessibilityRole="radiogroup"
-              accessibilityLabel="Conversation type"
-              style={styles.popoverTypeColumn}
-            >
-              <Text style={[styles.popoverGroupTitle, { color: theme.textSecondary }]}>Type</Text>
-              {TYPE_FILTERS.map((filter) => (
-                <FilterMenuOption
-                  key={filter.value}
-                  compact
-                  label={filter.label}
-                  selected={filters.type === filter.value}
-                  selection={{ kind: "type", value: filter.value }}
-                  onSelect={select}
-                />
-              ))}
-            </View>
-          </View>
-          <View style={[styles.popoverFooter, { borderTopColor: theme.divider }]}>
+          <Pressable accessible={false} onPress={() => setMenu(null)} style={[styles.popHeader, { borderBottomColor: signal.divider }]}>
+            <Text style={[styles.popTitle, { color: signal.text }]}>Filter</Text>
+            <Text style={[styles.popCount, { color: signal.textSecondary }]}>Showing {props.showing} of {props.total} in {props.lensLabel}</Text>
+          </Pressable>
+          {controls}
+          {toggles("Only show", ONLY_KEYS)}
+          {toggles("Also include", INCLUDE_KEYS)}
+          <View style={styles.popFooter}>
+            <Pressable accessibilityRole="button" onPress={props.onClearAll} hitSlop={6} style={NO_SELECT}>
+              <Text style={[styles.footerClear, { color: signal.textSecondary }]}>Clear all</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Reset conversation filters"
-              onPress={() => onFiltersChange(resetInboxFilters())}
+              onPress={props.onSaveView}
+              style={({ hovered }) => [styles.saveView, { borderColor: signal.dividerStrong }, hovered && { backgroundColor: signal.rowHover }, NO_SELECT]}
             >
-              <Text style={[styles.popoverResetLabel, { color: theme.accent }]}>Reset</Text>
+              <Ionicons aria-hidden name="bookmark-outline" size={14} color={signal.text} />
+              <Text style={[styles.saveLabel, { color: signal.text }]}>Save as view</Text>
             </Pressable>
           </View>
-        </View>
+        </Reanimated.View>
       </Modal>
     );
   }
 
   return (
-    <OverlayShell
-      visible={visible}
-      onClose={onClose}
-      animationType="slide"
-      // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
-      backdropColor="rgba(0,0,0,0.35)"
-      backdropStyle={styles.modalRoot}
-      backdropAccessibilityRole="button"
-      backdropAccessibilityLabel="Close conversation filters"
-      card={false}
-      cardStyle={styles.sheetWrapper}
-    >
-      <View
-        accessibilityViewIsModal
-        accessibilityLabel="Conversation filters"
-        style={[styles.menu, { backgroundColor: theme.backgroundElement }]}
-      >
-        <View style={styles.menuHeader}>
-          <Text style={[styles.menuTitle, { color: theme.text }]}>Filters</Text>
-          <Text style={[styles.menuSummary, { color: theme.textSecondary }]}>
-            {activeInboxFilterCount(filters)} active
-          </Text>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close filters" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: signal.scrim }]} />
+      <View role="dialog" aria-label="Filter conversations" style={[styles.sheet, { backgroundColor: signal.popBg }]}>
+        <View style={[styles.grabber, { backgroundColor: signal.dividerStrong }]} />
+        <View style={styles.sheetHeader}>
+          <Pressable accessibilityRole="button" onPress={props.onClearAll} hitSlop={8} style={NO_SELECT}>
+            <Text style={[styles.sheetAction, { color: signal.textSecondary }]}>Clear</Text>
+          </Pressable>
+          <Text style={[styles.sheetTitle, { color: signal.text }]}>Filter</Text>
+          <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8} style={NO_SELECT}>
+            <Text style={[styles.sheetAction, styles.sheetDone, { color: signal.text }]}>Done</Text>
+          </Pressable>
         </View>
-        <ScrollView
-          style={styles.menuContent}
-          contentContainerStyle={styles.menuContentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <View accessibilityRole="radiogroup" accessibilityLabel="Conversation state">
-            <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>State</Text>
-            {STATE_FILTERS.map((filter) => (
-              <FilterMenuOption
-                key={filter.value}
-                label={filter.label}
-                count={counts?.[filter.value]}
-                selected={filters.state === filter.value}
-                selection={{ kind: "state", value: filter.value }}
-                onSelect={select}
-              />
-            ))}
-          </View>
-          <View style={[styles.menuDivider, { backgroundColor: theme.divider }]} />
-          <View accessibilityRole="radiogroup" accessibilityLabel="Conversation type">
-            <Text style={[styles.groupTitle, { color: theme.textSecondary }]}>Type</Text>
-            {TYPE_FILTERS.map((filter) => (
-              <FilterMenuOption
-                key={filter.value}
-                label={filter.label}
-                selected={filters.type === filter.value}
-                selection={{ kind: "type", value: filter.value }}
-                onSelect={select}
-              />
-            ))}
-          </View>
+        <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+          {controls}
+          {toggles("Only show", ONLY_KEYS)}
+          {toggles("Also include", INCLUDE_KEYS)}
         </ScrollView>
-        <View style={styles.menuActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Reset conversation filters"
-            onPress={() => onFiltersChange(resetInboxFilters())}
-            style={({ pressed }) => [styles.resetButton, pressed && { opacity: 0.65 }]}
-          >
-            <Text style={[styles.resetButtonLabel, { color: theme.accent }]}>Reset</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Done filtering conversations"
-            onPress={onClose}
-            style={({ pressed }) => [
-              styles.doneButton,
-              { backgroundColor: theme.accent },
-              pressed && { opacity: 0.75 },
-            ]}
-          >
-            <Text style={[styles.doneButtonLabel, { color: theme.background }]}>Done</Text>
-          </Pressable>
-        </View>
+        <Pressable accessibilityRole="button" onPress={onClose} style={[styles.showButton, { backgroundColor: signal.switchOn }]}>
+          <Text style={[styles.showLabel, { color: signal.onSwitch }]}>
+            Show {props.showing} {props.showing === 1 ? "conversation" : "conversations"}
+          </Text>
+        </Pressable>
       </View>
-    </OverlayShell>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  segments: {
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 2,
-    height: 28,
-    padding: 2,
-  },
-  segment: {
-    alignItems: "center",
-    borderRadius: 6,
-    // Content-sized so the active label keeps its count; flex: 1 split the track in equal thirds.
-    flexBasis: "auto",
-    flexGrow: 1,
-    flexShrink: 1,
-    justifyContent: "center",
-    minWidth: 0,
-    paddingHorizontal: 6,
-  },
-  segmentSelected: {
-    boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
-  } as object,
-  segmentLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  segmentCount: {
-    fontVariant: ["tabular-nums"],
-    fontWeight: "500",
-  },
-  popoverBackdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  popover: {
-    borderRadius: Radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: "hidden",
-    position: "absolute",
-    ...CardShadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
-  },
-  popoverBody: {
-    flexDirection: "row",
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-  },
-  popoverStateColumn: {
-    flex: 1.3,
-  },
-  popoverTypeColumn: {
-    flex: 1,
-  },
-  popoverColumnDivider: {
-    alignSelf: "stretch",
-    marginHorizontal: 6,
-    marginVertical: 2,
-    width: StyleSheet.hairlineWidth,
-  },
-  popoverGroupTitle: {
-    fontSize: Type.caption,
-    fontWeight: "700",
-    paddingBottom: 4,
-    paddingHorizontal: 12,
-  },
-  popoverFooter: {
-    alignItems: "flex-end",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  popoverResetLabel: {
-    fontSize: Type.secondary,
-    fontWeight: "600",
-  },
-  // Color + press-dismiss live on OverlayShell's own backdrop; this anchors
-  // `menu` to the bottom. alignItems MUST be reset too: the shell centers its
-  // child by default (correct for a dialog), which made this sheet shrink to
-  // its content width and float as a narrow column instead of spanning the
-  // screen like a bottom sheet.
-  modalRoot: {
-    alignItems: "stretch",
-    justifyContent: "flex-end",
-  },
-  // OverlayShell's press-swallowing wrapper. It gets the sheet's SIZE because
-  // it's the direct child of the (flex:1) backdrop, so a percentage has a
-  // definite parent to resolve against. Putting maxHeight on `menu` instead
-  // asked Yoga to size a child by a percentage of a parent whose own height
-  // was being derived from that child — the circularity left the sheet
-  // stretched to the cap with dead space above the buttons.
-  sheetWrapper: {
-    maxHeight: "88%",
-    width: "100%",
-  },
-  menu: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    flexShrink: 1,
-    paddingBottom: 20,
-    paddingTop: 18,
-  },
-  menuContent: {
-    flexShrink: 1,
-  },
-  menuContentContainer: {
-    paddingBottom: 4,
-  },
-  menuHeader: {
-    alignItems: "baseline",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: 12,
-    paddingHorizontal: 20,
-  },
-  menuTitle: {
-    fontSize: 21,
-    fontWeight: "700",
-  },
-  menuSummary: {
-    fontSize: 14,
-  },
-  groupTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    paddingBottom: 4,
-    paddingHorizontal: 20,
-  },
-  menuOption: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 44,
-    paddingHorizontal: 20,
-  },
-  popoverOption: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-  },
-  check: {
-    fontSize: 16,
-    fontWeight: "700",
-    width: 24,
-  },
-  popoverCheck: {
-    fontSize: 14,
-    width: 18,
-  },
-  menuOptionLabel: {
-    flex: 1,
-    fontSize: 16,
-  },
-  popoverOptionLabel: {
-    fontSize: 14,
-  },
-  menuOptionCount: {
-    fontSize: 14,
-    fontVariant: ["tabular-nums"],
-  },
-  popoverOptionCount: {
-    fontSize: 12,
-  },
-  menuDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 20,
-    marginVertical: 10,
-  },
-  menuActions: {
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "flex-end",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  resetButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 14,
-  },
-  resetButtonLabel: {
-    fontSize: Type.body,
-    fontWeight: "600",
-  },
-  doneButton: {
-    alignItems: "center",
-    borderRadius: Radii.chip,
-    justifyContent: "center",
-    minHeight: 44,
-    minWidth: 84,
-    paddingHorizontal: 16,
-  },
-  doneButtonLabel: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  tabs: { flexDirection: "row", gap: 12, position: "relative" },
+  tabsPhone: { gap: 18, paddingHorizontal: 20 },
+  tab: { alignItems: "flex-start", flexDirection: "row", paddingBottom: 10 },
+  tabPhone: { paddingBottom: 6 },
+  // TODO(signal-tokens): header family arrives with U1's type tokens.
+  tabLabel: { fontSize: 14.5, fontWeight: "600", letterSpacing: -0.15, lineHeight: 18 },
+  tabLabelPhone: { fontSize: 25, fontWeight: "700", letterSpacing: -0.4, lineHeight: 30 },
+  tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18, marginLeft: 4 },
+  tabCountPhone: { fontSize: 12, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
+  tabCountTurn: { fontWeight: "600" },
+  underline: { borderRadius: 2, bottom: 0, height: 2, position: "absolute" },
+  chips: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6, paddingBottom: 2, paddingLeft: 14, paddingRight: 12, paddingTop: 10 },
+  chipsPhone: { gap: 8, paddingHorizontal: 20, paddingTop: 8 },
+  chip: { alignItems: "center", borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 5, height: 24, paddingLeft: 9, paddingRight: 4 },
+  chipPhone: { height: 32, paddingLeft: 12, paddingRight: 8 },
+  viewChip: { paddingLeft: 7 },
+  chipBody: { alignItems: "center", flexDirection: "row", gap: 4 },
+  chipLabel: { fontSize: 12, fontWeight: "500", maxWidth: 180 },
+  chipLabelPhone: { fontSize: 15 },
+  chipX: { alignItems: "center", borderRadius: 8, height: 16, justifyContent: "center", width: 16 },
+  clearAll: { fontSize: 12, fontWeight: "500", marginLeft: 4 },
+  countLine: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 10 },
+  countLineText: { fontSize: 13, fontVariant: ["tabular-nums"] },
+  popover: { borderRadius: 14, position: "absolute" },
+  popHeader: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", height: 46, justifyContent: "space-between", paddingHorizontal: 16 },
+  popTitle: { fontSize: 14, fontWeight: "600" },
+  popCount: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  raised: { position: "relative", zIndex: 2 },
+  band: { borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 10 },
+  bandTitle: { fontSize: 12, fontWeight: "600", paddingBottom: 4 },
+  fieldRow: { paddingVertical: 3, position: "relative" },
+  fieldPress: { alignItems: "center", flex: 1, flexDirection: "row", minHeight: 30 },
+  fieldLabel: { flex: 1, fontSize: 13 },
+  dd: { alignItems: "center", borderRadius: 8, borderWidth: 1, flexDirection: "row", gap: 8, height: 30, justifyContent: "space-between", paddingLeft: 11, paddingRight: 7, width: 190 },
+  ddOpen: { borderWidth: 1.5 },
+  ddValue: { flex: 1, fontSize: 13 },
+  menu: { borderRadius: 12, minWidth: 190, padding: 5, position: "absolute", right: 0, top: 36 },
+  menuPhone: { minWidth: 230, right: 8, top: 46 },
+  menuItem: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 6, height: 30, paddingHorizontal: 6 },
+  menuItemPhone: { height: 42 },
+  menuCheck: { alignItems: "center", width: 18 },
+  dot: { borderRadius: 4, height: 7, width: 7 },
+  menuLabel: { fontSize: 13 },
+  menuLabelPhone: { fontSize: 17 },
+  menuEmpty: { fontSize: 12, padding: 8 },
+  check: { alignItems: "center", flexDirection: "row", gap: 10, height: 30 },
+  box: { alignItems: "center", borderRadius: 4.5, borderWidth: 1.5, height: 16, justifyContent: "center", width: 16 },
+  checkLabel: { flex: 1, fontSize: 13 },
+  checkCount: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  popFooter: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  footerClear: { fontSize: 13, fontWeight: "600" },
+  saveView: { alignItems: "center", borderRadius: 8, borderWidth: 1, flexDirection: "row", gap: 6, height: 30, paddingHorizontal: 12 },
+  saveLabel: { fontSize: 13, fontWeight: "600" },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, bottom: 0, left: 0, maxHeight: "92%", paddingBottom: 28, position: "absolute", right: 0 },
+  grabber: { alignSelf: "center", borderRadius: 3, height: 5, marginTop: 8, width: 36 },
+  sheetHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14 },
+  sheetTitle: { fontSize: 17, fontWeight: "600" },
+  sheetAction: { fontSize: 17 },
+  sheetDone: { fontWeight: "600" },
+  sheetBody: { gap: 8, paddingBottom: 16, paddingHorizontal: 16 },
+  sheetCard: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, overflow: "visible" },
+  sheetGroup: { fontSize: 13, paddingBottom: 6, paddingHorizontal: 14, paddingTop: 14 },
+  sheetRow: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", minHeight: 44, paddingHorizontal: 14, position: "relative" },
+  sheetIcon: { marginRight: 12 },
+  sheetLabel: { flex: 1, fontSize: 17 },
+  sheetRowValue: { alignItems: "center", flexDirection: "row", gap: 4, marginLeft: "auto" },
+  sheetValue: { fontSize: 17 },
+  showButton: { alignItems: "center", borderRadius: 12, height: 50, justifyContent: "center", marginHorizontal: 16, marginTop: 4 },
+  showLabel: { fontSize: 17, fontWeight: "600" },
 });

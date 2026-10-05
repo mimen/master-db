@@ -5,12 +5,14 @@ const DRAG = { dataSet: { tauriDragRegion: "" } } as object;
 const NO_DRAG = { dataSet: { tauriDragRegion: "false" } } as object;
 
 export const DESK_HEADER_HEIGHT = 112;
-export const DESK_HEADER_WITH_CONTROLS_HEIGHT = 120;
+/** Search toolbar over the lens tabs, with no summary row. */
+export const DESK_HEADER_WITH_CONTROLS_HEIGHT = 90;
 
 /**
  * The desk-language sidebar header shared by Messages and Contacts: a fixed
- * glass bar with a summary row on top and a search/action toolbar beneath.
- * Messages adds a controls row (the state segments) under the toolbar.
+ * glass bar with an optional summary row and a search/action toolbar.
+ * Messages adds the lens tabs under the toolbar, their underline sitting on
+ * the header's bottom rule.
  */
 export function DeskHeader({
   summary,
@@ -19,7 +21,7 @@ export function DeskHeader({
   controls,
   testID = "desk-header",
 }: {
-  summary: React.ReactNode;
+  summary?: React.ReactNode;
   search: React.ReactNode;
   action: React.ReactNode;
   controls?: React.ReactNode;
@@ -38,7 +40,7 @@ export function DeskHeader({
       {...DRAG}
     >
       {summary}
-      <View style={[styles.toolbar, controls ? styles.toolbarTight : null]} {...NO_DRAG}>
+      <View style={[styles.toolbar, summary ? null : styles.toolbarFirst]} {...NO_DRAG}>
         {search}
         {action}
       </View>
@@ -62,8 +64,8 @@ const styles = StyleSheet.create({
   },
   headerWithControls: {
     height: DESK_HEADER_WITH_CONTROLS_HEIGHT,
-    paddingBottom: 8,
-    paddingTop: 10,
+    paddingBottom: 0,
+    paddingTop: 12,
   },
   toolbar: {
     alignItems: "center",
@@ -71,10 +73,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
   },
-  toolbarTight: {
-    marginTop: 8,
+  toolbarFirst: {
+    marginTop: 0,
   },
   controls: {
-    marginTop: 8,
+    marginTop: "auto",
   },
 });
