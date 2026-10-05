@@ -34,10 +34,10 @@ import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast, ToastAnchor } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { toggleSettleChat } from "@/hooks/use-triage-actions";
-import { settleActionFor } from "@shared/chat-state";
 import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
 import { Composer } from "./composer";
+import { QueuePosition } from "./queue-position";
+import { StateStrip } from "./state-strip";
 import { CenteredSpinner, EmptyState } from "./empty-state";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
@@ -534,23 +534,7 @@ export function ThreadView({
             </Text>
           </Pressable>
           <View style={styles.paneHeaderActions}>
-            {settleActionFor(headerChat) === "settle" && (
-              <Pressable
-                ref={(node) => { if (Platform.OS === "web") (node as unknown as HTMLElement | null)?.setAttribute("title", "Settle (⌘E)"); }}
-                testID="thread-settle"
-                accessibilityRole="button"
-                accessibilityLabel="Settle (⌘E)"
-                onPress={() => { void toggleSettleChat(headerChat); }}
-                style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [
-                  styles.settle,
-                  (hovered || pressed) && { backgroundColor: pressed ? theme.rowSelected : theme.rowHover },
-                ]}
-              >
-                <Ionicons name="checkmark" size={15} color={theme.text} />
-                <Text style={[styles.settleLabel, { color: theme.text }]}>Settle</Text>
-                <Text style={[styles.settleKey, { color: theme.textTertiary }]}>⌘E</Text>
-              </Pressable>
-            )}
+            <QueuePosition />
             <View style={[styles.vsep, { backgroundColor: theme.divider }]} />
             <FaceTimeButton
               chatGuid={chatGuid}
@@ -763,6 +747,7 @@ export function ThreadView({
           reactionSuggestions={aiStatus?.reactionSuggestions === true}
           reactionPreview={reactionPreview}
         />
+        <StateStrip chatGuid={chatGuid} messages={messages} historyComplete={!hasMore} />
         <Composer
           chatGuid={chatGuid}
           isGroup={isGroup}
@@ -826,9 +811,6 @@ const styles = StyleSheet.create({
   crumb: { flexShrink: 1, fontSize: 13.5 },
   crumbSlash: { fontSize: 14, marginHorizontal: 8 },
   threadTitle: { ...headerFace, flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },
-  settle: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 6, height: 28, paddingHorizontal: 8 },
-  settleLabel: { fontSize: 12.5, fontWeight: "600" },
-  settleKey: { fontSize: 11, fontWeight: "500" },
   vsep: { height: 16, marginHorizontal: 6, width: 1 },
   retryButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },

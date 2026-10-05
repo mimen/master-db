@@ -1,11 +1,11 @@
 # Settle a conversation
 
-Settling marks a conversation handled: it leaves Needs reply or Waiting, a `Settled` toast appears at the bottom with `Undo`, and Undo restores it. Settling an already-settled conversation from the All view reverses it.
+Settling marks a conversation handled: it leaves Needs reply or Waiting, a `Settled <Name>` toast appears with `Undo`, and Undo (or ⌘Z outside a text field, ⌘⇧Z anywhere) restores it. In Needs reply and Unread, settling opens the next conversation at once, and a reply opens it after about 1.2 s. Settling an already-settled conversation from the All view reverses it.
 
 ## Sub-features
 
 - `settle-row` settles from the row's Settle button.
-- `settle-header` settles from the thread header button.
+- `settle-strip` settles from the state strip above the composer.
 - `settle-key` settles with Cmd+E in an open thread.
 - `settle-undo` restores the conversation from the toast's Undo.
 - `settle-unsettle` un-settles a settled conversation from the All view.
@@ -13,7 +13,7 @@ Settling marks a conversation handled: it leaves Needs reply or Waiting, a `Sett
 ## How to get to it (user POV)
 
 - Hover a row in Needs reply and choose `Settle`.
-- Open a conversation and choose the check-mark button in the thread header.
+- Open a conversation and choose `Settle ⌘E` in the state strip above the composer.
 - Open a conversation and press Cmd+E.
 
 ## Driving it with Playwright (desk fixture)
@@ -23,8 +23,9 @@ Preconditions:
 - Fixture healthy; doctor passes.
 - Viewport at least 1300x820, so the header and toast layout match desktop.
 
-- **Settle by keyboard.** Count `getByTestId("conversation-row")`, click the first row, then `page.keyboard.press("Meta+e")`. `getByText("Settled", { exact: true })` and `getByRole("button", { name: "Undo", exact: true })` appear in the lower half of the viewport.
-- **Settle from the header.** Open a thread and click `getByTestId("thread-settle")` (accessible name `Settle (⌘E)`). The result is the same toast.
+- **Settle by keyboard.** Read the count off the `Needs reply, N conversations` radio (rows are virtualized, so counting rows undercounts), click the first row, then `page.keyboard.press("Meta+e")`. `getByText("Settled <Name>", { exact: true })` and `getByRole("button", { name: "Undo", exact: true })` appear in the lower half of the viewport.
+- **Settle from the strip.** Open a thread and click `getByTestId("thread-settle")` (accessible name `Settle (⌘E)`). The result is the same toast. A settled thread's strip reads `Settled · Back in Needs reply if <first name> texts again` with `Un-settle (⌘E)`.
+- **Auto-advance and position.** The thread top bar shows `N of M` with `Previous conversation (K)` and `Next conversation (J)`. `drives/settle-loop.ts` proves the whole loop.
 - **Settle from a row.** Hover a row and click `row.getByRole("button", { name: "Settle <Name>" })`. The row leaves the Needs reply list.
 - **Undo.** Click `Undo`. The toast disappears and the row count returns to its value before settling.
 - **Un-settle.** In the All view, a settled row's button reads `Un-settle <Name>`. Clicking it shows `Un-settled — back in Needs Reply`.

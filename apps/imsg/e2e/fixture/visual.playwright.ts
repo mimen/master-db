@@ -167,7 +167,7 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await expect(menu.getByText("Hide from Unresponded", { exact: true })).toHaveCount(0);
 });
 
-test("thread, header settle, inspector breakpoint, and global Sweep geometry", async ({ desk }) => {
+test("thread, strip settle, and inspector breakpoint", async ({ desk }) => {
   test.setTimeout(60_000);
   for (const width of [900, 1039, 1040, 1300]) {
     await resetAndOpen(desk, width, "light");
@@ -177,26 +177,12 @@ test("thread, header settle, inspector breakpoint, and global Sweep geometry", a
     const settle = page.getByTestId("thread-settle");
     await expect(settle).toBeVisible();
     const settleBox = await settle.boundingBox();
-    expect(settleBox?.height).toBe(28);
+    expect(settleBox?.height).toBe(26);
 
     await page.keyboard.press("Meta+i");
     await expect(page.getByText("Details", { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.keyboard.press("Meta+i");
-
-    await page.getByRole("button", { name: /Start sweep/ }).click();
-    const backdrop = page.getByTestId("sweep-backdrop");
-    const card = page.getByTestId("sweep-card");
-    await expect(backdrop).toBeVisible();
-    await expect(card).toBeVisible();
-    const backdropBox = await backdrop.boundingBox();
-    const cardBox = await card.boundingBox();
-    expect(backdropBox?.width).toBeCloseTo(width, 1);
-    expect(cardBox?.width).toBeCloseTo(Math.min(560, width - 48), 1);
-    expect(cardBox!.x).toBeGreaterThan(0);
-    expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual(width);
-    await page.screenshot({ path: `/tmp/comma-sweep-light-${width}.png`, animations: "disabled" });
-    await page.getByRole("button", { name: "Close sweep" }).click();
   }
 });
 
@@ -587,12 +573,6 @@ test("every visible control remains stable and usable on hover", async ({ desk }
     for (const control of await page.getByRole("button").all()) await expectHoverStable(control);
     await page.screenshot({ path: `/tmp/comma-hover-inspector-${scheme}.png`, animations: "disabled" });
     await page.keyboard.press("Meta+i");
-
-    await page.getByRole("button", { name: /Start sweep/ }).click();
-    await expect(page.getByTestId("sweep-card")).toBeVisible();
-    for (const control of await page.getByTestId("sweep-card").getByRole("button").all()) await expectHoverStable(control);
-    await page.screenshot({ path: `/tmp/comma-hover-sweep-${scheme}.png`, animations: "disabled" });
-    await page.getByRole("button", { name: "Close sweep" }).click();
   }
 });
 
@@ -664,17 +644,3 @@ test("messages send through the real UI and fixture replies arrive through Conve
   await page.screenshot({ path: "/tmp/comma-send-receive-fixture.png", animations: "disabled" });
 });
 
-test("Sweep shows a settled-item trail and real undo", async ({ desk }) => {
-  await resetAndOpen(desk, 1300, "light");
-  const page = desk.page;
-  await page.getByRole("button", { name: /Start sweep/ }).click();
-  const card = page.getByTestId("sweep-card");
-  await card.getByRole("button", { name: "Settle current conversation" }).click();
-  await expect(card.getByText(/Alex Rivera · settled/)).toBeVisible();
-  await card.getByRole("button", { name: "Skip conversation" }).click();
-  await expect(card.getByText("Avery Brooks", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "/tmp/comma-sweep-cleared-trail.png", animations: "disabled" });
-  await card.getByRole("button", { name: "Undo last settle" }).click();
-  await expect(card.getByText(/Alex Rivera · settled/)).toBeHidden();
-  await expect(card.getByText("Alex Rivera", { exact: true })).toBeVisible();
-});

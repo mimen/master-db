@@ -11,7 +11,6 @@ import { ConversationFiltersModal, StateSegments, type FilterAnchor } from "./co
 import { SkeletonList } from "./skeleton-list";
 
 import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
-import FlashIcon from "@hugeicons/core-free-icons/FlashIcon";
 import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
 import { ChromeIconButton } from "./sidebar/chrome-icon-button";
 import { SidebarChrome } from "./sidebar/sidebar-chrome";
@@ -59,7 +58,6 @@ interface ConversationListPaneProps {
   onPreviewChat: (chat: ChatSummary) => void;
   onRefresh: () => void;
   onNewMessage: () => void;
-  onStartSweep: (chats: ChatSummary[], startGuid?: string) => void;
 }
 
 export function ConversationListPane({
@@ -76,7 +74,6 @@ export function ConversationListPane({
   onPreviewChat,
   onRefresh,
   onNewMessage,
-  onStartSweep,
 }: ConversationListPaneProps) {
   const theme = useTheme();
   const type = useType();
@@ -141,10 +138,6 @@ export function ConversationListPane({
     listChats: deskChats,
     navigationEntries: deskChats.map((chat, index) => ({ chat, index })),
   }) : model, [model, deskChats, wide]);
-  const sweepableChats = useMemo(
-    () => deskModel.listChats.filter((chat) => chat.flags.unresponded),
-    [deskModel.listChats],
-  );
   const glide = useSyncExternalStore(subscribeListMode, isListMode, () => false);
 
   // All imperative list scrolling (glide pinning, view resets, reorder
@@ -209,9 +202,6 @@ export function ConversationListPane({
     <ChromeIconButton ref={filterBtnRef} hugeIcon={FilterHorizontalIcon} accessibilityLabel="Filter conversations" onPress={openFilters} />
   );
   const newButton = <ChromeIconButton hugeIcon={PencilEdit02Icon} accessibilityLabel="New message" onPress={onNewMessage} />;
-  const startSweep = filters.state === "unresponded" && sweepableChats.length > 0
-    ? () => onStartSweep(sweepableChats, sweepableChats.some((chat) => chat.guid === selectedGuid) ? selectedGuid : sweepableChats[0]?.guid)
-    : null;
   const lensTabs = <StateSegments filters={filters} counts={counts} onFiltersChange={(f) => search.applyFilters(f)} size={wide ? "regular" : "large"} />;
   const chrome = wide ? (
     <SidebarHeader
@@ -221,7 +211,6 @@ export function ConversationListPane({
         <>
           {filterButton}
           {newButton}
-          {startSweep ? <ChromeIconButton hugeIcon={FlashIcon} accessibilityLabel={`Start sweep, ${sweepableChats.length} conversations`} onPress={startSweep} /> : null}
         </>
       }
       below={

@@ -1,5 +1,6 @@
 import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
+import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
@@ -8,10 +9,20 @@ import { runExclusiveTriageWrite, type TriageWriteOutcome } from "@/lib/triage-w
 type TriageListener = (chatGuid: string) => void;
 const resolvedListeners = new Set<TriageListener>();
 const undoListeners = new Set<TriageListener>();
+const settlingListeners = new Set<TriageListener>();
 
 export function onTriageResolved(listener: TriageListener): () => void {
   resolvedListeners.add(listener);
   return () => resolvedListeners.delete(listener);
+}
+
+/**
+ * Fires the moment a settle starts, before its write resolves, so auto-advance
+ * can move on without waiting a round trip. A failed write toasts on its own.
+ */
+export function onTriageSettling(listener: TriageListener): () => void {
+  settlingListeners.add(listener);
+  return () => settlingListeners.delete(listener);
 }
 
 export function onTriageUndo(listener: TriageListener): () => void {
@@ -44,8 +55,7 @@ async function dismissOne(chat: ChatSummary, kind: TriageKind): Promise<void> {
  * Forward triage: clear whichever triage flags the conversation carries.
  *
  * Answers "busy" when this conversation already has a triage write outstanding,
- * so the sweep overlay holds its cursor rather than advancing past a settle that
- * never happened.
+ * so a caller never reports a settle that never happened.
  */
 export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
   return runExclusiveTriageWrite(chat.guid, async () => {
@@ -53,6 +63,7 @@ export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome>
     if (kinds.length === 0) return;
 
     const undoToken = beginUndoAction();
+    emit(settlingListeners, chat.guid);
     await Promise.all(kinds.map((kind) => dismissOne(chat, kind)));
     emit(resolvedListeners, chat.guid);
     // The entry runs long after this write released the conversation, and it
@@ -113,11 +124,19 @@ export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
     if (outcome === "busy") {
       showToast("Still saving that change — try again in a moment");
     } else if (action === "settle") {
-      showToast("Settled", { label: "Undo", onPress: () => void undoLastTriageAction() });
+      showToast(`Settled ${chat.displayName}`, { label: "Undo", onPress: () => void undoLastTriageAction() });
     } else {
       showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs Reply");
     }
   } catch {
     // The write that failed already surfaced its own toast.
   }
+}
+
+/**
+ * The row's hover Settle. chat-row calls it in place of its onSettle prop:
+ * `const settle = useRowSettle(chat);` then `onPress={settle}`.
+ */
+export function useRowSettle(chat: ChatSummary): () => void {
+  return useCallback(() => void toggleSettleChat(chat), [chat]);
 }
