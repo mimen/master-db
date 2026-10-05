@@ -1,13 +1,18 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+
+import { useSpring } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow } from "@/constants/theme";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface OverlayShellProps {
   visible: boolean;
   onClose: () => void;
   children: ReactNode;
-  /** "fade" (default) for dialogs/popovers; "slide" for a bottom sheet. */
+  /** "fade" (default) springs the panel open from 0.98 on snappy; "slide" is the native bottom sheet. */
   animationType?: "fade" | "slide" | "none";
   /** Backdrop scrim color. Defaults to the shared `backdrop` token — pass a
    * literal rgba for a site with a documented lighter/heavier scrim (the
@@ -67,23 +72,50 @@ export function OverlayShell({
   accessibilityLabel,
 }: OverlayShellProps) {
   const theme = useTheme();
+  const animated = animationType === "fade";
+  const snappy = useSpring("snappy");
+  const shown = useSharedValue(0);
+  // The Modal stays mounted until the close spring lands, so the panel can leave instead of cutting.
+  const [mounted, setMounted] = useState(visible);
+  if (visible && !mounted) setMounted(true);
+
+  useEffect(() => {
+    if (!animated) return;
+    const unmount = () => setMounted(false);
+    // Close is quicker than open: the same spring, but it ends once the panel reads as gone.
+    shown.value = withSpring(visible ? 1 : 0, visible ? snappy : { ...snappy, energyThreshold: 1e-3 }, (finished) => {
+      "worklet";
+      if (finished && !visible) runOnJS(unmount)();
+    });
+  }, [animated, shown, snappy, visible]);
+
+  const scrim = useAnimatedStyle(() => ({ opacity: shown.value }));
+  // The panel inherits the scrim's fade, so it only scales.
+  const panel = useAnimatedStyle(() => ({ transform: [{ scale: 0.98 + 0.02 * shown.value }] }));
+
   return (
-    <Modal visible={visible} transparent animationType={animationType} onRequestClose={onClose}>
-      <Pressable
+    <Modal
+      visible={animated ? mounted : visible}
+      transparent
+      animationType={animated ? "none" : animationType}
+      onRequestClose={onClose}
+    >
+      <AnimatedPressable
         accessibilityRole={backdropAccessibilityRole ?? "button"}
         accessibilityLabel={backdropAccessibilityLabel ?? "Close"}
         onPress={onClose}
-        style={[styles.backdrop, { backgroundColor: backdropColor ?? theme.backdrop }, backdropStyle]}
+        pointerEvents={visible ? "auto" : "none"}
+        style={[styles.backdrop, { backgroundColor: backdropColor ?? theme.backdrop }, backdropStyle, animated && scrim]}
       >
-        <Pressable
+        <AnimatedPressable
           accessible={false}
           {...(accessibilityLabel ? { role: "dialog", "aria-modal": true, "aria-label": accessibilityLabel } as object : null)}
           onPress={() => undefined}
-          style={[card && [styles.card, { backgroundColor: theme.background }], cardStyle]}
+          style={[card && [styles.card, { backgroundColor: theme.background }], cardStyle, animated && panel]}
         >
           {children}
-        </Pressable>
-      </Pressable>
+        </AnimatedPressable>
+      </AnimatedPressable>
     </Modal>
   );
 }
