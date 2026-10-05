@@ -25,6 +25,7 @@ import { Colors, Type } from "@/constants/theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
+import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
@@ -302,13 +303,13 @@ function ChatRowInner({
                   </Pressable>
                 ) : last ? (
                   <Text style={[styles.time, { color: visual.muted, fontSize: 11 }]}>
-                    {formatListTimestamp(last.dateCreated)}
+                    <RowAge chat={chat} />
                   </Text>
                 ) : null}
               </View>
             ) : last ? (
               <Text style={[styles.time, { color: theme.textSecondary, fontSize: type.secondary }]}>
-                {formatListTimestamp(last.dateCreated)}
+                <RowAge chat={chat} />
               </Text>
             ) : null}
           </View>
