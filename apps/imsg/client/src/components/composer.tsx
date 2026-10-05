@@ -517,11 +517,22 @@ export function Composer({
   }, [text, card]);
 
   const sendRef = useRef<() => void>(() => undefined);
+  // Taps queued behind a busy frame all run against the same render's `text`, so the
+  // clear inside send() can't stop them; the latch is claimed synchronously and
+  // released by the next text the composer holds.
+  const sentText = useRef<string | null>(null);
+  useEffect(() => {
+    if (text !== sentText.current) sentText.current = null;
+  }, [text]);
   const send = async () => {
     const outgoing = trimMentionAnnotations(text, mentions);
     const trimmed = outgoing.text;
     const outgoingMentions = isGroup && privateApi && !isSMS ? outgoing.mentions : [];
-    if (!trimmed && pending.length === 0) return;
+    const staged = pendingRef.current;
+    if (!trimmed && staged.length === 0) return;
+    // Staged attachments guard themselves: replacePending empties pendingRef synchronously.
+    if (staged.length === 0 && sentText.current === text) return;
+    sentText.current = text;
 
     if (editing) {
       setBusy(true);
@@ -531,6 +542,7 @@ export function Composer({
         clearText();
         onClearEditing();
       } catch {
+        sentText.current = null;
         showToast("Couldn't edit. Messages can only be edited for 15 minutes.");
       } finally {
         setBusy(false);
@@ -543,8 +555,8 @@ export function Composer({
     // Send staged attachments first (plain text rides the first one as a
     // caption). A real mention stays a separate attributed text message because
     // BlueBubbles' attachment subject field cannot carry mention runs.
-    if (pending.length > 0) {
-      const attachments = pending;
+    if (staged.length > 0) {
+      const attachments = staged;
       const caption = outgoingMentions.length === 0 ? trimmed || undefined : undefined;
       replacePending([]);
       clearText();
