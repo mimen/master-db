@@ -1,6 +1,6 @@
 import { runCommand } from "@/lib/convex-commands";
 import { messagingCommandError } from "@/lib/messaging-api";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -20,12 +20,31 @@ import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact } from "@shared/types";
 import { formatAddress } from "@shared/address";
-import { useTheme } from "@/hooks/use-theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { contactService, splitPrefix } from "@/lib/contact-service";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { type AirtableHumanRow } from "@/lib/identity";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { PersonAvatar } from "./avatar";
-import { ListRow } from "./list-row";
+import { ServiceDot, ServiceLabel } from "./service-label";
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: {
+    background: "#F4F4F5", surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", rowHover: "rgba(0,0,0,0.04)", text: "#17171A",
+    textTertiary: "#64646B", icon: "#5E5E66", divider: "rgba(0,0,0,0.075)", dividerStrong: "rgba(0,0,0,0.13)",
+    bubbleMine: "#007AFF", chipBg: "#FFFFFF", chipBorder: "rgba(0,0,0,0.13)", popBg: "#FFFFFF",
+    popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)", popSelected: "rgba(0,0,0,0.075)",
+  },
+  dark: {
+    background: "#0F0F11", surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", rowHover: "rgba(255,255,255,0.045)", text: "#EDEDEF",
+    textTertiary: "#8F8F96", icon: "#97979E", divider: "rgba(255,255,255,0.07)", dividerStrong: "rgba(255,255,255,0.12)",
+    bubbleMine: "#0A84FF", chipBg: "#1C1C1F", chipBorder: "rgba(255,255,255,0.12)", popBg: "#232326",
+    popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)", popSelected: "rgba(255,255,255,0.06)",
+  },
+} as const;
+type SignalColors = (typeof SIGNAL)["light"] | (typeof SIGNAL)["dark"];
 
 type Row =
   | { kind: "recent-header"; key: string }
@@ -54,7 +73,10 @@ export function NewChatContent({
   /** Pre-fills the recipient — used by the person-view's "Message" action for someone with no existing thread. */
   initialContact?: Contact;
 }) {
-  const theme = useTheme();
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const { wide } = useLayoutMode();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const toInput = useRef<TextInput>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Contact[]>([]);
   const [selected, setSelected] = useState<Contact[]>(initialContact ? [initialContact] : []);
@@ -79,7 +101,9 @@ export function NewChatContent({
   const addContact = (c: Contact) => {
     setSelected((current) => (current.some((x) => x.address === c.address) ? current : [...current, c]));
     setQuery("");
+    toInput.current?.focus();
   };
+
 
   // Same pattern as the Contacts screen: existing contacts first, unlinked
   // Airtable matches below — sharing the search/dedupe/add logic via the hook.
@@ -128,168 +152,231 @@ export function NewChatContent({
   };
 
   const canSend = selected.length > 0 && text.trim().length > 0;
+  const pickable = rows.filter((row) => row.kind === "contact" || row.kind === "airtable");
+  const active = pickable.length > 0 ? pickable[Math.min(activeIndex, pickable.length - 1)] : undefined;
+  const pick = (row: Row): void => {
+    if (row.kind === "contact") addContact(row.contact);
+    else if (row.kind === "airtable") void addAirtableContact(row.human);
+  };
+  const onKey = (key: string): boolean => {
+    if (pickable.length === 0) return false;
+    if (key === "ArrowDown") setActiveIndex((i) => (i + 1) % pickable.length);
+    else if (key === "ArrowUp") setActiveIndex((i) => (i - 1 + pickable.length) % pickable.length);
+    else return false;
+    return true;
+  };
+
+  const suggestions = rows.length > 0 ? (
+    <View
+      style={[
+        wide ? styles.popover : styles.inlineList,
+        wide && { backgroundColor: signal.popBg, boxShadow: signal.popShadow } as object,
+      ]}
+    >
+      <FlatList
+        data={rows}
+        keyExtractor={(row) => row.key}
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item }) => {
+          if (item.kind === "airtable-header" || item.kind === "recent-header") {
+            return (
+              <Text style={[styles.sectionHeader, { color: signal.textTertiary }]}>
+                {item.kind === "recent-header" ? "Recent" : "From Airtable"}
+              </Text>
+            );
+          }
+          const selectedRow = item === active;
+          if (item.kind === "airtable") {
+            const adding = addingId === item.human.record_id;
+            return (
+              <SuggestionRow
+                selected={selectedRow}
+                disabled={adding}
+                onPress={() => pick(item)}
+                signal={signal}
+                avatar={<PersonAvatar address={null} name={item.human.display_name} size={28} />}
+                name={item.human.display_name}
+                query={needle}
+                handle={item.human.phone ?? item.human.email ?? undefined}
+                trailing={adding ? <ActivityIndicator size="small" /> : <Ionicons name="add-circle-outline" size={18} color={signal.icon} />}
+              />
+            );
+          }
+          const service = contactService(item.contact.address, chats);
+          const handle = formatAddress(item.contact.address);
+          return (
+            <SuggestionRow
+              selected={selectedRow}
+              onPress={() => pick(item)}
+              signal={signal}
+              avatar={<PersonAvatar address={item.contact.address} name={item.contact.name} size={28} />}
+              name={item.contact.name}
+              query={needle}
+              handle={item.contact.name === handle ? undefined : handle}
+              trailing={service ? <ServiceLabel service={service} size={12} /> : undefined}
+            />
+          );
+        }}
+      />
+    </View>
+  ) : null;
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: theme.background }}
+      style={{ flex: 1, backgroundColor: signal.background }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* To: field with inline recipient chips */}
-      <View style={[styles.toRow, { borderBottomColor: theme.divider }]}>
-        <Text style={{ color: theme.textSecondary, fontSize: 15 }}>To:</Text>
-        <View style={styles.toContent}>
-          {selected.map((contact) => (
+      {wide && (
+        <View style={[styles.header, { borderBottomColor: signal.divider }]}>
+          <Text accessibilityRole="header" style={[styles.headerTitle, { color: signal.text }]}>New message</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close new message"
+            onPress={onClose}
+            hitSlop={8}
+            style={({ hovered, pressed }) => [styles.headerIcon, (hovered || pressed) && { backgroundColor: signal.rowHover }]}
+          >
+            <Ionicons name="close" size={18} color={signal.icon} />
+          </Pressable>
+        </View>
+      )}
+      <View style={[styles.toRow, { borderBottomColor: signal.divider }]}>
+        <Text style={[styles.toLabel, { color: signal.textTertiary }]}>To</Text>
+        {selected.map((contact) => {
+          const service = contactService(contact.address, chats);
+          return (
             <Pressable
               key={contact.address}
               accessibilityRole="button"
               accessibilityLabel={`Remove ${contact.name}`}
               onPress={() => setSelected((cur) => cur.filter((c) => c.address !== contact.address))}
-              style={({ hovered, pressed }) => [styles.chip, { backgroundColor: theme.accent }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
+              style={({ hovered, pressed }) => [styles.token, { backgroundColor: hovered || pressed ? signal.rowHover : signal.chipBg, borderColor: signal.chipBorder }]}
             >
-              <Text style={{ color: theme.onAccent, fontSize: 14 }}>{contact.name}</Text>
-              <Ionicons name="close" size={14} color={theme.onAccent} />
+              <PersonAvatar address={contact.address} name={contact.name} size={18} />
+              <Text numberOfLines={1} style={[styles.tokenText, { color: signal.text }]}>{contact.name}</Text>
+              {service && <ServiceDot service={service} />}
             </Pressable>
-          ))}
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={selected.length === 0 ? "Name, number, or email" : ""}
-            placeholderTextColor={theme.textSecondary}
-            autoFocus
-            onSubmitEditing={() => {
+          );
+        })}
+        <TextInput
+          ref={toInput}
+          value={query}
+          onChangeText={(value) => {
+            setQuery(value);
+            setActiveIndex(0);
+          }}
+          placeholder={selected.length === 0 ? "Name, number, or email" : ""}
+          placeholderTextColor={signal.textTertiary}
+          autoFocus
+          // react-native-web reads blurOnSubmit, not submitBehavior; Enter picks and keeps typing.
+          blurOnSubmit={false}
+          onKeyPress={(event) => {
+            if (onKey(event.nativeEvent.key)) event.preventDefault();
+          }}
+          onSubmitEditing={() => {
+            if (active) pick(active);
+            else {
               const value = query.trim();
-              if (value && results.length === 0) addContact({ address: value, name: value });
-            }}
-            style={[styles.toInput, { color: theme.text }]}
-          />
-        </View>
+              if (value) addContact({ address: value, name: value });
+            }
+          }}
+          style={[styles.toInput, { color: signal.text }]}
+        />
       </View>
 
-      {/* Contact suggestions fill the middle; the keyboard just shrinks this. */}
-      <FlatList
-        data={rows}
-        keyExtractor={(row) => row.key}
-        keyboardShouldPersistTaps="handled"
-        style={{ flex: 1 }}
-        renderItem={({ item }) => {
-          if (item.kind === "airtable-header" || item.kind === "recent-header") {
-            return (
-              <Text style={[styles.sectionHeader, { color: theme.textSecondary, backgroundColor: theme.background }]}>
-                {item.kind === "recent-header" ? "Recent" : "From Airtable"}
-              </Text>
-            );
-          }
-          if (item.kind === "airtable") {
-            const adding = addingId === item.human.record_id;
-            return (
-              <ListRow
-                disabled={adding}
-                onPress={() => void addAirtableContact(item.human)}
-                leading={<PersonAvatar address={null} name={item.human.display_name} size={36} />}
-                title={item.human.display_name}
-                trailing={
-                  adding ? (
-                    <ActivityIndicator size="small" />
-                  ) : (
-                    <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
-                  )
-                }
-              />
-            );
-          }
-          return (
-            <ListRow
-              onPress={() => addContact(item.contact)}
-              leading={<PersonAvatar address={item.contact.address} name={item.contact.name} size={36} />}
-              title={item.contact.name}
-              subtitle={item.contact.name === formatAddress(item.contact.address) ? undefined : formatAddress(item.contact.address)}
-            />
-          );
-        }}
-      />
+      <View style={{ flex: 1 }}>{suggestions}</View>
 
-      {/* Message composer sits at the bottom, always visible. */}
-      <View style={[styles.composer, { borderTopColor: theme.divider }]}>
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder="iMessage"
-          placeholderTextColor={theme.textSecondary}
-          multiline
-          style={[styles.msgInput, { color: theme.text, borderColor: theme.divider }]}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-          onPress={() => void create()}
-          disabled={!canSend || sending}
-          style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? theme.bubbleMine : theme.backgroundElement }, canSend && !sending && hovered && !pressed && { opacity: HOVER_DIM }, canSend && !sending && pressed && { opacity: PRESS_DIM }]}
-        >
-          {sending ? (
-            <ActivityIndicator color={theme.onAccent} size="small" />
-          ) : (
-            <Ionicons name="arrow-up" size={20} color={theme.onAccent} />
-          )}
-        </Pressable>
+      <View style={styles.composerWrap}>
+        <View style={[styles.composer, { backgroundColor: signal.surface, borderColor: signal.dividerStrong }]}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Message"
+            placeholderTextColor={signal.textTertiary}
+            multiline
+            style={[styles.msgInput, { color: signal.text }]}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send"
+            onPress={() => void create()}
+            disabled={!canSend || sending}
+            style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? signal.bubbleMine : signal.field }, canSend && !sending && hovered && !pressed && { opacity: HOVER_DIM }, canSend && !sending && pressed && { opacity: PRESS_DIM }]}
+          >
+            {sending ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Ionicons name="arrow-up" size={16} color={canSend ? "#FFFFFF" : signal.icon} />
+            )}
+          </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+function SuggestionRow({
+  avatar,
+  name,
+  query,
+  handle,
+  trailing,
+  selected,
+  disabled,
+  signal,
+  onPress,
+}: {
+  avatar: React.ReactNode;
+  name: string;
+  query: string;
+  handle?: string;
+  trailing?: React.ReactNode;
+  selected: boolean;
+  disabled?: boolean;
+  signal: SignalColors;
+  onPress: () => void;
+}) {
+  const { match, rest } = splitPrefix(name, query);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={name}
+      aria-selected={selected}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ hovered, pressed }) => [styles.suggestion, (selected || hovered || pressed) && { backgroundColor: selected ? signal.popSelected : signal.rowHover }]}
+    >
+      {avatar}
+      <View style={styles.suggestionBody}>
+        <Text numberOfLines={1} style={[styles.suggestionName, { color: signal.text }]}>
+          {match ? <Text style={{ fontWeight: "700" }}>{match}</Text> : null}
+          {rest}
+        </Text>
+        {handle ? <Text numberOfLines={1} style={[styles.suggestionHandle, { color: signal.textTertiary }]}>{handle}</Text> : null}
+      </View>
+      {trailing}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  toRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  toContent: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-  },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  toInput: {
-    flex: 1,
-    minWidth: 120,
-    fontSize: 16,
-    paddingVertical: 2,
-  },
-  sectionHeader: { fontSize: 12, fontWeight: "600", paddingHorizontal: 16, paddingBottom: 4, paddingTop: 10 },
-  composer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  msgInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 19,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    fontSize: 17,
-    maxHeight: 120,
-  },
-  sendButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 1,
-  },
+  header: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", height: 52, justifyContent: "space-between", paddingLeft: 22, paddingRight: 12 },
+  headerTitle: { fontSize: 15.5, fontWeight: "600", letterSpacing: -0.15 },
+  headerIcon: { alignItems: "center", borderRadius: 6, height: 28, justifyContent: "center", width: 28 },
+  toRow: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", flexWrap: "wrap", gap: 6, minHeight: 52, paddingHorizontal: 22, paddingVertical: 10 },
+  toLabel: { fontSize: 13.5, marginRight: 4 },
+  token: { alignItems: "center", borderRadius: 999, borderWidth: 1, flexDirection: "row", gap: 6, height: 26, maxWidth: 240, paddingLeft: 3, paddingRight: 9 },
+  tokenText: { flexShrink: 1, fontSize: 13, fontWeight: "500" },
+  toInput: { flex: 1, fontSize: 13.5, minWidth: 120, paddingVertical: 2 },
+  popover: { borderRadius: 12, left: 62, maxHeight: 360, padding: 5, position: "absolute", top: 4, width: 420, zIndex: 2 },
+  inlineList: { flex: 1, paddingHorizontal: 8, paddingTop: 4 },
+  sectionHeader: { fontSize: 11.5, fontWeight: "600", paddingBottom: 4, paddingHorizontal: 10, paddingTop: 8 },
+  suggestion: { alignItems: "center", borderRadius: 10, flexDirection: "row", gap: 11, marginBottom: 2, minHeight: 48, paddingHorizontal: 10, paddingVertical: 6 },
+  suggestionBody: { flex: 1, minWidth: 0 },
+  suggestionName: { fontSize: 13.5, lineHeight: 17 },
+  suggestionHandle: { fontSize: 12, fontVariant: ["tabular-nums"], lineHeight: 15 },
+  composerWrap: { alignSelf: "center", maxWidth: 760, paddingBottom: 16, paddingHorizontal: 16, width: "100%" },
+  composer: { alignItems: "flex-end", borderRadius: 16, borderWidth: 1, flexDirection: "row", gap: 8, padding: 8, paddingLeft: 14 },
+  msgInput: { flex: 1, fontSize: 14, lineHeight: 20, maxHeight: 120, minHeight: 40, paddingVertical: 10 },
+  sendButton: { alignItems: "center", borderRadius: 15, height: 30, justifyContent: "center", marginBottom: 5, width: 30 },
 });
