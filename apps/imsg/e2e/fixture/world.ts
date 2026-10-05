@@ -12,6 +12,7 @@ export const CHAT_GUIDS = {
   waiting: "iMessage;-;+16195550102",
   unreadGroup: "iMessage;+;fixture-crew",
   coldSms: "SMS;-;+16195550103",
+  rcs: "RCS;-;+16195550105",
   unknown: "SMS;-;+16195550999",
 } as const;
 
@@ -118,6 +119,11 @@ export function fixtureSeed(): FakeSeed {
         messages: [message("cold-sms-1", CHAT_GUIDS.coldSms, "Old SMS receipt", 1_440, true)],
       },
       {
+        guid: CHAT_GUIDS.rcs,
+        participants: [{ address: "+16195550105", service: "RCS" }],
+        messages: [message("rcs-1", CHAT_GUIDS.rcs, "Old RCS receipt", 1_500, true)],
+      },
+      {
         guid: CHAT_GUIDS.unknown,
         participants: [{ address: "+16195550999", service: "SMS" }],
         messages: [message("unknown-1", CHAT_GUIDS.unknown, "Is this still available?", 6, false, "+16195550999")],
@@ -158,6 +164,7 @@ const names = new Map<string, string>([
   ["+16195550102", "Jordan Lee"],
   ["+16195550103", "Sam Chen"],
   ["+16195550104", "Maya Patel"],
+  ["+16195550105", "Dana Whitfield"],
   ...backlogNames.map((name, index) => [`+161955502${String(index).padStart(2, "0")}`, name] as [string, string]),
 ]);
 

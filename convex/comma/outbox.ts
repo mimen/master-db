@@ -6,6 +6,7 @@ import { assertAllowed } from "../_lib/authed";
 import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
 
 import { deleteConversationDraft } from "./drafts";
+import { sendService, tempGuid } from "./tempMessage";
 
 /**
  * The command queue. Clients enqueue (Convex Auth); the Mini's bridge claims
@@ -27,11 +28,6 @@ export const AUTO_RETRY = {
 } satisfies Record<CommaOutboxPayload["kind"], boolean>;
 export const IDEMPOTENT_KINDS = new Set(Object.entries(AUTO_RETRY).filter(([, retry]) => retry).map(([kind]) => kind));
 export const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "clearSuggestionLearning"]);
-
-/** Temp row guid for a queued send; the bridge's echo replaces it by clientKey. */
-export function tempGuid(clientKey: string): string {
-  return `temp-${clientKey}`;
-}
 
 export const enqueue = mutation({
   args: { clientKey: v.string(), conversationId: v.optional(v.id("comma_conversations")), payload: outboxPayload },
@@ -65,7 +61,7 @@ export const enqueue = mutation({
         dateCreated: now,
         isFromMe: true,
         text: payload.text,
-        service: conversation?.primaryChatGuid.startsWith("SMS;") ? "SMS" : "iMessage",
+        service: sendService(conversation?.primaryChatGuid ?? ""),
         error: 0,
         edited: false,
         retracted: false,

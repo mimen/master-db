@@ -13,7 +13,7 @@ test("isolated desk serves Convex chats, sends, receives, and updates live queri
   const chatsPage = (await chatsResponse.json()) as { page: ConvexConversation[]; isDone: boolean; continueCursor: string };
   expect(chatsPage).toMatchObject({ isDone: true, continueCursor: expect.any(String) });
   const chats = chatsPage.page;
-  expect(chats).toHaveLength(17);
+  expect(chats).toHaveLength(18);
   const conversation = chats.find((chat) => chat.primaryChatGuid === desk.chats.needs)!;
   expect(conversation).toMatchObject({
     displayName: "Alex Rivera",

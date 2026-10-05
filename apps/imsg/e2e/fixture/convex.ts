@@ -3,6 +3,7 @@ import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
 import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
+import { sendService, tempGuid } from "../../../../convex/comma/tempMessage";
 import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, mapMessage } from "../../server/map";
 import { MessageSearch } from "../../server/message-search";
@@ -110,6 +111,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const uploads = new Map<string, { bytes: Blob; filename?: string; mimeType?: string }>();
   const transcripts = new Map<string, TranscriptState>();
   const inFlight = new Map<string, Promise<string>>();
+  const temps = new Map<string, ConvexMessage>();
   const peerTyping = new Map<string, { peerTyping: boolean; updatedAt: number; expiresAt: number }>();
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   bb.onEvent((event) => {
@@ -161,8 +163,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       bb.chatMessages(guid, { limit: Number.MAX_SAFE_INTEGER, sort: "DESC" })));
     if (pages.every((page) => !page.ok)) throw new FixtureError("fetch failed", 502);
     const raw = new Map(pages.flatMap((page) => page.ok ? page.value.map((message) => [message.guid, message] as const) : []));
-    return buildThread([...raw.values()], chatGuid, names).sort((a, b) => b.dateCreated - a.dateCreated)
-      .map((message) => messageRow(message, bb.clientKeyFor(message.guid)));
+    return [...buildThread([...raw.values()], chatGuid, names).map((message) => messageRow(message, bb.clientKeyFor(message.guid))),
+      ...[...temps.values()].filter((temp) => temp.conversationId === chatGuid)].sort((a, b) => b.dateCreated - a.dateCreated);
   };
   const execute = async (chatGuid: string, payload: CommaOutboxPayload, clientKey: string): Promise<CommandResult | undefined> => {
     const directory = controls.directory;
@@ -434,7 +436,19 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
         } else if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
-        const result = await execute(chatGuid, payload, clientKey);
+        // Production's enqueue writes this temp row; the bridge's completion retires it.
+        if (payload.kind === "send") {
+          const primaryChatGuid = (await conversations()).find((row) => row._id === chatGuid)!.primaryChatGuid;
+          const now = Date.now();
+          temps.set(clientKey, {
+            _id: id(tempGuid(clientKey)), _creationTime: now, guid: tempGuid(clientKey),
+            conversationId: id(chatGuid), chatGuid: primaryChatGuid, dateCreated: now, isFromMe: true,
+            text: payload.text, service: sendService(primaryChatGuid), error: 0, edited: false, retracted: false,
+            isTapback: false, reactions: [], ...(payload.replyToGuid ? { replyToGuid: payload.replyToGuid } : {}),
+            isGroupEvent: false, mentions: payload.mentions ?? [], attachmentGuids: [], clientKey, sourceVersion: 0, attachments: [],
+          });
+        }
+        const result = await execute(chatGuid, payload, clientKey).finally(() => temps.delete(clientKey));
         const resultGuid = result && "message" in result ? result.message.guid : undefined;
         if (payload.kind === "send") drafts.delete(chatGuid);
         const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
@@ -466,6 +480,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

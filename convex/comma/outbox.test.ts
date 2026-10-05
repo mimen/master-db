@@ -55,6 +55,18 @@ describe("enqueue", () => {
     expect(temps.map((m) => [m.guid, m.text, m.clientKey])).toEqual([["temp-k1", "hello", "k1"]]);
   });
 
+  test.each([
+    ["iMessage;-;+15550001111", "iMessage"],
+    ["SMS;-;+15550001111", "SMS"],
+    ["RCS;-;+15550001111", "SMS"],
+  ])("a send out on %s gets a %s temp bubble", async (primaryChatGuid, service) => {
+    const { t, as, c } = await setup();
+    await t.run((ctx) => ctx.db.patch(c, { primaryChatGuid, chatGuids: [primaryChatGuid] }));
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "k1", conversationId: c, payload: send });
+    const [temp] = await t.run((ctx) => ctx.db.query("comma_messages").collect());
+    expect(temp?.service).toBe(service);
+  });
+
   test("requires Convex Auth", async () => {
     const { t, c } = await setup();
     await expect(t.mutation(api.comma.outbox.enqueue, { clientKey: "k", conversationId: c, payload: send })).rejects.toThrow();
