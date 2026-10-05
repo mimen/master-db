@@ -6,6 +6,7 @@ import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
+import { useChatDirectory } from "./use-chat-directory";
 
 interface UseChatsResult {
   chats: ChatSummary[];
@@ -17,7 +18,10 @@ interface UseChatsResult {
   refresh: () => void;
 }
 
-/** Every conversation from Convex, live. Pages load one after another until the list is complete. */
+/**
+ * Every conversation from Convex, live. Pages load one after another until the list is complete.
+ * Only ChatDirectoryProvider calls this; everything else reads useChatDirectory.
+ */
 export function useConvexChats(): { chats: ChatSummary[] | null } {
   const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listConversations,
@@ -42,9 +46,9 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
  * switches are pure computation, no network.
  */
 export function useChats(state: StateFilter, type: TypeFilter, freezeMembership = true): UseChatsResult {
-  const convex = useConvexChats();
-  const all = convex.chats ?? [];
-  const loading = convex.chats === null;
+  const directory = useChatDirectory();
+  const all = useMemo(() => directory ?? [], [directory]);
+  const loading = directory === null;
   const refresh = useCallback(() => undefined, []);
   // Convex reconnects on its own; this only surfaces the outage it is already riding out.
   // Its socket takes about a minute to notice a dead network, so the browser's own signal leads.

@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { DesktopShellProvider } from "@/components/desktop-shell-provider";
+import { ChatDirectoryProvider } from "@/hooks/use-chat-directory";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
@@ -57,6 +58,7 @@ export default function RootLayout() {
     <AppErrorBoundary>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ClientAuthProvider>
+      <ChatDirectoryProvider>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <ActionSheetProvider>
             <LightboxProvider>
@@ -93,6 +95,7 @@ export default function RootLayout() {
             </LightboxProvider>
           </ActionSheetProvider>
         </ThemeProvider>
+      </ChatDirectoryProvider>
       </ClientAuthProvider>
     </GestureHandlerRootView>
     </AppErrorBoundary>
