@@ -12,7 +12,8 @@ import {
   useUnlinkEvent,
 } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";
-import { HOVER_DIM, PRESS_DIM, Radii, Type } from "@/constants/theme";
+import { HOVER_DIM, Radii, Type } from "@/constants/theme";
+import { Dropdown, type DropdownOption } from "./ui/dropdown";
 import { showToast } from "@/lib/toast";
 import { crmSummary } from "@/lib/crm-summary";
 import { CrmEventsEditor } from "./crm-events-editor";
@@ -25,9 +26,13 @@ export interface PersonCrmSectionProps {
   events: EventLink[];
 }
 
+/** The Dropdown's stand-in for an unset priority; the mutation receives null. */
+export const NO_PRIORITY = 0;
+
 // P1–P5, one = highest — see convex/schema/identity/people.ts's docstring.
 // NOT inverted, unlike Todoist's API.
-const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
+export const PRIORITY_OPTIONS: readonly DropdownOption<Priority>[] = [
+  { value: NO_PRIORITY, label: "No priority" },
   { value: 1, label: "P1" },
   { value: 2, label: "P2" },
   { value: 3, label: "P3" },
@@ -97,8 +102,7 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
   // (setPriority({priority: null}) — see crm.ts) rather than cycling through
   // values with no way back to "no opinion recorded."
   const choosePriority = (value: Priority) => {
-    const next = priority === value ? null : value;
-    setPriority({ personId, priority: next }).catch(() => showToast("Couldn't update the priority. Try again."));
+    setPriority({ personId, priority: value === NO_PRIORITY ? null : value }).catch(() => showToast("Couldn't update the priority. Try again."));
   };
 
   const submitTag = async () => {
@@ -142,31 +146,13 @@ export function PersonCrmSection({ personId, isFavorite, priority, tags, events 
             </Text>
           </Pressable>
 
-          <View style={styles.priorityGroup} accessibilityRole="radiogroup" accessibilityLabel="Priority">
-            {PRIORITY_OPTIONS.map((opt) => {
-              const selected = priority === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  accessibilityRole="radio"
-                  accessibilityLabel={`${opt.label} priority`}
-                  aria-checked={selected}
-                  onPress={() => choosePriority(opt.value)}
-                  style={({ hovered, pressed }) => [
-                    styles.priorityPill,
-                    { backgroundColor: selected ? theme.text : hovered || pressed ? theme.backgroundSelected : theme.backgroundElement },
-                    selected && (hovered || pressed) && { opacity: pressed ? PRESS_DIM : HOVER_DIM },
-                  ]}
-                >
-                  <Text
-                    style={[styles.priorityLabel, { color: selected ? theme.background : theme.textSecondary }]}
-                  >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Dropdown
+            label="Priority"
+            value={priority ?? NO_PRIORITY}
+            options={PRIORITY_OPTIONS}
+            onChange={choosePriority}
+            style={styles.priorityField}
+          />
         </View>
 
         <View style={styles.tagRow}>
@@ -226,9 +212,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   favoriteBtn: { flexDirection: "row", alignItems: "center", borderRadius: 6, gap: 6, margin: -4, padding: 4 },
   favoriteLabel: { fontSize: Type.secondary, fontWeight: "600" },
-  priorityGroup: { flexDirection: "row", gap: 6 },
-  priorityPill: { borderRadius: Radii.chip, paddingHorizontal: 10, paddingVertical: 5 },
-  priorityLabel: { fontSize: Type.caption, fontWeight: "600" },
+  priorityField: { width: 132 },
   tagRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 },
   tagChip: {
     alignItems: "center",

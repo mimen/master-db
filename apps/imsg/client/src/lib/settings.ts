@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { Appearance, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { SuggestionModel } from "@shared/types";
 
@@ -7,8 +8,17 @@ import type { SuggestionModel } from "@shared/types";
  * mirrored to AsyncStorage — but reactive, so a change in the settings picker
  * updates every reader (the suggestion shelf) immediately.
  */
-export type { Settings, SuggestionMode, NameOrder } from "./settings-values";
-import { DEFAULT, parseSettings, type Settings, type SuggestionMode, type NameOrder } from "./settings-values";
+export type { Settings, SuggestionMode, NameOrder, ThemePreference, OpenOnLens, GroupConversationsBy } from "./settings-values";
+import {
+  DEFAULT,
+  parseSettings,
+  type GroupConversationsBy,
+  type NameOrder,
+  type OpenOnLens,
+  type Settings,
+  type SuggestionMode,
+  type ThemePreference,
+} from "./settings-values";
 
 const KEY = "imsg.settings.v2";
 
@@ -27,6 +37,7 @@ export async function hydrateSettings(): Promise<void> {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return;
     state = parseSettings(raw);
+    applyTheme(state.theme);
     emit();
   } catch {
     // storage unavailable — settings stay at defaults this session
@@ -58,6 +69,35 @@ export function setNameOrder(order: NameOrder): void {
   persist();
 }
 
+/** Native pins the appearance through RN; web reads the preference in use-color-scheme.web.ts. */
+function applyTheme(theme: ThemePreference): void {
+  if (Platform.OS !== "web") Appearance.setColorScheme(theme === "system" ? "unspecified" : theme);
+}
+
+export function setTheme(theme: ThemePreference): void {
+  if (state.theme === theme) return;
+  state = { ...state, theme };
+  applyTheme(theme);
+  emit();
+  persist();
+}
+
+/** Stored only; the conversation list reads it when the filters unit wires it in. */
+export function setOpenOn(openOn: OpenOnLens): void {
+  if (state.openOn === openOn) return;
+  state = { ...state, openOn };
+  emit();
+  persist();
+}
+
+/** Stored only; the conversation list reads it when the filters unit wires it in. */
+export function setGroupBy(groupBy: GroupConversationsBy): void {
+  if (state.groupBy === groupBy) return;
+  state = { ...state, groupBy };
+  emit();
+  persist();
+}
+
 function subscribe(callback: () => void): () => void {
   listeners.add(callback);
   return () => listeners.delete(callback);
@@ -85,4 +125,16 @@ export function useNameOrder(): NameOrder {
     () => state.nameOrder,
     () => state.nameOrder,
   );
+}
+
+export function useThemePreference(): ThemePreference {
+  return useSyncExternalStore(subscribe, () => state.theme, () => state.theme);
+}
+
+export function useOpenOn(): OpenOnLens {
+  return useSyncExternalStore(subscribe, () => state.openOn, () => state.openOn);
+}
+
+export function useGroupBy(): GroupConversationsBy {
+  return useSyncExternalStore(subscribe, () => state.groupBy, () => state.groupBy);
 }

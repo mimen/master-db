@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { ColorSchemeName } from "react-native";
 
+import { useThemePreference } from "@/lib/settings";
+
 const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
 const RECONCILE_INTERVAL_MS = 250;
 const listeners = new Set<() => void>();
@@ -73,9 +75,11 @@ function subscribeToColorScheme(onStoreChange: () => void): () => void {
  * committing different theme snapshots.
  */
 export function useColorScheme(): ColorSchemeName {
-  return useSyncExternalStore(
+  const preference = useThemePreference();
+  const system = useSyncExternalStore(
     subscribeToColorScheme,
     getColorSchemeSnapshot,
     getServerColorSchemeSnapshot,
   );
+  return preference === "system" ? system : preference;
 }
