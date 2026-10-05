@@ -1,60 +1,42 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Platform, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet } from "react-native";
+
+import { PhoneTabBar } from "@/components/phone-tab-bar";
+import { useChats } from "@/hooks/use-chats";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 
 /**
- * Real bottom tab bar on mobile: Messages and Contacts are equal primary
- * destinations, not one hidden behind the other. The persistent root desktop
- * shell owns wide navigation, so this native tab bar is hidden there.
+ * Phone navigation: Messages and Contacts are tab screens, Scheduled and
+ * Settings open as routes from the same floating bar. The persistent desktop
+ * shell owns wide navigation, so no bar renders there.
  */
 export default function TabsLayout() {
   const { wide } = useLayoutMode();
-  const iosMobile = Platform.OS === "ios" && !wide;
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const { counts } = useChats("unresponded", DEFAULT_INBOX_FILTERS.type);
+  const needsReply = counts?.unresponded ?? 0;
 
   return (
     <Tabs
+      tabBar={(props) => (wide ? null : <PhoneTabBar {...props} needsReply={needsReply} />)}
       screenOptions={{
         headerShown: false,
         // Mount both tabs at startup — first switch to Contacts otherwise
         // mounts the whole screen live (jarring full-screen flash).
         lazy: false,
         sceneStyle: { backgroundColor: theme.background },
-        // Shorter bar with breathing room above the icons; the home-indicator
-        // inset stays below the content instead of reading as dead space.
-        tabBarStyle: wide
-          ? styles.hiddenTabBar
-          : iosMobile
-            ? { height: 54 + insets.bottom, paddingTop: 8 }
-            : undefined,
-        tabBarActiveTintColor: theme.accent,
-        tabBarInactiveTintColor: theme.textSecondary,
+        // The bar floats over the scene; the lists pad themselves clear of it.
+        tabBarStyle: styles.floating,
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Messages",
-          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="contacts"
-        options={{
-          title: "Contacts",
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Messages" }} />
+      <Tabs.Screen name="contacts" options={{ title: "Contacts" }} />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  hiddenTabBar: {
-    display: "none",
-  },
+  floating: { position: "absolute" },
 });
