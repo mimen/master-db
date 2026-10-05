@@ -1,35 +1,38 @@
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "react-native-reanimated";
-import {
-  Animated,
-  Easing,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { Animated, Easing, Platform, StyleSheet, View, type ViewStyle } from "react-native";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
-const DOT_DELAYS_MS = [0, 160, 320] as const;
-const BOUNCE_DURATION_MS = 550;
+// The one loop motion allows besides the send ring: each dot steps between full and 0.4 opacity, staggered.
+const DOT_DELAYS_MS = [0, 200, 400] as const;
+const STEP_MS = 600;
+const REST_OPACITY = [1, 0.75, 0.5] as const;
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: { bubbleTheirs: "#FFFFFF", bubbleTheirsBorder: "rgba(0,0,0,0.07)", textTertiary: "#64646B" },
+  dark: { bubbleTheirs: "#232326", bubbleTheirsBorder: "rgba(255,255,255,0.05)", textTertiary: "#8F8F96" },
+} as const;
 
 interface TypingIndicatorProps {
+  /** Ignored by the bubble variant, which draws the Signal theirs-bubble. */
   backgroundColor?: string;
-  color: string;
+  /** Dot color for the bare variant. */
+  color?: string;
   label?: string;
   style?: ViewStyle;
   variant?: "bubble" | "bare";
 }
 
 export function TypingIndicator({
-  backgroundColor,
   color,
   label = "Someone is typing",
   style,
   variant = "bubble",
 }: TypingIndicatorProps) {
   const reduceMotion = useReducedMotion();
-  const dots = DOT_DELAYS_MS.map((delay) => (
-    <TypingDot color={color} delay={delay} key={delay} reduceMotion={reduceMotion} />
-  ));
+  const signal = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const dotColor = variant === "bare" && color ? color : signal.textTertiary;
 
   return (
     <View
@@ -40,11 +43,19 @@ export function TypingIndicator({
       style={[
         styles.dots,
         variant === "bubble" && styles.bubble,
-        variant === "bubble" && { backgroundColor },
+        variant === "bubble" && { backgroundColor: signal.bubbleTheirs, borderColor: signal.bubbleTheirsBorder },
         style,
       ]}
     >
-      {dots}
+      {DOT_DELAYS_MS.map((delay, index) => (
+        <TypingDot
+          color={dotColor}
+          delay={delay}
+          key={delay}
+          reduceMotion={reduceMotion}
+          rest={REST_OPACITY[index] ?? 1}
+        />
+      ))}
     </View>
   );
 }
@@ -53,62 +64,55 @@ function TypingDot({
   color,
   delay,
   reduceMotion,
+  rest,
 }: {
   color: string;
   delay: number;
   reduceMotion: boolean;
+  rest: number;
 }) {
-  const translateY = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(rest)).current;
 
   useEffect(() => {
-    translateY.setValue(0);
-    if (reduceMotion) return;
-
-    const bounce = Animated.sequence([
+    if (reduceMotion) {
+      opacity.setValue(rest);
+      return;
+    }
+    opacity.setValue(1);
+    const native = Platform.OS !== "web";
+    const pulse = Animated.sequence([
       Animated.delay(delay),
       Animated.loop(
         Animated.sequence([
-          Animated.timing(translateY, {
-            duration: BOUNCE_DURATION_MS,
-            easing: Easing.out(Easing.quad),
-            toValue: -3,
-            useNativeDriver: true,
-          }),
-          Animated.timing(translateY, {
-            duration: BOUNCE_DURATION_MS,
-            easing: Easing.in(Easing.quad),
-            toValue: 0,
-            useNativeDriver: true,
-          }),
+          Animated.timing(opacity, { duration: STEP_MS, easing: Easing.inOut(Easing.ease), toValue: 0.4, useNativeDriver: native }),
+          Animated.timing(opacity, { duration: STEP_MS, easing: Easing.inOut(Easing.ease), toValue: 1, useNativeDriver: native }),
         ]),
       ),
     ]);
-    bounce.start();
-
-    return () => bounce.stop();
-  }, [delay, reduceMotion, translateY]);
+    pulse.start();
+    return () => pulse.stop();
+  }, [delay, opacity, reduceMotion, rest]);
 
   return (
     <Animated.View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.dot, { backgroundColor: color, transform: [{ translateY }] }]}
+      style={[styles.dot, { backgroundColor: color, opacity }]}
     />
   );
 }
 
-
 const styles = StyleSheet.create({
   bubble: {
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
   },
   dot: {
-    borderRadius: 3,
-    height: 6,
-    opacity: 0.4,
-    width: 6,
+    borderRadius: 3.5,
+    height: 7,
+    width: 7,
   },
   dots: {
     alignItems: "center",
