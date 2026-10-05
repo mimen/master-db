@@ -10,6 +10,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useTheme } from "@/hooks/use-theme";
 
+import { RollingNumber } from "./motion/rolling-number";
+
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
 const BAR_HEIGHT = 58;
@@ -17,10 +19,6 @@ const BAR_GAP = 10;
 
 /** Bottom padding a phone list needs so its last row scrolls clear of the bar. */
 export const PHONE_TAB_BAR_CLEARANCE = BAR_HEIGHT + BAR_GAP + 40;
-
-function badgeText(count: number): string {
-  return count > 99 ? "99+" : String(count);
-}
 
 function Tab({
   icon,
@@ -47,7 +45,11 @@ function Tab({
       <HugeiconsIcon icon={icon} size={23} color={on ? theme.text : theme.icon} strokeWidth={1.6} />
       {badge > 0 ? (
         <View style={[styles.badge, { backgroundColor: theme.turn }]}>
-          <Text style={[styles.badgeText, { color: theme.onTurn }]}>{badgeText(badge)}</Text>
+          {badge > 99 ? (
+            <Text style={[styles.badgeText, { color: theme.onTurn }]}>99+</Text>
+          ) : (
+            <RollingNumber value={badge} style={[styles.badgeText, { color: theme.onTurn }]} />
+          )}
         </View>
       ) : null}
     </Pressable>
@@ -87,5 +89,5 @@ const styles = StyleSheet.create({
   bar: { borderRadius: 999, flexDirection: "row", gap: 4, height: BAR_HEIGHT, padding: 5 },
   tab: { alignItems: "center", borderRadius: 999, height: 48, justifyContent: "center", width: 68 },
   badge: { alignItems: "center", borderRadius: 999, height: 18, justifyContent: "center", left: 34, minWidth: 18, paddingHorizontal: 5, position: "absolute", top: 3 },
-  badgeText: { fontSize: 11, fontVariant: ["tabular-nums"], fontWeight: "600" },
+  badgeText: { fontSize: 11, fontVariant: ["tabular-nums"], fontWeight: "600", lineHeight: 14 },
 });

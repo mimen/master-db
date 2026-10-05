@@ -61,6 +61,7 @@ import { burstGate } from "@/lib/burst-gate";
 import { formatRecordingClock, type VoiceMemoEnd, voiceMemoOutcome } from "@/lib/voice-memo";
 import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
+import { MorphSendButton, type SendStatus } from "./motion/morph-send-button";
 import { ScheduleEditor } from "./schedule-editor";
 
 interface ComposerProps {
@@ -88,6 +89,8 @@ interface PendingAttachment extends PendingAttachmentAsset {
 
 /** One toast per burst of failed sends, shared across composers and chats. */
 const sendFailureToast = burstGate(5_000);
+/** Matches MorphSendButton's check hold. */
+const SENT_HOLD_MS = 900;
 
 const IOS_INPUT_LINE_HEIGHT = 22;
 /**
@@ -302,6 +305,13 @@ export function Composer({
     };
   }, []);
   const [busy, setBusy] = useState(false);
+  // Drives the send button's arrow, ring and check. "sent" holds the check, then returns to idle.
+  const [sendStatus, setSendStatus] = useState<SendStatus>("idle");
+  useEffect(() => {
+    if (sendStatus !== "sent") return;
+    const timer = setTimeout(() => setSendStatus("idle"), SENT_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [sendStatus]);
   const inputRef = useRef<TextInput>(null);
   const acceptMentionRef = useRef<() => boolean>(() => false);
   const typingActive = useRef(false);
@@ -357,14 +367,10 @@ export function Composer({
     [chatGuid],
   );
 
-  // Desktop web: the composer is a keyboard focus target — reply-intent
-  // selections request it (docs/keyboard-design.md). Type-anywhere is gone: it
-  // can't coexist with glide-mode single keys, and its char-append was wrong
-  // for IME/dead-key/emoji input anyway.
-  useEffect(() => {
-    if (Platform.OS !== "web" || typeof window === "undefined" || window.innerWidth < 768) return;
-    return registerFocusTarget("composer", () => inputRef.current?.focus());
-  }, [chatGuid]);
+  // The composer is a focus target: desktop reply-intent selections and the empty lens's
+  // Nudge request it (docs/keyboard-design.md). Type-anywhere is gone: it can't coexist with
+  // glide-mode single keys, and its char-append was wrong for IME/dead-key/emoji input anyway.
+  useEffect(() => registerFocusTarget("composer", () => inputRef.current?.focus()), [chatGuid]);
 
   // Desktop web: Enter sends, Shift+Enter newlines (RN multiline swallows
   // submit on web). Guards: IME composition, key repeat, in-flight send.
@@ -488,6 +494,7 @@ export function Composer({
       // when you commit, and a confirmation that waits on the network reads as lag.
       playSend();
       hapticSend();
+      setSendStatus("sending");
       try {
         for (let i = 0; i < attachments.length; i++) {
           const attachment = attachments[i];
@@ -506,8 +513,10 @@ export function Composer({
           );
         }
         onClearReply();
+        setSendStatus("sent");
         // No playSend() here — confirmation already fired on touch-up above.
       } catch (error) {
+        setSendStatus("idle");
         hapticFailure();
         showToast(messagingCommandError(error, "Couldn't send the attachment. Check the Mac mini connection."));
       } finally {
@@ -526,6 +535,7 @@ export function Composer({
     onOptimistic(temp);
     playSend();
     hapticSend();
+    setSendStatus("sending");
     try {
       const message = await sendWithSuggestionFeedback(
         () => api.sendText(chatGuid, {
@@ -544,7 +554,9 @@ export function Composer({
       // BlueBubbles can echo a freshly-sent SMS back as "iMessage" before it
       // reclassifies — pin the service so the green bubble never flashes blue.
       onSettled(temp.guid, isSMS ? { ...withMentions, service: "SMS" } : withMentions);
+      setSendStatus("sent");
     } catch {
+      setSendStatus("idle");
       hapticFailure();
       onSettled(temp.guid, { ...temp, pending: false, failed: true });
       if (sendFailureToast()) showToast("Couldn't send. Check the Mac mini connection.");
@@ -1168,18 +1180,12 @@ ${url}` : url;
               {({ hovered, pressed }) => <Ionicons name="chevron-up" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}
             </Pressable>
           )}
-          {canSend && !recording ? (
-            <Pressable
-              ref={sendBtnRef}
-              accessibilityRole="button"
-              accessibilityLabel="Send"
-              onPress={() => void send()}
-              onLongPress={canSchedule ? openScheduleSheet : undefined}
-              disabled={busy}
-              style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: sendColor }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
-            >
-              <Ionicons name="arrow-up" size={20} color={theme.onAccent} />
-            </Pressable>
+          {/* Stays up after a send clears the field, so the ring and check have somewhere to play. */}
+          {(canSend || sendStatus !== "idle") && !recording ? (
+            <View ref={sendBtnRef}>
+              {/* New text brings the arrow straight back, so a second send never waits on the first. */}
+              <MorphSendButton status={canSend ? "idle" : sendStatus} disabled={busy && sendStatus === "idle"} onPress={() => void send()} color={sendColor} />
+            </View>
           ) : (
             <Pressable
               accessibilityRole="button"
