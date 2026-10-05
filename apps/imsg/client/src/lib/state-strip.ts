@@ -3,9 +3,7 @@ import type { ChatSummary, Message } from "@shared/types";
 import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 import { format } from "date-fns/format";
 
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
+import { compactAge } from "@/lib/turn-age";
 
 export type StripTone = "turn" | "waiting" | "settled";
 
@@ -28,15 +26,6 @@ export interface StripInput {
   readonly now: number;
   /** Phone width: "Replied Friday" instead of "You last replied Friday". */
   readonly compact: boolean;
-}
-
-// TODO(signal-states): same rule as turn-age.ts compactAge; import it once that unit lands.
-/** "4m", "5h", "6d", "2w". */
-export function compactAge(ms: number): string {
-  if (ms < HOUR) return `${Math.max(1, Math.floor(ms / MINUTE))}m`;
-  if (ms < DAY) return `${Math.floor(ms / HOUR)}h`;
-  if (ms < 7 * DAY) return `${Math.floor(ms / DAY)}d`;
-  return `${Math.floor(ms / (7 * DAY))}w`;
 }
 
 /** "today", "yesterday", a weekday inside the last week, else "Mar 3". */

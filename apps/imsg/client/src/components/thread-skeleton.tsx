@@ -1,9 +1,6 @@
 import { StyleSheet, View, type DimensionValue } from "react-native";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
-
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = { light: { skeleton: "rgba(0,0,0,0.06)" }, dark: { skeleton: "rgba(255,255,255,0.07)" } } as const;
+import { useTheme } from "@/hooks/use-theme";
 
 // Sizes from round3/html/desk-states.html "Thread loading", newest at the bottom.
 const BUBBLES: readonly { width: DimensionValue; height: number; mine: boolean }[] = [
@@ -16,7 +13,7 @@ const BUBBLES: readonly { width: DimensionValue; height: number; mine: boolean }
 
 /** Still bubble-shaped placeholders where a thread's messages will land. No shimmer by design. */
 export function ThreadSkeleton() {
-  const { skeleton } = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const { skeleton } = useTheme();
   return (
     <View role="progressbar" aria-busy accessibilityLabel="Loading conversation" style={styles.container}>
       {BUBBLES.map((bubble, i) => (

@@ -1,11 +1,7 @@
 import type { ChatSummary } from "@shared/types";
 import { useSyncExternalStore } from "react";
 
-/**
- * The desktop lens order: pinned, then CRM priority 1-2, then newest first.
- * TODO(signal-settle): conversation-list-pane's deskChats sorts the same way inline; it should
- * import this so the "2 of 41" count and the rendered list cannot drift.
- */
+/** The desktop lens order: pinned, then CRM priority 1-2, then newest first. The list pane renders this order too. */
 export function queueOrder(chats: readonly ChatSummary[]): ChatSummary[] {
   const rank = (chat: ChatSummary): number =>
     chat.flags.pinned ? 0 : chat.crm?.priority !== undefined && chat.crm.priority <= 2 ? 1 : 2;

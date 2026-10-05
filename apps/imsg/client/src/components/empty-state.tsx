@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { Spacing } from "@/constants/theme";
@@ -55,12 +54,6 @@ export function CenteredSpinner({ style }: CenteredSpinnerProps) {
   return <View style={[styles.spinner, style]}>{shown && <ActivityIndicator />}</View>;
 }
 
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { text: "#17171A", textSecondary: "#55555C", danger: "#C4261B", surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", dividerStrong: "rgba(0,0,0,0.13)" },
-  dark: { text: "#EDEDEF", textSecondary: "#A6A6AD", danger: "#FF6B5E", surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", dividerStrong: "rgba(255,255,255,0.12)" },
-} as const;
-
 export interface ErrorStateProps {
   title: string;
   message: string;
@@ -69,10 +62,10 @@ export interface ErrorStateProps {
 
 /** A load that failed: what failed, the one thing to check, and Try again as the only action. */
 export function ErrorState({ title, message, onRetry }: ErrorStateProps) {
-  const c = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const c = useTheme();
   return (
     <View style={styles.error}>
-      <Ionicons name="alert-circle-outline" size={26} color={c.danger} />
+      <Ionicons name="alert-circle-outline" size={26} color={c.destructive} />
       <Text role="heading" style={[styles.errorTitle, { color: c.text }]}>{title}</Text>
       <Text style={[styles.errorMessage, { color: c.textSecondary }]}>{message}</Text>
       <Pressable

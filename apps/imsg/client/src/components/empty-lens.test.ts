@@ -13,7 +13,7 @@ beforeAll(async () => {
     plugins: [{ name: "stub-ui", setup(build) {
       build.onResolve({ filter: /^(react-native|react\/jsx-dev-runtime|react\/jsx-runtime|@expo\/vector-icons|\.\/avatar|@\/hooks\/.*)$/ }, () => ({ path: "stub", namespace: "stub" }));
       build.onLoad({ filter: /.*/, namespace: "stub" }, () => ({ loader: "js",
-        contents: "const s = () => null; export const StyleSheet = { create: (x) => x }; export { s as Pressable, s as Text, s as View, s as Ionicons, s as ChatAvatar, s as useColorScheme, s as useLayoutMode, s as jsx, s as jsxs, s as jsxDEV, s as Fragment };" }));
+        contents: "const s = () => null; export const StyleSheet = { create: (x) => x }; export { s as Pressable, s as Text, s as View, s as Ionicons, s as ChatAvatar, s as useColorScheme, s as useLayoutMode, s as useTheme, s as jsx, s as jsxs, s as jsxDEV, s as Fragment };" }));
     } }],
   });
   if (!built.success) throw new Error(built.logs.map(String).join("\n"));

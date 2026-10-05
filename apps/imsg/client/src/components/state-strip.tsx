@@ -1,30 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { Message } from "@shared/types";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import Reanimated, {
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
 
 import { useChatDirectory } from "@/hooks/use-chat-directory";
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { useTheme } from "@/hooks/use-theme";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { stripCopy, type StripTone } from "@/lib/state-strip";
 
-// TODO(signal-tokens): round4/tokens.json values until U1's tokens land.
-const STRIP = {
-  light: { strip: "#FFFFFF", divider: "rgba(0,0,0,0.075)", text: "#17171A", textSecondary: "#55555C", textTertiary: "#64646B", icon: "#5E5E66", turn: "#BE3A06", turnMark: "#EC5A1E", hover: "rgba(0,0,0,0.04)" },
-  dark: { strip: "#19191C", divider: "rgba(255,255,255,0.07)", text: "#EDEDEF", textSecondary: "#A6A6AD", textTertiary: "#8F8F96", icon: "#97979E", turn: "#FF8A57", turnMark: "#FF6A2B", hover: "rgba(255,255,255,0.045)" },
-} as const;
-
-// TODO(signal-motion): use springs.ts
-const SMOOTH = { stiffness: 189.9, damping: 25.35, mass: 1 } as const;
+import { BlurSwap } from "./motion/blur-swap";
 
 const MINUTE = 60_000;
 
@@ -38,26 +24,7 @@ function useMinuteClock(): number {
   return now;
 }
 
-/** Content that enters with the blur swap: opacity, 6px rise and a 4px blur clearing together. */
-function BlurSwapIn({ children }: { readonly children: ReactNode }) {
-  const reduceMotion = useReducedMotion();
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.value = reduceMotion ? withTiming(1, { duration: 100 }) : withSpring(1, SMOOTH);
-  }, [progress, reduceMotion]);
-  const style = useAnimatedStyle(() => {
-    const p = progress.value;
-    if (reduceMotion) return { opacity: p };
-    return {
-      opacity: p,
-      transform: [{ translateY: (1 - p) * 6 }],
-      ...(Platform.OS === "web" ? { filter: `blur(${Math.max(0, (1 - p) * 4)}px)` } : {}),
-    };
-  });
-  return <Reanimated.View style={[styles.swap, style]}>{children}</Reanimated.View>;
-}
-
-function ToneIcon({ tone, colors }: { readonly tone: StripTone; readonly colors: (typeof STRIP)[keyof typeof STRIP] }) {
+function ToneIcon({ tone, colors }: { readonly tone: StripTone; readonly colors: ReturnType<typeof useTheme> }) {
   if (tone === "settled") return <Ionicons name="checkmark-circle-outline" size={16} color={colors.icon} />;
   if (tone === "waiting") return <Ionicons name="time-outline" size={16} color={colors.icon} />;
   return (
@@ -82,7 +49,7 @@ export function StateStrip({
   readonly historyComplete: boolean;
 }) {
   const chat = useChatDirectory()?.find((c) => c.guid === chatGuid);
-  const colors = STRIP[useColorScheme() === "dark" ? "dark" : "light"];
+  const colors = useTheme();
   const { wide } = useLayoutMode();
   const now = useMinuteClock();
   const [actionHovered, setActionHovered] = useState(false);
@@ -95,15 +62,17 @@ export function StateStrip({
   return (
     <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>
       {/* Keyed on the state, so a settle or a new message swaps the lead in rather than cutting. */}
-      <BlurSwapIn key={`${copy.tone}:${copy.lead}`}>
-        <ToneIcon tone={copy.tone} colors={colors} />
-        <Text numberOfLines={1} style={[styles.lead, { color: copy.tone === "turn" ? colors.turn : colors.text }]}>
-          {copy.lead}
-        </Text>
-        {copy.detail && (
-          <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{copy.detail}</Text>
-        )}
-      </BlurSwapIn>
+      <BlurSwap swapKey={`${copy.tone}:${copy.lead}`} style={styles.swapHost}>
+        <View style={styles.swap}>
+          <ToneIcon tone={copy.tone} colors={colors} />
+          <Text numberOfLines={1} style={[styles.lead, { color: copy.tone === "turn" ? colors.turn : colors.text }]}>
+            {copy.lead}
+          </Text>
+          {copy.detail && (
+            <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{copy.detail}</Text>
+          )}
+        </View>
+      </BlurSwap>
       {/* Waiting has a settle action too, but the strip only offers it where it is the next step. */}
       {copy.tone !== "waiting" && copy.action && (
         <Pressable
@@ -115,7 +84,7 @@ export function StateStrip({
           onHoverIn={() => setActionHovered(true)}
           onHoverOut={() => setActionHovered(false)}
           hitSlop={4}
-          style={({ pressed }) => [styles.action, (actionHovered || pressed) && { backgroundColor: colors.hover }]}
+          style={({ pressed }) => [styles.action, (actionHovered || pressed) && { backgroundColor: colors.rowHover }]}
         >
           <Ionicons name={copy.action === "unsettle" ? "arrow-undo-outline" : "checkmark"} size={14} color={colors.text} />
           <Text style={[styles.actionText, { color: colors.text }]}>{actionLabel}</Text>
@@ -140,9 +109,9 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingRight: 6,
   },
+  swapHost: { flex: 1, minWidth: 0 },
   swap: {
     alignItems: "center",
-    flex: 1,
     flexDirection: "row",
     gap: 8,
     minWidth: 0,

@@ -138,6 +138,12 @@ export const Colors = {
     tapbackBorder: "rgba(0,0,0,0.1)",
     disabled: "#A2A2A8",
     switchOff: "#8E8E95",
+    /** The state strip on top of the composer card. */
+    strip: "#FFFFFF",
+    toastBg: "#17171A",
+    toastText: "#FFFFFF",
+    toastAction: "#FFB08A",
+    toastActionHover: "rgba(255,255,255,0.1)",
   },
   dark: {
     ...Palette.dark,
@@ -175,5 +181,10 @@ export const Colors = {
     tapbackBorder: "rgba(255,255,255,0.08)",
     disabled: "#5E5E64",
     switchOff: "#727279",
+    strip: "#19191C",
+    toastBg: "#EDEDEF",
+    toastText: "#17171A",
+    toastAction: "#B23A06",
+    toastActionHover: "rgba(0,0,0,0.06)",
   },
 } as const;

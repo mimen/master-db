@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import type { ChatSummary } from "@shared/types";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { useTheme } from "@/hooks/use-theme";
 import { compactAge, LATE_AFTER_MS, waitingLongest, yourTurnLongest, type AgedChat } from "@/lib/turn-age";
 
 import { ChatAvatar } from "./avatar";
@@ -84,12 +84,6 @@ export function emptyLensCopy(lens: EmptyLensKind, counts: EmptyLensCounts): Emp
   return { title: entry.title, line2: entry.line2(counts), sectionTitle: entry.sectionTitle, footer: entry.footer, footerHint: entry.footerHint };
 }
 
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { text: "#17171A", textSecondary: "#55555C", textTertiary: "#64646B", icon: "#5E5E66", turn: "#BE3A06", rowHover: "rgba(0,0,0,0.04)", surface: "#FFFFFF", field: "rgba(0,0,0,0.045)", dividerStrong: "rgba(0,0,0,0.13)" },
-  dark: { text: "#EDEDEF", textSecondary: "#A6A6AD", textTertiary: "#8F8F96", icon: "#97979E", turn: "#FF8A57", rowHover: "rgba(255,255,255,0.045)", surface: "#1C1C1F", field: "rgba(255,255,255,0.06)", dividerStrong: "rgba(255,255,255,0.12)" },
-} as const;
-
 // Desktop values from round4/html/desk-empty.html, phone from phone-empty.html.
 const SIZE = {
   desk: { padTop: 22, padX: 8, headPadX: 10, titleSize: 13, icon: 17, iconGap: 8, line2Size: 12.5, line2Lh: 17.5, line2Indent: 22, groupTop: 22, groupSize: 11.5, rowsPadX: 0, avatar: 32, rowPadX: 10, rowPadTop: 9, rowPadBottom: 10, rowGap: 10, rowRadius: 10, name: 13, nameLh: 18, snippet: 12.5, snippetLh: 17, age: 12, nudgeH: 24, nudgePadX: 9, nudgeRadius: 7, nudgeSize: 12, nudgeBorder: true, more: 12.5, morePadX: 10, showAgeWithNudge: true },
@@ -106,7 +100,7 @@ function snippetOf(chat: ChatSummary): string {
 export function EmptyLens(props: EmptyLensProps) {
   const { lens, chats, counts, now, onOpenChat } = props;
   const { wide } = useLayoutMode();
-  const c = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const c = useTheme();
   const s = wide ? SIZE.desk : SIZE.phone;
   const entry = LENSES[lens];
   const copy = emptyLensCopy(lens, counts);

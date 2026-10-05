@@ -5,9 +5,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useIsFocused } from "expo-router/react-navigation";
 
+import { Springs } from "@/constants/springs";
 import { CardShadow } from "@/constants/theme";
 import { Space, TypeRamp, Weight } from "@/constants/tokens";
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useTheme } from "@/hooks/use-theme";
 
 export interface ToastAction {
   readonly label: string;
@@ -16,15 +17,6 @@ export interface ToastAction {
   readonly hint?: string;
 }
 
-// TODO(signal-tokens): read from tokens.ts once U1 lands
-const SIGNAL = {
-  light: { toastBg: "#17171A", toastText: "#FFFFFF", toastAction: "#FFB08A", toastActionHover: "rgba(255,255,255,0.1)" },
-  dark: { toastBg: "#EDEDEF", toastText: "#17171A", toastAction: "#B23A06", toastActionHover: "rgba(0,0,0,0.06)" },
-} as const;
-
-// TODO(signal-motion): use springs.ts
-const SNAPPY = { stiffness: 566.4, damping: 42.84, mass: 1 };
-const SMOOTH = { stiffness: 189.9, damping: 25.35, mass: 1 };
 const RISE = 10;
 
 interface Toast {
@@ -62,8 +54,9 @@ export function ToastAnchor({ children, active }: { readonly children: ReactNode
   return (
     <View testID="thread-composer-chrome">
       {children}
+      {/* Bottom-anchored over the composer card, so it never covers the suggestion chips above it. */}
       {context?.activeAnchor === anchor && (
-        <View pointerEvents="box-none" style={[styles.overlay, { top: Space.md }]}>
+        <View pointerEvents="box-none" style={[styles.overlay, { bottom: Space.md }]}>
           {context.pill}
         </View>
       )}
@@ -86,7 +79,7 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
     });
   }, []);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const c = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+  const c = useTheme();
   const reduceMotion = useReducedMotion();
   const progress = useSharedValue(0);
   const clear = useCallback(() => setToast(null), []);
@@ -124,8 +117,8 @@ export function ToastHost({ children }: { readonly children: ReactNode }) {
       return;
     }
     progress.value = shown
-      ? withSpring(1, SNAPPY)
-      : withSpring(0, SMOOTH, (finished) => {
+      ? withSpring(1, Springs.snappy)
+      : withSpring(0, Springs.smooth, (finished) => {
           if (finished) scheduleOnRN(clear);
         });
   }, [clear, progress, reduceMotion, shown, toast]);
