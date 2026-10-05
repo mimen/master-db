@@ -96,7 +96,7 @@ function ChatRowInner({
   handle,
   selected,
   keyboardFocused = false,
-  onPress,
+  onOpen,
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another with the same name. */
@@ -104,7 +104,7 @@ function ChatRowInner({
   selected: boolean;
   /** Glide-mode cursor: the persimmon ring on the selected row while navigating. */
   keyboardFocused?: boolean;
-  onPress: () => void;
+  onOpen: (chat: ChatSummary) => void;
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
@@ -201,7 +201,7 @@ function ChatRowInner({
       // The dot is drawn, so unread has to be spoken here too.
       aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, snippet, last ? formatListTimestamp(last.dateCreated) : null].filter(Boolean).join(", ")}
       aria-selected={selected}
-      onPress={onPress}
+      onPress={() => onOpen(chat)}
       onPressIn={() => markOpenStart(chat.guid)}
       onLongPress={() => openMenu(chat)}
       style={({ pressed }) => [

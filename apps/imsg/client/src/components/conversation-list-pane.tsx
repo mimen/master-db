@@ -1,6 +1,6 @@
 import type { ChatSummary, StateCounts } from "@shared/types";
 import { useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
@@ -283,36 +283,25 @@ export function ConversationListPane({
   // re-renders every mounted row on every render of this pane.
   // One person's second number or email reads as a duplicate row without its handle.
   const handles = useMemo(() => disambiguators(allChats), [allChats]);
-  const renderChat = useCallback(
-    (item: ChatSummary) => (
-      <ChatRow
-        chat={item}
-        handle={handles.get(item.guid)}
-        selected={wide && selectedGuid === item.guid}
-        keyboardFocused={wide && glide && selectedGuid === item.guid}
-        onPress={() => onOpenChat(item)}
+  // The parent's onOpenChat is a fresh function every render. A stable handle keeps ChatRow's
+  // memo intact, so a click re-renders the two rows whose selection changed, not every row.
+  const openChatRef = useRef(onOpenChat);
+  useEffect(() => { openChatRef.current = onOpenChat; });
+  const openRow = useCallback((chat: ChatSummary) => openChatRef.current(chat), []);
+  const renderRow = useCallback(
+    ({ item: row }: { item: InboxRow }) => (
+      <InboxCell
+        row={row}
+        gone={leaving.has(row.key)}
+        onCollapsed={dropLeaving}
+        labelColor={theme.textTertiary}
+        handle={row.kind === "chat" ? handles.get(row.chat.guid) : undefined}
+        selected={row.kind === "chat" && wide && selectedGuid === row.chat.guid}
+        keyboardFocused={row.kind === "chat" && wide && glide && selectedGuid === row.chat.guid}
+        onOpen={openRow}
       />
     ),
-    [wide, glide, selectedGuid, onOpenChat, handles],
-  );
-  const renderRow = useCallback(
-    ({ item: row }: { item: InboxRow }) => {
-      const gone = leaving.has(row.key);
-      return (
-        // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
-        <View pointerEvents={gone ? "none" : "auto"}>
-          <Collapse collapsed={gone} onCollapsed={() => dropLeaving(row.key)}>
-            {row.kind === "section" ? (
-              <View style={styles.group}>
-                <Text accessibilityRole="header" style={[styles.groupLabel, { color: theme.textTertiary }]}>{row.label}</Text>
-                <Text style={[styles.groupCount, { color: theme.textTertiary }]}>{row.count}</Text>
-              </View>
-            ) : renderChat(row.chat)}
-          </Collapse>
-        </View>
-      );
-    },
-    [theme, renderChat, leaving, dropLeaving],
+    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow],
   );
   // Needs reply and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -503,6 +492,37 @@ export function ConversationListPane({
   );
   return pane;
 }
+
+/**
+ * One list cell. Memoized with primitive props so a click or a lens switch re-renders only the
+ * cells whose row, selection or leave state changed, not all ~700 mounted ones.
+ */
+const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen }: {
+  readonly row: InboxRow;
+  readonly gone: boolean;
+  readonly onCollapsed: (key: string) => void;
+  readonly labelColor: string;
+  readonly handle: string | undefined;
+  readonly selected: boolean;
+  readonly keyboardFocused: boolean;
+  readonly onOpen: (chat: ChatSummary) => void;
+}) {
+  return (
+    // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
+    <View pointerEvents={gone ? "none" : "auto"}>
+      <Collapse collapsed={gone} onCollapsed={() => onCollapsed(row.key)}>
+        {row.kind === "section" ? (
+          <View style={styles.group}>
+            <Text accessibilityRole="header" style={[styles.groupLabel, { color: labelColor }]}>{row.label}</Text>
+            <Text style={[styles.groupCount, { color: labelColor }]}>{row.count}</Text>
+          </View>
+        ) : (
+          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} />
+        )}
+      </Collapse>
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   visuallyHidden: { height: 1, overflow: "hidden", position: "absolute", width: 1, opacity: 0 },
