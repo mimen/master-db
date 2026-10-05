@@ -1,17 +1,15 @@
 import { expect, test } from "../fixtures/desk";
 
 for (const scheme of ["light", "dark"] as const) {
-  test(`shelf pills share one neutral fill and stay one row on phone (${scheme})`, async ({ desk }) => {
+  test(`alternate chips share one neutral fill and stay one row under the phone field (${scheme})`, async ({ desk }) => {
     const page = desk.page;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-    await page.goto(`/?shelf=${scheme}`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("tab", { name: "All", exact: true })).toBeVisible();
-    await page.waitForTimeout(800);
-    await page.getByText("Alex Rivera", { exact: true }).filter({ visible: true }).first().click();
+    await page.goto(`/chat/${encodeURIComponent(desk.chats.needs)}?name=Alex%20Rivera&shelf=${scheme}`, { waitUntil: "domcontentloaded" });
 
+    // The top suggestion is the field's ghost text; the alternates are the chips under it.
+    await expect(page.getByTestId("composer-ghost")).toHaveText("what time do you need the final answer by?");
     const pills = [
-      page.getByRole("button", { name: /^clarify, curious:/ }),
       page.getByRole("button", { name: /^decline, boundary:/ }),
       page.getByRole("button", { name: /^react, playful:/ }),
     ];
