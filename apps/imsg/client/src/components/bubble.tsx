@@ -275,14 +275,9 @@ export const Bubble = memo(function Bubble({
   const senderName =
     message.sender?.name ?? (message.sender?.address ? formatAddress(message.sender.address) : "");
   const groupGutter = !mine && isGroupChat;
-  // Cap bubble width so long messages neither stretch across a wide pane nor
-  // overflow a narrow one (Details/Assistant open). Pane-relative when known.
-  const bubbleMaxWidth =
-    paneWidth > 0
-      ? Math.min(paneWidth * (groupGutter ? 0.58 : 0.64), 520)
-      : wide
-        ? Math.min(winW * 0.5, 520)
-        : "76%";
+  // A share of the reading column the thread passes in: 64% on desk (58% beside a group avatar), 76% on phone.
+  const share = wide ? (groupGutter ? 0.58 : 0.64) : 0.76;
+  const bubbleMaxWidth = paneWidth > 0 ? paneWidth * share : wide ? Math.min(winW * 0.5, 520) : "76%";
   const url = message.text ? firstUrl(message.text) : null;
   const delivery = deliveryState(message, latestInboundAt, Date.now());
   const notDelivered = delivery === "failed";
@@ -298,10 +293,8 @@ export const Bubble = memo(function Bubble({
   return (
     <View
       style={{
-        paddingHorizontal: 14,
-        marginBottom: groupEnd ? 8 : 3,
         // Tapback chips overhang the bubble top; reserve that headroom so they never slide under the neighbor.
-        marginTop: tapbacks.length > 0 ? 16 : 0,
+        marginTop: tapbacks.length > 0 ? 22 : groupStart ? (wide ? 10 : 9) : 3,
       }}
     >
       {groupGutter && groupStart && senderName !== "" && (
@@ -442,7 +435,7 @@ export const Bubble = memo(function Bubble({
           ) : mine && isLatestOutgoing && message.pending && slowSend ? (
             <PendingReceipt style={[styles.meta, caption]} />
           ) : (
-            <Receipt style={[styles.meta, caption]} text={receiptText({ message, isLatestOutgoing, slowSend, groupEnd, showTime })} />
+            <Receipt style={[styles.meta, caption]} text={receiptText({ message, isLatestOutgoing, slowSend, showTime })} />
           )}
         </View>
 
@@ -523,7 +516,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   meta: {
-    marginTop: 0,
+    marginBottom: 2,
     marginHorizontal: 4,
   },
   failedRow: {

@@ -16,7 +16,7 @@ import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
-import { formatDayDivider, sameDay } from "@/lib/format";
+import { formatDayDivider, formatThreadTime, sameDay } from "@/lib/format";
 import { hapticSelect } from "@/lib/haptics";
 import { usePeerTyping } from "@/lib/presence-api";
 import { createInboundReadObserver } from "@/lib/message-observers";
@@ -35,6 +35,7 @@ import { showToast, ToastAnchor } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
 import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
+import { sinceYourReply } from "./message-meta";
 import { Composer } from "./composer";
 import { QueuePosition } from "./queue-position";
 import { StateStrip } from "./state-strip";
@@ -54,6 +55,8 @@ import { TypingIndicator } from "./typing-indicator";
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
 const UNSEND_WINDOW_MS = 2 * 60 * 1000;
 const GROUP_GAP_MS = 10 * 60 * 1000;
+const COLUMN_PAD = 32;
+const PHONE_PAD = 12;
 
 function formatWindowRemaining(windowMs: number, ageMs: number): string {
   const minutes = Math.max(1, Math.ceil((windowMs - ageMs) / 60_000));
@@ -65,6 +68,8 @@ interface Row {
   groupStart: boolean;
   groupEnd: boolean;
   newDay: boolean;
+  /** Inside the inbound run since your last reply; the run's first row carries its size. */
+  since: { count: number | null } | null;
 }
 
 interface ThreadViewProps {
@@ -110,7 +115,7 @@ export function ThreadView({
   const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, newestMessages } =
     useMessages(chatGuid, jumpTarget);
   messagesRef.current = messages;
-  // Milad owes a reply when the newest real message is inbound. Drives whether
+  // It is your turn when the newest real message is inbound. Drives whether
   // the suggestion shelf appears at all.
   const awaitingReply = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -209,6 +214,10 @@ export function ThreadView({
   // drive the scroll ourselves. Inverted container ⇒ wheel-up must increase
   // scrollTop (toward older messages).
   const [paneW, setPaneW] = useState(0);
+  // The reading column the bubbles size against: 760 max on desk, the pane less its gutters on phone.
+  const columnW = headerChat
+    ? Math.max(0, Math.min(TriageGeometry.threadMaxWidth, paneW - 2 * COLUMN_PAD))
+    : Math.max(0, paneW - 2 * PHONE_PAD);
   const onPaneLayout = useCallback((width: number): void => {
     const next = Math.round(width);
     setPaneW((current) => (current === next ? current : next));
@@ -246,7 +255,8 @@ export function ThreadView({
 
   const rows = useMemo<Row[]>(() => {
     const visible = messages.filter((m) => !m.isGroupEvent || m.text);
-    const built = visible.map((message, index) => {
+    const run = sinceYourReply(visible);
+    const built = visible.map((message, index): Row => {
       const prev = visible[index - 1];
       const next = visible[index + 1];
       const newDay = !prev || !sameDay(prev.dateCreated, message.dateCreated);
@@ -262,7 +272,8 @@ export function ThreadView({
         next.isFromMe === message.isFromMe &&
         next.sender?.address === message.sender?.address &&
         next.dateCreated - message.dateCreated < GROUP_GAP_MS;
-      return { message, groupStart: !samePrev, groupEnd: !sameNext, newDay };
+      const since = index < run.start ? null : { count: index === run.start ? run.count : null };
+      return { message, groupStart: !samePrev, groupEnd: !sameNext, newDay, since };
     });
     return built.reverse(); // inverted list renders newest first
   }, [messages]);
@@ -536,6 +547,11 @@ export function ThreadView({
               </>
             ) : null}
             <ThreadTitle name={headerChat.displayName} from={advancedFrom} color={theme.text} />
+            {headerChat.isGroup && headerChat.participants.length > 0 && (
+              <Text numberOfLines={1} style={[styles.peopleCount, { color: theme.textTertiary }]}>
+                {headerChat.participants.length + 1} people
+              </Text>
+            )}
           </Pressable>
           <View style={styles.paneHeaderActions}>
             <QueuePosition />
@@ -658,8 +674,8 @@ export function ThreadView({
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           contentContainerStyle={headerChat
-            ? { paddingVertical: 14, paddingHorizontal: Math.max(18, (paneW - TriageGeometry.threadMaxWidth) / 2) }
-            : { paddingVertical: 10 }}
+            ? { paddingVertical: 16, paddingHorizontal: Math.max(COLUMN_PAD, (paneW - TriageGeometry.threadMaxWidth) / 2) }
+            : { paddingVertical: 10, paddingHorizontal: PHONE_PAD }}
           ListHeaderComponent={
             peerTyping ? (
               <View style={styles.typingRow}>
@@ -674,6 +690,26 @@ export function ThreadView({
               !item.message.isFromMe &&
               item.message.dateCreated >= firstUnreadAt &&
               (olderMessage === null || olderMessage.dateCreated < firstUnreadAt);
+            const sinceStart = item.since?.count != null;
+            const body = item.message.isGroupEvent ? (
+              <Text style={[styles.groupEvent, { color: theme.textTertiary }]}>
+                {item.message.text}
+              </Text>
+            ) : (
+              <Bubble
+                message={item.message}
+                paneWidth={columnW}
+                groupStart={item.groupStart}
+                groupEnd={item.groupEnd}
+                isGroupChat={isGroup}
+                isLatestOutgoing={item.message.guid === latestOutgoingGuid}
+                latestInboundAt={latestInboundAt}
+                highlighted={item.message.guid === highlightGuid}
+                onLongPress={openMessageSheet}
+                onRetry={retry}
+                onShowReactions={showReactions}
+              />
+            );
             return (
               <Reanimated.View
                 entering={
@@ -684,7 +720,7 @@ export function ThreadView({
                     : undefined
                 }
               >
-                {unreadBoundary && (
+                {unreadBoundary && !sinceStart && (
                   <View style={styles.unreadDivider}>
                     <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
                     <Text style={[styles.unreadLabel, { color: theme.accent }]}>
@@ -693,30 +729,32 @@ export function ThreadView({
                     <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
                   </View>
                 )}
-                {item.newDay && (
-                  <Text style={[styles.dayDivider, { color: theme.textTertiary }]}>
-                    {formatDayDivider(item.message.dateCreated)}
+                {item.newDay && !sinceStart && (
+                  <Text style={[styles.dayDivider, !headerChat && styles.dayDividerPhone, { color: theme.textTertiary }]}>
+                    {formatThreadTime(item.message.dateCreated)}
                   </Text>
                 )}
-                {item.message.isGroupEvent ? (
-                  <Text style={[styles.groupEvent, { color: theme.textSecondary }]}>
-                    {item.message.text}
-                  </Text>
-                ) : (
-                  <Bubble
-                    message={item.message}
-                    paneWidth={paneW}
-                    groupStart={item.groupStart}
-                    groupEnd={item.groupEnd}
-                    isGroupChat={isGroup}
-                    isLatestOutgoing={item.message.guid === latestOutgoingGuid}
-                    latestInboundAt={latestInboundAt}
-                    highlighted={item.message.guid === highlightGuid}
-                    onLongPress={openMessageSheet}
-                    onRetry={retry}
-                    onShowReactions={showReactions}
-                  />
-                )}
+                {item.since ? (
+                  <View
+                    style={[
+                      headerChat ? styles.sinceRunDesk : styles.sinceRunPhone,
+                      sinceStart && (headerChat ? styles.sinceStartDesk : styles.sinceStartPhone),
+                      { borderLeftColor: theme.turnMark },
+                    ]}
+                  >
+                    {sinceStart && (
+                      <View style={[styles.sinceLabel, headerChat ? styles.sinceLabelDesk : styles.sinceLabelPhone]}>
+                        <Text style={[styles.sinceCount, { color: theme.turn, fontSize: headerChat ? 11.5 : 13 }]}>
+                          {item.since.count} since your reply
+                        </Text>
+                        <Text style={{ color: theme.textTertiary, fontSize: headerChat ? 11.5 : 13 }}>
+                          {formatThreadTime(item.message.dateCreated)}
+                        </Text>
+                      </View>
+                    )}
+                    {body}
+                  </View>
+                ) : body}
               </Reanimated.View>
             );
           }}
@@ -815,6 +853,7 @@ const styles = StyleSheet.create({
   headerIconButton: { borderRadius: 7, height: 30, width: 30 },
   crumb: { flexShrink: 1, fontSize: 13.5 },
   crumbSlash: { fontSize: 14, marginHorizontal: 8 },
+  peopleCount: { flexShrink: 0, fontSize: 12.5, marginLeft: 12 },
   titleSwap: { flexShrink: 1, minWidth: 0 },
   threadTitle: { ...headerFace, flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },
   vsep: { height: 16, marginHorizontal: 6, width: 1 },
@@ -907,16 +946,26 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
   },
+  sinceRunDesk: { borderLeftWidth: 2, marginLeft: -17, paddingLeft: 15 },
+  sinceRunPhone: { borderLeftWidth: 2, marginLeft: -12, paddingLeft: 10 },
+  sinceStartDesk: { marginTop: 22 },
+  sinceStartPhone: { marginTop: 18 },
+  sinceLabel: { flexDirection: "row" },
+  sinceLabelDesk: { gap: 10, marginBottom: 3 },
+  sinceLabelPhone: { gap: 8, marginBottom: 4 },
+  sinceCount: { fontWeight: "600" },
   dayDivider: {
     textAlign: "center",
     fontSize: 11.5,
     marginBottom: 8,
     marginTop: 16,
   },
+  dayDividerPhone: { fontSize: 12, marginBottom: 6, marginTop: 14 },
   groupEvent: {
     textAlign: "center",
     fontSize: 12,
-    marginVertical: 6,
+    marginBottom: 6,
+    marginTop: 12,
     paddingHorizontal: 20,
   },
 });

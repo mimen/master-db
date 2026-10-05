@@ -3,6 +3,7 @@ import { isSameDay } from "date-fns/isSameDay";
 import { isSameWeek } from "date-fns/isSameWeek";
 import { isToday } from "date-fns/isToday";
 import { isYesterday } from "date-fns/isYesterday";
+import { differenceInCalendarDays } from "date-fns/differenceInCalendarDays";
 
 export function formatListTimestamp(ms: number): string {
   const d = new Date(ms);
@@ -17,6 +18,27 @@ export function formatDayDivider(ms: number): string {
   if (isToday(d)) return "Today";
   if (isYesterday(d)) return "Yesterday";
   return format(d, "EEEE, MMMM d");
+}
+
+/** A thread's date separator: the day, then the time its first message arrived ("Friday 8:12 PM"). */
+export function formatThreadTime(ms: number, now = Date.now()): string {
+  const d = new Date(ms);
+  const time = format(d, "h:mm a");
+  const days = differenceInCalendarDays(now, d);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Yesterday ${time}`;
+  if (days < 7) return `${format(d, "EEEE")} ${time}`;
+  return format(d, "EEE, MMM d 'at' h:mm a");
+}
+
+/** The read receipt's time: a clock time today, a weekday this week, else a date ("Read Friday"). */
+export function formatReceiptTime(ms: number, now = Date.now()): string {
+  const d = new Date(ms);
+  const days = differenceInCalendarDays(now, d);
+  if (days === 0) return format(d, "h:mm a");
+  if (days === 1) return "Yesterday";
+  if (days < 7) return format(d, "EEEE");
+  return format(d, "MMM d");
 }
 
 export function formatBubbleTime(ms: number): string {
