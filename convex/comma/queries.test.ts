@@ -339,6 +339,31 @@ describe("Comma read queries", () => {
     expect(await t.query(api.comma.queries.getConversation, { conversationId: id })).toBeNull();
     expect(await t.query(api.comma.queries.resolveChat, { chatGuid: "SMS;-;one" })).toBeNull();
   });
+
+  test("carries the CRM a DM inherits from its person and a group owns", async () => {
+    const t = authed();
+    const [dm, group, plain] = await t.run(async (ctx) => {
+      const address = "+16195551234";
+      const personId = await ctx.db.insert("people", {
+        display_name: "Tracy", normalized_phones: [address], normalized_emails: [], is_favorite: true, priority: 2,
+        identity_count: 1, message_count: 0, is_self: false, auto_clustered: true, created_at: "x", updated_at: "x",
+      });
+      await ctx.db.insert("identities", { kind: "phone", value: address, normalized: address, person_id: personId,
+        message_count: 0, chat_count: 0, is_self: false, source: "apple_contact", created_at: "x", updated_at: "x" });
+      await ctx.db.insert("tags", { person_id: personId, tag: "showcase", created_at: "x" });
+      await ctx.db.insert("chat_crm", { chat_guid: "iMessage;+;crew", priority: 4, created_at: "x", updated_at: "x" });
+      await ctx.db.insert("tags", { chat_guid: "iMessage;+;crew", tag: "launch", created_at: "x" });
+      const dm = await ctx.db.insert("comma_conversations", { ...conversation("dm", 3), participants: [{ address, name: null }] });
+      const group = await ctx.db.insert("comma_conversations", { ...conversation("crew", 2), isGroup: true, primaryChatGuid: "iMessage;+;crew" });
+      const plain = await ctx.db.insert("comma_conversations", conversation("plain", 1));
+      return [dm, group, plain];
+    });
+    const crm = async (conversationId: Id<"comma_conversations">) =>
+      (await t.query(api.comma.queries.getConversation, { conversationId }))?.crm;
+    expect(await crm(dm)).toEqual({ is_favorite: true, priority: 2, tags: ["showcase"] });
+    expect(await crm(group)).toEqual({ priority: 4, tags: ["launch"] });
+    expect(await crm(plain)).toBeUndefined();
+  });
 });
 
 test("suggestions require the allowed identity and return only the requested conversation", async () => {

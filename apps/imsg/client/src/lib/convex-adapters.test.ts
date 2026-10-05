@@ -89,6 +89,12 @@ describe("conversationToChat", () => {
     expect(manuallyUnread.unreadCount).toBe(0);
     expect(manuallyUnread.flags.unread).toBe(true);
   });
+
+  test("carries the CRM projection only when the view sends one", () => {
+    const crm = { is_favorite: true, priority: 2, tags: ["showcase"] };
+    expect(conversationToChat({ ...conversation(), crm }).crm).toEqual(crm);
+    expect("crm" in conversationToChat(conversation())).toBe(false);
+  });
 });
 
 describe("messageToMessage", () => {
