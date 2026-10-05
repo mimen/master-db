@@ -230,9 +230,8 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
     CAPS.groups,
   );
 
-  if (commands.length > 0) sections.push({ title: "Commands", hideHeader: true, items: commands });
-  if (conversations.length > 0) sections.push({ title: "Conversations", items: conversations });
-  if (groups.length > 0) sections.push({ title: "Groups", items: groups });
+  const people = [...conversations, ...groups];
+  if (people.length > 0) sections.push({ title: "People", items: people });
   if (input.messages.length > 0) {
     sections.push({
       title: "Messages",
@@ -263,6 +262,8 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
       })),
     });
   }
+  // Typed, commands come last under their own header, after the people and messages they'd act on.
+  if (commands.length > 0) sections.push({ title: "Commands", items: commands });
   return sections;
 }
 

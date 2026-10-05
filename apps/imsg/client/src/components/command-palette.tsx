@@ -12,7 +12,7 @@ import { Springs } from "@/constants/springs";
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { api } from "@/lib/api";
-import { formatListTimestamp, initials } from "@/lib/format";
+import { formatReceiptTime, initials } from "@/lib/format";
 import {
   buildPaletteSections,
   flattenSections,
@@ -413,7 +413,7 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
           : "";
       return (
         <>
-          <ChatAvatar chat={chat} size={22} />
+          <ChatAvatar chat={chat} size={26} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Highlighted text={chat.displayName} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
             {subtitle !== "" && (
@@ -429,19 +429,19 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
       const sender = m.isFromMe ? "You" : (m.sender?.name ?? m.sender?.address ?? "?");
       return (
         <>
-          <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={sender} size={22} />
+          <PersonAvatar address={m.isFromMe ? null : (m.sender?.address ?? null)} name={sender} size={26} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Text numberOfLines={1} style={[paletteStyles.title, styles.noShrink, { color: theme.text }]}>{sender}</Text>
             <Highlighted text={m.text} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.shrink]} />
           </View>
-          <Text style={[styles.age, { color: theme.popTertiary }]}>{formatListTimestamp(m.dateCreated)}</Text>
+          <Text style={[styles.age, { color: theme.popTertiary }]}>{formatReceiptTime(m.dateCreated)}</Text>
         </>
       );
     }
     case "contact":
       return (
         <>
-          <PersonAvatar address={item.contact.address} name={item.contact.name} size={22} />
+          <PersonAvatar address={item.contact.address} name={item.contact.name} size={26} />
           <View style={[paletteStyles.textCol, styles.inline]}>
             <Highlighted text={item.contact.name} needle={needle} color={theme.text} style={[paletteStyles.title, styles.noShrink]} />
             <Text numberOfLines={1} style={[paletteStyles.subtitle, styles.shrink, { color: theme.popTertiary }]}>{item.contact.address}</Text>

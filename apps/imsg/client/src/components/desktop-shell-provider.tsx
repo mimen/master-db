@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   // No color here: OverlayShell's default is the scheme's scrim (tokens `backdrop`).
   paletteBackdrop: {
     justifyContent: "flex-start",
-    paddingTop: 72,
+    paddingTop: 96,
   },
   helpBackdrop: { backgroundColor: "rgba(18,18,22,0.34)" },
   paletteCard: {

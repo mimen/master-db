@@ -69,7 +69,7 @@ describe("buildPaletteSections", () => {
     ]);
   });
 
-  test("approved section order: commands, conversations, groups, messages, contacts", () => {
+  test("typed section order: people (conversations, then groups), messages, contacts, commands", () => {
     const sections = buildPaletteSections({
       query: "tyson",
       chats: [other, tysonDm, tysonGroup, namedGroup],
@@ -77,7 +77,7 @@ describe("buildPaletteSections", () => {
       contacts: [contact("Tyson", "+1555")],
     });
 
-    expect(sections.map((s) => s.title)).toEqual(["Conversations", "Groups", "Messages", "Contacts"]);
+    expect(sections.map((s) => s.title)).toEqual(["People", "Messages", "Contacts"]);
     const flat = flattenSections(sections);
     expect(flat[0]).toMatchObject({ kind: "conversation", chat: { guid: "dm" } });
   });
@@ -89,7 +89,7 @@ describe("buildPaletteSections", () => {
       messages: [],
       contacts: [],
     });
-    const groups = sections.find((s) => s.title === "Groups")!.items;
+    const groups = sections.find((s) => s.title === "People")!.items;
 
     expect(groups[0]).toMatchObject({ kind: "group", chat: { guid: "grp2" }, matchedMember: null });
     expect(groups[1]).toMatchObject({ kind: "group", chat: { guid: "grp" }, matchedMember: "Tyson" });
@@ -150,7 +150,7 @@ describe("buildPaletteSections", () => {
       contacts: [],
     });
 
-    const conversations = sections.find((s) => s.title === "Conversations")?.items ?? [];
+    const conversations = sections.find((s) => s.title === "People")?.items ?? [];
     expect(conversations).toHaveLength(1);
     expect(conversations[0]).toMatchObject({ kind: "conversation", chat: { guid: "jimmy" } });
   });
@@ -170,14 +170,14 @@ describe("buildPaletteSections", () => {
       contacts: [],
     });
 
-    const groups = sections.find((s) => s.title === "Groups")?.items ?? [];
+    const groups = sections.find((s) => s.title === "People")?.items ?? [];
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ kind: "group", chat: { guid: "jimmy-grp" } });
   });
 
   test("no searchNames on a chat doesn't throw and doesn't spuriously match", () => {
     const sections = buildPaletteSections({ query: "sciandra", chats: [tysonDm], messages: [], contacts: [] });
-    expect(sections.find((s) => s.title === "Conversations")).toBeUndefined();
+    expect(sections.find((s) => s.title === "People")).toBeUndefined();
   });
 
   // -------------------------------------------------------- favorite ranking
@@ -189,7 +189,7 @@ describe("buildPaletteSections", () => {
       const plain = chat({ guid: "plain", displayName: "Klarissa" });
       const sections = buildPaletteSections({ query: "arissa", chats: [plain, favorite], messages: [], contacts: [] });
 
-      const conversations = sections.find((s) => s.title === "Conversations")!.items;
+      const conversations = sections.find((s) => s.title === "People")!.items;
       expect(conversations.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual(["fav", "plain"]);
     });
 
@@ -206,7 +206,7 @@ describe("buildPaletteSections", () => {
         contacts: [],
       });
 
-      const conversations = sections.find((s) => s.title === "Conversations")!.items;
+      const conversations = sections.find((s) => s.title === "People")!.items;
       expect(conversations.map((i) => (i.kind === "conversation" ? i.chat.guid : "?"))).toEqual(["marissa", "emma"]);
     });
 
@@ -219,7 +219,7 @@ describe("buildPaletteSections", () => {
         contacts: [],
       });
 
-      expect(sections.find((s) => s.title === "Conversations")).toBeUndefined();
+      expect(sections.find((s) => s.title === "People")).toBeUndefined();
     });
 
     test("a favorited group wins a same-tier tie over a non-favorite group", () => {
@@ -245,7 +245,7 @@ describe("buildPaletteSections", () => {
         contacts: [],
       });
 
-      const groups = sections.find((s) => s.title === "Groups")!.items;
+      const groups = sections.find((s) => s.title === "People")!.items;
       expect(groups.map((i) => (i.kind === "group" ? i.chat.guid : "?"))).toEqual(["fav-grp", "plain-grp"]);
     });
 
