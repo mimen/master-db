@@ -246,11 +246,13 @@ test("suggestion shelf states hold their footprint and recover quietly", async (
     await page.screenshot({ path: `/tmp/comma-shelf-loading-${scheme}.png`, animations: "disabled" });
 
     release();
-    const pill = page.getByRole("button", { name: /^clarify, curious:/ });
+    // The top suggestion becomes the field's ghost text; the rest land where the placeholders were.
+    await expect(page.getByTestId("composer-ghost")).toHaveText("what time do you need the final answer by?");
+    const pill = page.getByRole("button", { name: /^decline, boundary:/ });
     await expect(pill).toBeVisible();
     await page.waitForTimeout(600);
     await page.screenshot({ path: `/tmp/comma-shelf-loaded-${scheme}.png`, animations: "disabled" });
-    const loadedBox = await pill.boundingBox();
+    const loadedBox = await page.getByTestId("suggestion-alternates").boundingBox();
     expect(Math.abs(loadedBox!.y - loadingBox!.y)).toBeLessThanOrEqual(1);
     await expect(page.getByText("Suggestions unavailable")).toHaveCount(0);
 

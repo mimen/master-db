@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   type GestureResponderEvent,
@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import Reanimated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
@@ -63,6 +64,8 @@ import { PersonAvatar } from "./avatar";
 import { OverlayShell } from "./overlay-shell";
 import { MorphSendButton, type SendStatus } from "./motion/morph-send-button";
 import { ScheduleEditor } from "./schedule-editor";
+import { SuggestionAlternates, type SuggestionSource, useReplySuggestions } from "./suggestion-shelf";
+import { useSpring } from "@/constants/springs";
 
 interface ComposerProps {
   chatGuid: string;
@@ -80,6 +83,10 @@ interface ComposerProps {
   /** Web: the pane that accepts dropped files into this composer. */
   dropTargetRef: RefObject<View | null>;
   onDragActiveChange: (active: boolean) => void;
+  /** Reply suggestions: the top one is the field's ghost text, the rest are the alternates under it. */
+  suggestions: SuggestionSource;
+  /** The state strip, which sits directly on the field. */
+  strip?: ReactNode;
 }
 
 interface PendingAttachment extends PendingAttachmentAsset {
@@ -108,6 +115,48 @@ const IOS_INPUT_CHROME_V = 8 + 8 + INPUT_BORDER_W * 2;
 const IOS_INPUT_MIN_HEIGHT = IOS_INPUT_LINE_HEIGHT + IOS_INPUT_CHROME_V;
 // Six lines, as Messages.app, then the field scrolls.
 const IOS_INPUT_MAX_HEIGHT = IOS_INPUT_LINE_HEIGHT * 6 + IOS_INPUT_CHROME_V;
+
+// The desktop card's field: 14 over the text, and room under it so one line still reads as a
+// roomy field (58 tall) before the toolbar.
+const CARD_FONT = 14;
+const CARD_LINE_HEIGHT = 20;
+const CARD_PAD_TOP = 14;
+const CARD_PAD_BOTTOM = 24;
+const CARD_MIN_HEIGHT = CARD_PAD_TOP + CARD_LINE_HEIGHT + CARD_PAD_BOTTOM;
+const CARD_MAX_HEIGHT = CARD_LINE_HEIGHT * 6 + CARD_PAD_TOP + CARD_PAD_BOTTOM;
+/** Phone: room on the field's right for the Use key while the ghost shows. */
+const USE_KEY_INSET = 64;
+
+/**
+ * The top reply suggestion, drawn in the empty field in tertiary ink. It fades on snappy as
+ * typing starts and returns when the field empties; Reduce Motion makes it instant.
+ */
+function GhostText({ text, shown, card, fontSize, color, onHeight }: {
+  text: string;
+  shown: boolean;
+  card: boolean;
+  fontSize: number;
+  color: string;
+  onHeight: (height: number) => void;
+}): React.JSX.Element {
+  const spring = useSpring("snappy");
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    opacity.value = withSpring(shown ? 1 : 0, spring);
+  }, [opacity, shown, spring]);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Reanimated.View pointerEvents="none" aria-hidden style={[card ? styles.cardGhost : styles.phoneGhost, fade]}>
+      <Text
+        testID="composer-ghost"
+        onLayout={(event) => onHeight(event.nativeEvent.layout.height)}
+        style={{ color, fontSize, lineHeight: card ? CARD_LINE_HEIGHT : IOS_INPUT_LINE_HEIGHT }}
+      >
+        {text}
+      </Text>
+    </Reanimated.View>
+  );
+}
 
 
 function tempMessage(
@@ -264,6 +313,8 @@ export function Composer({
   onSent,
   dropTargetRef,
   onDragActiveChange,
+  suggestions,
+  strip,
 }: ComposerProps) {
   const theme = useTheme();
   const type = useType();
@@ -293,6 +344,9 @@ export function Composer({
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   }, []);
   const draftSync = useComposerDraft(chatGuid, editing !== null, loadRemoteDraft);
+  const replySuggestions = useReplySuggestions(chatGuid, suggestions);
+  const ghost = replySuggestions.slots.kind === "ready" ? replySuggestions.slots.ghost : null;
+  const [ghostTextHeight, setGhostHeight] = useState(0);
 
   // Track native keyboard visibility for keyboard-specific composer edge spacing.
   useEffect(() => {
@@ -314,6 +368,7 @@ export function Composer({
   }, [sendStatus]);
   const inputRef = useRef<TextInput>(null);
   const acceptMentionRef = useRef<() => boolean>(() => false);
+  const acceptGhostRef = useRef<() => boolean>(() => false);
   const typingActive = useRef(false);
   const typingSentAt = useRef(0);
   const typingIdle = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -380,6 +435,10 @@ export function Composer({
     if (!node || typeof node.addEventListener !== "function") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) && acceptMentionRef.current()) {
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "Tab" && !event.shiftKey && acceptGhostRef.current()) {
         event.preventDefault();
         return;
       }
@@ -450,11 +509,12 @@ export function Composer({
     // Reset to the one-line floor BEFORE measuring: scrollHeight never reports
     // less than the current height, and RNW's empty textarea is ~2 rows tall —
     // resetting to "auto" made that the permanent minimum.
-    node.style.height = `${IOS_INPUT_MIN_HEIGHT}px`;
-    const next = Math.min(Math.max(node.scrollHeight, IOS_INPUT_MIN_HEIGHT), IOS_INPUT_MAX_HEIGHT);
+    const [min, max] = card ? [CARD_MIN_HEIGHT, CARD_MAX_HEIGHT] : [IOS_INPUT_MIN_HEIGHT, IOS_INPUT_MAX_HEIGHT];
+    node.style.height = `${min}px`;
+    const next = Math.min(Math.max(node.scrollHeight, min), max);
     node.style.height = `${next}px`;
-    node.style.overflowY = node.scrollHeight > IOS_INPUT_MAX_HEIGHT ? "auto" : "hidden";
-  }, [text]);
+    node.style.overflowY = node.scrollHeight > max ? "auto" : "hidden";
+  }, [text, card]);
 
   const sendRef = useRef<() => void>(() => undefined);
   const send = async () => {
@@ -820,6 +880,8 @@ ${url}` : url;
 
   const attachBtnRef = useRef<View>(null);
   const sendBtnRef = useRef<View>(null);
+  const scheduleBtnRef = useRef<View>(null);
+  const serviceBtnRef = useRef<View>(null);
   const openAttachSheet = () => {
     const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
     if (Platform.OS !== "web") {
@@ -910,13 +972,14 @@ ${url}` : url;
         },
       },
     ];
-    // Desktop: both the menu and the date editor open upward from the send
-    // button, right edges aligned. Mobile keeps the centered sheet and dialog.
-    if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && sendBtnRef.current) {
-      sendBtnRef.current.measureInWindow((x, y, width) => {
-        const right = x + width;
-        setScheduleAnchor({ right: window.innerWidth - right, bottom: window.innerHeight - y + 8 });
-        showSheet({ title: "Send later", actions, anchor: { x: right - 18, y, align: "end" } });
+    // Desktop: the menu opens upward from Send later; the date editor opens upward
+    // from the send button, right edges aligned. Mobile keeps the centered sheet and dialog.
+    const sendNode = sendBtnRef.current;
+    const laterNode = scheduleBtnRef.current;
+    if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && sendNode && laterNode) {
+      sendNode.measureInWindow((x, y, width) => {
+        setScheduleAnchor({ right: window.innerWidth - (x + width), bottom: window.innerHeight - y + 8 });
+        laterNode.measureInWindow((laterX, laterY) => showSheet({ title: "Send later", actions, anchor: { x: laterX, y: laterY } }));
       });
     } else {
       setScheduleAnchor(null);
@@ -945,6 +1008,30 @@ ${url}` : url;
   const canSend = text.trim().length > 0 || pending.length > 0;
   const canSchedule = text.trim().length > 0 && pending.length === 0 && !editing;
   const sendColor = isSMS ? theme.sms : theme.bubbleMine;
+  const serviceLabel = isSMS ? "SMS" : "iMessage";
+  const ghostShown = ghost !== null && text.length === 0 && !editing && pending.length === 0 && !recording;
+  const ghostPadV = card ? CARD_PAD_TOP + CARD_PAD_BOTTOM : IOS_INPUT_CHROME_V;
+  const ghostHeight = Math.min(ghostTextHeight + ghostPadV, card ? CARD_MAX_HEIGHT : IOS_INPUT_MAX_HEIGHT);
+  acceptGhostRef.current = (): boolean => {
+    if (!ghostShown || !ghost) return false;
+    replySuggestions.apply(ghost);
+    return true;
+  };
+
+  // The conversation's service follows its chat: an SMS or RCS chat sends green. The outbox has no
+  // per-message service yet, so the other service shows but cannot be picked.
+  const openServiceMenu = () => {
+    const other = isSMS ? "iMessage" : "SMS";
+    const actions = [
+      { label: serviceLabel, icon: "checkmark" as const, onPress: () => undefined },
+      { label: other, disabled: true, note: "Switching services isn't available yet", onPress: () => undefined },
+    ];
+    if (Platform.OS === "web" && serviceBtnRef.current) {
+      serviceBtnRef.current.measureInWindow((x, y) => showSheet({ title: "Send with", actions, anchor: { x, y } }));
+    } else {
+      showSheet({ title: "Send with", actions });
+    }
+  };
 
   // Keyboard down, the bar extends into the home-indicator strip and the
   // indicator simply draws over it — the same thing Messages does. Reserving
@@ -962,6 +1049,153 @@ ${url}` : url;
   const barPadV =
     keyboardUp || Platform.OS === "web" ? 8 : 8 + Math.min(insets.bottom, 12);
 
+  const attachButton = (
+    <Pressable
+      ref={attachBtnRef}
+      accessibilityRole="button"
+      accessibilityLabel="Add attachment"
+      onPress={openAttachSheet}
+      disabled={busy || recording}
+      hitSlop={8}
+      style={({ hovered, pressed }) => card
+        ? [styles.toolIcon, (hovered || pressed) && { backgroundColor: theme.rowHover }]
+        : [styles.sendButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.field }, pressed && { opacity: HOVER_DIM }]}
+    >
+      {({ hovered, pressed }) => <Ionicons name="add" size={card ? 19 : 22} color={hovered || pressed ? theme.text : theme.icon} />}
+    </Pressable>
+  );
+
+  // Stays up after a send clears the field, so the ring and check have somewhere to play.
+  const sendControl = (canSend || sendStatus !== "idle") && !recording ? (
+    <View ref={sendBtnRef}>
+      {/* New text brings the arrow straight back, so a second send never waits on the first. */}
+      <MorphSendButton status={canSend ? "idle" : sendStatus} disabled={busy && sendStatus === "idle"} onPress={() => void send()} color={sendColor} />
+    </View>
+  ) : (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={recording ? "Send voice message" : "Record voice message"}
+      {...(Platform.OS === "web"
+        ? {
+            onPress: () => void (recording ? finishRecording("send") : startRecording()),
+          }
+        : {
+            onPressIn: () => {
+              micHeld.current = true;
+              void startRecording();
+            },
+            // RN Pressable fires onPressOut on release AND when the finger
+            // slides off the hit rect; only a release inside it sends.
+            onPressOut: (event: GestureResponderEvent) => {
+              micHeld.current = false;
+              const { locationX, locationY } = event.nativeEvent;
+              const inside = locationX >= -24 && locationX <= 58 && locationY >= -24 && locationY <= 58;
+              void finishRecording(inside ? "send" : "cancel");
+            },
+          })}
+      hitSlop={8}
+      disabled={busy || Boolean(editing)}
+      style={({ hovered, pressed }) => [
+        styles.sendButton,
+        { backgroundColor: recording ? theme.destructive : theme.field },
+        !recording && (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
+      ]}
+    >
+      <Ionicons
+        name={recording ? (Platform.OS === "web" ? "arrow-up" : "stop") : "mic"}
+        size={19}
+        color={recording ? theme.onAccent : theme.icon}
+      />
+    </Pressable>
+  );
+
+  const field = recording ? (
+    <View style={[styles.input, styles.recordingBar, card && styles.cardRecording, { borderColor: theme.divider }]}>
+      <View style={[styles.recDot, { backgroundColor: theme.destructive }]} />
+      <Text
+        accessibilityLiveRegion="polite"
+        style={{ color: theme.text, fontSize: 15, fontVariant: ["tabular-nums"], flex: 1 }}
+      >
+        {formatRecordingClock(recorderState.durationMillis ?? 0)}
+      </Text>
+      {Platform.OS === "web" ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel recording"
+          onPress={() => void finishRecording("cancel")}
+          style={({ hovered, pressed }) => [styles.recCancel, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+        >
+          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Cancel · Esc</Text>
+        </Pressable>
+      ) : (
+        <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Slide away to cancel</Text>
+      )}
+    </View>
+  ) : (
+    <View style={card ? undefined : styles.phoneField}>
+      {Platform.OS === "ios" && (
+        <Text
+          style={styles.growthMirror}
+          onLayout={(e) => onMirrorLayout(e.nativeEvent.layout.height)}
+        >
+          {text.length === 0 ? " " : text.endsWith("\n") ? `${text} ` : text}
+        </Text>
+      )}
+      <TextInput
+        ref={inputRef}
+        value={text}
+        selection={selection}
+        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+        onFocus={() => { setListMode(false); draftSync.onFocus(); }}
+        onBlur={draftSync.onBlur}
+        onChangeText={onChangeText}
+        placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
+        // The ghost suggestion takes the placeholder's place; the attribute stays for assistive tech.
+        placeholderTextColor={ghostShown ? "transparent" : theme.textSecondary}
+        multiline
+        scrollEnabled={Platform.OS === "ios" ? inputHeight >= IOS_INPUT_MAX_HEIGHT : undefined}
+        // Desktop: Enter sends (handled by the keydown listener above).
+        // Mobile: Return inserts a newline; sending is the button only.
+        enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
+        submitBehavior={Platform.OS === "web" ? "submit" : "newline"}
+        onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
+        style={[
+          styles.input,
+          Platform.OS === "ios" && {
+            height: inputHeight,
+            lineHeight: IOS_INPUT_LINE_HEIGHT,
+          },
+          Platform.OS === "web" && styles.webInput,
+          { color: theme.text, borderColor: theme.dividerStrong, backgroundColor: theme.surface, fontSize: type.body },
+          card && [styles.cardInput, { backgroundColor: "transparent" }],
+          ghostShown && { minHeight: ghostHeight, paddingRight: card ? styles.cardInput.paddingHorizontal : USE_KEY_INSET },
+        ]}
+      />
+      {ghost && (
+        <GhostText
+          text={ghost.text}
+          shown={ghostShown}
+          card={card}
+          fontSize={card ? CARD_FONT : type.body}
+          color={theme.textTertiary}
+          onHeight={setGhostHeight}
+        />
+      )}
+      {!card && ghostShown && ghost && (
+        <Pressable
+          testID="composer-use-ghost"
+          accessibilityRole="button"
+          accessibilityLabel={`Use suggestion: ${ghost.text}`}
+          onPress={() => replySuggestions.apply(ghost)}
+          hitSlop={6}
+          style={({ pressed }) => [styles.useKey, { borderColor: theme.dividerStrong }, pressed && { backgroundColor: theme.rowSelected }]}
+        >
+          <Text style={[styles.useKeyText, { color: theme.textSecondary }]}>Use</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
   return (
     <View
       ref={containerRef}
@@ -969,7 +1203,8 @@ ${url}` : url;
         styles.container,
         card && styles.cardHost,
         {
-          borderTopColor: card ? "transparent" : theme.divider,
+          // The strip sits on the field, so no rule crosses under it.
+          borderTopColor: card || strip ? "transparent" : theme.divider,
           // Keep native controls clear of the keyboard and rounded display
           // edges — see barPadV above for why both edges share one value.
           paddingTop: barPadV,
@@ -1091,140 +1326,69 @@ ${url}` : url;
           ))}
         </View>
       )}
-      <View style={[styles.inputRow, card && [styles.card, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]]}>
-        <View style={styles.actionCol}>
-          <Pressable
-            ref={attachBtnRef}
-            accessibilityRole="button"
-            accessibilityLabel="Add attachment"
-            onPress={openAttachSheet}
-            disabled={busy || recording}
-            hitSlop={8}
-            style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }, pressed && { opacity: HOVER_DIM }]}
-          >
-            {({ hovered, pressed }) => <Ionicons name="add" size={22} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-          </Pressable>
-        </View>
-        {recording ? (
-          <View style={[styles.input, styles.recordingBar, { borderColor: theme.divider }]}>
-            <View style={[styles.recDot, { backgroundColor: theme.destructive }]} />
-            <Text
-              accessibilityLiveRegion="polite"
-              style={{ color: theme.text, fontSize: 15, fontVariant: ["tabular-nums"], flex: 1 }}
+      {strip && <View style={card ? styles.deskStrip : styles.phoneStrip}>{strip}</View>}
+      {card ? (
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
+          {field}
+          <View style={styles.tools}>
+            {attachButton}
+            <Pressable
+              ref={serviceBtnRef}
+              testID="composer-service"
+              accessibilityRole="button"
+              accessibilityLabel={`Service: ${serviceLabel}`}
+              onPress={openServiceMenu}
+              style={({ hovered, pressed }) => [styles.toolChip, (hovered || pressed) && { backgroundColor: theme.rowHover }]}
             >
-              {formatRecordingClock(recorderState.durationMillis ?? 0)}
-            </Text>
-            {Platform.OS === "web" ? (
+              <View style={[styles.serviceDot, { backgroundColor: sendColor }]} />
+              <Text style={[styles.toolText, { color: theme.textSecondary }]}>{serviceLabel}</Text>
+              <Ionicons name="chevron-down" size={13} color={theme.icon} />
+            </Pressable>
+            <View style={[styles.toolSep, { backgroundColor: theme.divider }]} />
+            <Pressable
+              ref={scheduleBtnRef}
+              accessibilityRole="button"
+              accessibilityLabel="Send later"
+              accessibilityState={{ disabled: !canSchedule || busy || recording }}
+              onPress={openScheduleSheet}
+              disabled={!canSchedule || busy || recording}
+              style={({ hovered, pressed }) => [styles.toolChip, { opacity: canSchedule ? 1 : 0.5 }, canSchedule && (hovered || pressed) && { backgroundColor: theme.rowHover }]}
+            >
+              <Ionicons name="time-outline" size={15} color={theme.icon} />
+              <Text style={[styles.toolText, { color: theme.textSecondary }]}>Send later</Text>
+            </Pressable>
+            <View style={styles.toolSpacer} />
+            {ghostShown && (
+              <View testID="composer-tab-hint" style={styles.tabHint}>
+                <Text style={[styles.kbd, { borderColor: theme.dividerStrong, color: theme.textSecondary }]}>Tab</Text>
+                <Text style={[styles.tabHintText, { color: theme.textTertiary }]}>accept</Text>
+              </View>
+            )}
+            {sendControl}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.inputRow}>
+          <View style={styles.actionCol}>{attachButton}</View>
+          {field}
+          <View style={styles.actionCol}>
+            {canSchedule && !recording && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Cancel recording"
-                onPress={() => void finishRecording("cancel")}
-                style={({ hovered, pressed }) => [styles.recCancel, (hovered || pressed) && { backgroundColor: theme.backgroundElement }]}
+                accessibilityLabel="Send later"
+                onPress={openScheduleSheet}
+                disabled={busy}
+                hitSlop={6}
+                style={({ hovered, pressed }) => [styles.scheduleCaret, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
               >
-                <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Cancel · Esc</Text>
+                {({ hovered, pressed }) => <Ionicons name="chevron-up" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}
               </Pressable>
-            ) : (
-              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Slide away to cancel</Text>
             )}
+            {sendControl}
           </View>
-        ) : (
-          <View style={{ flex: 1 }}>
-            {Platform.OS === "ios" && (
-              <Text
-                style={styles.growthMirror}
-                onLayout={(e) => onMirrorLayout(e.nativeEvent.layout.height)}
-              >
-                {text.length === 0 ? " " : text.endsWith("\n") ? `${text} ` : text}
-              </Text>
-            )}
-            <TextInput
-              ref={inputRef}
-              value={text}
-              selection={selection}
-              onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
-              onFocus={() => { setListMode(false); draftSync.onFocus(); }}
-              onBlur={draftSync.onBlur}
-              onChangeText={onChangeText}
-              placeholder={editing ? "Edit message" : pending.length > 0 ? "Add a comment or Send" : isSMS ? "Text Message" : "iMessage"}
-              placeholderTextColor={theme.textSecondary}
-              multiline
-              scrollEnabled={Platform.OS === "ios" ? inputHeight >= IOS_INPUT_MAX_HEIGHT : undefined}
-              // Desktop: Enter sends (handled by the keydown listener above).
-              // Mobile: Return inserts a newline; sending is the button only.
-              enterKeyHint={Platform.OS === "web" ? "send" : "enter"}
-              submitBehavior={Platform.OS === "web" ? "submit" : "newline"}
-              onSubmitEditing={Platform.OS === "web" ? () => void send() : undefined}
-              style={[
-                styles.input,
-                Platform.OS === "ios" && {
-                  height: inputHeight,
-                  lineHeight: IOS_INPUT_LINE_HEIGHT,
-                },
-                Platform.OS === "web" && styles.webInput,
-                { color: theme.text, borderColor: theme.divider, backgroundColor: theme.background, fontSize: type.body },
-                card && [styles.cardInput, { backgroundColor: "transparent", fontSize: 14 }],
-              ]}
-            />
-          </View>
-        )}
-        <View style={styles.actionCol}>
-          {canSchedule && !recording && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Schedule message"
-              onPress={openScheduleSheet}
-              disabled={busy}
-              hitSlop={6}
-              style={({ hovered, pressed }) => [styles.scheduleCaret, hovered && !pressed && { backgroundColor: theme.backgroundElement }, pressed && { backgroundColor: theme.backgroundSelected }]}
-            >
-              {({ hovered, pressed }) => <Ionicons name="chevron-up" size={18} color={hovered || pressed ? theme.text : theme.textSecondary} />}
-            </Pressable>
-          )}
-          {/* Stays up after a send clears the field, so the ring and check have somewhere to play. */}
-          {(canSend || sendStatus !== "idle") && !recording ? (
-            <View ref={sendBtnRef}>
-              {/* New text brings the arrow straight back, so a second send never waits on the first. */}
-              <MorphSendButton status={canSend ? "idle" : sendStatus} disabled={busy && sendStatus === "idle"} onPress={() => void send()} color={sendColor} />
-            </View>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={recording ? "Send voice message" : "Record voice message"}
-              {...(Platform.OS === "web"
-                ? {
-                    onPress: () => void (recording ? finishRecording("send") : startRecording()),
-                  }
-                : {
-                    onPressIn: () => {
-                      micHeld.current = true;
-                      void startRecording();
-                    },
-                    // RN Pressable fires onPressOut on release AND when the finger
-                    // slides off the hit rect; only a release inside it sends.
-                    onPressOut: (event: GestureResponderEvent) => {
-                      micHeld.current = false;
-                      const { locationX, locationY } = event.nativeEvent;
-                      const inside = locationX >= -24 && locationX <= 58 && locationY >= -24 && locationY <= 58;
-                      void finishRecording(inside ? "send" : "cancel");
-                    },
-                  })}
-              hitSlop={8}
-              disabled={busy || Boolean(editing)}
-              style={({ hovered, pressed }) => [
-                styles.sendButton,
-                { backgroundColor: recording ? theme.destructive : theme.backgroundElement },
-                !recording && (hovered || pressed) && { backgroundColor: theme.backgroundSelected },
-              ]}
-            >
-              <Ionicons
-                name={recording ? (Platform.OS === "web" ? "arrow-up" : "stop") : "mic"}
-                size={19}
-                color={recording ? theme.onAccent : theme.textSecondary}
-              />
-            </Pressable>
-          )}
         </View>
-      </View>
+      )}
+      <SuggestionAlternates state={replySuggestions} wide={card} />
     </View>
   );
 }
@@ -1318,9 +1482,44 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
     gap: 8,
   },
+  // StateStrip insets itself 32; these pull it onto the field. Desktop: 14 inside the card.
+  // Phone: from 14 inside the field's left curve to 26 short of the screen edge.
+  deskStrip: { marginHorizontal: 14 - 32 },
+  phoneStrip: { marginLeft: 34 + 8 + 14 - 32, marginRight: 26 - 18 - 32 },
+  phoneField: { flex: 1 },
+  tools: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    paddingBottom: 8,
+    paddingHorizontal: 8,
+    paddingTop: 2,
+  },
+  toolIcon: { alignItems: "center", borderRadius: 7, height: 30, justifyContent: "center", width: 30 },
+  toolChip: { alignItems: "center", borderRadius: 7, flexDirection: "row", gap: 6, height: 28, paddingHorizontal: 8 },
+  toolText: { fontSize: 12.5, fontWeight: "500" },
+  toolSep: { height: 16, marginHorizontal: 2, width: 1 },
+  toolSpacer: { flex: 1 },
+  serviceDot: { borderRadius: 4, height: 8, width: 8 },
+  tabHint: { alignItems: "center", flexDirection: "row", gap: 6, marginRight: 6 },
+  kbd: { borderRadius: 5, borderWidth: 1, fontSize: 11, fontWeight: "600", paddingHorizontal: 5, paddingVertical: 1 },
+  tabHintText: { fontSize: 12 },
+  cardGhost: { left: 16, position: "absolute", right: 16, top: CARD_PAD_TOP },
+  phoneGhost: { left: MIRROR_INSET_H, position: "absolute", right: USE_KEY_INSET, top: (Platform.OS === "web" ? 7 : 8) + INPUT_BORDER_W },
+  useKey: {
+    borderRadius: 6,
+    borderWidth: 1,
+    bottom: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    position: "absolute",
+    right: 10,
+  },
+  useKeyText: { fontSize: 12, fontWeight: "600" },
+  cardRecording: { borderWidth: 0, marginHorizontal: 8, marginTop: 8 },
   cardHost: {
     alignSelf: "center",
     borderTopWidth: 0,
@@ -1328,16 +1527,17 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   card: {
-    alignItems: "flex-end",
     borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    borderWidth: 1,
   },
   cardInput: {
     borderWidth: 0,
-    minHeight: 40,
-    paddingHorizontal: 6,
+    fontSize: CARD_FONT,
+    lineHeight: CARD_LINE_HEIGHT,
+    minHeight: CARD_MIN_HEIGHT,
+    paddingBottom: CARD_PAD_BOTTOM,
+    paddingHorizontal: 16,
+    paddingTop: CARD_PAD_TOP,
   },
   growthMirror: {
     // Same metrics as the input's TEXT AREA — inset by padding + border, not
