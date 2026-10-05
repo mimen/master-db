@@ -440,7 +440,7 @@ function ThreadEnter({ animate, children }: { readonly animate: boolean; readonl
   const progress = useSharedValue(animate ? 0 : 1);
   useEffect(() => {
     if (!animate) return;
-    progress.value = reduceMotion ? withTiming(1, { duration: 100 }) : withSpring(1, Springs.smooth);
+    progress.value = reduceMotion ? withTiming(1, { duration: 0 }) : withSpring(1, Springs.smooth);
   }, [animate, progress, reduceMotion]);
   const style = useAnimatedStyle(() => ({
     opacity: progress.value,

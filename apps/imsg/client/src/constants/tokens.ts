@@ -44,7 +44,7 @@ export const TypeRamp: { readonly desktop: TypeRampScale; readonly mobile: TypeR
 
 /**
  * The one semantic palette: Signal. Pure neutral with one persimmon accent
- * that marks owed time (`turn`), the active lens (`lensBar`) and keyboard
+ * that marks your-turn time (`turn`), the active lens (`lensBar`) and keyboard
  * focus (`focusRing`). `accent` stays iMessage blue: it is the sent bubble,
  * the unread dot and links, not chrome. Every text token was measured at
  * 4.5:1 or better on `background`, `thread` and `surface` in its scheme

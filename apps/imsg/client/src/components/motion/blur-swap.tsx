@@ -17,7 +17,7 @@ export interface BlurSwapProps {
 /**
  * Morph, don't cut: old content leaves up with blur(4px) to opacity 0 while new content enters
  * from below. The leaving copy is positioned over the entering one (motion's popLayout), so the
- * two never stack in flow. Native skips the blur. Reduce Motion becomes a 100ms cross-fade.
+ * two never stack in flow. Native skips the blur. Reduce Motion swaps instantly.
  */
 export function BlurSwap({ swapKey, children, variant = "rise", spring = "snappy", style }: BlurSwapProps): React.JSX.Element {
   const [current, setCurrent] = useState({ key: swapKey, id: 0 });
@@ -88,7 +88,7 @@ function Layer({ children, variant, spring, leaving = false, animateIn = false, 
       if (finished) runOnJS(notify)();
     };
     if (reduceMotion) {
-      shown.value = withTiming(leaving ? 0 : 1, { duration: 100 }, done);
+      shown.value = withTiming(leaving ? 0 : 1, { duration: 0 }, done);
     } else {
       shown.value = withSpring(leaving ? 0 : 1, springConfig(spring, false), done);
     }
