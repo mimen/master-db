@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ThreadView } from "@/components/thread-view";
 import { useChats } from "@/hooks/use-chats";
 import { type JumpTarget } from "@/hooks/use-messages";
+import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { advanceTarget, publishQueuePosition, queueOrder, queuePosition } from "@/hooks/use-queue-position";
@@ -51,7 +52,7 @@ export function MessagesWorkspace({
   const [selectionIntent, setSelectionIntent] = useState<"reply" | "preview">("reply");
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   // The conversation auto-advance opened. Only it slides in; a click cuts as before.
-  const [advancedGuid, setAdvancedGuid] = useState<string | null>(null);
+  const [advanced, setAdvanced] = useState<{ guid: string; from: string } | null>(null);
   const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide);
   const selectedRef = useRef(selected);
   const stateRef = useRef(state);
@@ -238,7 +239,7 @@ export function MessagesWorkspace({
     if (selectedRef.current?.guid !== guid) return;
     const next = nextRef.current;
     if (!next || next.guid === guid) return;
-    setAdvancedGuid(next.guid);
+    setAdvanced({ guid: next.guid, from: selectedRef.current.displayName });
     openChatRef.current(next);
   }, [wide]);
   useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
@@ -400,7 +401,7 @@ export function MessagesWorkspace({
       list={list}
       detail={
         selected ? (
-          <ThreadEnter key={selected.guid + (jumpTarget?.guid ?? "")} animate={selected.guid === advancedGuid}>
+          <ThreadEnter key={selected.guid + (jumpTarget?.guid ?? "")} animate={selected.guid === advanced?.guid}>
             <ThreadView
               chatGuid={selected.guid}
               isGroup={selected.isGroup}
@@ -408,6 +409,7 @@ export function MessagesWorkspace({
               headerChat={selected}
               lensLabel={desktopInboxTitle({ state, type })}
               previewOnly={selectionIntent === "preview"}
+              advancedFrom={selected.guid === advanced?.guid ? advanced.from : undefined}
               toastActive={active}
             />
           </ThreadEnter>
@@ -426,8 +428,6 @@ export function MessagesWorkspace({
 }
 
 const SEND_HOLD_MS = 1200;
-// TODO(signal-motion): use springs.ts
-const SMOOTH = { stiffness: 189.9, damping: 25.35, mass: 1 } as const;
 
 /**
  * The next thread entering from 14px below on smooth (round4 motion.md, auto-advance).
@@ -438,7 +438,7 @@ function ThreadEnter({ animate, children }: { readonly animate: boolean; readonl
   const progress = useSharedValue(animate ? 0 : 1);
   useEffect(() => {
     if (!animate) return;
-    progress.value = reduceMotion ? withTiming(1, { duration: 100 }) : withSpring(1, SMOOTH);
+    progress.value = reduceMotion ? withTiming(1, { duration: 100 }) : withSpring(1, Springs.smooth);
   }, [animate, progress, reduceMotion]);
   const style = useAnimatedStyle(() => ({
     opacity: progress.value,

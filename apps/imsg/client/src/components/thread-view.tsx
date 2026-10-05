@@ -38,7 +38,9 @@ import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
 import { Composer } from "./composer";
 import { QueuePosition } from "./queue-position";
 import { StateStrip } from "./state-strip";
-import { CenteredSpinner, EmptyState } from "./empty-state";
+import { ErrorState } from "./empty-state";
+import { BlurSwap } from "./motion/blur-swap";
+import { ThreadSkeleton } from "./thread-skeleton";
 import { SuggestionShelf } from "./suggestion-shelf";
 import { FaceTimeButton } from "./facetime-button";
 import { IconButton } from "./ui/icon-button";
@@ -82,8 +84,8 @@ interface ThreadViewProps {
   lensLabel?: string;
   /** Glide-mode preview: render without marking the conversation read. */
   previewOnly?: boolean;
-  /** Sweep mode advances only after a real send settles successfully. */
-  onMessageSent?: () => void;
+  /** Auto-advance: the name this conversation replaced, which the breadcrumb blur-swaps out. */
+  advancedFrom?: string;
   toastActive?: boolean;
 }
 
@@ -94,7 +96,7 @@ export function ThreadView({
   headerChat = null,
   lensLabel,
   previewOnly = false,
-  onMessageSent,
+  advancedFrom,
   toastActive = true,
 }: ThreadViewProps) {
   const theme = useTheme();
@@ -425,18 +427,21 @@ export function ThreadView({
               },
             ]
           : []),
-        // While a send is confirming, show Edit and Unsend inert rather than hiding them.
+        // While a send is confirming, show Edit and Undo send inert rather than hiding them.
         ...(mine && privateApi && message.text && message.pending
-          ? [{ label: "Edit · available once sent", disabled: true, onPress: () => undefined },
-            { label: "Unsend · available once sent", disabled: true, onPress: () => undefined }]
+          ? [{ label: "Edit", disabled: true, separatorBefore: true, onPress: () => undefined },
+            { label: "Undo send", disabled: true, note: "Available once it's sent", onPress: () => undefined }]
           : []),
         ...(mine && privateApi && message.text && age < EDIT_WINDOW_MS && !message.pending
-          ? [{ label: `Edit · ${formatWindowRemaining(EDIT_WINDOW_MS, age)}`, onPress: () => setEditing(message) }]
+          ? [{ label: "Edit", note: formatWindowRemaining(EDIT_WINDOW_MS, age), separatorBefore: true, onPress: () => setEditing(message) }]
           : []),
         ...(mine && privateApi && age < UNSEND_WINDOW_MS && !message.pending
           ? [
               {
-                label: `Unsend · ${formatWindowRemaining(UNSEND_WINDOW_MS, age)}`,
+                label: "Undo send",
+                note: formatWindowRemaining(UNSEND_WINDOW_MS, age),
+                // Edit is hidden past its window or on a text-less message, so this opens the block.
+                separatorBefore: !(message.text && age < EDIT_WINDOW_MS),
                 destructive: true,
                 onPress: () => {
                   void api
@@ -453,6 +458,7 @@ export function ThreadView({
           ? [
               {
                 label: "Delete for Me",
+                separatorBefore: true,
                 destructive: true,
                 onPress: () => {
                   void api
@@ -529,9 +535,7 @@ export function ThreadView({
                 <Text aria-hidden style={[styles.crumbSlash, { color: theme.textTertiary }]}>/</Text>
               </>
             ) : null}
-            <Text role="heading" aria-level={2} numberOfLines={1} style={[styles.threadTitle, { color: theme.text }]}>
-              {headerChat.displayName}
-            </Text>
+            <ThreadTitle name={headerChat.displayName} from={advancedFrom} color={theme.text} />
           </Pressable>
           <View style={styles.paneHeaderActions}>
             <QueuePosition />
@@ -610,19 +614,13 @@ export function ThreadView({
       )}
 
       {loading && messages.length === 0 ? (
-        <CenteredSpinner />
+        <ThreadSkeleton />
       ) : failed && messages.length === 0 ? (
-        <EmptyState icon="cloud-offline-outline" message="Couldn't load messages">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading messages"
-            onPress={retryLoad}
-            hitSlop={8}
-            style={({ hovered, pressed }) => [styles.retryButton, { backgroundColor: hovered || pressed ? theme.backgroundSelected : theme.backgroundElement }]}
-          >
-            <Text style={{ color: theme.text, fontSize: type.secondary, fontWeight: "600" }}>Retry</Text>
-          </Pressable>
-        </EmptyState>
+        <ErrorState
+          title="Unable to load this conversation"
+          message="The Mac mini didn't answer. Check that it's awake, then try again."
+          onRetry={retryLoad}
+        />
       ) : (
         <FlatList
           testID="thread-message-list"
@@ -665,10 +663,7 @@ export function ThreadView({
           ListHeaderComponent={
             peerTyping ? (
               <View style={styles.typingRow}>
-                <TypingIndicator
-                  backgroundColor={theme.bubbleTheirs}
-                  color={theme.bubbleTheirsText}
-                />
+                <TypingIndicator />
               </View>
             ) : null
           }
@@ -768,7 +763,6 @@ export function ThreadView({
           onSent={(message) => {
             upsert(message);
             scrollToLatest();
-            onMessageSent?.();
           }}
           dropTargetRef={paneRef}
           onDragActiveChange={setFileDragActive}
@@ -791,6 +785,17 @@ export function ThreadView({
   );
 }
 
+/** The breadcrumb name. After an auto-advance it mounts on the previous name, then blur-swaps to this one. */
+function ThreadTitle({ name, from, color }: { name: string; from: string | undefined; color: string }) {
+  const [shown, setShown] = useState(from ?? name);
+  useEffect(() => setShown(name), [name]);
+  return (
+    <BlurSwap swapKey={shown} style={styles.titleSwap}>
+      <Text role="heading" aria-level={2} numberOfLines={1} style={[styles.threadTitle, { color }]}>{shown}</Text>
+    </BlurSwap>
+  );
+}
+
 const styles = StyleSheet.create({
   paneHeader: {
     alignItems: "center",
@@ -810,9 +815,9 @@ const styles = StyleSheet.create({
   headerIconButton: { borderRadius: 7, height: 30, width: 30 },
   crumb: { flexShrink: 1, fontSize: 13.5 },
   crumbSlash: { fontSize: 14, marginHorizontal: 8 },
+  titleSwap: { flexShrink: 1, minWidth: 0 },
   threadTitle: { ...headerFace, flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },
   vsep: { height: 16, marginHorizontal: 6, width: 1 },
-  retryButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6 },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },
   searchShelf: {
     flexDirection: "row",
