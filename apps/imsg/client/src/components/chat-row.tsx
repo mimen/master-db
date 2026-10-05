@@ -259,7 +259,7 @@ function ChatRowInner({
         </View>
         <View style={styles.messageRow}>
           <Text
-            numberOfLines={compact ? 2 : 1}
+            numberOfLines={2}
             style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
           >
             {snippet}

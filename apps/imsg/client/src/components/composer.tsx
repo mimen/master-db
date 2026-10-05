@@ -149,6 +149,8 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
     <Reanimated.View pointerEvents="none" aria-hidden style={[card ? styles.cardGhost : styles.phoneGhost, fade]}>
       <Text
         testID="composer-ghost"
+        // The field stops growing at six lines, so the ghost does too; accepting it inserts the whole text.
+        numberOfLines={6}
         onLayout={(event) => onHeight(event.nativeEvent.layout.height)}
         style={{ color, fontSize, lineHeight: card ? CARD_LINE_HEIGHT : IOS_INPUT_LINE_HEIGHT }}
       >
