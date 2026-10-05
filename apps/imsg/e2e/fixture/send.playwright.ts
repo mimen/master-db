@@ -69,6 +69,9 @@ async function openThread(desk: Parameters<Parameters<typeof test>[1]>[0]["desk"
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
   await page.goto("/?send", { waitUntil: "domcontentloaded" });
+  // All, not Needs reply: a send in Needs reply auto-advances to the next conversation,
+  // which would replace the thread these probes watch.
+  await page.getByRole("tab", { name: "All", exact: true }).click();
   await page.getByTestId("conversation-row").first().click();
   await expect(page.getByPlaceholder("iMessage")).toBeVisible();
   return page;
