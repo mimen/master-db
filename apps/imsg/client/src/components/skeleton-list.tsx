@@ -1,74 +1,32 @@
-import { useEffect, useRef } from "react";
-import { Animated, Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-import { useReducedMotion } from "react-native-reanimated";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
-import { useTheme } from "@/hooks/use-theme";
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = { light: { skeleton: "rgba(0,0,0,0.06)" }, dark: { skeleton: "rgba(255,255,255,0.07)" } } as const;
 
-/** Pulsing placeholder rows shown while the chat list first loads. */
+/** Still placeholder rows, in the conversation row's geometry, shown while the chat list first loads. */
 export function SkeletonList({ rows = 9 }: { rows?: number }) {
-  const theme = useTheme();
-  const opacity = useRef(new Animated.Value(0.5)).current;
-  const reduceMotion = useReducedMotion();
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 700,
-          useNativeDriver: Platform.OS !== "web",
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.5,
-          duration: 700,
-          useNativeDriver: Platform.OS !== "web",
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity, reduceMotion]);
-
+  const { skeleton } = SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
   return (
-    <Animated.View style={{ opacity }}>
+    <View role="progressbar" aria-busy accessibilityLabel="Loading conversations" style={styles.list}>
       {Array.from({ length: rows }, (_, i) => (
         <View key={i} style={styles.row}>
-          <View style={styles.dotColumn} />
-          <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]} />
+          <View style={[styles.avatar, { backgroundColor: skeleton }]} />
           <View style={styles.lines}>
-            <View style={[styles.line, { width: "45%", backgroundColor: theme.backgroundElement }]} />
-            <View style={[styles.line, { width: "80%", backgroundColor: theme.backgroundElement }]} />
+            <View style={[styles.line, { width: "45%", backgroundColor: skeleton }]} />
+            <View style={[styles.line, { width: "80%", backgroundColor: skeleton }]} />
           </View>
         </View>
       ))}
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 75,
-    paddingRight: 16,
-  },
-  dotColumn: {
-    width: 17,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-  },
-  lines: {
-    flex: 1,
-    gap: 7,
-    marginLeft: 11,
-  },
-  line: {
-    height: 11,
-    borderRadius: 6,
-  },
+  list: { paddingHorizontal: 8 },
+  row: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 4, paddingHorizontal: 12, paddingVertical: 9 },
+  avatar: { borderRadius: 18, height: 36, width: 36 },
+  lines: { flex: 1, gap: 8 },
+  line: { borderRadius: 999, height: 10 },
 });
