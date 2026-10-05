@@ -1,8 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useTheme } from "@/hooks/use-theme";
-import { useTriageTheme } from "@/hooks/use-triage-theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+
+// TODO(signal-tokens): read from tokens.ts once U1 lands
+const SIGNAL = {
+  light: {
+    popBg: "#FFFFFF",
+    popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)",
+    popSelected: "rgba(0,0,0,0.075)",
+    popTertiary: "#64646B",
+    field: "rgba(0,0,0,0.045)",
+    text: "#17171A",
+    textSecondary: "#55555C",
+    icon: "#5E5E66",
+    turn: "#BE3A06",
+    divider: "rgba(0,0,0,0.075)",
+    dividerStrong: "rgba(0,0,0,0.13)",
+  },
+  dark: {
+    popBg: "#232326",
+    popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)",
+    popSelected: "rgba(255,255,255,0.06)",
+    popTertiary: "#A0A0A7",
+    field: "rgba(255,255,255,0.06)",
+    text: "#EDEDEF",
+    textSecondary: "#A6A6AD",
+    icon: "#97979E",
+    turn: "#FF8A57",
+    divider: "rgba(255,255,255,0.07)",
+    dividerStrong: "rgba(255,255,255,0.12)",
+  },
+} as const;
+
+/** Signal colors for every palette surface. Popovers read tertiary text as popTertiary. */
+export function usePaletteColors(): (typeof SIGNAL)[keyof typeof SIGNAL] {
+  return SIGNAL[useColorScheme() === "dark" ? "dark" : "light"];
+}
 
 /**
  * Shared list behavior for every palette surface (root search, compose, and
@@ -84,7 +118,7 @@ export function PaletteListRow({
   onHover: () => void;
   children: React.ReactNode;
 }) {
-  const visual = useTriageTheme();
+  const c = usePaletteColors();
   return (
     <Pressable
       // RNW renders dataSet as data-* attributes; RN's types don't know it.
@@ -97,64 +131,74 @@ export function PaletteListRow({
       // Hover moves the palette cursor; the selection fill IS the hover
       // feedback, so no separate hover fill here.
       onHoverIn={onHover}
-      style={[paletteStyles.row, selected && { backgroundColor: visual.cardSelected }]}
+      style={[paletteStyles.row, selected && { backgroundColor: c.popSelected }]}
     >
       {children}
     </Pressable>
   );
 }
 
-export function PaletteSectionHeader({ title }: { title: string }) {
-  const theme = useTheme();
+export function PaletteSectionHeader({ title, trailing }: { title: string; trailing?: string }) {
+  const c = usePaletteColors();
   return (
-    <Text style={[paletteStyles.sectionHeader, { color: theme.textSecondary }]}>{title}</Text>
+    <View style={paletteStyles.sectionHeader}>
+      <Text style={[paletteStyles.sectionHeaderText, { color: c.popTertiary }]}>{title}</Text>
+      {trailing && <Text style={[paletteStyles.sectionHeaderText, { color: c.popTertiary }]}>{trailing}</Text>}
+    </View>
   );
 }
 
 export const paletteStyles = StyleSheet.create({
   sectionHeader: {
-    fontSize: 12,
-    fontWeight: "600",
-    paddingBottom: 3,
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: 5,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+  sectionHeaderText: {
+    fontSize: 11.5,
   },
   row: {
     alignItems: "center",
+    borderRadius: 8,
     flexDirection: "row",
-    gap: 10,
-    minHeight: 40,
-    paddingHorizontal: 16,
-    paddingVertical: 5,
+    gap: 11,
+    marginBottom: 2,
+    marginHorizontal: 8,
+    minHeight: 38,
+    paddingHorizontal: 10,
   },
   iconBadge: {
     alignItems: "center",
-    borderRadius: 15,
-    height: 30,
+    borderRadius: 6,
+    height: 22,
     justifyContent: "center",
-    width: 30,
+    width: 22,
   },
   textCol: {
     flex: 1,
     minWidth: 0,
   },
   title: {
-    fontSize: 15,
-    fontWeight: "500",
+    fontSize: 13.5,
   },
   subtitle: {
-    fontSize: 13,
-    marginTop: 1,
+    fontSize: 12.5,
   },
   hint: {
     fontSize: 12,
   },
-  enterHint: {
-    fontSize: 13,
+  kbd: {
+    borderRadius: 5,
+    borderWidth: 1,
+    fontSize: 11,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   empty: {
-    fontSize: 15,
-    marginTop: 40,
+    fontSize: 13.5,
+    marginVertical: 28,
     textAlign: "center",
   },
 });
