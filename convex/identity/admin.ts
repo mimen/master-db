@@ -47,14 +47,18 @@ export const deletePersonByHandle = internalMutation({
  * a typo fixed in Contacts otherwise keeps naming the wrong person. Idempotent.
  */
 export const removeStaleCardHandle = internalMutation({
-  args: { handle: v.string(), source: v.string(), sourceContactId: v.string() },
-  handler: async (ctx, { handle, source, sourceContactId }) => {
+  args: { handle: v.string(), source: v.string(), sourceContactId: v.string(), clearPhoto: v.optional(v.boolean()) },
+  handler: async (ctx, { handle, source, sourceContactId, clearPhoto }) => {
     const normalized = handle.includes("@") ? normalizeEmail(handle) : normalizePhone(handle);
     const rows = await ctx.db.query("identities").withIndex("by_normalized", (q) => q.eq("normalized", normalized)).collect();
     const stale = rows.filter((i) => i.source === source && i.source_contact_id === sourceContactId);
     for (const i of stale) await ctx.db.delete(i._id);
     const people = [...new Set(stale.flatMap((i) => (i.person_id ? [i.person_id] : [])))];
-    for (const personId of people) await recomputePersonAggregates(ctx, personId);
+    for (const personId of people) {
+      await recomputePersonAggregates(ctx, personId);
+      // A photo the bridge linked through this handle belongs to the other card's person.
+      if (clearPhoto) await ctx.db.patch(personId, { photoStorageId: undefined, photoHash: undefined, updated_at: new Date().toISOString() });
+    }
     return { removed: stale.length, people };
   },
 });
