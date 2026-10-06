@@ -269,3 +269,22 @@ describe("ingestOneCard: structured name parts", () => {
     expect(identity?.first_name).toBe("Chase");
   });
 });
+
+describe("ingestOneCard: a handle shared by two cards", () => {
+  // Production: Tyler Chase's card carried Ramin Majlessi's email by mistake, and the shared
+  // email's identity ended up with Ramin's display name and Tyler's first and last name.
+  test("each sync writes the shared handle's name whole from one card, never spliced", async () => {
+    const t = convexTest(schema, modules);
+    const tyler: ContactCard = { display_name: "Tyler Chase", first_name: "Tyler", last_name: "Chase", source_contact_id: "TYLER:ABPerson", phones: ["8587509848"], emails: ["shared@example.com"] };
+    const ramin: ContactCard = { display_name: "Ramin Majlessi", first_name: "Ramin", last_name: "Majlessi", source_contact_id: "RAMIN:ABPerson", phones: ["7608078355"], emails: ["shared@example.com"] };
+    for (const card of [tyler, ramin, tyler, ramin]) {
+      await t.run((ctx) => ingestOneCard(ctx, "apple_contact", card, false));
+      const shared = await t.run((ctx) =>
+        ctx.db.query("identities").withIndex("by_value", (q) => q.eq("value", "shared@example.com")).collect(),
+      );
+      for (const i of shared) {
+        expect([i.display_name, i.first_name, i.last_name]).toEqual([card.display_name, card.first_name, card.last_name]);
+      }
+    }
+  });
+});

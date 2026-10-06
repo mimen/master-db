@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { internalMutation } from "../_generated/server";
 
-import { pickPrimaryNameIdentity } from "./internal";
+import { pickPrimaryNameIdentity, recomputePersonAggregates } from "./internal";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
 /**
@@ -41,6 +41,23 @@ export const deletePersonByHandle = internalMutation({
  * WITHOUT touching their locked display_name (that stays exactly as the human
  * set it). Idempotent: re-running only touches people still missing parts.
  */
+/**
+ * Repair for a stray handle that sat on two Apple cards: re-derive one person's name and
+ * aggregates from its identities under the current rules. The next Apple sync fixes the
+ * identity rows themselves; this applies the person-level pick now. Idempotent.
+ */
+export const recomputePersonByHandle = internalMutation({
+  args: { handle: v.string() },
+  handler: async (ctx, { handle }) => {
+    const normalized = handle.includes("@") ? normalizeEmail(handle) : normalizePhone(handle);
+    const identity = await ctx.db.query("identities").withIndex("by_normalized", (q) => q.eq("normalized", normalized)).first();
+    if (!identity?.person_id) return null;
+    await recomputePersonAggregates(ctx, identity.person_id);
+    const person = await ctx.db.get(identity.person_id);
+    return { personId: identity.person_id, display_name: person?.display_name, first_name: person?.first_name, last_name: person?.last_name };
+  },
+});
+
 export const rederiveLockedStructuredNames = internalMutation({
   args: {},
   handler: async (ctx) => {

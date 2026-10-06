@@ -159,20 +159,17 @@ export async function ingestOneCard(
       .collect();
     const existing = rows.find((r) => r.source === source);
     if (existing) {
-      const nextDisplayName =
-        card.display_name && card.display_name.length > (existing.display_name?.length ?? 0)
-          ? card.display_name
-          : existing.display_name;
-      // first_name/last_name/nickname/source_contact_id use "new non-blank
-      // value wins, blank never clears" — unlike display_name's growth-merge
-      // (which favors length as a proxy for completeness), these are single
-      // structured fields from one source record, so a fresh non-empty value
-      // is always the more current truth; a card that transiently omits one
-      // (e.g. a naive Airtable split) must not blow away a good existing
-      // value.
-      const nextFirstName = card.first_name || existing.first_name;
-      const nextLastName = card.last_name || existing.last_name;
-      const nextNickname = card.nickname || existing.nickname;
+      // A handle on two cards (a typo'd or shared address) is written by each sync of
+      // either card. A different card replaces the name as one unit, so a row never mixes
+      // one card's display_name with another's first and last name. The same card (or one
+      // without an id) fills field by field: a value it omits this time never clears one.
+      const sameCard = !card.source_contact_id || !existing.source_contact_id || card.source_contact_id === existing.source_contact_id;
+      const cardHasName = Boolean(card.display_name || card.first_name || card.last_name || card.nickname);
+      const replace = !sameCard && cardHasName;
+      const nextDisplayName = replace ? card.display_name : card.display_name || existing.display_name;
+      const nextFirstName = replace ? card.first_name : card.first_name || existing.first_name;
+      const nextLastName = replace ? card.last_name : card.last_name || existing.last_name;
+      const nextNickname = replace ? card.nickname : card.nickname || existing.nickname;
       const nextSourceContactId = card.source_contact_id || existing.source_contact_id;
       // Only write when something actually differs. This is the ~1,510-card
       // sync loop that runs every 10 minutes — patching (and bumping

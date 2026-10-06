@@ -362,6 +362,12 @@ describe("pickPrimaryNameIdentity", () => {
     expect(pickPrimaryNameIdentity(identities)?.display_name).toBe("A Longer Name");
   });
 
+  test("within a source, the name most handles carry beats a longer one on a single stray handle", () => {
+    const tyler = { source: "apple_contact", display_name: "Tyler Chase", first_name: "Tyler", last_name: "Chase" };
+    const identities = [tyler, tyler, { source: "apple_contact", display_name: "Ramin Majlessi", first_name: "Ramin", last_name: "Majlessi" }];
+    expect(pickPrimaryNameIdentity(identities)?.display_name).toBe("Tyler Chase");
+  });
+
   test("unlisted sources (e.g. beeper's participant/sender) rank below apple/airtable/manual", () => {
     const identities = [
       { source: "participant", display_name: "Beeper Name" },
