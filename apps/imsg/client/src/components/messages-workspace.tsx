@@ -244,21 +244,6 @@ export function MessagesWorkspace({
     openChatRef.current(next);
   }, [wide]);
   useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
-  // A reply is the open conversation turning to "you wrote last" while it stays open. Read
-  // off the directory rather than the composer, so text and attachments both count, and only
-  // once the send has landed. Holds long enough to see the reply arrive before moving on.
-  const openGuid = selected?.guid;
-  const lastGuid = selected?.lastMessage?.guid;
-  const lastFromMe = selected?.lastMessage?.isFromMe === true;
-  const lastSeenRef = useRef<{ guid: string | undefined; lastGuid: string | undefined }>({ guid: undefined, lastGuid: undefined });
-  useEffect(() => {
-    const prior = lastSeenRef.current;
-    lastSeenRef.current = { guid: openGuid, lastGuid };
-    if (!openGuid || !lastFromMe || prior.guid !== openGuid || prior.lastGuid === lastGuid) return;
-    const timer = setTimeout(() => advanceFrom(openGuid), SEND_HOLD_MS);
-    return () => clearTimeout(timer);
-  }, [advanceFrom, lastFromMe, lastGuid, openGuid]);
-
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
   const previewChat = (chat: ChatSummary): void => {
     commitChatSelection(chat, "preview");
@@ -429,7 +414,6 @@ export function MessagesWorkspace({
   );
 }
 
-const SEND_HOLD_MS = 1200;
 
 /**
  * The next thread entering from 14px below on smooth (round4 motion.md, auto-advance).
