@@ -53,7 +53,6 @@ for (const history of ["opened earlier", "never opened"] as const) {
 test("Convex updates edit and retract a confirmed send without reviving its optimistic row", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  // All, not Needs reply: a send there auto-advances away from the thread under test.
   await page.getByRole("tab", { name: "All", exact: true }).click();
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   const thread = page.getByTestId("thread-view");

@@ -69,8 +69,6 @@ async function openThread(desk: Parameters<Parameters<typeof test>[1]>[0]["desk"
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "no-preference" });
   await page.goto("/?send", { waitUntil: "domcontentloaded" });
-  // All, not Needs reply: a send in Needs reply auto-advances to the next conversation,
-  // which would replace the thread these probes watch.
   await page.getByRole("tab", { name: "All", exact: true }).click();
   await page.getByTestId("conversation-row").first().click();
   await expect(page.getByPlaceholder("iMessage")).toBeVisible();
@@ -144,4 +142,25 @@ test("a burst of send taps queued behind a busy frame sends the message once", a
   await page.waitForTimeout(1000);
   expect(enqueued).toEqual(["once only"]);
   await expect(page.getByTestId("thread-view").getByText("once only", { exact: true })).toHaveCount(1);
+});
+
+test("sending in Needs reply stays on the conversation; only ⌘E moves on", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1300, height: 820 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").first().click();
+  const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
+  const name = (await heading.textContent())?.trim();
+  if (!name) throw new Error("open thread has no name");
+  const composer = page.getByPlaceholder("iMessage");
+  for (const text of ["first of a few", "and a second"]) {
+    await composer.fill(text);
+    await composer.press("Enter");
+    await expect(page.getByTestId("thread-view").getByText(text, { exact: true })).toBeVisible();
+  }
+  await page.waitForTimeout(2000);
+  await expect(heading).toHaveText(name);
+  await composer.blur();
+  await page.keyboard.press("Meta+e");
+  await expect(heading).not.toHaveText(name);
 });
