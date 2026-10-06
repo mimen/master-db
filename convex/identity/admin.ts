@@ -42,19 +42,20 @@ export const deletePersonByHandle = internalMutation({
  * set it). Idempotent: re-running only touches people still missing parts.
  */
 /**
- * Repair for a stray handle that sat on two Apple cards: re-derive one person's name and
- * aggregates from its identities under the current rules. The next Apple sync fixes the
- * identity rows themselves; this applies the person-level pick now. Idempotent.
+ * Detach one source's identity for a handle from one card, then re-derive that person.
+ * For a handle a card no longer carries: the Apple sync never prunes removed handles, so
+ * a typo fixed in Contacts otherwise keeps naming the wrong person. Idempotent.
  */
-export const recomputePersonByHandle = internalMutation({
-  args: { handle: v.string() },
-  handler: async (ctx, { handle }) => {
+export const removeStaleCardHandle = internalMutation({
+  args: { handle: v.string(), source: v.string(), sourceContactId: v.string() },
+  handler: async (ctx, { handle, source, sourceContactId }) => {
     const normalized = handle.includes("@") ? normalizeEmail(handle) : normalizePhone(handle);
-    const identity = await ctx.db.query("identities").withIndex("by_normalized", (q) => q.eq("normalized", normalized)).first();
-    if (!identity?.person_id) return null;
-    await recomputePersonAggregates(ctx, identity.person_id);
-    const person = await ctx.db.get(identity.person_id);
-    return { personId: identity.person_id, display_name: person?.display_name, first_name: person?.first_name, last_name: person?.last_name };
+    const rows = await ctx.db.query("identities").withIndex("by_normalized", (q) => q.eq("normalized", normalized)).collect();
+    const stale = rows.filter((i) => i.source === source && i.source_contact_id === sourceContactId);
+    for (const i of stale) await ctx.db.delete(i._id);
+    const people = [...new Set(stale.flatMap((i) => (i.person_id ? [i.person_id] : [])))];
+    for (const personId of people) await recomputePersonAggregates(ctx, personId);
+    return { removed: stale.length, people };
   },
 });
 

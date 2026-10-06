@@ -241,17 +241,9 @@ function hasNameData(i: NameIdentityFields): boolean {
 export function pickPrimaryNameIdentity<T extends NameIdentityFields>(identities: readonly T[]): T | undefined {
   const candidates = identities.filter(hasNameData);
   if (candidates.length === 0) return undefined;
-  // Within the best source, the name most of the person's handles carry wins: one stray
-  // handle that also sits on someone else's card must not rename them. Length only breaks
-  // a tie in that count.
-  const nameKey = (i: T) => [i.display_name, i.first_name, i.last_name, i.nickname].join("\u0000");
-  const support = new Map<string, number>();
-  for (const i of candidates) support.set(nameKey(i), (support.get(nameKey(i)) ?? 0) + 1);
   candidates.sort((a, b) => {
     const rankDiff = sourceRank(a.source) - sourceRank(b.source);
     if (rankDiff !== 0) return rankDiff;
-    const supportDiff = (support.get(nameKey(b)) ?? 0) - (support.get(nameKey(a)) ?? 0);
-    if (supportDiff !== 0) return supportDiff;
     return (b.display_name?.length ?? 0) - (a.display_name?.length ?? 0);
   });
   return candidates[0];
