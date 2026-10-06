@@ -142,6 +142,8 @@ final class Driver {
     sleepMs(30)
     let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)!
     let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)!
+    // A plain click: no modifier the session left down may turn it into a range or toggle select.
+    down.flags = []; up.flags = []
     let t = now()
     post(down)
     sleepMs(8)

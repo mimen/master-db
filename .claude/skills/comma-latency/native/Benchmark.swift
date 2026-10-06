@@ -190,6 +190,39 @@ final class Session {
     guard axValueText(field).isEmpty else { throw Abort.unsafe("temporary text not cleared") }
     ownedField = nil; ownedText = nil
   }
+  /// Mouse-click switching between two named, already-read conversations (owner-approved: a
+  /// click re-marks a read chat read, which changes nothing visible). Each click re-checks both
+  /// rows and refuses one that has turned unread.
+  func clickSwitch(repeats: Int, list: CGRect, isComma: Bool) throws {
+    let names = (ProcessInfo.processInfo.environment["COMMA_LATENCY_PAIR"] ?? "").split(separator: "|").map(String.init)
+    guard names.count == 2 else { throw Abort.setup("COMMA_LATENCY_PAIR must name two conversations, 'A|B'") }
+    func row(_ name: String) throws -> AXUIElement {
+      let candidates = isComma
+        ? axSearch(web!, key: "AXButtonSearchKey", limit: 400)
+        : descendants(window, limit: 4000).filter { ["AXCell", "AXRow", "AXButton", "AXStaticText"].contains(axString($0, kAXRoleAttribute)) }
+      let hit = candidates.first { el in
+        let text = label(el)
+        let r = axFrame(el)
+        return text.hasPrefix(name + ",") && list.insetBy(dx: -40, dy: -200).contains(midpoint(r)) && r.height >= 30
+      }
+      guard let hit else { throw Abort.setup("conversation row '\(name)' not visible in the list") }
+      guard !label(hit).localizedCaseInsensitiveContains("unread") else { throw Abort.unsafe("'\(name)' is unread; refusing to click it") }
+      return hit
+    }
+    let left = list.maxX + 40
+    let thread = CGRect(x: left, y: frame.minY + 120, width: frame.maxX - left - 15, height: frame.height - 210)
+    try driver.click(midpoint(axFrame(try row(names[0])))); sleepMs(1500)
+    // The thread must be what the region shows: a selection banner or an open side pane would
+    // make every switch look instant.
+    let shown = descendants(window, limit: 4000).map { label($0) + " " + axValueText($0) }
+    if shown.contains(where: { $0.contains("Conversations Selected") }) { throw Abort.setup("multi-selection is active") }
+    if isComma, axSearch(web!, key: "AXButtonSearchKey", limit: 400).contains(where: { label($0).hasPrefix("Close settings") }) { throw Abort.setup("settings pane covers the thread") }
+    for i in 1...repeats {
+      let target = names[i % 2]
+      let element = try row(target)
+      try measure("click-switch", repetition: i, region: thread) { try driver.click(midpoint(axFrame(element))) }
+    }
+  }
   func palette(repeats: Int) throws {
     let region = CGRect(x: frame.minX + frame.width * 0.25, y: frame.minY + 130, width: frame.width * 0.5, height: min(370, frame.height - 150))
     for i in 1...repeats {
@@ -230,7 +263,9 @@ final class Session {
       let list: CGRect
       if let search { let s = axFrame(search); list = CGRect(x: s.minX, y: s.maxY + (isComma ? 60 : 10), width: isComma ? 410 : 300, height: min(500, frame.maxY - s.maxY - 90)) }
       else { throw Abort.setup("AX search anchor not found") }
-      if onlyInteraction == "command-palette" {
+      if onlyInteraction == "click-switch" {
+        try clickSwitch(repeats: repeats, list: list, isComma: isComma)
+      } else if onlyInteraction == "command-palette" {
         guard isComma else { throw Abort.setup("palette is Comma-only") }
         try palette(repeats: repeats)
       } else if previewOnly {
