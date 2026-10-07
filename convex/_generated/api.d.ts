@@ -191,57 +191,6 @@ export declare const api: {
     >;
     signOut: FunctionReference<"action", "public", {}, any>;
   };
-  beeper: {
-    queries: {
-      getAttachmentUrl: {
-        getAttachmentUrl: FunctionReference<
-          "query",
-          "public",
-          { mxc_id: string },
-          any
-        >;
-      };
-      getMessagesByChat: {
-        getMessagesByChat: FunctionReference<
-          "query",
-          "public",
-          { before_ts_epoch_ms?: number; chat_id: string; limit?: number },
-          any
-        >;
-      };
-      getRecentChats: {
-        getRecentChats: FunctionReference<
-          "query",
-          "public",
-          { limit?: number; network?: string },
-          any
-        >;
-      };
-      getSyncStatus: {
-        getSyncStatus: FunctionReference<"query", "public", any, any>;
-      };
-      searchMessages: {
-        searchMessages: FunctionReference<
-          "query",
-          "public",
-          {
-            chat_id?: string;
-            limit?: number;
-            network?: string;
-            query: string;
-            sender_id?: string;
-          },
-          any
-        >;
-      };
-    };
-  };
-  clear: {
-    all: FunctionReference<"mutation", "public", any, any>;
-    items: FunctionReference<"mutation", "public", any, any>;
-    projects: FunctionReference<"mutation", "public", any, any>;
-    syncState: FunctionReference<"mutation", "public", any, any>;
-  };
   comma: {
     bridgeState: {
       bridgeState: FunctionReference<
@@ -1556,6 +1505,11 @@ export declare const api: {
           _id: Id<"comma_conversations">;
           chatGuids: Array<string>;
           conversationKey: string;
+          crm?: {
+            is_favorite?: boolean;
+            priority?: number;
+            tags?: Array<string>;
+          };
           displayName: string;
           flags: {
             mutedUnresponded: boolean;
@@ -1586,6 +1540,7 @@ export declare const api: {
           }>;
           primaryChatGuid: string;
           rawDisplayName?: string;
+          unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
         } | null
@@ -1661,6 +1616,11 @@ export declare const api: {
             _id: Id<"comma_conversations">;
             chatGuids: Array<string>;
             conversationKey: string;
+            crm?: {
+              is_favorite?: boolean;
+              priority?: number;
+              tags?: Array<string>;
+            };
             displayName: string;
             flags: {
               mutedUnresponded: boolean;
@@ -1691,6 +1651,7 @@ export declare const api: {
             }>;
             primaryChatGuid: string;
             rawDisplayName?: string;
+            unread?: { count: number; firstAt: number };
             unreadCount: number;
             updatedAt: number;
           }>;
@@ -1834,6 +1795,11 @@ export declare const api: {
           _id: Id<"comma_conversations">;
           chatGuids: Array<string>;
           conversationKey: string;
+          crm?: {
+            is_favorite?: boolean;
+            priority?: number;
+            tags?: Array<string>;
+          };
           displayName: string;
           flags: {
             mutedUnresponded: boolean;
@@ -1864,6 +1830,7 @@ export declare const api: {
           }>;
           primaryChatGuid: string;
           rawDisplayName?: string;
+          unread?: { count: number; firstAt: number };
           unreadCount: number;
           updatedAt: number;
         } | null
@@ -2010,7 +1977,7 @@ export declare const api: {
         getDashboardStats: FunctionReference<
           "query",
           "public",
-          { timezoneOffsetMinutes?: number },
+          { now?: number; timezoneOffsetMinutes?: number },
           any
         >;
       };
@@ -2021,7 +1988,7 @@ export declare const api: {
       searchAirtableHumans: FunctionReference<
         "action",
         "public",
-        { key: string; query: string },
+        { key?: string; query: string },
         any
       >;
     };
@@ -2029,49 +1996,55 @@ export declare const api: {
       addChatTag: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; key: string; tag: string },
+        { chatGuid: string; key?: string; tag: string },
         any
       >;
       addTag: FunctionReference<
         "mutation",
         "public",
-        { key: string; personId: Id<"people">; tag: string },
+        { key?: string; personId: Id<"people">; tag: string },
         any
       >;
       removeChatTag: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; key: string; tag: string },
+        { chatGuid: string; key?: string; tag: string },
         any
       >;
       removeTag: FunctionReference<
         "mutation",
         "public",
-        { key: string; personId: Id<"people">; tag: string },
+        { key?: string; personId: Id<"people">; tag: string },
         any
       >;
       setChatFavorite: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; is_favorite: boolean; key: string },
+        { chatGuid: string; is_favorite: boolean; key?: string },
         any
       >;
       setChatPriority: FunctionReference<
         "mutation",
         "public",
-        { chatGuid: string; key: string; priority?: number | null },
+        { chatGuid: string; key?: string; priority?: number | null },
         any
       >;
       setFavorite: FunctionReference<
         "mutation",
         "public",
-        { is_favorite: boolean; key: string; personId: Id<"people"> },
+        { is_favorite: boolean; key?: string; personId: Id<"people"> },
+        any
+      >;
+      setNotes: FunctionReference<
+        "mutation",
+        "public",
+        { key?: string; notes: string; personId: Id<"people"> },
         any
       >;
       setPriority: FunctionReference<
         "mutation",
         "public",
-        { key: string; personId: Id<"people">; priority?: number | null },
+        { key?: string; personId: Id<"people">; priority?: number | null },
         any
       >;
     };
@@ -2083,25 +2056,32 @@ export declare const api: {
           airtable_event_id: string;
           chatGuid?: string;
           event_name: string;
-          key: string;
+          key?: string;
           personId?: Id<"people">;
+          start_date?: string;
         },
         any
       >;
       searchEvents: FunctionReference<
         "action",
         "public",
-        { key: string; query: string },
+        { key?: string; query: string },
         any
       >;
       unlinkEvent: FunctionReference<
         "mutation",
         "public",
-        { key: string; linkId: Id<"event_links"> },
+        { key?: string; linkId: Id<"event_links"> },
         any
       >;
     };
     mutations: {
+      addHandle: FunctionReference<
+        "mutation",
+        "public",
+        { handle: string; key?: string; personId: Id<"people"> },
+        any
+      >;
       addPersonFromAirtable: FunctionReference<
         "mutation",
         "public",
@@ -2109,7 +2089,7 @@ export declare const api: {
           display_name?: string;
           email?: string;
           first_name?: string;
-          key: string;
+          key?: string;
           last_name?: string;
           phone?: string;
           record_id: string;
@@ -2123,11 +2103,23 @@ export declare const api: {
           display_name?: string;
           first_name?: string;
           handle: string;
-          key: string;
+          key?: string;
           last_name?: string;
           nickname?: string;
           organization?: string;
         },
+        any
+      >;
+      markNotDuplicate: FunctionReference<
+        "mutation",
+        "public",
+        { key?: string; otherId: Id<"people">; personId: Id<"people"> },
+        any
+      >;
+      mergePeople: FunctionReference<
+        "mutation",
+        "public",
+        { keepId: Id<"people">; key?: string; mergeId: Id<"people"> },
         any
       >;
       renamePerson: FunctionReference<
@@ -2136,7 +2128,7 @@ export declare const api: {
         {
           display_name?: string;
           first_name?: string;
-          key: string;
+          key?: string;
           last_name?: string;
           nickname?: string;
           organization?: string;
@@ -2144,39 +2136,50 @@ export declare const api: {
         },
         any
       >;
+      setPrimaryHandle: FunctionReference<
+        "mutation",
+        "public",
+        { handle: string; key?: string; personId: Id<"people"> },
+        any
+      >;
     };
     queries: {
       chatCrm: FunctionReference<
         "query",
         "public",
-        { chatGuids?: Array<string>; key: string },
+        { chatGuids?: Array<string>; key?: string },
         any
       >;
-      listPeople: FunctionReference<"query", "public", { key: string }, any>;
-      listTags: FunctionReference<"query", "public", { key: string }, any>;
-      nameDirectory: FunctionReference<"query", "public", { key: string }, any>;
+      listPeople: FunctionReference<"query", "public", { key?: string }, any>;
+      listTags: FunctionReference<"query", "public", { key?: string }, any>;
+      nameDirectory: FunctionReference<
+        "query",
+        "public",
+        { key?: string },
+        any
+      >;
       searchContacts: FunctionReference<
         "query",
         "public",
-        { key: string; limit?: number; q: string },
+        { key?: string; limit?: number; q: string },
         Array<{ address: string; is_favorite?: boolean; name: string }>
       >;
       searchPeople: FunctionReference<
         "query",
         "public",
-        { key: string; name: string },
+        { key?: string; name: string },
         any
       >;
       topLinkedPeople: FunctionReference<
         "query",
         "public",
-        { key: string; limit?: number },
+        { key?: string; limit?: number },
         any
       >;
       whoIs: FunctionReference<
         "query",
         "public",
-        { handle: string; key: string },
+        { handle: string; key?: string },
         any
       >;
     };
@@ -2208,7 +2211,7 @@ export declare const api: {
         getRoutineGenerationStatus: FunctionReference<
           "query",
           "public",
-          {},
+          { now?: number },
           any
         >;
       };
@@ -2240,7 +2243,7 @@ export declare const api: {
         getRoutineStats: FunctionReference<
           "query",
           "public",
-          { routineId: Id<"routines"> },
+          { now?: number; routineId: Id<"routines"> },
           any
         >;
       };
@@ -2657,7 +2660,7 @@ export declare const api: {
           getAllListCounts: FunctionReference<
             "query",
             "public",
-            { timezoneOffsetMinutes?: number },
+            { now?: number; timezoneOffsetMinutes?: number },
             any
           >;
         };
@@ -2681,7 +2684,7 @@ export declare const api: {
           getScheduledProjects: FunctionReference<
             "query",
             "public",
-            { from?: string; to?: string },
+            { from?: string; now?: number; to?: string },
             any
           >;
         };
@@ -2740,6 +2743,7 @@ export declare const api: {
             combineDueAndDeadline?: boolean;
             includeDeadlines?: boolean;
             limit?: number;
+            now?: number;
             projectId?: string;
             timeFilter?:
               | "overdue"
@@ -2776,6 +2780,7 @@ export declare const api: {
               | "all";
             include_low_priority?: boolean;
             max_tasks?: number;
+            now?: number;
           },
           any
         >;
@@ -2792,6 +2797,7 @@ export declare const api: {
               | "assigned-to-others"
               | "not-assigned-to-others";
             limit?: number;
+            now?: number;
             projectId?: string;
           },
           any
@@ -2809,6 +2815,7 @@ export declare const api: {
               | "assigned-to-others"
               | "not-assigned-to-others";
             limit?: number;
+            now?: number;
             projectId?: string;
             timezoneOffsetMinutes?: number;
           },
@@ -2827,6 +2834,7 @@ export declare const api: {
               | "assigned-to-others"
               | "not-assigned-to-others";
             limit?: number;
+            now?: number;
             projectId?: string;
             timezoneOffsetMinutes?: number;
           },
@@ -2845,6 +2853,7 @@ export declare const api: {
               | "assigned-to-others"
               | "not-assigned-to-others";
             limit?: number;
+            now?: number;
             projectId?: string;
           },
           any
@@ -2858,6 +2867,7 @@ export declare const api: {
             context?: "work" | "personal" | "errands" | "all";
             include_assigned_to_others?: boolean;
             limit?: number;
+            now?: number;
             timeframe?: "today" | "week" | "overdue" | "all";
           },
           any
@@ -2907,6 +2917,7 @@ export declare const api: {
                   type: "label";
                   view: string;
                 };
+            now?: number;
           },
           any
         >;
@@ -2963,6 +2974,7 @@ export declare const api: {
                   type: "agent-queue";
                   view: string;
                 };
+            now?: number;
           },
           any
         >;
@@ -3002,6 +3014,7 @@ export declare const api: {
               | "assigned-to-others"
               | "not-assigned-to-others";
             limit?: number;
+            now?: number;
             projectId?: string;
           },
           any
@@ -3017,6 +3030,7 @@ export declare const api: {
           {
             include_assigned_to_others?: boolean;
             max_tasks?: number;
+            now?: number;
             target_hours?: number;
           },
           any
@@ -3081,7 +3095,7 @@ export declare const api: {
         getTimeFilterCounts: FunctionReference<
           "query",
           "public",
-          { timezoneOffsetMinutes?: number },
+          { now?: number; timezoneOffsetMinutes?: number },
           any
         >;
       };
@@ -3357,7 +3371,64 @@ export declare const internal: {
           any
         >;
       };
+      getAttachmentUrl: {
+        getAttachmentUrl: FunctionReference<
+          "query",
+          "internal",
+          { mxc_id: string },
+          any
+        >;
+      };
+      getMessagesByChat: {
+        getMessagesByChat: FunctionReference<
+          "query",
+          "internal",
+          {
+            chat_id: string;
+            paginationOpts: {
+              cursor: string | null;
+              endCursor?: string | null;
+              id?: number;
+              maximumBytesRead?: number;
+              maximumRowsRead?: number;
+              numItems: number;
+            };
+          },
+          any
+        >;
+      };
+      getRecentChats: {
+        getRecentChats: FunctionReference<
+          "query",
+          "internal",
+          { limit?: number; network?: string },
+          any
+        >;
+      };
+      getSyncStatus: {
+        getSyncStatus: FunctionReference<"query", "internal", any, any>;
+      };
+      searchMessages: {
+        searchMessages: FunctionReference<
+          "query",
+          "internal",
+          {
+            chat_id?: string;
+            limit?: number;
+            network?: string;
+            query: string;
+            sender_id?: string;
+          },
+          any
+        >;
+      };
     };
+  };
+  clear: {
+    all: FunctionReference<"mutation", "internal", any, any>;
+    items: FunctionReference<"mutation", "internal", any, any>;
+    projects: FunctionReference<"mutation", "internal", any, any>;
+    syncState: FunctionReference<"mutation", "internal", any, any>;
   };
   comma: {
     deletions: {
@@ -3496,6 +3567,12 @@ export declare const internal: {
           }>;
         },
         { deleted: number; upserted: number }
+      >;
+      replaceUnread: FunctionReference<
+        "mutation",
+        "internal",
+        { chats: Array<{ chatGuid: string; count: number; firstAt: number }> },
+        { changed: number; unresolved: number }
       >;
       setAttachmentStorage: FunctionReference<
         "mutation",
@@ -4783,6 +4860,17 @@ export declare const internal: {
         {},
         any
       >;
+      removeStaleCardHandle: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          clearPhoto?: boolean;
+          handle: string;
+          source: string;
+          sourceContactId: string;
+        },
+        any
+      >;
     };
     airtableSync: {
       syncAirtableHumans: FunctionReference<"action", "internal", {}, any>;
@@ -5077,7 +5165,7 @@ export declare const internal: {
         getRoutinesNeedingGeneration: FunctionReference<
           "query",
           "internal",
-          any,
+          { now: number },
           any
         >;
       };
@@ -5213,9 +5301,10 @@ export declare const internal: {
               };
               is_deleted?: boolean;
               labels?: Array<string>;
+              parent_id?: string | null;
               priority?: number;
               project_id?: string;
-              section_id?: string;
+              section_id?: string | null;
               sync_version?: number;
               updated_at?: string;
             };

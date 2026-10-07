@@ -1,13 +1,14 @@
-import { makeFunctionReference, type ApiFromModules } from "convex/server";
+import { makeFunctionReference, type ApiFromModules, type FunctionArgs, type FunctionReturnType } from "convex/server";
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
 import { api } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import type { QueryCtx } from "../_generated/server";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 
-import type { searchMessages } from "./queries";
+import { listConversations, type searchMessages } from "./queries";
 import { commaModules } from "./testModules.vitest";
 
 const paginationOpts = { numItems: 2, cursor: null };
@@ -379,6 +380,55 @@ test("suggestions require the allowed identity and return only the requested con
   expect(await allowed.query(api.comma.queries.getSuggestions, { conversationId: id })).toMatchObject({ anchorGuid: "latest", payload, createdAt: 42 });
   const other = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("other", 2)));
   expect(await allowed.query(api.comma.queries.getSuggestions, { conversationId: other })).toBeNull();
+});
+
+test("a sidebar page resolves each participant once and rereads identities on the next request", async () => {
+  const t = authed();
+  const address = "+16195551234";
+  const personId = await t.run(async (ctx) => {
+    const personId = await ctx.db.insert("people", {
+      display_name: "Before", normalized_phones: [address], normalized_emails: [],
+      identity_count: 1, message_count: 0, is_self: false, auto_clustered: false,
+      created_at: "before", updated_at: "before",
+    });
+    await ctx.db.insert("identities", { person_id: personId, kind: "phone", source: "manual",
+      value: address, normalized: address, is_self: false, message_count: 0, chat_count: 0,
+      created_at: "before", updated_at: "before" });
+    for (let i = 0; i < 20; i++) {
+      await ctx.db.insert("comma_conversations", {
+        ...conversation(`thread-${i}`, i + 1), participants: [{ address, name: null }],
+      });
+    }
+    return personId;
+  });
+  const read = () => t.run(async (ctx) => {
+    let identityQueries = 0;
+    const db = new Proxy(ctx.db, {
+      get(target, property) {
+        if (property === "query") return (table: Parameters<typeof ctx.db.query>[0]) => {
+          if (table === "identities") identityQueries++;
+          return target.query(table);
+        };
+        return Reflect.get(target, property);
+      },
+    });
+    const registered = listConversations as typeof listConversations & {
+      _handler: (ctx: QueryCtx, args: FunctionArgs<typeof api.comma.queries.listConversations>) =>
+        Promise<FunctionReturnType<typeof api.comma.queries.listConversations>>;
+    };
+    const result = await registered._handler({ ...ctx, db }, {
+      paginationOpts: { numItems: 200, cursor: null },
+    });
+    return { result, identityQueries };
+  });
+  const before = await read();
+  expect(before.result.page).toHaveLength(20);
+  expect(before.result.page.every((row) => row.displayName === "Before" && row.lastMessage?.senderName === "Before")).toBe(true);
+  expect(before.identityQueries).toBe(1);
+  await t.run((ctx) => ctx.db.patch(personId, { display_name: "After" }));
+  const after = await read();
+  expect(after.result.page.every((row) => row.displayName === "After" && row.lastMessage?.senderName === "After")).toBe(true);
+  expect(after.identityQueries).toBe(1);
 });
 
 test("conversation and message names react to identity changes without a bridge refresh", async () => {

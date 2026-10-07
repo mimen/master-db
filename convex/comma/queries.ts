@@ -70,7 +70,24 @@ async function conversationCrm(
   };
 }
 
-async function withConversationState(ctx: QueryCtx, conversation: CommaConversationDoc) {
+function personReader(ctx: QueryCtx) {
+  // Share in-flight lookups within one query, never across reactive executions.
+  const people = new Map<string, ReturnType<typeof personForAddress>>();
+  return (address: string) => {
+    let person = people.get(address);
+    if (!person) {
+      person = personForAddress(ctx, address);
+      people.set(address, person);
+    }
+    return person;
+  };
+}
+
+async function withConversationState(
+  ctx: QueryCtx,
+  conversation: CommaConversationDoc,
+  readPerson = personReader(ctx),
+) {
   const state = await ctx.db
     .query("comma_conversation_state")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id))
@@ -90,7 +107,7 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
     conversation.lastMessage ?? null,
     unreadCount,
   );
-  const people = await Promise.all(conversation.participants.map((participant) => personForAddress(ctx, participant.address)));
+  const people = await Promise.all(conversation.participants.map((participant) => readPerson(participant.address)));
   const participants = await Promise.all(conversation.participants.map(async (participant, index) => {
     const person = people[index];
     return { ...participant, name: person?.display_name ?? participant.name, photoUrl: person?.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null };
@@ -106,7 +123,7 @@ async function withConversationState(ctx: QueryCtx, conversation: CommaConversat
     const senderAddress = !conversation.isGroup && conversation.participants.length === 1
       ? conversation.participants[0].address
       : (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastMessage.guid)).unique())?.sender?.address;
-    const person = senderAddress ? await personForAddress(ctx, senderAddress) : null;
+    const person = senderAddress ? await readPerson(senderAddress) : null;
     senderName = person?.display_name ?? senderName;
   }
   return { ...conversation, displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
@@ -126,9 +143,10 @@ export const listConversations = query({
       .order("desc")
       .filter((q) => q.neq(q.field("lastMessage"), undefined))
       .paginate(args.paginationOpts);
+    const readPerson = personReader(ctx);
     return {
       ...result,
-      page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation))),
+      page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation, readPerson))),
     };
   },
 });
