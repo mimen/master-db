@@ -23,13 +23,15 @@ interface UseChatsResult {
  * Only ChatDirectoryProvider calls this; everything else reads useChatDirectory.
  */
 export function useConvexChats(): { chats: ChatSummary[] | null } {
+  // A new message re-runs the page holding its conversation, and the busiest conversations sit
+  // in the first page. At 200 rows that re-run took 1-4.5s server-side before the sidebar moved.
   const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listConversations,
     {},
-    { initialNumItems: 200 },
+    { initialNumItems: 25 },
   );
   useEffect(() => {
-    if (status === "CanLoadMore") loadMore(200);
+    if (status === "CanLoadMore") loadMore(100);
   }, [status, loadMore]);
   const chats = useMemo(() => results.map(conversationToChat), [results]);
   const live = status !== "LoadingFirstPage";
