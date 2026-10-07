@@ -118,13 +118,36 @@ describe("claim and complete", () => {
     expect(status).toEqual({ s: "unknown", p: "pending" });
   });
 
-  test("a successful send retires its temp bubble even when the echo carries no clientKey", async () => {
+  const real = (c: Id<"comma_conversations">, guid: string, clientKey?: string) => ({
+    guid, conversationId: c, chatGuid: "iMessage;-;+15550001111", dateCreated: 5, isFromMe: true, text: "hello",
+    service: "iMessage", error: 0, edited: false, retracted: false, isTapback: false, reactions: [], isGroupEvent: false,
+    mentions: [], attachmentGuids: [], sourceVersion: 1000, ...(clientKey ? { clientKey } : {}),
+  });
+  const rows = (t: T) => t.run(async (ctx) => ({
+    guids: (await ctx.db.query("comma_messages").collect()).map((m) => m.guid),
+    last: (await ctx.db.query("comma_conversations").first())?.lastMessage?.guid,
+  }));
+
+  test("a send moves the conversation preview before the bridge sees it", async () => {
     const { t, as, c } = await setup();
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
-    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
-    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "sent", resultGuid: "REAL-GUID" });
-    const guids = await t.run(async (ctx) => (await ctx.db.query("comma_messages").collect()).map((m) => m.guid));
-    expect(guids).toEqual([]);
+    const conversation = await t.run((ctx) => ctx.db.get(c));
+    expect(conversation?.lastMessage).toMatchObject({ guid: "temp-s", text: "hello", isFromMe: true });
+    expect(conversation?.lastMessageAt).toBeGreaterThan(1);
+  });
+
+  test("a confirmed send keeps its temp until the real row lands, whichever arrives first", async () => {
+    for (const echoFirst of [false, true]) {
+      const { t, as, c } = await setup();
+      await as.mutation(api.comma.outbox.enqueue, { clientKey: "s", conversationId: c, payload: send });
+      const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+      const complete = () => t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "s", claimToken: claim.claimToken!, status: "sent", resultGuid: "REAL-GUID" });
+      const echo = () => t.mutation(internal.comma.internal.upsertMessages, { messages: [real(c, "REAL-GUID")] });
+      await (echoFirst ? echo() : complete());
+      expect((await rows(t)).guids).toContain(echoFirst ? "REAL-GUID" : "temp-s");
+      await (echoFirst ? complete() : echo());
+      expect(await rows(t)).toEqual({ guids: ["REAL-GUID"], last: "REAL-GUID" });
+    }
   });
 
   test("complete records the outcome", async () => {

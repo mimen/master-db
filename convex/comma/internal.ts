@@ -170,7 +170,7 @@ async function refoldTarget(ctx: MutationCtx, targetGuid: string): Promise<void>
   await ctx.db.patch(target._id, { reactions: foldTapbacks(tapbacks) });
 }
 
-async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<void> {
+export async function refreshLastMessage(ctx: MutationCtx, conversationId: Id<"comma_conversations">): Promise<void> {
   const conversation = await ctx.db.get(conversationId);
   if (!conversation) return;
   let newest: Doc<"comma_messages"> | null = null;
@@ -218,12 +218,15 @@ export const upsertMessages = internalMutation({
       const row = { ...message, reactions: existing?.reactions ?? [] };
       if (existing) await ctx.db.patch(existing._id, row);
       else await ctx.db.insert("comma_messages", row);
-      // The real echo of a queued send replaces its optimistic temp row.
-      if (message.clientKey && !message.guid.startsWith("temp-")) {
-        const temp = await ctx.db
+      // The real echo of a queued send replaces its optimistic temp row, matched by the
+      // clientKey it carries or, when BlueBubbles drops it, the send the outbox confirmed.
+      if (!message.guid.startsWith("temp-")) {
+        const clientKey = message.clientKey ?? (await ctx.db.query("comma_outbox")
+          .withIndex("by_resultGuid", (q) => q.eq("resultGuid", message.guid)).first())?.clientKey;
+        const temp = clientKey ? await ctx.db
           .query("comma_messages")
-          .withIndex("by_guid", (q) => q.eq("guid", `temp-${message.clientKey}`))
-          .unique();
+          .withIndex("by_guid", (q) => q.eq("guid", `temp-${clientKey}`))
+          .unique() : null;
         if (temp) await ctx.db.delete(temp._id);
       }
       written++;

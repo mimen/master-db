@@ -55,7 +55,8 @@ export const comma_triage_open = defineTable(triageOpenFields).index("by_convers
 
 export const comma_outbox = defineTable(outboxFields)
   .index("by_clientKey", ["clientKey"])
-  .index("by_status_createdAt", ["status", "createdAt"]);
+  .index("by_status_createdAt", ["status", "createdAt"])
+  .index("by_resultGuid", ["resultGuid"]);
 
 export const comma_drafts = defineTable(draftFields).index("by_conversationId", ["conversationId"]);
 

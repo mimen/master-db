@@ -6,6 +6,7 @@ import { assertAllowed } from "../_lib/authed";
 import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
 
 import { deleteConversationDraft } from "./drafts";
+import { refreshLastMessage } from "./internal";
 import { sendService, tempGuid } from "./tempMessage";
 
 /**
@@ -52,16 +53,22 @@ export const enqueue = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    if (payload.kind === "send" && conversationId) {
-      await deleteConversationDraft(ctx, conversationId);
+    if (payload.kind === "send" && conversation) {
+      await deleteConversationDraft(ctx, conversation._id);
+      // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.
+      // The real row's refreshLastMessage overwrites it, and a failed send stays the preview.
+      await ctx.db.patch(conversation._id, {
+        lastMessage: { guid: tempGuid(clientKey), text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
+        lastMessageAt: Math.max(conversation.lastMessageAt, now),
+      });
       await ctx.db.insert("comma_messages", {
         guid: tempGuid(clientKey),
-        conversationId,
-        chatGuid: conversation?.primaryChatGuid ?? "",
+        conversationId: conversation._id,
+        chatGuid: conversation.primaryChatGuid,
         dateCreated: now,
         isFromMe: true,
         text: payload.text,
-        service: sendService(conversation?.primaryChatGuid ?? ""),
+        service: sendService(conversation.primaryChatGuid),
         error: 0,
         edited: false,
         retracted: false,
@@ -203,8 +210,14 @@ export const completeOutbox = internalMutation({
         .withIndex("by_guid", (q) => q.eq("guid", tempGuid(clientKey)))
         .unique();
       // BlueBubbles echoes often omit tempGuid, so a confirmed send cannot wait for a
-      // clientKey-tagged echo to retire its temp row; the real row arrives by guid.
-      if (temp && status === "sent") await ctx.db.delete(temp._id);
+      // clientKey-tagged echo to retire its temp row. It goes once the real row has landed;
+      // deleting it sooner blanked the bubble and the sidebar preview until the echo arrived.
+      const real = resultGuid ? await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", resultGuid)).unique() : null;
+      if (temp && status === "sent" && (real || !resultGuid)) {
+        await ctx.db.delete(temp._id);
+        // An echo that beat this receipt left the temp as the newest row and the preview.
+        await refreshLastMessage(ctx, temp.conversationId);
+      }
       // A failed or unknown send keeps its temp bubble so the client can show the state.
       else if (temp) await ctx.db.patch(temp._id, { error: status === "failed" ? 1 : 0 });
     }
