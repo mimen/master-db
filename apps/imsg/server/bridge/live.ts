@@ -76,10 +76,25 @@ export class MessageWriter {
     await this.upsertChats();
   }
 
+  private posted = new Map<string, string>();
+  private postedSince = 0;
+
   private async upsertChats(): Promise<void> {
-    for (const batch of batches(toConversationInputs([...this.chats.values()], this.deps.names))) {
-      const resolved = await this.deps.ingest.post("conversations", { conversations: batch });
+    // Reconcile re-reads every chat every two minutes. Re-posting all ~1,000 took about ten seconds
+    // of ingest, and live messages waited behind it in the shared queue, so only changed rows go.
+    // ponytail: an hourly full post refreshes ids a server-side merge may have moved; restart also does.
+    if (Date.now() - this.postedSince > 60 * 60_000) {
+      this.posted.clear();
+      this.postedSince = Date.now();
+    }
+    const changed = toConversationInputs([...this.chats.values()], this.deps.names)
+      .map((row) => ({ row, json: JSON.stringify(row) }))
+      .filter(({ row, json }) => this.posted.get(row.conversationKey) !== json ||
+        row.chats.some((chat) => !this.conversationIds.has(chat.chatGuid)));
+    for (const batch of batches(changed)) {
+      const resolved = await this.deps.ingest.post("conversations", { conversations: batch.map(({ row }) => row) });
       for (const [guid, id] of Object.entries(resolved)) this.conversationIds.set(guid, id);
+      for (const { row, json } of batch) this.posted.set(row.conversationKey, json);
     }
     this.onChats?.([...this.chats.values()]);
   }

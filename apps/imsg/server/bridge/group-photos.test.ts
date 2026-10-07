@@ -83,7 +83,7 @@ test("startup and group-change events mirror photos after conversations are inge
     bb.emit({ kind: "group-changed" });
     await live.flush();
     await mirror.flush();
-    expect(ingest.calls.map((call) => call.kind)).toEqual(["conversations", "groupPhoto", "conversations", "groupPhoto"]);
+    expect(ingest.calls.map((call) => call.kind)).toEqual(["conversations", "groupPhoto", "groupPhoto"]);
     expect(ingest.calls.at(-1)).toMatchObject({ body: { guid: "p2" } });
   } finally { live.stop(); mirror.stop(); download.mockRestore(); chats.mockRestore(); }
 });

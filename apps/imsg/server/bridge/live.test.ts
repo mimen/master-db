@@ -75,9 +75,10 @@ test("unknown chats resolve before messages and group changes re-upsert conversa
   bb.emit({ kind: "new-message", message: raw });
   await live.flush();
   expect(ingest.calls.map((call) => call.kind)).toEqual(["conversations", "messages", "attachments", "sync"]);
+  const reads = bb.calls.queryChats;
   bb.emit({ kind: "group-changed" });
   await live.flush();
-  expect(ingest.calls.at(-1)?.kind).toBe("conversations");
+  expect(bb.calls.queryChats).toBe(reads + 1);
   query.mockRestore();
 });
 
@@ -97,6 +98,18 @@ test("send errors are mirrored and failed ingest retains the batch without throw
   expect(calls.map((call) => call.body.messages[0].sourceVersion)).toEqual([8001, 8001]);
   expect(calls.at(-1)?.body.messages[0]).toMatchObject({ error: 42, text: "hello", attachmentGuids: ["a1"] });
   expect(live.pending).toBe(0);
+});
+
+test("a refresh posts only the conversations that changed", async () => {
+  const { writer, bb, ingest, chatGuid } = fixture();
+  await writer.refreshChats();
+  await writer.refreshChats();
+  expect(ingest.calls.filter((call) => call.kind === "conversations")).toHaveLength(1);
+  bb.appendMessage(chatGuid, { guid: "m2", originalROWID: 9, text: "later", dateCreated: Date.now() + 1000, chats: [{ guid: chatGuid }] });
+  await writer.refreshChats();
+  const posts = ingest.calls.filter((call) => call.kind === "conversations");
+  expect(posts).toHaveLength(2);
+  expect(posts[1].body.conversations.map((row) => row.lastMessage?.text)).toEqual(["later"]);
 });
 
 test("message and attachment batches never exceed 200 rows", async () => {

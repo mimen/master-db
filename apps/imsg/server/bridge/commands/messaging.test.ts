@@ -110,6 +110,7 @@ test("createChat rejects an incorrect recipient set and reports mirror failure a
 
 test("participant and leaveGroup refresh the mirror and respect private API failures", async () => {
   const h = harness(GROUP);
+  const reads = h.bb.calls.queryChats;
   const add = spyOn(h.bb, "addParticipant");
   const remove = spyOn(h.bb, "removeParticipant");
   expect(await messagingHandlers.participant.execute(h.context, { kind: "participant", address: "person", action: "add" })).toEqual({ kind: "participant", ok: true });
@@ -117,7 +118,7 @@ test("participant and leaveGroup refresh the mirror and respect private API fail
   expect(await messagingHandlers.participant.execute(h.context, { kind: "participant", address: "person", action: "remove" })).toEqual({ kind: "participant", ok: true });
   expect(remove).toHaveBeenCalledWith(GROUP, "person");
   expect(await messagingHandlers.leaveGroup.execute(h.context)).toEqual({ kind: "leaveGroup", ok: true });
-  expect(h.ingest.calls.filter((call) => call.kind === "conversations")).toHaveLength(3);
+  expect(h.bb.calls.queryChats - reads).toBe(3);
   const disabled = harness(GROUP, false);
   await expect(messagingHandlers.participant.execute(disabled.context, { kind: "participant", address: "person", action: "add" })).rejects.toThrow("private API disabled");
   await expect(messagingHandlers.leaveGroup.execute(disabled.context)).rejects.toThrow("private API disabled");
