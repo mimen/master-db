@@ -2,7 +2,7 @@ import type { GenericId } from "convex/values";
 import type { Contact, SendTextRequest } from "@shared/types";
 import { UnknownCommandError } from "./command-results";
 import { commaApi, commaOutbox } from "./convex-api";
-import type { CommandClient, RunCommandOptions, runCommand } from "./convex-commands";
+import { sendMovesSidebar, type CommandClient, type RunCommandOptions, type runCommand } from "./convex-commands";
 
 export function messagingCommandError(error: unknown, fallback: string): string {
   return error instanceof UnknownCommandError
@@ -27,6 +27,7 @@ export async function enqueueTextSendVia(client: CommandClient, chatGuid: string
   const conversation = await client.query(commaApi.resolveChat, { chatGuid });
   if (!conversation) throw new Error("Conversation is not mirrored yet");
   await client.mutation(commaOutbox.enqueue, { clientKey,
-    conversationId: conversation._id as GenericId<"comma_conversations">, payload: { kind: "send", ...body } });
+    conversationId: conversation._id as GenericId<"comma_conversations">, payload: { kind: "send", ...body } },
+  { optimisticUpdate: sendMovesSidebar });
   return true;
 }

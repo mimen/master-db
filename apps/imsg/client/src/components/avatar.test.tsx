@@ -41,7 +41,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
   }));
   mock.module("@/hooks/use-theme", () => ({ useTheme: () => ({ avatar: ["#ECECEE", "#E6E6E9"], avatarText: "#3C3C42" }) }));
   let groupPhotoUrl: string | null = null;
-  mock.module("convex/react", () => ({ useQuery: () => ({ groupPhotoUrl }) }));
+  mock.module("convex/react", () => ({ useQuery: () => ({ groupPhotoUrl }), optimisticallyUpdateValueInPaginatedQuery: () => undefined }));
   const { PersonAvatar, GroupPhotoAvatar, avatarSlot } = await import("./avatar");
 
   test("a contact keeps one ramp slot, and the slot stays inside the ramp", () => {

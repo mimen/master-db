@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { OptimisticUpdate } from "convex/browser";
+import { optimisticallyUpdateValueInPaginatedQuery } from "convex/react";
 import type { FunctionArgs } from "convex/server";
 import type { GenericId } from "convex/values";
 import { commaApi, commaOutbox } from "./convex-api";
@@ -9,8 +11,25 @@ export type CommandPayload = FunctionArgs<typeof commaOutbox.enqueue>["payload"]
 /** Injected client contracts keep the complete test suite free of module mocks. */
 export interface CommandClient {
   query(ref: typeof commaApi.resolveChat, args: { chatGuid: string }): Promise<{ _id: string } | null>;
-  mutation(ref: typeof commaOutbox.enqueue, args: FunctionArgs<typeof commaOutbox.enqueue>): Promise<unknown>;
+  mutation(ref: typeof commaOutbox.enqueue, args: FunctionArgs<typeof commaOutbox.enqueue>,
+    options?: { optimisticUpdate?: OptimisticUpdate<FunctionArgs<typeof commaOutbox.enqueue>> }): Promise<unknown>;
 }
+
+/**
+ * A send moves its conversation in the cached sidebar the moment it is enqueued, the way the
+ * server's temp row moves it a round trip later. The list sorts by lastMessage, so patching the
+ * row is enough; Convex drops the patch when the server's result arrives or the mutation fails.
+ */
+export const sendMovesSidebar: OptimisticUpdate<FunctionArgs<typeof commaOutbox.enqueue>> = (store, { clientKey, conversationId, payload }) => {
+  if (payload.kind !== "send" || !conversationId) return;
+  const now = Date.now();
+  optimisticallyUpdateValueInPaginatedQuery(store, commaApi.listConversations, {}, (row) => row._id !== conversationId ? row : {
+    ...row,
+    lastMessage: { guid: `temp-${clientKey}`, text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
+    lastMessageAt: Math.max(row.lastMessageAt, now),
+    flags: { ...row.flags, unresponded: false, waiting: true },
+  });
+};
 export interface CommandWatch {
   onUpdate(callback: () => void): () => void;
   localQueryResult(): CommandReceipt | null | undefined;
@@ -37,7 +56,7 @@ async function enqueueCommandVia(client: CommandClient, chatGuid: string | null,
     clientKey,
     ...(conversation ? { conversationId: conversation._id as GenericId<"comma_conversations"> } : {}),
     payload,
-  });
+  }, { optimisticUpdate: sendMovesSidebar });
   if (typeof id !== "string") throw new Error("Enqueue did not return a command ID");
   return id as GenericId<"comma_outbox">;
 }

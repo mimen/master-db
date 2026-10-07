@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { enqueueVia, type CommandClient } from "./convex-commands";
+import { enqueueVia, sendMovesSidebar, type CommandClient } from "./convex-commands";
 
 function client(resolved: { _id: string } | null) {
   const calls: { kind: string; args: unknown }[] = [];
@@ -209,4 +209,37 @@ test("hook tracks command state and releases a pending subscription on unmount",
       else Reflect.set(globalThis, key, value);
     }
   }
+});
+
+describe("sendMovesSidebar", () => {
+  type Row = { _id: string; lastMessageAt: number; lastMessage?: { guid: string; text: string }; flags: { unresponded: boolean; waiting: boolean } };
+  function store(page: Row[]) {
+    const pages = [{ args: { paginationOpts: { numItems: 25, cursor: null } }, value: { page, isDone: false, continueCursor: "c" } }];
+    return {
+      pages,
+      getAllQueries: () => pages,
+      getQuery: () => undefined,
+      setQuery: (_ref: unknown, args: unknown, value: (typeof pages)[number]["value"]) => {
+        const hit = pages.find((p) => p.args === args);
+        if (hit) hit.value = value;
+      },
+    };
+  }
+  const row = (id: string): Row => ({ _id: id, lastMessageAt: 1, lastMessage: { guid: "old", text: "old" }, flags: { unresponded: true, waiting: false } });
+
+  test("a send puts its text, time and Waiting on its own row and leaves the rest", () => {
+    const local = store([row("a"), row("b")]);
+    sendMovesSidebar(local as never, { clientKey: "k", conversationId: "b" as never, payload: { kind: "send", text: "hi" } });
+    const [a, b] = local.pages[0].value.page;
+    expect(a).toEqual(row("a"));
+    expect(b.lastMessage).toMatchObject({ guid: "temp-k", text: "hi" });
+    expect(b.lastMessageAt).toBeGreaterThan(1);
+    expect(b.flags).toEqual({ unresponded: false, waiting: true });
+  });
+
+  test("other commands leave the sidebar alone", () => {
+    const local = store([row("a")]);
+    sendMovesSidebar(local as never, { clientKey: "k", conversationId: "a" as never, payload: { kind: "pin", value: true } });
+    expect(local.pages[0].value.page).toEqual([row("a")]);
+  });
 });

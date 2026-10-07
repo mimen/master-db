@@ -61,6 +61,9 @@ export function usePaginatedQuery<Ref extends PaginatedQueryReference>(ref: Ref,
   };
 }
 
+/** The fixture has no local query store; its server echoes sends on the next poll. */
+export function optimisticallyUpdateValueInPaginatedQuery(): void {}
+
 export function useConvex() {
   return convexClient;
 }
