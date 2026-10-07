@@ -497,7 +497,13 @@ export const replaceUnread = internalMutation({
       next.set(id, { count: (prior?.count ?? 0) + chat.count, firstAt: Math.min(prior?.firstAt ?? chat.firstAt, chat.firstAt) });
     }
     let changed = 0;
-    for await (const conversation of ctx.db.query("comma_conversations")) {
+    // Only rows unread now or unread next can change; a full scan cost a second on every arrival.
+    const unread = await ctx.db.query("comma_conversations")
+      .withIndex("by_unreadCount", (q) => q.gt("unread.count", -1)).collect();
+    const seen = new Set(unread.map((row) => row._id));
+    const added = await Promise.all([...next.keys()].filter((id) => !seen.has(id)).map((id) => ctx.db.get(id)));
+    for (const conversation of [...unread, ...added]) {
+      if (!conversation) continue;
       const want = next.get(conversation._id);
       if (want?.count === conversation.unread?.count && want?.firstAt === conversation.unread?.firstAt) continue;
       await ctx.db.patch(conversation._id, { unread: want });

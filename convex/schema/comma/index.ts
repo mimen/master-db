@@ -21,7 +21,8 @@ import {
 export const comma_conversations = defineTable(conversationFields)
   .index("by_conversationKey", ["conversationKey"])
   .index("by_lastMessageAt", ["lastMessageAt"])
-  .index("by_primaryChatGuid", ["primaryChatGuid"]);
+  .index("by_primaryChatGuid", ["primaryChatGuid"])
+  .index("by_unreadCount", ["unread.count"]);
 
 export const comma_chat_aliases = defineTable(chatAliasFields)
   .index("by_chatGuid", ["chatGuid"])

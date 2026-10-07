@@ -297,6 +297,19 @@ describe("replaceUnread", () => {
     expect(second).toEqual({ changed: 1, unresolved: 0 });
     expect((await t.run((ctx) => ctx.db.get(other)))?.unread).toBeUndefined();
   });
+
+  test("an unchanged snapshot writes nothing; read and newly unread rows both settle", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedDm(t, "+15550001111", [{ chatGuid: "iMessage;-;+15550001111", lastMessageAt: 1 }]);
+    const b = await seedDm(t, "+15550002222", [{ chatGuid: "iMessage;-;+15550002222", lastMessageAt: 2 }]);
+    const snapshot = { chats: [{ chatGuid: "iMessage;-;+15550001111", count: 1, firstAt: 1 }] };
+    expect(await t.mutation(replaceUnread, snapshot)).toEqual({ changed: 1, unresolved: 0 });
+    expect(await t.mutation(replaceUnread, snapshot)).toEqual({ changed: 0, unresolved: 0 });
+    expect(await t.mutation(replaceUnread, { chats: [{ chatGuid: "iMessage;-;+15550002222", count: 4, firstAt: 2 }] }))
+      .toEqual({ changed: 2, unresolved: 0 });
+    expect((await t.run((ctx) => ctx.db.get(a)))?.unread).toBeUndefined();
+    expect((await t.run((ctx) => ctx.db.get(b)))?.unread).toEqual({ count: 4, firstAt: 2 });
+  });
 });
 
 describe("setAttachmentStorage", () => {
