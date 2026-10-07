@@ -120,7 +120,7 @@ describe("claim and complete", () => {
 
   const real = (c: Id<"comma_conversations">, guid: string, clientKey?: string) => ({
     guid, conversationId: c, chatGuid: "iMessage;-;+15550001111", dateCreated: 5, isFromMe: true, text: "hello",
-    service: "iMessage", error: 0, edited: false, retracted: false, isTapback: false, reactions: [], isGroupEvent: false,
+    service: "iMessage" as const, error: 0, edited: false, retracted: false, isTapback: false, reactions: [], isGroupEvent: false,
     mentions: [], attachmentGuids: [], sourceVersion: 1000, ...(clientKey ? { clientKey } : {}),
   });
   const rows = (t: T) => t.run(async (ctx) => ({
