@@ -271,4 +271,4 @@ flowchart TD
 
 ## When in doubt
 
-`CLAUDE.md` at the repo root is the agent-facing rules-of-the-road. `AGENTS.md` mirrors it for non-Claude tools.
+`AGENTS.md` at the repo root is the agent-facing rules-of-the-road.

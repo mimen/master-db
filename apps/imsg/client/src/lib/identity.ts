@@ -5,7 +5,7 @@ import { requireConvexUrl } from "./public-env";
 /**
  * imsg is not part of the master-db Convex build (Metro can't safely cross
  * the monorepo boundary to bundle convex/_generated — untested, and this
- * app already has real Metro/Expo-Go fragility per CLAUDE.md). Per the
+ * app already has real Metro/Expo-Go fragility per apps/imsg/AGENTS.md). Per the
  * original migration plan's own fallback, function refs are hand-typed
  * string paths instead of the generated `api` object. Keep these shapes in
  * sync with convex/identity/queries.ts and mutations.ts in the repo root.
@@ -31,7 +31,7 @@ export type IdentityRow = {
 /** P1–P5, ONE = HIGHEST PRIORITY — see convex/schema/identity/people.ts's
  * docstring. `undefined`/`null` means unset, deliberately distinct from any
  * numbered level. NOT inverted, unlike Todoist's API (see the root
- * CLAUDE.md's Todoist Priority System gotcha) — the raw number IS the
+ * AGENTS.md's Todoist Priority System gotcha) — the raw number IS the
  * P-level everywhere in this app. */
 export type Priority = number;
 

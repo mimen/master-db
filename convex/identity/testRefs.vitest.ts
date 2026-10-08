@@ -4,7 +4,7 @@
 // Hand-typed function references for the identity module's convex-test
 // suites. Not routed through the generated `api`/`internal` objects because
 // codegen isn't run as part of this workflow (see convex/README.md /
-// CLAUDE.md) — a stale or absent `_generated/api.js` would make every
+// AGENTS.md) — a stale or absent `_generated/api.js` would make every
 // `api.identity.*` reference fail even though the underlying functions are
 // fine. convex-test dispatches by module path against the real source
 // modules passed to `convexTest(schema, modules)`, so a hand-typed

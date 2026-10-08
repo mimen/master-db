@@ -75,7 +75,7 @@ export const people = defineTable({
   // unset priority means "no opinion recorded," distinct from a person
   // explicitly marked mid priority.
   //
-  // ⚠️ NOT INVERTED, unlike Todoist's API (see the root CLAUDE.md's Todoist
+  // ⚠️ NOT INVERTED, unlike Todoist's API (see the root AGENTS.md's Todoist
   // Priority System gotcha, where API priority 4 == UI P1). Here the raw
   // stored number IS the P-level: priority 1 in the database means P1/highest,
   // priority 5 means P5/lowest. Never flip this when rendering or comparing.
