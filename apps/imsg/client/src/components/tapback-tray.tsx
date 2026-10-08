@@ -86,7 +86,9 @@ export function TapbackTray({
     tapback.onPress();
   };
   const keyState = useRef({ tapbacks, pick, onDone });
-  keyState.current = { tapbacks, pick, onDone };
+  useEffect(() => {
+    keyState.current = { tapbacks, pick, onDone };
+  });
 
   useEffect(() => {
     shown.value = reduceMotion ? 1 : withSpring(1, Springs.snappy);
