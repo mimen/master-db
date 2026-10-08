@@ -18,6 +18,7 @@ import { useLightbox } from "@/lib/lightbox";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import { LinkPreviewCard, firstUrl } from "./link-preview-card";
 import { receiptText } from "./message-meta";
+import { TAPBACK_LABEL } from "@/lib/tapbacks";
 
 const SPECIAL_META: Record<SpecialContent["kind"], { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
   contact: { icon: "person-circle-outline", label: "Contact card" },
@@ -100,10 +101,6 @@ function SpecialCard({ special, mine }: { special: SpecialContent; mine: boolean
     </View>
   );
 }
-
-export const TAPBACK_LABEL: Record<string, string> = {
-  love: "Love", like: "Like", dislike: "Dislike", laugh: "Laugh", emphasize: "Emphasize", question: "Question",
-};
 
 export const TAPBACK_EMOJI = new Map([
   ["love", "❤️"],

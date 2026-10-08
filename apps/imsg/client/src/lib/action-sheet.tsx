@@ -17,6 +17,7 @@ import { CardShadow, Radii, Type } from "@/constants/theme";
 import { presentActions, type IconName } from "@/lib/action-presentation";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
+import { TapbackTray, type TrayTapback } from "@/components/tapback-tray";
 
 export interface SheetAction {
   label: string;
@@ -37,14 +38,6 @@ function actionColor(c: ThemeColors, action: SheetAction): string {
   return action.disabled ? c.disabled : action.destructive ? c.destructive : c.text;
 }
 
-export interface SheetTapback {
-  emoji: string;
-  /** Spoken name, e.g. "Love"; the emoji alone reads poorly to a screen reader. */
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}
-
 export interface PopoverAnchor {
   x: number;
   y: number;
@@ -55,8 +48,8 @@ export interface PopoverAnchor {
 interface SheetRequest {
   title?: string;
   actions: SheetAction[];
-  /** Optional horizontal reaction pill rendered above the actions. */
-  tapbacks?: SheetTapback[];
+  /** The tapback tray, floated above the actions. */
+  tapbacks?: TrayTapback[];
   /** Desktop right-click: viewport coords to anchor a compact popover at. */
   anchor?: PopoverAnchor;
 }
@@ -143,31 +136,15 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
           </Pressable>
         ) : variant === "dialog" ? (
           <Pressable style={styles.dialogBackdrop} onPress={() => setRequest(null)}>
+            {rendered?.tapbacks && (
+              <TapbackTray tapbacks={rendered.tapbacks} onDone={() => setRequest(null)} />
+            )}
             <Pressable
               style={[styles.dialog, { backgroundColor: theme.popBg, borderColor: theme.divider, boxShadow: theme.popShadow }]}
               onPress={() => undefined}
             >
               {rendered?.title && (
                 <Text style={[styles.dialogTitle, { color: theme.textSecondary }]}>{rendered.title}</Text>
-              )}
-              {rendered?.tapbacks && (
-                <View style={styles.tapbackRow}>
-                  {rendered.tapbacks.map((t) => (
-                    <Pressable
-                      key={t.emoji}
-                      accessibilityRole="button"
-                      accessibilityLabel={t.active ? `Remove ${t.label}` : t.label}
-                      aria-selected={t.active}
-                      onPress={() => {
-                        setRequest(null);
-                        t.onPress();
-                      }}
-                      style={[styles.tapback, styles.tapbackSmall, t.active && { backgroundColor: theme.bubbleMine }]}
-                    >
-                      <Text style={{ fontSize: 20 }}>{t.emoji}</Text>
-                    </Pressable>
-                  ))}
-                </View>
               )}
               {rendered?.actions.map((action) => (
                 <Pressable
@@ -197,19 +174,8 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
             onPress={() => undefined}
           >
             {rendered?.tapbacks && (
-              <View style={[styles.tapbackPill, { backgroundColor: theme.popBg }]}>
-                {rendered.tapbacks.map((t) => (
-                  <Pressable
-                    key={t.emoji}
-                    onPress={() => {
-                      setRequest(null);
-                      t.onPress();
-                    }}
-                    style={[styles.tapback, t.active && { backgroundColor: theme.bubbleMine }]}
-                  >
-                    <Text style={{ fontSize: 24 }}>{t.emoji}</Text>
-                  </Pressable>
-                ))}
+              <View style={styles.sheetTray}>
+                <TapbackTray tapbacks={rendered.tapbacks} size="touch" onDone={() => setRequest(null)} />
               </View>
             )}
             <View style={[styles.sheetGroup, { backgroundColor: theme.popBg }]}>
@@ -264,30 +230,8 @@ export function ActionSheetProvider({ children }: { children: React.ReactNode })
 
 const POP_W = 240;
 const TAPBACK_GAP = 8;
-
-// Glyphs drawn to match the mockup; anything unknown falls back to its emoji.
-const TAPBACK_GLYPHS: Record<string, { icon: IconName } | { text: string; size: number }> = {
-  Love: { icon: "heart" },
-  Like: { icon: "thumbs-up-outline" },
-  Dislike: { icon: "thumbs-down-outline" },
-  Laugh: { text: "HA\nHA", size: 9 },
-  Emphasize: { text: "!!", size: 16 },
-  Question: { text: "?", size: 18 },
-};
-
-function TapbackGlyph({ tapback, color }: { tapback: SheetTapback; color: string }) {
-  const glyph = TAPBACK_GLYPHS[tapback.label];
-  if (!glyph) return <Text style={{ fontSize: 20 }}>{tapback.emoji}</Text>;
-  if ("icon" in glyph) {
-    const heart = glyph.icon === "heart" && !tapback.active;
-    return <Ionicons name={glyph.icon} size={19} color={heart ? "#FF375F" : color} />;
-  }
-  return (
-    <Text style={[styles.tapbackText, { color, fontSize: glyph.size, lineHeight: glyph.size + (glyph.size < 12 ? 0 : 2) }]}>
-      {glyph.text}
-    </Text>
-  );
-}
+// Six 36pt buttons, 2pt gaps, 4pt padding.
+const TRAY_W = 6 * 36 + 5 * 2 + 8;
 
 /** Desktop right-click menu: a tapback pill floating above a separate menu card. */
 function PopoverMenu({
@@ -303,7 +247,7 @@ function PopoverMenu({
 }) {
   const c = useTheme();
   const { anchor, tapbacks, actions } = request;
-  const width = tapbacks ? Math.max(POP_W, tapbacks.length * 40 + 6) : POP_W;
+  const width = tapbacks ? Math.max(POP_W, TRAY_W) : POP_W;
   const requestedLeft = anchor.align === "end" ? anchor.x - POP_W + 18 : anchor.x;
   const left = Math.max(8, Math.min(requestedLeft, winW - width - 8));
   // Anchors near the bottom (composer attach) open upward.
@@ -312,29 +256,7 @@ function PopoverMenu({
   const presented = presentActions(actions);
   return (
     <View style={[styles.popoverStack, { left }, place]}>
-      {tapbacks && (
-        <View style={[styles.tapbackBar, { backgroundColor: c.popBg, boxShadow: c.popShadow }]}>
-          {tapbacks.map((t) => (
-            <Pressable
-              key={t.emoji}
-              accessibilityRole="button"
-              accessibilityLabel={t.active ? `Remove ${t.label}` : t.label}
-              aria-selected={t.active}
-              onPress={() => {
-                onDone();
-                t.onPress();
-              }}
-              style={({ hovered, pressed }) => [
-                styles.tapback36,
-                (hovered || pressed) && { backgroundColor: c.popSelected },
-                t.active && { backgroundColor: c.bubbleMine },
-              ]}
-            >
-              <TapbackGlyph tapback={t} color={t.active ? c.onAccent : c.textSecondary} />
-            </Pressable>
-          ))}
-        </View>
-      )}
+      {tapbacks && <TapbackTray tapbacks={tapbacks} onDone={onDone} />}
       {actions.length > 0 && (
         <View role="menu" style={[styles.menuCard, { backgroundColor: c.popBg, boxShadow: c.popShadow }]}>
           {actions.map((action, i) => {
@@ -383,24 +305,6 @@ const styles = StyleSheet.create({
     gap: TAPBACK_GAP,
     position: "absolute",
   },
-  tapbackBar: {
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 4,
-    padding: 5,
-  },
-  tapback36: {
-    alignItems: "center",
-    borderRadius: 18,
-    height: 36,
-    justifyContent: "center",
-    width: 36,
-  },
-  tapbackText: {
-    fontWeight: "800",
-    letterSpacing: -0.5,
-    textAlign: "center",
-  },
   menuCard: {
     borderRadius: 12,
     padding: 6,
@@ -436,11 +340,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     marginVertical: 4,
   },
-  tapbackSmall: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-  },
   backdrop: {
     flex: 1,
     // Lighter scrim than the shared 0.45 backdrop token — intentional, not swept.
@@ -450,6 +349,7 @@ const styles = StyleSheet.create({
   dialogBackdrop: {
     alignItems: "center",
     flex: 1,
+    gap: TAPBACK_GAP,
     justifyContent: "center",
   },
   dialog: {
@@ -468,6 +368,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     textAlign: "center",
+  },
+  sheetTray: {
+    alignItems: "center",
+    marginBottom: 4,
   },
   dialogAction: {
     justifyContent: "center",
@@ -519,32 +423,5 @@ const styles = StyleSheet.create({
   cancelLabel: {
     fontSize: 20,
     fontWeight: "600",
-  },
-  tapbackPill: {
-    alignSelf: "center",
-    borderRadius: 28,
-    flexDirection: "row",
-    gap: 4,
-    marginBottom: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    ...CardShadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-  },
-  tapbackRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  tapback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

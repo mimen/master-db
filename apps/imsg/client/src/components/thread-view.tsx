@@ -34,7 +34,8 @@ import { CardShadow, HOVER_DIM, Radii } from "@/constants/theme";
 import { showToast, ToastAnchor } from "@/lib/toast";
 import type { ChatSummary } from "@shared/types";
 import { useAiStatus } from "@/hooks/use-ai";
-import { Bubble, TAPBACK_EMOJI, TAPBACK_LABEL } from "./bubble";
+import { Bubble, TAPBACK_EMOJI } from "./bubble";
+import { TAPBACKS } from "@/lib/tapbacks";
 import { sinceYourReply } from "./message-meta";
 import { Composer } from "./composer";
 import { QueuePosition } from "./queue-position";
@@ -381,11 +382,11 @@ export function ThreadView({
       const mine = message.isFromMe;
       const age = Date.now() - message.dateCreated;
       const tapbacks = privateApi
-        ? [...TAPBACK_EMOJI.entries()].map(([type, emoji]) => {
+        ? TAPBACKS.map(({ type, label }) => {
             const active = message.reactions.some((r) => r.isFromMe && r.type === type);
             return {
-              emoji,
-              label: TAPBACK_LABEL[type] ?? type,
+              type,
+              label,
               active,
               onPress: () => {
                 // Optimistic: show my reaction immediately; revert on failure.
