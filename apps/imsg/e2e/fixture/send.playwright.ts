@@ -160,7 +160,48 @@ test("sending in Needs reply stays on the conversation; only ⌘E moves on", asy
   }
   await page.waitForTimeout(2000);
   await expect(heading).toHaveText(name);
+  const openRow = page.getByTestId("conversation-row").filter({ hasText: name });
+  await expect(openRow, "a replied conversation stays in Needs reply while it is open").toHaveCount(1);
   await composer.blur();
   await page.keyboard.press("Meta+e");
   await expect(heading).not.toHaveText(name);
+  await expect(openRow, "settling releases the row").toHaveCount(0);
+});
+
+test("a conversation read in Unread stays listed until it is left", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1300, height: 820 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: /^Unread/ }).click();
+  const rows = page.getByTestId("conversation-row");
+  await expect(rows.first()).toBeVisible();
+  const before = await rows.count();
+  await rows.first().click();
+  const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
+  const name = (await heading.textContent())?.trim();
+  if (!name) throw new Error("open thread has no name");
+  await page.waitForTimeout(2000);
+  await expect(rows.filter({ hasText: name }), "the read conversation stays while open").toHaveCount(1);
+  await expect(rows).toHaveCount(before);
+});
+
+test("leaving a replied conversation drops it from Needs reply", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1300, height: 820 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const rows = page.getByTestId("conversation-row");
+  await rows.first().click();
+  const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
+  const name = (await heading.textContent())?.trim();
+  if (!name) throw new Error("open thread has no name");
+  const composer = page.getByPlaceholder("iMessage");
+  await composer.fill("replied, then left");
+  await composer.press("Enter");
+  await expect(page.getByTestId("thread-view").getByText("replied, then left", { exact: true })).toBeVisible();
+  await page.waitForTimeout(1500);
+  const openRow = rows.filter({ hasText: name });
+  await expect(openRow).toHaveCount(1);
+  await rows.filter({ hasNotText: name }).first().click();
+  await expect(heading).not.toHaveText(name);
+  await expect(openRow).toHaveCount(0);
 });

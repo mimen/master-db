@@ -1,5 +1,5 @@
 import { formatAddress } from "@shared/address";
-import { settleActionFor, settleLeavesLens } from "@shared/chat-state";
+import { matchesFilters, settleActionFor, settleLeavesLens } from "@shared/chat-state";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
@@ -54,7 +54,10 @@ export function MessagesWorkspace({
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   // The conversation auto-advance opened. Only it slides in; a click cuts as before.
   const [advanced, setAdvanced] = useState<{ guid: string; from: string } | null>(null);
-  const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide);
+  // The open conversation stays in Needs reply or Unread after a reply or a read, until it is
+  // left or settled; otherwise the row vanished under the cursor mid-reply.
+  const [held, setHeld] = useState<string | null>(null);
+  const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide, wide ? held : null);
   const selectedRef = useRef(selected);
   const stateRef = useRef(state);
   const openChatRef = useRef<(chat: ChatSummary) => void>(() => undefined);
@@ -244,6 +247,14 @@ export function MessagesWorkspace({
     openChatRef.current(next);
   }, [wide]);
   useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
+  const allChatsRef = useRef(allChats);
+  useEffect(() => { allChatsRef.current = allChats; });
+  const selectedGuid = selected?.guid;
+  useEffect(() => {
+    const chat = selectedGuid ? allChatsRef.current.find((c) => c.guid === selectedGuid) : undefined;
+    setHeld(chat && (state === "unresponded" || state === "unread") && matchesFilters(chat, state, type) ? chat.guid : null);
+  }, [selectedGuid, state, type]);
+  useEffect(() => onTriageSettling((guid) => setHeld((current) => (current === guid ? null : current))), []);
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
   const previewChat = (chat: ChatSummary): void => {
     commitChatSelection(chat, "preview");

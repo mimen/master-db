@@ -57,7 +57,7 @@ export function ChatDirectoryProvider({ children }: { readonly children: ReactNo
  * Fetches the complete chat list once and filters locally — filter/lens
  * switches are pure computation, no network.
  */
-export function useChats(state: StateFilter, type: TypeFilter, freezeMembership = true): UseChatsResult {
+export function useChats(state: StateFilter, type: TypeFilter, freezeMembership = true, held: string | null = null): UseChatsResult {
   const directory = useChatDirectory();
   const all = useMemo(() => directory ?? [], [directory]);
   const loading = directory === null;
@@ -79,7 +79,7 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   const chats = useMemo(() => {
     if (state === "all" || state === "unresponded" || state === "waiting" || !freezeMembership) {
       frozenRef.current = { state, guids: new Set() };
-      return all.filter((c) => matchesFilters(c, state, type));
+      return all.filter((c) => c.guid === held || matchesFilters(c, state, type));
     }
     if (frozenRef.current.state !== state) frozenRef.current = { state, guids: new Set() };
     const frozen = frozenRef.current.guids;
@@ -90,7 +90,7 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
       }
       return frozen.has(c.guid) && matchesFilters(c, "all", type);
     });
-  }, [all, state, type, freezeMembership]);
+  }, [all, state, type, freezeMembership, held]);
   const counts = useMemo(() => computeCounts(all, type), [all, type]);
 
   // Dock/home-screen unread badge (Safari web apps + installed PWAs).
