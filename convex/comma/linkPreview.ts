@@ -98,7 +98,15 @@ export async function fetchPreview(rawUrl: string, deps: LinkPreviewDependencies
         return null;
       }
       const html = await readHtml(response, controller.signal);
-      return controller.signal.aborted ? null : extractLinkPreview(html, url, originalUrl);
+      if (controller.signal.aborted) return null;
+      const preview = extractLinkPreview(html, url, originalUrl);
+      // The app loads this URL itself, so a public name that resolves private never hits the page-host check.
+      if (!preview?.image) return preview;
+      const imageUrl = await allowedUrl(preview.image, deps.resolve);
+      if (controller.signal.aborted) return null;
+      if (imageUrl) return preview;
+      const stripped = { ...preview, image: null };
+      return stripped.title || stripped.description ? stripped : null;
     }
     return null;
   };

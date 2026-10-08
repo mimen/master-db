@@ -107,7 +107,7 @@ describe("redirects and limits", () => {
       .mockResolvedValueOnce(html('<title>Final</title><meta property="og:image" content="../image.jpg">'));
     expect(await fetchPreview(url, deps)).toMatchObject({ url, title: "Final", image: "https://other.example.com/image.jpg", siteName: "other.example.com" });
     expect(deps.fetch).toHaveBeenCalledTimes(4);
-    expect(deps.resolve).toHaveBeenCalledTimes(4);
+    expect(deps.resolve).toHaveBeenCalledTimes(5);
     expect(deps.fetch.mock.calls.every(([, init]) => init.redirect === "manual")).toBe(true);
   });
 
@@ -209,6 +209,14 @@ describe("metadata", () => {
     const deps = network();
     deps.fetch.mockResolvedValue(html(`<title>Safe text</title><meta property="og:image" content="${image}">`));
     expect(await fetchPreview(url, deps)).toMatchObject({ title: "Safe text", image: null });
+  });
+
+  test("drops an image host that resolves to a private address", async () => {
+    const deps = network();
+    deps.resolve.mockImplementation(async (hostname: string) => hostname === "localtest.me" ? ["127.0.0.1"] : ["93.184.215.14"]);
+    deps.fetch.mockResolvedValue(html('<title>Safe text</title><meta property="og:image" content="https://localtest.me/secret">'));
+    expect(await fetchPreview(url, deps)).toMatchObject({ title: "Safe text", image: null });
+    expect(deps.resolve).toHaveBeenCalledWith("localtest.me");
   });
 });
 
