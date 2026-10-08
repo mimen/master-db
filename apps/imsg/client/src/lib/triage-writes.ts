@@ -36,6 +36,15 @@ export async function runExclusiveTriageWrite(
   return "done";
 }
 
+/**
+ * The message a settle is conditional on. A send still in flight has only a temp guid the Mac has
+ * never seen, and anchoring to it made the bridge reject the settle as "latest message changed",
+ * so ⌘E right after a reply neither settled nor advanced. Unanchored, it settles the newest message.
+ */
+export function settleAnchor(last: { guid: string } | null | undefined): string | undefined {
+  return last && !last.guid.startsWith("temp-") ? last.guid : undefined;
+}
+
 export function resetTriageWritesForTests(): void {
   inFlight.clear();
 }

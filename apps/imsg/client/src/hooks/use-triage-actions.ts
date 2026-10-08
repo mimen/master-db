@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { runExclusiveTriageWrite, type TriageWriteOutcome } from "@/lib/triage-writes";
+import { runExclusiveTriageWrite, settleAnchor, type TriageWriteOutcome } from "@/lib/triage-writes";
 
 type TriageListener = (chatGuid: string) => void;
 const resolvedListeners = new Set<TriageListener>();
@@ -43,7 +43,7 @@ const TRIAGE_KINDS: readonly TriageKind[] = ["unresponded", "waiting"];
 
 async function dismissOne(chat: ChatSummary, kind: TriageKind): Promise<void> {
   try {
-    await api.dismiss(chat.guid, kind, chat.lastMessage?.guid);
+    await api.dismiss(chat.guid, kind, settleAnchor(chat.lastMessage));
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     showToast(message.startsWith("409:") ? "Conversation changed. Review the newest message." : "Could not settle conversation");

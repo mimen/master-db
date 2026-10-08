@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { resetTriageWritesForTests, runExclusiveTriageWrite } from "./triage-writes";
+import { resetTriageWritesForTests, runExclusiveTriageWrite, settleAnchor } from "./triage-writes";
 
 /** A write the test resolves by hand, standing in for the dismiss round trip. */
 function deferred(): { promise: Promise<void>; resolve: () => void; reject: (error: Error) => void } {
@@ -104,5 +104,16 @@ describe("per-conversation triage write exclusion", () => {
 
     held.resolve();
     expect(await heldPress).toBe("done");
+  });
+});
+
+describe("settleAnchor", () => {
+  test("a delivered message anchors the settle", () => {
+    expect(settleAnchor({ guid: "7E0E2623-8E90" })).toBe("7E0E2623-8E90");
+  });
+
+  test("a send still in flight leaves the settle unanchored, so the Mac does not reject it", () => {
+    expect(settleAnchor({ guid: "temp-temp-1791418832" })).toBeUndefined();
+    expect(settleAnchor(null)).toBeUndefined();
   });
 });
