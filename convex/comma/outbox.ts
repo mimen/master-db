@@ -6,7 +6,7 @@ import { assertAllowed } from "../_lib/authed";
 import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
 
 import { deleteConversationDraft } from "./drafts";
-import { refreshLastMessage } from "./internal";
+import { refoldTarget, refreshLastMessage } from "./internal";
 import { sendService, tempGuid } from "./tempMessage";
 
 /**
@@ -220,6 +220,17 @@ export const completeOutbox = internalMutation({
       }
       // A failed or unknown send keeps its temp bubble so the client can show the state.
       else if (temp) await ctx.db.patch(temp._id, { error: status === "failed" ? 1 : 0 });
+    }
+    if (row.payload.kind === "react" && row.payload.remove && status === "sent") {
+      // macOS 15 removes a tapback by deleting its chat.db row; no removal row ever reaches
+      // the bridge, so the reaction stayed folded on the target until this drops it here.
+      const { messageGuid, reaction } = row.payload;
+      const mine = await ctx.db.query("comma_messages")
+        .withIndex("by_tapbackTargetGuid", (q) => q.eq("tapbackTargetGuid", messageGuid)).collect();
+      for (const tapback of mine) {
+        if (tapback.isFromMe && tapback.tapback?.reaction === reaction && !tapback.tapback.remove) await ctx.db.delete(tapback._id);
+      }
+      await refoldTarget(ctx, messageGuid);
     }
     return true;
   },

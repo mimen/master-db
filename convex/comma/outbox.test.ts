@@ -276,3 +276,24 @@ test("the full cutover schema keeps legacy rows valid and registers new state ta
   await as.mutation(api.comma.outbox.enqueue, { clientKey: "search", conversationId: c, payload: send });
   expect(await t.run((ctx) => ctx.db.query("comma_messages").withSearchIndex("search_text", (q) => q.search("text", "hello").eq("isFromMe", true)).collect())).toHaveLength(1);
 });
+
+describe("react remove", () => {
+  test("a confirmed removal drops my tapback even though the Mac sends no removal row", async () => {
+    const { t, as, c } = await setup();
+    const base = { conversationId: c, chatGuid: "iMessage;-;+15550001111", service: "iMessage" as const, error: 0, edited: false,
+      retracted: false, reactions: [], isGroupEvent: false, mentions: [], attachmentGuids: [], text: "" };
+    await t.mutation(internal.comma.internal.upsertMessages, { messages: [
+      { ...base, guid: "target", dateCreated: 1, isFromMe: false, isTapback: false, text: "hi", sourceVersion: 1000 },
+      { ...base, guid: "mine", dateCreated: 2, isFromMe: true, isTapback: true, tapbackTargetGuid: "target",
+        tapback: { reaction: "like", remove: false, targetGuid: "target" }, sourceVersion: 2000 },
+      { ...base, guid: "theirs", dateCreated: 3, isFromMe: false, isTapback: true, tapbackTargetGuid: "target",
+        sender: { address: "+15550001111", name: null }, tapback: { reaction: "like", remove: false, targetGuid: "target" }, sourceVersion: 3000 },
+    ] });
+    const reactions = () => t.run(async (ctx) => (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", "target")).unique())?.reactions);
+    expect((await reactions())?.map((r) => r.isFromMe)).toEqual([true, false]);
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "r", conversationId: c, payload: { kind: "react", messageGuid: "target", reaction: "like", remove: true } });
+    const [claim] = await t.mutation(internal.comma.outbox.claimOutbox, { now: 1, leaseMs: 1000, limit: 10 });
+    await t.mutation(internal.comma.outbox.completeOutbox, { clientKey: "r", claimToken: claim.claimToken!, status: "sent" });
+    expect((await reactions())?.map((r) => r.isFromMe)).toEqual([false]);
+  });
+});

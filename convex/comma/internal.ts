@@ -157,7 +157,7 @@ export function foldTapbacks(tapbacks: Pick<Doc<"comma_messages">, "dateCreated"
   return reactions;
 }
 
-async function refoldTarget(ctx: MutationCtx, targetGuid: string): Promise<void> {
+export async function refoldTarget(ctx: MutationCtx, targetGuid: string): Promise<void> {
   const target = await ctx.db
     .query("comma_messages")
     .withIndex("by_guid", (q) => q.eq("guid", targetGuid))
