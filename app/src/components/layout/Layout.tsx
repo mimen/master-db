@@ -27,7 +27,7 @@ import { resolveView } from "@/lib/views/viewDefinitions"
 import type { TodoistLabelDoc, TodoistProjects, TodoistProjectsWithMetadata, TodoistProjectWithMetadata } from "@/types/convex/todoist"
 
 export function Layout() {
-  const { openShortcuts, openQuickAdd, openSync, openArchive } = useDialogContext()
+  const { openShortcuts, openQuickAdd, openSync, openArchive, openSettings } = useDialogContext()
   const { getCountForView } = useCountRegistry()
   const [location, setLocation] = useLocation()
 
@@ -167,6 +167,12 @@ export function Layout() {
   // because dynamic views (like priority-projects) depend on context data to build lists
   useEffect(() => {
     const viewKey = pathToViewKey(location, viewContext)
+    // Settings is a dialog, not a view: open it over the current view
+    if (viewKey === "view:settings") {
+      openSettings()
+      setLocation(viewKeyToPath(activeView.key, viewContext), { replace: true })
+      return
+    }
     if (viewKey) {
       // Re-resolve if viewKey changed
       if (viewKey !== activeView.key) {
@@ -189,7 +195,7 @@ export function Layout() {
         resetTaskCounts()
       }
     }
-  }, [location, activeView.key, activeView.lists.length, viewContext, resetTaskCounts])
+  }, [location, activeView.key, activeView.lists.length, viewContext, resetTaskCounts, openSettings, setLocation])
 
   const handleTaskCountChangeWithUpdate = useCallback(
     (listId: string, count: number) => {
