@@ -19,12 +19,12 @@ describe("SignInScreen", () => {
     ).toBeInTheDocument()
   })
 
-  test("clicking the button calls signIn('google')", async () => {
+  test("clicking the button signs in with Google and returns to this origin", async () => {
     mockSignIn.mockClear()
     render(<SignInScreen />)
     await userEvent.click(
       screen.getByRole("button", { name: /sign in with google/i }),
     )
-    expect(mockSignIn).toHaveBeenCalledWith("google")
+    expect(mockSignIn).toHaveBeenCalledWith("google", { redirectTo: window.location.origin })
   })
 })
