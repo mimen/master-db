@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, type MutationCtx } from "../_generated/server";
 
 import { recomputePersonAggregates } from "./internal";
@@ -81,6 +81,7 @@ export async function ingestOneCard(
   source: string,
   card: ContactCard,
   link_only: boolean,
+  reconciled?: Set<Id<"people">>,
 ): Promise<IngestCardResult> {
   const now = new Date().toISOString();
   const handles: Array<{ value: string; kind: "phone" | "email"; normalized: string }> = [];
@@ -99,11 +100,13 @@ export async function ingestOneCard(
   // doesn't spawn a duplicate person if its cross-source match logic below
   // would otherwise find nothing.
   let personId: Id<"people"> | null = null;
+  const rowsByValue = new Map<string, Doc<"identities">[]>();
   for (const h of handles) {
     const rows = await ctx.db
       .query("identities")
       .withIndex("by_value", (q) => q.eq("value", h.value))
       .collect();
+    rowsByValue.set(h.value, rows);
     const sameSource = rows.find((r) => r.source === source);
     if (sameSource?.person_id) {
       const p = await ctx.db.get(sameSource.person_id);
@@ -153,10 +156,13 @@ export async function ingestOneCard(
 
   let identitiesWritten = 0;
   for (const h of handles) {
-    const rows = await ctx.db
-      .query("identities")
-      .withIndex("by_value", (q) => q.eq("value", h.value))
-      .collect();
+    const rows =
+      rowsByValue.get(h.value) ??
+      (await ctx.db
+        .query("identities")
+        .withIndex("by_value", (q) => q.eq("value", h.value))
+        .collect());
+    rowsByValue.delete(h.value);
     const existing = rows.find((r) => r.source === source);
     if (existing) {
       // A handle on two cards (a typo'd or shared address) is written by each sync of
@@ -184,6 +190,8 @@ export async function ingestOneCard(
         existing.nickname !== nextNickname ||
         existing.source_contact_id !== nextSourceContactId;
       if (changed) {
+        if (existing.person_id) reconciled?.delete(existing.person_id);
+        reconciled?.delete(personId);
         await ctx.db.patch(existing._id, {
           person_id: personId,
           display_name: nextDisplayName,
@@ -195,6 +203,7 @@ export async function ingestOneCard(
         });
       }
     } else {
+      reconciled?.delete(personId);
       await ctx.db.insert("identities", {
         person_id: personId,
         kind: h.kind,
@@ -222,11 +231,15 @@ export async function ingestOneCard(
   if (card.airtable_record_id) {
     const p = await ctx.db.get(personId);
     if (p && !p.airtable_human_id) {
+      reconciled?.delete(personId);
       await ctx.db.patch(personId, { airtable_human_id: card.airtable_record_id, updated_at: now });
     }
   }
 
-  await recomputePersonAggregates(ctx, personId);
+  if (!reconciled?.has(personId)) {
+    await recomputePersonAggregates(ctx, personId);
+    reconciled?.add(personId);
+  }
   return wasReused
     ? { outcome: "reused", personId, identitiesWritten }
     : { outcome: "created", personId, identitiesWritten };
@@ -250,8 +263,9 @@ export const ingestContactsBatch = internalMutation({
     let skippedNoHandles = 0;
     let skippedNoMatch = 0;
 
+    const reconciled = new Set<Id<"people">>();
     for (const card of contacts) {
-      const result = await ingestOneCard(ctx, source, card, link_only ?? false);
+      const result = await ingestOneCard(ctx, source, card, link_only ?? false, reconciled);
       switch (result.outcome) {
         case "skipped_no_handles":
           skippedNoHandles++;
