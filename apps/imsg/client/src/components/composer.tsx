@@ -1083,7 +1083,7 @@ ${url}` : url;
   const sendControl = (canSend || sendStatus !== "idle") && !recording ? (
     <View ref={sendBtnRef}>
       {/* New text brings the arrow straight back, so a second send never waits on the first. */}
-      <MorphSendButton status={canSend ? "idle" : sendStatus} disabled={busy && sendStatus === "idle"} onPress={() => void send()} color={sendColor} />
+      <MorphSendButton status={canSend ? "idle" : sendStatus} disabled={busy && sendStatus === "idle"} onPress={() => { void send(); inputRef.current?.focus(); }} color={sendColor} />
     </View>
   ) : (
     <Pressable
