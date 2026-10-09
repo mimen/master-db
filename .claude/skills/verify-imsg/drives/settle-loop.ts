@@ -23,7 +23,7 @@ async function open(page: Page, width: number, height: number, scheme: "light" |
 }
 
 async function needsCount(page: Page): Promise<number> {
-  const label = await page.getByRole("radio", { name: /^Needs reply, \d+/ }).getAttribute("aria-label");
+  const label = await page.getByRole("tab", { name: /^Needs reply, \d+/ }).getAttribute("aria-label");
   return Number(/(\d+)/.exec(label ?? "")?.[1]);
 }
 
@@ -70,20 +70,19 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await page.getByRole("button", { name: "Next conversation (J)" }).click();
   await expect(page.getByText(`${at + 1} of ${before}`, { exact: true })).toBeVisible();
 
-  // Send from Needs reply: holds about 1.2 s, then opens the next conversation.
+  // Send from Needs reply stays on the conversation; only a settle moves on.
   const sender = (await heading(page).textContent())!;
   await page.getByPlaceholder("iMessage").fill("On it");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(2000);
   await expect(heading(page)).toHaveText(sender);
-  await expect(heading(page)).not.toHaveText(sender, { timeout: 4000 });
   await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("placeholder"))).toBe("iMessage");
 });
 
 test("settle-loop: settled strip offers un-settle (dark)", async ({ desk }) => {
   const page = desk.page;
   await open(page, 1440, 900, "dark");
-  await page.getByRole("radio", { name: /^All, / }).click();
+  await page.getByRole("tab", { name: "All", exact: true }).click();
   const rows = page.getByTestId("conversation-row");
   await rows.first().click();
   const strip = page.getByTestId("state-strip");

@@ -10,7 +10,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(`/chat/${encodeURIComponent(desk.chats.unreadGroup)}?name=Launch%20Crew&isGroup=1`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("radio", { name: /^All,/ }).click();
+    await page.getByRole("tab", { name: "All", exact: true }).click();
     await expect(page.getByTestId("state-strip")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
     await page.getByPlaceholder("iMessage").fill("On it");
@@ -52,11 +52,11 @@ test("signal-wire empty Needs reply lens", async ({ desk }) => {
   // Settle every row in Needs reply; each leaving row collapses out.
   test.setTimeout(120_000);
   const empty = page.getByRole("heading", { name: "You've replied to everyone" });
-  for (let i = 0; i < 40 && !(await page.getByRole("radio", { name: /^Needs reply, 0 / }).count()); i++) {
-    const before = await page.getByRole("radio", { name: /^Needs reply/ }).getAttribute("aria-label");
+  for (let i = 0; i < 40 && !(await page.getByRole("tab", { name: /^Needs reply, 0$/ }).count()); i++) {
+    const before = await page.getByRole("tab", { name: /^Needs reply/ }).getAttribute("aria-label");
     await rows.first().click();
     await page.getByRole("button", { name: /^Settle \(/ }).click();
-    await expect(page.getByRole("radio", { name: /^Needs reply/ })).not.toHaveAttribute("aria-label", before ?? "");
+    await expect(page.getByRole("tab", { name: /^Needs reply/ })).not.toHaveAttribute("aria-label", before ?? "");
     await page.waitForTimeout(500);
   }
   await expect(page.getByRole("heading", { name: "You've replied to everyone" })).toBeVisible();

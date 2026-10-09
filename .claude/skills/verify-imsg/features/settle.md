@@ -1,6 +1,6 @@
 # Settle a conversation
 
-Settling marks a conversation handled: it leaves Needs reply or Waiting, a `Settled <Name>` toast appears with `Undo`, and Undo (or ⌘Z outside a text field, ⌘⇧Z anywhere) restores it. In Needs reply and Unread, settling opens the next conversation at once, and a reply opens it after about 1.2 s. Settling an already-settled conversation from the All view reverses it.
+Settling marks a conversation handled: it leaves Needs reply or Waiting, a `Settled <Name>` toast appears with `Undo`, and Undo (or ⌘Z outside a text field, ⌘⇧Z anywhere) restores it. In Needs reply and Unread, settling opens the next conversation at once. A reply stays on the conversation, which holds its place in the lens until it is left or settled. Settling an already-settled conversation from the All view reverses it.
 
 ## Sub-features
 
