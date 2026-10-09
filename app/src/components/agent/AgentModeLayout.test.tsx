@@ -16,4 +16,9 @@ describe("AgentModeLayout", () => {
     expect(screen.queryByTestId("surface")).toBeNull()
     expect(screen.getByText(/Select a task/i)).toBeInTheDocument()
   })
+  test("stacks list above the thread on a phone-width screen", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 })
+    const { container } = render(<AgentModeLayout selectedEntityRef={null}><div>list</div></AgentModeLayout>)
+    expect(container.querySelector("[data-panel-group-direction]")).toHaveAttribute("data-panel-group-direction", "vertical")
+  })
 })

@@ -9,6 +9,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import { AgentComposerProvider } from "@/contexts/AgentComposerContext"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 export function AgentModeLayout({
   selectedEntityRef,
@@ -20,17 +21,20 @@ export function AgentModeLayout({
   header?: ReactNode
   children: ReactNode
 }) {
+  // A side-by-side split leaves the list a few characters wide on a phone
+  const isMobile = useIsMobile()
   return (
     <ResizablePanelGroup
-      direction="horizontal"
-      autoSaveId="agent-mode-panels"
+      key={isMobile ? "vertical" : "horizontal"}
+      direction={isMobile ? "vertical" : "horizontal"}
+      autoSaveId={isMobile ? "agent-mode-panels-mobile" : "agent-mode-panels"}
       className="h-full"
     >
       <ResizablePanel
         defaultSize={42}
         minSize={25}
         maxSize={65}
-        className="flex flex-col border-r overflow-hidden"
+        className={isMobile ? "flex flex-col border-b overflow-hidden" : "flex flex-col border-r overflow-hidden"}
       >
         {header}
         {/* Scroll region: min-h-0 lets this flex child shrink so the long
