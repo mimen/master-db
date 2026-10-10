@@ -2,6 +2,17 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-10. The connection starts with the page, not after the app loads (1202bb26)
+
+- **For the user:** opening a conversation right after reopening Comma is about a quarter second faster. The page now starts the Convex connection and the sign-in token in its first lines, while the app's code is still downloading. Before, the connection waited for the app to load, then spent 200 to 330 ms on Convex's handshake.
+- **Metric 1c (production return visit, open right after load, p75):** production 350 to 558 ms became 187 to 224 ms on the preview, over three interleaved rounds with no overlap. On a fresh load the list was equal or faster (round p75s 832, 531 and 628 ms against 826, 944 and 882).
+- **Ratchet:** `post-export.test.ts` requires the boot script ahead of the bundle. `convex-token.test.ts` and `boot-handoff.test.ts` pin that the early token is used once, that a forced refresh never uses it, and that a mismatched or closed socket is replaced.
+- **Revert:** `git revert 1202bb26`.
+
+## 2026-10-10. Correction: font preloads removed
+
+H10 was measured and rejected, but its revert commit (4dec178d) carried H10's own change, so production preloaded both fonts from 13:00 until 00c8e140. 00c8e140 removes the preloads again.
+
 ## 2026-10-10. Lens tabs keep their place as counts fill in (53308655)
 
 - **For the user:** on a fresh load, Waiting and All no longer shuffle sideways while the Needs reply and Unread counts climb from one digit to two.
