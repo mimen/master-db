@@ -97,6 +97,10 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   });
   const messagesActions = useRef<MessagesWorkspaceActions | null>(null);
   const activeWorkspace = projection?.workspace ?? state.activeWorkspace;
+  // Contacts mounts on first visit, then stays mounted. Its people list is about 440 KB that
+  // would otherwise share the boot socket with the first conversation page and first open.
+  const [contactsVisited, setContactsVisited] = useState(false);
+  if (activeWorkspace === "contacts" && !contactsVisited) setContactsVisited(true);
   const shellOwnsRoute = wide && projection !== null;
 
   useEffect(() => {
@@ -348,7 +352,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
                 accessibilityElementsHidden={activeWorkspace !== "contacts"}
                 importantForAccessibility={activeWorkspace === "contacts" ? "auto" : "no-hide-descendants"}
               >
-                <ContactsWorkspace wide />
+                {contactsVisited ? <ContactsWorkspace wide /> : null}
               </View>
             </View>
             {utilityPane}
