@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { FIXTURE_NOW } from "./world";
-import { expect, test } from "../fixtures/desk";
+import { expect, settledCount, test } from "../fixtures/desk";
 
 interface BubbleTrace {
   /** Distinct DOM nodes that rendered the text: 1 means the row never remounted. */
@@ -175,7 +175,7 @@ test("a conversation read in Unread stays listed until it is left", async ({ des
   await page.getByRole("tab", { name: /^Unread/ }).click();
   const rows = page.getByTestId("conversation-row");
   await expect(rows.first()).toBeVisible();
-  const before = await rows.count();
+  const before = await settledCount(rows);
   await rows.first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
   const name = (await heading.textContent())?.trim();

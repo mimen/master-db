@@ -60,7 +60,7 @@ test("an unknown attachment outcome shows a component toast and does not retry",
     node.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
   });
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.getByText("Command outcome unknown. Check the conversation before trying again.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Not sure this went through. Check the conversation before trying again.", { exact: true })).toBeVisible();
   await expect(page.getByText("Couldn't send the attachment. Check the bridge connection.", { exact: true })).toHaveCount(0);
   expect(sends).toBe(1);
 });

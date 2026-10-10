@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, settledCount, test } from "../fixtures/desk";
 
 const OUT = process.env.COMMA_GALLERY_DIR ?? "/tmp/comma-ui-batch-d";
 
@@ -58,7 +58,7 @@ test("settling shows a bottom toast whose Undo restores the conversation", async
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
-  const before = await page.getByTestId("conversation-row").count();
+  const before = await settledCount(page.getByTestId("conversation-row"));
   await page.getByTestId("conversation-row").first().click();
   const name = (await page.getByTestId("thread-view").getByRole("heading", { level: 2 }).textContent())?.trim();
   if (!name) throw new Error("open thread has no name");

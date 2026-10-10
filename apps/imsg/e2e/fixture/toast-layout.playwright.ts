@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 
-import { expect, test } from "../fixtures/desk";
+import { expect, settledCount, test } from "../fixtures/desk";
 
 const OUT = process.env.COMMA_GALLERY_DIR ?? "/tmp/comma-toast-fix2/after";
 const sizes = [
@@ -20,7 +20,7 @@ for (const scheme of ["light", "dark"] as const) {
       await page.getByRole("tab", { name: "All", exact: true }).click();
       const rows = page.getByTestId("conversation-row");
       await expect(rows.first()).toBeVisible();
-      const before = await rows.count();
+      const before = await settledCount(rows);
       const lastMessage = page.getByText("I added the revised run of show.", { exact: true });
       await expect(lastMessage).toBeVisible();
       await page.getByTestId("thread-settle").click();

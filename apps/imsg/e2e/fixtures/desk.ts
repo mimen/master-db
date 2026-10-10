@@ -1,4 +1,4 @@
-import { expect, test as base, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test as base, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import { CHAT_GUIDS } from "../fixture/world";
 
 interface DeskFixture {
@@ -79,3 +79,14 @@ export const test = base.extend<DeskFixture>({
 });
 
 export { expect };
+
+/** The list renders rows in batches; a count taken mid-batch is not the list's size. */
+export async function settledCount(locator: Locator): Promise<number> {
+  let count = -1;
+  await expect.poll(async () => {
+    const previous = count;
+    count = await locator.count();
+    return count === previous;
+  }, { intervals: [100] }).toBe(true);
+  return count;
+}

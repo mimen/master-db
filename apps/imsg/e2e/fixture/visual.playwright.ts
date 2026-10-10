@@ -1,11 +1,12 @@
-import type { Locator } from "@playwright/test";
+import type { ElementHandle, Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
 
-async function expectHoverStable(control: Locator): Promise<void> {
+/** Element handles, not nth locators: hovering a row reveals its buttons and would shift every later index. */
+async function expectHoverStable(page: Page, control: ElementHandle): Promise<void> {
   if (!(await control.isVisible()) || !(await control.isEnabled())) return;
   const before = await control.boundingBox();
   if (!before) return;
-  const viewport = control.page().viewportSize();
+  const viewport = page.viewportSize();
   if (!viewport || before.x < 0 || before.y < 0 || before.x + before.width > viewport.width || before.y + before.height > viewport.height) return;
   const receivesPointer = await control.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -14,7 +15,7 @@ async function expectHoverStable(control: Locator): Promise<void> {
   });
   if (!receivesPointer) return;
   await control.hover();
-  await expect(control).toBeVisible();
+  expect(await control.isVisible()).toBe(true);
   expect(await control.boundingBox()).toEqual(before);
 }
 
@@ -137,8 +138,9 @@ test("row actions follow conversation state across queue lenses and keep More mi
   await page.getByRole("heading", { name: "Comma" }).first().hover();
   await row.focus();
   await expect(row.getByText("Settle", { exact: true })).toBeVisible();
+  // One tab stop per row: Tab leaves the row, ⌘E settles it (228f98f4).
   await page.keyboard.press("Tab");
-  await expect(row.getByRole("button", { name: /^Settle / })).toBeFocused();
+  await expect(page.getByTestId("conversation-row").nth(1)).toBeFocused();
   await row.click();
   await expect(page.getByTestId("thread-settle")).toHaveAccessibleName("Settle (⌘E)");
   await expect(page.getByTestId("thread-settle")).toHaveAttribute("title", "Settle (⌘E)");
@@ -583,17 +585,17 @@ test("every visible control remains stable and usable on hover", async ({ desk }
     await resetAndOpen(desk, 1300, scheme);
     const page = desk.page;
 
-    for (const control of await page.getByRole("button").all()) await expectHoverStable(control);
+    for (const control of await page.getByRole("button").elementHandles()) await expectHoverStable(page, control);
     await page.screenshot({ path: `/tmp/comma-hover-queue-${scheme}.png`, animations: "disabled" });
 
     await page.getByTestId("conversation-row").nth(1).click();
     await expect(page.getByTestId("thread-settle")).toBeVisible();
-    for (const control of await page.getByRole("button").all()) await expectHoverStable(control);
+    for (const control of await page.getByRole("button").elementHandles()) await expectHoverStable(page, control);
     await page.screenshot({ path: `/tmp/comma-hover-thread-${scheme}.png`, animations: "disabled" });
 
     await page.keyboard.press("Meta+i");
     await expect(page.getByText("Details", { exact: true })).toBeVisible();
-    for (const control of await page.getByRole("button").all()) await expectHoverStable(control);
+    for (const control of await page.getByRole("button").elementHandles()) await expectHoverStable(page, control);
     await page.screenshot({ path: `/tmp/comma-hover-inspector-${scheme}.png`, animations: "disabled" });
     await page.keyboard.press("Meta+i");
   }
