@@ -1,7 +1,7 @@
 import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Platform } from "react-native";
-import { readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
+import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
@@ -34,13 +34,13 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
     if (status === "CanLoadMore") loadMore(100);
   }, [status, loadMore]);
   const chats = useMemo(() => results.map(conversationToChat), [results]);
-  const live = status !== "LoadingFirstPage";
-  // Read once per mount: the snapshot only bridges the gap until the first live page.
+  // Read once per mount: the snapshot bridges the gap until the live list is complete.
   const [snapshot] = useState(() => readChatSnapshot(webStore()));
   useEffect(() => {
     if (status === "Exhausted") writeChatSnapshot(webStore(), chats);
   }, [status, chats]);
-  return { chats: live ? chats : snapshot };
+  const bridged = useMemo(() => (snapshot && status !== "Exhausted" ? bridgeSnapshot(chats, snapshot) : chats), [snapshot, status, chats]);
+  return { chats: status === "LoadingFirstPage" ? snapshot : bridged };
 }
 
 /**

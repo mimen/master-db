@@ -40,3 +40,15 @@ export function writeChatSnapshot(store: Store | undefined, chats: readonly Chat
     // Quota or private mode: the next cold start just waits for Convex.
   }
 }
+
+/**
+ * The list while live pages are still arriving: every live row, then the snapshot's rows older than
+ * the oldest live one. Without the tail, the first live page (25 rows) replaces up to 300 snapshot
+ * rows and lens counts drop, then climb back page by page.
+ */
+export function bridgeSnapshot(live: readonly ChatSummary[], snapshot: readonly ChatSummary[]): ChatSummary[] {
+  if (live.length === 0) return [...snapshot];
+  const seen = new Set(live.map((chat) => chat.guid));
+  const oldest = Math.min(...live.map((chat) => chat.lastMessage?.dateCreated ?? 0));
+  return [...live, ...snapshot.filter((chat) => !seen.has(chat.guid) && (chat.lastMessage?.dateCreated ?? 0) < oldest)];
+}
