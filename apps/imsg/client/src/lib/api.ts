@@ -18,22 +18,6 @@ import type {
   TranscriptState,
 } from "@shared/types";
 
-const messageBatches = new Set<readonly Pick<Message, "guid" | "chatGuid">[]>();
-
-// Edit and unsend take only a message guid; mounted threads supply its chat.
-export function registerMessageActions(messages: readonly Pick<Message, "guid" | "chatGuid">[]): () => void {
-  messageBatches.add(messages);
-  return () => { messageBatches.delete(messages); };
-}
-
-function messageChatGuid(messageGuid: string): string | undefined {
-  for (const messages of messageBatches) {
-    const message = messages.find((item) => item.guid === messageGuid);
-    if (message) return message.chatGuid;
-  }
-  return undefined;
-}
-
 export async function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<{ ok: boolean }> {
   await enqueueVia(convexClient as unknown as CommandClient, chatGuid, payload);
   return { ok: true };
@@ -74,30 +58,6 @@ export const api = {
   },
   async setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
     return enqueueCommand(chatGuid, { kind: "pin", value: pinned });
-  },
-  async react(
-    messageGuid: string,
-    body: { chatGuid: string; reaction: string; remove?: boolean; partIndex?: number; suggested?: boolean },
-  ): Promise<{ ok: boolean }> {
-    if (!body.suggested) return enqueueCommand(body.chatGuid, {
-      kind: "react", messageGuid, reaction: body.reaction, remove: body.remove ?? false,
-      ...(body.partIndex !== undefined ? { partIndex: body.partIndex } : {}),
-    });
-    return runCommand(body.chatGuid, { kind: "react", messageGuid, reaction: body.reaction,
-      remove: body.remove ?? false, partIndex: body.partIndex, suggested: true });
-  },
-  async unsend(messageGuid: string): Promise<{ ok: boolean }> {
-    const chatGuid = messageChatGuid(messageGuid);
-    if (!chatGuid) throw new Error("Message conversation is unavailable");
-    return enqueueCommand(chatGuid, { kind: "unsend", messageGuid });
-  },
-  async deleteMessage(messageGuid: string, chatGuid: string): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, { kind: "delete", messageGuid });
-  },
-  async edit(messageGuid: string, text: string): Promise<{ ok: boolean }> {
-    const chatGuid = messageChatGuid(messageGuid);
-    if (!chatGuid) throw new Error("Message conversation is unavailable");
-    return enqueueCommand(chatGuid, { kind: "edit", messageGuid, text });
   },
   contacts(q: string): Promise<Contact[]> {
     return convexClient.query(identityApi.searchContacts, contactSearchArgs(q));

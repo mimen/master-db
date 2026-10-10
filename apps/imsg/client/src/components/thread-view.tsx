@@ -112,7 +112,7 @@ export function ThreadView({
   const paneRef = useRef<View>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, newestMessages } =
+  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, pend, newestMessages } =
     useMessages(chatGuid, jumpTarget);
   messagesRef.current = messages;
   // It is your turn when the newest real message is inbound. Drives whether
@@ -389,17 +389,10 @@ export function ThreadView({
               label,
               active,
               onPress: () => {
-                // Optimistic: show my reaction immediately; revert on failure.
-                const reactions = active
-                  ? message.reactions.filter((r) => !(r.isFromMe && r.type === type))
-                  : [
-                      ...message.reactions,
-                      { type, isFromMe: true, senderName: null, senderAddress: null },
-                    ];
-                upsert({ ...message, reactions });
+                const rollback = pend(message.guid, { kind: "react", type, remove: active });
                 hapticSelect();
-                void api.react(message.guid, { chatGuid, reaction: type, remove: active }).catch(() => {
-                  upsert(message);
+                runCommand(chatGuid, { kind: "react", messageGuid: message.guid, reaction: type, remove: active }).catch(() => {
+                  rollback();
                   showToast("Couldn't send the reaction. Try again.");
                 });
               },
@@ -455,10 +448,11 @@ export function ThreadView({
                 separatorBefore: !(message.text && age < EDIT_WINDOW_MS),
                 destructive: true,
                 onPress: () => {
-                  void api
-                    .unsend(message.guid)
-                    .then(() => upsert({ ...message, retracted: true }))
-                    .catch(() => showToast("Couldn't unsend. Messages can only be unsent for about 2 minutes."));
+                  const rollback = pend(message.guid, { kind: "retract" });
+                  runCommand(message.chatGuid, { kind: "unsend", messageGuid: message.guid }).catch(() => {
+                    rollback();
+                    showToast("Couldn't unsend. Messages can only be unsent for about 2 minutes.");
+                  });
                 },
               },
             ]
@@ -472,13 +466,11 @@ export function ThreadView({
                 separatorBefore: true,
                 destructive: true,
                 onPress: () => {
-                  void api
-                    .deleteMessage(message.guid, chatGuid)
-                    .then(() => {
-                      upsert({ ...message, retracted: true });
-                      showToast("Deleted");
-                    })
-                    .catch(() => showToast("Couldn't delete the message. Try again."));
+                  const rollback = pend(message.guid, { kind: "retract" });
+                  runCommand(chatGuid, { kind: "delete", messageGuid: message.guid }).then(() => showToast("Deleted"), () => {
+                    rollback();
+                    showToast("Couldn't delete the message. Try again.");
+                  });
                 },
               },
             ]
@@ -486,7 +478,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
     },
-    [chatGuid, privateApi, showSheet, upsert],
+    [chatGuid, pend, privateApi, showSheet, upsert],
   );
 
   // The thread's bottom inset, driven by the keyboard rather than by
@@ -789,7 +781,7 @@ export function ThreadView({
           editing={editing}
           onClearReply={() => setReplyTo(null)}
           onClearEditing={() => setEditing(null)}
-          onEdited={upsert}
+          onEdit={pend}
           onOptimistic={(message) => {
             upsert(message);
             scrollToLatest();

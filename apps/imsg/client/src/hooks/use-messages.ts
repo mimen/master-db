@@ -1,11 +1,11 @@
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { registerMessageActions } from "@/lib/api";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { messageWindow } from "@/lib/history-api";
 import { reconcileWindow, settleTemp, sortByDate, upsertMessage, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
+import { applyPendingEdits, retirePendingEdits, type PendingEdit, type PendingEdits } from "@/lib/pending-edits";
 import type { Message } from "@shared/types";
 import { useConversationRef } from "./use-chat-directory";
 import { useMessageWindow } from "./use-message-window";
@@ -90,7 +90,12 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
   };
 }
 
-export function useMessages(chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
+export interface ThreadMessages extends UseMessagesResult {
+  /** Shows an intent on a server-held message at once; the returned rollback undoes it if the command fails. */
+  pend: (messageGuid: string, edit: PendingEdit) => () => void;
+}
+
+export function useMessages(chatGuid: string | null, target: JumpTarget | null): ThreadMessages {
   const { conversationId, lastMessageAt, resolving } = useConversationRef(chatGuid);
   // This window can render the sidebar's newest message while pagination loads,
   // and keeps the active thread's read observer live during a historical jump.
@@ -100,11 +105,25 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const convex = useConvexMessages(!target ? conversationId : null, !target ? chatGuid : null, target ? [] : newest);
   const anchored = useMessageWindow(target ? conversationId : null, target ? chatGuid : null, target);
   const selected = target ? anchored : convex;
+  const [edits, setEdits] = useState<PendingEdits>(new Map());
+  useEffect(() => setEdits(new Map()), [chatGuid]);
+  useEffect(() => setEdits((current) => retirePendingEdits(current, selected.messages)), [selected.messages, edits]);
+  const shown = useMemo(() => applyPendingEdits(selected.messages, edits), [selected.messages, edits]);
+  const pend = useCallback((messageGuid: string, edit: PendingEdit) => {
+    setEdits((current) => new Map(current).set(messageGuid, edit));
+    return () => setEdits((current) => {
+      if (current.get(messageGuid) !== edit) return current;
+      const next = new Map(current);
+      next.delete(messageGuid);
+      return next;
+    });
+  }, []);
   const result = {
     ...selected,
+    messages: shown,
+    pend,
     newestMessages: newest,
     loading: chatGuid !== null && selected.messages.length === 0 && (resolving || selected.loading),
   };
-  useEffect(() => registerMessageActions(result.messages), [result.messages]);
   return result;
 }

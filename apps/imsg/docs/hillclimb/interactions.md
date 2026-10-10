@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **24 OPTIMISTIC, 8 PARTIAL, 21 SPINNER, 51 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -30,10 +30,10 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Edit scheduled, Save | scheduled-content.tsx:76 → R(editScheduled) | SPINNER | No list patch | Inline error |
 | Cancel scheduled | use-scheduled.ts:39 → R(cancelScheduled) | PARTIAL | Row hides; counts read unpatched `listScheduled({})` | Row restored |
 | Send scheduled now | use-scheduled.ts:43 → R(sendScheduledNow) | PARTIAL | Counts lag; thread bubble waits | Row restored, toast |
-| Save message edit | composer.tsx:539 → E(edit) | WAIT | Local edit ignored under remote rows | Toast. No rollback |
-| Undo send | thread-view.tsx:457 → E(unsend) | WAIT | Same | Toast on enqueue error only |
-| Delete for me | thread-view.tsx:474 → E(delete) | WAIT | Same | Toast on enqueue error only |
-| Add or remove tapback | thread-view.tsx:391 → E(react) | PARTIAL | Local patch only shows in anchored history | Toast |
+| Save message edit | composer.tsx:540 → R(edit) | OPTIMISTIC | Pending-edit overlay until the mirror shows the text | Text rolls back, toast |
+| Undo send | thread-view.tsx:450 → R(unsend) | OPTIMISTIC | Bubble hides at once | Bubble returns, toast |
+| Delete for me | thread-view.tsx:468 → R(delete) | OPTIMISTIC | Bubble hides at once | Bubble returns, toast |
+| Add or remove tapback | thread-view.tsx:391 → R(react) | OPTIMISTIC | Pending-edit overlay in normal and anchored threads | Badge rolls back, toast |
 | Confirm AI reaction | suggestion-shelf.tsx:145 → R(react) | WAIT | No local reaction | Toast |
 | Generate or refresh AI replies | suggestion-shelf.tsx:78 → R(suggestions) | SPINNER | Skeleton after 600 ms | Retry control |
 | Accept AI text | suggestion-shelf.tsx:166 | OPTIMISTIC | Fills composer | — |
@@ -149,8 +149,7 @@ All identity writes lack an optimistic updater. The visible queries are `whoIs({
 
 ## Ranked by how often a user feels them
 
-1. Tapbacks. The local patch is discarded in a normal thread, so a reaction waits a full bridge round trip.
-2. Settle. The selection moves at once, but flags and lens counts wait for the mirror.
-3. Mark read on open, mark unread. The unread dot and counts lag.
-4. Pin. The switch and pinned section wait.
-5. Voice send and Forward. No pending state at all.
+1. Settle. The selection moves at once, but flags and lens counts wait for the mirror.
+2. Mark read on open, mark unread. The unread dot and counts lag.
+3. Pin. The switch and pinned section wait.
+4. Voice send and Forward. No pending state at all.

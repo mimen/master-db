@@ -41,6 +41,8 @@ import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer, type SuggestionAttribution } from "@/lib/composer-fill";
 import type { Contact, Message, Participant } from "@shared/types";
+import type { PendingEdit } from "@/lib/pending-edits";
+import { runCommand } from "@/lib/convex-commands";
 import type { MentionAnnotation } from "@shared/mentions";
 import { mentionQueryAt, reconcileMentionAnnotations, trimMentionAnnotations } from "@shared/mentions";
 import { useTheme } from "@/hooks/use-theme";
@@ -76,7 +78,7 @@ interface ComposerProps {
   editing: Message | null;
   onClearReply: () => void;
   onClearEditing: () => void;
-  onEdited: (message: Message) => void;
+  onEdit: (messageGuid: string, edit: PendingEdit) => () => void;
   onOptimistic: (message: Message) => void;
   onSettled: (tempGuid: string, message: Message) => void;
   onSent: (message: Message) => void;
@@ -309,7 +311,7 @@ export function Composer({
   editing,
   onClearReply,
   onClearEditing,
-  onEdited,
+  onEdit,
   onOptimistic,
   onSettled,
   onSent,
@@ -537,18 +539,13 @@ export function Composer({
     sentText.current = text;
 
     if (editing) {
-      setBusy(true);
-      try {
-        await api.edit(editing.guid, trimmed);
-        onEdited({ ...editing, text: trimmed, edited: true });
-        clearText();
-        onClearEditing();
-      } catch {
-        sentText.current = null;
+      const rollback = onEdit(editing.guid, { kind: "edit", text: trimmed });
+      clearText();
+      onClearEditing();
+      runCommand(editing.chatGuid, { kind: "edit", messageGuid: editing.guid, text: trimmed }).catch(() => {
+        rollback();
         showToast("Couldn't edit. Messages can only be edited for 15 minutes.");
-      } finally {
-        setBusy(false);
-      }
+      });
       return;
     }
 
