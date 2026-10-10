@@ -8,7 +8,8 @@ export function staticCacheControl(urlPath: string): string {
   if (path === "/" || path === "" || path.endsWith(".html") || path.endsWith(".webmanifest")) {
     return "no-store";
   }
-  if (path.includes("/_expo/static/")) {
+  // Metro names every file under /assets/ by content hash (Ionicons.<md5>.ttf), so it is immutable too.
+  if (path.includes("/_expo/static/") || /^\/assets\/.*\.[0-9a-f]{32}(@\dx)?\.\w+$/.test(path)) {
     return "public, max-age=31536000, immutable";
   }
   return "no-cache";
