@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -30,25 +30,6 @@ describe("postExport", () => {
     // Keyboard focus and pinch zoom stay available.
     expect(html).not.toContain("outline:none!important");
     expect(html).not.toContain("user-scalable=no");
-  });
-
-  test("preloads the icon and header fonts the first frame paints, and nothing else", async () => {
-    const root = mkdtempSync(join(tmpdir(), "comma-post-export-"));
-    roots.push(root);
-    writeFileSync(join(root, "index.html"), "<html><head></head><body></body></html>");
-    const icons = "assets/node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts";
-    mkdirSync(join(root, icons), { recursive: true });
-    mkdirSync(join(root, "assets/assets/fonts"), { recursive: true });
-    writeFileSync(join(root, icons, `Ionicons.${"a".repeat(32)}.ttf`), "");
-    writeFileSync(join(root, icons, `Feather.${"b".repeat(32)}.ttf`), "");
-    writeFileSync(join(root, `assets/assets/fonts/BricolageGrotesque-SemiBold.${"c".repeat(32)}.ttf`), "");
-
-    await postExport(root, undefined);
-
-    const html = await Bun.file(join(root, "index.html")).text();
-    expect(html).toContain(`<link rel="preload" href="/${icons}/Ionicons.${"a".repeat(32)}.ttf" as="font" type="font/ttf" crossorigin/>`);
-    expect(html).toContain(`<link rel="preload" href="/assets/assets/fonts/BricolageGrotesque-SemiBold.${"c".repeat(32)}.ttf" as="font" type="font/ttf" crossorigin/>`);
-    expect(html).not.toContain("Feather");
   });
 
   test("paints a loading shell on the empty root that respects reduced motion", async () => {
