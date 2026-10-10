@@ -69,7 +69,7 @@ bun ../scripts/precompress.ts "$STAGING_DIR"
 [ -f "$STAGING_DIR/index.html.br" ] && [ -f "$STAGING_DIR/index.html.gz" ] || fail "release index is not precompressed"
 /usr/bin/grep -F "<meta name=\"comma-web-sha\" content=\"$SOURCE_SHA\"/>" "$STAGING_DIR/index.html" >/dev/null \
   || fail "release index does not embed source SHA"
-ENTRY_ASSET="$(find "$STAGING_DIR/_expo/static/js/web" -type f -name '*.js' -print -quit)"
+ENTRY_ASSET="$(find "$STAGING_DIR/_expo/static/js/web" -type f -name 'entry-*.js' -print -quit)"
 [ -n "$ENTRY_ASSET" ] || fail "release contains no JavaScript entry asset"
 /usr/bin/grep -F "$SOURCE_SHA" "$ENTRY_ASSET" >/dev/null \
   || fail "release entry asset does not embed source SHA"

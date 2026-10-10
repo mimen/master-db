@@ -8,7 +8,9 @@ export interface WebReleaseIdentity {
 }
 
 export function parseEntryAsset(html: string): string {
-  const match = html.match(/<script[^>]+src=["']([^"']+\/_expo\/static\/js\/web\/[^"']+\.js)["']/i)
+  // Split exports also load __expo-metro-runtime and __common first; the app and its release SHA are in entry-*.
+  const match = html.match(/<script[^>]+src=["']([^"']+\/_expo\/static\/js\/web\/entry-[^"']+\.js)["']/i)
+    ?? html.match(/<script[^>]+src=["']([^"']+\/_expo\/static\/js\/web\/[^"']+\.js)["']/i)
     ?? html.match(/<script[^>]+src=["']([^"']+\.js)["']/i);
   if (!match?.[1]) throw new Error("production index has no JavaScript entry asset");
   return match[1];

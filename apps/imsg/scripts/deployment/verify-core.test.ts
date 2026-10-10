@@ -25,6 +25,13 @@ describe("production deployment verification", () => {
     expect(parseEntryAsset(html)).toBe("/_expo/static/js/web/entry-deadbeef.js");
   });
 
+  test("a split export's entry asset is entry-*, not the runtime or common chunk loaded first", () => {
+    const html = '<script src="/_expo/static/js/web/__expo-metro-runtime-1f.js" defer></script>'
+      + '<script src="/_expo/static/js/web/__common-2e.js" defer></script>'
+      + '<script src="/_expo/static/js/web/entry-30.js" defer></script>';
+    expect(parseEntryAsset(html)).toBe("/_expo/static/js/web/entry-30.js");
+  });
+
   test("rejects ambiguous release identity and blank visual renders", () => {
     expect(() => parseWebRelease({ environment: "production", branch: null, webSha: "latest" })).toThrow();
     expect(() => assertRenderedVisual("Loading", "Messages")).toThrow();
