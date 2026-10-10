@@ -2,6 +2,7 @@ import { paginationOptsValidator, paginationResultValidator, type SearchFilterFi
 import { v } from "convex/values";
 
 import { computeFlags } from "../../apps/imsg/shared/chat-state";
+import type { Id } from "../_generated/dataModel";
 import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
@@ -17,7 +18,7 @@ import {
   type CommaMessageDoc,
 } from "../schema/comma/validators";
 
-import { personForAddress } from "./photos";
+import { normalizedAddress, personForAddress, personForNormalized } from "./photos";
 
 const conversationView = v.object({
   ...conversationDoc.fields,
@@ -44,6 +45,7 @@ async function conversationCrm(
   ctx: QueryCtx,
   conversation: CommaConversationDoc,
   person: Awaited<ReturnType<typeof personForAddress>>,
+  read: ListReader,
 ) {
   let base: { is_favorite?: boolean; priority?: number; tags: string[] };
   if (conversation.isGroup) {
@@ -53,7 +55,7 @@ async function conversationCrm(
       .withIndex("by_chat", (q) => q.eq("chat_guid", conversation.primaryChatGuid)).collect();
     base = { is_favorite: row?.is_favorite, priority: row?.priority, tags: tags.map((t) => t.tag) };
   } else if (person) {
-    const tags = await ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", person._id)).collect();
+    const tags = await read.personTags(person._id);
     base = {
       is_favorite: person.is_favorite,
       priority: typeof person.priority === "number" ? person.priority : undefined,
@@ -70,23 +72,36 @@ async function conversationCrm(
   };
 }
 
-function personReader(ctx: QueryCtx) {
-  // Share in-flight lookups within one query, never across reactive executions.
-  const people = new Map<string, ReturnType<typeof personForAddress>>();
-  return (address: string) => {
-    let person = people.get(address);
-    if (!person) {
-      person = personForAddress(ctx, address);
-      people.set(address, person);
+function memo<K, V>(load: (key: K) => Promise<V>) {
+  const cache = new Map<K, Promise<V>>();
+  return (key: K) => {
+    let value = cache.get(key);
+    if (!value) {
+      value = load(key);
+      cache.set(key, value);
     }
-    return person;
+    return value;
   };
 }
+
+// Shares in-flight lookups within one query execution, never across reactive executions.
+// Keys are what the read depends on: a "+1… (smsfp)" sender and a "+1…" participant share
+// one identity lookup, and a person reached by phone and by email is read once.
+function listReader(ctx: QueryCtx) {
+  const getPerson = memo((id: Id<"people">) => ctx.db.get(id));
+  const personByNormalized = memo((normalized: string) => personForNormalized(ctx, normalized, getPerson));
+  return {
+    person: (address: string) => personByNormalized(normalizedAddress(address)),
+    personTags: memo((id: Id<"people">) => ctx.db.query("tags").withIndex("by_person", (q) => q.eq("person_id", id)).collect()),
+    storageUrl: memo((id: Id<"_storage">) => ctx.storage.getUrl(id)),
+  };
+}
+type ListReader = ReturnType<typeof listReader>;
 
 async function withConversationState(
   ctx: QueryCtx,
   conversation: CommaConversationDoc,
-  readPerson = personReader(ctx),
+  read = listReader(ctx),
 ) {
   const state = await ctx.db
     .query("comma_conversation_state")
@@ -107,12 +122,12 @@ async function withConversationState(
     conversation.lastMessage ?? null,
     unreadCount,
   );
-  const people = await Promise.all(conversation.participants.map((participant) => readPerson(participant.address)));
+  const people = await Promise.all(conversation.participants.map((participant) => read.person(participant.address)));
   const participants = await Promise.all(conversation.participants.map(async (participant, index) => {
     const person = people[index];
-    return { ...participant, name: person?.display_name ?? participant.name, photoUrl: person?.photoStorageId ? await ctx.storage.getUrl(person.photoStorageId) : null };
+    return { ...participant, name: person?.display_name ?? participant.name, photoUrl: person?.photoStorageId ? await read.storageUrl(person.photoStorageId) : null };
   }));
-  const crm = await conversationCrm(ctx, conversation, !conversation.isGroup && people.length === 1 ? people[0] ?? null : null);
+  const crm = await conversationCrm(ctx, conversation, !conversation.isGroup && people.length === 1 ? people[0] ?? null : null, read);
   const displayName = conversation.isGroup
     ? conversation.rawDisplayName === undefined ? conversation.displayName
       : conversation.rawDisplayName.trim() || participants.map((p) => p.name ?? p.address).join(", ")
@@ -123,12 +138,12 @@ async function withConversationState(
     const senderAddress = !conversation.isGroup && conversation.participants.length === 1
       ? conversation.participants[0].address
       : (await ctx.db.query("comma_messages").withIndex("by_guid", (q) => q.eq("guid", lastMessage.guid)).unique())?.sender?.address;
-    const person = senderAddress ? await readPerson(senderAddress) : null;
+    const person = senderAddress ? await read.person(senderAddress) : null;
     senderName = person?.display_name ?? senderName;
   }
   return { ...conversation, displayName, participants, flags, unreadCount, ...(crm ? { crm } : {}),
     ...(lastMessage ? { lastMessage: { ...lastMessage, senderName } } : {}),
-    groupPhotoUrl: conversation.groupPhotoStorageId ? await ctx.storage.getUrl(conversation.groupPhotoStorageId) : null,
+    groupPhotoUrl: conversation.groupPhotoStorageId ? await read.storageUrl(conversation.groupPhotoStorageId) : null,
   };
 }
 
@@ -143,10 +158,10 @@ export const listConversations = query({
       .order("desc")
       .filter((q) => q.neq(q.field("lastMessage"), undefined))
       .paginate(args.paginationOpts);
-    const readPerson = personReader(ctx);
+    const read = listReader(ctx);
     return {
       ...result,
-      page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation, readPerson))),
+      page: await Promise.all(result.page.map((conversation) => withConversationState(ctx, conversation, read))),
     };
   },
 });

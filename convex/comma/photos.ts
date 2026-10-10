@@ -1,17 +1,29 @@
 import { v } from "convex/values";
 
 import { stripServiceSuffix } from "../../apps/imsg/shared/address";
+import type { Id } from "../_generated/dataModel";
 import { internalMutation, type QueryCtx } from "../_generated/server";
 import { normalizeEmail, normalizePhone } from "../identity/normalize";
 
-export async function personForAddress(ctx: Pick<QueryCtx, "db">, address: string) {
+export function normalizedAddress(address: string) {
   const raw = stripServiceSuffix(address);
-  const normalized = normalizeEmail(raw) || normalizePhone(raw) || raw;
+  return normalizeEmail(raw) || normalizePhone(raw) || raw;
+}
+
+export function personForAddress(ctx: Pick<QueryCtx, "db">, address: string) {
+  return personForNormalized(ctx, normalizedAddress(address));
+}
+
+export async function personForNormalized(
+  ctx: Pick<QueryCtx, "db">,
+  normalized: string,
+  getPerson = (id: Id<"people">) => ctx.db.get(id),
+) {
   const identities = await ctx.db.query("identities")
     .withIndex("by_normalized", (q) => q.eq("normalized", normalized)).collect();
   for (const identity of identities) {
     if (!identity.person_id) continue;
-    const person = await ctx.db.get(identity.person_id);
+    const person = await getPerson(identity.person_id);
     if (person && !person.merged_into) return person;
   }
   return null;
