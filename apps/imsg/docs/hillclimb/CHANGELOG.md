@@ -2,6 +2,13 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-10. The sidebar header holds still while the app loads (ab4226b7)
+
+- **For the user:** the search box, the lens tabs and their counts no longer jump after the window first paints, and "Select a conversation" no longer slides down. Icons and the header font now load before the first frame, and the counts hold their space until the list arrives.
+- **Metric 3a (layout shifts after first paint, desktop fixture, median of 5):** first visit 5 to 7 went to 0, return visit 8 to 0, and list delayed 1.5 s 7 to 10 to 0. Load time did not change: interleaved A/B list p75 was 489 to 610 ms before against 484 to 564 ms after.
+- **Ratchet:** `ratchet.playwright.ts` withholds the list for 1.5 s and fails on any shift in the queue header. The old build produced 38 header shifts.
+- **Revert:** `git revert ab4226b7`.
+
 ## 2026-10-10. Tapbacks, edits, unsend and delete land on the frame you act (3bf6fd43)
 
 - **For the user:** a tapback, an edit, Undo send and Delete for Me now show on the frame of the click. If the Mac mini rejects one, it reverts with a toast. Before, a tapback showed after a server round trip, and the other three waited for it.
