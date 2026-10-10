@@ -17,7 +17,7 @@
     "build": "tsc -b && cd client && bun run build:web",
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:fixture": "playwright test --config e2e/fixture.playwright.config.ts",
-    "fixture:build": "cd client && EXPO_NO_DOTENV=1 EXPO_NO_CLIENT_ENV_VARS=1 IMSG_VISUAL_FIXTURE=1 bun run expo export --platform web --output-dir ../e2e/fixture/dist",
+    "fixture:build": "cd client && EXPO_NO_DOTENV=1 EXPO_NO_CLIENT_ENV_VARS=1 IMSG_VISUAL_FIXTURE=1 bun run expo export --platform web --output-dir ../e2e/fixture/dist && bun scripts/post-export.ts ../e2e/fixture/dist && bun ../scripts/precompress.ts ../e2e/fixture/dist",
     "fixture:start": "bun run fixture:build && zsh -c 'exec -a imsg:fixture@triage-desk bun --no-env-file e2e/fixture/start.ts'",
     "lint": "oxlint",
     "start": "bun server/index.ts"

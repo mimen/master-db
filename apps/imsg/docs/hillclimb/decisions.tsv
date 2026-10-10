@@ -1,0 +1,2 @@
+id	date	metric	hypothesis	change	before	after	delta	tests	verdict	commit	note
+H0	2026-10-10	all	baseline	harness only: e2e/bench/load.ts, e2e/bench/shift.ts; fixture build matches prod (post-export + precompress)	-	see README baseline	-	typecheck+lint+1028 unit green; e2e 71/74 (3 pre-existing failures)	kept	(this commit)	fixture e2e failures composer-upload:40, visual:125, visual:580 fail on unmodified tree too
