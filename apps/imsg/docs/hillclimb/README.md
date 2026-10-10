@@ -20,7 +20,7 @@ To A/B a change on real data without touching production: `bun run deploy:branch
 | 1b | Cold load, returning visit (HTTP cache and list snapshot present), p75 | `bun e2e/bench/load.ts --target fixture --runs 9` | fixture 228 ms; prod 179 to 180 ms | same | ≤ 200 ms on both | none yet |
 | 1c | Open a conversation to its newest message on screen, immediately after load, p75 | same command, `openP75` | fixture 128 ms; prod 529 to 581 ms (return visit) | same | prod ≤ 150 ms | none yet |
 | 1d | JS on the wire, first visit | same command, `jsKB` | 721 KB fixture (br), 740 KB prod (br); 3.7 MB raw | same | ≤ 450 KB | none yet |
-| 2 | Non-optimistic interactions (WAIT + SPINNER + PARTIAL in the inventory) | [interactions.md](interactions.md) | 84 of 104 (54 WAIT, 21 SPINNER, 9 PARTIAL) | 80 of 104 (51 WAIT, 21 SPINNER, 8 PARTIAL) | 0 for writes the user can see | none yet |
+| 2 | Non-optimistic interactions (WAIT + SPINNER + PARTIAL in the inventory) | [interactions.md](interactions.md) | 84 of 104 (54 WAIT, 21 SPINNER, 9 PARTIAL) | 80 of 104 (51 WAIT, 21 SPINNER, 8 PARTIAL) | 0 for writes the user can see | tapback within 50 ms and visible rollback (ratchet.playwright.ts) |
 | 3a | Layout shifts after first paint, not caused by input, in named regions | `bun e2e/bench/shift.ts --target fixture --runs 5 --visit return` | fixture median 8; prod median 16 | same | 0 | none yet |
 | 3b | Dropped frames scrolling a long thread / during stream-in; input lag while typing | not built yet | — | — | 0 long frames over 16.7 ms at p95 | none yet |
 | 4 | Feel: flows walked in light and dark at desktop and phone sizes | manual walk, findings logged in decisions.tsv | not walked | — | no flash, jump, or missing pending state | — |
