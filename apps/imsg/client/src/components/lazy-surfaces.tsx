@@ -42,6 +42,8 @@ export const PersonContent = deferred(() => import("@/components/person-content"
 export const ScheduledContent = deferred(() => import("@/components/scheduled-content").then((m) => m.ScheduledContent));
 export const SearchContent = deferred(() => import("@/components/search-content").then((m) => m.SearchContent));
 export const SettingsContent = deferred(() => import("@/components/settings-content").then((m) => m.SettingsContent));
+/** Dev and fixture only, so it is not preloaded. */
+export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
 
 const surfaces = [ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent];
 
