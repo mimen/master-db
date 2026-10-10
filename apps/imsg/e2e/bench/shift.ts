@@ -18,8 +18,9 @@ const runs = Number(args.get("runs") ?? 5);
 const visit = args.get("visit") ?? "first";
 const hold = Number(args.get("hold") ?? 0);
 const width = Number(args.get("width") ?? 1440);
+/** --url points a prod run at a branch preview (same Convex data, read-only flow). */
 const base = target === "prod"
-  ? "https://milads-mac-mini.taild31e9a.ts.net:8447"
+  ? args.get("url") ?? "https://milads-mac-mini.taild31e9a.ts.net:8447"
   : `http://127.0.0.1:${process.env.IMSG_FIXTURE_PORT ?? 8399}`;
 
 /** Ordered outermost-last: a source is named by the first region containing it. */

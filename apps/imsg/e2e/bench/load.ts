@@ -27,8 +27,9 @@ const visit = (args.get("visit") ?? "return") as "first" | "return";
 const idle = Number(args.get("idle") ?? 0);
 /** chromium (web/PWA) or webkit (the desktop shell is a WKWebView). Network shaping is chromium-only. */
 const engine = args.get("browser") ?? "chromium";
+/** --url points a prod run at a branch preview (same Convex data, read-only flow). */
 const base = target === "prod"
-  ? "https://milads-mac-mini.taild31e9a.ts.net:8447"
+  ? args.get("url") ?? "https://milads-mac-mini.taild31e9a.ts.net:8447"
   : `http://127.0.0.1:${process.env.IMSG_FIXTURE_PORT ?? 8399}`;
 
 /** Approximates the laptop-to-Mini tailnet path: ~60 ms RTT, ~40 Mbit down. */
