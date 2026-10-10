@@ -533,7 +533,8 @@ const styles = StyleSheet.create({
   lensNote: { fontWeight: "600", paddingHorizontal: 18, paddingTop: 10 },
   group: { flexDirection: "row", justifyContent: "space-between", paddingBottom: 6, paddingHorizontal: 18, paddingTop: 14 },
   groupLabel: { fontSize: 11.5 },
-  groupCount: { fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  // Three tabular digits wide, so a count that grows while pages load (9, 42, 261) never moves.
+  groupCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], minWidth: "3ch", textAlign: "right" } as object,
   badge: { alignItems: "center", borderRadius: 8, borderWidth: 1.5, height: 16, justifyContent: "center", minWidth: 16, paddingHorizontal: 3, position: "absolute", right: -3, top: -3 },
   badgeText: { fontSize: 10, fontVariant: ["tabular-nums"], fontWeight: "700" },
   empty: {
