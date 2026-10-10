@@ -1,10 +1,10 @@
 import { router, Stack } from "expo-router";
 import { Pressable, Text } from "react-native";
-import { SettingsContent } from "@/components/settings-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { Space } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { goBackOrHome } from "@/lib/back-navigation";
+import { SettingsContent } from "@/components/lazy-surfaces";
 
 export default function SettingsScreen(): React.JSX.Element | null {
   const { wide } = useLayoutMode();

@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { KeyboardAvoidingView, Platform } from "react-native";
-import { SearchContent } from "@/components/search-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { SearchContent } from "@/components/lazy-surfaces";
 
 export default function SearchScreen(): React.JSX.Element | null {
   const { wide } = useLayoutMode();

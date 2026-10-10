@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { KeyboardAvoidingView, Platform } from "react-native";
-import { NewChatContent } from "@/components/new-chat-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { NewChatContent } from "@/components/lazy-surfaces";
 
 export default function NewChatScreen(): React.JSX.Element | null {
   const { address, name } = useLocalSearchParams<{ address?: string; name?: string }>();

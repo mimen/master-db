@@ -9,7 +9,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { ContactsTopBar } from "@/components/contacts-ui";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
-import { PersonContent } from "@/components/person-content";
+import { PersonContent } from "@/components/lazy-surfaces";
 import { type ContactListRow, primaryHandle } from "@/lib/identity";
 
 type Mode = "person" | "merge" | "add";

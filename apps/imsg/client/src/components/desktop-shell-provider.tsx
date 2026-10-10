@@ -3,23 +3,26 @@ import type { JSX, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { ChatInfoContent } from "@/components/chat-info-content";
-import { CommandPalette } from "@/components/command-palette";
-import { ContactsWorkspace } from "@/components/contacts-workspace";
 import {
   DesktopShellContext,
   type MessagesRailState,
   type MessagesWorkspaceActions,
 } from "@/components/desktop-shell-context";
 import { DesktopUtilityPane } from "@/components/desktop-split";
-import { ForwardContent } from "@/components/forward-content";
+import {
+  ChatInfoContent,
+  CommandPalette,
+  ContactsWorkspace,
+  ForwardContent,
+  NewChatContent,
+  PersonContent,
+  preloadSurfaces,
+  ScheduledContent,
+  SearchContent,
+  SettingsContent,
+} from "@/components/lazy-surfaces";
 import { MessagesWorkspace } from "@/components/messages-workspace";
-import { NewChatContent } from "@/components/new-chat-content";
 import { OverlayShell } from "@/components/overlay-shell";
-import { PersonContent } from "@/components/person-content";
-import { SearchContent } from "@/components/search-content";
-import { ScheduledContent } from "@/components/scheduled-content";
-import { SettingsContent } from "@/components/settings-content";
 import { Type } from "@/constants/theme";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -112,6 +115,12 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     }
     dispatch({ type: "route/committed", route: projection });
   }, [projection, wide]);
+
+  useEffect(() => {
+    // After the list has had the link to itself, fetch the surface chunks so a first open has no empty frame.
+    const timer = setTimeout(() => (globalThis.requestIdleCallback ?? setTimeout)(preloadSurfaces), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!wide) return;

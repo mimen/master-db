@@ -1,6 +1,6 @@
 import type { JSX } from "react";
+import { ContactsWorkspace } from "@/components/lazy-surfaces";
 
-import { ContactsWorkspace } from "@/components/contacts-workspace";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 
 /**

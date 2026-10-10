@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { ChatInfoContent } from "@/components/chat-info-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { ChatInfoContent } from "@/components/lazy-surfaces";
 
 export default function ChatInfoScreen(): React.JSX.Element | null {
   const { guid } = useLocalSearchParams<{ guid: string }>();

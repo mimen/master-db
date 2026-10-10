@@ -1,9 +1,9 @@
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { PersonContent } from "@/components/lazy-surfaces";
 
 import { useTheme } from "@/hooks/use-theme";
-import { PersonContent } from "@/components/person-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { goBackOrHome } from "@/lib/back-navigation";
 

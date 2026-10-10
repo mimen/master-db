@@ -1,6 +1,6 @@
 import { router } from "expo-router";
+import { ForwardContent } from "@/components/lazy-surfaces";
 
-import { ForwardContent } from "@/components/forward-content";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { selectChat } from "@/lib/selection";
 
