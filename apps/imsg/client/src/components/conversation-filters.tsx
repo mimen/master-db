@@ -84,14 +84,14 @@ export function LensTabs({
             <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
             {lens.count && count === undefined ? (
               // Counts are unknown until the first list arrives; two digits hold their place.
-              <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countPlaceholder]}>00</Text>
+              <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countSlot, styles.countPlaceholder]}>00</Text>
             ) : count === undefined ? null : lens.count === "turn" && count <= 999 ? (
               // The Needs reply count is the app badge; it rolls on snappy as it changes.
-              <View style={phone ? styles.rollPhone : styles.roll}>
+              <View style={[phone ? styles.rollPhone : styles.roll, styles.countSlot]}>
                 <RollingNumber value={count} style={[phone ? styles.tabCountPhone : styles.tabCount, styles.rollText, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]} />
               </View>
             ) : (
-              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, { color: theme.textTertiary }]}>{formatCount(count)}</Text>
+              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countSlot, { color: theme.textTertiary }]}>{formatCount(count)}</Text>
             )}
           </>
         );
@@ -427,6 +427,8 @@ const styles = StyleSheet.create({
   tabCountPhone: { alignSelf: "flex-start", fontSize: 13, lineHeight: 16, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
   tabCountTurn: { fontWeight: "600" },
   countPlaceholder: { opacity: 0 },
+  // Two tabular digits wide at any count under 100, so 8 to 16 to 44 while pages load never moves the tabs.
+  countSlot: { minWidth: "2ch", alignItems: "flex-end", textAlign: "right" } as object,
   roll: { alignSelf: "flex-start", marginLeft: 5 },
   rollPhone: { alignSelf: "flex-start", marginLeft: 3, marginTop: 2 },
   rollText: { alignSelf: "auto", marginLeft: 0, marginTop: 0 },
