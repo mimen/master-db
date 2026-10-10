@@ -14,6 +14,21 @@ export const LOADING_SHELL_CSS =
   `@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}#root:empty::before{background:${Palette.dark.textTertiary}}}` +
   "@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}";
 
+/** Fonts painted on first frame: the sidebar's icons and the header face. */
+const FIRST_PAINT_FONTS = [/\/Ionicons\.[0-9a-f]{32}\.ttf$/, /\/BricolageGrotesque-SemiBold\.[0-9a-f]{32}\.ttf$/];
+
+/**
+ * Preloads for the first-paint fonts, so they download beside the bundle instead of after it.
+ * Registered after first paint, either one moves the sidebar header.
+ */
+export async function fontPreloads(outputDirectory: string): Promise<string> {
+  const root = outputDirectory.replace(/\/$/, "");
+  const files = [...new Bun.Glob("assets/**/*.ttf").scanSync(root)].map((file) => `/${file}`);
+  return FIRST_PAINT_FONTS.flatMap((pattern) => files.filter((file) => pattern.test(file)))
+    .map((href) => `<link rel="preload" href="${href}" as="font" type="font/ttf" crossorigin/>`)
+    .join("");
+}
+
 /** Injects PWA head tags + a zoom-lock viewport into the exported SPA shell. */
 export async function postExport(outputDirectory: string, webSha: string | undefined): Promise<void> {
 const path = `${outputDirectory.replace(/\/$/, "")}/index.html`;
@@ -63,7 +78,7 @@ if (webSha && !html.includes('name="comma-web-sha"')) {
   html = html.replace("</head>", `<meta name="comma-web-sha" content="${webSha}"/></head>`);
 }
 if (!html.includes("manifest.webmanifest")) {
-  html = html.replace("</head>", `${tags}</head>`);
+  html = html.replace("</head>", `${await fontPreloads(outputDirectory)}${tags}</head>`);
 }
 await Bun.write(path, html);
 console.log("PWA tags + zoom lock injected");
