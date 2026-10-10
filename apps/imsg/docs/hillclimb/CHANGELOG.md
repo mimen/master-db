@@ -2,12 +2,12 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
-## 2026-10-10. Settle, read, unread and pin land on the frame you act (H5)
+## 2026-10-10. Settle, read, unread and pin land on the frame you act (4f606d83)
 
 - **For the user:** ⌘E moves the Needs reply count on the frame of the keypress, and the row leaves the lens with the selection. Mark read, mark unread, read on open, pin and unpin change the dot, the Unread count and the pinned order at once. If the Mac mini rejects one, it reverts with the existing toast.
 - **Metric 2 (non-optimistic interactions):** 80 became 73. `e2e/bench/optimistic.ts`, fixture with tailnet shaping, 9 interleaved runs, p50/p75: settle 339/344 to 22/23 ms, mark unread 286/299 to 15/15 ms, pin 299/299 to 15/16 ms.
 - **Ratchet:** `ratchet.playwright.ts` requires the Needs reply count within 50 ms of ⌘E and the unread label within 50 ms of Mark as unread, and requires a mark read to roll back with a toast under an injected bridge fault.
-- **Revert:** `git revert` the H5 commit.
+- **Revert:** `git revert 4f606d83`.
 
 ## 2026-10-10. The connection starts with the page, not after the app loads (1202bb26)
 
