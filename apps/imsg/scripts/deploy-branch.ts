@@ -153,8 +153,8 @@ if (desktopRequired) console.log(`Comma Dev app: ${localAppPath}`);
 }
 
 function incomingSpec(relativePath: string): string {
-  const path = `${remoteIncomingDirectory}/${relativePath}`.replaceAll(" ", "\\ ");
-  return `${sshTarget}:${path}`;
+  // rsync 3.x protects remote args by default, so spaces pass through unescaped; a "\ " lands literally.
+  return `${sshTarget}:${remoteIncomingDirectory}/${relativePath}`;
 }
 
 async function buildAndInstallDesktop(): Promise<void> {
