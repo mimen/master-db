@@ -19,6 +19,8 @@ const runs = Number(args.get("runs") ?? 5);
 const visit = args.get("visit") ?? "first";
 const hold = Number(args.get("hold") ?? 0);
 const width = Number(args.get("width") ?? 1440);
+/** tailnet shapes fixture runs like the laptop-to-Mini link (load.ts uses the same numbers). */
+const profile = args.get("profile") ?? "none";
 /** --url points a prod run at a branch preview (same Convex data, read-only flow). */
 const base = target === "prod"
   ? args.get("url") ?? "https://milads-mac-mini.taild31e9a.ts.net:8447"
@@ -40,6 +42,11 @@ for (let run = 0; run < runs; run++) {
     await prime.close();
   }
   const page = await context.newPage();
+  if (profile === "tailnet" && target === "fixture") {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Network.enable");
+    await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 60, downloadThroughput: 5_000_000, uploadThroughput: 2_500_000 });
+  }
   await page.addInitScript(census, REGIONS);
   if (hold > 0 && target === "fixture") {
     let painted = false;
@@ -76,4 +83,4 @@ await browser.close();
 const counts = all.map((s) => s.length).sort((a, b) => a - b);
 const byRegion: Record<string, number> = {};
 for (const shift of all.flat()) byRegion[`${shift.phase}:${shift.region}`] = (byRegion[`${shift.phase}:${shift.region}`] ?? 0) + 1;
-console.log(JSON.stringify({ summary: true, target, visit, hold, width, runs, shiftsMedian: counts[Math.floor(counts.length / 2)], shiftsMax: counts.at(-1), byRegion }));
+console.log(JSON.stringify({ summary: true, target, profile, visit, hold, width, runs, shiftsMedian: counts[Math.floor(counts.length / 2)], shiftsMax: counts.at(-1), byRegion }));
