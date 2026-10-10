@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { AirtableEventRow, EventLink } from "@/lib/identity";
 import { useSearchEvents } from "@/lib/identity";
 import { useTheme } from "@/hooks/use-theme";

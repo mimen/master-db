@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
 import { memo, useEffect, useState } from "react";

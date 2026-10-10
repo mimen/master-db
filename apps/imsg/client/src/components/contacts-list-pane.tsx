@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
 import UserAdd01Icon from "@hugeicons/core-free-icons/UserAdd01Icon";

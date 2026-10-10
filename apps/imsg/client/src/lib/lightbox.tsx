@@ -7,7 +7,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { VideoView, useVideoPlayer } from "expo-video";
 
 import { useQuery } from "convex/react";

@@ -4,7 +4,7 @@ import { useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Reanimated, { FadeIn } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { api } from "@/lib/api";
 import { aiApi, shelfSuggestions } from "@/lib/ai-api";
 import { calendarTemplateUrl, eventShelfLabel } from "@/lib/calendar-link";

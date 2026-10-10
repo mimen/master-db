@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ChatSummary } from "@shared/types";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 

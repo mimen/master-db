@@ -1,7 +1,7 @@
 import { runCommand } from "@/lib/convex-commands";
 import { requestSavedView } from "@/lib/palette/saved-views";
 import { messagingCommandError } from "@/lib/messaging-api";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";

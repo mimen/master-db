@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatDayDivider, formatThreadTime, sameDay } from "@/lib/format";

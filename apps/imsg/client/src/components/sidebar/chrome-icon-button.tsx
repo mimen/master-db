@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
 import { forwardRef } from "react";
 import { Pressable, StyleSheet, View } from "react-native";

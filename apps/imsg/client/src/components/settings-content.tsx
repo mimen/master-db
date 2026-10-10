@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { displayReleaseSha } from "@shared/release-identity";
 import type { SuggestionModel } from "@shared/types";
 import { createContext, useContext, useState, useSyncExternalStore, type JSX, type ReactNode } from "react";

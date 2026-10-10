@@ -4,7 +4,7 @@ import { useConvexConnectionState } from "convex/react";
 import { deliveryState } from "@/lib/delivery-state";
 import { openExternalUrl } from "@/lib/external-link";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { attachmentThumbnailUrl, attachmentUrl } from "@/lib/api";
 import { formatAddress } from "@shared/address";
 import type { Message, SpecialContent } from "@shared/types";

@@ -1,7 +1,7 @@
 import { createElement, useEffect, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { useActionSheet } from "@/lib/action-sheet";
 import { Springs } from "@/constants/springs";

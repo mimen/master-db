@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { loadAsync } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";

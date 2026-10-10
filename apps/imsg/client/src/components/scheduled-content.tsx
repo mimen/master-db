@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ChatSummary, ScheduledMessage } from "@shared/types";
 import { CenteredSpinner, EmptyState } from "@/components/empty-state";
 import { ScheduleEditor } from "@/components/schedule-editor";

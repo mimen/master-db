@@ -25,7 +25,7 @@ if (process.env.COMMA_AVATAR_TEST_CHILD !== "1") {
     failImage = props.onError;
     return createElement("img", { src: props.source.uri });
   } }));
-  mock.module("@expo/vector-icons", () => ({ Ionicons: () => null }));
+  mock.module("@expo/vector-icons/Ionicons", () => ({ default: () => null }));
   mock.module("react-native", () => ({
     View: ({ children }: { children: React.ReactNode }) => createElement("div", null, children),
     Text: ({ children }: { children: React.ReactNode }) => createElement("span", null, children),

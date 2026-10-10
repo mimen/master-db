@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   ActionSheetIOS,
   Modal,

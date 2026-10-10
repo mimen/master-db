@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
