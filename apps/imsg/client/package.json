@@ -57,5 +57,8 @@
     "lint": "expo lint",
     "build:web": "bun scripts/validate-public-env.ts && expo export --platform web && bun scripts/post-export.ts && bun ../scripts/precompress.ts dist"
   },
-  "private": true
+  "private": true,
+  "patchedDependencies": {
+    "react-native-gesture-handler@2.32.0": "patches/react-native-gesture-handler@2.32.0.patch"
+  }
 }
