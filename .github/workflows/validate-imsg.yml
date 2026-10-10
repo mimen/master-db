@@ -42,6 +42,12 @@ jobs:
       - name: Test
         working-directory: apps/imsg
         run: bun test
+      - name: Build fixture web export
+        working-directory: apps/imsg
+        run: bun run fixture:build
+      - name: First-visit JS size ratchet
+        working-directory: apps/imsg
+        run: bun test ./scripts/bundle-size.ratchet.ts
       - name: Hill-climb ratchets (fixture browser)
         working-directory: apps/imsg
         run: |
