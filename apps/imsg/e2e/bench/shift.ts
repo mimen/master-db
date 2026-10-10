@@ -10,6 +10,7 @@
  */
 import { chromium, type Page } from "@playwright/test";
 import { cachedChromium } from "../chromium";
+import { census, REGIONS, type Shift } from "./census";
 
 const args = new Map<string, string>();
 for (let i = 2; i < Bun.argv.length; i += 2) args.set(Bun.argv[i].replace(/^--/, ""), Bun.argv[i + 1]);
@@ -22,36 +23,6 @@ const width = Number(args.get("width") ?? 1440);
 const base = target === "prod"
   ? args.get("url") ?? "https://milads-mac-mini.taild31e9a.ts.net:8447"
   : `http://127.0.0.1:${process.env.IMSG_FIXTURE_PORT ?? 8399}`;
-
-/** Ordered outermost-last: a source is named by the first region containing it. */
-const REGIONS = ["conversation-row", "thread-message-list", "state-strip", "thread-view", "conversation-list-scroll", "triage-queue-header"];
-
-interface Shift { phase: string; region: string; value: number; node: string }
-
-const census = (regions: string[]) => {
-  const target = window as unknown as { __shifts: Shift[]; __phase: string };
-  target.__shifts = [];
-  target.__phase = "boot";
-  const name = (node: Node | null): string => {
-    const el = node instanceof Element ? node : node?.parentElement ?? null;
-    if (!el) return "unknown";
-    for (const region of regions) if (el.closest(`[data-testid="${region}"]`)) return region;
-    return "other";
-  };
-  const describe = (node: Node | null): string => {
-    const el = node instanceof Element ? node : node?.parentElement ?? null;
-    if (!el) return "?";
-    const id = el.closest("[data-testid]")?.getAttribute("data-testid") ?? "";
-    return `${el.tagName.toLowerCase()}${id ? `@${id}` : ""}`;
-  };
-  new PerformanceObserver((list) => {
-    for (const entry of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean; sources?: Array<{ node: Node | null }> }>) {
-      if (entry.hadRecentInput) continue;
-      const sources = entry.sources?.length ? entry.sources : [{ node: null }];
-      for (const source of sources) target.__shifts.push({ phase: target.__phase, region: name(source.node), value: entry.value, node: describe(source.node) });
-    }
-  }).observe({ type: "layout-shift", buffered: true });
-};
 
 async function phase(page: Page, value: string): Promise<void> {
   await page.evaluate((next) => { (window as unknown as { __phase: string }).__phase = next; }, value);

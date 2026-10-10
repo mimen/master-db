@@ -82,7 +82,10 @@ export function LensTabs({
         return (
           <>
             <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
-            {count === undefined ? null : lens.count === "turn" && count <= 999 ? (
+            {lens.count && count === undefined ? (
+              // Counts are unknown until the first list arrives; two digits hold their place.
+              <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countPlaceholder]}>00</Text>
+            ) : count === undefined ? null : lens.count === "turn" && count <= 999 ? (
               // The Needs reply count is the app badge; it rolls on snappy as it changes.
               <View style={phone ? styles.rollPhone : styles.roll}>
                 <RollingNumber value={count} style={[phone ? styles.tabCountPhone : styles.tabCount, styles.rollText, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]} />
@@ -423,6 +426,7 @@ const styles = StyleSheet.create({
   tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18, marginLeft: 5 },
   tabCountPhone: { alignSelf: "flex-start", fontSize: 13, lineHeight: 16, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
   tabCountTurn: { fontWeight: "600" },
+  countPlaceholder: { opacity: 0 },
   roll: { alignSelf: "flex-start", marginLeft: 5 },
   rollPhone: { alignSelf: "flex-start", marginLeft: 3, marginTop: 2 },
   rollText: { alignSelf: "auto", marginLeft: 0, marginTop: 0 },

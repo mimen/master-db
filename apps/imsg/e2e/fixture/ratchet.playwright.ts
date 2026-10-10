@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { census, REGIONS, type Shift } from "../bench/census";
 import { expect, test } from "../fixtures/desk";
 
 /**
@@ -68,4 +69,23 @@ test("ratchet: a tapback badge is on screen within 50 ms of the click", async ({
     return ratchet.__shownAt !== undefined && ratchet.__inputAt !== undefined ? ratchet.__shownAt - ratchet.__inputAt : false;
   }, undefined, { timeout: 5_000 });
   expect(Number(await elapsed.jsonValue())).toBeLessThanOrEqual(50);
+});
+
+test("the queue header holds still while the conversation list loads late", async ({ desk }) => {
+  const page = desk.page;
+  await page.addInitScript(census, REGIONS);
+  let held = false;
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string };
+    if (body.name === "comma/queries:listConversations" && !held) {
+      held = true;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    await route.continue();
+  });
+  await page.goto("/", { waitUntil: "commit" });
+  await page.waitForTimeout(2000);
+  await expect(page.getByTestId("conversation-row").first()).toBeVisible();
+  const shifts = await page.evaluate(() => (window as unknown as { __shifts: Shift[] }).__shifts);
+  expect(shifts.filter((shift) => shift.region === "triage-queue-header")).toEqual([]);
 });

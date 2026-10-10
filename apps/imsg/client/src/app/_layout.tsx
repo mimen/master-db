@@ -1,5 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
-import { useFonts } from "expo-font";
+import { Ionicons } from "@expo/vector-icons";
+import { loadAsync } from "expo-font";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -27,9 +28,11 @@ import { ensureGlobalWebCss } from "@/lib/web-css";
 import { HEADER_FONT, HEADER_FONT_SOURCE } from "@/lib/header-font";
 
 ensureGlobalWebCss();
+// Before the first render: an icon draws an empty Text until its font is registered, and the
+// header face swaps in late, so either one registered after first paint moves the sidebar header.
+void loadAsync({ ...Ionicons.font, [HEADER_FONT]: HEADER_FONT_SOURCE }).catch(() => undefined);
 
 export default function RootLayout() {
-  useFonts({ [HEADER_FONT]: HEADER_FONT_SOURCE });
   const colorScheme = useColorScheme();
   useEffect(() => {
     void hydrateDrafts();

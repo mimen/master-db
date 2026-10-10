@@ -30,7 +30,8 @@ export function RollingNumber({ value, style }: RollingNumberProps): React.JSX.E
     width.value = width.value === 0 ? target : withSpring(target, spring);
   }, [digitWidth, places.length, spring, width]);
 
-  const row = useAnimatedStyle(() => ({ width: width.value }));
+  // Unmeasured, the row sizes to the plain number below, so the first paint already has its width.
+  const row = useAnimatedStyle(() => (width.value === 0 ? {} : { width: width.value }));
 
   return (
     <View accessible accessibilityLabel={String(value)}>
@@ -38,9 +39,9 @@ export function RollingNumber({ value, style }: RollingNumberProps): React.JSX.E
         0
       </Text>
       <Animated.View style={[styles.row, { height: lineHeight }, row]}>
-        {digitWidth > 0 && places.map(({ key, digit }) => (
+        {digitWidth > 0 ? places.map(({ key, digit }) => (
           <Wheel key={key} digit={digit} width={digitWidth} lineHeight={lineHeight} style={style} spring={spring} />
-        ))}
+        )) : <Text aria-hidden style={[style, styles.digit]}>{value}</Text>}
       </Animated.View>
     </View>
   );

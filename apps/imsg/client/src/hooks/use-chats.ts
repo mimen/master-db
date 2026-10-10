@@ -91,7 +91,8 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
       return frozen.has(c.guid) && matchesFilters(c, "all", type);
     });
   }, [all, state, type, freezeMembership, held]);
-  const counts = useMemo(() => computeCounts(all, type), [all, type]);
+  // Unknown, not zero, until the first list arrives: a zero would paint and then jump.
+  const counts = useMemo(() => (directory === null ? null : computeCounts(all, type)), [directory, all, type]);
 
   // Dock/home-screen unread badge (Safari web apps + installed PWAs).
   useEffect(() => {
