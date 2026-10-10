@@ -24,7 +24,7 @@ const names = new Map<number, string>();
 page.on("websocket", (ws) => {
   ws.on("framesent", (f) => {
     const m = JSON.parse(String(f.payload)) as { type: string; modifications?: Array<{ type: string; queryId: number; udfPath: string; args: Array<{ paginationOpts?: { numItems: number } }> }> };
-    if (m.type === "Connect") log("sent Connect");
+    if (m.type === "Connect" || m.type === "Authenticate") log(`sent ${m.type}`);
     if (m.type !== "ModifyQuerySet") return;
     for (const mod of m.modifications ?? []) if (mod.type === "Add") {
       const n = mod.udfPath + (mod.args[0]?.paginationOpts ? `(n=${mod.args[0].paginationOpts.numItems})` : "");

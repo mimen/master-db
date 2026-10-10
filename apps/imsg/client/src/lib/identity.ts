@@ -1,5 +1,6 @@
 import { ConvexReactClient, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
+import { bootWebSocket } from "./boot-handoff";
 import { requireConvexUrl } from "./public-env";
 
 /**
@@ -13,7 +14,7 @@ import { requireConvexUrl } from "./public-env";
 
 export const convexClient = new ConvexReactClient(
   requireConvexUrl(process.env.EXPO_PUBLIC_CONVEX_URL),
-  { unsavedChangesWarning: false },
+  { unsavedChangesWarning: false, webSocketConstructor: bootWebSocket() },
 );
 
 

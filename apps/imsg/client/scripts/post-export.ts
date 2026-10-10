@@ -1,4 +1,7 @@
+import { version as convexVersion } from "convex";
+
 import { Palette } from "../src/constants/tokens";
+import { bootScript, convexSocketUrl } from "../src/lib/boot-handoff";
 
 /**
  * Painted while #root is still empty. React's first commit fills #root and the
@@ -15,7 +18,7 @@ export const LOADING_SHELL_CSS =
   "@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}";
 
 /** Injects PWA head tags + a zoom-lock viewport into the exported SPA shell. */
-export async function postExport(outputDirectory: string, webSha: string | undefined): Promise<void> {
+export async function postExport(outputDirectory: string, webSha: string | undefined, convexUrl?: string): Promise<void> {
 const path = `${outputDirectory.replace(/\/$/, "")}/index.html`;
 let html = await Bun.file(path).text();
 
@@ -62,6 +65,10 @@ const tags = [
 if (webSha && !html.includes('name="comma-web-sha"')) {
   html = html.replace("</head>", `<meta name="comma-web-sha" content="${webSha}"/></head>`);
 }
+// Ahead of the bundle's deferred script, so the socket and token overlap its download.
+if (convexUrl && !html.includes("__commaBoot")) {
+  html = html.replace("<head>", `<head><script>${bootScript(convexSocketUrl(convexUrl, convexVersion))}</script>`);
+}
 if (!html.includes("manifest.webmanifest")) {
   html = html.replace("</head>", `${tags}</head>`);
 }
@@ -72,5 +79,7 @@ console.log("PWA tags + zoom lock injected");
 if (import.meta.main) {
   const outputDirectory = process.argv[2]
     ?? new URL("../dist", import.meta.url).pathname;
-  await postExport(outputDirectory, process.env.EXPO_PUBLIC_IMSG_WEB_SHA);
+  const webSha = process.env.EXPO_PUBLIC_IMSG_WEB_SHA;
+  // Only release and preview builds stamp a SHA. The fixture build must not open production Convex.
+  await postExport(outputDirectory, webSha, webSha ? process.env.EXPO_PUBLIC_CONVEX_URL : undefined);
 }

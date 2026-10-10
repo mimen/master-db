@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { version } from "convex";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +45,30 @@ describe("postExport", () => {
     expect(html).toContain(`#root:empty{background:${Palette.light.background}}`);
     expect(html).toContain(`@media (prefers-color-scheme:dark){#root:empty{background:${Palette.dark.background}}`);
     expect(html).toContain("@media (prefers-reduced-motion:reduce){#root:empty::before{animation:none;opacity:.4}}");
+  });
+
+  test("starts the Convex socket and token request ahead of the bundle", async () => {
+    const root = mkdtempSync(join(tmpdir(), "comma-post-export-"));
+    roots.push(root);
+    writeFileSync(join(root, "index.html"), '<html><head><script src="/entry.js" defer></script></head><body></body></html>');
+
+    await postExport(root, undefined, "https://shiny-gerbil-853.convex.cloud");
+    await postExport(root, undefined, "https://shiny-gerbil-853.convex.cloud");
+
+    const html = await Bun.file(join(root, "index.html")).text();
+    const boot = html.indexOf(`new WebSocket("wss://shiny-gerbil-853.convex.cloud/api/${version}/sync")`);
+    expect(boot).toBeGreaterThan(-1);
+    expect(boot).toBeLessThan(html.indexOf('src="/entry.js"'));
+    expect(html.indexOf('fetch("/api/convex-token")')).toBeLessThan(html.indexOf('src="/entry.js"'));
+    expect(html.split("__commaBoot").length).toBe(2);
+  });
+
+  test("without a Convex URL the page has no boot script", async () => {
+    const root = mkdtempSync(join(tmpdir(), "comma-post-export-"));
+    roots.push(root);
+    writeFileSync(join(root, "index.html"), "<html><head></head><body></body></html>");
+    await postExport(root, undefined);
+    expect(await Bun.file(join(root, "index.html")).text()).not.toContain("__commaBoot");
   });
 
   test("loading shell grounds match the app's light and dark backgrounds", async () => {
