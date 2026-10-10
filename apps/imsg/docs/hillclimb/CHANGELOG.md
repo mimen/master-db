@@ -2,6 +2,12 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-10. Lens tabs keep their place as counts fill in (53308655)
+
+- **For the user:** on a fresh load, Waiting and All no longer shuffle sideways while the Needs reply and Unread counts climb from one digit to two.
+- **Metric 3a (production first visit, layout shifts per load, median of 3):** production 7, 5 and 8 against the preview's 2, 4 and 4 in interleaved rounds. First-visit list p75 was unchanged (745 and 788 ms against 733 and 735 ms).
+- **Revert:** `git revert 53308655`.
+
 ## 2026-10-10. Lens counts hold steady while the list loads (79c2b20d)
 
 - **For the user:** on reopening Comma, the Unread and Waiting counts no longer drop and climb back over the first second and a half, and the lens tabs no longer slide as they do. The saved list stays in place until the live list has fully arrived.
