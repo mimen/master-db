@@ -2,13 +2,13 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
-## 2026-10-10. A first visit downloads a third less JavaScript (cca4a7cd..041640ce)
+## 2026-10-10. A first visit downloads a third less JavaScript (e47ecc85..c457621b)
 
 - **For the user:** a fresh browser or a new desktop install fetches 524 KB of script instead of 759 KB before the conversation list can paint. Settings, Scheduled, Details, a person, Contacts, search, new message, forward and the command palette load as their own small files, fetched quietly a few seconds after the list appears, so their first open still shows at once.
 - **Metric 1d (first-visit JS, brotli):** fixture export 739 KB became 505 KB (-32%). On the wire, production's entry is 759 KB and the preview's three scripts total 524 KB. Raw JS went from 3,712 KB to 2,477 KB, and the export ships 2 font files instead of 20. Five changes, each measured alone: Ionicons only (-101 KB), Metro tree shaking (-65 KB), a gesture-handler patch that lets Reanimated tree-shake (-27 KB), deferred surfaces (-37 KB), the dev-only UI gallery deferred (-4 KB). See H11 to H15.
 - **Metric 1a (first-visit list, production data):** 4 interleaved rounds of 5 against production at ee03a642, read-only. Pooled p50 540 to 500 ms, p75 668 to 603 ms, P(preview faster) 0.68. Return visit p50 169 to 150 ms, p75 224 to 215 ms, P 0.73. The target of 450 KB is not met yet.
 - **Ratchet:** `scripts/bundle-size.ratchet.ts` sums the brotli size of every `<script src>` in the fixture export and fails above 520,000 bytes. `validate-imsg.yml` builds the fixture export, then runs it. It fails on the origin/main build (739,034) and on the build before deferred surfaces (546,111).
-- **Revert:** `git revert 041640ce 28051b05 f5ae3f6d 567e2736 600e49fd cca4a7cd`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
+- **Revert:** `git revert c457621b 244fa9cf 8f2e5a04 f636534c ca200280 e47ecc85`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
 
 ## 2026-10-10. Settle, read, unread and pin land on the frame you act (4f606d83)
 
