@@ -42,6 +42,8 @@ export interface RunCommandOptions {
   clientKey?: string;
   /** Cancels observation, not the queued operation. */
   signal?: AbortSignal;
+  /** Runs once the command is queued, before the bridge executes it. */
+  onQueued?: () => void;
 }
 
 function newClientKey(): string {
@@ -69,6 +71,7 @@ export async function enqueueVia(client: CommandClient, chatGuid: string, payloa
 export async function runCommandVia<P extends CommandPayload>(client: ResultCommandClient, chatGuid: string | null, payload: P, options: RunCommandOptions = {}): Promise<ResultFor<P["kind"]>> {
   options.signal?.throwIfAborted();
   const commandId = await enqueueCommandVia(client, chatGuid, payload, options.clientKey);
+  options.onQueued?.();
   options.signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     let settled = false;

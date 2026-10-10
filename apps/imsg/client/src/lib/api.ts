@@ -37,28 +37,6 @@ export const api = {
     return enqueueTextSendVia(convexClient as unknown as CommandClient, chatGuid, clientKey, body);
   },
   sendText: messagingApi.sendText,
-  async markRead(chatGuid: string): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, { kind: "markRead" });
-  },
-  async markUnread(chatGuid: string): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, { kind: "markUnread" });
-  },
-  async dismiss(
-    chatGuid: string,
-    _kind: "unresponded" | "waiting",
-    expectedLatestMessageGuid?: string,
-  ): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, {
-      kind: "settle",
-      ...(expectedLatestMessageGuid !== undefined ? { messageGuid: expectedLatestMessageGuid } : {}),
-    });
-  },
-  async undismiss(chatGuid: string, _kind: "unresponded" | "waiting"): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, { kind: "unsettle" });
-  },
-  async setPinned(chatGuid: string, pinned: boolean): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, { kind: "pin", value: pinned });
-  },
   contacts(q: string): Promise<Contact[]> {
     return convexClient.query(identityApi.searchContacts, contactSearchArgs(q));
   },

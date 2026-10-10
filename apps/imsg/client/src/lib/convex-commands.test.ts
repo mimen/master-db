@@ -94,6 +94,16 @@ describe("runCommandVia", () => {
     expect(h.cleanupCount()).toBe(1);
   });
 
+  test("reports the command queued before the bridge has run it", async () => {
+    const h = subscriptionClient();
+    let queued = false;
+    const pending = runCommandVia(h.fake, "chat", { kind: "settle" }, { onQueued: () => { queued = true; } });
+    await h.subscribed;
+    expect(queued).toBe(true);
+    h.push(receipt("sent", { kind: "settle", ok: true }));
+    await pending;
+  });
+
   test("cached and synchronous terminal results both resolve without leaking subscriptions", async () => {
     for (const synchronous of [false, true]) {
       const h = subscriptionClient(receipt("sent", { kind: "clearSuggestionLearning", ok: true }), synchronous);

@@ -55,6 +55,20 @@ async function openAlex(page: Page): Promise<void> {
 }
 
 const UNSEND_TEXT = "bench unsend probe";
+async function openRowMenu(page: Page, name: string, item: string): Promise<void> {
+  await page.getByRole("tab", { name: "All", exact: true }).click();
+  const row = page.getByTestId("conversation-row").filter({ hasText: name });
+  await row.hover();
+  await row.getByRole("button", { name: /More actions for/ }).click();
+  await page.getByRole("dialog").getByText(item, { exact: true }).waitFor();
+}
+
+/** The Needs reply tab's count, read off its accessible name. */
+function needsReplyCount(): number | null {
+  const label = [...document.querySelectorAll('[aria-label^="Needs reply, "]')].map((tab) => tab.getAttribute("aria-label")).at(0);
+  return label ? Number(label.slice("Needs reply, ".length)) : null;
+}
+
 
 const CASES: Case[] = [
   {
@@ -100,6 +114,36 @@ const CASES: Case[] = [
     act: (page) => page.getByRole("menuitem", { name: "Undo send" }).click(),
     done: () => ![...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
       .some((element) => element.getAttribute("aria-label") === "You: bench unsend probe"),
+  },
+  {
+    // Alex's open thread sits in Needs reply; the count must drop by one.
+    name: "settle",
+    setup: async (page) => {
+      await openAlex(page);
+      await page.getByPlaceholder("iMessage").blur();
+      await page.waitForFunction(needsReplyCount, undefined, { timeout: 10_000 });
+      await page.evaluate(`window.__needsBefore = (${needsReplyCount.toString()})()`);
+    },
+    act: (page) => page.keyboard.press("Meta+e"),
+    done: () => {
+      const label = [...document.querySelectorAll('[aria-label^="Needs reply, "]')].map((tab) => tab.getAttribute("aria-label")).at(0);
+      return label !== undefined && Number(label?.slice("Needs reply, ".length)) === (window as unknown as { __needsBefore: number }).__needsBefore - 1;
+    },
+  },
+  {
+    // Alex has no unread messages in the seed, so the dot or label appears only from the action.
+    name: "mark-unread",
+    setup: (page) => openRowMenu(page, "Alex Rivera", "Mark as unread"),
+    act: (page) => page.getByRole("dialog").getByText("Mark as unread", { exact: true }).click(),
+    done: () => [...document.querySelectorAll('[data-testid="conversation-row"]')]
+      .some((row) => /^Alex Rivera, unread,/.test(row.getAttribute("aria-label") ?? "")),
+  },
+  {
+    // Pinned conversations lead their age group; pinned, Launch Crew's newer message puts it ahead of pinned Alex.
+    name: "pin",
+    setup: (page) => openRowMenu(page, "Launch Crew", "Pin"),
+    act: (page) => page.getByRole("dialog").getByText("Pin", { exact: true }).click(),
+    done: () => document.querySelector('[data-testid="conversation-row"]')?.getAttribute("aria-label")?.startsWith("Launch Crew") === true,
   },
 ].filter((c) => !only || c.name === only);
 

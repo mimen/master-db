@@ -23,6 +23,7 @@ import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
 import { onOpenThreadSearch } from "@/lib/thread-search";
+import { readChat } from "@/lib/chat-actions";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
 import type { Message, Participant } from "@shared/types";
@@ -184,7 +185,7 @@ export function ThreadView({
     setSearchOpen(false);
     setSearchText("");
     // Preview (glide-mode j/k) must not mark read; activation ("reply") does.
-    if (!previewOnly) void api.markRead(chatGuid).catch(() => undefined);
+    if (!previewOnly) readChat(chatGuid).catch(() => undefined);
   }, [chatGuid, previewOnly]);
 
   useEffect(() => {
@@ -249,7 +250,7 @@ export function ThreadView({
 
   useEffect(() => {
     if (readObserver.current.observe(chatGuid, [...messages, ...newestMessages], !previewOnly)) {
-      void api.markRead(chatGuid).catch(() => undefined);
+      readChat(chatGuid).catch(() => undefined);
     }
   }, [chatGuid, messages, newestMessages, previewOnly]);
 

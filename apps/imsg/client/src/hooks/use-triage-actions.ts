@@ -2,7 +2,7 @@ import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
 import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
-import { api } from "@/lib/api";
+import { writeFlags } from "@/lib/chat-actions";
 import { showToast } from "@/lib/toast";
 import { runExclusiveTriageWrite, settleAnchor, type TriageWriteOutcome } from "@/lib/triage-writes";
 
@@ -38,17 +38,27 @@ export function undoLastTriageAction(): boolean {
   return runLatestUndo();
 }
 
-type TriageKind = "unresponded" | "waiting";
-const TRIAGE_KINDS: readonly TriageKind[] = ["unresponded", "waiting"];
+function unsettle(chat: ChatSummary, onQueued?: () => void): Promise<void> {
+  return writeFlags({ change: "unsettle", chatGuid: chat.guid }, { kind: "unsettle" }, onQueued);
+}
 
-async function dismissOne(chat: ChatSummary, kind: TriageKind): Promise<void> {
-  try {
-    await api.dismiss(chat.guid, kind, settleAnchor(chat.lastMessage));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    showToast(message.startsWith("409:") ? "Conversation changed. Review the newest message." : "Could not settle conversation");
-    throw error;
-  }
+/**
+ * Resolves once the command is queued, as the gesture did before it waited on the bridge, so the
+ * exclusion, the undo entry and the toast keep their timing. A failure at any point toasts; the
+ * flags have already rolled back.
+ */
+function untilQueued(write: (onQueued: () => void) => Promise<void>, failure: (error: unknown) => string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    write(resolve).catch((error: unknown) => {
+      showToast(failure(error));
+      reject(error);
+    });
+  });
+}
+
+function settleFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("latest message changed") ? "Conversation changed. Review the newest message." : "Could not settle conversation";
 }
 
 /**
@@ -59,17 +69,20 @@ async function dismissOne(chat: ChatSummary, kind: TriageKind): Promise<void> {
  */
 export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
   return runExclusiveTriageWrite(chat.guid, async () => {
-    const kinds = TRIAGE_KINDS.filter((kind) => chat.flags[kind]);
-    if (kinds.length === 0) return;
+    const last = chat.lastMessage;
+    if (!last || (!chat.flags.unresponded && !chat.flags.waiting)) return;
 
     const undoToken = beginUndoAction();
+    const anchor = settleAnchor(last);
+    const queued = untilQueued((onQueued) => writeFlags({ change: "settle", chatGuid: chat.guid, seen: anchor },
+      { kind: "settle", ...(anchor !== undefined ? { messageGuid: anchor } : {}) }, onQueued), settleFailure);
     emit(settlingListeners, chat.guid);
-    await Promise.all(kinds.map((kind) => dismissOne(chat, kind)));
+    await queued;
     emit(resolvedListeners, chat.guid);
     // The entry runs long after this write released the conversation, and it
     // takes no exclusion of its own. Undo must never be refused as busy.
     commitUndoAction(undoToken, () => {
-      void Promise.all(kinds.map((kind) => api.undismiss(chat.guid, kind)))
+      unsettle(chat)
         .then(() => emit(undoListeners, chat.guid))
         .catch(() => showToast("Couldn't undo the settle. Try again."));
     });
@@ -92,12 +105,7 @@ function unsettleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
     if (!last) return;
     // Un-settling returns the conversation to the queue its last message implies,
     // which is exactly what computeFlags derives once the anchors are cleared.
-    try {
-      await Promise.all(TRIAGE_KINDS.map((kind) => api.undismiss(chat.guid, kind)));
-    } catch (error) {
-      showToast("Couldn't un-settle the conversation. Try again.");
-      throw error;
-    }
+    await untilQueued((onQueued) => unsettle(chat, onQueued), () => "Couldn't un-settle the conversation. Try again.");
     emit(undoListeners, chat.guid);
   });
 }

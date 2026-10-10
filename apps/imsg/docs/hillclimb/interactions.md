@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **24 OPTIMISTIC, 8 PARTIAL, 21 SPINNER, 51 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **31 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 45 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -58,13 +58,13 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 
 | Interaction | Handler | Class | Lag or note | Failure shown |
 |---|---|---|---|---|
-| Settle (⌘E, chip, swipe) | use-triage-actions.ts:60 → E(settle) | PARTIAL | Selection advances; flags and counts wait for the mirror | Toast. Selection not restored |
-| Un-settle | use-triage-actions.ts:89 → E(unsettle) | WAIT | Flags wait | Toast |
-| Undo triage (toast, ⌘Z) | use-triage-actions.ts:71 → E(unsettle/markRead) | WAIT | Stack pops before the result | Toast |
-| Mark read (menu, swipe) | chat-actions.ts:14 → E(markRead) | WAIT | No flag patch | Toast |
-| Mark unread (menu, swipe, ⌘U) | chat-actions.ts:18 → E(markUnread) | WAIT | Same | Toast |
-| Read on open or inbound | thread-view.tsx:181,250 → E(markRead) | WAIT | Unread dot waits | Swallowed |
-| Pin or unpin | chat-actions.ts:10 → E(pin) | WAIT | Switch reads the directory flag | Toast |
+| Settle (⌘E, chip, swipe) | use-triage-actions.ts:70 → R(settle) | OPTIMISTIC | Flag-intent overlay on the Chat Directory; flags, lens membership and counts move with the selection | Flags roll back, toast. Selection not restored |
+| Un-settle | use-triage-actions.ts:102 → R(unsettle) | OPTIMISTIC | Same overlay | Flags roll back, toast |
+| Undo triage (toast, ⌘Z) | use-triage-actions.ts:84 → R(unsettle/markRead) | OPTIMISTIC | Same overlay | Flags roll back, toast |
+| Mark read (menu, swipe) | chat-actions.ts:35 → R(markRead) | OPTIMISTIC | Same overlay | Dot returns, toast |
+| Mark unread (menu, swipe, ⌘U) | chat-actions.ts:39 → R(markUnread) | OPTIMISTIC | Same overlay. The undo entry and the ⌘U toast still wait for the enqueue | Dot clears, toast |
+| Read on open or inbound | thread-view.tsx:188,253 → R(markRead) | OPTIMISTIC | Same overlay | Dot returns. No toast |
+| Pin or unpin | chat-actions.ts:26 → R(pin) | OPTIMISTIC | Same overlay; the switch and pinned order follow it | Order rolls back, toast |
 | Select, preview, back, panes | messages-workspace.tsx:70 | OPTIMISTIC | — | — |
 | Open a thread not yet loaded | use-messages.ts:43 | SPINNER | Skeleton | None |
 | Jump to a search hit | use-message-window.ts:16 | SPINNER | Skeleton | None |
@@ -149,7 +149,7 @@ All identity writes lack an optimistic updater. The visible queries are `whoIs({
 
 ## Ranked by how often a user feels them
 
-1. Settle. The selection moves at once, but flags and lens counts wait for the mirror.
-2. Mark read on open, mark unread. The unread dot and counts lag.
-3. Pin. The switch and pinned section wait.
-4. Voice send and Forward. No pending state at all.
+1. Voice send and Forward. No pending state at all.
+2. Send text. The sidebar patch waits for an awaited `resolveChat`.
+
+Settle, read, unread and pin led this list until H5 made them optimistic.
