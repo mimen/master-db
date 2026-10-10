@@ -2,6 +2,11 @@ const path = require("node:path");
 const { getDefaultConfig } = require("expo/metro-config");
 const { createDevRealDataMiddleware } = require("./scripts/dev-real-data-proxy");
 
+// Production exports drop unused exports (about 65 KB brotli on web). Set here rather than in each
+// build script because Expo reads these after loading this file; dev bundles ignore them.
+process.env.EXPO_UNSTABLE_METRO_OPTIMIZE_GRAPH ??= "1";
+process.env.EXPO_UNSTABLE_TREE_SHAKING ??= "1";
+
 const config = getDefaultConfig(__dirname);
 
 // Let Metro bundle files from ../shared (outside the client project root).
