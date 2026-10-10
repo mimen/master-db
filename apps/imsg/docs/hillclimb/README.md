@@ -10,11 +10,13 @@ Records in this directory:
 
 ## Metrics
 
-All benchmarks live in `apps/imsg/e2e/bench/` and run from `apps/imsg`. Fixture runs need `bun run fixture:start` (port 8399). Production runs are read-only: they open a conversation with the glide key `j`, which previews without marking read, and they send nothing.
+All benchmarks live in `apps/imsg/e2e/bench/` and run from `apps/imsg`. `e2e/bench/queries.ts` prints Convex payload bytes per query during a cold load. Ratchets live in `e2e/fixture/ratchet.playwright.ts` and run in `validate-imsg.yml`.
+
+To A/B a change on real data without touching production: `bun run deploy:branch` deploys the branch as a UI-only preview on its own port that reads production Convex, then run the prod benchmarks with `--url <preview URL>`, interleaved with runs against production. Fixture runs need `bun run fixture:start` (port 8399). Production runs are read-only: they open a conversation with the glide key `j`, which previews without marking read, and they send nothing.
 
 | # | Metric | Command | Baseline (2026-10-10) | Current | Target | Ratchet |
 |---|---|---|---|---|---|---|
-| 1a | Cold load, first visit: navigation to an interactive conversation row, p75 | `bun e2e/bench/load.ts --target fixture --visit first --runs 9` | fixture 525 ms; prod 1,236 to 1,486 ms | same | fixture ≤ 350 ms; prod ≤ 700 ms | none yet |
+| 1a | Cold load, first visit: navigation to an interactive conversation row, p75 | `bun e2e/bench/load.ts --target fixture --visit first --runs 9` | fixture 525 ms; prod 1,236 to 1,486 ms | prod 753 to 815 ms (H1) | fixture ≤ 350 ms; prod ≤ 700 ms | Contacts not mounted at boot (ratchet.playwright.ts) |
 | 1b | Cold load, returning visit (HTTP cache and list snapshot present), p75 | `bun e2e/bench/load.ts --target fixture --runs 9` | fixture 228 ms; prod 179 to 180 ms | same | ≤ 200 ms on both | none yet |
 | 1c | Open a conversation to its newest message on screen, immediately after load, p75 | same command, `openP75` | fixture 128 ms; prod 529 to 581 ms (return visit) | same | prod ≤ 150 ms | none yet |
 | 1d | JS on the wire, first visit | same command, `jsKB` | 721 KB fixture (br), 740 KB prod (br); 3.7 MB raw | same | ≤ 450 KB | none yet |

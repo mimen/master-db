@@ -42,6 +42,11 @@ jobs:
       - name: Test
         working-directory: apps/imsg
         run: bun test
+      - name: Hill-climb ratchets (fixture browser)
+        working-directory: apps/imsg
+        run: |
+          bunx playwright install chromium-headless-shell
+          bunx playwright test --config e2e/fixture.playwright.config.ts ratchet.playwright.ts
       - name: Test desktop production guard
         env:
           COMMA_DEV_GUARDED: "1"
