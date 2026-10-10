@@ -96,6 +96,17 @@ test("the queue header holds still while the conversation list loads late", asyn
   expect(shifts.filter((shift) => shift.region === "triage-queue-header")).toEqual([]);
 });
 
+test("the phone screen holds still while it loads", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.addInitScript(census, REGIONS);
+  await page.goto("/", { waitUntil: "commit" });
+  await expect(page.getByTestId("conversation-row").first()).toBeVisible();
+  await page.waitForTimeout(2000);
+  const shifts = await page.evaluate(() => (window as unknown as { __shifts: Shift[] }).__shifts);
+  expect(shifts).toEqual([]);
+});
+
 /** Starts an in-page clock: the first `type` event's timestamp, then the first frame in which `shown` holds. */
 async function timeToFrame(page: Page, type: "pointerdown" | "keydown", shown: string): Promise<void> {
   await page.evaluate(([eventType, source]) => {

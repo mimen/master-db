@@ -426,10 +426,10 @@ export function ConversationListPane({
                 )}
               </View>
               {!wide && (
-                <>
+                <View testID="phone-list-header">
                   <View style={styles.phoneLenses}>{lensTabs}</View>
                   <View style={styles.phoneSearch}>{searchField}</View>
-                </>
+                </View>
               )}
                             {lensOf(filters.state) === null && !search.active ? (
                 <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>

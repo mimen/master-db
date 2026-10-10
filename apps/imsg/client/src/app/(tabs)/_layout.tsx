@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 import { PhoneTabBar } from "@/components/phone-tab-bar";
 import { useChats } from "@/hooks/use-chats";
@@ -21,15 +21,18 @@ export default function TabsLayout() {
   return (
     <Tabs
       tabBar={(props) => (wide ? null : <PhoneTabBar {...props} needsReply={needsReply} />)}
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         headerShown: false,
         // Mount both tabs at startup — first switch to Contacts otherwise
         // mounts the whole screen live (jarring full-screen flash).
         lazy: false,
-        sceneStyle: { backgroundColor: theme.background },
+        // On web the inactive scene only drops to zIndex -1, so it still paints in the viewport and
+        // Contacts filling in at boot counts as layout shift. Hidden, not display:none, which would
+        // reset the Messages list's scroll offset on every tab switch.
+        sceneStyle: [{ backgroundColor: theme.background }, Platform.OS === "web" && !navigation.isFocused() && styles.hidden],
         // The bar floats over the scene; the lists pad themselves clear of it.
         tabBarStyle: styles.floating,
-      }}
+      })}
     >
       <Tabs.Screen name="index" options={{ title: "Messages" }} />
       <Tabs.Screen name="contacts" options={{ title: "Contacts" }} />
@@ -39,4 +42,5 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   floating: { position: "absolute" },
+  hidden: { visibility: "hidden" } as object,
 });

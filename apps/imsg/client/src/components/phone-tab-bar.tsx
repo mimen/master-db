@@ -73,7 +73,7 @@ export function PhoneTabBar({ state, navigation, needsReply }: TabBarProps & { r
     ? ({ backgroundColor: theme.barBg, boxShadow: theme.barShadow, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" } as object)
     : { backgroundColor: theme.surface, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } };
   return (
-    <View pointerEvents="box-none" style={[styles.host, { paddingBottom: bottom, paddingTop: 28 }, fade]}>
+    <View testID="phone-tab-bar" pointerEvents="box-none" style={[styles.host, { paddingBottom: bottom, paddingTop: 28 }, fade]}>
       <View role="tablist" style={[styles.bar, bar]}>
         <Tab icon={Message01Icon} label="Messages" on={route === "index"} badge={needsReply} onPress={() => navigation.navigate("index")} />
         <Tab icon={UserMultipleIcon} label="Contacts" on={route === "contacts"} onPress={() => navigation.navigate("contacts")} />

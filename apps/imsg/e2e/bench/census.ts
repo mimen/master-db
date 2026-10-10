@@ -1,5 +1,15 @@
 /** Ordered outermost-last: a source is named by the first region containing it. */
-export const REGIONS = ["conversation-row", "thread-message-list", "state-strip", "thread-view", "conversation-list-scroll", "triage-queue-header"];
+export const REGIONS = [
+  "conversation-row",
+  "thread-message-list",
+  "state-strip",
+  "thread-view",
+  "phone-list-header",
+  "conversation-list-scroll",
+  "triage-queue-header",
+  "phone-tab-bar",
+  "contacts-list-scroll",
+];
 
 export interface Shift { phase: string; region: string; value: number; node: string }
 
