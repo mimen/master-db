@@ -21,7 +21,7 @@ To A/B a change on real data without touching production: `bun run deploy:branch
 | 1c | Open a conversation to its newest message on screen, immediately after load, p75 | same command, `openP75` | fixture 128 ms; prod 529 to 581 ms (return visit) | same | prod ≤ 150 ms | none yet |
 | 1d | JS on the wire, first visit | same command, `jsKB` | 721 KB fixture (br), 740 KB prod (br); 3.7 MB raw | same | ≤ 450 KB | none yet |
 | 2 | Non-optimistic interactions (WAIT + SPINNER + PARTIAL in the inventory) | [interactions.md](interactions.md) | 84 of 104 (54 WAIT, 21 SPINNER, 9 PARTIAL) | 80 of 104 (51 WAIT, 21 SPINNER, 8 PARTIAL) | 0 for writes the user can see | tapback within 50 ms and visible rollback (ratchet.playwright.ts) |
-| 3a | Layout shifts after first paint, not caused by input, in named regions | `bun e2e/bench/shift.ts --target fixture --runs 5 --visit return` | fixture median 8; prod median 16 | fixture desktop 0 (H3); phone 390 median 5 | 0 | no shift in the queue header with the list held back 1.5 s (ratchet.playwright.ts) |
+| 3a | Layout shifts after first paint, not caused by input, in named regions | `bun e2e/bench/shift.ts --target fixture --runs 5 --visit return` | fixture median 8; prod median 16 | fixture desktop 0 (H3, H7); prod return visit 0 on preview (H8); phone 390 median 5 | 0 | no shift in the queue header with the list held back 1.5 s (ratchet.playwright.ts) |
 | 3b | Dropped frames scrolling a long thread / during stream-in; input lag while typing | not built yet | — | — | 0 long frames over 16.7 ms at p95 | none yet |
 | 4 | Feel: flows walked in light and dark at desktop and phone sizes | manual walk, findings logged in decisions.tsv | not walked | — | no flash, jump, or missing pending state | — |
 
