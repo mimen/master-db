@@ -22,6 +22,7 @@ import { usePeerTyping } from "@/lib/presence-api";
 import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
 import { setForwardText } from "@/lib/forward";
+import { tempMessage } from "@/lib/local-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
 import { openChatInfo } from "@/lib/chat-info";
@@ -425,9 +426,15 @@ export function ThreadView({
               {
                 label: "Send again",
                 onPress: () => {
-                  void runCommand(chatGuid, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions })
-                    .then(({ message: sent }) => upsert(sent))
-                    .catch((error: unknown) => showToast(messagingCommandError(error, "Send failed")));
+                  const temp = { ...tempMessage(chatGuid, message.text, null, message.mentions), replyToGuid: message.replyToGuid };
+                  upsert(temp);
+                  scrollToLatest();
+                  runCommand(chatGuid, { kind: "send", text: message.text, replyToGuid: message.replyToGuid ?? undefined, mentions: message.mentions }, { clientKey: temp.guid })
+                    .then(({ message: sent }) => replaceTemp(temp.guid, sent))
+                    .catch((error: unknown) => {
+                      replaceTemp(temp.guid, { ...temp, pending: false, failed: true });
+                      showToast(messagingCommandError(error, "Send failed"));
+                    });
                 },
               },
             ]
@@ -479,7 +486,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
     },
-    [chatGuid, pend, privateApi, showSheet, upsert],
+    [chatGuid, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
   );
 
   // The thread's bottom inset, driven by the keyboard rather than by

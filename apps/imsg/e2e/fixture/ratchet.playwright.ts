@@ -215,6 +215,11 @@ async function forwardToJordan(page: Page) {
 const FORWARDED = `() => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
   .some((element) => element.getAttribute("aria-label") === "You: ${INBOUND}")`;
 
+/** A send held by /__fixture/send-timing must land before the next test resets the world, or it lands in that one. */
+async function settleDelayedSend(page: Page) {
+  await expect(page.getByTestId("thread-view").getByText(/^(Sent|Delivered|Read .*)$/)).toBeVisible();
+}
+
 test("ratchet: a forwarded message is in the destination thread within 50 ms of the click", async ({ desk }) => {
   // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
   expect((await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300 } })).ok()).toBe(true);
@@ -223,6 +228,7 @@ test("ratchet: a forwarded message is in the destination thread within 50 ms of 
   await timeToFrame(page, "pointerdown", FORWARDED);
   await jordan.click();
   expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+  await settleDelayedSend(page);
 });
 
 test("a forward shows at once and turns Not delivered with a toast when the bridge fails it", async ({ desk }) => {
@@ -234,5 +240,41 @@ test("a forward shows at once and turns Not delivered with a toast when the brid
   await jordan.click();
   await shown;
   await expect(page.getByText("Forward failed")).toBeVisible();
+  await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
+});
+
+const ownBubble = (text: string) => `() => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
+  .filter((element) => element.getAttribute("aria-label") === "You: ${text}").length`;
+
+/** Avery's older send carries a stale error code in the seed, so its menu offers Send again. */
+async function sendAgainMenuItem(page: Page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByTestId("conversation-row").filter({ hasText: "Avery Brooks" }).click();
+  const own = page.getByTestId("thread-view").getByRole("button", { name: AVERY_SEND });
+  await expect(own).toHaveCount(1);
+  await own.click({ button: "right" });
+  return page.getByRole("menuitem", { name: "Send again" });
+}
+const AVERY_SEND = "You: Following up on Avery's plan.";
+
+test("ratchet: Send again puts the new copy in the thread within 50 ms of the click", async ({ desk }) => {
+  expect((await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300 } })).ok()).toBe(true);
+  const page = desk.page;
+  const again = await sendAgainMenuItem(page);
+  await timeToFrame(page, "pointerdown", `() => (${ownBubble("Following up on Avery's plan.")})() >= 2`);
+  await again.click();
+  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+  await settleDelayedSend(page);
+});
+
+test("Send again shows the copy at once and turns it Not delivered with a toast when the bridge fails it", async ({ desk }) => {
+  expect((await desk.request.post("/__fixture/fault", { data: { method: "sendText" } })).ok()).toBe(true);
+  const page = desk.page;
+  const again = await sendAgainMenuItem(page);
+  const shown = page.waitForFunction(`(${ownBubble("Following up on Avery's plan.")})() >= 2`, undefined, { polling: "raf", timeout: 5_000 });
+  await again.click();
+  await shown;
+  await expect(page.getByText("Send failed")).toBeVisible();
   await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
 });

@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **33 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 43 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **34 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 42 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -19,7 +19,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 |---|---|---|---|---|
 | Send text, reply, mentions | composer.tsx:529,603 → R(send) | PARTIAL | Bubble is local. The sidebar patch waits for an awaited `resolveChat` first | Failed bubble and toast. Draft not restored |
 | Retry failed bubble | thread-view.tsx:353 → R(send) | PARTIAL | Local revival is discarded under remote rows in a normal thread | Toast |
-| Send again (menu) | thread-view.tsx:432 → R(send) | WAIT | No temp bubble | Toast |
+| Send again (menu) | thread-view.tsx:429 → R(send) | OPTIMISTIC | Pending copy at the bottom on the click | Not delivered bubble with Retry, toast |
 | Send photos, videos, files | composer.tsx:560-598 → upload, R(sendAttachment) | SPINNER | Ring; bubble after upload | Toast. Staging lost |
 | Send contact card | composer.tsx:642 → R(sendContact) | SPINNER | Same ring | Toast. Card lost |
 | Mention text after attachments | composer.tsx:577 → R(send) | SPINNER | No local text bubble | Toast |
@@ -150,6 +150,6 @@ All identity writes lack an optimistic updater. The visible queries are `whoIs({
 ## Ranked by how often a user feels them
 
 1. Send text. The sidebar patch waits for an awaited `resolveChat`.
-2. Palette compose Send and Send again. No local bubble.
+2. Palette compose Send. Disabled arrow only.
 
 Settle, read, unread and pin led this list until H5 made them optimistic.

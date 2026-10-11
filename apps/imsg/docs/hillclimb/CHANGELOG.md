@@ -2,13 +2,20 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
-## 2026-10-10. A forward opens the destination with the message already in it (H17)
+## 2026-10-10. Send again puts the new copy in the thread at once (H18)
+
+- **For the user:** choosing Send again on an older message that may not have delivered adds the new copy at the bottom of the thread on the click, marked as sending, and scrolls to it. If the Mac mini rejects it, the copy turns Not delivered with Retry, and the "Send failed" toast shows. Before, nothing changed until the bridge answered.
+- **Metric 2 (non-optimistic interactions):** 71 became 70. `e2e/bench/optimistic.ts --case send-again`, 9 interleaved runs, p50/p75 299/316 to 15/15 ms.
+- **Ratchet:** `ratchet.playwright.ts` requires the copy within 50 ms of the click (fixture send delayed 300 ms) and requires Not delivered plus the toast under a `sendText` fault. Both fail on the old build (377 to 395 ms; no copy).
+- **Revert:** `git revert <H18 commit>`.
+
+## 2026-10-10. A forward opens the destination with the message already in it (17c44107)
 
 - **For the user:** picking a destination in the forward picker closes it and opens that conversation on the same frame, with the forwarded copy at the bottom marked as sending. If the Mac mini rejects it, the bubble turns Not delivered with Retry and the "Forward failed" toast shows. Before, the picker sat unchanged until the bridge answered, then closed with a "Forwarded to" toast.
 - **Metric 2 (non-optimistic interactions):** 72 became 71. `e2e/bench/optimistic.ts --case forward`, 9 interleaved runs, p50/p75 415/432 to 17/21 ms.
 - **Ratchet:** `ratchet.playwright.ts` requires the forwarded bubble in Jordan's thread within 50 ms of the click (with the fixture's send delayed 300 ms, since the bare fixture can answer inside a frame), and requires Not delivered plus the toast under a `sendText` fault. Both fail on the old build (344 to 360 ms; no bubble).
 - **Mechanism:** a thread's own unsettled sends moved from per-thread React state into `lib/local-sends.ts`, a per-chat store the thread reads. A send started outside the thread can now place its temp bubble before the thread mounts. `tempMessage` moved there from composer.tsx.
-- **Revert:** `git revert <H17 commit>`.
+- **Revert:** `git revert 17c44107`.
 
 ## 2026-10-10. A voice message is in the thread the moment you send it (b1fefba8)
 
