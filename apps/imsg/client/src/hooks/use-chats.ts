@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
+import { useListPagingHeld } from "@/lib/list-paging-hold";
 import { usePendingFlags } from "@/lib/pending-flags";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
@@ -31,9 +32,10 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
     {},
     { initialNumItems: 25 },
   );
+  const held = useListPagingHeld();
   useEffect(() => {
-    if (status === "CanLoadMore") loadMore(100);
-  }, [status, loadMore]);
+    if (status === "CanLoadMore" && !held) loadMore(100);
+  }, [status, loadMore, held]);
   const chats = useMemo(() => results.map(conversationToChat), [results]);
   // Read once per mount: the snapshot bridges the gap until the live list is complete.
   const [snapshot] = useState(() => readChatSnapshot(webStore()));
