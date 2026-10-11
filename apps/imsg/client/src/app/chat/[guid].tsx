@@ -7,7 +7,7 @@ import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar, GroupPhotoAvatar } from "@/components/avatar";
-import { ThreadView } from "@/components/thread-view";
+import { ThreadView } from "@/components/lazy-surfaces";
 import { FaceTimeButton } from "@/components/facetime-button";
 import { openThreadSearch } from "@/lib/thread-search";
 import { goBackOrHome } from "@/lib/back-navigation";

@@ -11,7 +11,7 @@ import { ConversationListPane } from "@/components/conversation-list-pane";
 import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
-import { ThreadView } from "@/components/thread-view";
+import { ThreadView } from "@/components/lazy-surfaces";
 import { useChats } from "@/hooks/use-chats";
 import { type JumpTarget } from "@/hooks/use-messages";
 import { Springs } from "@/constants/springs";

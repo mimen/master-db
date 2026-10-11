@@ -41,6 +41,9 @@ export const NewChatContent = deferred(() => import("@/components/new-chat-conte
 export const PersonContent = deferred(() => import("@/components/person-content").then((m) => m.PersonContent));
 export const ScheduledContent = deferred(() => import("@/components/scheduled-content").then((m) => m.ScheduledContent));
 export const SearchContent = deferred(() => import("@/components/search-content").then((m) => m.SearchContent));
+/** A conversation opens right after the list paints, so its chunk starts loading at boot. */
+export const ThreadView = deferred(() => import("@/components/thread-view").then((m) => m.ThreadView));
+ThreadView.preload().catch(() => undefined);
 export const SettingsContent = deferred(() => import("@/components/settings-content").then((m) => m.SettingsContent));
 /** Dev and fixture only, so it is not preloaded. */
 export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
