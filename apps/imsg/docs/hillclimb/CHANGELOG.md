@@ -2,6 +2,16 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-11. Cancelling or sending a scheduled message clears its sidebar count on the tap (H28)
+
+- **For the user:** the Scheduled count in the sidebar footer drops with the row on the tap of Cancel or Send now. If the Mac mini rejects it, the row and the count come back. Before, Cancel moved the count only after the mirror caught up (about 600 ms on the fixture), and Send now never cleared it on the fixture.
+- **Mechanism:** `lib/pending-scheduled.ts` holds the pending ids outside any one component, the way `pending-flags.ts` holds triage intents. The Scheduled pane and the footer read `listScheduled` through `usePendingScheduled`; an id retires once the bridge confirms and the mirror no longer queues it. The pane's local hidden set is gone.
+- **Not done:** the "Has a scheduled message" refinement reads `listScheduled` in conversation-list-pane.tsx, which another agent owns. It needs one change: wrap `useQuery(commaApi.listScheduled, {})` at line 166 in `usePendingScheduled(...)`.
+- **Metric 2 (non-optimistic interactions):** 63 became 61. `e2e/bench/optimistic.ts`, 9 interleaved runs against an origin/main build: `scheduled-cancel` p50/p75 614/647 to 14/15 ms; `scheduled-send-now` timed out at 15 s in 9 of 9 runs before, 15/16 ms after.
+- **Ratchet:** `ratchet.playwright.ts` requires the footer to drop "pending" within 50 ms of Cancel and of Send now (enqueue held 300 ms), and requires the count and row back under a `deleteScheduledMessage` or `updateScheduledMessage` fault. All four fail on the old build.
+- **Fixture:** `e2e/fixture/convex.ts` now executes `sendScheduledNow` through the server's `ScheduledSendNow`.
+- **Revert:** `git revert <H28 commit>`.
+
 ## 2026-10-11. A renamed group shows its new name on Save (860113d4)
 
 - **For the user:** saving a new group name in Details shows it there and on the conversation row on the same frame. If the Mac mini rejects it, both go back to the old name and the "Couldn't rename" toast shows. Before, the name changed only once the enqueue was acknowledged, and a bridge failure after that was never reported.

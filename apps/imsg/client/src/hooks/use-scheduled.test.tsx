@@ -56,6 +56,7 @@ function commands() {
   } };
 }
 
+let nextId = 7;
 for (const kind of ["cancelScheduled", "sendScheduledNow"] as const) {
   for (const status of ["failed", "unknown", "sent"] as const) {
     test(`${kind} hides optimistically and ${status === "sent" ? "stays hidden on success" : `rolls back on ${status}`}`, async () => {
@@ -65,9 +66,12 @@ for (const kind of ["cancelScheduled", "sendScheduledNow"] as const) {
       Object.assign(globalThis, { window: dom.window, document: dom.window.document });
       Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
       const h = commands();
+      // Pending cancels and sends outlive the hook, so each test takes its own scheduled message.
+      const id = nextId++;
+      const mine = [{ ...rows[0]!, bbId: id }];
       let hook!: UseScheduledResult;
       function Scheduled() {
-        hook = useScheduledState(rows, [], h.actions);
+        hook = useScheduledState(mine, [], h.actions);
         return createElement("div", null, hook.items.map((item) => item.text).join(","));
       }
       const container = document.getElementById("scheduled-root")!;
@@ -77,8 +81,8 @@ for (const kind of ["cancelScheduled", "sendScheduledNow"] as const) {
         expect(container.textContent).toBe("later");
         let result: Promise<unknown> | undefined;
         await act(async () => {
-          if (kind === "cancelScheduled") hook.cancel(7);
-          else result = hook.sendNow(7).catch((error: unknown) => error);
+          if (kind === "cancelScheduled") hook.cancel(id);
+          else result = hook.sendNow(id).catch((error: unknown) => error);
           await h.ready;
         });
         expect(container.textContent).toBe("");

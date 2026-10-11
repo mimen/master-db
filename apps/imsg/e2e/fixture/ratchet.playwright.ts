@@ -614,3 +614,47 @@ test("a group rename shows at once and rolls back with a toast when the bridge f
   await expect(page.getByTestId("desktop-utility-pane-content").getByText("Launch Crew", { exact: true })).toBeVisible();
   await expect(page.getByTestId("conversation-row").filter({ hasText: RENAMED })).toHaveCount(0);
 });
+
+/** The sidebar footer's Scheduled count: no "pending" in its name once nothing is queued. */
+const scheduledCountCleared = `() => {
+  const button = document.querySelector('[aria-label^="Scheduled"]');
+  return button !== null && !/pending/.test(button.getAttribute("aria-label") ?? "");
+}`;
+
+/** Opens the Scheduled pane on the seeded message to Jordan and reveals its row actions. */
+async function scheduledAction(page: Page, action: "Cancel" | "Send") {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("button", { name: "Scheduled, 1 pending" })).toBeVisible();
+  await page.getByRole("button", { name: "Scheduled, 1 pending" }).click();
+  await page.getByText("Checking back tomorrow morning.", { exact: true }).hover();
+  return page.getByRole("button", { name: action === "Cancel" ? "Cancel scheduled message to Jordan Lee" : "Send scheduled message to Jordan Lee now" });
+}
+
+for (const action of ["Cancel", "Send"] as const) {
+  const kind = action === "Cancel" ? "cancelScheduled" : "sendScheduledNow";
+  test(`ratchet: ${action === "Cancel" ? "cancelling" : "sending now"} a scheduled message clears the sidebar count within 50 ms`, async ({ desk }) => {
+    const page = desk.page;
+    // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
+    await page.route("**/__fixture/convex", async (route) => {
+      const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
+      if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === kind) await new Promise((resolve) => setTimeout(resolve, 300));
+      await route.continue();
+    });
+    const button = await scheduledAction(page, action);
+    await timeToFrame(page, "pointerdown", scheduledCountCleared);
+    await button.click();
+    expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+  });
+
+  test(`${action === "Cancel" ? "a cancel" : "a send now"} clears the count at once and restores it when the bridge fails it`, async ({ desk }) => {
+    const method = action === "Cancel" ? "deleteScheduledMessage" : "updateScheduledMessage";
+    expect((await desk.request.post("/__fixture/fault", { data: { method } })).ok()).toBe(true);
+    const page = desk.page;
+    const button = await scheduledAction(page, action);
+    const cleared = page.waitForFunction(`(${scheduledCountCleared})()`, undefined, { polling: "raf", timeout: 5_000 });
+    await button.click();
+    await cleared;
+    await expect(page.getByRole("button", { name: "Scheduled, 1 pending" })).toBeVisible();
+    await expect(page.getByText("Checking back tomorrow morning.", { exact: true })).toBeVisible();
+  });
+}

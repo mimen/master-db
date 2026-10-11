@@ -9,6 +9,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { IconButton } from "@/components/ui/icon-button";
 import { useTheme } from "@/hooks/use-theme";
 import { commaApi } from "@/lib/convex-api";
+import { usePendingScheduled } from "@/lib/pending-scheduled";
 import { openScheduledPane } from "@/lib/scheduled-pane";
 import { pendingScheduledCount } from "@/lib/scheduled";
 import { openSettingsPane } from "@/lib/settings-pane";
@@ -29,7 +30,7 @@ function FooterButton({ icon, label, on, onPress }: { icon: IconSvgElement; labe
  */
 export function SidebarFooter({ workspace }: { readonly workspace: "messages" | "contacts" }): React.JSX.Element {
   const theme = useTheme();
-  const pending = pendingScheduledCount(useQuery(commaApi.listScheduled, {}));
+  const pending = pendingScheduledCount(usePendingScheduled(useQuery(commaApi.listScheduled, {})));
   const onContacts = workspace === "contacts";
   return (
     <View role="navigation" aria-label="Workspaces" style={[styles.footer, { borderTopColor: theme.divider }]}>

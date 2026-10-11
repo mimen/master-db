@@ -5,7 +5,7 @@
  *
  *   bun e2e/bench/optimistic.ts --runs 9
  *   bun e2e/bench/optimistic.ts --runs 9 --url http://127.0.0.1:8641,http://127.0.0.1:8642   # interleaved A/B
- *   --case tapback-add|tapback-remove|unsend|settle|mark-unread|pin|voice-send|forward|palette-send|send-again|rename-group (default all)
+ *   --case tapback-add|tapback-remove|unsend|settle|mark-unread|pin|voice-send|forward|palette-send|send-again|rename-group|scheduled-cancel|scheduled-send-now (default all)
  *   --profile tailnet|none (default tailnet)
  *
  * Expects a fixture server (`bun run fixture:start`) on IMSG_FIXTURE_PORT (8399) unless --url names one.
@@ -227,6 +227,21 @@ const CASES: Case[] = [
     done: () => [...document.querySelectorAll('[data-testid="desktop-utility-pane-content"] *')]
       .some((element) => element.childElementCount === 0 && element.textContent === "Crew Prime"),
   },
+  ...(["cancel", "send-now"] as const).map((action): Case => ({
+    // The sidebar footer's Scheduled count drops the seeded message to Jordan.
+    name: `scheduled-${action}`,
+    setup: async (page) => {
+      await page.getByRole("button", { name: "Scheduled, 1 pending" }).click();
+      await page.getByText("Checking back tomorrow morning.", { exact: true }).hover();
+    },
+    act: (page) => page.getByRole("button", {
+      name: action === "cancel" ? "Cancel scheduled message to Jordan Lee" : "Send scheduled message to Jordan Lee now",
+    }).click(),
+    done: () => {
+      const button = document.querySelector('[aria-label^="Scheduled"]');
+      return button !== null && !/pending/.test(button.getAttribute("aria-label") ?? "");
+    },
+  })),
 ].filter((c) => !only || c.name === only);
 
 async function sample(browser: Browser, base: string, benchCase: Case, run: number): Promise<Sample> {

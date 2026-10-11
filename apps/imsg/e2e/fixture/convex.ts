@@ -8,6 +8,7 @@ import type { FixtureRouteControls } from "../../server/app";
 import { buildThread, mapMessage } from "../../server/map";
 import { MessageSearch } from "../../server/message-search";
 import { mapScheduledMessage } from "../../server/scheduled";
+import { ScheduledSendNow } from "../../server/scheduled-send-now";
 import { ChatCommands } from "../../server/commands";
 import { WhisperService } from "../../server/whisper";
 import type { OverlayDb } from "../../server/db";
@@ -232,6 +233,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         return { kind: "typing" as const, ok: true as const };
       }
       case "cancelScheduled": accept(await commands.cancelScheduled(payload.bbId)); break;
+      case "sendScheduledNow": accept(await new ScheduledSendNow(bb).send(payload.bbId)); break;
       case "suggestions": {
         const chat = (await chatSummaries()).find((row) => row.guid === chatGuid);
         const result = await ai.replySuggestions(chatGuid, chat && !chat.isGroup ? chat.displayName : null, payload.refresh, payload.model);
@@ -302,7 +304,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       }
       default: throw new FixtureError(`Unknown fixture outbox command: ${JSON.stringify(payload)}`, 400);
     }
-    if (["react", "edit", "unsend", "delete", "markRead", "markUnread", "pin", "mute", "settle", "unsettle", "rename", "participant", "leaveGroup", "deleteChat", "cancelScheduled"].includes(payload.kind)) {
+    if (["react", "edit", "unsend", "delete", "markRead", "markUnread", "pin", "mute", "settle", "unsettle", "rename", "participant", "leaveGroup", "deleteChat", "cancelScheduled", "sendScheduledNow"].includes(payload.kind)) {
       return { kind: payload.kind, ok: true } as CommandResult;
     }
     return undefined;

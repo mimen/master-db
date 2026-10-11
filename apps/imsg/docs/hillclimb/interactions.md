@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **41 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 37 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **43 OPTIMISTIC, 3 PARTIAL, 21 SPINNER, 37 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -28,8 +28,8 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Quick Send Later | composer.tsx:964 → R(schedule) | OPTIMISTIC | Composer clears and confirms on the tap (H38) | Text restored, toast |
 | Custom schedule, Save | composer.tsx:1238 → R(schedule) | SPINNER | "Saving…" | Inline error |
 | Edit scheduled, Save | scheduled-content.tsx:76 → R(editScheduled) | SPINNER | No list patch | Inline error |
-| Cancel scheduled | use-scheduled.ts:39 → R(cancelScheduled) | PARTIAL | Row hides; counts read unpatched `listScheduled({})` | Row restored |
-| Send scheduled now | use-scheduled.ts:43 → R(sendScheduledNow) | PARTIAL | Counts lag; thread bubble waits | Row restored, toast |
+| Cancel scheduled | use-scheduled.ts:31 → R(cancelScheduled) | OPTIMISTIC | Row and sidebar count move on the tap through `lib/pending-scheduled.ts` (H28). The "Has a scheduled message" refinement in conversation-list-pane.tsx still reads raw rows | Row and count restored |
+| Send scheduled now | use-scheduled.ts:35 → R(sendScheduledNow) | OPTIMISTIC | Same store; the thread bubble still waits for the scheduler | Row and count restored, toast |
 | Save message edit | composer.tsx:540 → R(edit) | OPTIMISTIC | Pending-edit overlay until the mirror shows the text | Text rolls back, toast |
 | Undo send | thread-view.tsx:450 → R(unsend) | OPTIMISTIC | Bubble hides at once | Bubble returns, toast |
 | Delete for me | thread-view.tsx:468 → R(delete) | OPTIMISTIC | Bubble hides at once | Bubble returns, toast |

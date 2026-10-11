@@ -1,9 +1,10 @@
 import type { CommaScheduledDoc } from "../../../../../convex/schema/comma/validators";
 import { useQuery } from "convex/react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { api } from "@/lib/api";
 import { scheduledToScheduled } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
+import { pendScheduled, usePendingScheduled } from "@/lib/pending-scheduled";
 import { useChatDirectory } from "./use-chat-directory";
 import type { ChatSummary, ScheduledMessage } from "@shared/types";
 
@@ -28,27 +29,22 @@ export function useScheduledState(
   chats: readonly ChatSummary[] | null,
   actions: Pick<typeof api, "cancelScheduled" | "sendScheduledNow" | "updateScheduled">,
 ): UseScheduledResult {
-  const [hidden, setHidden] = useState<ReadonlySet<number>>(new Set());
-  const items = useMemo(
-    () => (rows ?? []).filter((row) => !hidden.has(row.bbId)).map((row) => scheduledToScheduled(row, chats ?? [])),
-    [rows, chats, hidden],
-  );
-  const restore = useCallback((id: number) => {
-    setHidden((current) => new Set([...current].filter((value) => value !== id)));
-  }, []);
+  const shown = usePendingScheduled(rows);
+  const items = useMemo(() => (shown ?? []).map((row) => scheduledToScheduled(row, chats ?? [])), [shown, chats]);
   const cancel = useCallback((id: number) => {
-    setHidden((current) => new Set([...current, id]));
-    void actions.cancelScheduled(id).catch(() => restore(id));
-  }, [actions, restore]);
+    const pending = pendScheduled(id);
+    actions.cancelScheduled(id).then(pending.confirm, pending.rollback);
+  }, [actions]);
   const sendNow = useCallback(async (id: number): Promise<void> => {
-    setHidden((current) => new Set([...current, id]));
+    const pending = pendScheduled(id);
     try {
       await actions.sendScheduledNow(id);
+      pending.confirm();
     } catch (error) {
-      restore(id);
+      pending.rollback();
       throw error;
     }
-  }, [actions, restore]);
+  }, [actions]);
   const edit = useCallback(async (item: ScheduledMessage, text: string, sendAt: number): Promise<void> => {
     await actions.updateScheduled(item.id, item.chatGuid, text, sendAt);
   }, [actions]);
