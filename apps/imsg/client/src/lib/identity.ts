@@ -14,7 +14,7 @@ import { requireConvexUrl } from "./public-env";
 
 export const convexClient = new ConvexReactClient(
   requireConvexUrl(process.env.EXPO_PUBLIC_CONVEX_URL),
-  { unsavedChangesWarning: false, webSocketConstructor: bootWebSocket() },
+  { unsavedChangesWarning: false, webSocketConstructor: bootWebSocket(), initialAuthTokenReuse: true },
 );
 
 
