@@ -311,6 +311,8 @@ export function Composer({
   const [text, setText] = useState(() => getDraft(chatGuid));
   const [inputHeight, setInputHeight] = useState(IOS_INPUT_MIN_HEIGHT);
   const [selection, setSelection] = useState({ start: text.length, end: text.length });
+  const onSelection = (next: { start: number; end: number }): void =>
+    setSelection((current) => (current.start === next.start && current.end === next.end ? current : next));
   const [mentions, setMentions] = useState<MentionAnnotation[]>([]);
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const pendingRef = useRef<PendingAttachment[]>([]);
@@ -454,6 +456,9 @@ export function Composer({
   const onChangeText = (value: string) => {
     setMentions((current) => reconcileMentionAnnotations(text, value, current));
     setText(value);
+    // Web: take the caret with the text, so the select event that follows finds it equal and skips a render.
+    const node = Platform.OS === "web" ? (inputRef.current as unknown as HTMLTextAreaElement | null) : null;
+    if (node) onSelection({ start: node.selectionStart, end: node.selectionEnd });
     if (value.trim().length === 0) suggestionAttribution.current = null;
     if (!editing) {
       setDraft(chatGuid, value);
@@ -1150,7 +1155,7 @@ ${url}` : url;
         ref={inputRef}
         value={text}
         selection={selection}
-        onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
+        onSelectionChange={(event) => onSelection(event.nativeEvent.selection)}
         onFocus={() => { setListMode(false); draftSync.onFocus(); }}
         onBlur={draftSync.onBlur}
         onChangeText={onChangeText}

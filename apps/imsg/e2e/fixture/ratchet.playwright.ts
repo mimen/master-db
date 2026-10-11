@@ -458,3 +458,20 @@ test("ratchet: an arriving message renders only its row and its neighbour, not t
   console.log(`arrival renders: ${JSON.stringify(renders)}`);
   expect(renders.rows).toBeLessThanOrEqual(ROW_RENDERS_PER_ARRIVAL);
 });
+
+const TYPED = "See you at the venue around eight thirty";
+
+test("ratchet: each keystroke renders the composer once", async ({ desk }) => {
+  const page = desk.page;
+  await page.addInitScript(renderCounter);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().click();
+  const input = page.getByPlaceholder("iMessage");
+  await input.click();
+  await page.waitForTimeout(300);
+  await takeRenders(page);
+  await page.keyboard.type(TYPED, { delay: 30 });
+  await expect(input).toHaveValue(TYPED);
+  const renders = await takeRenders(page);
+  expect(renders.composer).toBeLessThanOrEqual(TYPED.length + 2);
+});
