@@ -6,7 +6,7 @@ const chat = (guid: string, dateCreated: number, isFromMe = false, chatGuid = "c
   guid: chatGuid,
   lastMessage: { guid, dateCreated, isFromMe, text: guid, senderName: null, hasAttachments: false },
 }) satisfies Pick<ChatSummary, "guid" | "lastMessage">;
-const message = (guid: string, isFromMe = false) => ({ guid, isFromMe, isGroupEvent: false, retracted: false }) as Message;
+const message = (guid: string, isFromMe = false, dateCreated = 0) => ({ guid, isFromMe, dateCreated, isGroupEvent: false, retracted: false }) as Message;
 
 test("initial pages, new pagination pages and backfill are silent", () => {
   const sound = createReceiveSoundObserver(100);
@@ -44,6 +44,13 @@ test("mounted reads follow new inbound GUIDs and ignore edits and outbound", () 
   expect(reads.observe("chat", [message("initial"), message("new")], true)).toBe(false);
   expect(reads.observe("chat", [message("outbound", true)], true)).toBe(false);
   expect(reads.observe("other", [message("other-initial")], true)).toBe(true);
+});
+
+test("an older page loading into the thread does not mark it read again", () => {
+  const reads = createInboundReadObserver();
+  expect(reads.observe("chat", [message("newest", false, 500)], true)).toBe(true);
+  expect(reads.observe("chat", [message("older", false, 100), message("newest", false, 500)], true)).toBe(false);
+  expect(reads.observe("chat", [message("older", false, 100), message("newest", false, 500), message("arrived", false, 900)], true)).toBe(true);
 });
 
 test("preview threads do not consume inbound GUIDs; retractions do not mark read", () => {

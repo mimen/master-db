@@ -349,6 +349,8 @@ test("the queue header moves at most once when the fonts arrive after first pain
 const SEEDED = 200;
 /** The 50 rows a page adds, plus the seam row whose grouping changes, with slack for list batching. */
 const ROW_RENDERS_PER_PAGE = 60;
+/** One render when the page is requested, one when it lands. */
+const THREAD_RENDERS_PER_PAGE = 2;
 
 type Desk = Parameters<Parameters<typeof test>[2]>[0]["desk"];
 
@@ -377,10 +379,16 @@ async function takeRenders(page: Page): Promise<Renders> {
 
 /**
  * Scrolls until the next older page is requested, holds that page, then releases it with no input in
- * flight. Returns the renders it cost and how far the bubble you were reading moved.
+ * flight. Returns the renders it cost, how far the bubble you were reading moved, and the read
+ * receipts it sent.
  */
-async function landOlderPage(desk: Desk): Promise<{ renders: Renders; moved: number }> {
+async function landOlderPage(desk: Desk): Promise<{ renders: Renders; moved: number; reads: number }> {
   const page = desk.page;
+  let reads = 0;
+  let released = false;
+  page.on("request", (request) => {
+    if (released && request.url().endsWith("/__fixture/convex") && (request.postData() ?? "").includes("markRead")) reads++;
+  });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   let asked = false;
@@ -412,11 +420,12 @@ async function landOlderPage(desk: Desk): Promise<{ renders: Renders; moved: num
   const anchor = thread.getByTestId("message-bubble").filter({ hasText: anchorText }).first();
   const before = (await anchor.boundingBox())!.y;
   await takeRenders(page);
+  released = true;
   release();
   await expect(thread.getByText("Seeded message 101", { exact: true })).toBeAttached();
   await page.waitForTimeout(500);
   const after = (await anchor.boundingBox())!.y;
-  return { renders: await takeRenders(page), moved: Math.abs(after - before) };
+  return { renders: await takeRenders(page), moved: Math.abs(after - before), reads };
 }
 
 test("an older page lands without moving the message you are reading", async ({ desk }) => {
@@ -428,4 +437,10 @@ test("ratchet: an older page renders only its own rows", async ({ desk }) => {
   const { renders } = await landOlderPage(desk);
   console.log(`older page renders: ${JSON.stringify(renders)}`);
   expect(renders.rows).toBeLessThanOrEqual(ROW_RENDERS_PER_PAGE);
+});
+
+test("ratchet: an older page renders the thread at most twice and does not mark it read again", async ({ desk }) => {
+  const { renders, reads } = await landOlderPage(desk);
+  expect(renders.threadView).toBeLessThanOrEqual(THREAD_RENDERS_PER_PAGE);
+  expect(reads, "older messages are not new messages").toBe(0);
 });

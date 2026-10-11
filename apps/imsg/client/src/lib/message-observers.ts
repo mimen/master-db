@@ -1,19 +1,25 @@
 import type { ChatSummary, Message } from "@shared/types";
 
-/** Observe only new inbound GUIDs once per mounted thread. */
+/** Observe new inbound GUIDs once per mounted thread. An older page, below everything seen, stays silent. */
 export function createInboundReadObserver() {
   let chat: string | null = null;
+  let oldestSeen = Infinity;
   const seen = new Set<string>();
   return {
     observe(chatGuid: string, messages: readonly Message[], active: boolean): boolean {
       if (chat !== chatGuid) {
         chat = chatGuid;
+        oldestSeen = Infinity;
         seen.clear();
       }
       const inbound = messages.filter((message) => !message.isFromMe && !message.isGroupEvent && !message.retracted);
       if (!active || inbound.length === 0) return false;
-      const added = inbound.some((message) => !seen.has(message.guid));
-      for (const message of inbound) seen.add(message.guid);
+      const first = seen.size === 0;
+      const added = inbound.some((message) => !seen.has(message.guid) && (first || message.dateCreated >= oldestSeen));
+      for (const message of inbound) {
+        seen.add(message.guid);
+        oldestSeen = Math.min(oldestSeen, message.dateCreated);
+      }
       return added;
     },
   };
