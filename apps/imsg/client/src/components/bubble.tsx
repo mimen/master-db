@@ -112,10 +112,9 @@ export const TAPBACK_EMOJI = new Map([
 ]);
 
 /** Holds still under a thread image until its thumbnail paints. */
-/** Stays mounted and fades once the image loads; unmounting an overlay reads as a layout shift. */
-function ImageSkeleton({ loaded }: { loaded: boolean }) {
+function ImageSkeleton() {
   const theme = useTheme();
-  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: theme.skeleton, opacity: loaded ? 0 : 1 }]} />;
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: theme.skeleton }]} />;
 }
 
 function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine: boolean; paneWidth?: number }) {
@@ -190,7 +189,7 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
               }
               style={[tile, { overflow: "hidden" }]}
             >
-              <ImageSkeleton loaded={state?.status === "loaded"} />
+              {state?.status !== "loaded" && <ImageSkeleton />}
               <Image
                 key={state?.attempt ?? 0}
                 source={{ uri: thumbnail! }}
