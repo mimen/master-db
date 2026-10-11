@@ -329,3 +329,18 @@ test("Send again shows the copy at once and turns it Not delivered with a toast 
   await expect(page.getByText("Send failed")).toBeVisible();
   await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
 });
+
+test("the queue header moves at most once when the fonts arrive after first paint", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript(census, REGIONS);
+  await page.route(/\.ttf$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.continue();
+  });
+  await page.goto("/", { waitUntil: "commit" });
+  await expect(page.getByTestId("conversation-row").first()).toBeVisible();
+  await page.waitForTimeout(1800);
+  const shifts = await page.evaluate(() => (window as unknown as { __shifts: Shift[] }).__shifts);
+  expect(shifts.filter((shift) => shift.region === "triage-queue-header").length).toBeLessThanOrEqual(1);
+});
