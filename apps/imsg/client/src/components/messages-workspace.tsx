@@ -380,7 +380,7 @@ export function MessagesWorkspace({
       counts={counts}
       filters={{ state, type }}
       loading={loading}
-      offline={error !== null}
+      offline={error}
       wide={wide}
       selectedGuid={wide ? selected?.guid : undefined}
       onFiltersChange={(filters) => {
