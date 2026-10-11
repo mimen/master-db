@@ -199,9 +199,6 @@ export function VideoBubble({
   sourceHeight: number | null;
 }) {
   const [activated, setActivated] = useState(false);
-  // Known dimensions size the tile; unknown ones (the bridge often sends 0x0) keep it square, with
-  // the frame letterboxed inside, rather than resizing it once the video reports its shape.
-  const known = sourceWidth !== null && sourceHeight !== null && sourceWidth > 0 && sourceHeight > 0;
   const [ratio, setRatio] = useState(() => aspectRatio(sourceWidth, sourceHeight));
   const videoRef = useRef<VideoView>(null);
   const player = useVideoPlayer(url, (p) => {
@@ -210,11 +207,10 @@ export function VideoBubble({
 
   useEventListener(player, "sourceLoad", ({ availableVideoTracks }) => {
     const size = availableVideoTracks[0]?.size;
-    if (size && known) setRatio(aspectRatio(size.width, size.height));
+    if (size) setRatio(aspectRatio(size.width, size.height));
   });
 
   const updateAspectRatio = () => {
-    if (!known) return;
     const trackSize = player.videoTrack?.size;
     if (trackSize) {
       setRatio(aspectRatio(trackSize.width, trackSize.height));
