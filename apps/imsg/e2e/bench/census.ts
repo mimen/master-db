@@ -34,9 +34,18 @@ export const census = (regions: string[]): void => {
     return `${el.tagName.toLowerCase()}${id ? `@${id}` : ""}`;
   };
   new PerformanceObserver((list) => {
-    for (const entry of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean; sources?: Array<{ node: Node | null }> }>) {
+    type Rect = { x: number; y: number; width: number; height: number };
+    type Source = { node: Node | null; previousRect?: Rect; currentRect?: Rect };
+    // A source whose box neither moved nor resized is a glyph repaint (a count changing digits in
+    // place), not a shift anyone sees; Chromium still reports it.
+    const moved = (s: Source): boolean => !s.previousRect || !s.currentRect ||
+      Math.abs(s.previousRect.x - s.currentRect.x) >= 0.5 || Math.abs(s.previousRect.y - s.currentRect.y) >= 0.5 ||
+      Math.abs(s.previousRect.width - s.currentRect.width) >= 0.5 || Math.abs(s.previousRect.height - s.currentRect.height) >= 0.5;
+    for (const entry of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean; sources?: Source[] }>) {
       if (entry.hadRecentInput) continue;
-      const sources = entry.sources?.length ? entry.sources : [{ node: null }];
+      const visible = entry.sources?.filter(moved);
+      if (entry.sources?.length && !visible?.length) continue;
+      const sources = visible?.length ? visible : [{ node: null }];
       for (const source of sources) target.__shifts.push({ phase: target.__phase, region: name(source.node), value: entry.value, node: describe(source.node) });
     }
   }).observe({ type: "layout-shift", buffered: true });
