@@ -526,7 +526,8 @@ export function ThreadView({
       columnW={columnW}
       isGroup={isGroup}
       isLatestOutgoing={item.message.guid === latestOutgoingGuid}
-      latestInboundAt={latestInboundAt}
+      // Only an outgoing message with an error code reads it, so an arrival leaves every other row alone.
+      latestInboundAt={item.message.isFromMe && item.message.error !== 0 ? latestInboundAt : null}
       highlighted={item.message.guid === highlightGuid}
       unreadCount={item.unreadBoundary ? unreadCount : 0}
       onLongPress={openMessageSheet}

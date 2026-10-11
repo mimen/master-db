@@ -444,3 +444,17 @@ test("ratchet: an older page renders the thread at most twice and does not mark 
   expect(renders.threadView).toBeLessThanOrEqual(THREAD_RENDERS_PER_PAGE);
   expect(reads, "older messages are not new messages").toBe(0);
 });
+
+/** The arriving row, the neighbour whose grouping it changes, and their mount-time second pass, with slack. */
+const ROW_RENDERS_PER_ARRIVAL = 6;
+
+test("ratchet: an arriving message renders only its row and its neighbour, not the thread", async ({ desk }) => {
+  const thread = await openSeededThread(desk);
+  await takeRenders(desk.page);
+  await desk.receive(desk.chats.needs, "Arrived just now", desk.chats.needs.split(";").at(-1));
+  await expect(thread.getByText("Arrived just now", { exact: true })).toBeVisible();
+  await desk.page.waitForTimeout(800);
+  const renders = await takeRenders(desk.page);
+  console.log(`arrival renders: ${JSON.stringify(renders)}`);
+  expect(renders.rows).toBeLessThanOrEqual(ROW_RENDERS_PER_ARRIVAL);
+});
