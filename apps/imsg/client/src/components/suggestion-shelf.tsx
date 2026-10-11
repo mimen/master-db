@@ -1,3 +1,4 @@
+import type { PendingEdit } from "@/lib/pending-edits";
 import { runCommand } from "@/lib/convex-commands";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { useQuery } from "convex/react";
@@ -34,6 +35,8 @@ export interface SuggestionSource {
   awaitingReply: boolean;
   reactionSuggestions: boolean;
   reactionPreview: (messageGuid: string) => string;
+  /** Shows an intent on a server-held message at once; the returned rollback undoes it. */
+  pend?: (messageGuid: string, edit: PendingEdit) => () => void;
 }
 
 export interface ReplySuggestionsState {
@@ -51,7 +54,7 @@ const SKELETON_DELAY_MS = 600;
 
 export function useReplySuggestions(
   chatGuid: string,
-  { enabled, awaitingReply, reactionSuggestions, reactionPreview }: SuggestionSource,
+  { enabled, awaitingReply, reactionSuggestions, reactionPreview, pend }: SuggestionSource,
 ): ReplySuggestionsState {
   const mode = useSuggestionMode();
   const selectedModel = useSuggestionModel();
@@ -143,6 +146,7 @@ export function useReplySuggestions(
       actions: [{
         label: `React ${emoji}`,
         onPress: () => {
+          const rollback = pend?.(suggestion.targetMessageGuid!, { kind: "react", type: suggestion.reaction!, remove: false });
           void runCommand(chatGuid, {
             kind: "react", messageGuid: suggestion.targetMessageGuid!, remove: false,
             reaction: suggestion.reaction!,
@@ -157,7 +161,10 @@ export function useReplySuggestions(
               selectedAt: Date.now(),
               finalText: suggestion.text,
             }).catch(() => undefined);
-          }).catch((error: unknown) => showToast(messagingCommandError(error, "Reaction failed")));
+          }).catch((error: unknown) => {
+            rollback?.();
+            showToast(messagingCommandError(error, "Reaction failed"));
+          });
         },
       }],
     });

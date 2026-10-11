@@ -331,7 +331,7 @@ export function Composer({
     setInputHeight(IOS_INPUT_MIN_HEIGHT);
   }, []);
   const draftSync = useComposerDraft(chatGuid, editing !== null, loadRemoteDraft);
-  const replySuggestions = useReplySuggestions(chatGuid, suggestions);
+  const replySuggestions = useReplySuggestions(chatGuid, { ...suggestions, pend: onEdit });
   const ghost = replySuggestions.slots.kind === "ready" ? replySuggestions.slots.ghost : null;
   const [ghostTextHeight, setGhostHeight] = useState(0);
 

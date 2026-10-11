@@ -509,3 +509,31 @@ test("ratchet: Send later clears the composer within 50 ms, and a failure puts t
   await desk.request.post("/__fixture/fault", { data: { method: null } });
   await desk.request.post("/__fixture/send-timing", { data: {} });
 });
+
+test("ratchet: an AI reaction shows on its message within 50 ms of confirming", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1300, height: 820 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").first().click();
+  await page.getByRole("button", { name: "react, playful: thumbs up" }).click();
+  const confirm = page.getByText("React 👍", { exact: true });
+  await expect(confirm).toBeVisible();
+  await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300, echo: false } });
+  await page.evaluate(() => {
+    const ratchet = window as unknown as { __inputAt?: number; __shownAt?: number };
+    addEventListener("pointerdown", (event) => { ratchet.__inputAt ??= event.timeStamp; }, { capture: true, once: true });
+    const poll = (now: number) => {
+      const badge = [...document.querySelectorAll('[data-testid="thread-view"] [aria-label="Like"]')].some((el) => !el.closest('[role="toolbar"]'));
+      if (badge && ratchet.__inputAt !== undefined) ratchet.__shownAt = now;
+      else requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+  });
+  await confirm.click();
+  const elapsed = await page.waitForFunction(() => {
+    const ratchet = window as unknown as { __inputAt?: number; __shownAt?: number };
+    return ratchet.__shownAt !== undefined && ratchet.__inputAt !== undefined ? ratchet.__shownAt - ratchet.__inputAt : false;
+  }, undefined, { timeout: 5_000 });
+  expect(Number(await elapsed.jsonValue())).toBeLessThanOrEqual(50);
+  await desk.request.post("/__fixture/send-timing", { data: {} });
+});
