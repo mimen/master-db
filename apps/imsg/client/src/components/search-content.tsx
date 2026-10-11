@@ -4,6 +4,8 @@ import { router } from "expo-router";
 import { api } from "@/lib/api";
 import { formatListTimestamp } from "@/lib/format";
 import { selectChat } from "@/lib/selection";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { addressesMatch } from "@shared/address";
 import type { Contact, Message } from "@shared/types";
 import { ListRow } from "./list-row";
 import { useTheme } from "@/hooks/use-theme";
@@ -57,15 +59,21 @@ export function SearchContent({
     return () => clearTimeout(handle);
   }, [query, scopeChatGuid]);
 
+  const directory = useChatDirectory();
+  const open = (chatGuid: string, name: string) => {
+    onClose();
+    if (!selectChat({ guid: chatGuid, name })) {
+      router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid, name } });
+    }
+  };
   const openContact = (contact: Contact) => {
+    // A listed 1:1 opens on the tap; findChat resolves the rest.
+    const listed = directory?.find((chat) => !chat.isGroup && chat.participants.length === 1
+      && addressesMatch(chat.participants[0]!.address, contact.address));
+    if (listed) return open(listed.guid, contact.name);
     api
       .findChat(contact.address)
-      .then(({ chatGuid }) => {
-        onClose();
-        if (!selectChat({ guid: chatGuid, name: contact.name })) {
-          router.push({ pathname: "/chat/[guid]", params: { guid: chatGuid, name: contact.name } });
-        }
-      })
+      .then(({ chatGuid }) => open(chatGuid, contact.name))
       .catch(() => undefined);
   };
 

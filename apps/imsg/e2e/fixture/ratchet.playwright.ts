@@ -554,3 +554,21 @@ test("Details paints the conversation's people from the list before chatInfo ans
   await expect(page.getByText("Reach Alex at", { exact: true })).toBeVisible({ timeout: 2_000 });
   held = false;
 });
+
+test("a contact search hit for a listed conversation opens it without waiting on findChat", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  let held = true;
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string };
+    while (held && body.name === "comma/conversationInfo:findChat") await new Promise((resolve) => setTimeout(resolve, 50));
+    await route.continue();
+  });
+  await page.goto("/search", { waitUntil: "domcontentloaded" });
+  await page.getByPlaceholder("Search contacts and messages…").fill("Nina");
+  const hit = page.getByText("+16195550201", { exact: true });
+  await expect(hit).toBeVisible({ timeout: 5_000 });
+  await hit.click();
+  await expect(page.getByTestId("thread-view").getByText("Any update when you get a chance?", { exact: true })).toBeVisible({ timeout: 2_000 });
+  held = false;
+});
