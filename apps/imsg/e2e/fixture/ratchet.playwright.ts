@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { census, REGIONS, type Shift } from "../bench/census";
+import { renderCounter, type Renders } from "../bench/renders";
 import { expect, test } from "../fixtures/desk";
 
 /**
@@ -343,4 +344,88 @@ test("the queue header moves at most once when the fonts arrive after first pain
   await page.waitForTimeout(1800);
   const shifts = await page.evaluate(() => (window as unknown as { __shifts: Shift[] }).__shifts);
   expect(shifts.filter((shift) => shift.region === "triage-queue-header").length).toBeLessThanOrEqual(1);
+});
+
+const SEEDED = 200;
+/** The 50 rows a page adds, plus the seam row whose grouping changes, with slack for list batching. */
+const ROW_RENDERS_PER_PAGE = 60;
+
+type Desk = Parameters<Parameters<typeof test>[2]>[0]["desk"];
+
+/** Opens a 200-message thread and waits for it to settle. */
+async function openSeededThread(desk: Desk) {
+  const page = desk.page;
+  await page.addInitScript(renderCounter);
+  for (let i = 1; i <= SEEDED; i++) await desk.receive(desk.chats.needs, `Seeded message ${i}`, desk.chats.needs.split(";").at(-1));
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).first().click();
+  const thread = page.getByTestId("thread-view");
+  await expect(thread.getByText(`Seeded message ${SEEDED}`, { exact: true })).toBeVisible();
+  await page.waitForTimeout(600);
+  return thread;
+}
+
+async function takeRenders(page: Page): Promise<Renders> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __renders: Renders };
+    const taken = { ...w.__renders };
+    for (const key of Object.keys(w.__renders) as Array<keyof Renders>) w.__renders[key] = 0;
+    return taken;
+  });
+}
+
+/**
+ * Scrolls until the next older page is requested, holds that page, then releases it with no input in
+ * flight. Returns the renders it cost and how far the bubble you were reading moved.
+ */
+async function landOlderPage(desk: Desk): Promise<{ renders: Renders; moved: number }> {
+  const page = desk.page;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let asked = false;
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string; args: { paginationOpts?: { numItems: number } } };
+    if (body.name === "comma/queries:listMessages" && body.args.paginationOpts?.numItems === 100) {
+      asked = true;
+      await gate;
+    }
+    await route.continue();
+  });
+  const thread = await openSeededThread(desk);
+  const list = await page.getByTestId("thread-message-list").boundingBox();
+  if (!list) throw new Error("thread list not on screen");
+  await page.mouse.move(list.x + list.width / 2, list.y + list.height / 2);
+  for (let step = 0; step < 40 && !asked; step++) {
+    await page.mouse.wheel(0, -240);
+    await page.waitForTimeout(50);
+  }
+  expect(asked, "scrolling up asks for the next older page").toBe(true);
+  await page.waitForTimeout(300);
+  const anchorText = await page.evaluate(() => {
+    const box = document.querySelector('[data-testid="thread-message-list"]')!.getBoundingClientRect();
+    const middle = box.top + box.height / 2;
+    const bubbles = [...document.querySelectorAll('[data-testid="message-bubble"]')];
+    bubbles.sort((a, b) => Math.abs(a.getBoundingClientRect().top - middle) - Math.abs(b.getBoundingClientRect().top - middle));
+    return bubbles[0]?.textContent ?? "";
+  });
+  const anchor = thread.getByTestId("message-bubble").filter({ hasText: anchorText }).first();
+  const before = (await anchor.boundingBox())!.y;
+  await takeRenders(page);
+  release();
+  await expect(thread.getByText("Seeded message 101", { exact: true })).toBeAttached();
+  await page.waitForTimeout(500);
+  const after = (await anchor.boundingBox())!.y;
+  return { renders: await takeRenders(page), moved: Math.abs(after - before) };
+}
+
+test("an older page lands without moving the message you are reading", async ({ desk }) => {
+  const { moved } = await landOlderPage(desk);
+  expect(moved).toBeLessThanOrEqual(1);
+});
+
+test("ratchet: an older page renders only its own rows", async ({ desk }) => {
+  const { renders } = await landOlderPage(desk);
+  console.log(`older page renders: ${JSON.stringify(renders)}`);
+  expect(renders.rows).toBeLessThanOrEqual(ROW_RENDERS_PER_PAGE);
 });

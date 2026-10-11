@@ -1,6 +1,6 @@
 import { runCommand } from "@/lib/convex-commands";
 import { messagingCommandError } from "@/lib/messaging-api";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Reanimated, { FadeInUp } from "react-native-reanimated";
 import {
   FlatList,
@@ -72,6 +72,28 @@ interface Row {
   newDay: boolean;
   /** Inside the inbound run since your last reply; the run's first row carries its size. */
   since: { count: number | null } | null;
+  /** The oldest unread message, which draws the unread divider above it. */
+  unreadBoundary: boolean;
+}
+
+const rowKey = (row: Row): string => row.message.clientKey ?? row.message.guid;
+
+/** Same values, field by field. Nested arrays and objects compare by content. */
+function sameMessage(a: Message, b: Message): boolean {
+  if (a === b) return true;
+  const keys = Object.keys(a) as Array<keyof Message>;
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => a[key] === b[key] ||
+    (typeof a[key] === "object" && a[key] !== null && JSON.stringify(a[key]) === JSON.stringify(b[key])));
+}
+
+/** `next` with `previous`'s identity when nothing a row draws changed, so its memoized cell skips the render. */
+function keepRow(previous: Row | undefined, next: Row): Row {
+  if (!previous || !sameMessage(previous.message, next.message)) return next;
+  const same = previous.groupStart === next.groupStart && previous.groupEnd === next.groupEnd &&
+    previous.newDay === next.newDay && previous.unreadBoundary === next.unreadBoundary &&
+    (previous.since === null) === (next.since === null) && previous.since?.count === next.since?.count;
+  return same ? previous : { ...next, message: previous.message };
 }
 
 interface ThreadViewProps {
@@ -255,9 +277,12 @@ export function ThreadView({
     }
   }, [chatGuid, messages, newestMessages, previewOnly]);
 
+  const firstUnreadAt = headerChat?.firstUnreadAt ?? null;
+  const previousRows = useRef(new Map<string, Row>());
   const rows = useMemo<Row[]>(() => {
     const visible = messages.filter((m) => !m.isGroupEvent || m.text);
     const run = sinceYourReply(visible);
+    const previous = previousRows.current;
     const built = visible.map((message, index): Row => {
       const prev = visible[index - 1];
       const next = visible[index + 1];
@@ -275,10 +300,14 @@ export function ThreadView({
         next.sender?.address === message.sender?.address &&
         next.dateCreated - message.dateCreated < GROUP_GAP_MS;
       const since = index < run.start ? null : { count: index === run.start ? run.count : null };
-      return { message, groupStart: !samePrev, groupEnd: !sameNext, newDay, since };
+      const unreadBoundary = firstUnreadAt !== null && !message.isFromMe && message.dateCreated >= firstUnreadAt &&
+        (prev === undefined || prev.dateCreated < firstUnreadAt);
+      const row = { message, groupStart: !samePrev, groupEnd: !sameNext, newDay, since, unreadBoundary };
+      return keepRow(previous.get(rowKey(row)), row);
     });
+    previousRows.current = new Map(built.map((row) => [rowKey(row), row]));
     return built.reverse(); // inverted list renders newest first
-  }, [messages]);
+  }, [messages, firstUnreadAt]);
 
   // In-thread search matches within the loaded window (newest-first `rows`).
   const searchMatches = useMemo(() => {
@@ -320,7 +349,6 @@ export function ThreadView({
 
   // Open at the first unread message when there are several (iMessage behavior).
   const unreadScrolled = useRef(false);
-  const firstUnreadAt = headerChat?.firstUnreadAt ?? null;
   useEffect(() => {
     if (jumpTarget || unreadScrolled.current || !firstUnreadAt || rows.length === 0) return;
     const unreadCount = rows.filter((r) => !r.message.isFromMe && r.message.dateCreated >= firstUnreadAt).length;
@@ -488,6 +516,24 @@ export function ThreadView({
     },
     [chatGuid, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
   );
+
+  const desk = headerChat !== null;
+  const unreadCount = headerChat?.unreadCount ?? 1;
+  const renderItem = useCallback(({ item }: { item: Row }) => (
+    <ThreadRow
+      row={item}
+      desk={desk}
+      columnW={columnW}
+      isGroup={isGroup}
+      isLatestOutgoing={item.message.guid === latestOutgoingGuid}
+      latestInboundAt={latestInboundAt}
+      highlighted={item.message.guid === highlightGuid}
+      unreadCount={item.unreadBoundary ? unreadCount : 0}
+      onLongPress={openMessageSheet}
+      onRetry={retry}
+      onShowReactions={showReactions}
+    />
+  ), [columnW, desk, highlightGuid, isGroup, latestInboundAt, latestOutgoingGuid, openMessageSheet, retry, showReactions, unreadCount]);
 
   // The thread's bottom inset, driven by the keyboard rather than by
   // KeyboardAvoidingView — which silently applies NO padding on this
@@ -683,81 +729,7 @@ export function ThreadView({
               </View>
             ) : null
           }
-          renderItem={({ item, index }) => {
-            const olderMessage = rows[index + 1]?.message ?? null;
-            const unreadBoundary =
-              firstUnreadAt !== null &&
-              !item.message.isFromMe &&
-              item.message.dateCreated >= firstUnreadAt &&
-              (olderMessage === null || olderMessage.dateCreated < firstUnreadAt);
-            const sinceStart = item.since?.count != null;
-            const body = item.message.isGroupEvent ? (
-              <Text style={[styles.groupEvent, { color: theme.textTertiary }]}>
-                {item.message.text}
-              </Text>
-            ) : (
-              <Bubble
-                message={item.message}
-                paneWidth={columnW}
-                groupStart={item.groupStart}
-                groupEnd={item.groupEnd}
-                isGroupChat={isGroup}
-                isLatestOutgoing={item.message.guid === latestOutgoingGuid}
-                latestInboundAt={latestInboundAt}
-                highlighted={item.message.guid === highlightGuid}
-                onLongPress={openMessageSheet}
-                onRetry={retry}
-                onShowReactions={showReactions}
-              />
-            );
-            return (
-              <Reanimated.View
-                entering={
-                  // FadeInUp, not Down: the list is inverted, so each cell carries
-                  // scaleY:-1 and a downward animation renders as an upward one.
-                  Date.now() - item.message.dateCreated < 4000
-                    ? FadeInUp.springify().damping(22)
-                    : undefined
-                }
-              >
-                {unreadBoundary && !sinceStart && (
-                  <View style={styles.unreadDivider}>
-                    <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
-                    <Text style={[styles.unreadLabel, { color: theme.accent }]}>
-                      {headerChat?.unreadCount ?? 1} unread
-                    </Text>
-                    <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
-                  </View>
-                )}
-                {item.newDay && !sinceStart && (
-                  <Text style={[styles.dayDivider, !headerChat && styles.dayDividerPhone, { color: theme.textTertiary }]}>
-                    {formatThreadTime(item.message.dateCreated)}
-                  </Text>
-                )}
-                {item.since ? (
-                  <View
-                    style={[
-                      headerChat ? styles.sinceRunDesk : styles.sinceRunPhone,
-                      sinceStart && (headerChat ? styles.sinceStartDesk : styles.sinceStartPhone),
-                      { borderLeftColor: theme.turnMark },
-                    ]}
-                  >
-                    {sinceStart && (
-                      <View style={[styles.sinceLabel, headerChat ? styles.sinceLabelDesk : styles.sinceLabelPhone]}>
-                        <Text style={[styles.sinceCount, { color: theme.turn, fontSize: headerChat ? 11.5 : 13 }]}>
-                          {item.since.count} since your reply
-                        </Text>
-                        <Text style={{ color: theme.textTertiary, fontSize: headerChat ? 11.5 : 13 }}>
-                          {formatThreadTime(item.message.dateCreated)}
-                        </Text>
-                      </View>
-                    )}
-                    {body}
-                  </View>
-                ) : body}
-              </Reanimated.View>
-            );
-          }}
+          renderItem={renderItem}
         />
       )}
       {dayChip && (
@@ -822,6 +794,106 @@ export function ThreadView({
     </View>
   );
 }
+
+interface ThreadRowProps {
+  row: Row;
+  desk: boolean;
+  columnW: number;
+  isGroup: boolean;
+  isLatestOutgoing: boolean;
+  latestInboundAt: number | null;
+  highlighted: boolean;
+  /** The unread divider's count; 0 on every row but the boundary. */
+  unreadCount: number;
+  onLongPress: (message: Message, anchor?: { x: number; y: number }) => void;
+  onRetry: (message: Message) => void;
+  onShowReactions: (message: Message) => void;
+}
+
+/** One message row. Memoized on its props, so a new page renders only the rows it adds. */
+const ThreadRow = memo(function ThreadRow({
+  row,
+  desk,
+  columnW,
+  isGroup,
+  isLatestOutgoing,
+  latestInboundAt,
+  highlighted,
+  unreadCount,
+  onLongPress,
+  onRetry,
+  onShowReactions,
+}: ThreadRowProps) {
+  const theme = useTheme();
+  const { message } = row;
+  const sinceStart = row.since?.count != null;
+  const body = message.isGroupEvent ? (
+    <Text style={[styles.groupEvent, { color: theme.textTertiary }]}>
+      {message.text}
+    </Text>
+  ) : (
+    <Bubble
+      message={message}
+      paneWidth={columnW}
+      groupStart={row.groupStart}
+      groupEnd={row.groupEnd}
+      isGroupChat={isGroup}
+      isLatestOutgoing={isLatestOutgoing}
+      latestInboundAt={latestInboundAt}
+      highlighted={highlighted}
+      onLongPress={onLongPress}
+      onRetry={onRetry}
+      onShowReactions={onShowReactions}
+    />
+  );
+  return (
+    <Reanimated.View
+      entering={
+        // FadeInUp, not Down: the list is inverted, so each cell carries
+        // scaleY:-1 and a downward animation renders as an upward one.
+        Date.now() - message.dateCreated < 4000
+          ? FadeInUp.springify().damping(22)
+          : undefined
+      }
+    >
+      {row.unreadBoundary && !sinceStart && (
+        <View style={styles.unreadDivider}>
+          <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
+          <Text style={[styles.unreadLabel, { color: theme.accent }]}>
+            {unreadCount} unread
+          </Text>
+          <View style={[styles.unreadLine, { backgroundColor: theme.accent }]} />
+        </View>
+      )}
+      {row.newDay && !sinceStart && (
+        <Text style={[styles.dayDivider, !desk && styles.dayDividerPhone, { color: theme.textTertiary }]}>
+          {formatThreadTime(message.dateCreated)}
+        </Text>
+      )}
+      {row.since ? (
+        <View
+          style={[
+            desk ? styles.sinceRunDesk : styles.sinceRunPhone,
+            sinceStart && (desk ? styles.sinceStartDesk : styles.sinceStartPhone),
+            { borderLeftColor: theme.turnMark },
+          ]}
+        >
+          {sinceStart && (
+            <View style={[styles.sinceLabel, desk ? styles.sinceLabelDesk : styles.sinceLabelPhone]}>
+              <Text style={[styles.sinceCount, { color: theme.turn, fontSize: desk ? 11.5 : 13 }]}>
+                {row.since.count} since your reply
+              </Text>
+              <Text style={{ color: theme.textTertiary, fontSize: desk ? 11.5 : 13 }}>
+                {formatThreadTime(message.dateCreated)}
+              </Text>
+            </View>
+          )}
+          {body}
+        </View>
+      ) : body}
+    </Reanimated.View>
+  );
+});
 
 /** The breadcrumb name. After an auto-advance it mounts on the previous name, then blur-swaps to this one. */
 function ThreadTitle({ name, from, color }: { name: string; from: string | undefined; color: string }) {
