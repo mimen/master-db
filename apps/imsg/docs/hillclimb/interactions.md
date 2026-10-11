@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **32 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 44 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **33 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 43 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -46,7 +46,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Palette compose, Send | command-palette.tsx:536 → R(createChat) | WAIT | Disabled arrow only | Toast |
 | Recipient search | composer.tsx:240, new-chat-content.tsx:74, command-palette.tsx:473 | WAIT | Debounced, no indicator | Silent |
 | Recipient chips | new-chat-content.tsx:85 | OPTIMISTIC | — | — |
-| Forward to destination | forward-content.tsx:31 → R(send) | WAIT | No pending state | Toast |
+| Forward to destination | forward-content.tsx:33 → R(send) | OPTIMISTIC | Closes and opens the destination with a pending bubble on the click (lib/local-sends.ts) | Not delivered bubble with Retry, toast |
 | Filter forward targets | use-forward-targets.ts:23 | OPTIMISTIC | — | — |
 | Reply or edit mode | thread-view.tsx:410 | OPTIMISTIC | — | — |
 | Paste, drop, stage attachment (web) | composer.tsx:655 | OPTIMISTIC | — | Toast on validation |
@@ -149,7 +149,7 @@ All identity writes lack an optimistic updater. The visible queries are `whoIs({
 
 ## Ranked by how often a user feels them
 
-1. Forward. No pending state at all.
-2. Send text. The sidebar patch waits for an awaited `resolveChat`.
+1. Send text. The sidebar patch waits for an awaited `resolveChat`.
+2. Palette compose Send and Send again. No local bubble.
 
 Settle, read, unread and pin led this list until H5 made them optimistic.

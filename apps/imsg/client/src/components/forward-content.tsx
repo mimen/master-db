@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { takeForwardText } from "@/lib/forward";
+import { localSends, tempMessage } from "@/lib/local-sends";
 import { showToast } from "@/lib/toast";
 import { useForwardTargets } from "@/hooks/use-forward-targets";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
@@ -28,15 +29,19 @@ export function ForwardContent({ onClose, onOpenChat }: ForwardContentProps): Re
   const { results, loading, query, setQuery } = useForwardTargets();
   const [text] = useState(() => takeForwardText());
 
+  // The copy lands in the destination thread on the click, the way a composer send does.
   const forwardTo = (chat: ChatSummary): void => {
     if (!text) return;
-    void runCommand(chat.guid, { kind: "send", text })
-      .then(() => {
-        showToast(`Forwarded to ${chat.displayName}`);
-        onClose();
-        onOpenChat(chat);
-      })
-      .catch((error: unknown) => showToast(messagingCommandError(error, "Forward failed")));
+    const temp = tempMessage(chat.guid, text);
+    localSends.upsert(chat.guid, temp);
+    onClose();
+    onOpenChat(chat);
+    void runCommand(chat.guid, { kind: "send", text }, { clientKey: temp.guid })
+      .then(({ message }) => localSends.settle(chat.guid, temp.guid, message))
+      .catch((error: unknown) => {
+        localSends.settle(chat.guid, temp.guid, { ...temp, pending: false, failed: true });
+        showToast(messagingCommandError(error, "Forward failed"));
+      });
   };
 
   // Forward only opens from a message. Reached any other way (a reload, a

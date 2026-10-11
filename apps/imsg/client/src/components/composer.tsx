@@ -36,6 +36,7 @@ import { setTyping as sendTyping } from "@/lib/presence-api";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { sendWithSuggestionFeedback } from "@/lib/ai-api";
 import { getDraft, setDraft } from "@/lib/drafts";
+import { tempMessage } from "@/lib/local-sends";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
@@ -167,43 +168,9 @@ function GhostText({ text, shown, card, fontSize, color, onHeight }: {
 }
 
 
-function tempMessage(
-  chatGuid: string,
-  text: string,
-  replyTo: Message | null,
-  mentions: readonly MentionAnnotation[],
-): Message {
-  const guid = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  return {
-    guid,
-    clientKey: guid,
-    chatGuid,
-    text,
-    dateCreated: Date.now(),
-    dateRead: null,
-    dateDelivered: null,
-    isFromMe: true,
-    service: chatIsSMS(chatGuid) ? "SMS" : "iMessage",
-    sender: null,
-    attachments: [],
-    mentions: [...mentions],
-    special: null,
-    sendEffect: null,
-    reactions: [],
-    replyToGuid: replyTo?.guid ?? null,
-    replyToPreview: replyTo ? replyTo.text.slice(0, 120) : null,
-    replyToFromMe: replyTo?.isFromMe ?? null,
-    isGroupEvent: false,
-    error: 0,
-    edited: false,
-    retracted: false,
-    pending: true,
-  };
-}
-
 /** A voice memo on its way: the audio bubble draws now, and plays once the recorder hands over its file. */
 function tempVoiceMessage(chatGuid: string, filename: string): Message {
-  const temp = tempMessage(chatGuid, "", null, []);
+  const temp = tempMessage(chatGuid, "");
   return {
     ...temp,
     attachments: [{ guid: `${temp.guid}-audio`, mimeType: "audio/mp4", filename, originalUrl: null, width: null, height: null, totalBytes: null }],

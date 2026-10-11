@@ -201,3 +201,38 @@ test("a voice message shows at once, then leaves with a toast and stays staged w
   expect(await page.evaluate(`(${VOICE_BUBBLE})()`)).toBe(false);
   await expect(page.getByRole("button", { name: "Remove attachment" })).toBeVisible();
 });
+
+/** Opens the forward picker on Alex's question and returns Jordan's row in it. */
+async function forwardToJordan(page: Page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await page.getByTestId("thread-view").getByRole("button", { name: `Alex Rivera: ${INBOUND}` }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Forward" }).click();
+  await page.getByPlaceholder("Forward to…").fill("Jordan");
+  return page.getByRole("button", { name: "Jordan Lee", exact: true });
+}
+
+const FORWARDED = `() => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
+  .some((element) => element.getAttribute("aria-label") === "You: ${INBOUND}")`;
+
+test("ratchet: a forwarded message is in the destination thread within 50 ms of the click", async ({ desk }) => {
+  // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
+  expect((await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300 } })).ok()).toBe(true);
+  const page = desk.page;
+  const jordan = await forwardToJordan(page);
+  await timeToFrame(page, "pointerdown", FORWARDED);
+  await jordan.click();
+  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+});
+
+test("a forward shows at once and turns Not delivered with a toast when the bridge fails it", async ({ desk }) => {
+  const fault = await desk.request.post("/__fixture/fault", { data: { method: "sendText" } });
+  expect(fault.ok()).toBe(true);
+  const page = desk.page;
+  const jordan = await forwardToJordan(page);
+  const shown = page.waitForFunction(FORWARDED, undefined, { polling: "raf", timeout: 5_000 });
+  await jordan.click();
+  await shown;
+  await expect(page.getByText("Forward failed")).toBeVisible();
+  await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
+});

@@ -2,12 +2,20 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
-## 2026-10-10. A voice message is in the thread the moment you send it (H16)
+## 2026-10-10. A forward opens the destination with the message already in it (H17)
+
+- **For the user:** picking a destination in the forward picker closes it and opens that conversation on the same frame, with the forwarded copy at the bottom marked as sending. If the Mac mini rejects it, the bubble turns Not delivered with Retry and the "Forward failed" toast shows. Before, the picker sat unchanged until the bridge answered, then closed with a "Forwarded to" toast.
+- **Metric 2 (non-optimistic interactions):** 72 became 71. `e2e/bench/optimistic.ts --case forward`, 9 interleaved runs, p50/p75 415/432 to 17/21 ms.
+- **Ratchet:** `ratchet.playwright.ts` requires the forwarded bubble in Jordan's thread within 50 ms of the click (with the fixture's send delayed 300 ms, since the bare fixture can answer inside a frame), and requires Not delivered plus the toast under a `sendText` fault. Both fail on the old build (344 to 360 ms; no bubble).
+- **Mechanism:** a thread's own unsettled sends moved from per-thread React state into `lib/local-sends.ts`, a per-chat store the thread reads. A send started outside the thread can now place its temp bubble before the thread mounts. `tempMessage` moved there from composer.tsx.
+- **Revert:** `git revert <H17 commit>`.
+
+## 2026-10-10. A voice message is in the thread the moment you send it (b1fefba8)
 
 - **For the user:** releasing the mic (or clicking Send voice message on the web) puts the audio bubble in the thread on that frame, marked as sending. It becomes playable a beat later, once the recorder hands over the file. If the Mac mini rejects it, the bubble leaves, the existing toast shows, and the take waits in the staging tray with a mic icon so Send resends it as a voice message. Before, the controls only dimmed and nothing appeared until the bridge answered, and a failed take was lost.
 - **Metric 2 (non-optimistic interactions):** 73 became 72. `e2e/bench/optimistic.ts --case voice-send`, fixture with tailnet shaping, 9 interleaved runs, p50/p75 518/534 to 15/15 ms.
 - **Ratchet:** `ratchet.playwright.ts` requires the audio bubble within 50 ms of the click and requires it to leave, toast and stage the take under an injected `sendAudio` fault. Both fail on the old build (364 to 480 ms; no staged take).
-- **Revert:** `git revert <H16 commit>`.
+- **Revert:** `git revert b1fefba8`.
 
 ## 2026-10-10. A first visit downloads a third less JavaScript (e47ecc85..c457621b)
 

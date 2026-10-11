@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { messageWindow } from "@/lib/history-api";
-import { reconcileWindow, settleTemp, sortByDate, upsertMessage, hideSelfEchoes } from "@/lib/message-window";
+import { localSends, useLocalSends } from "@/lib/local-sends";
+import { reconcileWindow, sortByDate, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import { applyPendingEdits, retirePendingEdits, type PendingEdit, type PendingEdits } from "@/lib/pending-edits";
 import type { Message } from "@shared/types";
@@ -45,8 +46,7 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
     conversationId ? { conversationId: conversationId as never } : "skip",
     { initialNumItems: 50 },
   );
-  const [local, setLocal] = useState<Message[]>([]);
-  useEffect(() => setLocal([]), [conversationId]);
+  const local = useLocalSends(chatGuid);
   useEffect(() => {
     if (chatGuid && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(chatGuid, true));
   }, [chatGuid, status]);
@@ -56,20 +56,20 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
   // Retire overlays once a real mirrored row owns the send. Otherwise an unsent
   // message could reappear from its old local acknowledgement after retraction.
   useEffect(() => {
+    if (!chatGuid) return;
     const confirmed = mirrored.filter((message) => !message.guid.startsWith("temp-"));
-    const remaining = local.filter((message) => !confirmed.some((row) => row.guid === message.guid ||
+    localSends.retain(chatGuid, (message) => !confirmed.some((row) => row.guid === message.guid ||
       (message.clientKey && row.clientKey === message.clientKey)));
-    if (remaining.length !== local.length) setLocal(remaining);
-  }, [mirrored, local]);
+  }, [chatGuid, mirrored, local]);
   const upsert = useCallback((message: Message) => {
-    setLocal((current) => upsertMessage(current, message));
-  }, []);
+    if (chatGuid) localSends.upsert(chatGuid, message);
+  }, [chatGuid]);
   const replaceTemp = useCallback((tempGuid: string, message: Message) => {
-    setLocal((current) => settleTemp(current, tempGuid, message));
-  }, []);
+    if (chatGuid) localSends.settle(chatGuid, tempGuid, message);
+  }, [chatGuid]);
   const remove = useCallback((guid: string) => {
-    setLocal((current) => current.filter((m) => m.guid !== guid));
-  }, []);
+    if (chatGuid) localSends.retain(chatGuid, (m) => m.guid !== guid);
+  }, [chatGuid]);
   const noop = useCallback(() => undefined, []);
   const loadOlder = useCallback(() => {
     if (status === "CanLoadMore") loadMore(50);
