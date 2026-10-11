@@ -17,6 +17,7 @@ import { writeFileSync } from "node:fs";
 import { chromium, type CDPSession, type Page } from "@playwright/test";
 import { cachedChromium } from "../chromium";
 import { CHAT_GUIDS } from "../fixture/world";
+import { renderCounter, type Renders } from "./renders";
 
 const args = new Map<string, string>();
 for (let i = 2; i < Bun.argv.length; i += 2) args.set(Bun.argv[i].replace(/^--/, ""), Bun.argv[i + 1]);
@@ -30,7 +31,7 @@ const STREAMED = 20;
 const TYPED = "See you at the venue around eight thirty";
 
 type Flow = "scroll" | "stream" | "typing";
-interface Sample { frames: number[]; long: number[]; inputs: number[] }
+interface Sample { frames: number[]; long: number[]; inputs: number[]; renders: Renders }
 
 /** Page init script: frame deltas, long frames and keydown-to-paint delays, recorded only while `__recording`. */
 const recorder = (): void => {
@@ -61,10 +62,13 @@ const recorder = (): void => {
 
 async function record(page: Page, on: boolean): Promise<Sample> {
   return page.evaluate((next) => {
-    const w = window as unknown as { __recording: boolean; __sample: { frames: number[]; long: number[]; inputs: number[] } };
-    const sample = w.__sample;
+    const w = window as unknown as { __recording: boolean; __sample: Omit<Sample, "renders">; __renders: Renders };
+    const sample = { ...w.__sample, renders: { ...w.__renders } };
     w.__recording = next;
-    if (next) w.__sample = { frames: [], long: [], inputs: [] };
+    if (next) {
+      w.__sample = { frames: [], long: [], inputs: [] };
+      for (const key of Object.keys(w.__renders) as Array<keyof Renders>) w.__renders[key] = 0;
+    }
     return sample;
   }, on);
 }
@@ -126,6 +130,8 @@ function summarize(sample: Sample) {
     longFrames: sample.long.length,
     longMs: Math.round(sample.long.reduce((a, b) => a + b, 0)),
     inputP95: sample.inputs.length ? round(pct(sample.inputs, 95)) : null,
+    keys: sample.inputs.length,
+    ...sample.renders,
   };
 }
 
@@ -152,6 +158,7 @@ for (let run = 0; run < total; run++) {
   for (let i = 1; i <= SEEDED; i++) await context.request.post(`${base}/__fixture/receive`, { data: { chatGuid: CHAT, text: `Seeded message ${i}`, handle: CHAT.split(";").at(-1) } });
   const page = await context.newPage();
   await page.addInitScript(recorder);
+  await page.addInitScript(renderCounter);
   const cdp = await context.newCDPSession(page);
   if (cpu > 1) await cdp.send("Emulation.setCPUThrottlingRate", { rate: cpu });
   await openThread(page);
@@ -185,7 +192,13 @@ if (!profileFlow) {
       over33: spread(rows.map((r) => r.over33)),
       longFrames: spread(rows.map((r) => r.longFrames)),
       longMs: spread(rows.map((r) => r.longMs)),
-      ...(flow === "typing" ? { inputP95: spread(rows.map((r) => r.inputP95 ?? 0)) } : {}),
+      commits: spread(rows.map((r) => r.commits)),
+      threadView: spread(rows.map((r) => r.threadView)),
+      cells: spread(rows.map((r) => r.cells)),
+      rows: spread(rows.map((r) => r.rows)),
+      bubbles: spread(rows.map((r) => r.bubbles)),
+      composer: spread(rows.map((r) => r.composer)),
+      ...(flow === "typing" ? { inputP95: spread(rows.map((r) => r.inputP95 ?? 0)), keys: spread(rows.map((r) => r.keys)) } : {}),
     }];
   }));
   console.log(JSON.stringify({ summary: true, runs, cpu, ...report }));

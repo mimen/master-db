@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getFunctionName, type FunctionArgs, type FunctionReference, type FunctionReturnType } from "convex/server";
 import type { PaginatedQueryArgs, PaginatedQueryReference } from "convex/react";
 import { fixtureCommandWatch } from "./fixture-command-watch";
@@ -54,9 +54,15 @@ export function usePaginatedQuery<Ref extends PaginatedQueryReference>(ref: Ref,
     ...args, paginationOpts: { numItems: limit, cursor: null },
   } as FunctionArgs<Ref>);
   const loadMore = useCallback((count: number) => setLimit((value) => value + count), []);
+  // Convex keeps the loaded pages on screen while the next one loads (LoadingMore).
+  const argsKey = JSON.stringify(args);
+  const loaded = useRef<{ argsKey: string; value: NonNullable<typeof result> }>(undefined);
+  if (result !== undefined) loaded.current = { argsKey, value: result };
+  const held = result ?? (loaded.current?.argsKey === argsKey ? loaded.current.value : undefined);
   return {
-    results: result?.page ?? [],
-    status: result === undefined ? "LoadingFirstPage" as const : result.isDone ? "Exhausted" as const : "CanLoadMore" as const,
+    results: held?.page ?? [],
+    status: held === undefined ? "LoadingFirstPage" as const : result === undefined ? "LoadingMore" as const
+      : result.isDone ? "Exhausted" as const : "CanLoadMore" as const,
     loadMore,
   };
 }
