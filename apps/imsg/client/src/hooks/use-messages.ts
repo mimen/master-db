@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { messageWindow } from "@/lib/history-api";
-import { holdListPaging } from "@/lib/list-paging-hold";
 import { localSends, useLocalSends } from "@/lib/local-sends";
 import { reconcileWindow, sortByDate, hideSelfEchoes } from "@/lib/message-window";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
@@ -51,8 +50,6 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
   useEffect(() => {
     if (chatGuid && status !== "LoadingFirstPage") afterPaint(() => markOpenRendered(chatGuid, true));
   }, [chatGuid, status]);
-  const firstPageLoading = conversationId !== null && status === "LoadingFirstPage";
-  useEffect(() => (firstPageLoading ? holdListPaging() : undefined), [firstPageLoading]);
   const remote = useMemo(() => sortByDate(results.map(messageToMessage)), [results]);
   const mirrored = useMemo(() => reconcileWindow(remote, [...newest]), [newest, remote]);
   const messages = useMemo(() => hideSelfEchoes(mergeConvexMessages(mirrored, local)), [mirrored, local]);
