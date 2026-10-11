@@ -39,6 +39,13 @@ One entry per landed change, newest first. Each entry gives the date, the commit
 - **Ratchet:** `scripts/bundle-size.ratchet.ts` sums the brotli size of every `<script src>` in the fixture export and fails above 520,000 bytes. `validate-imsg.yml` builds the fixture export, then runs it. It fails on the origin/main build (739,034) and on the build before deferred surfaces (546,111).
 - **Revert:** `git revert c457621b 244fa9cf 8f2e5a04 f636534c ca200280 e47ecc85`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
 
+## 2026-10-11. A fresh load downloads 444 KB of JavaScript (6695e497, 1a9ca847)
+
+- **For the user:** the conversation list appears sooner on a fresh load. The thread view now loads in its own chunk, which starts downloading at boot, and the phone swipe's gesture library loads only on phones.
+- **Metric 1d (first-visit JS, brotli):** 506 KB became 444 KB, which meets the 450 KB target. On production data, first-visit list p75 went from 564 to 523 ms (faster in 4 of 4 rounds), and return-visit list p75 from 195 to 138 ms.
+- **Ratchet:** `scripts/bundle-size.ratchet.ts` ceiling is now 458,000 bytes. `e2e/fixture/row-swipe.playwright.ts` swipes a phone row and fails if gesture-handler returns to the entry chunk.
+- **Revert:** `git revert 1a9ca847 6695e497`.
+
 ## 2026-10-11. Sends from anywhere show at once (15e820de, 43cb3d75, 54970c97, c5e3dee9)
 
 - **For the user:** a voice message, a forward, Send again from the message menu, and a send from ⌘K now show a pending bubble or the Sending ring on the click. A failure reverts with a toast; a failed voice take goes back to the tray.
