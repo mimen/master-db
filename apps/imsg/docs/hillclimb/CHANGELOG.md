@@ -2,14 +2,14 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
-## 2026-10-11. A renamed group shows its new name on Save (H26)
+## 2026-10-11. A renamed group shows its new name on Save (860113d4)
 
 - **For the user:** saving a new group name in Details shows it there and on the conversation row on the same frame. If the Mac mini rejects it, both go back to the old name and the "Couldn't rename" toast shows. Before, the name changed only once the enqueue was acknowledged, and a bridge failure after that was never reported.
 - **Mechanism:** a `rename` intent joins the flag intents in `lib/pending-flags.ts` on its own axis and patches `displayName`; it retires once the directory carries the name. The rename now runs through `runCommand`, so it observes the bridge's result. The unused `api.renameGroup` and `enqueueCommand` are gone.
 - **Metric 2 (non-optimistic interactions):** 64 became 63. `e2e/bench/optimistic.ts --case rename-group`, 9 interleaved runs against an origin/main build, p50/p75 80/82 to 13/14 ms.
 - **Ratchet:** `ratchet.playwright.ts` requires the new name in Details within 50 ms of Save (rename enqueue held 300 ms) and requires the old name plus the toast under a `renameGroup` fault. Both fail on the old build (310 to 317 ms; the name never shows).
 - **Harness:** `IMSG_FIXTURE_DIST` serves another build from the same fixture, and each port keeps its own runtime database, so an A/B pair runs side by side.
-- **Revert:** `git revert <H26 commit>`.
+- **Revert:** `git revert 860113d4`.
 
 ## 2026-10-10. A new message from the palette shows it is sending on the click (H19)
 
