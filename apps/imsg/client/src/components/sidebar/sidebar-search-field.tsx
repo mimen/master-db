@@ -44,7 +44,10 @@ export function SidebarSearchField({
         { backgroundColor: theme.field, height: wide ? 30 : 40, borderRadius: wide ? 8 : 10, gap: wide ? 7 : 8, paddingLeft: wide ? 9 : 12 },
       ]}
     >
-      <Ionicons name="search" size={wide ? 14 : 17} color={theme.textTertiary} />
+      {/* Sized box: the glyph has no width until the icon font registers, which can follow first paint. */}
+      <View style={{ width: wide ? 14 : 17, height: wide ? 14 : 17 }}>
+        <Ionicons name="search" size={wide ? 14 : 17} color={theme.textTertiary} />
+      </View>
       <TextInput
         ref={inputRef}
         accessibilityLabel={accessibilityLabel}

@@ -26,7 +26,12 @@ export function EmptyState({ icon, iconSize = 28, iconColor, message, children, 
   const type = useType();
   return (
     <View style={[styles.container, style]}>
-      {icon && <Ionicons name={icon} size={iconSize} color={iconColor ?? theme.textSecondary} />}
+      {/* Sized box: the glyph has no height until the icon font registers, which can follow first paint. */}
+      {icon && (
+        <View style={{ width: iconSize, height: iconSize }}>
+          <Ionicons name={icon} size={iconSize} color={iconColor ?? theme.textSecondary} />
+        </View>
+      )}
       {typeof message === "string" ? (
         <Text style={{ color: theme.textSecondary, fontSize: type.body }}>{message}</Text>
       ) : (
