@@ -31,7 +31,12 @@ import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 import type { AirtableHumanRow } from "@/lib/identity";
 
+import { addressesMatch } from "@shared/address";
+import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { localSends, tempMessage } from "@/lib/local-sends";
+import { afterPaint } from "@/lib/open-timing";
 import { ChatAvatar, PersonAvatar } from "./avatar";
+import { MorphSendButton } from "./motion/morph-send-button";
 import {
   PaletteListRow,
   PaletteSectionHeader,
@@ -533,16 +538,34 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   const { reset } = cursor;
   useEffect(() => reset(), [needle, reset]);
 
+  const directory = useChatDirectory();
   const send = (): void => {
     const body = text.trim();
     if (recipients.length === 0 || body === "" || sending) return;
     setSending(true);
+    // createChat lands one recipient in their iMessage conversation; when that already exists,
+    // the message shows there on the click, as a composer send does.
+    const [only] = recipients;
+    const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && chat.guid.startsWith("iMessage;") &&
+      chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
+    const temp = existing ? tempMessage(existing.guid, body) : null;
+    if (existing && temp) {
+      localSends.upsert(existing.guid, temp);
+      // Mounting the thread costs a long frame; the Sending ring paints first, on the frame of the click.
+      afterPaint(() => {
+        onClose();
+        selectChat({ guid: existing.guid, name: existing.displayName });
+      });
+    }
     runCommand(null, { kind: "createChat", addresses: recipients.map((c) => c.address), text: body })
-      .then(({ chatGuid }) => {
+      .then(({ chatGuid, message }) => {
+        if (existing && temp && chatGuid === existing.guid) return localSends.settle(chatGuid, temp.guid, message);
+        if (existing && temp) localSends.retain(existing.guid, (m) => m.guid !== temp.guid);
         onClose();
         selectChat({ guid: chatGuid });
       })
       .catch((e: unknown) => {
+        if (existing && temp) localSends.settle(existing.guid, temp.guid, { ...temp, pending: false, failed: true });
         const detail =
           e instanceof Error ? /"error"\s*:\s*"([^"]+)"/.exec(e.message)?.[1] : undefined;
         showToast(messagingCommandError(e, detail ? `Couldn't start: ${detail.slice(0, 120)}` : e instanceof Error ? `Couldn't start: ${e.message.slice(0, 120)}` : "Couldn't start the conversation"));
@@ -692,15 +715,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           placeholderTextColor={theme.textSecondary}
           style={[styles.composeMessageInput, { borderColor: theme.divider, color: theme.text }]}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-          disabled={!canSend}
-          onPress={send}
-          style={({ hovered, pressed }) => [styles.sendButton, { backgroundColor: canSend ? theme.accent : theme.backgroundElement }, canSend && hovered && !pressed && { opacity: HOVER_DIM }, canSend && pressed && { opacity: PRESS_DIM }]}
-        >
-          <Ionicons name="arrow-up" size={17} color={canSend ? theme.onAccent : theme.textSecondary} />
-        </Pressable>
+        <MorphSendButton status={sending ? "sending" : "idle"} disabled={!canSend && !sending} onPress={send} />
       </View>
     </PaletteFrame>
   );
@@ -800,12 +815,5 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: 13,
     paddingVertical: 6,
-  },
-  sendButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
   },
 });

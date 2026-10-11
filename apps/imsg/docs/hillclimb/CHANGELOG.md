@@ -2,12 +2,19 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
-## 2026-10-10. Send again puts the new copy in the thread at once (H18)
+## 2026-10-10. A new message from the palette shows it is sending on the click (H19)
+
+- **For the user:** pressing Send in the ⌘N palette turns the arrow into the composer's Sending ring on that frame. When the one recipient already has a conversation, the palette closes on the next frame and that thread opens with the message at the bottom, marked as sending. If the Mac mini rejects it, the bubble turns Not delivered and the "Couldn't start" toast shows. A brand-new conversation keeps the ring until createChat answers, because there is no thread to show it in yet. Before, the arrow only dimmed and nothing moved until the bridge answered.
+- **Metric 2 (non-optimistic interactions):** 70 became 69. `e2e/bench/optimistic.ts --case palette-send` (ring or bubble, whichever first), 9 interleaved runs, p50/p75 298/299 to 38/50 ms. The ring paints about 12 ms after the click in-page; the bench's Playwright-side reading adds the long frame that mounts the thread.
+- **Ratchet:** `ratchet.playwright.ts` requires the ring or bubble within 50 ms of Send (createChat enqueue held 300 ms), and requires Not delivered plus the toast under a `createChat` fault. Both fail on the old build (345 to 361 ms; no bubble).
+- **Revert:** `git revert <H19 commit>`.
+
+## 2026-10-10. Send again puts the new copy in the thread at once (968c5f26)
 
 - **For the user:** choosing Send again on an older message that may not have delivered adds the new copy at the bottom of the thread on the click, marked as sending, and scrolls to it. If the Mac mini rejects it, the copy turns Not delivered with Retry, and the "Send failed" toast shows. Before, nothing changed until the bridge answered.
 - **Metric 2 (non-optimistic interactions):** 71 became 70. `e2e/bench/optimistic.ts --case send-again`, 9 interleaved runs, p50/p75 299/316 to 15/15 ms.
 - **Ratchet:** `ratchet.playwright.ts` requires the copy within 50 ms of the click (fixture send delayed 300 ms) and requires Not delivered plus the toast under a `sendText` fault. Both fail on the old build (377 to 395 ms; no copy).
-- **Revert:** `git revert <H18 commit>`.
+- **Revert:** `git revert 968c5f26`.
 
 ## 2026-10-10. A forward opens the destination with the message already in it (17c44107)
 

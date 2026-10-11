@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **34 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 42 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **35 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 41 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -43,7 +43,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Import legacy drafts | use-composer-draft.ts:50 | WAIT | Background | Toast |
 | Typing presence | composer.tsx:463 → R(typing) | WAIT | Invisible | Swallowed |
 | New chat route, Send | new-chat-content.tsx:114 → R(createChat) | SPINNER | Navigation after receipt | Toast |
-| Palette compose, Send | command-palette.tsx:536 → R(createChat) | WAIT | Disabled arrow only | Toast |
+| Palette compose, Send | command-palette.tsx:542 → R(createChat) | OPTIMISTIC | Sending ring on the click; one recipient with a conversation gets a pending bubble there a frame later. A new conversation keeps the ring until createChat answers | Not delivered bubble and toast; ring stops and toast for a new conversation |
 | Recipient search | composer.tsx:240, new-chat-content.tsx:74, command-palette.tsx:473 | WAIT | Debounced, no indicator | Silent |
 | Recipient chips | new-chat-content.tsx:85 | OPTIMISTIC | — | — |
 | Forward to destination | forward-content.tsx:33 → R(send) | OPTIMISTIC | Closes and opens the destination with a pending bubble on the click (lib/local-sends.ts) | Not delivered bubble with Retry, toast |
@@ -150,6 +150,6 @@ All identity writes lack an optimistic updater. The visible queries are `whoIs({
 ## Ranked by how often a user feels them
 
 1. Send text. The sidebar patch waits for an awaited `resolveChat`.
-2. Palette compose Send. Disabled arrow only.
+2. New chat route Send. Navigation waits for createChat.
 
 Settle, read, unread and pin led this list until H5 made them optimistic.

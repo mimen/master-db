@@ -243,8 +243,48 @@ test("a forward shows at once and turns Not delivered with a toast when the brid
   await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
 });
 
+/** Opens new-message compose with Alex as the recipient and `text` typed; returns its Send button. */
+async function composeToAlex(page: Page, text: string) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("conversation-row").first()).toBeVisible();
+  await page.keyboard.press("Meta+n");
+  await page.getByPlaceholder("Name, number, or email").fill("Alex");
+  await expect(page.getByText("+16195550101").first()).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Remove Alex Rivera" })).toBeVisible();
+  await page.getByPlaceholder("iMessage").last().fill(text);
+  return page.getByRole("button", { name: "Send", exact: true }).last();
+}
+
 const ownBubble = (text: string) => `() => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
   .filter((element) => element.getAttribute("aria-label") === "You: ${text}").length`;
+
+test("ratchet: a new message shows it is sending within 50 ms of Send", async ({ desk }) => {
+  const page = desk.page;
+  // send-timing does not reach createChat, so hold its enqueue the way a real bridge would.
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
+    if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "createChat") await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  });
+  const send = await composeToAlex(page, "palette probe");
+  // The palette's Sending ring paints on the click; the thread with the bubble mounts a frame later.
+  await timeToFrame(page, "pointerdown", `() => document.querySelector('[aria-label="Sending"]') !== null || (${ownBubble("palette probe")})() > 0`);
+  await send.click();
+  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+  await settleDelayedSend(page);
+});
+
+test("a new message shows at once and turns Not delivered with a toast when the bridge fails it", async ({ desk }) => {
+  expect((await desk.request.post("/__fixture/fault", { data: { method: "createChat" } })).ok()).toBe(true);
+  const page = desk.page;
+  const send = await composeToAlex(page, "palette fault probe");
+  const shown = page.waitForFunction(`(${ownBubble("palette fault probe")})() > 0`, undefined, { polling: "raf", timeout: 5_000 });
+  await send.click();
+  await shown;
+  await expect(page.getByText(/^Couldn't start/)).toBeVisible();
+  await expect(page.getByTestId("thread-view").getByText("Not delivered", { exact: true })).toBeVisible();
+});
 
 /** Avery's older send carries a stale error code in the seed, so its menu offers Send again. */
 async function sendAgainMenuItem(page: Page) {
