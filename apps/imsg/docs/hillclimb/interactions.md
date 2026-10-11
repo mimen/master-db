@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **37 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 41 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **38 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 40 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -25,7 +25,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Mention text after attachments | composer.tsx:577 → R(send) | SPINNER | No local text bubble | Toast |
 | Start or cancel voice | composer.tsx:922 | WAIT | Recording UI waits for recorder setup | Toast |
 | Send voice | composer.tsx:949 → upload, R(sendAttachment) | OPTIMISTIC | Pending audio bubble on release; plays once the recorder hands over the file | Bubble leaves, toast. Take staged to resend |
-| Quick Send Later | composer.tsx:964 → R(schedule) | WAIT | No pending indicator | Toast |
+| Quick Send Later | composer.tsx:964 → R(schedule) | OPTIMISTIC | Composer clears and confirms on the tap (H38) | Text restored, toast |
 | Custom schedule, Save | composer.tsx:1238 → R(schedule) | SPINNER | "Saving…" | Inline error |
 | Edit scheduled, Save | scheduled-content.tsx:76 → R(editScheduled) | SPINNER | No list patch | Inline error |
 | Cancel scheduled | use-scheduled.ts:39 → R(cancelScheduled) | PARTIAL | Row hides; counts read unpatched `listScheduled({})` | Row restored |
