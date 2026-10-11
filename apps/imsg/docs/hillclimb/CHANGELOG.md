@@ -39,6 +39,35 @@ One entry per landed change, newest first. Each entry gives the date, the commit
 - **Ratchet:** `scripts/bundle-size.ratchet.ts` sums the brotli size of every `<script src>` in the fixture export and fails above 520,000 bytes. `validate-imsg.yml` builds the fixture export, then runs it. It fails on the origin/main build (739,034) and on the build before deferred surfaces (546,111).
 - **Revert:** `git revert c457621b 244fa9cf 8f2e5a04 f636534c ca200280 e47ecc85`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
 
+## 2026-10-11. Sends from anywhere show at once (15e820de, 43cb3d75, 54970c97, c5e3dee9)
+
+- **For the user:** a voice message, a forward, Send again from the message menu, and a send from ⌘K now show a pending bubble or the Sending ring on the click. A failure reverts with a toast; a failed voice take goes back to the tray.
+- **Metric 2 (p75, input to first visible change):** voice 534 to 15 ms, forward 432 to 21 ms, Send again 316 to 15 ms, palette send 299 to 50 ms. Non-optimistic interactions: 73 became 69.
+- **Ratchet:** four same-frame tests and four rollback tests in `ratchet.playwright.ts`, each failing on the old build.
+- **Revert:** `git revert c5e3dee9 54970c97 43cb3d75 15e820de`.
+
+## 2026-10-11. The phone screen holds still while it loads (e13c9aa9)
+
+- **For the user:** at phone width the list no longer jumps as the app fills in; the hidden Contacts tab was still painting behind Messages.
+- **Metric 3a (phone 390, shifts per load):** median 5 became 0.
+- **Ratchet:** "the phone screen holds still while it loads" in `ratchet.playwright.ts`.
+- **Revert:** `git revert e13c9aa9`.
+
+## 2026-10-11. Section counts keep their place while the list loads (50b3b59a)
+
+- **For the user:** the Today, This week and Older counts no longer nudge their labels as pages arrive on a fresh load.
+- **Revert:** `git revert 50b3b59a`.
+
+## 2026-10-11. The conversation list reads less on the server (25414156)
+
+- **For the user:** nothing visible until the Convex functions deploy; then each list page does about 12% fewer database lookups and 59% fewer photo-URL calls.
+- **Proof:** `convex/comma/listConversations.reads.test.ts` pins read counts and a hash of the output recorded from the old code.
+- **Revert:** `git revert 25414156`, then redeploy Convex.
+
+## 2026-10-11. Smoothness benchmark (96f4679d)
+
+- `e2e/bench/frames.ts` measures frames while scrolling a 200-message thread, while 20 messages arrive, and while typing. Baseline: scroll p95 16.8 ms with 4 frames over 33 ms; typing input-to-paint p95 20 ms.
+
 ## 2026-10-10. Settle, read, unread and pin land on the frame you act (4f606d83)
 
 - **For the user:** ⌘E moves the Needs reply count on the frame of the keypress, and the row leaves the lens with the selection. Mark read, mark unread, read on open, pin and unpin change the dot, the Unread count and the pinned order at once. If the Mac mini rejects one, it reverts with the existing toast.
