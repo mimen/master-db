@@ -964,14 +964,15 @@ ${url}` : url;
       ...scheduleOptions().map((option) => ({
         label: option.label,
         onPress: () => {
-          void api
-            .schedule(chatGuid, trimmed, option.at)
-            .then(() => {
-              clearText();
-              setDraft(chatGuid, "");
-              showToast(`Scheduled ${option.label.toLowerCase()}`);
-            })
-            .catch(() => showToast("Couldn't schedule the message. Try again."));
+          // Clears and confirms on the tap; a failure puts the text back with the error.
+          clearText();
+          setDraft(chatGuid, "");
+          showToast(`Scheduled ${option.label.toLowerCase()}`);
+          api.schedule(chatGuid, trimmed, option.at).catch(() => {
+            setText(trimmed);
+            setDraft(chatGuid, trimmed);
+            showToast("Couldn't schedule the message. Try again.");
+          });
         },
       })),
       {

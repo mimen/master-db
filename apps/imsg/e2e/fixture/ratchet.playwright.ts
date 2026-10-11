@@ -475,3 +475,37 @@ test("ratchet: each keystroke renders the composer once", async ({ desk }) => {
   const renders = await takeRenders(page);
   expect(renders.composer).toBeLessThanOrEqual(TYPED.length + 2);
 });
+
+test("ratchet: Send later clears the composer within 50 ms, and a failure puts the text back", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").first().click();
+  const composer = page.getByPlaceholder("iMessage");
+  await composer.fill("Doors at 8, see you then");
+  await desk.request.post("/__fixture/send-timing", { data: { delayMs: 300, echo: false } });
+  await page.getByRole("button", { name: "Send later" }).click();
+  const option = page.getByRole("menuitem").filter({ hasNotText: "Choose Date" }).first();
+  await expect(option).toBeVisible();
+  await page.evaluate(() => {
+    const ratchet = window as unknown as { __inputAt?: number; __shownAt?: number };
+    addEventListener("pointerdown", (event) => { ratchet.__inputAt ??= event.timeStamp; }, { capture: true, once: true });
+    const poll = (now: number) => {
+      const field = document.querySelector('textarea[placeholder="iMessage"]') as HTMLTextAreaElement | null;
+      if (field && field.value === "" && ratchet.__inputAt !== undefined) ratchet.__shownAt = now;
+      else requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+  });
+  await desk.request.post("/__fixture/fault", { data: { method: "createScheduledMessage", error: "offline" } });
+  await option.click();
+  const elapsed = await page.waitForFunction(() => {
+    const ratchet = window as unknown as { __inputAt?: number; __shownAt?: number };
+    return ratchet.__shownAt !== undefined && ratchet.__inputAt !== undefined ? ratchet.__shownAt - ratchet.__inputAt : false;
+  }, undefined, { timeout: 5_000 });
+  expect(Number(await elapsed.jsonValue())).toBeLessThanOrEqual(50);
+  await expect(composer).toHaveValue("Doors at 8, see you then");
+  await expect(page.getByText("Couldn't schedule the message. Try again.")).toBeVisible();
+  await desk.request.post("/__fixture/fault", { data: { method: null } });
+  await desk.request.post("/__fixture/send-timing", { data: {} });
+});
