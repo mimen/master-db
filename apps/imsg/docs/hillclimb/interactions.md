@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **38 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 40 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **39 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 39 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -34,7 +34,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Undo send | thread-view.tsx:450 → R(unsend) | OPTIMISTIC | Bubble hides at once | Bubble returns, toast |
 | Delete for me | thread-view.tsx:468 → R(delete) | OPTIMISTIC | Bubble hides at once | Bubble returns, toast |
 | Add or remove tapback | thread-view.tsx:391 → R(react) | OPTIMISTIC | Pending-edit overlay in normal and anchored threads | Badge rolls back, toast |
-| Confirm AI reaction | suggestion-shelf.tsx:145 → R(react) | WAIT | No local reaction | Toast |
+| Confirm AI reaction | suggestion-shelf.tsx:145 → R(react) | OPTIMISTIC | Reaction badge on the confirm through pending-edits (H39) | Badge rolls back, toast |
 | Generate or refresh AI replies | suggestion-shelf.tsx:78 → R(suggestions) | SPINNER | Skeleton after 600 ms | Retry control |
 | Accept AI text | suggestion-shelf.tsx:166 | OPTIMISTIC | Fills composer | — |
 | Hide AI ghost by typing | composer.tsx:471 | OPTIMISTIC | — | — |
