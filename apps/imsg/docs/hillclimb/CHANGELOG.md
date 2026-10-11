@@ -39,6 +39,13 @@ One entry per landed change, newest first. Each entry gives the date, the commit
 - **Ratchet:** `scripts/bundle-size.ratchet.ts` sums the brotli size of every `<script src>` in the fixture export and fails above 520,000 bytes. `validate-imsg.yml` builds the fixture export, then runs it. It fails on the origin/main build (739,034) and on the build before deferred surfaces (546,111).
 - **Revert:** `git revert c457621b 244fa9cf 8f2e5a04 f636534c ca200280 e47ecc85`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
 
+## 2026-10-11. Long threads scroll and update without redrawing everything (6f1176f2, 21b1009d, 8d0a28b9, ac22fac3)
+
+- **For the user:** scrolling back through a long thread draws only the newly loaded messages, and no longer re-marks the thread read on every page. A new message no longer redraws every bubble. Typing renders the composer once per keystroke instead of twice.
+- **Metric 3b (frames.ts, 4x CPU, scroll 200 messages):** long-frame time 552 to 131 ms, frames over 33 ms 5 to 1. Rows rendered per scroll 5,240 to 355. Rows per 20 arrivals 462 to 45. Composer renders per 40 keys 84 to 42.
+- **Ratchet:** render-count ceilings in `ratchet.playwright.ts` for older pages, arrivals and typing, plus a check that the message you are reading does not move when an older page lands.
+- **Revert:** `git revert ac22fac3 8d0a28b9 21b1009d 6f1176f2`.
+
 ## 2026-10-11. The header holds still when fonts arrive late (ff9135a0, dd5b731b)
 
 - **For the user:** on a fresh load where the icon and header fonts arrive after the first frame, the search field no longer slides, "Select a conversation" no longer drops, and the lens tabs no longer widen and push Waiting and All sideways.
