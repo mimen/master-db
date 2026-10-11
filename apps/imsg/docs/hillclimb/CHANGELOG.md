@@ -48,6 +48,12 @@ One entry per landed change, newest first. Each entry gives the date, the commit
 - **Ratchet:** `scripts/bundle-size.ratchet.ts` sums the brotli size of every `<script src>` in the fixture export and fails above 520,000 bytes. `validate-imsg.yml` builds the fixture export, then runs it. It fails on the origin/main build (739,034) and on the build before deferred surfaces (546,111).
 - **Revert:** `git revert c457621b 244fa9cf 8f2e5a04 f636534c ca200280 e47ecc85`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
 
+## 2026-10-11. A Convex timeout no longer crashes the app (d2110009, c0fcae1b)
+
+- **For the user:** when the conversation list or a thread fails to load on the server (the "too many system operations" timeout seen on 2026-10-09), Comma keeps the list and the open conversation on screen, shows "Couldn't refresh. Retrying…", and recovers on its own. Before, one failed page put the whole app on "Something went wrong", and reloading from there lost the open conversation.
+- **Ratchet:** `e2e/fixture/query-failure.playwright.ts` fails a list page and a thread page and requires no crash screen, the same row still selected, and recovery. `retrying-query.test.tsx` covers the retry backoff.
+- **Revert:** `git revert c0fcae1b d2110009`.
+
 ## 2026-10-11. Details opens with its people already there (eb50009b)
 
 - **For the user:** ⌘I shows the conversation's name, people and actions at once instead of a blank pane while the Mac mini answers. On the fixture, ⌘I to content went from 157 to 170 ms to 87 to 103 ms.
