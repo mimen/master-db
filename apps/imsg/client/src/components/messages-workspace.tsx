@@ -18,6 +18,7 @@ import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { advanceTarget, publishQueuePosition, queueOrder, queuePosition } from "@/hooks/use-queue-position";
+import { traceTriage } from "@/lib/triage-trace";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
@@ -174,6 +175,7 @@ export function MessagesWorkspace({
       applyState: setState,
       applyType: setType,
       clearSelection: () => {
+        traceTriage({ kind: "clear", via: "clearSelection" });
         setSelected(null);
         shell.dispatch({ type: "messages/chat-settled" });
         router.replace("/");
@@ -239,10 +241,11 @@ export function MessagesWorkspace({
     if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
   }, [order, selected]);
   const advanceFrom = useCallback((guid: string): void => {
-    if (!wide || (stateRef.current !== "unresponded" && stateRef.current !== "unread")) return;
-    if (selectedRef.current?.guid !== guid) return;
+    if (!wide || (stateRef.current !== "unresponded" && stateRef.current !== "unread")) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
+    if (selectedRef.current?.guid !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: `selected ${selectedRef.current?.guid.slice(-6) ?? "none"}` });
     const next = nextRef.current;
-    if (!next || next.guid === guid) return;
+    if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
+    traceTriage({ kind: "advance", from: guid, to: next.guid, reason: "ok" });
     setAdvanced({ guid: next.guid, from: selectedRef.current.displayName });
     openChatRef.current(next);
   }, [wide]);
@@ -305,6 +308,7 @@ export function MessagesWorkspace({
         // No lens gate. The gesture acts on the selected conversation from any
         // lens, and toggleSettleChat answers every press with a toast.
         const action = settleActionFor(sel);
+        traceTriage({ kind: "settle-key", guid: sel.guid, lens: stateRef.current, action, next: nextRef.current?.guid ?? null });
         void toggleSettleChat(sel);
         // Needs reply and Unread auto-advance on the settle itself (onTriageSettling).
         // Elsewhere, glide off the row only when the action drops it out of the lens.
@@ -354,6 +358,7 @@ export function MessagesWorkspace({
           return true;
         }
         if (selectedRef.current) {
+          traceTriage({ kind: "clear", via: "closePanel" });
           setSelected(null);
           shell.dispatch({ type: "messages/chat-settled" });
           router.replace("/");
