@@ -113,7 +113,7 @@ export function ThreadView({
   const paneRef = useRef<View>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const messagesRef = useRef<Message[]>([]);
-  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, pend, newestMessages } =
+  const { messages, loading, failed, retry: retryLoad, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove, pend, newestMessages } =
     useMessages(chatGuid, jumpTarget);
   messagesRef.current = messages;
   // It is your turn when the newest real message is inbound. Drives whether
@@ -790,6 +790,7 @@ export function ThreadView({
           onSettled={(tempGuid, message) => {
             replaceTemp(tempGuid, message);
           }}
+          onWithdraw={remove}
           onSent={(message) => {
             upsert(message);
             scrollToLatest();

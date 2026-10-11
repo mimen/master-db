@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **31 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 45 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **32 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 44 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -24,7 +24,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 | Send contact card | composer.tsx:642 → R(sendContact) | SPINNER | Same ring | Toast. Card lost |
 | Mention text after attachments | composer.tsx:577 → R(send) | SPINNER | No local text bubble | Toast |
 | Start or cancel voice | composer.tsx:922 | WAIT | Recording UI waits for recorder setup | Toast |
-| Send voice | composer.tsx:940 → upload, R(sendAttachment) | WAIT | Controls disable; no ring, no temp | Toast. Take lost |
+| Send voice | composer.tsx:949 → upload, R(sendAttachment) | OPTIMISTIC | Pending audio bubble on release; plays once the recorder hands over the file | Bubble leaves, toast. Take staged to resend |
 | Quick Send Later | composer.tsx:964 → R(schedule) | WAIT | No pending indicator | Toast |
 | Custom schedule, Save | composer.tsx:1238 → R(schedule) | SPINNER | "Saving…" | Inline error |
 | Edit scheduled, Save | scheduled-content.tsx:76 → R(editScheduled) | SPINNER | No list patch | Inline error |
@@ -149,7 +149,7 @@ All identity writes lack an optimistic updater. The visible queries are `whoIs({
 
 ## Ranked by how often a user feels them
 
-1. Voice send and Forward. No pending state at all.
+1. Forward. No pending state at all.
 2. Send text. The sidebar patch waits for an awaited `resolveChat`.
 
 Settle, read, unread and pin led this list until H5 made them optimistic.

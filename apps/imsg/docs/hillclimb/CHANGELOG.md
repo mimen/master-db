@@ -2,6 +2,13 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-10. A voice message is in the thread the moment you send it (H16)
+
+- **For the user:** releasing the mic (or clicking Send voice message on the web) puts the audio bubble in the thread on that frame, marked as sending. It becomes playable a beat later, once the recorder hands over the file. If the Mac mini rejects it, the bubble leaves, the existing toast shows, and the take waits in the staging tray with a mic icon so Send resends it as a voice message. Before, the controls only dimmed and nothing appeared until the bridge answered, and a failed take was lost.
+- **Metric 2 (non-optimistic interactions):** 73 became 72. `e2e/bench/optimistic.ts --case voice-send`, fixture with tailnet shaping, 9 interleaved runs, p50/p75 518/534 to 15/15 ms.
+- **Ratchet:** `ratchet.playwright.ts` requires the audio bubble within 50 ms of the click and requires it to leave, toast and stage the take under an injected `sendAudio` fault. Both fail on the old build (364 to 480 ms; no staged take).
+- **Revert:** `git revert <H16 commit>`.
+
 ## 2026-10-10. A first visit downloads a third less JavaScript (e47ecc85..c457621b)
 
 - **For the user:** a fresh browser or a new desktop install fetches 524 KB of script instead of 759 KB before the conversation list can paint. Settings, Scheduled, Details, a person, Contacts, search, new message, forward and the command palette load as their own small files, fetched quietly a few seconds after the list appears, so their first open still shows at once.

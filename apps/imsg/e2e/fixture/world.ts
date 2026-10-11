@@ -108,7 +108,9 @@ export function fixtureSeed(): FakeSeed {
           guid,
           participants: [{ address, service: "iMessage" as const }],
           messages: [
-            message(`backlog-out-${index}`, guid, `Following up on ${name.split(" ")[0]}'s plan.`, 600 + index * 130, true),
+            // A stale error code on Avery's older send offers "Send again"; the newer reply keeps it reading delivered.
+            message(`backlog-out-${index}`, guid, `Following up on ${name.split(" ")[0]}'s plan.`, 600 + index * 130, true, undefined,
+              index === 0 ? { error: 22 } : {}),
             message(`backlog-in-${index}`, guid, index % 3 === 0 ? "Can you confirm the final details?" : index % 3 === 1 ? "Any update when you get a chance?" : "This looks good, one question remains.", 180 + index * 130, false, address),
           ],
         };

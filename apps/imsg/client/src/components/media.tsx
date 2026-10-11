@@ -47,17 +47,19 @@ export function MediaUnavailable({ onMac }: { onMac?: boolean }) {
   </View>;
 }
 
-export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatGuid: string; url: string; mine: boolean }) {
+/** `url` is null only while `sending`, before the recorder has handed over the file. */
+export function AudioBubble({ guid, chatGuid, url, mine, sending = false }: { guid: string; chatGuid: string; url: string | null; mine: boolean; sending?: boolean }) {
   const theme = useTheme();
-  const player = useAudioPlayer({ uri: url });
+  const player = useAudioPlayer(url ? { uri: url } : null);
   const status = useAudioPlayerStatus(player);
   const playing = status.playing;
   const tint = mine ? theme.onAccent : theme.text;
   // Alpha-dimmed white with no matching token — left as a literal.
   const dimTint = mine ? "rgba(255,255,255,0.4)" : theme.divider;
-  const waveform = useMemo(() => fakeWaveform(url), [url]);
+  const waveform = useMemo(() => fakeWaveform(url ?? guid), [url, guid]);
   const [rateIndex, setRateIndex] = useState(0);
-  const state = useQuery(mediaApi.transcriptState, { attachmentGuid: guid });
+  // A sending memo has no mirrored attachment to transcribe yet.
+  const state = useQuery(mediaApi.transcriptState, sending ? "skip" : { attachmentGuid: guid });
   const [requestState, setRequestState] = useState<TranscriptState | null>(null);
   const transcript = state?.state === "ready" ? state : requestState ?? state ?? { state: "not-requested" as const };
   const requestTranscript = async () => {
@@ -97,7 +99,7 @@ export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatG
   return (
     <View style={styles.audioStack}>
       <View style={[styles.audio, mine ? { backgroundColor: theme.bubbleMine, borderColor: theme.bubbleMine } : { backgroundColor: theme.bubbleTheirs, borderColor: theme.bubbleTheirsBorder }]}>
-        <Pressable onPress={toggle} hitSlop={8} style={({ hovered, pressed }) => [styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.field }, hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
+        <Pressable onPress={toggle} disabled={!url} hitSlop={8} style={({ hovered, pressed }) => [styles.playButton, { backgroundColor: mine ? "rgba(255,255,255,0.9)" : theme.field }, hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
           {/* mine's play button sits on a near-white translucent circle regardless
               of theme — black icon is deliberate, not a theme.text substitute. */}
           <Ionicons name={playing ? "pause" : "play"} size={16} color={mine ? "#000" : theme.text} />
@@ -126,7 +128,7 @@ export function AudioBubble({ guid, chatGuid, url, mine }: { guid: string; chatG
           </Pressable>
         )}
       </View>
-      {transcript.state === "not-requested" && (
+      {transcript.state === "not-requested" && !sending && (
         <Pressable onPress={() => void requestTranscript()} hitSlop={6} style={({ hovered, pressed }) => [hovered && !pressed && styles.mediaControlHover, pressed && styles.mediaControlPress]}>
           <Text style={[styles.transcriptAction, { color: theme.accent }]}>Transcribe</Text>
         </Pressable>

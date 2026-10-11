@@ -7,6 +7,12 @@ import { expect, test } from "../fixtures/desk";
  * so a change that gives it back fails CI.
  */
 
+test.use({
+  launchOptions: async ({ launchOptions }, provide) => {
+    await provide({ ...launchOptions, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
+  },
+});
+
 test("Contacts and its people list wait for the first visit, then stay mounted", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
@@ -155,4 +161,43 @@ test("a mark read shows at once and rolls back with a toast when the bridge fail
   await cleared;
   await expect(row).toHaveAttribute("aria-label", /^Launch Crew, unread,/);
   await expect(page.getByText("Couldn't mark as read. Try again.")).toBeVisible();
+});
+
+/** An audio bubble's duration ("0:03"), which only a voice message in the thread list draws. */
+const VOICE_BUBBLE = `() => [...document.querySelectorAll('[data-testid="thread-message-list"] *')]
+  .some((element) => element.childElementCount === 0 && /^\\d+:\\d\\d$/.test(element.textContent ?? ""))`;
+
+async function recordVoice(page: Page) {
+  await page.context().grantPermissions(["microphone"]);
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await page.getByRole("button", { name: "Record voice message" }).click();
+  await expect(page.getByText("0:01", { exact: true })).toBeVisible();
+  return page.getByRole("button", { name: "Send voice message" });
+}
+
+test("ratchet: a sent voice message is in the thread within 50 ms of the click", async ({ desk }) => {
+  const page = desk.page;
+  // A real upload takes longer than a frame; on the bare fixture it can finish inside 50 ms.
+  await page.route("**/__fixture/upload", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  });
+  const send = await recordVoice(page);
+  await timeToFrame(page, "pointerdown", VOICE_BUBBLE);
+  await send.click();
+  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+});
+
+test("a voice message shows at once, then leaves with a toast and stays staged when the bridge fails it", async ({ desk }) => {
+  const fault = await desk.request.post("/__fixture/fault", { data: { method: "sendAudio" } });
+  expect(fault.ok()).toBe(true);
+  const page = desk.page;
+  const send = await recordVoice(page);
+  const shown = page.waitForFunction(VOICE_BUBBLE, undefined, { polling: "raf", timeout: 5_000 });
+  await send.click();
+  await shown;
+  await expect(page.getByText("Couldn't send the voice message. Check the Mac mini connection.")).toBeVisible();
+  expect(await page.evaluate(`(${VOICE_BUBBLE})()`)).toBe(false);
+  await expect(page.getByRole("button", { name: "Remove attachment" })).toBeVisible();
 });

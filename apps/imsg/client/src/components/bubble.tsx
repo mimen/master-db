@@ -137,13 +137,12 @@ function Attachments({ message, mine, paneWidth = 0 }: { message: Message; mine:
       {message.attachments.map((att) => {
         const url = attachmentUrl(att);
         const thumbnail = attachmentThumbnailUrl(att, mediaW);
-        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
-        if (
-          att.mimeType?.startsWith("audio/") ||
-          /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "")
-        ) {
-          return <AudioBubble key={att.guid} guid={att.guid} chatGuid={message.chatGuid} url={url!} mine={mine} />;
+        const audio = att.mimeType?.startsWith("audio/") || /\.(caf|amr|m4a|mp3|wav)$/i.test(att.filename ?? "");
+        // A voice memo still sending draws its bubble before the recorder has handed over the file.
+        if (audio && (url || message.pending)) {
+          return <AudioBubble key={att.guid} guid={att.guid} chatGuid={message.chatGuid} url={url} mine={mine} sending={message.pending === true} />;
         }
+        if (!url && !(att.mimeType?.startsWith("image/") && thumbnail)) return <MediaUnavailable key={att.guid} onMac={att.onMac} />;
         if (att.mimeType?.startsWith("video/") || /\.(mov|mp4|m4v)$/i.test(att.filename ?? "")) {
           return (
             <VideoBubble

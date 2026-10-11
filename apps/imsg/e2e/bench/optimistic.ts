@@ -5,7 +5,8 @@
  *
  *   bun e2e/bench/optimistic.ts --runs 9
  *   bun e2e/bench/optimistic.ts --runs 9 --url http://127.0.0.1:8641,http://127.0.0.1:8642   # interleaved A/B
- *   --case tapback-add|tapback-remove|unsend (default all)  --profile tailnet|none (default tailnet)
+ *   --case tapback-add|tapback-remove|unsend|settle|mark-unread|pin|voice-send|forward|palette-send|send-again (default all)
+ *   --profile tailnet|none (default tailnet)
  *
  * Expects a fixture server (`bun run fixture:start`) on IMSG_FIXTURE_PORT (8399) unless --url names one.
  * Each sample resets the fixture world. To add a case, append to CASES: `setup` brings the page
@@ -69,6 +70,21 @@ function needsReplyCount(): number | null {
   return label ? Number(label.slice("Needs reply, ".length)) : null;
 }
 
+
+const AVERY_SEND = "You: Following up on Avery's plan.";
+
+/** A take long enough to send: the recording clock has passed 0:01. */
+async function recordVoice(page: Page): Promise<void> {
+  await openAlex(page);
+  await page.getByRole("button", { name: "Record voice message" }).click();
+  await page.getByText("0:01", { exact: true }).waitFor({ timeout: 10_000 });
+}
+
+/** An audio bubble's duration ("0:03"), which only a voice message in the thread list draws. */
+function voiceBubbleShown(): boolean {
+  return [...document.querySelectorAll('[data-testid="thread-message-list"] *')]
+    .some((element) => element.childElementCount === 0 && /^\d+:\d\d$/.test(element.textContent ?? ""));
+}
 
 const CASES: Case[] = [
   {
@@ -145,10 +161,64 @@ const CASES: Case[] = [
     act: (page) => page.getByRole("dialog").getByText("Pin", { exact: true }).click(),
     done: () => document.querySelector('[data-testid="conversation-row"]')?.getAttribute("aria-label")?.startsWith("Launch Crew") === true,
   },
+  {
+    name: "voice-send",
+    setup: recordVoice,
+    act: (page) => page.getByRole("button", { name: "Send voice message" }).click(),
+    done: voiceBubbleShown,
+  },
+  {
+    // Forwarding Alex's question to Jordan: the copy is the user's own, so it reads "You: …".
+    name: "forward",
+    setup: async (page) => {
+      await openAlex(page);
+      await inbound(page).click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Forward" }).click();
+      await page.getByPlaceholder("Forward to…").fill("Jordan");
+      await page.getByRole("button", { name: "Jordan Lee", exact: true }).waitFor();
+    },
+    act: (page) => page.getByRole("button", { name: "Jordan Lee", exact: true }).click(),
+    done: () => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
+      .some((element) => element.getAttribute("aria-label") === "You: Can you send the final arrival time?"),
+  },
+  {
+    // The first sign the message is on its way: a sending state in the palette, or the message in the thread.
+    name: "palette-send",
+    setup: async (page) => {
+      await page.getByTestId("conversation-row").first().waitFor();
+      await page.keyboard.press("Meta+n");
+      await page.getByPlaceholder("Name, number, or email").fill("Alex");
+      await page.getByText("+16195550101").first().waitFor();
+      await page.keyboard.press("Enter");
+      await page.getByRole("button", { name: "Remove Alex Rivera" }).waitFor();
+      await page.getByPlaceholder("iMessage").last().fill("bench palette probe");
+    },
+    act: (page) => page.getByRole("button", { name: "Send", exact: true }).last().click(),
+    done: () => document.querySelector('[aria-label="Sending"]') !== null ||
+      [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
+        .some((element) => element.getAttribute("aria-label") === "You: bench palette probe"),
+  },
+  {
+    // Avery's older send carries a stale error code, so its menu offers Send again.
+    name: "send-again",
+    setup: async (page) => {
+      await page.getByRole("tab", { name: "All", exact: true }).click();
+      await page.getByTestId("conversation-row").filter({ hasText: "Avery Brooks" }).click();
+      const own = thread(page).getByRole("button", { name: AVERY_SEND });
+      await own.waitFor({ timeout: 30_000 });
+      await own.click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Send again" }).waitFor();
+    },
+    act: (page) => page.getByRole("menuitem", { name: "Send again" }).click(),
+    done: () => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
+      .filter((element) => element.getAttribute("aria-label") === "You: Following up on Avery's plan.").length >= 2,
+  },
 ].filter((c) => !only || c.name === only);
 
 async function sample(browser: Browser, base: string, benchCase: Case, run: number): Promise<Sample> {
-  const context = await browser.newContext({ baseURL: base, viewport: { width: 1440, height: 900 }, serviceWorkers: "block", reducedMotion: "reduce" });
+  const context = await browser.newContext({
+    baseURL: base, viewport: { width: 1440, height: 900 }, serviceWorkers: "block", reducedMotion: "reduce", permissions: ["microphone"],
+  });
   const page = await context.newPage();
   // The fixture stamps sends on its pinned clock; match it so Edit and Undo send windows apply.
   await page.addInitScript((fixtureNow) => {
@@ -194,7 +264,10 @@ function percentile(values: number[], p: number): number | null {
   return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 }
 
-const browser = await chromium.launch({ executablePath: cachedChromium(), headless: true });
+const browser = await chromium.launch({
+  executablePath: cachedChromium(), headless: true,
+  args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+});
 const samples: Sample[] = [];
 for (let run = 0; run < runs; run++) {
   for (const benchCase of CASES) {

@@ -81,6 +81,8 @@ interface ComposerProps {
   onEdit: (messageGuid: string, edit: PendingEdit) => () => void;
   onOptimistic: (message: Message) => void;
   onSettled: (tempGuid: string, message: Message) => void;
+  /** Takes back an optimistic send that failed before it reached the outbox. */
+  onWithdraw: (tempGuid: string) => void;
   onSent: (message: Message) => void;
   /** Web: the pane that accepts dropped files into this composer. */
   dropTargetRef: RefObject<View | null>;
@@ -94,6 +96,8 @@ interface ComposerProps {
 interface PendingAttachment extends PendingAttachmentAsset {
   /** Present when this pending item is a contact card, sent via the server. */
   contact?: Contact;
+  /** A voice memo whose send failed, staged so the take is not lost; it resends as a voice memo. */
+  voice?: true;
 }
 
 /** One toast per burst of failed sends, shared across composers and chats. */
@@ -194,6 +198,15 @@ function tempMessage(
     edited: false,
     retracted: false,
     pending: true,
+  };
+}
+
+/** A voice memo on its way: the audio bubble draws now, and plays once the recorder hands over its file. */
+function tempVoiceMessage(chatGuid: string, filename: string): Message {
+  const temp = tempMessage(chatGuid, "", null, []);
+  return {
+    ...temp,
+    attachments: [{ guid: `${temp.guid}-audio`, mimeType: "audio/mp4", filename, originalUrl: null, width: null, height: null, totalBytes: null }],
   };
 }
 
@@ -314,6 +327,7 @@ export function Composer({
   onEdit,
   onOptimistic,
   onSettled,
+  onWithdraw,
   onSent,
   dropTargetRef,
   onDragActiveChange,
@@ -643,7 +657,7 @@ export function Composer({
     }
     onSent(await uploadAndSendAttachment(chatGuid, {
       uri: att.uri, filename: att.name, mimeType: att.mime,
-      caption, isAudioMessage: false,
+      caption, isAudioMessage: att.voice === true,
     }));
   };
 
@@ -939,17 +953,30 @@ ${url}` : url;
     if (startedAt === null) return;
     recordStartedAt.current = null;
     const outcome = voiceMemoOutcome(end, Date.now() - startedAt);
-    try {
-      await recorder.stop();
-      const uri = recorder.uri;
-      if (outcome === "discard" || !uri) return;
+    // The bubble goes up on the release; the web recorder only hands over its file a beat later.
+    const filename = `voice-${Date.now()}.m4a`;
+    const temp = outcome === "send" ? tempVoiceMessage(chatGuid, filename) : null;
+    if (temp) {
+      onOptimistic(temp);
       setBusy(true);
       playSend();
       hapticSend();
-      onSent(await uploadAndSendAttachment(chatGuid, {
-        uri, filename: `voice-${Date.now()}.m4a`, mimeType: "audio/mp4", isAudioMessage: true,
+    }
+    let uri: string | null = null;
+    try {
+      await recorder.stop();
+      uri = recorder.uri;
+      if (!temp) return;
+      if (!uri) throw new Error("The recorder produced no file");
+      onOptimistic({ ...temp, attachments: temp.attachments.map((attachment) => ({ ...attachment, originalUrl: uri })) });
+      onSettled(temp.guid, await uploadAndSendAttachment(chatGuid, {
+        uri, filename, mimeType: "audio/mp4", isAudioMessage: true,
       }));
     } catch (error) {
+      if (temp) {
+        onWithdraw(temp.guid);
+        if (uri) stage([{ uri, name: filename, mime: "audio/mp4", isImage: false, voice: true, cleanup: Platform.OS === "web" ? "object-url" : null }]);
+      }
       hapticFailure();
       showToast(messagingCommandError(error, "Couldn't send the voice message. Check the Mac mini connection."));
     } finally {
@@ -1316,7 +1343,7 @@ ${url}` : url;
               ) : (
                 <View style={[styles.pendingThumb, styles.pendingFile, { backgroundColor: theme.backgroundElement }]}>
                   <Ionicons
-                    name={att.contact ? "person-circle-outline" : "document-outline"}
+                    name={att.contact ? "person-circle-outline" : att.voice ? "mic-outline" : "document-outline"}
                     size={22}
                     color={theme.textSecondary}
                   />
