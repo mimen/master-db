@@ -5,7 +5,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { Platform } from "react-native";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { GestureRoot } from "@/components/gesture-root";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
@@ -59,7 +59,7 @@ export default function RootLayout() {
     // blip) must degrade to a visible fallback, not a permanently white window.
   return (
     <AppErrorBoundary>
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureRoot style={{ flex: 1 }}>
       <ClientAuthProvider>
       <ChatDirectoryProvider>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
@@ -100,7 +100,7 @@ export default function RootLayout() {
         </ThemeProvider>
       </ChatDirectoryProvider>
       </ClientAuthProvider>
-    </GestureHandlerRootView>
+    </GestureRoot>
     </AppErrorBoundary>
   );
 }

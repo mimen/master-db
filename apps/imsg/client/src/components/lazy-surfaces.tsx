@@ -1,5 +1,7 @@
-import { useEffect, useState, type ComponentType, type JSX } from "react";
+import { useEffect, useState, type ComponentProps, type ComponentType, type JSX } from "react";
 import { StyleSheet, View } from "react-native";
+
+import type { RowPan as RowPanComponent } from "@/components/row-pan";
 
 /**
  * Surfaces off the first-paint path load as their own web chunks. Until the chunk arrives the
@@ -7,7 +9,10 @@ import { StyleSheet, View } from "react-native";
  * around it moves. A plain state update shows it, not Suspense: a lazy boundary inside an overlay
  * portal stayed on its fallback after another lazy surface had loaded.
  */
-function deferred<P extends object>(load: () => Promise<ComponentType<P>>) {
+function deferred<P extends object>(
+  load: () => Promise<ComponentType<P>>,
+  Fallback: (props: P) => JSX.Element = () => <View style={styles.fill} />,
+) {
   let loaded: ComponentType<P> | null = null;
   let pending: Promise<ComponentType<P>> | null = null;
   const preload = (): Promise<ComponentType<P>> =>
@@ -28,7 +33,7 @@ function deferred<P extends object>(load: () => Promise<ComponentType<P>>) {
         live = false;
       };
     }, [Component]);
-    return Component ? <Component {...props} /> : <View style={styles.fill} />;
+    return Component ? <Component {...props} /> : <Fallback {...props} />;
   }
   return Object.assign(Deferred, { preload });
 }
@@ -45,10 +50,15 @@ export const SearchContent = deferred(() => import("@/components/search-content"
 export const ThreadView = deferred(() => import("@/components/thread-view").then((m) => m.ThreadView));
 ThreadView.preload().catch(() => undefined);
 export const SettingsContent = deferred(() => import("@/components/settings-content").then((m) => m.SettingsContent));
+/** Until the gesture chunk lands a phone row renders still, so the list never waits on swiping. */
+export const RowPan = deferred(
+  () => import("@/components/row-pan").then((m) => m.RowPan),
+  ({ children }: ComponentProps<typeof RowPanComponent>) => <>{children}</>,
+);
 /** Dev and fixture only, so it is not preloaded. */
 export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
 
-const surfaces = [ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent];
+const surfaces = [ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan];
 
 /** Fetches every surface chunk off the critical path, so a first open renders without the empty frame. */
 export function preloadSurfaces(): void {

@@ -3,18 +3,14 @@ import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
 import { memo, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, {
-  ReduceMotion,
   runOnJS,
   useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   type SharedValue,
 } from "react-native-reanimated";
 
-import { Springs } from "@/constants/springs";
 import { useChatActions } from "@/hooks/use-chat-actions";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useRowSettle } from "@/hooks/use-triage-actions";
@@ -26,11 +22,12 @@ import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
 import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
-import { rubberBand, SWIPE_THRESHOLD } from "@/lib/row-swipe";
+import { SWIPE_THRESHOLD } from "@/lib/row-swipe";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
 import { ChatAvatar } from "./avatar";
+import { RowPan } from "./lazy-surfaces";
 import { FAVORITE_GOLD } from "./person-crm-section";
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
@@ -155,9 +152,7 @@ function ChatRowInner({
     };
   }, [chat.guid, contextRef]);
 
-  // Phone swipe: left settles, right toggles unread. The row follows the
-  // finger 1:1, rubber-bands past the threshold, buzzes once as it arms, and
-  // commits on release; dragging back under the threshold disarms.
+  // The row buzzes once as a phone swipe arms; dragging back under the threshold disarms.
   const offset = useSharedValue(0);
   const dragging = useSharedValue(false);
   const toggleRead = (): void => {
@@ -170,25 +165,6 @@ function ChatRowInner({
       if (armed && wasArmed === false) runOnJS(hapticCommit)();
     },
   );
-  const pan = Gesture.Pan()
-    .enabled(!compact)
-    .activeOffsetX([-12, 12])
-    .failOffsetY([-10, 10])
-    .onBegin(() => {
-      dragging.value = true;
-    })
-    .onUpdate((event) => {
-      const dx = !settleOffered && event.translationX < 0 ? 0 : event.translationX;
-      offset.value = rubberBand(dx);
-    })
-    .onFinalize(() => {
-      dragging.value = false;
-      const committed = Math.abs(offset.value) >= SWIPE_THRESHOLD;
-      if (committed && offset.value < 0 && settleOffered) runOnJS(settle)();
-      else if (committed && offset.value > 0) runOnJS(toggleRead)();
-      // An armed release slides home on smooth; an unarmed one springs back on snappy.
-      offset.value = withSpring(0, { ...(committed ? Springs.smooth : Springs.snappy), reduceMotion: ReduceMotion.System });
-    });
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
 
   const fill = selected ? theme.rowSelected : hovered || focusedWithin ? theme.rowHover : "transparent";
@@ -314,9 +290,9 @@ function ChatRowInner({
           armedFill={theme.swipeSettle}
         />
       ) : null}
-      <GestureDetector gesture={pan}>
+      <RowPan offset={offset} dragging={dragging} settleOffered={settleOffered} onSettle={settle} onToggleRead={toggleRead}>
         <Reanimated.View style={[styles.slide, { backgroundColor: theme.background }, slide]}>{row}</Reanimated.View>
-      </GestureDetector>
+      </RowPan>
     </View>
   );
 }

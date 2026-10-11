@@ -13,8 +13,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 
-/** 2026-10-11 fixture build: 476,735 bytes brotli across entry, __common and the Metro runtime, plus 3%. */
-const CEILING_BYTES = 491_000;
+/** 2026-10-11 fixture build: 444,244 bytes brotli across entry, __common and the Metro runtime, plus 3%. */
+const CEILING_BYTES = 458_000;
 
 const exportDirectory = process.env.IMSG_BUNDLE_DIR ?? join(import.meta.dir, "../e2e/fixture/dist");
 
