@@ -39,6 +39,14 @@ One entry per landed change, newest first. Each entry gives the date, the commit
 - **Ratchet:** `scripts/bundle-size.ratchet.ts` sums the brotli size of every `<script src>` in the fixture export and fails above 520,000 bytes. `validate-imsg.yml` builds the fixture export, then runs it. It fails on the origin/main build (739,034) and on the build before deferred surfaces (546,111).
 - **Revert:** `git revert c457621b 244fa9cf 8f2e5a04 f636534c ca200280 e47ecc85`, newest first. H13 also needs `bun install` in `apps/imsg/client` to drop the patch.
 
+## 2026-10-11. The header holds still when fonts arrive late (ff9135a0, dd5b731b)
+
+- **For the user:** on a fresh load where the icon and header fonts arrive after the first frame, the search field no longer slides, "Select a conversation" no longer drops, and the lens tabs no longer widen and push Waiting and All sideways.
+- **How:** each icon sits in a box of its own size, and on web the header face falls back to a local semibold sans whose letter widths match Bricolage within 0.6 px. Settled screens are pixel-identical.
+- **Metric 3a (fixture, fonts held 700 ms, shifts per load):** 5 to 6 became 1.
+- **Ratchet:** `ratchet.playwright.ts` holds the fonts 700 ms and allows at most one header shift. The old build shows 4.
+- **Revert:** `git revert dd5b731b ff9135a0`.
+
 ## 2026-10-11. A fresh load downloads 444 KB of JavaScript (6695e497, 1a9ca847)
 
 - **For the user:** the conversation list appears sooner on a fresh load. The thread view now loads in its own chunk, which starts downloading at boot, and the phone swipe's gesture library loads only on phones.
