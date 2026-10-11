@@ -33,6 +33,7 @@ import { onTriageResolved, onTriageUndo } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useType } from "@/hooks/use-type";
 import { commaApi } from "@/lib/convex-api";
+import { usePendingScheduled } from "@/lib/pending-scheduled";
 import {
   activeChips,
   checkboxCounts,
@@ -163,7 +164,8 @@ export function ConversationListPane({
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [wide, selectLens]);
-  const scheduledRows = useQuery(commaApi.listScheduled, {});
+  // The "Has a scheduled message" refinement drops a cancelled or sent row on the tap, like the footer count.
+  const scheduledRows = usePendingScheduled(useQuery(commaApi.listScheduled, {}));
   const scheduled = useMemo(() => new Set((scheduledRows ?? [])
     .filter((row) => PENDING_SCHEDULED.has(row.status))
     .flatMap((row) => [row.chatGuid, ...(row.conversationId ? [row.conversationId] : [])])), [scheduledRows]);
