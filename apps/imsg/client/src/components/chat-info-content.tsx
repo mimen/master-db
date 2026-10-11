@@ -66,11 +66,18 @@ export function ChatInfoContent({
   const showSheet = useActionSheet();
   const openLightbox = useLightbox();
   const chats = useChatDirectory();
-  const [info, setInfo] = useState<{
+  const [fetched, setInfo] = useState<{
     displayName: string | null;
     isGroup: boolean;
     participants: Contact[];
   } | null>(null);
+  // The directory already holds the name and people, so Details paints on open; chatInfo refines it.
+  const listed = chats?.find((chat) => chat.guid === guid);
+  const info = fetched ?? (listed ? {
+    displayName: listed.isGroup ? listed.displayName : null,
+    isGroup: listed.isGroup,
+    participants: listed.participants.map((p) => ({ address: p.address, name: p.name ?? formatAddress(p.address) })),
+  } : null);
   const conversation = useQuery(commaApi.resolveChat, guid ? { chatGuid: guid } : "skip");
   const gallery = useQuery(mediaApi.gallery, conversation ? { conversationId: conversation._id } : "skip") ?? [];
   const [gridWidth, setGridWidth] = useState(0);
@@ -239,7 +246,10 @@ export function ChatInfoContent({
             accessibilityLabel={info.isGroup ? "Rename group" : undefined}
             disabled={!info.isGroup}
             style={styles.titleRow}
-            onPress={() => setRenaming(true)}
+            onPress={() => {
+              if (!fetched) setName(info.displayName ?? "");
+              setRenaming(true);
+            }}
           >
             <Text style={[styles.title, { color: theme.text }]}>
               {info.isGroup ? info.displayName || `${info.participants.length} people` : peerName ?? "Details"}

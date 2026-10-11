@@ -537,3 +537,20 @@ test("ratchet: an AI reaction shows on its message within 50 ms of confirming", 
   expect(Number(await elapsed.jsonValue())).toBeLessThanOrEqual(50);
   await desk.request.post("/__fixture/send-timing", { data: {} });
 });
+
+test("Details paints the conversation's people from the list before chatInfo answers", async ({ desk }) => {
+  const page = desk.page;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  let held = true;
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string };
+    while (held && body.name === "comma/conversationInfo:chatInfo") await new Promise((resolve) => setTimeout(resolve, 50));
+    await route.continue();
+  });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
+  await page.keyboard.press("Meta+i");
+  await expect(page.getByText("Details", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reach Alex at", { exact: true })).toBeVisible({ timeout: 2_000 });
+  held = false;
+});
