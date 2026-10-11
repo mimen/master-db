@@ -11,13 +11,13 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **35 OPTIMISTIC, 7 PARTIAL, 21 SPINNER, 41 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **36 OPTIMISTIC, 6 PARTIAL, 21 SPINNER, 41 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
 | Interaction | Handler | Class | Lag or note | Failure shown |
 |---|---|---|---|---|
-| Send text, reply, mentions | composer.tsx:529,603 → R(send) | PARTIAL | Bubble is local. The sidebar patch waits for an awaited `resolveChat` first | Failed bubble and toast. Draft not restored |
+| Send text, reply, mentions | composer.tsx:529,603 → R(send) | OPTIMISTIC | Bubble and sidebar move on the click; listed chats skip resolveChat (H37) | Failed bubble and toast. Draft not restored |
 | Retry failed bubble | thread-view.tsx:353 → R(send) | PARTIAL | Local revival is discarded under remote rows in a normal thread | Toast |
 | Send again (menu) | thread-view.tsx:429 → R(send) | OPTIMISTIC | Pending copy at the bottom on the click | Not delivered bubble with Retry, toast |
 | Send photos, videos, files | composer.tsx:560-598 → upload, R(sendAttachment) | SPINNER | Ring; bubble after upload | Toast. Staging lost |
