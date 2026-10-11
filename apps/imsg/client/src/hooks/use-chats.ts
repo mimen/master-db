@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
+import { publishKnownConversations } from "@/lib/convex-commands";
 import { usePendingFlags } from "@/lib/pending-flags";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
@@ -52,6 +53,7 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
 export function ChatDirectoryProvider({ children }: { readonly children: ReactNode }) {
   const { chats } = useConvexChats();
   const shown = usePendingFlags(chats);
+  useEffect(() => publishKnownConversations(chats ?? []), [chats]);
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
 }
 

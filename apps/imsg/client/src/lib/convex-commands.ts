@@ -46,13 +46,26 @@ export interface RunCommandOptions {
   onQueued?: () => void;
 }
 
+/**
+ * Conversation ids the directory already holds, keyed by chat guid. The directory provider keeps it
+ * current, so a command on a listed chat skips the resolveChat round trip before it can enqueue,
+ * and the enqueue's optimistic update lands on the frame of the input.
+ */
+const knownConversations = new Map<string, string>();
+
+export function publishKnownConversations(chats: readonly { guid: string; conversationId?: string }[]): void {
+  knownConversations.clear();
+  for (const chat of chats) if (chat.conversationId) knownConversations.set(chat.guid, chat.conversationId);
+}
+
 function newClientKey(): string {
   return `command-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 async function enqueueCommandVia(client: CommandClient, chatGuid: string | null, payload: CommandPayload, clientKey = newClientKey()): Promise<GenericId<"comma_outbox">> {
   const global = payload.kind === "createChat" || payload.kind === "clearSuggestionLearning";
   if (!chatGuid && !global) throw new Error("This command requires a chat");
-  const conversation = chatGuid ? await client.query(commaApi.resolveChat, { chatGuid }) : null;
+  const knownId = chatGuid ? knownConversations.get(chatGuid) : undefined;
+  const conversation = knownId ? { _id: knownId } : chatGuid ? await client.query(commaApi.resolveChat, { chatGuid }) : null;
   if (chatGuid && !conversation) throw new Error("Conversation is not mirrored yet");
   const id = await client.mutation(commaOutbox.enqueue, {
     clientKey,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { enqueueVia, sendMovesSidebar, type CommandClient } from "./convex-commands";
+import { enqueueVia, publishKnownConversations, sendMovesSidebar, type CommandClient } from "./convex-commands";
 
 function client(resolved: { _id: string } | null) {
   const calls: { kind: string; args: unknown }[] = [];
@@ -30,6 +30,15 @@ describe("enqueueVia", () => {
     const { fake, calls } = client(null);
     await expect(enqueueVia(fake, "SMS;-;+15550009999", { kind: "settle" })).rejects.toThrow("Conversation is not mirrored yet");
     expect(calls.some((call) => call.kind === "mutation")).toBe(false);
+  });
+
+  test("a chat the directory lists enqueues without a resolveChat round trip", async () => {
+    const { fake, calls } = client(null);
+    publishKnownConversations([{ guid: "iMessage;-;+15550002222", conversationId: "conv-known" }]);
+    await enqueueVia(fake, "iMessage;-;+15550002222", { kind: "pin", value: true });
+    publishKnownConversations([]);
+    expect(calls.map((call) => call.kind)).toEqual(["mutation"]);
+    expect((calls[0]?.args as { conversationId: string }).conversationId).toBe("conv-known");
   });
 
   test("propagates a rejected outbox write", async () => {
