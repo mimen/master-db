@@ -5,7 +5,7 @@
  *
  *   bun e2e/bench/optimistic.ts --runs 9
  *   bun e2e/bench/optimistic.ts --runs 9 --url http://127.0.0.1:8641,http://127.0.0.1:8642   # interleaved A/B
- *   --case tapback-add|tapback-remove|unsend|settle|mark-unread|pin|voice-send|forward|palette-send|send-again (default all)
+ *   --case tapback-add|tapback-remove|unsend|settle|mark-unread|pin|voice-send|forward|palette-send|send-again|rename-group (default all)
  *   --profile tailnet|none (default tailnet)
  *
  * Expects a fixture server (`bun run fixture:start`) on IMSG_FIXTURE_PORT (8399) unless --url names one.
@@ -212,6 +212,20 @@ const CASES: Case[] = [
     act: (page) => page.getByRole("menuitem", { name: "Send again" }).click(),
     done: () => [...document.querySelectorAll('[data-testid="thread-view"] [role="button"]')]
       .filter((element) => element.getAttribute("aria-label") === "You: Following up on Avery's plan.").length >= 2,
+  },
+  {
+    // The new name in Launch Crew's Details pane.
+    name: "rename-group",
+    setup: async (page) => {
+      await page.getByRole("tab", { name: "All", exact: true }).click();
+      await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
+      await page.keyboard.press("Meta+i");
+      await page.getByRole("button", { name: "Rename group" }).click();
+      await page.getByPlaceholder("Group name").fill("Crew Prime");
+    },
+    act: (page) => page.getByRole("button", { name: "Save name" }).click(),
+    done: () => [...document.querySelectorAll('[data-testid="desktop-utility-pane-content"] *')]
+      .some((element) => element.childElementCount === 0 && element.textContent === "Crew Prime"),
   },
 ].filter((c) => !only || c.name === only);
 

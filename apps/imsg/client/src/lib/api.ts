@@ -1,6 +1,6 @@
 import { messageToMessage } from "./convex-adapters";
 import { commaApi, commaOutbox } from "./convex-api";
-import { enqueueVia, runCommand, type CommandClient, type CommandPayload } from "./convex-commands";
+import { runCommand, type CommandClient } from "./convex-commands";
 import { createMessagingApi, enqueueTextSendVia } from "./messaging-api";
 import { convexClient } from "./identity";
 import { searchMessages } from "./history-api";
@@ -17,11 +17,6 @@ import type {
   SendTextRequest,
   TranscriptState,
 } from "@shared/types";
-
-export async function enqueueCommand(chatGuid: string, payload: CommandPayload): Promise<{ ok: boolean }> {
-  await enqueueVia(convexClient as unknown as CommandClient, chatGuid, payload);
-  return { ok: true };
-}
 
 async function scheduledChatGuid(id: number): Promise<string> {
   const rows = await convexClient.query(commaApi.listScheduled, {});
@@ -72,9 +67,6 @@ export const api = {
     const result = await convexClient.query(identityApi.chatInfo, { chatGuid });
     if (!result) throw new Error("Chat not found");
     return result;
-  },
-  async renameGroup(chatGuid: string, name: string): Promise<{ ok: boolean }> {
-    return enqueueCommand(chatGuid, { kind: "rename", name });
   },
   participant: messagingApi.participant,
   leaveGroup: messagingApi.leaveGroup,

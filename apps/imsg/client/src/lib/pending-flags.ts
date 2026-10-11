@@ -14,7 +14,8 @@ export type FlagIntent =
   | { change: "unsettle"; chatGuid: string }
   | { change: "read"; chatGuid: string; at: number }
   | { change: "unread"; chatGuid: string }
-  | { change: "pin"; chatGuid: string; value: boolean };
+  | { change: "pin"; chatGuid: string; value: boolean }
+  | { change: "rename"; chatGuid: string; name: string };
 
 /** `confirmed` once the bridge has executed the command. Only a confirmed intent can retire. */
 export interface PendingFlag { readonly intent: FlagIntent; readonly confirmed: boolean }
@@ -22,7 +23,7 @@ export interface PendingFlag { readonly intent: FlagIntent; readonly confirmed: 
 /** One pending intent per chat and axis; a newer one on the same axis replaces the older. */
 export type PendingFlags = ReadonlyMap<string, PendingFlag>;
 
-const AXIS: Record<FlagIntent["change"], string> = { settle: "triage", unsettle: "triage", read: "read", unread: "read", pin: "pin" };
+const AXIS: Record<FlagIntent["change"], string> = { settle: "triage", unsettle: "triage", read: "read", unread: "read", pin: "pin", rename: "name" };
 
 function write(state: ChatState, intent: FlagIntent, last: ChatSummary["lastMessage"]): ChatState {
   switch (intent.change) {
@@ -32,6 +33,7 @@ function write(state: ChatState, intent: FlagIntent, last: ChatSummary["lastMess
     case "read": return { ...state, readAt: intent.at, markedUnread: 0 };
     case "unread": return { ...state, markedUnread: 1 };
     case "pin": return { ...state, pinned: Number(intent.value) };
+    case "rename": return state;
   }
 }
 
@@ -53,9 +55,11 @@ function apply(chat: ChatSummary, intents: readonly FlagIntent[]): ChatSummary {
   // listConversations' rule: a read at or after the last message zeroes the count.
   const unreadCount = (state.readAt ?? -1) >= (chat.lastMessage?.dateCreated ?? 0) ? 0 : chat.unreadCount;
   const flags = computeFlags(state, chat.lastMessage, unreadCount);
-  const same = unreadCount === chat.unreadCount && (Object.keys(flags) as (keyof typeof flags)[]).every((key) => flags[key] === chat.flags[key]);
+  const displayName = intents.reduce((name, intent) => intent.change === "rename" ? intent.name : name, chat.displayName);
+  const same = unreadCount === chat.unreadCount && displayName === chat.displayName &&
+    (Object.keys(flags) as (keyof typeof flags)[]).every((key) => flags[key] === chat.flags[key]);
   // firstUnreadAt stays: the open thread still needs it to place its unread divider.
-  return same ? chat : { ...chat, flags, unreadCount };
+  return same ? chat : { ...chat, flags, unreadCount, displayName };
 }
 
 /** The directory as the user's pending intents leave it. Returns `chats` itself when no row changes. */

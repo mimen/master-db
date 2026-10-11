@@ -66,6 +66,11 @@ describe("applyFlagIntents", () => {
     expect(applyFlagIntents(quiet, pending([{ change: "read", chatGuid: "c1", at: 250 }]))).toBe(quiet);
   });
 
+  test("a rename shows the new name on the row and leaves its flags", () => {
+    const [shown] = applyFlagIntents([chat()], pending([{ change: "rename", chatGuid: "c1", name: "Crew" }]));
+    expect(shown).toMatchObject({ displayName: "Crew", flags: chat().flags, unreadCount: 2 });
+  });
+
   test("intents on separate axes compose on one row", () => {
     const [shown] = applyFlagIntents([chat()], pending(
       [{ change: "pin", chatGuid: "c1", value: true }],
@@ -88,6 +93,12 @@ describe("retireFlagIntents", () => {
     expect(retireFlagIntents(pending([pin, true]), [pinned]).size).toBe(0);
     const intents = pending([pin, true]);
     expect(retireFlagIntents(intents, [chat()])).toBe(intents);
+  });
+
+  test("keeps a confirmed rename until the directory carries the new name", () => {
+    const rename = pending([{ change: "rename", chatGuid: "c1", name: "Crew" }, true]);
+    expect(retireFlagIntents(rename, [chat()])).toBe(rename);
+    expect(retireFlagIntents(rename, [chat({ displayName: "Crew" })]).size).toBe(0);
   });
 
   test("drops a confirmed settle that a newer message made moot", () => {

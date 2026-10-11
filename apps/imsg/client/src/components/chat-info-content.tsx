@@ -17,7 +17,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { api, attachmentThumbnailUrl } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
-import { pinChat } from "@/lib/chat-actions";
+import { pinChat, writeFlags } from "@/lib/chat-actions";
 import { contactService } from "@/lib/contact-service";
 import { useAddChatTag } from "@/lib/identity";
 import { useLightbox } from "@/lib/lightbox";
@@ -141,11 +141,14 @@ export function ChatInfoContent({
 
   const saveName = () => {
     setRenaming(false);
-    if (name.trim() && name !== info.displayName) {
-      api.renameGroup(guid, name.trim())
-        .then(() => setInfo((current) => current ? { ...current, displayName: name.trim() } : current))
-        .catch(() => showToast("Couldn't rename the conversation. Try again."));
-    }
+    const next = name.trim();
+    if (!next || next === info.displayName) return;
+    const previous = fetched?.displayName ?? null;
+    setInfo((current) => current && { ...current, displayName: next });
+    writeFlags({ change: "rename", chatGuid: guid, name: next }, { kind: "rename", name: next }).catch((error: unknown) => {
+      setInfo((current) => current && { ...current, displayName: previous });
+      showToast(messagingCommandError(error, "Couldn't rename the conversation. Try again."));
+    });
   };
 
   const removeParticipant = (p: Contact) => {

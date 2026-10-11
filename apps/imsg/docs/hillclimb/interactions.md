@@ -11,7 +11,7 @@ Classes:
 
 `E(kind)` enqueues `comma/outbox:enqueue` and resolves at acknowledgement. `R(kind)` also watches `comma/outbox:getCommand` until the bridge executes. Enqueue-only callers never see a later bridge failure.
 
-Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **40 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 38 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
+Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 WAIT.** Current: **41 OPTIMISTIC, 5 PARTIAL, 21 SPINNER, 37 WAIT.** The target is zero non-optimistic interactions among the writes a user sees. Reads that must fetch (search, history paging, media) count as done when they show a placeholder instantly and never block input.
 
 ## Messaging
 
@@ -90,7 +90,7 @@ Count at baseline: **104 interactions. 20 OPTIMISTIC, 9 PARTIAL, 21 SPINNER, 54 
 |---|---|---|---|---|
 | Open details (phone) | chat-info-content.tsx:101 → chatInfo | SPINNER | Centered spinner | Swallowed |
 | Open details (desktop) | same | OPTIMISTIC | Paints name and people from the list; chatInfo refines (H40) | Swallowed |
-| Rename group | chat-info-content.tsx:135 → E(rename) | WAIT | Name changes on acknowledgement | Toast |
+| Rename group | chat-info-content.tsx:142 → R(rename) | OPTIMISTIC | Details and the conversation row show the new name on Save through a `rename` flag intent (H26) | Name rolls back, toast |
 | Add or remove participant | chat-info-content.tsx:144 → R(participant) | WAIT | No pending control | Toast |
 | Leave group | chat-info-content.tsx:198 → R(leaveGroup) | WAIT | Close after receipt | Toast |
 | Delete conversation | chat-info-content.tsx:176 → R(deleteChat) | WAIT | Navigation after receipt | Toast |

@@ -572,3 +572,45 @@ test("a contact search hit for a listed conversation opens it without waiting on
   await expect(page.getByTestId("thread-view").getByText("Any update when you get a chance?", { exact: true })).toBeVisible({ timeout: 2_000 });
   held = false;
 });
+
+const RENAMED = "Crew Prime";
+const renamedInDetails = `() => [...document.querySelectorAll('[data-testid="desktop-utility-pane-content"] *')]
+  .some((element) => element.childElementCount === 0 && element.textContent === "${RENAMED}")`;
+
+/** Opens Launch Crew's Details and types a new name, ready to save. */
+async function renameLaunchCrew(page: Page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByTestId("conversation-row").filter({ hasText: "Launch Crew" }).click();
+  await page.keyboard.press("Meta+i");
+  await page.getByRole("button", { name: "Rename group" }).click();
+  await page.getByPlaceholder("Group name").fill(RENAMED);
+  return page.getByRole("button", { name: "Save name" });
+}
+
+test("ratchet: a renamed group shows its new name within 50 ms of Save", async ({ desk }) => {
+  const page = desk.page;
+  // A real bridge takes longer than a frame; the bare fixture can answer inside 50 ms.
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as { name: string; args: { payload?: { kind: string } } };
+    if (body.name === "comma/outbox:enqueue" && body.args.payload?.kind === "rename") await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  });
+  const save = await renameLaunchCrew(page);
+  await timeToFrame(page, "pointerdown", renamedInDetails);
+  await save.click();
+  expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
+  await expect(page.getByTestId("conversation-row").filter({ hasText: RENAMED })).toHaveCount(1);
+});
+
+test("a group rename shows at once and rolls back with a toast when the bridge fails it", async ({ desk }) => {
+  expect((await desk.request.post("/__fixture/fault", { data: { method: "renameGroup" } })).ok()).toBe(true);
+  const page = desk.page;
+  const save = await renameLaunchCrew(page);
+  const shown = page.waitForFunction(`(${renamedInDetails})()`, undefined, { polling: "raf", timeout: 5_000 });
+  await save.click();
+  await shown;
+  await expect(page.getByText("Couldn't rename the conversation. Try again.")).toBeVisible();
+  await expect(page.getByTestId("desktop-utility-pane-content").getByText("Launch Crew", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("conversation-row").filter({ hasText: RENAMED })).toHaveCount(0);
+});

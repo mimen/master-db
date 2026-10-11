@@ -11,9 +11,10 @@ import { FixtureBlueBubbles, type FaultableMethod } from "./fake-bluebubbles";
 import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
 
 const fixtureDirectory = dirname(fileURLToPath(import.meta.url));
-const runtimeDirectory = join(fixtureDirectory, ".runtime");
-const dbPath = join(runtimeDirectory, "overlay.db");
 const port = Number(Bun.env.IMSG_FIXTURE_PORT ?? 8399);
+// One database per port, so an A/B pair (IMSG_FIXTURE_DIST serves the other build) never shares one.
+const runtimeDirectory = join(fixtureDirectory, ".runtime", String(port));
+const dbPath = join(runtimeDirectory, "overlay.db");
 
 mkdirSync(runtimeDirectory, { recursive: true });
 for (const suffix of ["", "-shm", "-wal"]) rmSync(`${dbPath}${suffix}`, { force: true });
@@ -148,7 +149,7 @@ const { app, dispose } = await createApp({
   identity,
   ai: new FixtureAi(db),
   backgroundServices: false,
-  staticRoot: join(fixtureDirectory, "dist"),
+  staticRoot: Bun.env.IMSG_FIXTURE_DIST ?? join(fixtureDirectory, "dist"),
   configureFixtureRoutes: (fixtureApp, controls) => {
     const resetConvex = registerConvexFixture(fixtureApp, controls, bb, db, identity, {
       "comma/history:messageWindow": (args) => fixtureMessageWindow(bb, identity, args),
