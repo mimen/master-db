@@ -42,7 +42,9 @@ function message(
 const backlogNames = [
   "Avery Brooks", "Nina Park", "Diego Santos", "Riley Chen", "Taylor Morgan", "Priya Shah",
   "Marcus Reed", "Leah Kim", "Owen Foster", "Sofia Martinez", "Noah Blake", "Mina Patel",
-] as const;
+  // FIXTURE_BACKLOG=300 adds needs-reply conversations so the list paginates like a real inbox.
+  ...Array.from({ length: Number(process.env.FIXTURE_BACKLOG ?? 0) }, (_, index) => `Backlog ${index + 1}`),
+];
 
 const backlogContacts: BBContact[] = backlogNames.map((displayName, index) => ({
   id: `fixture-backlog-${index}`,
