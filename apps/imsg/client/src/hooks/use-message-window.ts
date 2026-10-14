@@ -1,5 +1,5 @@
 import type { Message } from "@shared/types";
-import { useConvex } from "convex/react";
+import { useConvex, useQuery } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { JumpTarget, UseMessagesResult } from "./use-messages";
@@ -8,13 +8,12 @@ import { messageToMessage } from "@/lib/convex-adapters";
 import { messageWindow, type MessageWindowArgs } from "@/lib/history-api";
 import { mergeWindow, reconcileWindow, settleTemp, upsertMessage } from "@/lib/message-window";
 import { afterPaint, markOpenRendered, markOpenStart } from "@/lib/open-timing";
-import { useRetryingQuery } from "@/lib/retrying-query";
 
 export function useMessageWindow(conversationId: string | null, chatGuid: string | null, target: JumpTarget | null): UseMessagesResult {
   const convexClient = useConvex();
   const around = target?.dateCreated;
   const targetGuid = target?.guid;
-  const { data: batch, failed, retry } = useRetryingQuery(messageWindow, conversationId && around !== undefined
+  const batch = useQuery(messageWindow, conversationId && around !== undefined
     ? { conversationId: conversationId as MessageWindowArgs["conversationId"], around } : "skip");
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -102,9 +101,10 @@ export function useMessageWindow(conversationId: string | null, chatGuid: string
   const upsert = useCallback((message: Message) => setMessages((current) => upsertMessage(current, message)), []);
   const replaceTemp = useCallback((tempGuid: string, message: Message) => setMessages((current) => settleTemp(current, tempGuid, message)), []);
   const remove = useCallback((guid: string) => setMessages((current) => current.filter((message) => message.guid !== guid)), []);
+  const noop = useCallback(() => undefined, []);
   return {
-    messages, loading: conversationId !== null && batch === undefined && !failed, failed: failed && messages.length === 0,
-    retry, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove,
+    messages, loading: conversationId !== null && batch === undefined, failed: false,
+    retry: noop, hasMore, hasNewer, loadOlder, loadNewer, upsert, replaceTemp, remove,
     newestMessages: [],
   };
 }

@@ -1,15 +1,14 @@
-import { useConvexConnectionState } from "convex/react";
-import { createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Platform } from "react-native";
 import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
 import { conversationToChat } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { publishKnownConversations } from "@/lib/convex-commands";
 import { usePendingFlags } from "@/lib/pending-flags";
-import { useRetryingPaginatedQuery } from "@/lib/retrying-query";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
-import { ChatDirectoryContext, DirectoryFailedContext, useChatDirectory } from "./use-chat-directory";
+import { ChatDirectoryContext, useChatDirectory } from "./use-chat-directory";
 
 interface UseChatsResult {
   chats: ChatSummary[];
@@ -17,8 +16,7 @@ interface UseChatsResult {
   allChats: ChatSummary[];
   counts: StateCounts | null;
   loading: boolean;
-  /** "offline" while the socket is down, "stale" while the list query is failing and retrying. */
-  error: "offline" | "stale" | null;
+  error: string | null;
   refresh: () => void;
 }
 
@@ -26,11 +24,14 @@ interface UseChatsResult {
  * Every conversation from Convex, live. Pages load one after another until the list is complete.
  * Only ChatDirectoryProvider calls this; everything else reads useChatDirectory.
  */
-export function useConvexChats(): { chats: ChatSummary[] | null; failed: boolean } {
+export function useConvexChats(): { chats: ChatSummary[] | null } {
   // A new message re-runs the page holding its conversation, and the busiest conversations sit
   // in the first page. At 200 rows that re-run took 1-4.5s server-side before the sidebar moved.
-  // A failed page (a Convex timeout under load) keeps the rows on screen and retries.
-  const { results, status, loadMore, failed } = useRetryingPaginatedQuery(commaApi.listConversations, {}, 25);
+  const { results, status, loadMore } = usePaginatedQuery(
+    commaApi.listConversations,
+    {},
+    { initialNumItems: 25 },
+  );
   useEffect(() => {
     if (status === "CanLoadMore") loadMore(100);
   }, [status, loadMore]);
@@ -41,7 +42,7 @@ export function useConvexChats(): { chats: ChatSummary[] | null; failed: boolean
     if (status === "Exhausted") writeChatSnapshot(webStore(), chats);
   }, [status, chats]);
   const bridged = useMemo(() => (snapshot && status !== "Exhausted" ? bridgeSnapshot(chats, snapshot) : chats), [snapshot, status, chats]);
-  return { chats: status === "LoadingFirstPage" ? snapshot : bridged, failed };
+  return { chats: status === "LoadingFirstPage" ? snapshot : bridged };
 }
 
 /**
@@ -50,11 +51,10 @@ export function useConvexChats(): { chats: ChatSummary[] | null; failed: boolean
  * that mounted another held the thread's first query behind a second-long list page.
  */
 export function ChatDirectoryProvider({ children }: { readonly children: ReactNode }) {
-  const { chats, failed } = useConvexChats();
+  const { chats } = useConvexChats();
   const shown = usePendingFlags(chats);
   useEffect(() => publishKnownConversations(chats ?? []), [chats]);
-  return createElement(DirectoryFailedContext.Provider, { value: failed },
-    createElement(ChatDirectoryContext.Provider, { value: shown }, children));
+  return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
 }
 
 /**
@@ -70,8 +70,7 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   // Its socket takes about a minute to notice a dead network, so the browser's own signal leads.
   const { isWebSocketConnected, hasEverConnected } = useConvexConnectionState();
   const browserOnline = useBrowserOnline();
-  const stale = useContext(DirectoryFailedContext);
-  const error = hasEverConnected && (!isWebSocketConnected || !browserOnline) ? "offline" : stale ? "stale" : null;
+  const error = hasEverConnected && (!isWebSocketConnected || !browserOnline) ? "offline" : null;
 
   // Passive review lenses (Unread, Settled) freeze membership so an item does
   // not jump while it is being inspected. The active triage queues enumerated

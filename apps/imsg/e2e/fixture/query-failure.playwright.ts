@@ -30,9 +30,7 @@ for (const name of ["comma/queries:listConversations", "comma/queries:listMessag
 
     arm();
     await expect.poll(() => arm(), { message: "the query failed once" }).toBe(true);
-    if (name === "comma/queries:listConversations") {
-      await expect(page.getByTestId("offline-bar")).toContainText("Couldn't refresh. Retrying");
-    } else await page.waitForTimeout(500);
+    await page.waitForTimeout(500);
     await expect(page.getByText("Something went wrong")).toHaveCount(0);
     await expect(alex).toHaveAttribute("aria-selected", "true");
     await expect(thread.getByText("Can you send the final arrival time?", { exact: true })).toBeVisible();
@@ -42,6 +40,5 @@ for (const name of ["comma/queries:listConversations", "comma/queries:listMessag
     await expect(thread.getByText("Recovered after the failed page.", { exact: true })).toBeVisible();
     await expect(alex).toContainText("Recovered after the failed page.");
     await expect(page.getByText("Something went wrong")).toHaveCount(0);
-    await expect(page.getByTestId("offline-bar")).toHaveCount(0);
   });
 }

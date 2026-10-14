@@ -1,13 +1,11 @@
 import type { ChatSummary } from "@shared/types";
+import { useQuery } from "convex/react";
 import type { GenericId } from "convex/values";
 import { createContext, useContext } from "react";
 import { commaApi } from "@/lib/convex-api";
-import { useRetryingQuery } from "@/lib/retrying-query";
 
 /** The one conversation-list subscription, published by ChatDirectoryProvider in use-chats. */
 export const ChatDirectoryContext = createContext<ChatSummary[] | null>(null);
-/** True while the directory's list query is failing; the directory is its last good rows. */
-export const DirectoryFailedContext = createContext(false);
 
 export function useChatDirectory(): ChatSummary[] | null {
   return useContext(ChatDirectoryContext);
@@ -25,7 +23,7 @@ export function useConversationRef(chatGuid: string | null): {
 } {
   const known = useChatDirectory()?.find((chat) => chat.guid === chatGuid);
   const knownId = known?.conversationId as GenericId<"comma_conversations"> | undefined;
-  const { data: resolved } = useRetryingQuery(commaApi.resolveChat, chatGuid && !knownId ? { chatGuid } : "skip");
+  const resolved = useQuery(commaApi.resolveChat, chatGuid && !knownId ? { chatGuid } : "skip");
   if (knownId) return { conversationId: knownId, lastMessageAt: known?.lastMessage?.dateCreated ?? null, resolving: false };
   return {
     conversationId: resolved?._id ?? null,

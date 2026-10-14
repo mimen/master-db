@@ -29,19 +29,13 @@ if (process.env.COMMA_DRAFT_HOOK_CHILD !== "1") {
   const queries: Array<{ name: string; skipped: boolean }> = [];
   let imports = 0;
 
-  const useQuery = (ref: Parameters<typeof getFunctionName>[0], args: { chatGuid?: string } | "skip") => {
-    const name = getFunctionName(ref);
-    queries.push({ name, skipped: args === "skip" });
-    if (args === "skip") return undefined;
-    return name.endsWith(":resolveChat") ? { _id: `id-${args.chatGuid}` } : remote;
-  };
   mock.module("convex/react", () => ({
-    useQuery,
-    useQuery_experimental: ({ query, args }: { query: Parameters<typeof getFunctionName>[0]; args: { chatGuid?: string } | "skip" }) => {
-      const data = useQuery(query, args);
-      return data === undefined ? { status: "pending" } : { status: "success", data };
+    useQuery: (ref: Parameters<typeof getFunctionName>[0], args: { chatGuid?: string } | "skip") => {
+      const name = getFunctionName(ref);
+      queries.push({ name, skipped: args === "skip" });
+      if (args === "skip") return undefined;
+      return name.endsWith(":resolveChat") ? { _id: `id-${args.chatGuid}` } : remote;
     },
-    usePaginatedQuery_experimental: () => ({ status: "pending", data: undefined, loadMore: () => undefined }),
   }));
   mock.module("@/lib/convex-auth", () => ({ useConvexAuth: () => ({ isAuthenticated: authenticated }) }));
   mock.module("@/lib/toast", () => ({ showToast: () => {} }));

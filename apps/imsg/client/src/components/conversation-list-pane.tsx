@@ -91,8 +91,8 @@ interface ConversationListPaneProps {
   counts: StateCounts | null;
   filters: InboxFilters;
   loading: boolean;
-  /** The socket is down, or the list query failed and is retrying; the list is the last good copy. */
-  offline: "offline" | "stale" | null;
+  /** The last chat-list fetch failed; the list is the saved copy. */
+  offline: boolean;
   wide: boolean;
   selectedGuid?: string;
   onFiltersChange: (filters: InboxFilters) => void;
@@ -422,8 +422,8 @@ export function ConversationListPane({
               <View role="status" aria-live="polite">
                 {offline && (
                   <View testID="offline-bar" style={[styles.offlineBar, { backgroundColor: theme.backgroundElement }]}>
-                    <Ionicons aria-hidden name={offline === "stale" ? "refresh-outline" : "cloud-offline-outline"} size={13} color={theme.textSecondary} />
-                    <Text style={[styles.offlineText, { color: theme.textSecondary }]}>{offline === "stale" ? "Couldn't refresh. Retrying…" : allChats.length > 0 ? "Offline. Messages send when you reconnect." : "Offline. Reconnecting…"}</Text>
+                    <Ionicons aria-hidden name="cloud-offline-outline" size={13} color={theme.textSecondary} />
+                    <Text style={[styles.offlineText, { color: theme.textSecondary }]}>{allChats.length > 0 ? "Offline. Messages send when you reconnect." : "Offline. Reconnecting…"}</Text>
                   </View>
                 )}
               </View>

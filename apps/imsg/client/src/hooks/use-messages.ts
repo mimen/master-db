@@ -1,10 +1,10 @@
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { mergeConvexMessages, messageToMessage } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { messageWindow } from "@/lib/history-api";
 import { localSends, useLocalSends } from "@/lib/local-sends";
 import { reconcileWindow, sortByDate, hideSelfEchoes } from "@/lib/message-window";
-import { useRetryingPaginatedQuery, useRetryingQuery } from "@/lib/retrying-query";
 import { afterPaint, markOpenRendered } from "@/lib/open-timing";
 import { applyPendingEdits, retirePendingEdits, type PendingEdit, type PendingEdits } from "@/lib/pending-edits";
 import type { Message } from "@shared/types";
@@ -41,10 +41,10 @@ export interface UseMessagesResult {
  * blinks.
  */
 function useConvexMessages(conversationId: string | null, chatGuid: string | null, newest: readonly Message[]): UseMessagesResult {
-  const { results, status, loadMore, failed, retry } = useRetryingPaginatedQuery(
+  const { results, status, loadMore } = usePaginatedQuery(
     commaApi.listMessages,
     conversationId ? { conversationId: conversationId as never } : "skip",
-    50,
+    { initialNumItems: 50 },
   );
   const local = useLocalSends(chatGuid);
   useEffect(() => {
@@ -76,9 +76,9 @@ function useConvexMessages(conversationId: string | null, chatGuid: string | nul
   }, [status, loadMore]);
   return {
     messages,
-    loading: status === "LoadingFirstPage" && !failed && conversationId !== null && messages.length === 0,
-    failed: failed && messages.length === 0,
-    retry,
+    loading: status === "LoadingFirstPage" && conversationId !== null && messages.length === 0,
+    failed: false,
+    retry: noop,
     hasMore: status === "CanLoadMore",
     hasNewer: false,
     loadOlder,
@@ -99,7 +99,7 @@ export function useMessages(chatGuid: string | null, target: JumpTarget | null):
   const { conversationId, lastMessageAt, resolving } = useConversationRef(chatGuid);
   // This window can render the sidebar's newest message while pagination loads,
   // and keeps the active thread's read observer live during a historical jump.
-  const { data: newestRows } = useRetryingQuery(messageWindow, conversationId && lastMessageAt !== null
+  const newestRows = useQuery(messageWindow, conversationId && lastMessageAt !== null
     ? { conversationId, before: lastMessageAt + 1 } : "skip");
   const newest = useMemo(() => newestRows?.map(messageToMessage) ?? [], [newestRows]);
   const convex = useConvexMessages(!target ? conversationId : null, !target ? chatGuid : null, target ? [] : newest);
