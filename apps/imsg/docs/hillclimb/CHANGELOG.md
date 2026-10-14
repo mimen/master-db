@@ -2,6 +2,13 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-13. Reverted: the crash guard duplicated the conversation list (f766eb21, a9e6dfd3)
+
+- **For the user:** the list shows each conversation once again, the counts are right, and it is fast again. The 10-11 change that kept the app on screen through a Convex timeout (H34) made the list re-subscribe in a loop in production. Every conversation appeared many times, Needs reply and Unread read 999+, and the app slowed to a crawl.
+- **Why tests missed it:** the fixture's 18 conversations fit in one page, so the loop never started there.
+- **Now guarded by:** `e2e/bench/duplicates.ts`, a read-only check against real data. It counts duplicate rows and list subscriptions, and must pass on a preview before any change to how the list loads lands.
+- **Side effect of the revert:** a Convex timeout on the list can again put the app on its crash screen until the guard is redone without the loop.
+
 ## 2026-10-11. Cancelling or sending a scheduled message clears its sidebar count on the tap (6711eb8a, c9d6bc02)
 
 - **For the user:** the Scheduled count in the sidebar footer drops with the row on the tap of Cancel or Send now. If the Mac mini rejects it, the row and the count come back. Before, Cancel moved the count only after the mirror caught up (about 600 ms on the fixture), and Send now never cleared it on the fixture.
