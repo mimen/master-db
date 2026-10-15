@@ -1,6 +1,9 @@
 import { extractLabelNameFromSlug, extractProjectIdFromSlug, getLabelSlug, getProjectSlug } from "./slugs"
 
-import type { ViewBuildContext, ViewKey } from "@/lib/views/types"
+import type { RoutineTaskFilter, TimeRange, ViewBuildContext, ViewKey } from "@/lib/views/types"
+
+const TIME_RANGES: readonly string[] = ["overdue", "today", "upcoming", "no-date"] satisfies TimeRange[]
+const ROUTINE_TASK_FILTERS: readonly string[] = ["overdue", "morning", "night", "todays", "get-ahead"] satisfies RoutineTaskFilter[]
 
 /**
  * Convert a ViewKey to a URL path
@@ -124,7 +127,7 @@ export function pathToViewKey(path: string, context?: ViewBuildContext): ViewKey
 
   // Routine task views
   const routineTaskMatch = normalized.match(/^\/routine-tasks\/([^/]+)$/)
-  if (routineTaskMatch) {
+  if (routineTaskMatch && ROUTINE_TASK_FILTERS.includes(routineTaskMatch[1])) {
     return `view:routine-tasks:${routineTaskMatch[1]}` as ViewKey
   }
 
@@ -149,9 +152,9 @@ export function pathToViewKey(path: string, context?: ViewBuildContext): ViewKey
   }
 
   // Time ranges
-  if (normalized.startsWith("/time/")) {
-    const range = normalized.replace("/time/", "")
-    return `view:time:${range}` as ViewKey
+  const timeMatch = normalized.match(/^\/time\/([^/]+)$/)
+  if (timeMatch && TIME_RANGES.includes(timeMatch[1])) {
+    return `view:time:${timeMatch[1]}` as ViewKey
   }
 
   // Priority views
