@@ -259,9 +259,9 @@ export function Layout() {
           event.preventDefault()
           // Determine default project ID based on active view
           let defaultProjectId: string | undefined = undefined
-          if (activeView.key.startsWith('project:')) {
-            // Extract project ID from view key (format: "project:{id}")
-            defaultProjectId = activeView.key.replace('project:', '')
+          if (activeView.key.startsWith('view:project:')) {
+            // Extract project ID from view key (format: "view:project:{id}")
+            defaultProjectId = activeView.key.slice('view:project:'.length)
           }
           openQuickAdd(defaultProjectId)
           break
