@@ -9,7 +9,10 @@ const MAX = 40;
 export type TriageTraceEvent =
   | { readonly kind: "settle-key"; readonly guid: string; readonly lens: string; readonly action: string; readonly next: string | null }
   | { readonly kind: "advance"; readonly from: string; readonly to: string | null; readonly reason: string }
-  | { readonly kind: "clear"; readonly via: string };
+  | { readonly kind: "clear"; readonly via: string }
+  // Modifier chords only, so typed text is never recorded.
+  | { readonly kind: "key"; readonly combo: string; readonly code: string; readonly command: string | null }
+  | { readonly kind: "menu"; readonly command: string };
 
 function short(guid: string | null): string | null {
   return guid === null ? null : guid.slice(-6);

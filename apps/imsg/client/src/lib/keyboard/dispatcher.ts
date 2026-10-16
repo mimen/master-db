@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { traceTriage } from "../triage-trace";
 import { matchBinding, runCommand } from "./controller";
 
 /**
@@ -28,6 +29,10 @@ export function installKeyboardDispatcher(): () => void {
     if (event.getModifierState?.("AltGraph")) return;
 
     const binding = matchBinding(event);
+    if (event.metaKey || event.ctrlKey) {
+      const mods = `${event.metaKey ? "cmd+" : ""}${event.ctrlKey ? "ctrl+" : ""}${event.altKey ? "alt+" : ""}${event.shiftKey ? "shift+" : ""}`;
+      traceTriage({ kind: "key", combo: mods + event.key, code: event.code, command: binding?.commandId ?? null });
+    }
     if (!binding) return;
     if (event.repeat && !binding.allowRepeat) return;
     // Fail closed: a binding not marked editable-safe never fires from a text field,

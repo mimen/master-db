@@ -4,6 +4,7 @@ import {
 } from "@shared/release-identity";
 
 import { runCommand } from "./keyboard/controller";
+import { traceTriage } from "./triage-trace";
 import { isCommandId } from "./keyboard/registry";
 import type { CommandId } from "./keyboard/types";
 
@@ -228,6 +229,7 @@ export function installNativeMenuBridge(
       const id = event.payload;
       if (!isCommandId(id)) return;
       const command: CommandId = id;
+      traceTriage({ kind: "menu", command });
       const handled = runCommand(command, "native-menu");
       if (command === "navigation.close" && !handled) closeDesktopWindow(win);
     })

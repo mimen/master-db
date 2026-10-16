@@ -11,3 +11,12 @@ test("records why ⌘E did not advance, with guids shortened and capped at 40 en
   expect(ring).toHaveLength(40);
   expect(ring.at(-1)).toMatchObject({ from: "500044", reason: "no next" });
 });
+
+test("records a modifier chord with its physical key and the command it matched", () => {
+  traceTriage({ kind: "key", combo: "cmd+e", code: "KeyE", command: "conversation.settle" });
+  traceTriage({ kind: "menu", command: "navigation.close" });
+  expect(JSON.parse(data.get("imsg.triageTrace")!)).toMatchObject([
+    { kind: "key", combo: "cmd+e", code: "KeyE", command: "conversation.settle" },
+    { kind: "menu", command: "navigation.close" },
+  ]);
+});
