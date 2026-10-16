@@ -3,7 +3,7 @@ import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
 import { applyMessage as applyMessageToSummaries } from "../shared/chat-state";
-import { mapChat, mapMessage, type UnreadSummary } from "./map";
+import { isQuietMessage, mapChat, mapMessage, type UnreadSummary } from "./map";
 import type { NameSource } from "./name-resolver";
 import type { ChatSummary, Message } from "../shared/types";
 import { sameSendAddress } from "./message-verification";
@@ -470,7 +470,7 @@ export class ChatDirectory {
     const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
     const lastGuid = chat?.lastMessage?.guid;
     if (!lastGuid) return { ok: false, error: "chat has no last message", status: 404 };
-    if (expectedLatestMessageGuid && expectedLatestMessageGuid !== lastGuid) {
+    if (expectedLatestMessageGuid && expectedLatestMessageGuid !== lastGuid && !(await this.nothingNewSince(guid, expectedLatestMessageGuid))) {
       return { ok: false, error: "latest message changed", status: 409 };
     }
     for (const sibling of this.siblingGuids(guid)) {
@@ -482,6 +482,21 @@ export class ChatDirectory {
     this.db.clearOpenTriageItem(canonical);
     this.invalidate();
     return { ok: true };
+  }
+
+  /**
+   * The client anchors a settle on the newest message it shows, which skips tapbacks and unsent
+   * messages, while BlueBubbles' last message counts them. True when only those sit after the anchor.
+   */
+  private async nothingNewSince(guid: string, anchor: string): Promise<boolean> {
+    const pages = await Promise.all(this.siblingGuids(guid).map((sibling) => this.bb.chatMessages(sibling, { limit: 25 })));
+    const newestFirst = pages.flatMap((page) => (page.ok ? page.value : []))
+      .toSorted((a, b) => (b.dateCreated ?? 0) - (a.dateCreated ?? 0));
+    for (const message of newestFirst) {
+      if (message.guid === anchor) return true;
+      if (!isQuietMessage(message)) return false;
+    }
+    return false;
   }
 
   async undismiss(

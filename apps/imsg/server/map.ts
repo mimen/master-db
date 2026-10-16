@@ -271,6 +271,11 @@ function isRetracted(m: BBMessage): boolean {
   return Boolean(m.dateEdited) && !m.text && !m.attachments?.length;
 }
 
+/** A tapback or an unsent message: never a conversation's last message in Convex (refreshLastMessage). */
+export function isQuietMessage(m: BBMessage): boolean {
+  return isTapback(m) || isRetracted(m);
+}
+
 /**
  * Converts a raw DESC message window into ascending, normal messages with
  * tapbacks folded into `reactions` and reply previews resolved in-window.

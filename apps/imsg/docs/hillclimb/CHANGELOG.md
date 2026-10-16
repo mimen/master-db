@@ -2,6 +2,15 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-15. A tapback or an unsent message no longer blocks a settle
+
+- **For the user:** a conversation whose newest event is a tapback or an unsent message settles like any other. Before, the settle came back with "Conversation changed. Review the newest message." or "Could not settle conversation" until someone sent a real message. The group with Nick Chase, Shonna Gillis, Marissa and Brooke had failed this way 10 times since 10-10.
+- **Cause:** Comma anchors a settle on the newest message it shows. Convex skips tapbacks and unsent messages when it picks that message (`refreshLastMessage`), but the Mini compared the anchor with BlueBubbles' raw last row. In that group the raw last row was a Loved tapback that came 81 s after Brooke's "Ok perfect! 😍".
+- **Now:** the Mini reads the newest 25 messages and accepts the anchor when only tapbacks or unsent messages follow it. A real message after the anchor still rejects the settle, so a settle never hides a message the user has not seen. `isQuietMessage` in `server/map.ts` names what Convex skips.
+- **Audit:** across all 1,882 outbox commands, settle failed only for this cause and the 1,000-chat cutoff (f4754c58).
+- **Guarded by:** a test in `server/chat-directory.test.ts` that covers the tapback case and the new-message case.
+- **Revert:** revert the commit.
+
 ## 2026-10-15. Conversations past BlueBubbles' first 1,000 chats can be settled
 
 - **For the user:** settling Marissa Carlene Aguilar's thread, or any other conversation in the same position, sticks. Before, it settled, came back a few seconds later, and showed "Could not settle conversation".
