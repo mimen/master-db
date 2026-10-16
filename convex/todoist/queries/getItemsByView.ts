@@ -94,7 +94,10 @@ export const getItemsByView = authedQuery({
       }
 
       if (list.range === "overdue") {
-        return ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, { now: args.now });
+        return ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, {
+          timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+          now: args.now,
+        });
       }
 
       if (list.range === "no-date") {

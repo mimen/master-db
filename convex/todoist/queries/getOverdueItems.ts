@@ -17,6 +17,7 @@ export const getOverdueItems = authedQuery({
         v.literal('not-assigned-to-others')
       )
     ),
+    timezoneOffsetMinutes: v.optional(v.number()),
     now: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Doc<"todoist_items">[]> => {
@@ -32,25 +33,18 @@ export const getOverdueItems = authedQuery({
       }
     );
 
-    const today = new Date(args.now ?? Date.now());
-    today.setHours(0, 0, 0, 0);
-    const todayISODate = today.toISOString().split('T')[0];
+    // timezoneOffsetMinutes: minutes to ADD to UTC to get local time (e.g., PST is -480)
+    const nowLocal = new Date((args.now ?? Date.now()) + (args.timezoneOffsetMinutes ?? 0) * 60 * 1000);
+    const todayLocalDate = nowLocal.toISOString().split('T')[0];
 
     const overdueItems: Doc<"todoist_items">[] = allItems.filter((item: Doc<"todoist_items">) => {
       // Exclude routine tasks from time filters
       if (item.labels?.includes("routine")) return false;
 
-      if (!item.due) return false;
-
-      const dueDate = item.due.date;
+      const dueDate = item.due?.date;
       if (!dueDate) return false;
 
-      if (dueDate.includes('T')) {
-        const dueDateObj = new Date(dueDate);
-        return dueDateObj < today;
-      } else {
-        return dueDate < todayISODate;
-      }
+      return dueDate.split('T')[0] < todayLocalDate;
     });
 
     const sortedItems: Doc<"todoist_items">[] = overdueItems.sort((a: Doc<"todoist_items">, b: Doc<"todoist_items">) => {

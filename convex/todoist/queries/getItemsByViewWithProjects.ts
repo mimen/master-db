@@ -120,7 +120,10 @@ export const getItemsByViewWithProjects = authedQuery({
           now: args.now,
         });
       } else if (list.range === "overdue") {
-        items = await ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, { now: args.now });
+        items = await ctx.runQuery(api.todoist.queries.getOverdueItems.getOverdueItems, {
+          timezoneOffsetMinutes: list.timezoneOffsetMinutes,
+          now: args.now,
+        });
       } else if (list.range === "no-date") {
         items = await ctx.runQuery(api.todoist.queries.getNoDueDateItems.getNoDueDateItems, {});
       }

@@ -3016,6 +3016,7 @@ export declare const api: {
             limit?: number;
             now?: number;
             projectId?: string;
+            timezoneOffsetMinutes?: number;
           },
           any
         >;
