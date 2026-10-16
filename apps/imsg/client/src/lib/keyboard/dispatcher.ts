@@ -29,7 +29,7 @@ export function installKeyboardDispatcher(): () => void {
     if (event.getModifierState?.("AltGraph")) return;
 
     const binding = matchBinding(event);
-    if (event.metaKey || event.ctrlKey) {
+    if ((event.metaKey || event.ctrlKey) && !["Meta", "Control", "Shift", "Alt"].includes(event.key)) {
       const mods = `${event.metaKey ? "cmd+" : ""}${event.ctrlKey ? "ctrl+" : ""}${event.altKey ? "alt+" : ""}${event.shiftKey ? "shift+" : ""}`;
       traceTriage({ kind: "key", combo: mods + event.key, code: event.code, command: binding?.commandId ?? null });
     }
