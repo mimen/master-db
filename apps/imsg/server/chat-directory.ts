@@ -1,4 +1,4 @@
-import type { BBHandle, BBMessage } from "./bb-types";
+import type { BBChat, BBHandle, BBMessage } from "./bb-types";
 import type { BlueBubbles } from "./bluebubbles";
 import type { ContactBook } from "./contacts";
 import type { OverlayDb } from "./db";
@@ -269,15 +269,23 @@ export class ChatDirectory {
     if (this.summaryCache && this.now() - this.summaryCache.at < SUMMARY_TTL_MS) {
       return { ok: true, chats: this.summaryCache.chats };
     }
-    const result = await this.bb.queryChats();
-    if (!result.ok) return { ok: false, error: result.error };
+    // Every page: BlueBubbles' lastmessage sort is not global, so a chat with a new message can sit
+    // past row 1,000, and a missing chat cannot be settled.
+    const byGuid = new Map<string, BBChat>();
+    for (let offset = 0; ; offset += 1000) {
+      const page = await this.bb.queryChats(1000, offset);
+      if (!page.ok) return { ok: false, error: page.error };
+      for (const chat of page.value) byGuid.set(chat.guid, chat);
+      if (page.value.length < 1000) break;
+    }
+    const all = [...byGuid.values()];
     this.participantHandles = new Map(
-      result.value.map((chat) => [chat.guid, chat.participants ?? []] as const),
+      all.map((chat) => [chat.guid, chat.participants ?? []] as const),
     );
     await this.contacts.refresh();
     const unread = await this.unreadCounts();
     const overlay = this.db.getAll();
-    let chats = result.value
+    let chats = all
       .map((chat) => {
         const state = overlay.get(chat.guid);
         const summary = mapChat(chat, state, this.names, unread.get(chat.guid));

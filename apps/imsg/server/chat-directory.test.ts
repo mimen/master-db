@@ -954,6 +954,15 @@ describe("ChatDirectory.findByAddress", () => {
 });
 
 describe("Triage Desk state", () => {
+  test("settles a conversation past BlueBubbles' first page of 1,000 chats", async () => {
+    const filler: FakeChatSeed[] = Array.from({ length: 1000 }, (_, i) => {
+      const address = `+1555${String(i).padStart(7, "0")}`;
+      return { guid: `iMessage;-;${address}`, participants: [{ address }], messages: [inbound(`f${i}`, 10_000 + i, "hi", address)] };
+    });
+    const { directory } = await setup([...filler, twoChatSeed()[0]!]);
+    expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toEqual({ ok: true });
+  });
+
   test("rejects stale Done anchors and supports durable undismiss", async () => {
     const { db, directory } = await setup();
     const stale = await directory.dismiss(CHAT_A, "unresponded", "old-guid");

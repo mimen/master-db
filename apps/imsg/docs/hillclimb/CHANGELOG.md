@@ -2,6 +2,13 @@
 
 One entry per landed change, newest first. Each entry gives the date, the commit, what changed for the user, the metric before and after, and how to revert.
 
+## 2026-10-15. Conversations past BlueBubbles' first 1,000 chats can be settled
+
+- **For the user:** settling Marissa Carlene Aguilar's thread, or any other conversation in the same position, sticks. Before, it settled, came back a few seconds later, and showed "Could not settle conversation".
+- **Cause:** the Mini's chat directory read only the first page of 1,000 chats from BlueBubbles, while the bridge that feeds Convex reads every page. BlueBubbles' sort by last message is not global, so Marissa's chat, with a message from today, sat at row 1,000. The bridge rejected each settle with "chat has no last message" (four failed settle commands in `comma_outbox`).
+- **Now guarded by:** a test in `server/chat-directory.test.ts` that settles a chat at row 1,001.
+- **Revert:** revert the commit; settles of chats past row 1,000 fail again.
+
 ## 2026-10-13. Reverted: the crash guard duplicated the conversation list (f766eb21, a9e6dfd3)
 
 - **For the user:** the list shows each conversation once again, the counts are right, and it is fast again. The 10-11 change that kept the app on screen through a Convex timeout (H34) made the list re-subscribe in a loop in production. Every conversation appeared many times, Needs reply and Unread read 999+, and the app slowed to a crawl.
