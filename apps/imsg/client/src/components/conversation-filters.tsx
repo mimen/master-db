@@ -322,6 +322,9 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
       <Field label="Priority" icon="star-outline" phone={phone} value={r.priority}
         options={PRIORITIES.map((value) => ({ value, label: PRIORITY_LABELS[value] }))}
         onChange={(priority) => set({ priority })} />
+      <Field label="Sort" icon="swap-vertical-outline" phone={phone} value={r.oldestFirst ? "oldest" : "newest"}
+        options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]}
+        onChange={(order) => set({ oldestFirst: order === "oldest" })} />
       {/* The shared dropdown picks one value, so Tags narrows to a single tag. */}
       <Field label="Tags" icon="pricetag-outline" phone={phone} value={r.tags[0] ?? ANY_TAG}
         options={[{ value: ANY_TAG, label: "Any tag" }, ...props.tags.map((value) => ({ value, label: value }))]}

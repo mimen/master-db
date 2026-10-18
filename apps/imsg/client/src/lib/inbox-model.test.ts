@@ -214,6 +214,13 @@ describe("groupByAge", () => {
       "Today", "today", "This week", "pinned", "priority", "newer",
     ]);
   });
+
+  test("oldest first runs Older to Today and oldest to newest inside each group", () => {
+    const rows = groupByAge([chatAt("a", 1), chatAt("b", 30), chatAt("c", 50), chatAt("d", 24 * 20)], NOW, true);
+    expect(rows.map((r) => (r.kind === "section" ? r.label : r.chat.guid))).toEqual([
+      "Older", "d", "This week", "c", "b", "Today", "a",
+    ]);
+  });
 });
 
 describe("refinements", () => {

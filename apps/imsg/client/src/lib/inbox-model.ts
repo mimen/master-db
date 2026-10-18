@@ -56,6 +56,8 @@ export interface Refinements {
   tags: readonly string[];
   only: readonly OnlyKey[];
   include: readonly IncludeKey[];
+  /** Oldest first: age groups and the conversations in each run oldest to newest. Absent means newest first. */
+  oldestFirst?: boolean;
 }
 
 export const DEFAULT_REFINEMENTS: Refinements = {
@@ -214,6 +216,7 @@ export function activeChips(filters: InboxFilters, r: Refinements): FilterChip[]
   for (const key of r.include) {
     chips.push({ key: `include-${key}`, label: INCLUDE_LABELS[key], remove: (f, cur) => ({ filters: f, refinements: { ...cur, include: cur.include.filter((k) => k !== key) } }) });
   }
+  if (r.oldestFirst) chips.push({ key: "order", label: "Oldest first", remove: keep({ oldestFirst: false }) });
   return chips;
 }
 
@@ -250,12 +253,13 @@ export interface InboxModel {
   navigationEntries: InboxNavigationEntry[];
 }
 
-/** The lens order within one age group: pinned, then CRM priority 1-2, then newest first. */
-export function queueOrder(chats: readonly ChatSummary[]): ChatSummary[] {
+/** The lens order within one age group: pinned, then CRM priority 1-2, then newest first (or oldest first). */
+export function queueOrder(chats: readonly ChatSummary[], oldestFirst = false): ChatSummary[] {
   const rank = (chat: ChatSummary): number =>
     chat.flags.pinned ? 0 : chat.crm?.priority !== undefined && chat.crm.priority <= 2 ? 1 : 2;
+  const direction = oldestFirst ? -1 : 1;
   return [...chats].sort((a, b) =>
-    rank(a) - rank(b) || (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
+    rank(a) - rank(b) || direction * ((b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0)));
 }
 
 const AGE_GROUPS = ["Today", "This week", "Older"] as const;
@@ -266,15 +270,15 @@ function ageGroup(at: number, now: number): (typeof AGE_GROUPS)[number] {
 }
 
 /** Splits recency-ordered chats into age sections with counts; empty sections are omitted. */
-export function groupByAge(chats: readonly ChatSummary[], now: number): InboxRow[] {
+export function groupByAge(chats: readonly ChatSummary[], now: number, oldestFirst = false): InboxRow[] {
   const buckets = new Map<string, ChatSummary[]>(AGE_GROUPS.map((g) => [g, []]));
   for (const chat of chats) buckets.get(ageGroup(chat.lastMessage?.dateCreated ?? 0, now))?.push(chat);
-  return AGE_GROUPS.flatMap((label): InboxRow[] => {
+  return (oldestFirst ? AGE_GROUPS.toReversed() : AGE_GROUPS).flatMap((label): InboxRow[] => {
     const group = buckets.get(label) ?? [];
     if (group.length === 0) return [];
     return [
       { kind: "section", key: `section-${label}`, label, count: group.length },
-      ...queueOrder(group).map(
+      ...queueOrder(group, oldestFirst).map(
         (chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }),
       ),
     ];
@@ -355,7 +359,7 @@ export function deriveInboxModel(
   refine?: RefineContext,
 ): InboxModel {
   const now = refine?.now ?? Date.now();
-  const rows = groupByAge(filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine), now);
+  const rows = groupByAge(filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine), now, refine?.refinements.oldestFirst);
   const navigationEntries = rows.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
   return { listChats: navigationEntries.map((e) => e.chat), rows, navigationEntries };
 }
