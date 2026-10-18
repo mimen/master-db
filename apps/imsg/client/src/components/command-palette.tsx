@@ -5,14 +5,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import Reanimated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
 import { Springs } from "@/constants/springs";
 
 import { useAirtableSearch } from "@/hooks/use-airtable-search";
 import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { api } from "@/lib/api";
-import { formatReceiptTime, initials } from "@/lib/format";
+import { formatReceiptTime } from "@/lib/format";
 import {
   buildPaletteSections,
   flattenSections,
@@ -29,9 +29,9 @@ import { openSettingsPane } from "@/lib/settings-pane";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
-import type { AirtableHumanRow } from "@/lib/identity";
 
-import { addressesMatch } from "@shared/address";
+import { addressesMatch, formatAddress } from "@shared/address";
+import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { localSends, tempMessage } from "@/lib/local-sends";
 import { afterPaint } from "@/lib/open-timing";
@@ -346,7 +346,7 @@ function FooterHint({ keys, label }: { keys: string; label: string }) {
 }
 
 /** The palette card: scales 0.98 to 1 and fades in on the snappy spring; Reduce Motion lands it at rest. */
-function PaletteFrame({ children }: { children: React.ReactNode }) {
+function PaletteFrame({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const shown = useSharedValue(reduceMotion ? 1 : 0);
@@ -358,7 +358,7 @@ function PaletteFrame({ children }: { children: React.ReactNode }) {
     transform: [{ scale: 0.98 + 0.02 * shown.value }],
   }));
   return (
-    <Reanimated.View style={[styles.frame, { backgroundColor: theme.popBg, boxShadow: theme.popShadow }, entrance]}>
+    <Reanimated.View style={[styles.frame, { backgroundColor: theme.popBg, boxShadow: theme.popShadow }, style, entrance]}>
       {children}
     </Reanimated.View>
   );
@@ -457,46 +457,42 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
   }
 }
 
-type ComposeRow =
-  | { kind: "contact"; key: string; contact: Contact }
-  | { kind: "airtable"; key: string; human: AirtableHumanRow };
-
 /** Palette-styled new-message flow: recipient search with chips, then the
- * first message — replaces the old desktop NewChatContent overlay. Built on
- * the same cursor/row primitives as the root view. */
+ * first message. Built on the same cursor/row primitives as the root view. */
 function PaletteCompose({ onClose }: { onClose: () => void }) {
   const theme = useTheme();
   const [recipients, setRecipients] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<Contact[]>([]);
+  const [results, setResults] = useState<{ needle: string; contacts: Contact[] }>({ needle: "", contacts: [] });
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const recipientInputRef = useRef<TextInput>(null);
   const messageInputRef = useRef<TextInput>(null);
+  const directory = useChatDirectory();
 
   const needle = query.trim();
+  // The last answer stays on screen while the next one loads, so rows never blank between keys;
+  // the directory's own matches fill in instantly in the meantime.
   useEffect(() => {
-    setResults([]);
     if (needle.length < 2) return;
-    // Cancellation is load-bearing: an in-flight request must not land after
-    // a clear and repopulate the list with stale rows.
     let cancelled = false;
     const handle = setTimeout(() => {
       api
         .contacts(needle)
         .then((found) => {
-          if (!cancelled) setResults(found);
+          if (!cancelled) setResults({ needle, contacts: found });
         })
         .catch(() => undefined);
-    }, 200);
+    }, 150);
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
   }, [needle]);
+  const searching = needle.length >= 2 && results.needle !== needle;
 
   const addRecipient = (c: Contact): void => {
-    setRecipients((cur) => (cur.some((x) => x.address === c.address) ? cur : [...cur, c]));
+    setRecipients((cur) => (cur.some((x) => addressesMatch(x.address, c.address)) ? cur : [...cur, c]));
     setQuery("");
     recipientInputRef.current?.focus();
   };
@@ -511,26 +507,14 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     },
   );
 
-  // One row per underlying address: the directory can hold duplicate entries
-  // for the same number, and an Airtable human may duplicate a directory hit.
-  const rows: ComposeRow[] = useMemo(() => {
-    const normalize = (address: string): string =>
-      address.replace(/[^a-z0-9@+]/gi, "").toLowerCase();
-    const seen = new Set(recipients.map((r) => normalize(r.address)));
-    const out: ComposeRow[] = [];
-    for (const c of results) {
-      const norm = normalize(c.address);
-      if (seen.has(norm)) continue;
-      seen.add(norm);
-      out.push({ kind: "contact", key: `c-${norm}`, contact: c });
-    }
-    for (const h of airtableResults) {
-      const addr = h.phone ?? h.email;
-      if (addr && seen.has(normalize(addr))) continue;
-      out.push({ kind: "airtable", key: `at-${h.record_id}`, human: h });
-    }
-    return out;
-  }, [results, airtableResults, recipients]);
+  const sections = useMemo(() => composeSections({
+    query,
+    recipients,
+    directory: directory ?? [],
+    contacts: needle.length >= 2 ? results.contacts : [],
+    airtable: airtableResults,
+  }), [query, recipients, directory, needle, results.contacts, airtableResults]);
+  const rows = useMemo(() => sections.flatMap((section) => section.rows), [sections]);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
 
@@ -538,16 +522,15 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
   const { reset } = cursor;
   useEffect(() => reset(), [needle, reset]);
 
-  const directory = useChatDirectory();
+  const [only] = recipients;
+  const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && chat.guid.startsWith("iMessage;") &&
+    chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
   const send = (): void => {
     const body = text.trim();
     if (recipients.length === 0 || body === "" || sending) return;
     setSending(true);
     // createChat lands one recipient in their iMessage conversation; when that already exists,
     // the message shows there on the click, as a composer send does.
-    const [only] = recipients;
-    const existing = recipients.length === 1 && only ? directory?.find((chat) => !chat.isGroup && chat.guid.startsWith("iMessage;") &&
-      chat.participants.length === 1 && addressesMatch(chat.participants[0]?.address ?? "", only.address)) : undefined;
     const temp = existing ? tempMessage(existing.guid, body) : null;
     if (existing && temp) {
       localSends.upsert(existing.guid, temp);
@@ -573,15 +556,18 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
       .finally(() => setSending(false));
   };
 
-  // Keyboard: arrows rove results; Enter adds the selected result (or a raw
-  // address) from the To field, sends from the message field; Backspace on an
-  // empty To field pops the last chip. Esc stays with the global ladder.
-  const stateRef = useRef({ query, recipients, send });
-  stateRef.current = { query, recipients, send };
+  const choose = (row: ComposeRow): void => {
+    if (row.kind === "airtable") void addAirtableContact(row.human);
+    else addRecipient(row.contact);
+  };
+
+  // Keyboard: arrows rove results; Enter adds the selected row from the To field and sends from
+  // the message field (⇧Enter is a new line); Backspace on an empty To field pops the last chip.
+  // Esc stays with the global ladder.
+  const stateRef = useRef({ query, recipients, send, choose });
+  stateRef.current = { query, recipients, send, choose };
   const cursorRef = useRef(cursor);
   cursorRef.current = cursor;
-  const addAirtableRef = useRef(addAirtableContact);
-  addAirtableRef.current = addAirtableContact;
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const st = stateRef.current;
@@ -596,16 +582,14 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
         return;
       }
       if (e.key === "Enter") {
+        if (inMessage && e.shiftKey) return;
         e.preventDefault();
         e.stopPropagation();
         if (inMessage) return st.send();
         const row = rowsRef.current[cursorRef.current.indexRef.current];
-        if (row?.kind === "contact") return addRecipient(row.contact);
-        if (row?.kind === "airtable") return void addAirtableRef.current(row.human);
-        const raw = st.query.trim();
-        // No matches — treat the raw text as an address (number/email).
-        if (raw !== "" && rowsRef.current.length === 0) addRecipient({ address: raw, name: raw });
-        else if (raw === "" && st.recipients.length > 0) messageInputRef.current?.focus();
+        if (row && st.query.trim() !== "") return st.choose(row);
+        if (st.query.trim() === "" && st.recipients.length > 0) messageInputRef.current?.focus();
+        else if (row) st.choose(row);
         return;
       }
       if (e.key === "Backspace" && !inMessage && st.query === "" && st.recipients.length > 0) {
@@ -614,15 +598,20 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const canSend = recipients.length > 0 && text.trim().length > 0 && !sending;
+  const inTo = query.trim() !== "" || recipients.length === 0;
+  let flatIndex = -1;
 
   return (
-    <PaletteFrame>
-      <View style={[styles.inputRow, styles.composeToRow, { borderBottomColor: theme.divider }]}>
-        <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>To:</Text>
+    <PaletteFrame style={styles.composeFrame}>
+      <View style={[styles.composeHeader, { borderBottomColor: theme.divider }]}>
+        <Text style={[styles.composeTitle, { color: theme.text }]}>New message</Text>
+        <Text aria-hidden style={[paletteStyles.kbd, { borderColor: theme.dividerStrong, color: theme.popTertiary }]}>esc</Text>
+      </View>
+      <View style={[styles.composeToRow, { borderBottomColor: theme.divider }]}>
+        <Text style={[styles.composeToLabel, { color: theme.textSecondary }]}>To</Text>
         <View style={styles.chipWrap}>
           {recipients.map((contact) => (
             <Pressable
@@ -632,7 +621,7 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
               onPress={() => setRecipients((cur) => cur.filter((c) => c.address !== contact.address))}
               style={({ hovered, pressed }) => [styles.chip, { backgroundColor: theme.accent }, hovered && !pressed && { opacity: HOVER_DIM }, pressed && { opacity: PRESS_DIM }]}
             >
-              <Text style={{ color: theme.onAccent, fontSize: 13 }}>{contact.name}</Text>
+              <Text numberOfLines={1} style={[styles.chipText, { color: theme.onAccent }]}>{contact.name === contact.address ? formatAddress(contact.address) : contact.name}</Text>
               <Ionicons name="close" size={13} color={theme.onAccent} />
             </Pressable>
           ))}
@@ -640,69 +629,66 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
             ref={recipientInputRef}
             value={query}
             onChangeText={setQuery}
-            placeholder={recipients.length === 0 ? "Name, number, or email" : ""}
-            placeholderTextColor={theme.textSecondary}
+            placeholder={recipients.length === 0 ? "Name, number, or email" : "Add another"}
+            placeholderTextColor={theme.popTertiary}
+            accessibilityLabel="To"
             autoFocus
+            autoCorrect={false}
+            autoCapitalize="none"
+            spellCheck={false}
             style={[styles.input, styles.composeToInput, { color: theme.text }]}
           />
         </View>
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent} style={{ flex: 1 }}>
-        {rows.length > 0 && <PaletteSectionHeader title="Contacts" />}
-        {rows.map((row, index) => {
-          const selected = index === cursor.selectedIndex;
-          if (row.kind === "airtable") {
-            const adding = addingId === row.human.record_id;
-            return (
-              <PaletteListRow
-                key={row.key}
-                paletteKey={row.key}
-                selected={selected}
-                disabled={adding}
-                onPress={() => void addAirtableContact(row.human)}
-                onHover={() => cursor.setSelectedIndex(index)}
-              >
-                <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
-                  <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
-                    {initials(row.human.display_name)}
-                  </Text>
-                </View>
-                <Text style={[paletteStyles.title, { color: theme.text, flex: 1 }]}>
-                  {row.human.display_name}
-                </Text>
-                <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>
-                  {adding ? "Adding…" : "From Airtable"}
-                </Text>
-              </PaletteListRow>
-            );
-          }
-          return (
-            <PaletteListRow
-              key={row.key}
-              paletteKey={row.key}
-              selected={selected}
-              onPress={() => addRecipient(row.contact)}
-              onHover={() => cursor.setSelectedIndex(index)}
-            >
-              <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
-                <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: "600" }}>
-                  {initials(row.contact.name)}
-                </Text>
-              </View>
-              <View style={paletteStyles.textCol}>
-                <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
-                  {row.contact.name}
-                </Text>
-                <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>
-                  {row.contact.address}
-                </Text>
-              </View>
-            </PaletteListRow>
-          );
-        })}
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listContent} style={styles.composeResults}>
+        {sections.map((section) => (
+          <Fragment key={section.title}>
+            <PaletteSectionHeader title={section.title} />
+            {section.rows.map((row) => {
+              flatIndex += 1;
+              const index = flatIndex;
+              const selected = index === cursor.selectedIndex;
+              const name = row.kind === "airtable" ? row.human.display_name : row.contact.name;
+              const address = row.kind === "airtable" ? row.human.phone ?? row.human.email ?? null : row.contact.address;
+              const adding = row.kind === "airtable" && addingId === row.human.record_id;
+              return (
+                <PaletteListRow
+                  key={row.key}
+                  paletteKey={row.key}
+                  selected={selected}
+                  disabled={adding}
+                  onPress={() => choose(row)}
+                  onHover={() => cursor.setSelectedIndex(index)}
+                >
+                  {row.kind === "raw" ? (
+                    <View style={[paletteStyles.iconBadge, { backgroundColor: theme.field }]}>
+                      <Ionicons aria-hidden name={address?.includes("@") ? "mail-outline" : "call-outline"} size={14} color={theme.icon} />
+                    </View>
+                  ) : (
+                    <PersonAvatar address={address ?? name} name={name} size={28} />
+                  )}
+                  <View style={paletteStyles.textCol}>
+                    <Text numberOfLines={1} style={[paletteStyles.title, { color: theme.text }]}>
+                      {row.kind === "raw" ? formatAddress(row.contact.address) : name}
+                    </Text>
+                    {row.kind !== "raw" && address && formatAddress(address) !== name ? (
+                      <Text numberOfLines={1} style={[paletteStyles.subtitle, { color: theme.textSecondary }]}>{formatAddress(address)}</Text>
+                    ) : null}
+                  </View>
+                  {adding ? <Text style={[paletteStyles.hint, { color: theme.textSecondary }]}>Adding…</Text> : null}
+                </PaletteListRow>
+              );
+            })}
+          </Fragment>
+        ))}
         {rows.length === 0 && needle.length >= 2 && (
           <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
-            No matches — press ↵ to use "{needle}" directly
+            {searching ? "Searching…" : `No one matches “${needle}”. Type a full number or email to start a new conversation.`}
+          </Text>
+        )}
+        {rows.length === 0 && needle.length < 2 && recipients.length > 0 && (
+          <Text style={[paletteStyles.empty, { color: theme.textSecondary }]}>
+            {existing ? `This continues your conversation with ${existing.displayName}.` : "Add another person, or write the first message below."}
           </Text>
         )}
       </ScrollView>
@@ -711,11 +697,19 @@ function PaletteCompose({ onClose }: { onClose: () => void }) {
           ref={messageInputRef}
           value={text}
           onChangeText={setText}
-          placeholder="iMessage"
-          placeholderTextColor={theme.textSecondary}
-          style={[styles.composeMessageInput, { borderColor: theme.divider, color: theme.text }]}
+          placeholder={recipients.length === 0 ? "Add someone first" : "Message"}
+          placeholderTextColor={theme.popTertiary}
+          accessibilityLabel="Message"
+          multiline
+          numberOfLines={1}
+          style={[styles.composeMessageInput, { borderColor: theme.dividerStrong, color: theme.text }]}
         />
         <MorphSendButton status={sending ? "sending" : "idle"} disabled={!canSend && !sending} onPress={send} />
+      </View>
+      <View style={[styles.footer, { borderTopColor: theme.divider }]}>
+        <FooterHint keys="↑↓" label="move" />
+        <FooterHint keys="↵" label={inTo ? "add" : "send"} />
+        <FooterHint keys="⇧↵" label="new line" />
       </View>
     </PaletteFrame>
   );
@@ -776,9 +770,35 @@ const styles = StyleSheet.create({
   footerKeys: {
     fontWeight: "600",
   },
+  composeFrame: {
+    height: 480,
+  },
+  composeHeader: {
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    height: 44,
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+  },
+  composeTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
   composeToRow: {
-    alignItems: "flex-start",
-    paddingVertical: 10,
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  composeToLabel: {
+    fontSize: 15,
+  },
+  composeResults: {
+    flex: 1,
   },
   chipWrap: {
     alignItems: "center",
@@ -793,14 +813,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 4,
     height: 26,
+    maxWidth: 220,
     paddingHorizontal: 10,
   },
+  chipText: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: "500",
+  },
   composeToInput: {
-    minWidth: 140,
-    paddingVertical: 3,
+    minWidth: 160,
+    paddingVertical: 4,
   },
   composeBar: {
-    alignItems: "center",
+    alignItems: "flex-end",
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 8,
@@ -812,8 +838,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     fontSize: 15,
+    maxHeight: 120,
     minHeight: 34,
     paddingHorizontal: 13,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
 });

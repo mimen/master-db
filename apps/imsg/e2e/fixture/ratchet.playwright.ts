@@ -261,10 +261,10 @@ async function composeToAlex(page: Page, text: string) {
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
   await page.keyboard.press("Meta+n");
   await page.getByPlaceholder("Name, number, or email").fill("Alex");
-  await expect(page.getByText("+16195550101").first()).toBeVisible();
+  await expect(page.getByText("(619) 555-0101").first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "Remove Alex Rivera" })).toBeVisible();
-  await page.getByPlaceholder("iMessage").last().fill(text);
+  await page.getByRole("dialog").getByPlaceholder("Message").fill(text);
   return page.getByRole("button", { name: "Send", exact: true }).last();
 }
 
