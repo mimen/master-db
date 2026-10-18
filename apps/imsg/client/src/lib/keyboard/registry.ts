@@ -63,6 +63,9 @@ export const BINDINGS: readonly KeyBinding[] = [
   { commandId: "conversation.next", combo: "arrowdown", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.previous", combo: "k", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.previous", combo: "arrowup", scope: "global", allowInEditable: false, allowRepeat: true, preventDefault: true },
+  // ⌘↓ / ⌘↑ step from anywhere, the composer included, without settling or marking read.
+  { commandId: "conversation.next", combo: "mod+arrowdown", scope: "global", allowInEditable: true, allowRepeat: true, preventDefault: true },
+  { commandId: "conversation.previous", combo: "mod+arrowup", scope: "global", allowInEditable: true, allowRepeat: true, preventDefault: true },
   { commandId: "conversation.activate", combo: "enter", scope: "list", allowInEditable: false, allowRepeat: false, preventDefault: true },
   // Enter OUTSIDE glide mode = jump into the open conversation's composer.
   // ORDER IS LOAD-BEARING: matchBinding returns the first match and skips

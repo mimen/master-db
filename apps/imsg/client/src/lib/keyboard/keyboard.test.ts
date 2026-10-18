@@ -20,6 +20,12 @@ describe("global chords", () => {
     expect(matchBinding(stroke({ key: "w", metaKey: true }))?.commandId).toBe("navigation.close");
   });
 
+  test("⌘↓ and ⌘↑ step conversations, even from the composer", () => {
+    const next = matchBinding(stroke({ key: "ArrowDown", metaKey: true }));
+    expect(next).toMatchObject({ commandId: "conversation.next", allowInEditable: true });
+    expect(matchBinding(stroke({ key: "ArrowUp", metaKey: true }))?.commandId).toBe("conversation.previous");
+  });
+
   test("⌘K matches the palette", () => {
     expect(matchBinding(stroke({ key: "k", metaKey: true }))?.commandId).toBe("palette.open");
   });
@@ -70,12 +76,10 @@ describe("global chords", () => {
     expect(binding?.allowInEditable).toBe(false);
   });
 
-  test("retired chords are gone: ⌘⇧E, ⌘⇧U, ⌘↑/⌘↓", () => {
+  test("retired chords are gone: ⌘⇧E, ⌘⇧U", () => {
     // ⌘E and ⌘U are bound; the SHIFTED forms they were once mistaken for are not.
     expect(matchBinding(stroke({ key: "e", metaKey: true, shiftKey: true }))).toBeNull();
     expect(matchBinding(stroke({ key: "u", metaKey: true, shiftKey: true }))).toBeNull();
-    expect(matchBinding(stroke({ key: "arrowdown", metaKey: true }))).toBeNull();
-    expect(matchBinding(stroke({ key: "arrowup", metaKey: true }))).toBeNull();
   });
 });
 
@@ -147,7 +151,7 @@ describe("registry", () => {
 
   test("help advertises the triage chords and hides the shell-only ones", () => {
     const entries = helpEntries();
-    expect(entries.find((e) => e.title === "Next conversation")?.keys).toEqual(["J", "↓"]);
+    expect(entries.find((e) => e.title === "Next conversation")?.keys).toEqual(["J", "↓", "⌘↓"]);
     expect(entries.find((e) => e.title === "Settle / un-settle")?.keys).toEqual(["⌘E"]);
     expect(entries.find((e) => e.title === "Mark unread")?.keys).toEqual(["⌘U"]);
     expect(entries.find((e) => e.title === "Undo last action")?.keys).toEqual(["⌘Z", "⌘⇧Z"]);

@@ -84,7 +84,10 @@ Retired, and still retired: `⌘⇧E` and `⌘⇧U`, shifted chords that encoded
 implementation failure rather than an intent. The `⌘E` and `⌘U` above are not
 those chords coming back — the shifted forms are still bound to nothing. They
 are the replacements for the bare glide letters, chosen for the reason in the
-paragraph above. Also retired: `⌘↑/⌘↓` (macOS text-system commands), `⌥↑/⌥↓`
+paragraph above. `⌘↑/⌘↓` were retired here as macOS text-system commands and
+came back on 2026-10-17 at Milad's request: they step to the previous or next
+conversation from anywhere, the composer included, without settling or marking
+read, at the cost of the composer's jump to start or end of the draft. Also retired: `⌥↑/⌥↓`
 (deferred per Sol — Esc+glide covers it), bare `i` (use ⌘I), `p` pin
 (palette-only).
 
