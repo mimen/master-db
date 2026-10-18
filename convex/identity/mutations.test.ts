@@ -319,6 +319,22 @@ describe("createPerson", () => {
 });
 
 describe("addPersonFromAirtable", () => {
+  test("joins an existing person through a secondary canonical handle on explicit add", async () => {
+    const t = convexTest(schema, modules);
+    const existing = await t.mutation(createPersonRef, { key: TEST_KEY, handle: "secondary@example.test" });
+    const result = await t.mutation(addPersonFromAirtableRef, {
+      key: TEST_KEY, record_id: "recAAAAAAAAAAAAAA", display_name: "Fixture",
+      phone: "+16195550100", email: "primary@example.test",
+      phones: ["+16195550100", "+16195550101"],
+      emails: ["primary@example.test", "secondary@example.test", "third@example.test"],
+    });
+    expect(result.personId).toBe(existing.personId);
+    expect(await t.run((ctx) => ctx.db.query("people").collect())).toHaveLength(1);
+    const person = await t.run((ctx) => ctx.db.get(result.personId));
+    expect(person?.normalized_emails).toContain("third@example.test");
+    expect(person?.normalized_phones).toContain("+16195550101");
+  });
+
   test("creates a person from an Airtable record with a phone", async () => {
     const t = convexTest(schema, modules);
     const result = await t.mutation(addPersonFromAirtableRef, {

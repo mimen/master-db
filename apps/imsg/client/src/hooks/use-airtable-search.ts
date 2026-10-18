@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+
 import {
   type AirtableHumanRow,
   type ContactListRow,
@@ -71,6 +72,8 @@ export function useAirtableSearch(needle: string, onAdded: (personId: string, hu
         last_name: human.last_name,
         phone: human.phone,
         email: human.email,
+        phones: human.phones,
+        emails: human.emails,
       });
       // Local eviction ahead of `people` catching up via Convex reactivity.
       setRawResults((current) => current.filter((r) => r.record_id !== human.record_id));

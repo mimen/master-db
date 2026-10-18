@@ -1,6 +1,8 @@
 import { internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
 
+import { contactValues, readCanonicalContacts, type CanonicalContact } from "./canonicalContacts";
+
 /**
  * Pulls AUF's Airtable "Humans" table into the identity graph, Convex-native
  * (no imsg involvement — unlike Apple Contacts, Airtable has a real cloud
@@ -24,40 +26,12 @@ import { internalAction } from "../_generated/server";
 
 const AIRTABLE_BASE_ID = "app39VsA3z85GTMbT";
 const HUMANS_TABLE_ID = "tbl6LptFEMKLaN0I9";
-// Every phone/email column on Humans, not just the first of each — these are
-// JOIN KEYS (see toContactCard), not just enrichment data. A person whose
-// Apple contact only carries their 2nd/3rd phone or 3rd/4th email would never
-// link to their Airtable record if we only pulled the first of each.
-// Deliberately excludes "PayPal Email" and "Shotgun Email Address" — those are
-// payment/vendor addresses, not identity handles a human would recognize as
-// "their email."
-const FIELDS = [
-  "Name",
-  "First Name",
-  "Last Name",
-  "Phone Number",
-  "Phone Number 2",
-  "Phone Number 3",
-  "Email Address",
-  "Email Address 2",
-  "Email Address 3",
-  "Email Address 4",
-];
+// Contact join keys come from AUF's canonical assignments, including secondary contacts.
+const FIELDS = ["Name", "First Name", "Last Name"];
 
 type AirtableRecord = {
   id: string;
-  fields: {
-    Name?: string;
-    "First Name"?: string;
-    "Last Name"?: string;
-    "Phone Number"?: string;
-    "Phone Number 2"?: string;
-    "Phone Number 3"?: string;
-    "Email Address"?: string;
-    "Email Address 2"?: string;
-    "Email Address 3"?: string;
-    "Email Address 4"?: string;
-  };
+  fields: { Name?: string; "First Name"?: string; "Last Name"?: string };
 };
 
 type AirtableListResponse = {
@@ -82,16 +56,9 @@ type ContactCard = {
 };
 
 /** Maps one Humans row to a pre-grouped contact card, or null if it has no handle at all. */
-export function toContactCard(r: AirtableRecord): ContactCard | null {
-  const phones = [r.fields["Phone Number"], r.fields["Phone Number 2"], r.fields["Phone Number 3"]].filter(
-    (p): p is string => Boolean(p),
-  );
-  const emails = [
-    r.fields["Email Address"],
-    r.fields["Email Address 2"],
-    r.fields["Email Address 3"],
-    r.fields["Email Address 4"],
-  ].filter((e): e is string => Boolean(e));
+export function toContactCard(r: AirtableRecord, contacts: CanonicalContact[]): ContactCard | null {
+  const phones = contactValues(contacts, r.id, "sms");
+  const emails = contactValues(contacts, r.id, "email");
   if (phones.length === 0 && emails.length === 0) return null;
   return {
     display_name: r.fields.Name,
@@ -125,16 +92,19 @@ export const syncAirtableHumans = internalAction({
         { headers: { Authorization: `Bearer ${apiKey}` } },
       );
       if (!res.ok) {
-        throw new Error(`Airtable Humans fetch failed: ${res.status} ${await res.text()}`);
+        throw new Error(`Airtable Humans fetch failed: ${res.status}`);
       }
       const body = (await res.json()) as AirtableListResponse;
+      const canonical = await readCanonicalContacts(body.records.map((row) => row.id));
       for (const r of body.records) {
-        const card = toContactCard(r);
+        const card = toContactCard(r, canonical);
         if (card) contacts.push(card);
       }
       offset = body.offset;
       pages++;
     } while (offset && pages < 100); // safety cap, Humans is nowhere near 10k records
+
+    if (offset) throw new Error("Airtable Humans exceeded the complete-read page limit");
 
     // link_only: Airtable should enrich people Milad already has (via
     // exact phone/email match against existing Apple/Beeper identities),

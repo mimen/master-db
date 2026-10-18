@@ -78,6 +78,8 @@ export const addPersonFromAirtableRef = makeFunctionReference<
     last_name?: string;
     phone?: string;
     email?: string;
+    phones?: string[];
+    emails?: string[];
   },
   { personId: Id<"people"> }
 >("identity/mutations:addPersonFromAirtable");

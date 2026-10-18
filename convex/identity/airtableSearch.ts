@@ -2,6 +2,7 @@ import { v } from "convex/values";
 
 import { action } from "../_generated/server";
 
+import { contactValues, readCanonicalContacts } from "./canonicalContacts";
 import { requireIdentityAccess } from "./key";
 
 /**
@@ -27,9 +28,8 @@ type AirtableRecord = {
     Name?: string;
     "First Name"?: string;
     "Last Name"?: string;
-    "Phone Number"?: string;
-    "Email Address"?: string;
-    "Email Address 2"?: string;
+    "Primary Phone"?: string;
+    "Primary Email"?: string;
   };
 };
 
@@ -56,7 +56,7 @@ export const searchAirtableHumans = action({
       pageSize: "15",
       filterByFormula: formula,
     });
-    for (const f of ["Name", "First Name", "Last Name", "Phone Number", "Email Address", "Email Address 2"]) {
+    for (const f of ["Name", "First Name", "Last Name", "Primary Phone", "Primary Email"]) {
       params.append("fields[]", f);
     }
 
@@ -64,17 +64,20 @@ export const searchAirtableHumans = action({
       `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${HUMANS_TABLE_ID}?${params.toString()}`,
       { headers: { Authorization: `Bearer ${apiKey}` } },
     );
-    if (!res.ok) throw new Error(`Airtable search failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw new Error(`Airtable search failed: ${res.status}`);
 
     const body = (await res.json()) as { records: AirtableRecord[] };
+    const canonical = await readCanonicalContacts(body.records.map((row) => row.id));
     return body.records
       .map((r) => ({
         record_id: r.id,
         display_name: r.fields.Name ?? "",
         first_name: r.fields["First Name"],
         last_name: r.fields["Last Name"],
-        phone: r.fields["Phone Number"],
-        email: r.fields["Email Address"] ?? r.fields["Email Address 2"],
+        phone: r.fields["Primary Phone"] || contactValues(canonical, r.id, "sms")[0],
+        email: r.fields["Primary Email"] || contactValues(canonical, r.id, "email")[0],
+        phones: contactValues(canonical, r.id, "sms"),
+        emails: contactValues(canonical, r.id, "email"),
       }))
       .filter((r) => r.display_name && (r.phone || r.email));
   },

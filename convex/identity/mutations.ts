@@ -187,8 +187,10 @@ export const addPersonFromAirtable = mutation({
     last_name: v.optional(v.string()),
     phone: v.optional(v.string()),
     email: v.optional(v.string()),
+    phones: v.optional(v.array(v.string())),
+    emails: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { key, record_id, display_name, first_name, last_name, phone, email }) => {
+  handler: async (ctx, { key, record_id, display_name, first_name, last_name, phone, email, phones, emails }) => {
     await requireIdentityAccess(ctx, key);
     const result = await ingestOneCard(
       ctx,
@@ -197,8 +199,8 @@ export const addPersonFromAirtable = mutation({
         display_name,
         first_name,
         last_name,
-        phones: phone ? [phone] : [],
-        emails: email ? [email] : [],
+        phones: phones ?? (phone ? [phone] : []),
+        emails: emails ?? (email ? [email] : []),
         airtable_record_id: record_id,
       },
       false,

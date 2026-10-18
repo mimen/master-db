@@ -60,3 +60,7 @@ There is no repository-wide production, branch, or verification command covering
 ## Next setup boundary
 
 Run `/setup-deployment-system` against each independently operated project when its deployment contract is being established. Keep its repo-relative `DEPLOY.md` authoritative and refresh the user-level project tracker after verification.
+
+## Canonical Human contact migration
+
+The [canonical Human contact runbook](docs/identity/canonical-human-contacts.md) records the AUF endpoint dependency, dedicated credential references, Master DB backend publish command, and required hourly-sync proof. The backend uses `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`, as recorded in `.github/workflows/deploy-imsg.yml`; merging the client changes alone does not publish Convex functions.

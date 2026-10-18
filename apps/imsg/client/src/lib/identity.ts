@@ -1,5 +1,6 @@
 import { ConvexReactClient, useAction, useMutation, useQuery } from "convex/react";
 import { makeFunctionReference } from "convex/server";
+
 import { bootWebSocket } from "./boot-handoff";
 import { requireConvexUrl } from "./public-env";
 
@@ -16,7 +17,6 @@ export const convexClient = new ConvexReactClient(
   requireConvexUrl(process.env.EXPO_PUBLIC_CONVEX_URL),
   { unsavedChangesWarning: false, webSocketConstructor: bootWebSocket() },
 );
-
 
 export type IdentityRow = {
   kind: string;
@@ -129,6 +129,8 @@ export type AirtableHumanRow = {
   last_name?: string;
   phone?: string;
   email?: string;
+  phones?: string[];
+  emails?: string[];
 };
 
 const whoIsRef = makeFunctionReference<"query", { handle: string }, WhoIsResult>(
@@ -167,6 +169,8 @@ const addPersonFromAirtableRef = makeFunctionReference<
     last_name?: string;
     phone?: string;
     email?: string;
+    phones?: string[];
+    emails?: string[];
   },
   { personId: string }
 >("identity/mutations:addPersonFromAirtable");
@@ -324,6 +328,8 @@ export function useAddPersonFromAirtable() {
     last_name?: string;
     phone?: string;
     email?: string;
+    phones?: string[];
+    emails?: string[];
   }) => mutate(args);
 }
 

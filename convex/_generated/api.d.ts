@@ -2119,10 +2119,12 @@ export declare const api: {
         {
           display_name?: string;
           email?: string;
+          emails?: Array<string>;
           first_name?: string;
           key?: string;
           last_name?: string;
           phone?: string;
+          phones?: Array<string>;
           record_id: string;
         },
         any
