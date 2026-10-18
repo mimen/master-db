@@ -104,6 +104,16 @@ describe("deriveInboxModel", () => {
     ).toEqual([known, unknown, spam]);
   });
 
+  test("search lists name and number matches before conversations that matched only on a message", () => {
+    const mentions = makeChat({ guid: "mentions", displayName: "Shonna Gillis", lastMessage: { ...makeChat().lastMessage!, dateCreated: 3 } });
+    const deep = makeChat({ guid: "deep", displayName: "Taylah Luna", lastMessage: { ...makeChat().lastMessage!, dateCreated: 2 } });
+    const nick = makeChat({ guid: "nick", displayName: "Nick Chase", lastMessage: { ...makeChat().lastMessage!, dateCreated: 1 } });
+    const model = deriveInboxModel([mentions, deep, nick], DEFAULT_INBOX_FILTERS, "nick chase", new Set(["mentions", "deep"]));
+    expect(model.rows.map((r) => (r.kind === "section" ? `${r.label}:${r.count}` : r.chat.guid))).toEqual([
+      "Conversations:1", "nick", "Messages:2", "mentions", "deep",
+    ]);
+  });
+
   test("search supersedes the state/type lenses (matches across everything)", () => {
     const groupUnread = makeChat({
       guid: "group-unread",

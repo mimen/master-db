@@ -327,27 +327,44 @@ export function filterInbox(
   browseGuids?: ReadonlySet<string>,
   refine?: RefineContext,
 ): ChatSummary[] {
-  const needle = searchQuery.trim().toLowerCase();
-  if (needle.length > 0) {
-    const needleDigits = needle.replace(/\D/g, "");
-    return chats.filter((chat) =>
-      chat.displayName.toLowerCase().includes(needle) ||
-      (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) ||
-      // Participants carry FULL names (group display names are first-names-only,
-      // so last names would otherwise never match a group) plus raw addresses.
-      chat.participants.some(
-        (p) =>
-          (p.name ?? "").toLowerCase().includes(needle) ||
-          p.address.toLowerCase().includes(needle) ||
-          (needleDigits.length >= 3 && p.address.replace(/\D/g, "").includes(needleDigits)),
-      ) ||
-      Boolean(deepMatchGuids?.has(chat.guid)));
-  }
+  if (searchQuery.trim().length > 0) return chats.filter((chat) => searchMatch(chat, searchQuery, deepMatchGuids) !== null);
   return chats.filter((chat) => {
     const base = browseGuids ? browseGuids.has(chat.guid) : matchesFilters(chat, filters.state, filters.type);
     if (!refine) return base;
     if (!base && !included(chat, filters.type, refine)) return false;
     return narrows(chat, refine.refinements, refine.now);
+  });
+}
+
+/** How a conversation matches a search: by its name or a number ("name"), or only by message text. */
+export function searchMatch(chat: ChatSummary, searchQuery: string, deepMatchGuids?: ReadonlySet<string>): "name" | "message" | null {
+  const needle = searchQuery.trim().toLowerCase();
+  const needleDigits = needle.replace(/\D/g, "");
+  const byName = chat.displayName.toLowerCase().includes(needle) ||
+    // Participants carry FULL names (group display names are first-names-only,
+    // so last names would otherwise never match a group) plus raw addresses.
+    chat.participants.some(
+      (p) =>
+        (p.name ?? "").toLowerCase().includes(needle) ||
+        p.address.toLowerCase().includes(needle) ||
+        (needleDigits.length >= 3 && p.address.replace(/\D/g, "").includes(needleDigits)),
+    );
+  if (byName) return "name";
+  return (chat.lastMessage?.text ?? "").toLowerCase().includes(needle) || deepMatchGuids?.has(chat.guid) ? "message" : null;
+}
+
+/** Search results: name and number matches first, then conversations that matched only on message text. */
+function groupBySearchMatch(chats: readonly ChatSummary[], searchQuery: string, deepMatchGuids?: ReadonlySet<string>): InboxRow[] {
+  const sections = [
+    { label: "Conversations", match: "name" },
+    { label: "Messages", match: "message" },
+  ] as const;
+  return sections.flatMap(({ label, match }): InboxRow[] => {
+    const group = chats.filter((chat) => searchMatch(chat, searchQuery, deepMatchGuids) === match);
+    return group.length === 0 ? [] : [
+      { kind: "section", key: `section-${label}`, label, count: group.length },
+      ...queueOrder(group).map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat })),
+    ];
   });
 }
 
@@ -367,7 +384,7 @@ export function deriveInboxModel(
   const rows = filters.state === "drafts" && !searchQuery.trim()
     ? [...filtered].sort((a, b) => (oldestFirst ? -1 : 1) * ((b.draft?.updatedAt ?? 0) - (a.draft?.updatedAt ?? 0)))
       .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }))
-    : groupByAge(filtered, now, oldestFirst);
+    : searchQuery.trim() ? groupBySearchMatch(filtered, searchQuery, deepMatchGuids) : groupByAge(filtered, now, oldestFirst);
   const navigationEntries = rows.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
   return { listChats: navigationEntries.map((e) => e.chat), rows, navigationEntries };
 }
