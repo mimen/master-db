@@ -308,6 +308,8 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
   const nextLastName = person.display_name_locked ? person.last_name : primary?.last_name;
   const nextNickname = person.display_name_locked ? person.nickname : primary?.nickname;
 
+  const nextPrimaryHandle = person.primary_handle && (phones.has(person.primary_handle) || emails.has(person.primary_handle))
+    ? person.primary_handle : undefined;
   const samePhones = setsEqual(new Set(person.normalized_phones), phones);
   const sameEmails = setsEqual(new Set(person.normalized_emails), emails);
   const unchanged =
@@ -319,7 +321,8 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
     sameEmails &&
     person.identity_count === all.length &&
     person.message_count === messageCount &&
-    person.is_self === isSelf;
+    person.is_self === isSelf &&
+    person.primary_handle === nextPrimaryHandle;
   if (unchanged) return null;
 
   const now = new Date().toISOString();
@@ -332,6 +335,7 @@ export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities
           last_name: primary?.last_name,
           nickname: primary?.nickname,
         }),
+    primary_handle: nextPrimaryHandle,
     normalized_phones: [...phones],
     normalized_emails: [...emails],
     identity_count: all.length,

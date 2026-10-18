@@ -6,7 +6,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { ingestOneCard } from "./ingestContacts";
-import { addPersonFromAirtableRef, listPeopleRef, nameDirectoryRef, searchAirtableHumansRef, TEST_KEY, whoIsRef } from "./testRefs.vitest";
+import { addPersonFromAirtableRef, listPeopleRef, nameDirectoryRef, searchAirtableHumansRef, setPrimaryHandleRef, TEST_KEY, whoIsRef } from "./testRefs.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const a = "recAAAAAAAAAAAAAA", c = "recCCCCCCCCCCCCCC";
@@ -143,6 +143,8 @@ test("redirect reassignment recomputes both existing owners and later revocation
     if (survivor.outcome !== "created") throw new Error("Fixture expected new person");
     await ctx.db.insert("identities", { person_id: survivor.personId, kind: "email", value: "independent@example.test", normalized: "independent@example.test", source: "apple_contact", message_count: 0, chat_count: 0, is_self: false, created_at: "fixture", updated_at: "fixture" });
   });
+  const formerOwner = (await t.run(ctx => ctx.db.query("people").collect())).find(p => p.airtable_human_id === c)!;
+  await t.mutation(setPrimaryHandleRef, { key: TEST_KEY, personId: formerOwner._id, handle: "survivor@example.test" });
   state.target = c; state.records[0].id = c; state.emails = ["survivor@example.test"];
   await t.action(sync, {});
   const assertAggregates = async () => {
@@ -153,9 +155,35 @@ test("redirect reassignment recomputes both existing owners and later revocation
       expect([...p.normalized_emails].sort()).toEqual([...new Set(rows.filter(r => r.normalized.includes("@")).map(r => r.normalized))].sort());
     }
   };
-  await assertAggregates(); state.emails = []; await t.action(sync, {}); await assertAggregates();
+  await assertAggregates();
+  expect((await t.run(ctx => ctx.db.get(formerOwner._id)))?.primary_handle).toBeUndefined();
+  state.emails = []; await t.action(sync, {}); await assertAggregates();
   expect(await t.query(whoIsRef, { key: TEST_KEY, handle: "independent@example.test" })).toMatchObject({ found: true });
   expect(await t.query(whoIsRef, { key: TEST_KEY, handle: "survivor@example.test" })).toMatchObject({ found: false });
   expect(JSON.stringify(await t.query(listPeopleRef, { key: TEST_KEY }))).not.toContain("survivor@example.test");
   expect((await t.query(nameDirectoryRef, { key: TEST_KEY })).some(r => r.normalized === "survivor@example.test")).toBe(false);
+});
+
+for (const selected of ["imported@example.test", "secondary@example.test"]) {
+  test(`withdrawal validates selected primary against all remaining sources: ${selected}`, async () => {
+    const { t, state } = fixture();
+    await t.run(ctx => ingestOneCard(ctx, "apple_contact", { emails: ["secondary@example.test"], phones: [] }, false));
+    await t.action(sync, {});
+    const person = (await t.run(ctx => ctx.db.query("people").collect()))[0];
+    await t.mutation(setPrimaryHandleRef, { key: TEST_KEY, personId: person._id, handle: selected });
+    state.emails = [];
+    await t.action(sync, {});
+    const after = await t.run(ctx => ctx.db.get(person._id));
+    expect(after?.primary_handle).toBe(selected === "secondary@example.test" ? selected : undefined);
+    expect(JSON.stringify(await t.query(listPeopleRef, { key: TEST_KEY }))).not.toContain("imported@example.test");
+  });
+}
+
+test("unchanged aggregates still clear an unsupported selected primary", async () => {
+  const { t } = fixture();
+  await t.run(ctx => ingestOneCard(ctx, "apple_contact", { emails: ["secondary@example.test"], phones: [] }, false));
+  const person = (await t.run(ctx => ctx.db.query("people").collect()))[0];
+  await t.run(ctx => ctx.db.patch(person._id, { primary_handle: "stale@example.test" }));
+  await t.run(ctx => ingestOneCard(ctx, "apple_contact", { emails: ["secondary@example.test"], phones: [] }, false));
+  expect((await t.run(ctx => ctx.db.get(person._id)))?.primary_handle).toBeUndefined();
 });

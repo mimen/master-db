@@ -17,6 +17,7 @@ async function fixture() {
   await t.run(ctx => ingestOneCard(ctx, "airtable_human", { airtable_record_id: "recAAAAAAAAAAAAAA", phones: [], emails: ["old@example.test"] }, false));
   await t.run(ctx => ingestOneCard(ctx, "airtable_human", { airtable_record_id: "recAAAAAAAAAAAAAA", source_contact_id: "recAAAAAAAAAAAAAA", phones: [], emails: ["new@example.test"] }, true));
   const state = () => t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+  await t.run(async ctx => { const person = (await ctx.db.query("people").collect())[0]; await ctx.db.patch(person._id, { primary_handle: "old@example.test" }); });
   const before = await state(); const proof = await stateProof(before);
   let afterFingerprint = ""; const rollback = new Error("rollback");
   try { await t.run(async ctx => {
@@ -35,6 +36,7 @@ test("exact cleanup emits receipts and deletes only reviewed legacy rows", async
   const receipt = await t.mutation(remove,{plan});
   expect(receipt).toMatchObject({ removed: 1, beforeFingerprint: plan.beforeRemovalFingerprint, afterFingerprint: plan.afterRemovalFingerprint, replacementFingerprint: plan.replacementFingerprint });
   expect((await state()).identities.map(r=>r.value)).toEqual(["new@example.test"]);
+  expect((await state()).people[0].primary_handle).toBeUndefined();
 });
 for (const change of ["new-legacy", "changed-legacy", "replacement", "after-proof"] as const) {
   test(`cleanup fails closed on ${change} without deleting rows`, async () => {
