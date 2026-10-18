@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 
 /**
@@ -285,6 +285,12 @@ export async function recomputePersonAggregates(
     .query("identities")
     .withIndex("by_person", (q) => q.eq("person_id", personId))
     .collect();
+  const patch = personAggregatePatch(person, all);
+  if (patch) await ctx.db.patch(personId, patch);
+}
+
+/** Shared pure aggregation for ordinary updates and exact snapshot cleanup. */
+export function personAggregatePatch(person: Doc<"people">, all: Doc<"identities">[]) {
   const phones = new Set<string>();
   const emails = new Set<string>();
   let messageCount = 0;
@@ -314,10 +320,10 @@ export async function recomputePersonAggregates(
     person.identity_count === all.length &&
     person.message_count === messageCount &&
     person.is_self === isSelf;
-  if (unchanged) return;
+  if (unchanged) return null;
 
   const now = new Date().toISOString();
-  await ctx.db.patch(personId, {
+  return {
     ...(person.display_name_locked
       ? {}
       : {
@@ -332,7 +338,7 @@ export async function recomputePersonAggregates(
     message_count: messageCount,
     is_self: isSelf,
     updated_at: now,
-  });
+  };
 }
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {

@@ -4962,12 +4962,23 @@ export declare const internal: {
       reconcileLegacyAirtableHumans: FunctionReference<
         "action",
         "internal",
-        { apply?: boolean },
+        {
+          apply?: boolean;
+          plan?: {
+            afterRemovalFingerprint: string;
+            beforeRemovalFingerprint: string;
+            cardsFingerprint: string;
+            initialFingerprint: string;
+            legacy: Array<{ fingerprint: string; id: Id<"identities"> }>;
+            replacementFingerprint: string;
+          };
+        },
         any
       >;
       syncAirtableHumans: FunctionReference<"action", "internal", {}, any>;
     };
     canonicalReconciliation: {
+      cleanupState: FunctionReference<"query", "internal", {}, any>;
       reconcileBatch: FunctionReference<
         "mutation",
         "internal",
@@ -4990,7 +5001,21 @@ export declare const internal: {
           skippedNoMatch: number;
         }
       >;
-      removeLegacy: FunctionReference<"mutation", "internal", {}, number>;
+      removeLegacy: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          plan: {
+            afterRemovalFingerprint: string;
+            beforeRemovalFingerprint: string;
+            cardsFingerprint: string;
+            initialFingerprint: string;
+            legacy: Array<{ fingerprint: string; id: Id<"identities"> }>;
+            replacementFingerprint: string;
+          };
+        },
+        any
+      >;
       sourceState: FunctionReference<
         "query",
         "internal",

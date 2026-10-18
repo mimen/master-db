@@ -6,7 +6,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { ingestOneCard } from "./ingestContacts";
-import { addPersonFromAirtableRef, searchAirtableHumansRef, TEST_KEY, whoIsRef } from "./testRefs.vitest";
+import { addPersonFromAirtableRef, listPeopleRef, nameDirectoryRef, searchAirtableHumansRef, TEST_KEY, whoIsRef } from "./testRefs.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const a = "recAAAAAAAAAAAAAA", c = "recCCCCCCCCCCCCCC";
@@ -115,9 +115,47 @@ test("legacy cleanup is preview-only by default and hourly sync refuses unreview
   await expect(t.action(sync, {})).rejects.toThrow("reviewed canonical cleanup");
   expect(await t.action(cleanup, {})).toMatchObject({ legacyWouldRemove: 2 });
   expect(await t.run((ctx) => ctx.db.query("identities").collect())).toEqual(before);
-  await t.action(cleanup, { apply: true });
-  expect(await t.query(whoIsRef, { key: TEST_KEY, handle: "old@example.test" })).toMatchObject({ found: false });
-  expect(await t.query(whoIsRef, { key: TEST_KEY, handle: "secondary@example.test" })).toMatchObject({ found: true });
-  expect((await t.run((ctx) => ctx.db.query("identities").collect())).every((r) => r.source_contact_id === a)).toBe(true);
+  await expect(t.action(cleanup, { apply: true })).rejects.toThrow("Exact reviewed cleanup plan required");
+  expect(await t.run((ctx) => ctx.db.query("identities").collect())).toEqual(before);
+});
+
+test("complete preview reads beyond 100 pages without truncation", async () => {
+  const { t } = fixture();
+  let pages = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
+    if (String(input).includes("api.airtable.com")) {
+      pages++;
+      return Response.json({ records: [{ id: a, fields: { Name: "Fixture" } }], ...(pages < 101 ? { offset: String(pages) } : {}) });
+    }
+    const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
+    return Response.json({ contacts: [], resolutions: humanIds.map(humanId => ({ humanId, canonicalHumanId: humanId })) });
+  }));
+  await t.action(cleanup, {});
+  expect(pages).toBe(101);
+  expect(await t.run(ctx => ctx.db.query("identities").collect())).toEqual([]);
+});
+
+test("redirect reassignment recomputes both existing owners and later revocation leaves no stale aggregates", async () => {
+  const { t, state } = fixture();
+  await t.run(async ctx => {
+    await ingestOneCard(ctx, "airtable_human", { airtable_record_id: a, source_contact_id: a, phones: [], emails: ["loser@example.test"] }, false);
+    const survivor = await ingestOneCard(ctx, "airtable_human", { airtable_record_id: c, source_contact_id: c, phones: [], emails: ["survivor@example.test"] }, false);
+    if (survivor.outcome !== "created") throw new Error("Fixture expected new person");
+    await ctx.db.insert("identities", { person_id: survivor.personId, kind: "email", value: "independent@example.test", normalized: "independent@example.test", source: "apple_contact", message_count: 0, chat_count: 0, is_self: false, created_at: "fixture", updated_at: "fixture" });
+  });
+  state.target = c; state.records[0].id = c; state.emails = ["survivor@example.test"];
   await t.action(sync, {});
+  const assertAggregates = async () => {
+    const data = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+    for (const p of data.people) {
+      const rows = data.identities.filter(r => r.person_id === p._id);
+      expect(p.identity_count).toBe(rows.length);
+      expect([...p.normalized_emails].sort()).toEqual([...new Set(rows.filter(r => r.normalized.includes("@")).map(r => r.normalized))].sort());
+    }
+  };
+  await assertAggregates(); state.emails = []; await t.action(sync, {}); await assertAggregates();
+  expect(await t.query(whoIsRef, { key: TEST_KEY, handle: "independent@example.test" })).toMatchObject({ found: true });
+  expect(await t.query(whoIsRef, { key: TEST_KEY, handle: "survivor@example.test" })).toMatchObject({ found: false });
+  expect(JSON.stringify(await t.query(listPeopleRef, { key: TEST_KEY }))).not.toContain("survivor@example.test");
+  expect((await t.query(nameDirectoryRef, { key: TEST_KEY })).some(r => r.normalized === "survivor@example.test")).toBe(false);
 });

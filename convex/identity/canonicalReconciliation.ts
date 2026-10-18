@@ -3,8 +3,9 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 
+import { cleanupPlan, fingerprint, stateProof } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
-import { recomputePersonAggregates } from "./internal";
+import { personAggregatePatch, recomputePersonAggregates } from "./internal";
 import { normalizeEmail, normalizePhone } from "./normalize";
 
 export const snapshotCard = v.object({
@@ -63,17 +64,37 @@ export const reconcileBatch = internalMutation({
   },
 });
 
-// Called only by the explicit migration action after all reads and replacement batches succeed.
+// Final deletion is one atomic transaction, bound to the approved local replay.
+export const cleanupState = internalQuery({
+  args: {},
+  handler: async (ctx) => stateProof({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }),
+});
 export const removeLegacy = internalMutation({
-  args: {}, returns: v.number(),
-  handler: async (ctx) => {
-    const rows = await ctx.db.query("identities").withIndex("by_source_contact", (q) => q.eq("source", "airtable_human").eq("source_contact_id", undefined)).collect();
+  args: { plan: cleanupPlan },
+  handler: async (ctx, { plan }) => {
+    const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+    const before = await stateProof(state);
+    if (before.fingerprint !== plan.beforeRemovalFingerprint || before.replacementFingerprint !== plan.replacementFingerprint ||
+        await fingerprint(before.legacy) !== await fingerprint(plan.legacy)) throw new Error("Cleanup plan drift or unverified replacements");
     const affected = new Set<Id<"people">>();
-    for (const row of rows) {
-      await ctx.db.delete(row._id);
+    // No rescan-and-delete: only the immutable approved IDs can be retired.
+    for (const entry of plan.legacy) {
+      const row = state.identities.find(r => r._id === entry.id);
+      if (!row || row.source !== "airtable_human" || row.source_contact_id) throw new Error("Cleanup legacy scope changed");
+      await ctx.db.delete(entry.id);
       if (row.person_id) affected.add(row.person_id);
     }
-    for (const id of affected) await recomputePersonAggregates(ctx, id);
-    return rows.length;
+    const removed = new Set(plan.legacy.map(r => r.id));
+    const remaining = state.identities.filter(r => !removed.has(r._id));
+    const people = [];
+    for (const person of state.people) {
+      const patch = affected.has(person._id) ? personAggregatePatch(person, remaining.filter(r => r.person_id === person._id)) : null;
+      if (patch) await ctx.db.patch(person._id, patch);
+      people.push(patch ? { ...person, ...patch } : person);
+    }
+    const after = await stateProof({ people, identities: remaining });
+    if (after.fingerprint !== plan.afterRemovalFingerprint) throw new Error("Cleanup after-state does not match reviewed plan");
+    return { removed: plan.legacy.length, beforeFingerprint: before.fingerprint, afterFingerprint: after.fingerprint,
+      replacementFingerprint: before.replacementFingerprint, legacy: plan.legacy };
   },
 });

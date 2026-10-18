@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internalAction, type ActionCtx } from "../_generated/server";
 
 import { contactValues, readCanonicalSnapshot, type CanonicalContact, type CanonicalSnapshot } from "./canonicalContacts";
+import { cleanupPlan, fingerprint, type CleanupPlan } from "./cleanupPlan";
 
 /**
  * Pulls AUF's Airtable "Humans" table into the identity graph, Convex-native
@@ -75,10 +76,14 @@ export function toContactCard(r: AirtableRecord, contacts: CanonicalContact[]): 
 type SnapshotCard = { humanId: string; canonicalHumanId: string | null; display_name?: string; first_name?: string; last_name?: string; phones: string[]; emails: string[] };
 const sourceState = makeFunctionReference<"query", Record<string, never>, { humanIds: string[]; legacyCount: number }>("identity/canonicalReconciliation:sourceState");
 const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[] }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
-const removeLegacy = makeFunctionReference<"mutation", Record<string, never>, number>("identity/canonicalReconciliation:removeLegacy");
+const removeLegacy = makeFunctionReference<"mutation", { plan: CleanupPlan }, { removed: number }>("identity/canonicalReconciliation:removeLegacy");
+const cleanupState = makeFunctionReference<"query", Record<string, never>, { fingerprint: string; legacy: CleanupPlan["legacy"] }>("identity/canonicalReconciliation:cleanupState");
 
-async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "apply") {
+async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "apply", plan?: CleanupPlan) {
     const state = await ctx.runQuery(sourceState, {});
+    if (migration === "apply" && !plan) throw new Error("Exact reviewed cleanup plan required");
+    const initial = migration !== "none" ? await ctx.runQuery(cleanupState, {}) : undefined;
+    if (plan && initial?.fingerprint !== plan.initialFingerprint) throw new Error("Cleanup initial state drift");
     if (migration === "none" && state.legacyCount)
       throw new Error("Legacy Airtable identities require reviewed canonical cleanup before hourly sync");
     const apiKey = process.env.AIRTABLE_API_KEY;
@@ -110,7 +115,7 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       for (const record of body.records) records.set(record.id, record);
       offset = body.offset;
       pages++;
-    } while (offset && pages < 100); // safety cap, Humans is nowhere near 10k records
+    } while (offset && pages < 1000); // bounded complete read: up to 100,000 Humans
 
     if (offset) throw new Error("Airtable Humans exceeded the complete-read page limit");
 
@@ -129,10 +134,11 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
         phones: contactCard?.phones ?? [],
         emails: contactCard?.emails ?? [] };
     });
-    if (migration === "preview") return { recordsSeen: records.size, legacyWouldRemove: state.legacyCount, humansToReconcile: cards.length };
-    const result = { recordsSeen: records.size, peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0, legacyRemoved: 0 };
-    // Resolve old links before survivor ingestion, independent of Airtable page ordering.
     cards.sort((a, b) => Number(b.humanId !== b.canonicalHumanId) - Number(a.humanId !== a.canonicalHumanId));
+    const cardsFingerprint = await fingerprint(cards);
+    if (migration === "preview") return { recordsSeen: records.size, legacyWouldRemove: state.legacyCount, humansToReconcile: cards.length, cards, cardsFingerprint, initialFingerprint: initial!.fingerprint, legacy: initial!.legacy };
+    if (plan && cardsFingerprint !== plan.cardsFingerprint) throw new Error("Canonical replacement manifest drift");
+    const result = { recordsSeen: records.size, peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0, legacyRemoved: 0 };
     for (let i = 0; i < cards.length; i += 50) {
       const batch = await ctx.runMutation(reconcileBatch, { cards: cards.slice(i, i + 50) });
       result.peopleReused += batch.peopleReused;
@@ -141,7 +147,10 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       result.skippedNoMatch += batch.skippedNoMatch;
       result.linksUpdated += batch.linksUpdated;
     }
-    if (migration === "apply") result.legacyRemoved = await ctx.runMutation(removeLegacy, {});
+    if (migration === "apply") {
+      const receipt = await ctx.runMutation(removeLegacy, { plan: plan! });
+      return { ...result, legacyRemoved: receipt.removed, cleanupReceipt: receipt };
+    }
     return result;
 }
 
@@ -149,6 +158,6 @@ export const syncAirtableHumans = internalAction({ args: {}, handler: (ctx) => s
 
 /** Separate operator-reviewed existing-data cleanup; preview is the default and does not write. */
 export const reconcileLegacyAirtableHumans = internalAction({
-  args: { apply: v.optional(v.boolean()) },
-  handler: (ctx, { apply }) => synchronize(ctx, apply ? "apply" : "preview"),
+  args: { apply: v.optional(v.boolean()), plan: v.optional(cleanupPlan) },
+  handler: (ctx, { apply, plan }) => synchronize(ctx, apply ? "apply" : "preview", plan),
 });

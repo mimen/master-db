@@ -160,6 +160,7 @@ export async function ingestOneCard(
     });
   }
 
+  const movedFrom = new Set<Id<"people">>();
   let identitiesWritten = 0;
   for (const h of handles) {
     const rows =
@@ -196,6 +197,7 @@ export async function ingestOneCard(
         existing.nickname !== nextNickname ||
         existing.source_contact_id !== nextSourceContactId;
       if (changed) {
+        if (existing.person_id && existing.person_id !== personId) movedFrom.add(existing.person_id);
         if (existing.person_id) reconciled?.delete(existing.person_id);
         reconciled?.delete(personId);
         await ctx.db.patch(existing._id, {
@@ -242,6 +244,10 @@ export async function ingestOneCard(
     }
   }
 
+  for (const previous of movedFrom) {
+    await recomputePersonAggregates(ctx, previous);
+    reconciled?.add(previous);
+  }
   if (!reconciled?.has(personId)) {
     await recomputePersonAggregates(ctx, personId);
     reconciled?.add(personId);

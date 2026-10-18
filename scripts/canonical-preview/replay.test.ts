@@ -1,0 +1,162 @@
+import { readFileSync, writeFileSync, chmodSync } from "node:fs";
+
+import { makeFunctionReference } from "convex/server";
+import { convexTest } from "convex-test";
+import { test, vi, expect } from "vitest";
+
+import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { CanonicalSnapshot } from "../../convex/identity/canonicalContacts";
+import { stateProof, type CleanupPlan, type State } from "../../convex/identity/cleanupPlan";
+import { recomputePersonAggregates } from "../../convex/identity/internal";
+import schema from "../../convex/schema";
+import { normalizeModules } from "../../convex/test-utils.vitest";
+
+const modules = normalizeModules(import.meta.glob("../../convex/**/*.*s"), import.meta.url);
+type RecordRow = { id: string; fields: Record<string, string> };
+type Input = { people: Doc<"people">[]; identities: Doc<"identities">[]; records: RecordRow[]; canonical: CanonicalSnapshot; complete: boolean };
+const key = (r: Doc<"identities">) => `${r.kind}:${r.normalized}`;
+const sorted = (xs: string[]) => [...new Set(xs)].sort();
+const save = (path: string, value: unknown) => { writeFileSync(path, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" }); chmodSync(path, 0o600); };
+
+async function replay(input: Input) {
+  if (!input.complete) throw new Error("Complete input required");
+  const t = convexTest(schema, modules);
+  const ids = new Map<string, Id<"people">>();
+  const oldIdentityIds = new Map<string, Id<"identities">>();
+  await t.run(async (ctx) => {
+    for (const row of input.people) {
+      const { _id, _creationTime, merged_into, not_duplicate_of, photoStorageId, ...data } = row;
+      void _creationTime; void merged_into; void not_duplicate_of; void photoStorageId;
+      ids.set(_id, await ctx.db.insert("people", data));
+    }
+    for (const row of input.people) {
+      if (row.merged_into && !ids.has(row.merged_into)) throw new Error("Missing merged person");
+      await ctx.db.patch(ids.get(row._id)!, { merged_into: row.merged_into ? ids.get(row.merged_into) : undefined,
+        not_duplicate_of: row.not_duplicate_of?.map(id => { if (!ids.has(id)) throw new Error("Missing referenced person"); return ids.get(id)!; }) });
+    }
+    for (const row of input.identities) {
+      const { _id, _creationTime, person_id, ...data } = row; void _creationTime;
+      if (person_id && !ids.has(person_id)) throw new Error("Missing identity owner");
+      oldIdentityIds.set(_id, await ctx.db.insert("identities", { ...data, person_id: person_id ? ids.get(person_id) : undefined }));
+    }
+  });
+  const before = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+  vi.stubEnv("AIRTABLE_API_KEY", "offline-only");
+  vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "offline-only");
+  vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://offline.convex.site/canonical-contacts/read");
+  vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => {
+    const u = new URL(String(url));
+    if (u.origin === "https://api.airtable.com" && u.pathname === "/v0/app39VsA3z85GTMbT/tbl6LptFEMKLaN0I9" && (!init?.method || init.method === "GET")) {
+      const start = Number(u.searchParams.get("offset") ?? 0);
+      return Response.json({ records: input.records.slice(start, start + 100), ...(start + 100 < input.records.length ? { offset: String(start + 100) } : {}) });
+    }
+    if (u.href === "https://offline.convex.site/canonical-contacts/read" && init?.method === "POST") {
+      const requested = new Set<string>(JSON.parse(String(init.body)).humanIds);
+      return Response.json({ contacts: input.canonical.contacts.filter(r => requested.has(r.humanId)), resolutions: input.canonical.resolutions.filter(r => requested.has(r.humanId)) });
+    }
+    throw new Error("NETWORK DENIED: offline replay only");
+  });
+  const originalPeople = new Map([...ids].map(([a,b]) => [b,a]));
+  const originalIdentities = new Map([...oldIdentityIds].map(([a,b]) => [b,a]));
+  const originalize = (state: State): State => ({
+    people: state.people.map(p => ({ ...p, _id: originalPeople.get(p._id) as Id<"people">,
+      merged_into: p.merged_into ? originalPeople.get(p.merged_into) as Id<"people"> : undefined,
+      not_duplicate_of: p.not_duplicate_of?.map(id => originalPeople.get(id) as Id<"people">) })),
+    identities: state.identities.map(r => ({ ...r, _id: (originalIdentities.get(r._id) ?? r._id) as Id<"identities">,
+      person_id: r.person_id ? originalPeople.get(r.person_id) as Id<"people"> : undefined })),
+  });
+  let result: unknown; let reviewedPlan: CleanupPlan | undefined;
+  try {
+    const preview = await t.action(makeFunctionReference<"action", Record<string, never>, {
+      cards: Array<{ humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }>;
+      cardsFingerprint: string;
+    }>("identity/airtableSync:reconcileLegacyAirtableHumans"), {});
+    for (let i = 0; i < preview.cards.length; i += 50) await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards }>("identity/canonicalReconciliation:reconcileBatch"), { cards: preview.cards.slice(i,i+50) });
+    const replaced = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+    const proof = await stateProof(replaced);
+    let predicted: State | undefined;
+    const rollback = new Error("LOCAL_PREVIEW_ROLLBACK");
+    try { await t.run(async ctx => {
+      const affected = new Set<Id<"people">>();
+      for (const entry of proof.legacy) { const row = await ctx.db.get(entry.id); if (row?.person_id) affected.add(row.person_id); await ctx.db.delete(entry.id); }
+      for (const id of affected) await recomputePersonAggregates(ctx, id);
+      predicted = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+      throw rollback;
+    }); } catch (e) { if (e !== rollback) throw e; }
+    if (!predicted) throw new Error("Missing local prediction");
+    const plan: CleanupPlan = { initialFingerprint: (await stateProof(before)).fingerprint,
+      cardsFingerprint: preview.cardsFingerprint, legacy: proof.legacy,
+      beforeRemovalFingerprint: proof.fingerprint, replacementFingerprint: proof.replacementFingerprint,
+      afterRemovalFingerprint: (await stateProof(predicted)).fingerprint };
+    const originalProof = await stateProof(originalize(replaced));
+    reviewedPlan = { ...plan, initialFingerprint: (await stateProof(originalize(before))).fingerprint,
+      legacy: originalProof.legacy, beforeRemovalFingerprint: originalProof.fingerprint,
+      replacementFingerprint: originalProof.replacementFingerprint,
+      afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint };
+    result = await t.mutation(makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy"), { plan });
+  } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+  const after = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+  const independentBefore = before.identities.filter(r => r.source !== "airtable_human");
+  const independentChanged = independentBefore.filter(r => JSON.stringify(r) !== JSON.stringify(after.identities.find(a => a._id === r._id)));
+  if (independentChanged.length) throw new Error("Independent source changed");
+  const originalPerson = new Map([...ids].map(([a, b]) => [b, a]));
+  const personDetails = before.people.map(p => {
+    const a = after.people.find(x => x._id === p._id)!;
+    const old = before.identities.filter(r => r.person_id === p._id), next = after.identities.filter(r => r.person_id === p._id);
+    const oldKeys = sorted(old.map(key)), newKeys = sorted(next.map(key));
+    return { personId: originalPerson.get(p._id), humanIdBefore: p.airtable_human_id, humanIdAfter: a.airtable_human_id,
+      independentSources: old.filter(r => r.source !== "airtable_human").length,
+      before: old.map(r => ({ key: key(r), source: r.source, humanId: r.source_contact_id })),
+      after: next.map(r => ({ key: key(r), source: r.source, humanId: r.source_contact_id })),
+      removedKeys: oldKeys.filter(k => !newKeys.includes(k)), addedKeys: newKeys.filter(k => !oldKeys.includes(k)),
+      disposition: newKeys.length ? "retains-identifiers" : "no-identifiers",
+      canonicalProof: input.canonical.resolutions.filter(r => r.humanId === p.airtable_human_id),
+      canonicalContacts: input.canonical.contacts.filter(r => r.humanId === p.airtable_human_id),
+      aggregatesBefore: { phones: p.normalized_phones, emails: p.normalized_emails, primaryHandle: p.primary_handle },
+      aggregatesAfter: { phones: a.normalized_phones, emails: a.normalized_emails, primaryHandle: a.primary_handle } };
+  });
+  const humanIds = sorted([...input.records.map(r => r.id), ...input.canonical.resolutions.map(r => r.humanId)]);
+  const humans = humanIds.map(humanId => ({ humanId,
+    nativeDisplay: input.records.find(r => r.id === humanId)?.fields,
+    resolution: input.canonical.resolutions.find(r => r.humanId === humanId),
+    canonicalContacts: input.canonical.contacts.filter(r => r.humanId === humanId),
+    before: input.identities.filter(r => r.source === "airtable_human" && (r.source_contact_id === humanId || (!r.source_contact_id && input.people.find(p => p._id === r.person_id)?.airtable_human_id === humanId))),
+    after: after.identities.filter(r => r.source === "airtable_human" && r.source_contact_id === humanId).map(r => ({ ...r, person_id: r.person_id ? originalPerson.get(r.person_id) : undefined })) }));
+  const special = personDetails.filter(p => !p.independentSources && p.before.some(r => r.source === "airtable_human"));
+  const globalAfter = new Set(after.identities.map(key));
+  const summary = { liveWrites: 0, peopleBefore: before.people.length, peopleAfter: after.people.length,
+    identitiesBefore: before.identities.length, identitiesAfter: after.identities.length,
+    legacyRemoved: before.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).length,
+    canonicalRowsAfter: after.identities.filter(r => r.source === "airtable_human").length,
+    newlyInsertedRows: after.identities.filter(r => !before.identities.some(b => b._id === r._id)).length,
+    genuinelyRemovedDistinctIdentifiers: sorted(before.identities.map(key)).filter(k => !globalAfter.has(k)).length,
+    removedPersonIdentifierPairs: personDetails.reduce((n,p) => n + p.removedKeys.length, 0),
+    addedPersonIdentifierPairs: personDetails.reduce((n,p) => n + p.addedKeys.length, 0),
+    linkChanges: personDetails.filter(p => p.humanIdBefore !== p.humanIdAfter).length,
+    independentSourceRemovals: 0, independentSourceChanges: 0,
+    withoutIndependentSources: special.length, withoutIndependentSourcesRetainingIdentifiers: special.filter(p => p.disposition === "retains-identifiers").length,
+    withoutIndependentSourcesLosingAllIdentifiers: special.filter(p => p.disposition === "no-identifiers").length };
+  return { summary, result, reviewedPlan, humans, people: personDetails, withoutIndependentSources: special };
+}
+
+test("offline operator preserves independent ownership and proves replacement delta", async () => {
+  const now = "2026-10-18"; const person = "fixture" as Id<"people">; const human = "recAAAAAAAAAAAAAA";
+  const p = { _id: person, _creationTime: 1, normalized_phones: [], normalized_emails: ["old@example.test"], identity_count: 1, message_count: 0, is_self: false, auto_clustered: true, created_at: now, updated_at: now, airtable_human_id: human };
+  const row = { _id: "legacy" as Id<"identities">, _creationTime: 1, person_id: person, kind: "email", value: "old@example.test", normalized: "old@example.test", message_count: 0, chat_count: 0, is_self: false, source: "airtable_human", created_at: now, updated_at: now };
+  const r = await replay({ complete: true, people: [p], identities: [row, { ...row, _id: "independent" as Id<"identities">, source: "manual" }], records: [{ id: human, fields: { Name: "Fixture" } }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [{ humanId: human, channel: "email", value: "new@example.test", primary: true }] } });
+  expect(r.summary).toMatchObject({ legacyRemoved: 1, canonicalRowsAfter: 1, independentSourceChanges: 0, genuinelyRemovedDistinctIdentifiers: 0, addedPersonIdentifierPairs: 1 });
+  const empty = await replay({ complete: true, people: [p], identities: [row], records: [{ id: human, fields: { Name: "Fixture" } }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [] } });
+  expect(empty.summary).toMatchObject({ withoutIndependentSources: 1, withoutIndependentSourcesLosingAllIdentifiers: 1, genuinelyRemovedDistinctIdentifiers: 1 });
+  expect(empty.withoutIndependentSources[0].canonicalProof).toEqual([{ humanId: human, canonicalHumanId: human }]);
+});
+
+test.skipIf(!process.env.CANONICAL_PREVIEW_INPUT)("restricted offline snapshot replay", async () => {
+  try {
+    const input = JSON.parse(readFileSync(process.env.CANONICAL_PREVIEW_INPUT!, "utf8")) as Input;
+    const result = await replay(input);
+    const prefix = process.env.CANONICAL_PREVIEW_OUTPUT!;
+    if (!prefix) throw new Error("Output prefix required");
+    save(`${prefix}.details.json`, result);
+    save(`${prefix}.summary.json`, result.summary);
+  } catch { throw new Error("Offline replay failed; no contact values emitted. Inspect restricted inputs locally."); }
+}, 120000);
