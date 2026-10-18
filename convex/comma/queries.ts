@@ -8,7 +8,8 @@ import { assertAllowed } from "../_lib/authed";
 import {
   attachmentDoc,
   conversationDoc,
-  draftDoc,
+  draftListItem,
+  draftView,
   messageDoc,
   participant,
   scheduledDoc,
@@ -277,13 +278,32 @@ export const listScheduled = query({
 
 export const getDraft = query({
   args: { conversationId: v.id("comma_conversations") },
-  returns: v.union(draftDoc, v.null()),
+  returns: v.union(draftView, v.null()),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    return await ctx.db
+    const draft = await ctx.db
       .query("comma_drafts")
       .withIndex("by_conversationId", (q) => q.eq("conversationId", args.conversationId))
       .unique();
+    if (!draft) return null;
+    const { attachments, ...rest } = draft;
+    if (!attachments) return rest;
+    return { ...rest, attachments: await Promise.all(attachments.map(async (a) => ({ ...a, url: await ctx.storage.getUrl(a.storageId) }))) };
+  },
+});
+
+/** The Drafts lens: every conversation with something in its composer, newest first. */
+export const listDrafts = query({
+  args: {},
+  returns: v.array(draftListItem),
+  handler: async (ctx) => {
+    await assertAllowed(ctx);
+    // ponytail: newest 200 drafts; paginate if a larger backlog ever matters.
+    const drafts = await ctx.db.query("comma_drafts").withIndex("by_updatedAt").order("desc").take(200);
+    return drafts.map((d) => ({
+      conversationId: d.conversationId, text: d.text, updatedAt: d.updatedAt, source: d.source ?? "user",
+      ...(d.note !== undefined ? { note: d.note } : {}), attachmentCount: d.attachments?.length ?? 0,
+    }));
   },
 });
 

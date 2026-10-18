@@ -243,6 +243,15 @@ export declare const api: {
         { conversationId: Id<"comma_conversations"> },
         null
       >;
+      removeDraftAttachment: FunctionReference<
+        "mutation",
+        "public",
+        {
+          conversationId: Id<"comma_conversations">;
+          storageId: Id<"_storage">;
+        },
+        null
+      >;
       setDraft: FunctionReference<
         "mutation",
         "public",
@@ -1552,7 +1561,16 @@ export declare const api: {
         {
           _creationTime: number;
           _id: Id<"comma_drafts">;
+          attachments?: Array<{
+            filename: string;
+            mimeType: string;
+            size: number;
+            storageId: Id<"_storage">;
+            url: string | null;
+          }>;
           conversationId: Id<"comma_conversations">;
+          note?: string;
+          source?: "user" | "agent";
           text: string;
           updatedAt: number;
         } | null
@@ -1658,6 +1676,19 @@ export declare const api: {
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
         }
+      >;
+      listDrafts: FunctionReference<
+        "query",
+        "public",
+        {},
+        Array<{
+          attachmentCount: number;
+          conversationId: Id<"comma_conversations">;
+          note?: string;
+          source: "user" | "agent";
+          text: string;
+          updatedAt: number;
+        }>
       >;
       listMessages: FunctionReference<
         "query",
@@ -3466,6 +3497,58 @@ export declare const internal: {
             | "presence"
             | "finalize";
         }
+      >;
+    };
+    drafts: {
+      deleteAgentDraft: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations"> },
+        boolean
+      >;
+      generateUploadUrl: FunctionReference<"mutation", "internal", {}, string>;
+      listAgentDrafts: FunctionReference<
+        "query",
+        "internal",
+        {},
+        Array<{
+          attachmentCount: number;
+          conversationId: Id<"comma_conversations">;
+          note?: string;
+          source: "user" | "agent";
+          text: string;
+          updatedAt: number;
+        }>
+      >;
+      prepareDraft: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          address?: string;
+          attachments?: Array<Id<"_storage">>;
+          chatGuid?: string;
+          conversationId?: Id<"comma_conversations">;
+          force?: boolean;
+          note?: string;
+          text: string;
+        },
+        {
+          conversationId: Id<"comma_conversations">;
+          draftId: Id<"comma_drafts">;
+          replaced: boolean;
+        }
+      >;
+      recordUpload: FunctionReference<
+        "mutation",
+        "internal",
+        { filename: string; mimeType: string; storageId: Id<"_storage"> },
+        { size: number; storageId: Id<"_storage"> }
+      >;
+      storeAttachment: FunctionReference<
+        "action",
+        "internal",
+        { base64: string; filename: string; mimeType: string },
+        { size: number; storageId: Id<"_storage"> }
       >;
     };
     groupPhotos: {

@@ -366,10 +366,19 @@ export const outboxFields = {
   updatedAt: v.number(),
 };
 
+export const draftAttachment = v.object({ storageId: v.id("_storage"), filename: v.string(), mimeType: v.string(), size: v.number() });
+export const draftSource = v.union(v.literal("user"), v.literal("agent"));
+
+/** What sits in a conversation's composer: the user's unsent text or a draft an agent prepared. */
 export const draftFields = {
   conversationId: v.id("comma_conversations"),
   text: v.string(),
   updatedAt: v.number(),
+  /** Absent on rows written before agent drafts existed, which are all the user's. */
+  source: v.optional(draftSource),
+  /** The agent's private context for the user. Shown above the composer, never sent. */
+  note: v.optional(v.string()),
+  attachments: v.optional(v.array(draftAttachment)),
 };
 
 export const scheduledFields = {
@@ -422,7 +431,14 @@ export const conversationDoc = withSystemFields("comma_conversations", conversat
 export const messageDoc = withSystemFields("comma_messages", messageFields);
 export const attachmentDoc = withSystemFields("comma_attachments", attachmentFields);
 export const conversationStateDoc = withSystemFields("comma_conversation_state", conversationStateFields);
-export const draftDoc = withSystemFields("comma_drafts", draftFields);
+export const draftView = withSystemFields("comma_drafts", {
+  ...draftFields,
+  attachments: v.optional(v.array(v.object({ ...draftAttachment.fields, url: v.union(v.string(), v.null()) }))),
+});
+export const draftListItem = v.object({
+  conversationId: v.id("comma_conversations"), text: v.string(), updatedAt: v.number(),
+  source: draftSource, note: v.optional(v.string()), attachmentCount: v.number(),
+});
 export const scheduledDoc = withSystemFields("comma_scheduled", scheduledFields);
 export const suggestionDoc = withSystemFields("comma_suggestions", suggestionFields);
 export const syncStateDoc = withSystemFields("comma_sync_state", syncStateFields);

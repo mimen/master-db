@@ -53,6 +53,11 @@ export const enqueue = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    if (payload.kind === "sendAttachment" && conversation) {
+      // Sending a drafted attachment sends the whole draft; the composer holds the rest.
+      const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
+      if (draft?.attachments?.some((a) => a.storageId === payload.storageId)) await ctx.db.delete(draft._id);
+    }
     if (payload.kind === "send" && conversation) {
       await deleteConversationDraft(ctx, conversation._id);
       // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.

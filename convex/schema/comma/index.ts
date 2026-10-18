@@ -58,7 +58,7 @@ export const comma_outbox = defineTable(outboxFields)
   .index("by_status_createdAt", ["status", "createdAt"])
   .index("by_resultGuid", ["resultGuid"]);
 
-export const comma_drafts = defineTable(draftFields).index("by_conversationId", ["conversationId"]);
+export const comma_drafts = defineTable(draftFields).index("by_conversationId", ["conversationId"]).index("by_updatedAt", ["updatedAt"]);
 
 export const comma_scheduled = defineTable(scheduledFields)
   .index("by_bbId", ["bbId"])

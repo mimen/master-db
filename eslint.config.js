@@ -23,6 +23,8 @@ export default [
         console: 'readonly',
         fetch: 'readonly',
         crypto: 'readonly',
+        atob: 'readonly',
+        btoa: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',
