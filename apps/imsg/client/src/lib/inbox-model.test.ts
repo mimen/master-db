@@ -8,6 +8,7 @@ import {
   DEFAULT_INBOX_FILTERS,
   DEFAULT_REFINEMENTS,
   deriveInboxModel,
+  draftPreview,
   groupByAge,
   priorityLevel,
   resetInboxFilters,
@@ -295,5 +296,29 @@ describe("activeChips", () => {
 
   test("a saved view is named after its chips", () => {
     expect(viewName(filters, r)).toBe("SMS, Last 7 days, Tag showcase");
+  });
+});
+
+describe("Drafts lens", () => {
+  const draft = (updatedAt: number, extra: Partial<NonNullable<ChatSummary["draft"]>> = {}): ChatSummary["draft"] =>
+    ({ source: "user", text: "draft", attachmentCount: 0, updatedAt, ...extra });
+
+  test("lists only drafted conversations, newest draft first, without age sections", () => {
+    const chats = [
+      makeChat({ guid: "old-draft", draft: draft(10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
+      makeChat({ guid: "none" }),
+      makeChat({ guid: "new-draft", draft: draft(20, { source: "agent" }) }),
+    ];
+    const model = deriveInboxModel(chats, { state: "drafts", type: "all" }, "", undefined, undefined, { refinements: DEFAULT_REFINEMENTS, scheduled: new Set(), now: NOW });
+    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.guid : row.label)).toEqual(["new-draft", "old-draft"]);
+    const oldest = deriveInboxModel(chats, { state: "drafts", type: "all" }, "", undefined, undefined, { refinements: { ...DEFAULT_REFINEMENTS, oldestFirst: true }, scheduled: new Set(), now: NOW });
+    expect(oldest.listChats.map((chat) => chat.guid)).toEqual(["old-draft", "new-draft"]);
+  });
+
+  test("an agent draft previews the note's first non-empty line, a user draft its text", () => {
+    expect(draftPreview({ source: "agent", text: "Sounds good!", note: "\nThey asked about Friday\nmore", attachmentCount: 1, updatedAt: 1 }))
+      .toEqual({ label: "Agent draft", body: "They asked about Friday" });
+    expect(draftPreview({ source: "agent", text: "", attachmentCount: 1, updatedAt: 1 })).toEqual({ label: "Agent draft", body: "Attachment" });
+    expect(draftPreview({ source: "user", text: "half typed", note: "ignored", attachmentCount: 0, updatedAt: 1 })).toEqual({ label: "Draft", body: "half typed" });
   });
 });

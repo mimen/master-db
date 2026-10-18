@@ -14,6 +14,7 @@ export const commaApi = {
   resolveChat: queries.resolveChat,
   listScheduled: queries.listScheduled,
   getDraft: queries.getDraft,
+  listDrafts: queries.listDrafts,
   syncStatus: queries.syncStatus,
   getSuggestions: queries.getSuggestions,
   getCommand: commaOutbox.getCommand,

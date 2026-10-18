@@ -47,3 +47,9 @@ test("native file URIs upload an ArrayBuffer without constructing a React Native
   await uploadAndSendAttachmentVia(deps, "chat", { uri: "file://memo.m4a", filename: "memo.m4a", mimeType: "audio/mp4", isAudioMessage: true });
   expect(calls.at(-1)).toMatchObject({ payload: { isAudioMessage: true } });
 });
+
+test("an already stored drafted attachment sends by reference without uploading again", async () => {
+  const { deps, calls } = harness();
+  await uploadAndSendAttachmentVia(deps, "chat", { storageId: "drafted" as never, filename: "plan.pdf", mimeType: "application/pdf", caption: "here", isAudioMessage: false });
+  expect(calls).toEqual([{ chat: "chat", payload: { kind: "sendAttachment", storageId: "drafted", filename: "plan.pdf", mimeType: "application/pdf", caption: "here", isAudioMessage: false } }]);
+});

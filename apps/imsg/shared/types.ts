@@ -1,6 +1,6 @@
 import type { MentionAnnotation } from "./mentions";
 
-export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "settled";
+export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "drafts" | "settled";
 /** One axis, ordered as the filter rail renders it. See matchesFilters for what
  * each lens does with screened conversations. */
 export type TypeFilter = "all" | "known" | "dm" | "group" | "unknown";
@@ -156,6 +156,14 @@ export interface ChatSummary {
     priority?: number;
     tags?: string[];
     events?: Array<{ id: string; name: string }>;
+  };
+  /** What sits in this conversation's composer, unsent: the user's own text or an agent-prepared draft. */
+  draft?: {
+    source: "user" | "agent";
+    text: string;
+    note?: string;
+    attachmentCount: number;
+    updatedAt: number;
   };
 }
 

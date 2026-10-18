@@ -421,7 +421,8 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
 }
 
 const styles = StyleSheet.create({
-  tabs: { gap: 14 },
+  // Five tabs fill the default sidebar; space-between keeps them inside it instead of clipping Drafts.
+  tabs: { gap: 6, justifyContent: "space-between" },
   tabsPhone: { gap: 22, paddingHorizontal: 20 },
   tabPhone: { paddingBottom: 6 },
   tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.15, lineHeight: 18 },

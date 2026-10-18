@@ -151,7 +151,7 @@ export function ConversationListPane({
       if (view) openView(view);
     }
   }, [store.pending, openView]);
-  // ⌘1..⌘4 switch lenses. Editable-safe: a chord never types.
+  // ⌘1..⌘5 switch lenses. Editable-safe: a chord never types.
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
     const onKey = (event: KeyboardEvent) => {

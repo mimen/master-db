@@ -1,7 +1,7 @@
 import { extractLinkPreview, parsePublicPreviewUrl } from "../../shared/link-preview";
 import type { Hono } from "hono";
 import type { GenericId, Infer } from "convex/values";
-import type { attachmentDoc, conversationDoc, draftDoc, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
+import type { attachmentDoc, conversationDoc, draftView, messageDoc, scheduledDoc, CommaOutboxPayload, CommandResult } from "../../../../convex/schema/comma/validators";
 import { conversationKey } from "../../../../convex/comma/conversationKey";
 import { sendService, tempGuid } from "../../../../convex/comma/tempMessage";
 import type { FixtureRouteControls } from "../../server/app";
@@ -105,7 +105,7 @@ export async function fixtureMessageWindow(bb: FixtureBlueBubbles, names: Fixtur
 }
 
 export function registerConvexFixture(app: Hono, controls: FixtureRouteControls, bb: FixtureBlueBubbles, db: OverlayDb, names: FixtureIdentity, additionalHandlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {}) {
-  const drafts = new Map<string, Infer<typeof draftDoc>>();
+  const drafts = new Map<string, Infer<typeof draftView>>();
   const receipts = new Map<string, { id: string; status: "sent"; clientKey: string; updatedAt: number; result?: CommandResult; resultGuid?: string }>();
   const shelves = new Map<string, ReplySuggestions>();
   const deletedChats = new Set<string>();
@@ -418,8 +418,35 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     "comma/drafts:setDraft": async (args) => {
       const conversationId = String(args.conversationId);
       const text = String(args.text);
-      if (text) drafts.set(conversationId, { _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId), text, updatedAt: FIXTURE_NOW });
-      else drafts.delete(conversationId);
+      const draft = drafts.get(conversationId);
+      if (!text && !draft?.attachments?.length) drafts.delete(conversationId);
+      else if (draft?.text !== text) drafts.set(conversationId, { ...draft, _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId), text, updatedAt: Date.now(), source: "user" });
+      return null;
+    },
+    "comma/drafts:removeDraftAttachment": async (args) => {
+      const draft = drafts.get(String(args.conversationId));
+      if (!draft?.attachments) return null;
+      const attachments = draft.attachments.filter((a) => a.storageId !== args.storageId);
+      if (!draft.text && attachments.length === 0) drafts.delete(String(args.conversationId));
+      else drafts.set(String(args.conversationId), { ...draft, attachments, updatedAt: Date.now() });
+      return null;
+    },
+    "comma/queries:listDrafts": async () => [...drafts.values()].sort((a, b) => b.updatedAt - a.updatedAt).map((d) => ({
+      conversationId: d.conversationId, text: d.text, updatedAt: d.updatedAt, source: d.source ?? "user",
+      ...(d.note !== undefined ? { note: d.note } : {}), attachmentCount: d.attachments?.length ?? 0,
+    })),
+    // Production's agent path is the internal comma/drafts:prepareDraft; the fixture takes a chat guid and finalized uploads.
+    "comma/drafts:prepareDraft": async (args) => {
+      const conversationId = String(args.chatGuid);
+      const attachments = ((args.attachments as string[] | undefined) ?? []).map((storageId) => {
+        const upload = uploads.get(storageId);
+        if (!upload?.filename || !upload.mimeType) throw new FixtureError("Finalized upload not found", 400);
+        return { storageId: id<"_storage">(storageId), filename: upload.filename, mimeType: upload.mimeType, size: upload.bytes.size, url: `/__fixture/media/${storageId}` };
+      });
+      drafts.set(conversationId, {
+        _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId), text: String(args.text),
+        updatedAt: Date.now(), source: "agent", ...(typeof args.note === "string" ? { note: args.note } : {}), ...(attachments.length ? { attachments } : {}),
+      });
       return null;
     },
     "comma/drafts:clearDraft": async (args) => {
@@ -452,7 +479,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         }
         const result = await execute(chatGuid, payload, clientKey).finally(() => temps.delete(clientKey));
         const resultGuid = result && "message" in result ? result.message.guid : undefined;
-        if (payload.kind === "send") drafts.delete(chatGuid);
+        if (payload.kind === "send" || (payload.kind === "sendAttachment" && drafts.get(chatGuid)?.attachments?.some((a) => a.storageId === payload.storageId))) drafts.delete(chatGuid);
         const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
         receipts.set(clientKey, receipt);
         return receipt.id;

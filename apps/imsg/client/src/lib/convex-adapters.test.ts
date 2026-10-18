@@ -7,6 +7,7 @@ import {
   conversationToChat,
   mergeConvexMessages,
   messageToMessage,
+  withDrafts,
   type ConvexConversation,
   type ConvexMessage,
 } from "./convex-adapters";
@@ -94,6 +95,18 @@ describe("conversationToChat", () => {
     const crm = { is_favorite: true, priority: 2, tags: ["showcase"] };
     expect(conversationToChat({ ...conversation(), crm }).crm).toEqual(crm);
     expect("crm" in conversationToChat(conversation())).toBe(false);
+  });
+});
+
+describe("withDrafts", () => {
+  test("marks exactly the conversations that have a draft and leaves the rest untouched", () => {
+    const drafted = conversationToChat(conversation());
+    const other = conversationToChat(conversation({ _id: "c2" as never, primaryChatGuid: "iMessage;-;+15550002222" }));
+    const [marked, untouched] = withDrafts([drafted, other], [
+      { conversationId: "c1" as never, text: "hi", updatedAt: 5, source: "agent", note: "context", attachmentCount: 2 },
+    ]);
+    expect(marked?.draft).toEqual({ text: "hi", updatedAt: 5, source: "agent", note: "context", attachmentCount: 2 });
+    expect(untouched).toBe(other);
   });
 });
 

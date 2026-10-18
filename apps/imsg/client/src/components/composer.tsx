@@ -41,6 +41,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatAddress } from "@shared/address";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { onFillComposer, type SuggestionAttribution } from "@/lib/composer-fill";
+import type { GenericId } from "convex/values";
 import type { Contact, Message, Participant } from "@shared/types";
 import type { PendingEdit } from "@/lib/pending-edits";
 import { runCommand } from "@/lib/convex-commands";
@@ -95,6 +96,8 @@ interface ComposerProps {
 }
 
 interface PendingAttachment extends PendingAttachmentAsset {
+  /** Present when an agent drafted this attachment; it is already stored and sends by reference. */
+  storageId?: GenericId<"_storage">;
   /** Present when this pending item is a contact card, sent via the server. */
   contact?: Contact;
   /** A voice memo whose send failed, staged so the take is not lost; it resends as a voice memo. */
@@ -628,7 +631,7 @@ export function Composer({
       return;
     }
     onSent(await uploadAndSendAttachment(chatGuid, {
-      uri: att.uri, filename: att.name, mimeType: att.mime,
+      ...(att.storageId ? { storageId: att.storageId } : { uri: att.uri }), filename: att.name, mimeType: att.mime,
       caption, isAudioMessage: att.voice === true,
     }));
   };
@@ -646,9 +649,21 @@ export function Composer({
     [replacePending],
   );
 
+  // A drafted attachment stages once per conversation visit, so removing or sending it sticks.
+  const stagedDraftAttachments = useRef(new Set<string>());
+  useEffect(() => { stagedDraftAttachments.current = new Set(); }, [chatGuid]);
+  useEffect(() => {
+    const fresh = (draftSync.draft?.attachments ?? []).filter((a) => a.url && !stagedDraftAttachments.current.has(a.storageId));
+    for (const a of fresh) stagedDraftAttachments.current.add(a.storageId);
+    stage(fresh.map((a): PendingAttachment => ({
+      uri: a.url ?? "", name: a.filename, mime: a.mimeType, isImage: a.mimeType.startsWith("image/"), cleanup: null, storageId: a.storageId,
+    })));
+  }, [draftSync.draft?.attachments, stage]);
+
   const removePending = (index: number): void => {
     const removed = pendingRef.current[index];
     if (removed) cleanupPendingAttachment(removed);
+    if (removed?.storageId) draftSync.removeAttachment(removed.storageId);
     const next = pendingRef.current.filter((_, itemIndex) => itemIndex !== index);
     replacePending(next);
   };
@@ -1247,6 +1262,12 @@ ${url}` : url;
           setContactPickerOpen(false);
         }}
       />
+      {draftSync.draft?.note && !editing && (
+        <View testID="draft-note" style={[styles.banner, { backgroundColor: theme.backgroundElement }]}>
+          <Ionicons name="sparkles" size={13} color={theme.turn} />
+          <Text style={[styles.bannerText, { color: theme.textSecondary }]}>{draftSync.draft.note}</Text>
+        </View>
+      )}
       {replyTo && !editing && (
         <View style={[styles.banner, { backgroundColor: theme.backgroundElement }]}>
           <Text numberOfLines={1} style={[styles.bannerText, { color: theme.textSecondary }]}>

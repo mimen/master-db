@@ -97,6 +97,8 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
       return chat.flags.unresponded;
     case "waiting":
       return chat.flags.waiting;
+    case "drafts":
+      return chat.draft !== undefined;
     case "settled":
       return isSettled(chat);
   }
@@ -139,6 +141,7 @@ export function settleLeavesLens(action: SettleAction, state: StateFilter): bool
   switch (state) {
     case "all":
     case "unread":
+    case "drafts":
       return false;
     case "unresponded":
     case "waiting":
@@ -148,7 +151,7 @@ export function settleLeavesLens(action: SettleAction, state: StateFilter): bool
   }
 }
 
-const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "settled"];
+const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "drafts", "settled"];
 
 export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCounts {
   return Object.fromEntries(

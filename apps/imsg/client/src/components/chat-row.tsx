@@ -20,6 +20,7 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
+import { draftPreview } from "@/lib/inbox-model";
 import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
 import { SWIPE_THRESHOLD } from "@/lib/row-swipe";
@@ -118,7 +119,8 @@ function ChatRowInner({
   const settleAction = settleActionFor(chat);
   const settleOffered = settleAction !== "none";
   const settleLabel = settleAction === "unsettle" ? "Un-settle" : "Settle";
-  const snippet = last
+  const draft = chat.draft ? draftPreview(chat.draft) : null;
+  const snippet = draft ? `${draft.label}: ${draft.body}` : last
     ? `${last.isFromMe ? "You: " : chat.isGroup && last.senderName ? `${last.senderName.split(" ")[0]}: ` : ""}${
         last.text || (last.hasAttachments ? "Attachment" : "")
       }`
@@ -238,7 +240,15 @@ function ChatRowInner({
             numberOfLines={2}
             style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
           >
-            {snippet}
+            {draft ? (
+              <>
+                <Text style={{ color: theme.turn, fontWeight: "600" }}>
+                  {chat.draft?.source === "agent" ? <Ionicons name="sparkles" size={compact ? 11 : 13} color={theme.turn} /> : null}
+                  {chat.draft?.source === "agent" ? " " : ""}{draft.label}
+                </Text>
+                {draft.body ? ` ${draft.body}` : ""}
+              </>
+            ) : snippet}
           </Text>
           {compact && actionsVisible ? (
             <Pressable

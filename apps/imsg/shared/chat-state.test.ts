@@ -441,6 +441,14 @@ describe("computeCounts", () => {
     expect(counts.unresponded).toBe(1);
     expect(counts.waiting).toBe(1);
     expect(counts.settled).toBe(1); // only "c", which carries no triage flag
+    expect(counts.drafts).toBe(0);
+  });
+
+  test("Drafts counts conversations with a draft and never drops a row on settle", () => {
+    const drafted = makeChat({ guid: "d", draft: { source: "agent", text: "hi", attachmentCount: 0, updatedAt: 1 } });
+    expect(computeCounts([drafted, makeChat({ guid: "e" })], "all").drafts).toBe(1);
+    expect(matchesFilters(drafted, "drafts", "all")).toBe(true);
+    expect(settleLeavesLens("settle", "drafts")).toBe(false);
   });
 
   test("counts a settled conversation with no last message as neither settled nor waiting", () => {

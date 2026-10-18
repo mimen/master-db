@@ -29,13 +29,14 @@ export function resetInboxFilters(): InboxFilters {
 }
 
 /** The tab row. Settled is reached through "Also include", not a tab. */
-export type Lens = "unresponded" | "unread" | "waiting" | "all";
+export type Lens = "unresponded" | "unread" | "waiting" | "all" | "drafts";
 
 export const LENSES: readonly { value: Lens; label: string; count: "turn" | "plain" | null }[] = [
   { value: "unresponded", label: "Needs reply", count: "turn" },
   { value: "unread", label: "Unread", count: "plain" },
   { value: "waiting", label: "Waiting", count: null },
   { value: "all", label: "All", count: null },
+  { value: "drafts", label: "Drafts", count: null },
 ];
 
 export function lensOf(state: StateFilter): Lens | null {
@@ -81,6 +82,7 @@ const LENS_TITLES: Record<StateFilter, string> = {
   unread: "Unread",
   unresponded: "Needs reply",
   waiting: "Waiting",
+  drafts: "Drafts",
   settled: "Settled",
 };
 
@@ -359,7 +361,13 @@ export function deriveInboxModel(
   refine?: RefineContext,
 ): InboxModel {
   const now = refine?.now ?? Date.now();
-  const rows = groupByAge(filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine), now, refine?.refinements.oldestFirst);
+  const filtered = filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine);
+  const oldestFirst = refine?.refinements.oldestFirst;
+  // Drafts read as one queue of prepared replies, ordered by when the draft was written, not by message age.
+  const rows = filters.state === "drafts" && !searchQuery.trim()
+    ? [...filtered].sort((a, b) => (oldestFirst ? -1 : 1) * ((b.draft?.updatedAt ?? 0) - (a.draft?.updatedAt ?? 0)))
+      .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }))
+    : groupByAge(filtered, now, oldestFirst);
   const navigationEntries = rows.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
   return { listChats: navigationEntries.map((e) => e.chat), rows, navigationEntries };
 }
@@ -383,4 +391,11 @@ export function checkboxCounts(
     settled: include("settled"),
     scheduled: include("scheduled"),
   };
+}
+
+/** A row's draft line: who prepared it, then the agent's note (its first line) or the draft text. */
+export function draftPreview(draft: NonNullable<ChatSummary["draft"]>): { label: string; body: string } {
+  const fallback = draft.text || (draft.attachmentCount > 0 ? "Attachment" : "");
+  if (draft.source === "user") return { label: "Draft", body: fallback };
+  return { label: "Agent draft", body: draft.note?.split("\n").find((line) => line.trim())?.trim() || fallback };
 }

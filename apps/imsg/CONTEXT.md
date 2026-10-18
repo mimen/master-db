@@ -60,3 +60,14 @@ added to Apple Contacts within the last Identity Sync cycle, before it reached
 Convex. `contactsAvailable` (and its Unknown-lens fail-open behavior) depends only
 on ContactBook's own availability — the mirror being down/unconfigured degrades
 silently to today's ContactBook-only resolution, never to "everything unknown."
+
+**Draft**:
+What sits unsent in a conversation's composer, one per conversation (`comma_drafts`). Either the
+user's own text (`source: "user"`, or absent on older rows) or a reply an agent prepared
+(`source: "agent"`) with an optional private `note` shown above the composer and stored
+`attachments`. The Drafts tab lists every conversation with one, newest first. Opening one loads its
+text and attachments into the composer; sending through the normal path or clearing deletes it.
+Agents write them with `bun scripts/prepare-draft.ts --to <address|chatGuid|conversationId> --text …
+[--note …] [--attach <path> …] [--force]`, which calls the internal `comma/drafts:prepareDraft`.
+`comma/drafts:listAgentDrafts` and `comma/drafts:deleteAgentDraft` list and remove agent drafts.
+_Avoid_: suggestion (the reply shelf), scheduled message

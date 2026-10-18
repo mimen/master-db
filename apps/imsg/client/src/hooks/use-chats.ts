@@ -1,8 +1,8 @@
-import { useConvexConnectionState, usePaginatedQuery } from "convex/react";
+import { useConvexConnectionState, usePaginatedQuery, useQuery } from "convex/react";
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Platform } from "react-native";
 import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
-import { conversationToChat } from "@/lib/convex-adapters";
+import { conversationToChat, withDrafts } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { publishKnownConversations } from "@/lib/convex-commands";
 import { usePendingFlags } from "@/lib/pending-flags";
@@ -51,7 +51,10 @@ export function useConvexChats(): { chats: ChatSummary[] | null } {
  * that mounted another held the thread's first query behind a second-long list page.
  */
 export function ChatDirectoryProvider({ children }: { readonly children: ReactNode }) {
-  const { chats } = useConvexChats();
+  const { chats: conversations } = useConvexChats();
+  // A separate subscription: draft writes as the user types must not re-run listConversations pages.
+  const drafts = useQuery(commaApi.listDrafts, {});
+  const chats = useMemo(() => (conversations && drafts ? withDrafts(conversations, drafts) : conversations), [conversations, drafts]);
   const shown = usePendingFlags(chats);
   useEffect(() => publishKnownConversations(chats ?? []), [chats]);
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
@@ -81,7 +84,7 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
     guids: new Set(),
   });
   const chats = useMemo(() => {
-    if (state === "all" || state === "unresponded" || state === "waiting" || !freezeMembership) {
+    if (state === "all" || state === "unresponded" || state === "waiting" || state === "drafts" || !freezeMembership) {
       frozenRef.current = { state, guids: new Set() };
       return all.filter((c) => c.guid === held || matchesFilters(c, state, type));
     }

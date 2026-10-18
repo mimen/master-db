@@ -1,4 +1,5 @@
 import { useQuery } from "convex/react";
+import type { GenericId } from "convex/values";
 import { useEffect, useRef } from "react";
 import { commaApi, commaDraftsApi } from "@/lib/convex-api";
 import { useConversationRef } from "@/hooks/use-chat-directory";
@@ -61,6 +62,12 @@ export function useComposerDraft(chatGuid: string, editing: boolean, onRemote: (
   }, [chatGuid, enabled]);
 
   return {
+    /** The conversation's stored draft, for its note and attachments. The text flows through onRemote. */
+    draft: remote && remote.conversationId === conversationId ? remote : null,
+    removeAttachment: (storageId: GenericId<"_storage">) => {
+      if (conversationId) void convexClient.mutation(commaDraftsApi.removeDraftAttachment, { conversationId, storageId })
+        .catch(() => showToast("Couldn't remove the drafted attachment."));
+    },
     onFocus: () => { focused.current = true; sync.current?.focus(); },
     onBlur: () => { focused.current = false; void sync.current?.blur(); },
   };

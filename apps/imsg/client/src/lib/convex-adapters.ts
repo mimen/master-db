@@ -31,6 +31,18 @@ export function conversationToChat(
   };
 }
 
+type ConvexDraftListItem = FunctionReturnType<typeof commaApi.listDrafts>[number];
+
+/** Marks each conversation that has something in its composer, for the Drafts lens and its rows. */
+export function withDrafts(chats: ChatSummary[], drafts: readonly ConvexDraftListItem[]): ChatSummary[] {
+  if (drafts.length === 0) return chats;
+  const byConversation = new Map(drafts.map(({ conversationId, ...draft }) => [conversationId as string, draft]));
+  return chats.map((chat) => {
+    const draft = chat.conversationId ? byConversation.get(chat.conversationId) : undefined;
+    return draft ? { ...chat, draft } : chat;
+  });
+}
+
 function visibleAttachments(attachments: ConvexMessage["attachments"]): ConvexMessage["attachments"] {
   const shown = attachments.filter((a) => !a.hideAttachment);
   const groups = new Map<string, ConvexMessage["attachments"]>();

@@ -3,7 +3,11 @@ import type { Message } from "@shared/types";
 import { mediaApi } from "./media-api";
 import { runCommand, type CommandPayload } from "./convex-commands";
 
-type AttachmentSource = { uri: string; blob?: never } | { blob: Blob; uri?: never };
+/** A storageId is an attachment already stored and finalized, such as one an agent drafted. */
+type AttachmentSource =
+  | { uri: string; blob?: never; storageId?: never }
+  | { blob: Blob; uri?: never; storageId?: never }
+  | { storageId: GenericId<"_storage">; uri?: never; blob?: never };
 export type AttachmentUpload = AttachmentSource & { filename: string; mimeType: string; caption?: string; isAudioMessage: boolean };
 export interface AttachmentUploadDeps {
   generateUploadUrl(): Promise<string>;
@@ -14,7 +18,16 @@ export interface AttachmentUploadDeps {
 }
 
 export async function uploadAndSendAttachmentVia(deps: AttachmentUploadDeps, chatGuid: string, attachment: AttachmentUpload): Promise<Message> {
-  const source = attachment.blob ?? await deps.readUri(attachment.uri);
+  const storageId = attachment.storageId ?? await upload(deps, attachment);
+  const sent = await deps.send(chatGuid, {
+    kind: "sendAttachment", storageId, filename: attachment.filename, mimeType: attachment.mimeType,
+    ...(attachment.caption !== undefined ? { caption: attachment.caption } : {}), isAudioMessage: attachment.isAudioMessage,
+  });
+  return sent.message;
+}
+
+async function upload(deps: AttachmentUploadDeps, attachment: AttachmentUpload): Promise<GenericId<"_storage">> {
+  const source = attachment.blob ?? await deps.readUri(attachment.uri ?? "");
   const bytes = source instanceof ArrayBuffer ? source : source.slice(0, source.size, attachment.mimeType);
   const uploadUrl = await deps.generateUploadUrl();
   const response = await deps.fetch(uploadUrl, { method: "POST", headers: { "Content-Type": attachment.mimeType }, body: bytes });
@@ -23,11 +36,7 @@ export async function uploadAndSendAttachmentVia(deps: AttachmentUploadDeps, cha
   if (!result || typeof result !== "object" || !("storageId" in result) || typeof result.storageId !== "string") throw new Error("Upload did not return a storage ID");
   const storageId = result.storageId as GenericId<"_storage">;
   await deps.finalizeUpload({ storageId, filename: attachment.filename, mimeType: attachment.mimeType });
-  const sent = await deps.send(chatGuid, {
-    kind: "sendAttachment", storageId, filename: attachment.filename, mimeType: attachment.mimeType,
-    ...(attachment.caption !== undefined ? { caption: attachment.caption } : {}), isAudioMessage: attachment.isAudioMessage,
-  });
-  return sent.message;
+  return storageId;
 }
 
 export async function uploadAndSendAttachment(chatGuid: string, attachment: AttachmentUpload): Promise<Message> {
