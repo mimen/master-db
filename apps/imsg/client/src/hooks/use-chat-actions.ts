@@ -4,6 +4,7 @@ import type { ChatSummary } from "@shared/types";
 import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
 import { markChatRead, markChatUnread, pinChat } from "@/lib/chat-actions";
 import { openChatInfo } from "@/lib/chat-info";
+import { copyHandleAction } from "@/lib/copy-handle";
 
 interface ChatActions {
   openMenu: (chat: ChatSummary, anchor?: PopoverAnchor) => void;
@@ -24,6 +25,7 @@ export function useChatActions(detailsInPane: boolean): ChatActions {
       chat.flags.pinned
         ? { label: "Unpin", onPress: () => pinChat(chat, false) }
         : { label: "Pin", onPress: () => pinChat(chat, true) },
+      ...(!chat.isGroup && chat.participants[0] ? [copyHandleAction(chat.participants[0].address)] : []),
       {
         label: "Details",
         onPress: () => {

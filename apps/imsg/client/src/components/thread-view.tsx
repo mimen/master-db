@@ -21,6 +21,7 @@ import { hapticSelect } from "@/lib/haptics";
 import { usePeerTyping } from "@/lib/presence-api";
 import { createInboundReadObserver } from "@/lib/message-observers";
 import { useActionSheet } from "@/lib/action-sheet";
+import { copyHandleAction } from "@/lib/copy-handle";
 import { setForwardText } from "@/lib/forward";
 import { tempMessage } from "@/lib/local-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
@@ -448,6 +449,9 @@ export function ThreadView({
               },
             ]
           : []),
+        ...(isGroup && !mine && message.sender?.address
+          ? [copyHandleAction(message.sender.address, message.sender.name?.split(" ")[0])]
+          : []),
         // A persisted error code is often stale, so this sends a new copy instead of an in-bubble retry.
         ...(mine && message.text && message.error !== 0 && !message.pending && !message.failed
           ? [
@@ -514,7 +518,7 @@ export function ThreadView({
       ];
       if (actions.length > 0 || tapbacks) showSheet({ actions, tapbacks, anchor });
     },
-    [chatGuid, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
+    [chatGuid, isGroup, pend, privateApi, replaceTemp, scrollToLatest, showSheet, upsert],
   );
 
   const desk = headerChat !== null;

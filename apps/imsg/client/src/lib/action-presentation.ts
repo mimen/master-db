@@ -29,6 +29,8 @@ interface Preset {
 // Keyed by label prefix so the menu dresses today's thread-view labels with no caller change.
 const PRESETS: ReadonlyArray<readonly [prefix: string, preset: Preset]> = [
   ["Reply", { icon: "arrow-undo-outline", shortcut: "⌘R", block: 0 }],
+  // "Copy Maya's number" and the like: same icon, but ⌘C copies the message, not the handle.
+  ["Copy ", { icon: "copy-outline", block: 0 }],
   ["Copy", { icon: "copy-outline", shortcut: "⌘C", block: 0 }],
   ["Forward", { icon: "arrow-redo-outline", block: 0 }],
   ["Send again", { icon: "refresh", block: 0 }],

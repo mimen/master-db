@@ -7,6 +7,8 @@ import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { usePersonView } from "@/hooks/use-person-view";
 import { airtableRecordUrl } from "@/lib/airtable";
 import { useActionSheet } from "@/lib/action-sheet";
+import { copyHandleAction } from "@/lib/copy-handle";
+import { useWebContextMenu } from "@/lib/use-web-context-menu";
 import {
   conversationState,
   handleRows,
@@ -426,6 +428,8 @@ function HandleLine({ row, first, grouped, onMakePrimary }: {
   readonly onMakePrimary: () => void;
 }) {
   const colors = useTheme();
+  const showSheet = useActionSheet();
+  const menuRef = useWebContextMenu<View>((anchor) => showSheet({ title: row.display, anchor, actions: [copyHandleAction(row.value)] }));
   const service = (
     <View style={styles.svc}>
       <ServiceDot service={row.service} size={grouped ? 9 : 7} />
@@ -439,7 +443,7 @@ function HandleLine({ row, first, grouped, onMakePrimary }: {
   ) : null;
   if (grouped) {
     return (
-      <View testID="handle-row" style={[styles.hrowGrouped, rowDivider(colors, first)]}>
+      <View ref={menuRef} testID="handle-row" style={[styles.hrowGrouped, rowDivider(colors, first)]}>
         <View style={styles.flex}>
           <Text style={[styles.kGrouped, { color: colors.textSecondary }]}>{row.label}</Text>
           <Text style={[styles.vGrouped, { color: colors.text }]}>{row.display}</Text>
@@ -450,7 +454,7 @@ function HandleLine({ row, first, grouped, onMakePrimary }: {
     );
   }
   return (
-    <View testID="handle-row" style={[styles.hrow, rowDivider(colors, first)]}>
+    <View ref={menuRef} testID="handle-row" style={[styles.hrow, rowDivider(colors, first)]}>
       <Text style={[styles.k, { color: colors.textSecondary }]}>{row.label}</Text>
       <Text numberOfLines={1} style={[styles.v, { color: colors.text }]}>{row.display}</Text>
       {service}

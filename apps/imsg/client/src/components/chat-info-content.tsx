@@ -16,7 +16,9 @@ import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { api, attachmentThumbnailUrl } from "@/lib/api";
-import { useActionSheet } from "@/lib/action-sheet";
+import { ContextMenuArea } from "@/components/context-menu-area";
+import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
+import { copyHandleAction } from "@/lib/copy-handle";
 import { pinChat, writeFlags } from "@/lib/chat-actions";
 import { contactService } from "@/lib/contact-service";
 import { useAddChatTag } from "@/lib/identity";
@@ -151,10 +153,12 @@ export function ChatInfoContent({
     });
   };
 
-  const removeParticipant = (p: Contact) => {
+  const memberMenu = (p: Contact, anchor?: PopoverAnchor) => {
     showSheet({
       title: p.name,
+      anchor,
       actions: [
+        copyHandleAction(p.address),
         {
           label: "Remove from conversation",
           destructive: true,
@@ -329,8 +333,8 @@ export function ChatInfoContent({
             {info.participants.map((p) => {
               const service = contactService(p.address, chats);
               return (
+                <ContextMenuArea key={p.address} onMenu={(anchor) => showSheet({ title: p.name, anchor, actions: [copyHandleAction(p.address)] })}>
                 <Pressable
-                  key={p.address}
                   accessibilityRole="button"
                   accessibilityLabel={p.name ?? formatAddress(p.address)}
                   onPress={() => openPerson(p)}
@@ -340,6 +344,7 @@ export function ChatInfoContent({
                   <Text numberOfLines={1} style={[styles.handleValue, { color: theme.text, fontSize: type.body }]}>{formatAddress(p.address)}</Text>
                   {service && <ServiceLabel service={service} size={type.caption} />}
                 </Pressable>
+                </ContextMenuArea>
               );
             })}
           </Section>
@@ -353,19 +358,20 @@ export function ChatInfoContent({
             {info.participants.map((p) => {
               const service = contactService(p.address, chats);
               return (
+                <ContextMenuArea key={p.address} onMenu={(anchor) => memberMenu(p, anchor)}>
                 <ListRow
-                  key={p.address}
                   paddingHorizontal={8}
                   titleWeight="400"
                   hoverFill={theme.rowHover}
                   style={styles.memberRow}
                   onPress={() => openPerson(p)}
-                  onLongPress={() => removeParticipant(p)}
+                  onLongPress={() => memberMenu(p)}
                   leading={<PersonAvatar address={p.address} name={p.name ?? formatAddress(p.address)} size={36} />}
                   title={p.name ?? formatAddress(p.address)}
                   subtitle={p.name ? formatAddress(p.address) : undefined}
                   trailing={service ? <ServiceLabel service={service} size={type.caption} /> : undefined}
                 />
+                </ContextMenuArea>
               );
             })}
             {addingParticipant && (

@@ -41,3 +41,9 @@ test("labels outside the table render bare", () => {
     { label: "❤️  You", icon: undefined, shortcut: undefined, note: undefined, separatorBefore: false },
   ]);
 });
+
+test("a handle copy keeps the copy icon but not the message's ⌘C", () => {
+  const [handle, message] = presentActions([{ label: "Copy Maya's number" }, { label: "Copy" }]);
+  expect(handle).toMatchObject({ icon: "copy-outline", shortcut: undefined });
+  expect(message).toMatchObject({ icon: "copy-outline", shortcut: "⌘C" });
+});
