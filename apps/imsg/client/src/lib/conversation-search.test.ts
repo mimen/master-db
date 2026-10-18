@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   conversationSearchReducer,
+  hasEveryWord,
   INITIAL_CONVERSATION_SEARCH,
   usableDeepMatches,
   type ConversationSearchState,
@@ -78,5 +79,14 @@ describe("conversationSearchReducer", () => {
     expect(usableDeepMatches(pending).size).toBe(0);
     expect(usableDeepMatches(failed).size).toBe(0);
     expect(failed.deepSearch).toEqual({ kind: "failed", query: "q1" });
+  });
+});
+
+describe("hasEveryWord", () => {
+  test("a message body matches only when it holds every word of the query, in any order", () => {
+    expect(hasEveryWord("Is Nick coming?", "nick chase")).toBe(false);
+    expect(hasEveryWord("Chase said no", "nick chase")).toBe(false);
+    expect(hasEveryWord("chase and Nick are in", "nick chase")).toBe(true);
+    expect(hasEveryWord("Nick Chase is here", "  Nick   Chase ")).toBe(true);
   });
 });

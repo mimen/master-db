@@ -4,6 +4,7 @@ import type { TextInput } from "react-native";
 import { api } from "@/lib/api";
 import {
   conversationSearchReducer,
+  hasEveryWord,
   INITIAL_CONVERSATION_SEARCH,
   normalizeSearchQuery,
   usableDeepMatches,
@@ -71,7 +72,7 @@ export function useConversationSearch(args: {
         .then((messages) => {
           // The reducer drops results tagged with a query that is no longer
           // current, so a late landing can never pollute a newer view.
-          dispatch({ type: "deep-ready", query: q, guids: new Set(messages.map((m) => m.chatGuid)) });
+          dispatch({ type: "deep-ready", query: q, guids: new Set(messages.filter((m) => hasEveryWord(m.text, q)).map((m) => m.chatGuid)) });
         })
         .catch(() => dispatch({ type: "deep-failed", query: q }));
     }, 250);

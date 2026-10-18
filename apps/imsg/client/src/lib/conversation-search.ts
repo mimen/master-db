@@ -38,6 +38,15 @@ export function normalizeSearchQuery(query: string): string {
   return query.trim();
 }
 
+/**
+ * The full-text index matches a message on ANY word of the query, so "nick chase" found every
+ * message saying "Nick" or "chase". A deep match must contain every word.
+ */
+export function hasEveryWord(text: string, query: string): boolean {
+  const haystack = text.toLowerCase();
+  return query.toLowerCase().split(/\s+/).filter(Boolean).every((word) => haystack.includes(word));
+}
+
 export function conversationSearchReducer(
   state: ConversationSearchState,
   action: ConversationSearchAction,
