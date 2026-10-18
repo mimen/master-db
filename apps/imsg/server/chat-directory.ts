@@ -469,24 +469,28 @@ export class ChatDirectory {
     if (!result.ok) return { ok: false, error: result.error, status: 502 };
     const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
     const lastGuid = chat?.lastMessage?.guid;
-    if (!lastGuid) return { ok: false, error: "chat has no last message", status: 404 };
-    if (expectedLatestMessageGuid && expectedLatestMessageGuid !== lastGuid && !(await this.nothingNewSince(guid, expectedLatestMessageGuid))) {
+    // The dismissal is recorded on the message the user settled, once it checks out as the newest:
+    // Convex compares it with the newest message it shows, and BlueBubbles' chat list can name a
+    // tapback or, for old chats, a stale earlier message as the last one.
+    const anchor = expectedLatestMessageGuid ?? lastGuid;
+    if (!anchor) return { ok: false, error: "chat has no last message", status: 404 };
+    if (anchor !== lastGuid && !(await this.nothingNewSince(guid, anchor))) {
       return { ok: false, error: "latest message changed", status: 409 };
     }
     for (const sibling of this.siblingGuids(guid)) {
-      if (kind === "unresponded") this.db.dismissUnresponded(sibling, lastGuid);
-      else this.db.dismissWaiting(sibling, lastGuid);
+      if (kind === "unresponded") this.db.dismissUnresponded(sibling, anchor);
+      else this.db.dismissWaiting(sibling, anchor);
     }
     const canonical = this.canonicalGuid(guid);
-    this.db.recordTriageClear(canonical, lastGuid, "dismiss", this.now());
+    this.db.recordTriageClear(canonical, anchor, "dismiss", this.now());
     this.db.clearOpenTriageItem(canonical);
     this.invalidate();
     return { ok: true };
   }
 
   /**
-   * The client anchors a settle on the newest message it shows, which skips tapbacks and unsent
-   * messages, while BlueBubbles' last message counts them. True when only those sit after the anchor.
+   * Reads the chat's newest messages directly, which /chat/query's last message is not reliable
+   * about. True when only tapbacks or unsent messages sit after the anchor.
    */
   private async nothingNewSince(guid: string, anchor: string): Promise<boolean> {
     const pages = await Promise.all(this.siblingGuids(guid).map((sibling) => this.bb.chatMessages(sibling, { limit: 25 })));

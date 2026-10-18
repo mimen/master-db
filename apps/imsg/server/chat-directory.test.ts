@@ -956,13 +956,26 @@ describe("ChatDirectory.findByAddress", () => {
 describe("Triage Desk state", () => {
   test("a tapback after the message the user saw does not block the settle; a new message does", async () => {
     const tapback: BBMessage = { ...inbound("t1", 1500, "Loved “hey from alice”"), associatedMessageGuid: "p:0/a1", associatedMessageType: "love" };
-    const { bb, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a1", 1000, "hey from alice"), tapback] }]);
+    const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a1", 1000, "hey from alice"), tapback] }]);
     expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toEqual({ ok: true });
-    const result = await directory.summaries();
-    expect(result.ok && find(result.chats, CHAT_A).flags.unresponded).toBe(false);
+    // Convex compares the dismissal with the newest message it shows, which skips the tapback.
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
 
     bb.receiveMessage(CHAT_A, "are you there?", { guid: "a2", handle: "+15550001111" });
     expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toMatchObject({ ok: false, status: 409 });
+  });
+
+  test("a stale last message in BlueBubbles' chat list does not misfile the settle", async () => {
+    const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a0", 900, "older"), inbound("a1", 1000, "newest")] }]);
+    // Old chats come back from /chat/query naming an earlier message as their last one.
+    const query = bb.queryChats.bind(bb);
+    spyOn(bb, "queryChats").mockImplementation(async (limit, offset) => {
+      const page = await query(limit, offset);
+      return page.ok ? { ok: true, value: page.value.map((chat) => ({ ...chat, lastMessage: inbound("a0", 900, "older") })) } : page;
+    });
+    directory.invalidate();
+    expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toEqual({ ok: true });
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
   });
 
   test("settles a conversation past BlueBubbles' first page of 1,000 chats", async () => {
