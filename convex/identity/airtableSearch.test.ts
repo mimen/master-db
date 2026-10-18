@@ -51,7 +51,7 @@ test("search authorizes first and returns every canonical contact alongside prim
       { humanId: id, channel: "email", value: "display@example.test", primary: true },
       { humanId: id, channel: "sms", value: "+16195550198", primary: false },
       { humanId: id, channel: "sms", value: "+16195550199", primary: true },
-    ] });
+    ], resolutions: [{ humanId: id, canonicalHumanId: id }] });
   });
   vi.stubGlobal("fetch", fetcher);
   const t = convexTest(schema, modules);

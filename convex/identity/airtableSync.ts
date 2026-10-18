@@ -1,7 +1,9 @@
-import { internal } from "../_generated/api";
-import { internalAction } from "../_generated/server";
+import { makeFunctionReference } from "convex/server";
+import { v } from "convex/values";
 
-import { contactValues, readCanonicalContacts, type CanonicalContact } from "./canonicalContacts";
+import { internalAction, type ActionCtx } from "../_generated/server";
+
+import { contactValues, readCanonicalSnapshot, type CanonicalContact, type CanonicalSnapshot } from "./canonicalContacts";
 
 /**
  * Pulls AUF's Airtable "Humans" table into the identity graph, Convex-native
@@ -70,15 +72,22 @@ export function toContactCard(r: AirtableRecord, contacts: CanonicalContact[]): 
   };
 }
 
-export const syncAirtableHumans = internalAction({
-  args: {},
-  handler: async (ctx) => {
+type SnapshotCard = { humanId: string; canonicalHumanId: string | null; display_name?: string; first_name?: string; last_name?: string; phones: string[]; emails: string[] };
+const sourceState = makeFunctionReference<"query", Record<string, never>, { humanIds: string[]; legacyCount: number }>("identity/canonicalReconciliation:sourceState");
+const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[] }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
+const removeLegacy = makeFunctionReference<"mutation", Record<string, never>, number>("identity/canonicalReconciliation:removeLegacy");
+
+async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "apply") {
+    const state = await ctx.runQuery(sourceState, {});
+    if (migration === "none" && state.legacyCount)
+      throw new Error("Legacy Airtable identities require reviewed canonical cleanup before hourly sync");
     const apiKey = process.env.AIRTABLE_API_KEY;
     if (!apiKey) {
       throw new Error("AIRTABLE_API_KEY not configured on this Convex deployment");
     }
 
-    const contacts: ContactCard[] = [];
+    const records = new Map<string, AirtableRecord>();
+    const snapshot: CanonicalSnapshot = { contacts: [], resolutions: [] };
 
     let offset: string | undefined;
     let pages = 0;
@@ -95,38 +104,51 @@ export const syncAirtableHumans = internalAction({
         throw new Error(`Airtable Humans fetch failed: ${res.status}`);
       }
       const body = (await res.json()) as AirtableListResponse;
-      const canonical = await readCanonicalContacts(body.records.map((row) => row.id));
-      for (const r of body.records) {
-        const card = toContactCard(r, canonical);
-        if (card) contacts.push(card);
-      }
+      const canonical = await readCanonicalSnapshot(body.records.map((row) => row.id));
+      snapshot.contacts.push(...canonical.contacts);
+      snapshot.resolutions.push(...canonical.resolutions);
+      for (const record of body.records) records.set(record.id, record);
       offset = body.offset;
       pages++;
     } while (offset && pages < 100); // safety cap, Humans is nowhere near 10k records
 
     if (offset) throw new Error("Airtable Humans exceeded the complete-read page limit");
 
-    // link_only: Airtable should enrich people Milad already has (via
-    // exact phone/email match against existing Apple/Beeper identities),
-    // never seed the graph with everyone in a growing community database
-    // he's never actually talked to. Records with no existing match are
-    // skipped here — they're still reachable on demand via
-    // identity/airtableSearch.ts's live "Add Contact from Airtable" search.
-    let peopleReused = 0;
-    let identitiesWritten = 0;
-    let skippedNoMatch = 0;
-    for (let i = 0; i < contacts.length; i += 50) {
-      const slice = contacts.slice(i, i + 50);
-      const result = await ctx.runMutation(internal.identity.ingestContacts.ingestContactsBatch, {
-        source: "airtable_human",
-        contacts: slice,
-        link_only: true,
-      });
-      peopleReused += result.peopleReused;
-      identitiesWritten += result.identitiesWritten;
-      skippedNoMatch += result.skippedNoMatch;
+    const missing = state.humanIds.filter((id) => !records.has(id));
+    for (let i = 0; i < missing.length; i += 100) {
+      const page = await readCanonicalSnapshot(missing.slice(i, i + 100));
+      snapshot.contacts.push(...page.contacts);
+      snapshot.resolutions.push(...page.resolutions);
     }
+    const cards: SnapshotCard[] = snapshot.resolutions.map(({ humanId, canonicalHumanId }) => {
+      // A complete Airtable enumeration proves whether the canonical Human still exists.
+      const record = canonicalHumanId ? records.get(canonicalHumanId) : undefined;
+      const contactCard = record ? toContactCard({ ...record, id: humanId }, snapshot.contacts) : null;
+      return { humanId, canonicalHumanId: record ? canonicalHumanId : null,
+        display_name: record?.fields.Name, first_name: record?.fields["First Name"], last_name: record?.fields["Last Name"],
+        phones: contactCard?.phones ?? [],
+        emails: contactCard?.emails ?? [] };
+    });
+    if (migration === "preview") return { recordsSeen: records.size, legacyWouldRemove: state.legacyCount, humansToReconcile: cards.length };
+    const result = { recordsSeen: records.size, peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0, legacyRemoved: 0 };
+    // Resolve old links before survivor ingestion, independent of Airtable page ordering.
+    cards.sort((a, b) => Number(b.humanId !== b.canonicalHumanId) - Number(a.humanId !== a.canonicalHumanId));
+    for (let i = 0; i < cards.length; i += 50) {
+      const batch = await ctx.runMutation(reconcileBatch, { cards: cards.slice(i, i + 50) });
+      result.peopleReused += batch.peopleReused;
+      result.identitiesWritten += batch.identitiesWritten;
+      result.identitiesRemoved += batch.identitiesRemoved;
+      result.skippedNoMatch += batch.skippedNoMatch;
+      result.linksUpdated += batch.linksUpdated;
+    }
+    if (migration === "apply") result.legacyRemoved = await ctx.runMutation(removeLegacy, {});
+    return result;
+}
 
-    return { recordsSeen: contacts.length, peopleReused, identitiesWritten, skippedNoMatch };
-  },
+export const syncAirtableHumans = internalAction({ args: {}, handler: (ctx) => synchronize(ctx, "none") });
+
+/** Separate operator-reviewed existing-data cleanup; preview is the default and does not write. */
+export const reconcileLegacyAirtableHumans = internalAction({
+  args: { apply: v.optional(v.boolean()) },
+  handler: (ctx, { apply }) => synchronize(ctx, apply ? "apply" : "preview"),
 });

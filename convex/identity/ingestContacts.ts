@@ -22,9 +22,9 @@ import { normalizeEmail, normalizePhone } from "./normalize";
  * that happens to normalize the same.
  *
  * Idempotent: re-ingesting the same card updates its identities in place
- * (dedupe key is (value, source)) rather than duplicating rows. No
- * source_record_id/provenance tracking in this phase — a card that drops a
- * phone number leaves the stale identity in place; cleanup is deferred.
+ * (dedupe key is (value, source)) rather than duplicating rows.
+ * Airtable identities additionally key on their Human source_contact_id.
+ * canonicalReconciliation removes withdrawn Airtable handles after complete reads.
  */
 
 // No img_url: raw contact-photo bytes can alone exceed Convex's 1MiB
@@ -100,6 +100,12 @@ export async function ingestOneCard(
   // doesn't spawn a duplicate person if its cross-source match logic below
   // would otherwise find nothing.
   let personId: Id<"people"> | null = null;
+  if (source === "airtable_human" && card.airtable_record_id) {
+    const linked = await ctx.db.query("people").withIndex("by_airtable_human", (q) => q.eq("airtable_human_id", card.airtable_record_id)).collect();
+    personId = linked.find((person) => !person.merged_into)?._id ?? null;
+  }
+  const sameSourceCard = (row: Doc<"identities">): boolean => row.source === source &&
+    (source !== "airtable_human" || row.source_contact_id === card.source_contact_id);
   const rowsByValue = new Map<string, Doc<"identities">[]>();
   for (const h of handles) {
     const rows = await ctx.db
@@ -107,8 +113,8 @@ export async function ingestOneCard(
       .withIndex("by_value", (q) => q.eq("value", h.value))
       .collect();
     rowsByValue.set(h.value, rows);
-    const sameSource = rows.find((r) => r.source === source);
-    if (sameSource?.person_id) {
+    const sameSource = rows.find(sameSourceCard);
+    if (!personId && sameSource?.person_id) {
       const p = await ctx.db.get(sameSource.person_id);
       if (p && !p.merged_into) {
         personId = sameSource.person_id;
@@ -163,7 +169,7 @@ export async function ingestOneCard(
         .withIndex("by_value", (q) => q.eq("value", h.value))
         .collect());
     rowsByValue.delete(h.value);
-    const existing = rows.find((r) => r.source === source);
+    const existing = rows.find(sameSourceCard);
     if (existing) {
       // A handle on two cards (a typo'd or shared address) is written by each sync of
       // either card. A different card replaces the name as one unit, so a row never mixes

@@ -51,7 +51,7 @@ describe("canonical Airtable sync", () => {
         return Response.json({ records: [record] });
       }
       expect(JSON.parse(init!.body as string)).toEqual({ humanIds: [id] });
-      return Response.json({ contacts });
+      return Response.json({ contacts, resolutions: [{ humanId: id, canonicalHumanId: id }] });
     });
     vi.stubGlobal("fetch", fetcher);
     const t = convexTest(schema, modules);
@@ -69,7 +69,7 @@ describe("canonical Airtable sync", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
       if (String(input).includes("api.airtable.com"))
         return Response.json({ records: [record], ...(pages++ === 0 ? { offset: "next" } : {}) });
-      return pages === 1 ? Response.json({ contacts }) : new Response("private", { status: 503 });
+      return pages === 1 ? Response.json({ contacts, resolutions: [{ humanId: id, canonicalHumanId: id }] }) : new Response("private", { status: 503 });
     }));
     const t = convexTest(schema, modules);
     await t.run((ctx) => ingestOneCard(ctx, "apple_contact", { emails: [], phones: ["+16195550103"] }, false));

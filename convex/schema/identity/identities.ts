@@ -35,10 +35,8 @@ export const identities = defineTable({
   nickname: v.optional(v.string()),
   phone_number: v.optional(v.string()), // if the network exposed one separately
   img_url: v.optional(v.string()),
-  // The source record's own id (e.g. Apple's "UUID:ABPerson" contact id).
-  // Retained so a future Apple write-back (Phase 3b) can target the right
-  // source record — Airtable's equivalent is already stored as
-  // people.airtable_human_id. Unset for sources with no addressable record id.
+  // Apple contact UUID or canonical Airtable Human ID. Airtable reconciliation
+  // uses this ownership key to withdraw only the originating Human's identities.
   source_contact_id: v.optional(v.string()),
 
   message_count: v.number(),
@@ -52,6 +50,7 @@ export const identities = defineTable({
   created_at: v.string(),
   updated_at: v.string(),
 })
+  .index("by_source_contact", ["source", "source_contact_id"])
   .index("by_value", ["value"])
   .index("by_normalized", ["normalized"])
   .index("by_person", ["person_id"])

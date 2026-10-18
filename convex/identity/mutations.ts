@@ -202,6 +202,7 @@ export const addPersonFromAirtable = mutation({
         phones: phones ?? (phone ? [phone] : []),
         emails: emails ?? (email ? [email] : []),
         airtable_record_id: record_id,
+        source_contact_id: record_id,
       },
       false,
     );

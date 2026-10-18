@@ -7,7 +7,7 @@ test("canonical fetch fails closed on errors, malformed rows, and unrequested Hu
   vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
   const id = "recAAAAAAAAAAAAAA";
   for (const response of [new Response("private upstream body", { status: 401 }), Response.json({ contacts: [{}] }),
-    Response.json({ contacts: [{ humanId: "recBBBBBBBBBBBBBB", value: "other@example.test", channel: "email", primary: false }] })]) {
+    Response.json({ contacts: [{ humanId: "recBBBBBBBBBBBBBB", value: "other@example.test", channel: "email", primary: false }], resolutions: [{ humanId: id, canonicalHumanId: id }] })]) {
     vi.stubGlobal("fetch", vi.fn(async () => response));
     await expect(readCanonicalContacts([id])).rejects.toThrow();
   }

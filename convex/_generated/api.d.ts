@@ -4959,7 +4959,44 @@ export declare const internal: {
       >;
     };
     airtableSync: {
+      reconcileLegacyAirtableHumans: FunctionReference<
+        "action",
+        "internal",
+        { apply?: boolean },
+        any
+      >;
       syncAirtableHumans: FunctionReference<"action", "internal", {}, any>;
+    };
+    canonicalReconciliation: {
+      reconcileBatch: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          cards: Array<{
+            canonicalHumanId: string | null;
+            display_name?: string;
+            emails: Array<string>;
+            first_name?: string;
+            humanId: string;
+            last_name?: string;
+            phones: Array<string>;
+          }>;
+        },
+        {
+          identitiesRemoved: number;
+          identitiesWritten: number;
+          linksUpdated: number;
+          peopleReused: number;
+          skippedNoMatch: number;
+        }
+      >;
+      removeLegacy: FunctionReference<"mutation", "internal", {}, number>;
+      sourceState: FunctionReference<
+        "query",
+        "internal",
+        {},
+        { humanIds: Array<string>; legacyCount: number }
+      >;
     };
     ingestContacts: {
       ingestContactsBatch: FunctionReference<

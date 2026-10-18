@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { action } from "../_generated/server";
 
-import { contactValues, readCanonicalContacts } from "./canonicalContacts";
+import { canonicalDisplay, contactValues, readCanonicalSnapshot } from "./canonicalContacts";
 import { requireIdentityAccess } from "./key";
 
 /**
@@ -67,18 +67,19 @@ export const searchAirtableHumans = action({
     if (!res.ok) throw new Error(`Airtable search failed: ${res.status}`);
 
     const body = (await res.json()) as { records: AirtableRecord[] };
-    const canonical = await readCanonicalContacts(body.records.map((row) => row.id));
+    const snapshot = await readCanonicalSnapshot(body.records.map((row) => row.id));
+    const canonical = snapshot.contacts;
     return body.records
       .map((r) => ({
-        record_id: r.id,
+        record_id: snapshot.resolutions.find((row) => row.humanId === r.id)?.canonicalHumanId ?? r.id,
         display_name: r.fields.Name ?? "",
         first_name: r.fields["First Name"],
         last_name: r.fields["Last Name"],
-        phone: r.fields["Primary Phone"] || contactValues(canonical, r.id, "sms")[0],
-        email: r.fields["Primary Email"] || contactValues(canonical, r.id, "email")[0],
+        phone: canonicalDisplay(r.fields["Primary Phone"], contactValues(canonical, r.id, "sms"), "sms"),
+        email: canonicalDisplay(r.fields["Primary Email"], contactValues(canonical, r.id, "email"), "email"),
         phones: contactValues(canonical, r.id, "sms"),
         emails: contactValues(canonical, r.id, "email"),
       }))
-      .filter((r) => r.display_name && (r.phone || r.email));
+      .filter((r, index, rows) => r.display_name && (r.phones.length || r.emails.length) && rows.findIndex((other) => other.record_id === r.record_id) === index);
   },
 });
