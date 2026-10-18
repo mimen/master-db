@@ -6,7 +6,6 @@ import { useSpring } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { CardShadow } from "@/constants/theme";
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export interface OverlayShellProps {
   visible: boolean;
@@ -99,22 +98,26 @@ export function OverlayShell({
       animationType={animated ? "none" : animationType}
       onRequestClose={onClose}
     >
-      <AnimatedPressable
-        accessibilityRole={backdropAccessibilityRole ?? "button"}
-        accessibilityLabel={backdropAccessibilityLabel ?? "Close"}
-        onPress={onClose}
-        pointerEvents={visible ? "auto" : "none"}
+      {/* The dismiss target is a sibling under the panel, never its ancestor: react-native-web runs a
+          Space or Enter typed in a field as a press of the nearest enclosing button, which closed
+          every dialog with a text field on the key after a space. */}
+      <Animated.View
+        pointerEvents={visible ? "box-none" : "none"}
         style={[styles.backdrop, { backgroundColor: backdropColor ?? theme.backdrop }, backdropStyle, animated && scrim]}
       >
-        <AnimatedPressable
-          accessible={false}
+        <Pressable
+          accessibilityRole={backdropAccessibilityRole ?? "button"}
+          accessibilityLabel={backdropAccessibilityLabel ?? "Close"}
+          onPress={onClose}
+          style={StyleSheet.absoluteFill}
+        />
+        <Animated.View
           {...(accessibilityLabel ? { role: "dialog", "aria-modal": true, "aria-label": accessibilityLabel } as object : null)}
-          onPress={() => undefined}
           style={[card && [styles.card, { backgroundColor: theme.background }], cardStyle, animated && panel]}
         >
           {children}
-        </AnimatedPressable>
-      </AnimatedPressable>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 }
