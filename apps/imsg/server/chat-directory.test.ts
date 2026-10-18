@@ -726,7 +726,7 @@ describe("ChatDirectory reactive fast path", () => {
     const { directory } = await setup();
     await directory.summaries();
 
-    const dismissed = await directory.dismiss(CHAT_A, "unresponded");
+    const dismissed = await directory.settle(CHAT_A);
     expect(dismissed.ok).toBe(true);
 
     const result = await directory.summaries();
@@ -744,7 +744,7 @@ describe("ChatDirectory reactive fast path", () => {
     if (!result.ok) return;
     expect(find(result.chats, CHAT_A).flags.unresponded).toBe(true);
 
-    const dismissed = await directory.dismiss(CHAT_A, "unresponded");
+    const dismissed = await directory.settle(CHAT_A);
     expect(dismissed.ok).toBe(true);
 
     result = await directory.summaries();
@@ -771,7 +771,7 @@ describe("ChatDirectory reactive fast path", () => {
 
     directory.setPinned(CHAT_A, true);
     await directory.markRead(CHAT_A);
-    await directory.dismiss(CHAT_A, "unresponded");
+    await directory.settle(CHAT_A);
     expect(changed).toBe(3);
   });
 });
@@ -957,12 +957,12 @@ describe("Triage Desk state", () => {
   test("a tapback after the message the user saw does not block the settle; a new message does", async () => {
     const tapback: BBMessage = { ...inbound("t1", 1500, "Loved “hey from alice”"), associatedMessageGuid: "p:0/a1", associatedMessageType: "love" };
     const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a1", 1000, "hey from alice"), tapback] }]);
-    expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toEqual({ ok: true });
+    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
     // Convex compares the dismissal with the newest message it shows, which skips the tapback.
     expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
 
     bb.receiveMessage(CHAT_A, "are you there?", { guid: "a2", handle: "+15550001111" });
-    expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toMatchObject({ ok: false, status: 409 });
+    expect(await directory.settle(CHAT_A, "a1")).toMatchObject({ ok: false, status: 409 });
   });
 
   test("a stale last message in BlueBubbles' chat list does not misfile the settle", async () => {
@@ -974,7 +974,42 @@ describe("Triage Desk state", () => {
       return page.ok ? { ok: true, value: page.value.map((chat) => ({ ...chat, lastMessage: inbound("a0", 900, "older") })) } : page;
     });
     directory.invalidate();
-    expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toEqual({ ok: true });
+    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
+  });
+
+  test("a stale last message of mine in the chat list still settles Needs reply, and un-settle undoes it", async () => {
+    const mine: BBMessage = { guid: "m0", text: "earlier, mine", dateCreated: 900, isFromMe: true };
+    const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [mine, inbound("a1", 1000, "newest, theirs")] }]);
+    const query = bb.queryChats.bind(bb);
+    spyOn(bb, "queryChats").mockImplementation(async (limit, offset) => {
+      const page = await query(limit, offset);
+      return page.ok ? { ok: true, value: page.value.map((chat) => ({ ...chat, lastMessage: mine })) } : page;
+    });
+    directory.invalidate();
+    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
+    expect(db.getAll().get(CHAT_A)?.dismissedWaitingGuid ?? null).toBeNull();
+    expect(db.overlaySnapshot().triageEvents.map((e) => e.messageGuid)).toContain("a1");
+
+    await directory.undismiss(CHAT_A, "unresponded");
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid ?? null).toBeNull();
+    expect(db.overlaySnapshot().triageEvents.map((e) => e.messageGuid)).not.toContain("a1");
+  });
+
+  test("the chats Convex groups into the conversation count, even ones the Mini keeps apart", async () => {
+    const other = "SMS;-;+15550002222";
+    const { db, directory } = await setup([twoChatSeed()[0]!, { guid: other, participants: [{ address: "+15550002222" }], messages: [inbound("s1", 5000, "newest, over SMS", "+15550002222")] }]);
+    expect(await directory.settle(CHAT_A, "s1")).toMatchObject({ ok: false, status: 409 });
+    expect(await directory.settle(CHAT_A, "s1", [CHAT_A, other])).toEqual({ ok: true });
+    expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("s1");
+    expect(db.getAll().get(other)?.dismissedUnrespondedGuid).toBe("s1");
+  });
+
+  test("any number of tapbacks after the message the user saw still settles", async () => {
+    const tapbacks: BBMessage[] = Array.from({ length: 120 }, (_, i) => ({ ...inbound(`t${i}`, 2000 + i, "Loved “hi”"), associatedMessageGuid: "p:0/a1", associatedMessageType: "love" }));
+    const { db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [inbound("a1", 1000, "hi"), ...tapbacks] }]);
+    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
     expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
   });
 
@@ -984,16 +1019,16 @@ describe("Triage Desk state", () => {
       return { guid: `iMessage;-;${address}`, participants: [{ address }], messages: [inbound(`f${i}`, 10_000 + i, "hi", address)] };
     });
     const { directory } = await setup([...filler, twoChatSeed()[0]!]);
-    expect(await directory.dismiss(CHAT_A, "unresponded", "a1")).toEqual({ ok: true });
+    expect(await directory.settle(CHAT_A, "a1")).toEqual({ ok: true });
   });
 
   test("rejects stale Done anchors and supports durable undismiss", async () => {
     const { db, directory } = await setup();
-    const stale = await directory.dismiss(CHAT_A, "unresponded", "old-guid");
+    const stale = await directory.settle(CHAT_A, "old-guid");
     expect(stale).toMatchObject({ ok: false, status: 409 });
     expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid ?? null).toBeNull();
 
-    expect((await directory.dismiss(CHAT_A, "unresponded", "a1")).ok).toBe(true);
+    expect((await directory.settle(CHAT_A, "a1")).ok).toBe(true);
     let result = await directory.summaries();
     if (!result.ok) return;
     expect(find(result.chats, CHAT_A).flags.unresponded).toBe(false);
@@ -1006,7 +1041,7 @@ describe("Triage Desk state", () => {
   test("records dismiss and outbound clear exactly once", async () => {
     const { db, directory, contacts } = await setup(twoChatSeed(), () => 50_000);
     await directory.summaries();
-    await directory.dismiss(CHAT_A, "unresponded", "a1");
+    await directory.settle(CHAT_A, "a1");
     await directory.summaries();
     const outbound = mapMessage(
       { guid: "reply-b", text: "reply", dateCreated: 40_000, isFromMe: true },

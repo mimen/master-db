@@ -42,12 +42,8 @@ export const messagingHandlers = {
     return { kind: "mute", ok: true };
   } },
   settle: { execute: async (ctx, payload) => {
-    const chatGuid = requireChat(ctx);
-    const directory = ctx.commands.directory;
-    const summaries = await directory.summaries();
-    if (!summaries.ok) throw new Error(summaries.error);
-    const chat = summaries.chats.find((item) => item.guid === directory.canonicalGuid(chatGuid));
-    accept(await directory.dismiss(chatGuid, chat?.lastMessage?.isFromMe ? "waiting" : "unresponded", payload.messageGuid));
+    const conversationChats = [...ctx.writer.conversationIds].filter(([, id]) => id === ctx.row.conversationId).map(([chat]) => chat);
+    accept(await ctx.commands.directory.settle(requireChat(ctx), payload.messageGuid, conversationChats));
     return { kind: "settle", ok: true };
   } },
   unsettle: { execute: async (ctx) => {

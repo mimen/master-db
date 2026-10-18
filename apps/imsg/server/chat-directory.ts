@@ -460,58 +460,76 @@ export class ChatDirectory {
     this.invalidate();
   }
 
-  async dismiss(
+  /**
+   * Settles a conversation on the message the user saw. Never trusts BlueBubbles' /chat/query
+   * last message, which can be a tapback or, for old chats, a stale earlier message: it reads the
+   * chat's own newest messages and finds the newest one that is not a tapback or unsent, the same
+   * message Convex shows as last and compares the dismissal with. Whose message that is decides
+   * Needs reply or Waiting. With an anchor, a real message after it rejects the settle.
+   */
+  async settle(
     guid: string,
-    kind: "unresponded" | "waiting",
-    expectedLatestMessageGuid?: string,
+    anchor?: string,
+    /** Every chat Convex groups into this conversation; read and written alongside the Mini's own siblings. */
+    conversationChats: readonly string[] = [],
   ): Promise<{ ok: boolean; error?: string; status?: 404 | 409 | 502 }> {
-    const result = await this.summaries();
-    if (!result.ok) return { ok: false, error: result.error, status: 502 };
-    const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
-    const lastGuid = chat?.lastMessage?.guid;
-    // The dismissal is recorded on the message the user settled, once it checks out as the newest:
-    // Convex compares it with the newest message it shows, and BlueBubbles' chat list can name a
-    // tapback or, for old chats, a stale earlier message as the last one.
-    const anchor = expectedLatestMessageGuid ?? lastGuid;
-    if (!anchor) return { ok: false, error: "chat has no last message", status: 404 };
-    if (anchor !== lastGuid && !(await this.nothingNewSince(guid, anchor))) {
-      return { ok: false, error: "latest message changed", status: 409 };
-    }
-    for (const sibling of this.siblingGuids(guid)) {
-      if (kind === "unresponded") this.db.dismissUnresponded(sibling, anchor);
-      else this.db.dismissWaiting(sibling, anchor);
+    await this.ensureSiblings();
+    const chats = [...new Set([...this.siblingGuids(guid), ...conversationChats])];
+    const newest = await this.newestRealMessage(chats);
+    if (!newest.ok) return { ok: false, error: newest.error, status: 502 };
+    const last = newest.message;
+    if (!last) return { ok: false, error: "chat has no last message", status: 404 };
+    if (anchor && anchor !== last.guid) return { ok: false, error: "latest message changed", status: 409 };
+    const kind = last.isFromMe ? "waiting" : "unresponded";
+    for (const sibling of chats) {
+      if (kind === "unresponded") this.db.dismissUnresponded(sibling, last.guid);
+      else this.db.dismissWaiting(sibling, last.guid);
     }
     const canonical = this.canonicalGuid(guid);
-    this.db.recordTriageClear(canonical, anchor, "dismiss", this.now());
+    this.db.recordTriageClear(canonical, last.guid, "dismiss", this.now());
     this.db.clearOpenTriageItem(canonical);
     this.invalidate();
     return { ok: true };
   }
 
-  /**
-   * Reads the chat's newest messages directly, which /chat/query's last message is not reliable
-   * about. True when only tapbacks or unsent messages sit after the anchor.
-   */
-  private async nothingNewSince(guid: string, anchor: string): Promise<boolean> {
-    const pages = await Promise.all(this.siblingGuids(guid).map((sibling) => this.bb.chatMessages(sibling, { limit: 25 })));
-    const newestFirst = pages.flatMap((page) => (page.ok ? page.value : []))
-      .toSorted((a, b) => (b.dateCreated ?? 0) - (a.dateCreated ?? 0));
-    for (const message of newestFirst) {
-      if (message.guid === anchor) return true;
-      if (!isQuietMessage(message)) return false;
+  /** The newest message across service siblings that is not a tapback or unsent, paging back as far as it takes. */
+  private async newestRealMessage(chats: readonly string[]): Promise<{ ok: true; message: BBMessage | null } | { ok: false; error: string }> {
+    const PAGE = 50;
+    const cursors = new Map(chats.map((chat) => [chat, undefined as number | undefined]));
+    const seen = new Set<string>();
+    while (cursors.size > 0) {
+      const pages = await Promise.all([...cursors].map(async ([sibling, before]) => [sibling, await this.bb.chatMessages(sibling, { limit: PAGE, ...(before ? { before } : {}) })] as const));
+      const batch: BBMessage[] = [];
+      for (const [sibling, page] of pages) {
+        if (!page.ok) return { ok: false, error: page.error };
+        const fresh = page.value.filter((m) => !seen.has(m.guid));
+        for (const m of fresh) seen.add(m.guid);
+        batch.push(...fresh);
+        const oldest = page.value.at(-1)?.dateCreated;
+        // A short page, or one with nothing new (an inclusive `before`), is the end of this sibling.
+        if (page.value.length < PAGE || fresh.length === 0 || oldest === undefined) cursors.delete(sibling);
+        else cursors.set(sibling, oldest);
+      }
+      // Newest first across siblings; within this window any real message beats every older page.
+      const real = batch.filter((m) => !isQuietMessage(m)).toSorted((a, b) => (b.dateCreated ?? 0) - (a.dateCreated ?? 0))[0];
+      if (real) return { ok: true, message: real };
     }
-    return false;
+    return { ok: true, message: null };
   }
 
   async undismiss(
     guid: string,
     kind: "unresponded" | "waiting",
   ): Promise<{ ok: boolean; error?: string; status?: 502 }> {
-    const result = await this.summaries();
-    if (!result.ok) return { ok: false, error: result.error, status: 502 };
-    const chat = result.chats.find((item) => item.guid === this.canonicalGuid(guid));
-    for (const sibling of this.siblingGuids(guid)) this.db.clearDismissal(sibling, kind);
-    if (chat?.lastMessage) this.db.deleteTriageClear(this.canonicalGuid(guid), chat.lastMessage.guid);
+    await this.ensureSiblings();
+    const canonical = this.canonicalGuid(guid);
+    const state = this.db.getAll();
+    for (const sibling of this.siblingGuids(guid)) {
+      // Drop the clear recorded for whatever this dismissal pointed at, not a guess at the last message.
+      const dismissed = kind === "unresponded" ? state.get(sibling)?.dismissedUnrespondedGuid : state.get(sibling)?.dismissedWaitingGuid;
+      if (dismissed) this.db.deleteTriageClear(canonical, dismissed);
+      this.db.clearDismissal(sibling, kind);
+    }
     this.invalidate();
     return { ok: true };
   }

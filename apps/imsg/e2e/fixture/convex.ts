@@ -204,11 +204,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       case "markUnread": directory.markUnread(chatGuid); break;
       case "pin": directory.setPinned(chatGuid, payload.value); break;
       case "mute": db.setMutedUnresponded(chatGuid, payload.value); directory.invalidate(); break;
-      case "settle": {
-        const chat = (await conversations()).find((row) => row._id === chatGuid);
-        accept(await directory.dismiss(chatGuid, chat?.lastMessage?.isFromMe ? "waiting" : "unresponded", payload.messageGuid));
-        break;
-      }
+      case "settle": accept(await directory.settle(chatGuid, payload.messageGuid)); break;
       case "unsettle":
         accept(await directory.undismiss(chatGuid, "unresponded"));
         accept(await directory.undismiss(chatGuid, "waiting"));
