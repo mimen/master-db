@@ -146,6 +146,42 @@ test("touched cleanup refuses to retire the last copy of any normalized identifi
   await expect(t.mutation(remove, { plan })).rejects.toThrow("newly lose an identifier");
   expect(await state()).toEqual(before);
 });
+test("a batch cannot lose a key when an unrelated duplicate drifts after replay", async () => {
+  const { t, state, before } = await fixture({ apple: true });
+  const apple = before.identities.find(row => row.source === "apple_contact")!;
+  const duplicateId = await t.run(async ctx => {
+    const { _id, _creationTime, ...copy } = apple;
+    void _id; void _creationTime;
+    return ctx.db.insert("identities", { ...copy, value: "new@example.test", normalized: "new@example.test" });
+  });
+  const initial = await state();
+  const scope = { scope: "touched" as const, touchedPersonIds: initial.people.filter(p => p.airtable_human_id).map(p => p._id),
+    allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
+    initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" };
+  const cards = [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: [] }];
+  const expectedPre = (await semanticStateProof(initial, scope, cards)).fingerprint;
+  let expectedPost = "";
+  const rollback = new Error("prediction rollback");
+  try {
+    await t.run(async ctx => {
+      await (reconcileBatch as unknown as { _handler: (context: typeof ctx, args: { cards: typeof cards }) => Promise<unknown> })
+        ._handler(ctx, { cards });
+      expectedPost = (await semanticStateProof({ people: await ctx.db.query("people").collect(),
+        identities: await ctx.db.query("identities").collect() }, scope, cards)).fingerprint;
+      throw rollback;
+    });
+  } catch (error) { if (error !== rollback) throw error; }
+  expect(expectedPost).not.toBe("");
+  await t.run(ctx => ctx.db.patch(duplicateId, { value: "moved@example.test", normalized: "moved@example.test" }));
+  const drifted = await state();
+  expect((await semanticStateProof(drifted, scope, cards)).fingerprint).toBe(expectedPre);
+  const batch = makeFunctionReference<"mutation", { cards: typeof cards; semanticGuard: typeof scope;
+    expectedStateFingerprint: string; expectedPostwriteFingerprint: string }>("identity/canonicalReconciliation:reconcileBatch");
+  await expect(t.mutation(batch, { cards, semanticGuard: scope, expectedStateFingerprint: expectedPre,
+    expectedPostwriteFingerprint: expectedPost })).rejects.toThrow("batch would newly lose an identifier");
+  expect(await state()).toEqual(drifted);
+});
 test("remote-capture drift stops before the first replacement mutation", async () => {
   const { t, state, plan, before, predicted } = await fixture({ apple: true });
   const scope = { allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
@@ -247,6 +283,14 @@ test("allowed legacy owner movement cannot commit a different canonical replacem
     await ctx.db.patch(_id, { airtable_human_id: undefined, primary_handle: undefined });
     const secondId = await ctx.db.insert("people", { ...copy, airtable_human_id: undefined,
       primary_handle: undefined, normalized_emails: [], normalized_phones: [], identity_count: 0 });
+    const legacy = await ctx.db.get(legacyId);
+    if (!legacy) throw new Error("Missing legacy fixture");
+    const { _id: legacyRowId, _creationTime: legacyCreated, ...legacyData } = legacy;
+    void legacyRowId; void legacyCreated;
+    await ctx.db.insert("identities", { ...legacyData, source: "apple_contact", source_contact_id: "synthetic",
+      person_id: _id, value: "OLD@example.test", normalized: "old@example.test" });
+    await ctx.db.insert("identities", { ...legacyData, source: "apple_contact", source_contact_id: "synthetic-2",
+      person_id: _id, value: "NEW@example.test", normalized: "new@example.test" });
     await recomputePersonAggregates(ctx, _id);
     await recomputePersonAggregates(ctx, secondId);
     return { firstId: _id, secondId };

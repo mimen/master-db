@@ -40,10 +40,13 @@ export const reconcileBatch = internalMutation({
         throw new Error("Paired SHA-256 cleanup batch proofs required");
     }
     if (await protectedDriftCount((id) => ctx.db.get(id))) throw new Error("Protected legacy identity drift");
+    let identifiersBefore: Set<string> | undefined;
     if (expectedStateFingerprint !== undefined) {
       const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
       const actual = guard ? (await semanticStateProof(state, guard, cards)).fingerprint : (await stateProof(state)).fingerprint;
       if (actual !== expectedStateFingerprint) throw new Error("Cleanup batch pre-write state drift");
+      if (guard?.scope === "touched")
+        identifiersBefore = new Set(state.identities.map(row => `${row.kind}:${row.normalized}`));
     }
     const result = { peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0 };
     const affected = new Set<Id<"people">>();
@@ -78,6 +81,11 @@ export const reconcileBatch = internalMutation({
     for (const personId of affected) await recomputePersonAggregates(ctx, personId);
     if (expectedPostwriteFingerprint !== undefined) {
       const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+      if (identifiersBefore) {
+        const identifiersAfter = new Set(state.identities.map(row => `${row.kind}:${row.normalized}`));
+        if ([...identifiersBefore].some(key => !identifiersAfter.has(key)))
+          throw new Error("Cleanup batch would newly lose an identifier");
+      }
       for (const id of new Set([...affected, ...validated])) {
         const person = state.people.find(row => row._id === id);
         if (person && personAggregatePatch(person, state.identities.filter(row => row.person_id === id)))
