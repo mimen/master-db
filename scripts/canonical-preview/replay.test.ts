@@ -22,6 +22,26 @@ const key = (r: Doc<"identities">) => `${r.kind}:${r.normalized}`;
 const sorted = (xs: string[]) => [...new Set(xs)].sort();
 const save = (path: string, value: unknown) => { writeFileSync(path, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" }); chmodSync(path, 0o600); };
 
+function originalizeState(state: State, originalPeople: Map<Id<"people">, Doc<"people">>,
+  originalIdentities: Map<Id<"identities">, Doc<"identities">>): State {
+  const personId = (id: Id<"people">) => originalPeople.get(id)?._id ?? id;
+  return {
+    people: state.people.map(person => {
+      const original = originalPeople.get(person._id);
+      return { ...person, _id: original?._id ?? person._id,
+        _creationTime: original?._creationTime ?? person._creationTime,
+        merged_into: person.merged_into ? personId(person.merged_into) : undefined,
+        not_duplicate_of: person.not_duplicate_of?.map(personId) };
+    }),
+    identities: state.identities.map(row => {
+      const original = originalIdentities.get(row._id);
+      return { ...row, _id: original?._id ?? row._id,
+        _creationTime: original?._creationTime ?? row._creationTime,
+        person_id: row.person_id ? personId(row.person_id) : undefined };
+    }),
+  };
+}
+
 async function stampGuard(scope: SemanticGuard, initial: State, replaced: State, after: State): Promise<SemanticGuard> {
   const first = await semanticStateProof(initial, scope);
   const second = await semanticStateProof(replaced, scope);
@@ -68,8 +88,12 @@ async function replay(input: Input) {
     }
     throw new Error("NETWORK DENIED: offline replay only");
   });
-  const originalPeople = new Map([...ids].map(([a,b]) => [b,a]));
-  const originalIdentities = new Map([...oldIdentityIds].map(([a,b]) => [b,a]));
+  const peopleByOriginalId = new Map(input.people.map(row => [row._id, row]));
+  const identitiesByOriginalId = new Map(input.identities.map(row => [row._id, row]));
+  const originalPeople = new Map([...ids].map(([original, generated]) =>
+    [generated, peopleByOriginalId.get(original)!]));
+  const originalIdentities = new Map([...oldIdentityIds].map(([original, generated]) =>
+    [generated, identitiesByOriginalId.get(original)!]));
   const originalProtected = new Map(protectedLegacy);
   const protectedGenerated = new Set(
     [...oldIdentityIds].filter(([original]) => originalProtected.has(original)).map(([, generated]) => generated),
@@ -79,7 +103,7 @@ async function replay(input: Input) {
   if (semanticScope?.scope === "touched") {
     semanticScope.touchedPersonIds = before.people.filter(person => person.airtable_human_id ||
       before.identities.some(row => row.source === "airtable_human" && row.person_id === person._id))
-      .map(person => originalPeople.get(person._id) as Id<"people">);
+      .map(person => originalPeople.get(person._id)!._id);
   }
   const generatedScope = semanticScope ? {
     ...semanticScope,
@@ -90,13 +114,7 @@ async function replay(input: Input) {
     derivedPeople: semanticScope.derivedPeople.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown derived person ID"); })()),
     touchedPersonIds: semanticScope.touchedPersonIds?.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown touched person ID"); })()),
   } : undefined;
-  const originalize = (state: State): State => ({
-    people: state.people.map(p => ({ ...p, _id: originalPeople.get(p._id) as Id<"people">,
-      merged_into: p.merged_into ? originalPeople.get(p.merged_into) as Id<"people"> : undefined,
-      not_duplicate_of: p.not_duplicate_of?.map(id => originalPeople.get(id) as Id<"people">) })),
-    identities: state.identities.map(r => ({ ...r, _id: (originalIdentities.get(r._id) ?? r._id) as Id<"identities">,
-      person_id: r.person_id ? originalPeople.get(r.person_id) as Id<"people"> : undefined })),
-  });
+  const originalize = (state: State): State => originalizeState(state, originalPeople, originalIdentities);
   let result: unknown; let reviewedPlan: CleanupPlan | undefined;
   const batchMutationDurationsMs: number[] = [];
   try {
@@ -121,6 +139,9 @@ async function replay(input: Input) {
       const generatedFingerprint = generatedScope ? (await semanticStateProof(prewrite, generatedScope, cards)).fingerprint : (await stateProof(prewrite)).fingerprint;
       const reviewedPrewrite = originalize(prewrite);
       const reviewedFingerprint = semanticScope ? (await semanticStateProof(reviewedPrewrite, semanticScope, cards)).fingerprint : (await stateProof(reviewedPrewrite)).fingerprint;
+      if (i === 0 && semanticScope && reviewedFingerprint !==
+          (await semanticStateProof({ people: input.people, identities: input.identities }, semanticScope, cards)).fingerprint)
+        throw new Error("Offline first-batch proof differs from captured input");
       batchPrewriteFingerprints.push(generatedFingerprint);
       reviewedBatchPrewriteFingerprints.push(reviewedFingerprint);
       const batchStart = performance.now();
@@ -289,6 +310,52 @@ test("offline operator stamps an optional bounded semantic guard", async () => {
     expect(result.reviewedPlan?.semanticGuard).toMatchObject({ allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [] });
     expect(result.summary.legacyRemoved).toBe(1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("offline ID transport restores captured creation times and first-batch candidate order", async () => {
+  const oldA = "old-person-a" as Id<"people">, oldB = "old-person-b" as Id<"people">;
+  const newA = "seed-person-a" as Id<"people">, newB = "seed-person-b" as Id<"people">;
+  const oldFirst = "old-identity-first" as Id<"identities">, oldSecond = "old-identity-second" as Id<"identities">;
+  const newFirst = "seed-identity-first" as Id<"identities">, newSecond = "seed-identity-second" as Id<"identities">;
+  const personA = { _id: oldA, _creationTime: 400, airtable_human_id: undefined } as Doc<"people">;
+  const personB = { _id: oldB, _creationTime: 500, airtable_human_id: undefined } as Doc<"people">;
+  const first = { _id: oldFirst, _creationTime: 100, person_id: oldA, source: "manual",
+    kind: "phone", value: "2125550100", normalized: "+12125550100" } as Doc<"identities">;
+  const second = { _id: oldSecond, _creationTime: 200, person_id: oldB, source: "apple_contact",
+    kind: "phone", value: "(212) 555-0100", normalized: "+12125550100" } as Doc<"identities">;
+  const captured: State = { people: [personA, personB], identities: [first, second] };
+  const seeded: State = {
+    people: [{ ...personA, _id: newA, _creationTime: 1000 }, { ...personB, _id: newB, _creationTime: 1001 }],
+    identities: [{ ...first, _id: newFirst, _creationTime: 2000, person_id: newA },
+      { ...second, _id: newSecond, _creationTime: 2001, person_id: newB }],
+  };
+  const people = new Map([[newA, personA], [newB, personB]]);
+  const identities = new Map([[newFirst, first], [newSecond, second]]);
+  const mappedOnly = originalizeState(seeded,
+    new Map([[newA, { ...personA, _creationTime: 1000 }], [newB, { ...personB, _creationTime: 1001 }]]),
+    new Map([[newFirst, { ...first, _creationTime: 2000 }], [newSecond, { ...second, _creationTime: 2001 }]]));
+  const restored = originalizeState(seeded, people, identities);
+  const guard: SemanticGuard = { scope: "touched", touchedPersonIds: [], allowAppleUpdatedAt: false,
+    legacyOwnerRows: [], derivedPeople: [], initialFingerprint: "", beforeRemovalFingerprint: "",
+    afterRemovalFingerprint: "", legacyFingerprint: "" };
+  const cards = [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: ["+12125550100"], emails: [] }];
+  const proof = async (state: State) => (await semanticStateProof(state, guard, cards)).fingerprint;
+  const capturedProof = await proof(captured);
+  expect(await proof(mappedOnly)).not.toBe(capturedProof);
+  expect(await proof(restored)).toBe(capturedProof);
+  expect(restored.people.map(row => row._creationTime)).toEqual([400, 500]);
+  expect(restored.identities.map(row => row._creationTime)).toEqual([100, 200]);
+  const secondOwnerChanged = { ...restored, identities: restored.identities.map(row =>
+    row._id === oldSecond ? { ...row, person_id: oldA } : row) };
+  const firstOwnerChanged = { ...restored, identities: restored.identities.map(row =>
+    row._id === oldFirst ? { ...row, person_id: oldB } : row) };
+  expect(await proof(secondOwnerChanged)).toBe(capturedProof);
+  expect(await proof(firstOwnerChanged)).not.toBe(capturedProof);
+  const newCanonical = { ...first, _id: "seed-canonical" as Id<"identities">,
+    _creationTime: 3000, source: "airtable_human", source_contact_id: cards[0].humanId } as Doc<"identities">;
+  const withNew = originalizeState({ ...seeded, identities: [...seeded.identities, newCanonical] }, people, identities);
+  expect(withNew.identities.at(-1)).toMatchObject({ _id: newCanonical._id, _creationTime: 3000 });
 });
 
 test.skipIf(!process.env.CANONICAL_PREVIEW_INPUT)("restricted offline snapshot replay", async () => {
