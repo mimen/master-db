@@ -1,6 +1,6 @@
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
@@ -8,6 +8,7 @@ import { normalizeModules } from "../test-utils.vitest";
 import { toContactCard } from "./airtableSync";
 import type { CanonicalContact } from "./canonicalContacts";
 import { ingestOneCard } from "./ingestContacts";
+import { protectedLegacy } from "./protectedLegacy";
 
 const id = "recAAAAAAAAAAAAAA";
 const record = { id, fields: { Name: "Synthetic Contact", "First Name": "Synthetic" } };
@@ -16,7 +17,13 @@ const contacts: CanonicalContact[] = [
   ...Array.from({ length: 4 }, (_, i) => ({ humanId: id, channel: "sms" as const, value: `+1619555010${i}`, primary: i === 0 })),
 ];
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+const approvedProtected = new Map(protectedLegacy);
+beforeEach(() => protectedLegacy.clear());
+afterEach(() => {
+  protectedLegacy.clear();
+  for (const [id, fingerprint] of approvedProtected) protectedLegacy.set(id, fingerprint);
+  vi.unstubAllGlobals(); vi.unstubAllEnvs();
+});
 
 describe("canonical Airtable sync", () => {
   test("retains all contacts beyond the old slot count, deduplicates, and isolates Humans", () => {

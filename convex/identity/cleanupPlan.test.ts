@@ -43,6 +43,8 @@ test("exact cleanup emits receipts and deletes only reviewed legacy rows", async
 test("a reviewed protected legacy row survives cleanup and is accepted by the hourly guard", async () => {
   const { t, state, plan } = await fixture();
   const entry = plan.legacy[0];
+  const saved = new Map(protectedLegacy);
+  protectedLegacy.clear();
   protectedLegacy.set(entry.id, entry.fingerprint);
   try {
     plan.protectedLegacy = [entry];
@@ -53,12 +55,31 @@ test("a reviewed protected legacy row survives cleanup and is accepted by the ho
     expect((await state()).identities.some((r) => r._id === entry.id)).toBe(true);
     const source = makeFunctionReference<"query", Record<string, never>, { legacyCount: number }>("identity/canonicalReconciliation:sourceState");
     expect((await t.query(source, {})).legacyCount).toBe(0);
+    const batch = makeFunctionReference<"mutation", { cards: { humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }[] }>("identity/canonicalReconciliation:reconcileBatch");
+    const cards = [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA", phones: [], emails: [] }];
+    await t.run((ctx) => ctx.db.patch(entry.id, { source_contact_id: "recAAAAAAAAAAAAAA" }));
+    expect((await t.query(source, {})).legacyCount).toBe(1);
+    let unchanged = await state();
+    await expect(t.mutation(batch, { cards })).rejects.toThrow("Protected legacy identity drift");
+    expect(await state()).toEqual(unchanged);
+    await t.run((ctx) => ctx.db.patch(entry.id, { source_contact_id: undefined, source: "manual" }));
+    expect((await t.query(source, {})).legacyCount).toBe(1);
+    unchanged = await state();
+    await expect(t.mutation(batch, { cards })).rejects.toThrow("Protected legacy identity drift");
+    expect(await state()).toEqual(unchanged);
+    await t.run((ctx) => ctx.db.patch(entry.id, { source: "airtable_human" }));
     await t.run((ctx) => ctx.db.patch(entry.id, { display_name: "Changed" }));
     expect((await t.query(source, {})).legacyCount).toBe(1);
     await t.run((ctx) => ingestOneCard(ctx, "airtable_human", { emails: ["unreviewed@example.test"], phones: [] }, false));
     expect((await t.query(source, {})).legacyCount).toBe(2);
+    await t.run((ctx) => ctx.db.delete(entry.id));
+    expect((await t.query(source, {})).legacyCount).toBe(2);
+    const unchangedAfterLoss = await state();
+    await expect(t.mutation(batch, { cards })).rejects.toThrow("Protected legacy identity drift");
+    expect(await state()).toEqual(unchangedAfterLoss);
   } finally {
-    protectedLegacy.delete(entry.id);
+    protectedLegacy.clear();
+    for (const [id, fingerprint] of saved) protectedLegacy.set(id, fingerprint);
   }
 });
 

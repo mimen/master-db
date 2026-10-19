@@ -1,4 +1,6 @@
-import type { CleanupPlan } from "./cleanupPlan";
+import type { Doc, Id } from "../_generated/dataModel";
+
+import { legacyRowFingerprint, type CleanupPlan } from "./cleanupPlan";
 
 /** Seven source-owned handles whose AUF removal intent is unproven. */
 export const protectedLegacy = new Map<string, string>([
@@ -32,4 +34,14 @@ export function assertProtectedPlan(plan: CleanupPlan): void {
 
 export function unreviewedLegacyCount(legacy: Legacy): number {
   return legacy.filter(({ id, fingerprint }) => protectedLegacy.get(id) !== fingerprint).length;
+}
+
+/** Read all approved IDs directly, including rows moved outside the Airtable index. */
+export async function protectedDriftCount(get: (id: Id<"identities">) => Promise<Doc<"identities"> | null>): Promise<number> {
+  const drift = await Promise.all([...protectedLegacy].map(async ([id, expected]) => {
+    const row = await get(id as Id<"identities">);
+    return !row || row.source !== "airtable_human" || Boolean(row.source_contact_id) ||
+      await legacyRowFingerprint(row) !== expected;
+  }));
+  return drift.filter(Boolean).length;
 }

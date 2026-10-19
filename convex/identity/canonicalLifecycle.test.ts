@@ -1,18 +1,25 @@
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { ingestOneCard } from "./ingestContacts";
+import { protectedLegacy } from "./protectedLegacy";
 import { addPersonFromAirtableRef, listPeopleRef, nameDirectoryRef, searchAirtableHumansRef, setPrimaryHandleRef, TEST_KEY, whoIsRef } from "./testRefs.vitest";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const a = "recAAAAAAAAAAAAAA", c = "recCCCCCCCCCCCCCC";
 const sync = makeFunctionReference<"action", Record<string, never>>("identity/airtableSync:syncAirtableHumans");
 const cleanup = makeFunctionReference<"action", { apply?: boolean }>("identity/airtableSync:reconcileLegacyAirtableHumans");
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+const approvedProtected = new Map(protectedLegacy);
+beforeEach(() => protectedLegacy.clear());
+afterEach(() => {
+  protectedLegacy.clear();
+  for (const [id, fingerprint] of approvedProtected) protectedLegacy.set(id, fingerprint);
+  vi.unstubAllEnvs(); vi.unstubAllGlobals();
+});
 
 function fixture() {
   vi.stubEnv("IMSG_SERVER_SECRET", TEST_KEY);

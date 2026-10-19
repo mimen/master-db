@@ -7,7 +7,7 @@ import { cleanupPlan, fingerprint, stateProof } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { personAggregatePatch, recomputePersonAggregates } from "./internal";
 import { normalizeEmail, normalizePhone } from "./normalize";
-import { assertProtectedPlan, protectedLegacy, unreviewedLegacyCount } from "./protectedLegacy";
+import { assertProtectedPlan, protectedDriftCount, protectedLegacy } from "./protectedLegacy";
 
 export const snapshotCard = v.object({
   humanId: v.string(),
@@ -23,10 +23,9 @@ export const sourceState = internalQuery({
     const rows = await ctx.db.query("identities").withIndex("by_source_contact", (q) => q.eq("source", "airtable_human")).collect();
     const people = await ctx.db.query("people").collect();
     const legacy = rows.filter((r) => !r.source_contact_id);
-    const protectedRows = legacy.filter((r) => protectedLegacy.has(r._id));
-    const proof = await stateProof({ people: [], identities: protectedRows });
+    const protectedDrift = await protectedDriftCount((id) => ctx.db.get(id));
     return { humanIds: [...new Set([...rows.map((r) => r.source_contact_id), ...people.map((p) => p.airtable_human_id)].filter((id): id is string => Boolean(id)))],
-      legacyCount: legacy.length - protectedRows.length + unreviewedLegacyCount(proof.legacy) };
+      legacyCount: legacy.filter((r) => !protectedLegacy.has(r._id)).length + protectedDrift };
   },
 });
 
@@ -35,6 +34,7 @@ export const reconcileBatch = internalMutation({
   returns: v.object({ peopleReused: v.number(), identitiesWritten: v.number(), identitiesRemoved: v.number(), skippedNoMatch: v.number(), linksUpdated: v.number() }),
   handler: async (ctx, { cards }) => {
     if (cards.length > 50) throw new Error("Canonical reconciliation batch exceeds 50 Humans");
+    if (await protectedDriftCount((id) => ctx.db.get(id))) throw new Error("Protected legacy identity drift");
     const result = { peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0 };
     const affected = new Set<Id<"people">>();
     for (const card of cards) {

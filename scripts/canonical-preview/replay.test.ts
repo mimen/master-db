@@ -59,8 +59,9 @@ async function replay(input: Input) {
   });
   const originalPeople = new Map([...ids].map(([a,b]) => [b,a]));
   const originalIdentities = new Map([...oldIdentityIds].map(([a,b]) => [b,a]));
+  const originalProtected = new Map(protectedLegacy);
   const protectedGenerated = new Set(
-    [...oldIdentityIds].filter(([original]) => protectedLegacy.has(original)).map(([, generated]) => generated),
+    [...oldIdentityIds].filter(([original]) => originalProtected.has(original)).map(([, generated]) => generated),
   );
   const originalize = (state: State): State => ({
     people: state.people.map(p => ({ ...p, _id: originalPeople.get(p._id) as Id<"people">,
@@ -71,6 +72,13 @@ async function replay(input: Input) {
   });
   let result: unknown; let reviewedPlan: CleanupPlan | undefined;
   try {
+    const seededLegacy = new Map((await stateProof(before)).legacy.map(({ id, fingerprint }) => [id, fingerprint]));
+    protectedLegacy.clear();
+    for (const id of protectedGenerated) {
+      const fingerprint = seededLegacy.get(id);
+      if (!fingerprint) throw new Error("Protected identity missing from offline seed");
+      protectedLegacy.set(id, fingerprint);
+    }
     const preview = await t.action(makeFunctionReference<"action", Record<string, never>, {
       cards: Array<{ humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }>;
       cardsFingerprint: string;
@@ -78,8 +86,6 @@ async function replay(input: Input) {
     for (let i = 0; i < preview.cards.length; i += 50) await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards }>("identity/canonicalReconciliation:reconcileBatch"), { cards: preview.cards.slice(i,i+50) });
     const replaced = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
     const proof = await stateProof(replaced);
-    for (const entry of proof.legacy.filter(({ id }) => protectedGenerated.has(id)))
-      protectedLegacy.set(entry.id, entry.fingerprint);
     let predicted: State | undefined;
     const rollback = new Error("LOCAL_PREVIEW_ROLLBACK");
     try { await t.run(async ctx => {
@@ -102,12 +108,13 @@ async function replay(input: Input) {
     const originalProof = await stateProof(originalize(replaced));
     reviewedPlan = { ...plan, initialFingerprint: (await stateProof(originalize(before))).fingerprint,
       legacy: originalProof.legacy, beforeRemovalFingerprint: originalProof.fingerprint,
-      protectedLegacy: originalProof.legacy.filter(({ id }) => protectedLegacy.has(id)),
+      protectedLegacy: originalProof.legacy.filter(({ id }) => originalProtected.has(id)),
       replacementFingerprint: originalProof.replacementFingerprint,
       afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint };
     result = await t.mutation(makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy"), { plan });
   } finally {
-    for (const id of protectedGenerated) protectedLegacy.delete(id);
+    protectedLegacy.clear();
+    for (const [id, fingerprint] of originalProtected) protectedLegacy.set(id, fingerprint);
     vi.unstubAllGlobals(); vi.unstubAllEnvs();
   }
   const after = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));

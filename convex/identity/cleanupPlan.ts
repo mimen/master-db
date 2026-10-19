@@ -35,12 +35,15 @@ function projected(row: Record<string, unknown>, generated: boolean, person = fa
   if (person) { delete copy.updated_at; delete copy.photoStorageId; }
   return copy;
 }
+export async function legacyRowFingerprint(row: Doc<"identities">): Promise<string> {
+  return fingerprint(projected(row, false));
+}
 export async function stateProof(state: State) {
   const canonical = state.identities.filter(r => r.source === "airtable_human" && r.source_contact_id);
   const replacements = canonical.map(r => projected(r, true)).sort((a,b) => stable(a).localeCompare(stable(b)));
   const identities = state.identities.map(r => projected(r, r.source === "airtable_human" && Boolean(r.source_contact_id))).sort((a,b) => stable(a).localeCompare(stable(b)));
   const people = state.people.map(r => projected(r, false, true)).sort((a,b) => stable(a).localeCompare(stable(b)));
-  const legacy = await Promise.all(state.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).map(async r => ({ id: r._id, fingerprint: await fingerprint(projected(r, false)) })));
+  const legacy = await Promise.all(state.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).map(async r => ({ id: r._id, fingerprint: await legacyRowFingerprint(r) })));
   legacy.sort((a,b) => a.id.localeCompare(b.id));
   return { fingerprint: await fingerprint({ people, identities }), replacementFingerprint: await fingerprint(replacements), legacy, replacements };
 }
