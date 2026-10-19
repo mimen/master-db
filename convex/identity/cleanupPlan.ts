@@ -7,11 +7,13 @@ export const cleanupPlan = v.object({
   beforeRemovalFingerprint: v.string(), afterRemovalFingerprint: v.string(),
   replacementFingerprint: v.string(),
   legacy: v.array(v.object({ id: v.id("identities"), fingerprint: v.string() })),
+  protectedLegacy: v.optional(v.array(v.object({ id: v.id("identities"), fingerprint: v.string() }))),
 });
 export type CleanupPlan = {
   initialFingerprint: string; cardsFingerprint: string; beforeRemovalFingerprint: string;
   afterRemovalFingerprint: string; replacementFingerprint: string;
   legacy: { id: Doc<"identities">["_id"]; fingerprint: string }[];
+  protectedLegacy?: { id: Doc<"identities">["_id"]; fingerprint: string }[];
 };
 export type State = { people: Doc<"people">[]; identities: Doc<"identities">[] };
 function stable(value: unknown): string {

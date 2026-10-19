@@ -8,6 +8,7 @@ import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { CanonicalSnapshot } from "../../convex/identity/canonicalContacts";
 import { stateProof, type CleanupPlan, type State } from "../../convex/identity/cleanupPlan";
 import { recomputePersonAggregates } from "../../convex/identity/internal";
+import { protectedLegacy } from "../../convex/identity/protectedLegacy";
 import schema from "../../convex/schema";
 import { normalizeModules } from "../../convex/test-utils.vitest";
 
@@ -58,6 +59,9 @@ async function replay(input: Input) {
   });
   const originalPeople = new Map([...ids].map(([a,b]) => [b,a]));
   const originalIdentities = new Map([...oldIdentityIds].map(([a,b]) => [b,a]));
+  const protectedGenerated = new Set(
+    [...oldIdentityIds].filter(([original]) => protectedLegacy.has(original)).map(([, generated]) => generated),
+  );
   const originalize = (state: State): State => ({
     people: state.people.map(p => ({ ...p, _id: originalPeople.get(p._id) as Id<"people">,
       merged_into: p.merged_into ? originalPeople.get(p.merged_into) as Id<"people"> : undefined,
@@ -74,11 +78,17 @@ async function replay(input: Input) {
     for (let i = 0; i < preview.cards.length; i += 50) await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards }>("identity/canonicalReconciliation:reconcileBatch"), { cards: preview.cards.slice(i,i+50) });
     const replaced = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
     const proof = await stateProof(replaced);
+    for (const entry of proof.legacy.filter(({ id }) => protectedGenerated.has(id)))
+      protectedLegacy.set(entry.id, entry.fingerprint);
     let predicted: State | undefined;
     const rollback = new Error("LOCAL_PREVIEW_ROLLBACK");
     try { await t.run(async ctx => {
       const affected = new Set<Id<"people">>();
-      for (const entry of proof.legacy) { const row = await ctx.db.get(entry.id); if (row?.person_id) affected.add(row.person_id); await ctx.db.delete(entry.id); }
+      for (const entry of proof.legacy.filter(({ id }) => !protectedGenerated.has(id))) {
+        const row = await ctx.db.get(entry.id);
+        if (row?.person_id) affected.add(row.person_id);
+        await ctx.db.delete(entry.id);
+      }
       for (const id of affected) await recomputePersonAggregates(ctx, id);
       predicted = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
       throw rollback;
@@ -86,15 +96,20 @@ async function replay(input: Input) {
     if (!predicted) throw new Error("Missing local prediction");
     const plan: CleanupPlan = { initialFingerprint: (await stateProof(before)).fingerprint,
       cardsFingerprint: preview.cardsFingerprint, legacy: proof.legacy,
+      protectedLegacy: proof.legacy.filter(({ id }) => protectedGenerated.has(id)),
       beforeRemovalFingerprint: proof.fingerprint, replacementFingerprint: proof.replacementFingerprint,
       afterRemovalFingerprint: (await stateProof(predicted)).fingerprint };
     const originalProof = await stateProof(originalize(replaced));
     reviewedPlan = { ...plan, initialFingerprint: (await stateProof(originalize(before))).fingerprint,
       legacy: originalProof.legacy, beforeRemovalFingerprint: originalProof.fingerprint,
+      protectedLegacy: originalProof.legacy.filter(({ id }) => protectedLegacy.has(id)),
       replacementFingerprint: originalProof.replacementFingerprint,
       afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint };
     result = await t.mutation(makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy"), { plan });
-  } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+  } finally {
+    for (const id of protectedGenerated) protectedLegacy.delete(id);
+    vi.unstubAllGlobals(); vi.unstubAllEnvs();
+  }
   const after = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
   const independentBefore = before.identities.filter(r => r.source !== "airtable_human");
   const independentChanged = independentBefore.filter(r => JSON.stringify(r) !== JSON.stringify(after.identities.find(a => a._id === r._id)));
@@ -126,7 +141,8 @@ async function replay(input: Input) {
   const globalAfter = new Set(after.identities.map(key));
   const summary = { liveWrites: 0, peopleBefore: before.people.length, peopleAfter: after.people.length,
     identitiesBefore: before.identities.length, identitiesAfter: after.identities.length,
-    legacyRemoved: before.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).length,
+    legacyRemoved: (result as { removed: number }).removed,
+    protectedLegacyRetained: protectedGenerated.size,
     canonicalRowsAfter: after.identities.filter(r => r.source === "airtable_human").length,
     newlyInsertedRows: after.identities.filter(r => !before.identities.some(b => b._id === r._id)).length,
     genuinelyRemovedDistinctIdentifiers: sorted(before.identities.map(key)).filter(k => !globalAfter.has(k)).length,

@@ -5,6 +5,7 @@ import { internalAction, type ActionCtx } from "../_generated/server";
 
 import { contactValues, readCanonicalSnapshot, type CanonicalContact, type CanonicalSnapshot } from "./canonicalContacts";
 import { cleanupPlan, fingerprint, type CleanupPlan } from "./cleanupPlan";
+import { assertProtectedPlan } from "./protectedLegacy";
 
 /**
  * Pulls AUF's Airtable "Humans" table into the identity graph, Convex-native
@@ -82,6 +83,7 @@ const cleanupState = makeFunctionReference<"query", Record<string, never>, { fin
 async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "apply", plan?: CleanupPlan) {
     const state = await ctx.runQuery(sourceState, {});
     if (migration === "apply" && !plan) throw new Error("Exact reviewed cleanup plan required");
+    if (plan) assertProtectedPlan(plan);
     const initial = migration !== "none" ? await ctx.runQuery(cleanupState, {}) : undefined;
     if (plan && initial?.fingerprint !== plan.initialFingerprint) throw new Error("Cleanup initial state drift");
     if (migration === "none" && state.legacyCount)

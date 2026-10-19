@@ -9,6 +9,7 @@ import { normalizeModules } from "../test-utils.vitest";
 import { stateProof, type CleanupPlan } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { recomputePersonAggregates } from "./internal";
+import { assertProtectedPlan, protectedLegacy, unreviewedLegacyCount } from "./protectedLegacy";
 
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const remove = makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy");
@@ -37,6 +38,49 @@ test("exact cleanup emits receipts and deletes only reviewed legacy rows", async
   expect(receipt).toMatchObject({ removed: 1, beforeFingerprint: plan.beforeRemovalFingerprint, afterFingerprint: plan.afterRemovalFingerprint, replacementFingerprint: plan.replacementFingerprint });
   expect((await state()).identities.map(r=>r.value)).toEqual(["new@example.test"]);
   expect((await state()).people[0].primary_handle).toBeUndefined();
+});
+
+test("a reviewed protected legacy row survives cleanup and is accepted by the hourly guard", async () => {
+  const { t, state, plan } = await fixture();
+  const entry = plan.legacy[0];
+  protectedLegacy.set(entry.id, entry.fingerprint);
+  try {
+    plan.protectedLegacy = [entry];
+    plan.afterRemovalFingerprint = plan.beforeRemovalFingerprint;
+    assertProtectedPlan(plan);
+    const receipt = await t.mutation(remove, { plan });
+    expect(receipt.removed).toBe(0);
+    expect((await state()).identities.some((r) => r._id === entry.id)).toBe(true);
+    const source = makeFunctionReference<"query", Record<string, never>, { legacyCount: number }>("identity/canonicalReconciliation:sourceState");
+    expect((await t.query(source, {})).legacyCount).toBe(0);
+    await t.run((ctx) => ctx.db.patch(entry.id, { display_name: "Changed" }));
+    expect((await t.query(source, {})).legacyCount).toBe(1);
+    await t.run((ctx) => ingestOneCard(ctx, "airtable_human", { emails: ["unreviewed@example.test"], phones: [] }, false));
+    expect((await t.query(source, {})).legacyCount).toBe(2);
+  } finally {
+    protectedLegacy.delete(entry.id);
+  }
+});
+
+test("protected plan refuses omitted, changed, duplicate, or extra exclusions", async () => {
+  const { plan } = await fixture();
+  const entry = plan.legacy[0];
+  protectedLegacy.set(entry.id, entry.fingerprint);
+  try {
+    expect(() => assertProtectedPlan(plan)).toThrow("Exact protected legacy manifest required");
+    plan.protectedLegacy = [entry];
+    expect(() => assertProtectedPlan(plan)).not.toThrow();
+    expect(unreviewedLegacyCount([entry])).toBe(0);
+    expect(unreviewedLegacyCount([{ ...entry, fingerprint: "changed" }])).toBe(1);
+    plan.protectedLegacy = [entry, entry];
+    expect(() => assertProtectedPlan(plan)).toThrow();
+    plan.protectedLegacy = [{ ...entry, fingerprint: "changed" }];
+    expect(() => assertProtectedPlan(plan)).toThrow("Protected legacy fingerprint drift");
+    plan.protectedLegacy = [{ id: "unapproved" as Id<"identities">, fingerprint: "changed" }];
+    expect(() => assertProtectedPlan(plan)).toThrow();
+  } finally {
+    protectedLegacy.delete(entry.id);
+  }
 });
 for (const change of ["new-legacy", "changed-legacy", "replacement", "after-proof"] as const) {
   test(`cleanup fails closed on ${change} without deleting rows`, async () => {

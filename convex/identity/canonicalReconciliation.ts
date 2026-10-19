@@ -7,6 +7,7 @@ import { cleanupPlan, fingerprint, stateProof } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { personAggregatePatch, recomputePersonAggregates } from "./internal";
 import { normalizeEmail, normalizePhone } from "./normalize";
+import { assertProtectedPlan, protectedLegacy, unreviewedLegacyCount } from "./protectedLegacy";
 
 export const snapshotCard = v.object({
   humanId: v.string(),
@@ -21,8 +22,11 @@ export const sourceState = internalQuery({
   handler: async (ctx) => {
     const rows = await ctx.db.query("identities").withIndex("by_source_contact", (q) => q.eq("source", "airtable_human")).collect();
     const people = await ctx.db.query("people").collect();
+    const legacy = rows.filter((r) => !r.source_contact_id);
+    const protectedRows = legacy.filter((r) => protectedLegacy.has(r._id));
+    const proof = await stateProof({ people: [], identities: protectedRows });
     return { humanIds: [...new Set([...rows.map((r) => r.source_contact_id), ...people.map((p) => p.airtable_human_id)].filter((id): id is string => Boolean(id)))],
-      legacyCount: rows.filter((r) => !r.source_contact_id).length };
+      legacyCount: legacy.length - protectedRows.length + unreviewedLegacyCount(proof.legacy) };
   },
 });
 
@@ -72,19 +76,21 @@ export const cleanupState = internalQuery({
 export const removeLegacy = internalMutation({
   args: { plan: cleanupPlan },
   handler: async (ctx, { plan }) => {
+    assertProtectedPlan(plan);
     const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
     const before = await stateProof(state);
     if (before.fingerprint !== plan.beforeRemovalFingerprint || before.replacementFingerprint !== plan.replacementFingerprint ||
         await fingerprint(before.legacy) !== await fingerprint(plan.legacy)) throw new Error("Cleanup plan drift or unverified replacements");
     const affected = new Set<Id<"people">>();
     // No rescan-and-delete: only the immutable approved IDs can be retired.
-    for (const entry of plan.legacy) {
+    const protectedIds = new Set((plan.protectedLegacy ?? []).map(({ id }) => id));
+    for (const entry of plan.legacy.filter(({ id }) => !protectedIds.has(id))) {
       const row = state.identities.find(r => r._id === entry.id);
       if (!row || row.source !== "airtable_human" || row.source_contact_id) throw new Error("Cleanup legacy scope changed");
       await ctx.db.delete(entry.id);
       if (row.person_id) affected.add(row.person_id);
     }
-    const removed = new Set(plan.legacy.map(r => r.id));
+    const removed = new Set(plan.legacy.filter(({ id }) => !protectedIds.has(id)).map(r => r.id));
     const remaining = state.identities.filter(r => !removed.has(r._id));
     const people = [];
     for (const person of state.people) {
@@ -94,7 +100,7 @@ export const removeLegacy = internalMutation({
     }
     const after = await stateProof({ people, identities: remaining });
     if (after.fingerprint !== plan.afterRemovalFingerprint) throw new Error("Cleanup after-state does not match reviewed plan");
-    return { removed: plan.legacy.length, beforeFingerprint: before.fingerprint, afterFingerprint: after.fingerprint,
-      replacementFingerprint: before.replacementFingerprint, legacy: plan.legacy };
+    return { removed: removed.size, beforeFingerprint: before.fingerprint, afterFingerprint: after.fingerprint,
+      replacementFingerprint: before.replacementFingerprint, legacy: plan.legacy.filter(({ id }) => removed.has(id)) };
   },
 });
