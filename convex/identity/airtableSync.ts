@@ -76,7 +76,7 @@ export function toContactCard(r: AirtableRecord, contacts: CanonicalContact[]): 
 
 type SnapshotCard = { humanId: string; canonicalHumanId: string | null; display_name?: string; first_name?: string; last_name?: string; phones: string[]; emails: string[] };
 const sourceState = makeFunctionReference<"query", Record<string, never>, { humanIds: string[]; legacyCount: number }>("identity/canonicalReconciliation:sourceState");
-const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[]; expectedStateFingerprint?: string; semanticGuard?: SemanticGuard }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
+const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[]; expectedStateFingerprint?: string; expectedPostwriteFingerprint?: string; semanticGuard?: SemanticGuard }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
 const removeLegacy = makeFunctionReference<"mutation", { plan: CleanupPlan }, { removed: number }>("identity/canonicalReconciliation:removeLegacy");
 const cleanupState = makeFunctionReference<"query", { semanticGuard?: SemanticGuard }, { fingerprint: string; legacy: CleanupPlan["legacy"]; semanticFingerprint?: string }>("identity/canonicalReconciliation:cleanupState");
 
@@ -153,13 +153,15 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       if (plan.semanticGuard
         ? preWrite.semanticFingerprint !== plan.semanticGuard.initialFingerprint
         : preWrite.fingerprint !== plan.initialFingerprint) throw new Error("Cleanup pre-write state drift");
-      if (plan.batchPrewriteFingerprints?.length !== Math.ceil(cards.length / 50))
-        throw new Error("Exact reviewed batch proofs required");
+      if (plan.batchPrewriteFingerprints?.length !== Math.ceil(cards.length / 50) ||
+          plan.batchPostwriteFingerprints?.length !== Math.ceil(cards.length / 50))
+        throw new Error("Exact reviewed pre/post batch proofs required");
     }
     const result = { recordsSeen: records.size, peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0, legacyRemoved: 0 };
     for (let i = 0; i < cards.length; i += 50) {
       const batch = await ctx.runMutation(reconcileBatch, { cards: cards.slice(i, i + 50),
-        expectedStateFingerprint: plan?.batchPrewriteFingerprints?.[i / 50], semanticGuard: plan?.semanticGuard });
+        expectedStateFingerprint: plan?.batchPrewriteFingerprints?.[i / 50],
+        expectedPostwriteFingerprint: plan?.batchPostwriteFingerprints?.[i / 50], semanticGuard: plan?.semanticGuard });
       result.peopleReused += batch.peopleReused;
       result.identitiesWritten += batch.identitiesWritten;
       result.identitiesRemoved += batch.identitiesRemoved;

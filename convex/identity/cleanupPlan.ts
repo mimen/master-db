@@ -19,6 +19,7 @@ export const cleanupPlan = v.object({
   protectedLegacy: v.optional(v.array(v.object({ id: v.id("identities"), fingerprint: v.string() }))),
   semanticGuard: v.optional(semanticGuard),
   batchPrewriteFingerprints: v.optional(v.array(v.string())),
+  batchPostwriteFingerprints: v.optional(v.array(v.string())),
 });
 export type SemanticGuard = {
   allowAppleUpdatedAt: boolean;
@@ -34,6 +35,7 @@ export type CleanupPlan = {
   protectedLegacy?: { id: Doc<"identities">["_id"]; fingerprint: string }[];
   semanticGuard?: SemanticGuard;
   batchPrewriteFingerprints?: string[];
+  batchPostwriteFingerprints?: string[];
 };
 export type State = { people: Doc<"people">[]; identities: Doc<"identities">[] };
 function stable(value: unknown): string {

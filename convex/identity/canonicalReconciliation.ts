@@ -30,9 +30,9 @@ export const sourceState = internalQuery({
 });
 
 export const reconcileBatch = internalMutation({
-  args: { cards: v.array(snapshotCard), expectedStateFingerprint: v.optional(v.string()), semanticGuard: v.optional(semanticGuard) },
+  args: { cards: v.array(snapshotCard), expectedStateFingerprint: v.optional(v.string()), expectedPostwriteFingerprint: v.optional(v.string()), semanticGuard: v.optional(semanticGuard) },
   returns: v.object({ peopleReused: v.number(), identitiesWritten: v.number(), identitiesRemoved: v.number(), skippedNoMatch: v.number(), linksUpdated: v.number() }),
-  handler: async (ctx, { cards, expectedStateFingerprint, semanticGuard: guard }) => {
+  handler: async (ctx, { cards, expectedStateFingerprint, expectedPostwriteFingerprint, semanticGuard: guard }) => {
     if (cards.length > 50) throw new Error("Canonical reconciliation batch exceeds 50 Humans");
     if (await protectedDriftCount((id) => ctx.db.get(id))) throw new Error("Protected legacy identity drift");
     if (expectedStateFingerprint) {
@@ -69,6 +69,11 @@ export const reconcileBatch = internalMutation({
       }
     }
     for (const personId of affected) await recomputePersonAggregates(ctx, personId);
+    if (expectedPostwriteFingerprint) {
+      const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+      const actual = guard ? (await semanticStateProof(state, guard)).fingerprint : (await stateProof(state)).fingerprint;
+      if (actual !== expectedPostwriteFingerprint) throw new Error("Cleanup batch post-write state drift");
+    }
     return result;
   },
 });

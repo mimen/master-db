@@ -106,6 +106,8 @@ async function replay(input: Input) {
     }>("identity/airtableSync:reconcileLegacyAirtableHumans"), {});
     const batchPrewriteFingerprints: string[] = [];
     const reviewedBatchPrewriteFingerprints: string[] = [];
+    const batchPostwriteFingerprints: string[] = [];
+    const reviewedBatchPostwriteFingerprints: string[] = [];
     for (let i = 0; i < preview.cards.length; i += 50) {
       const prewrite = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
       const generatedFingerprint = generatedScope ? (await semanticStateProof(prewrite, generatedScope)).fingerprint : (await stateProof(prewrite)).fingerprint;
@@ -116,6 +118,10 @@ async function replay(input: Input) {
       const batchStart = performance.now();
       await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards; expectedStateFingerprint: string; semanticGuard?: SemanticGuard }>("identity/canonicalReconciliation:reconcileBatch"),
         { cards: preview.cards.slice(i,i+50), expectedStateFingerprint: generatedFingerprint, semanticGuard: generatedScope });
+      const postwrite = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+      batchPostwriteFingerprints.push(generatedScope ? (await semanticStateProof(postwrite, generatedScope)).fingerprint : (await stateProof(postwrite)).fingerprint);
+      const reviewedPostwrite = originalize(postwrite);
+      reviewedBatchPostwriteFingerprints.push(semanticScope ? (await semanticStateProof(reviewedPostwrite, semanticScope)).fingerprint : (await stateProof(reviewedPostwrite)).fingerprint);
       batchMutationDurationsMs.push(Math.round(performance.now() - batchStart));
     }
     const replaced = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
@@ -138,7 +144,7 @@ async function replay(input: Input) {
       cardsFingerprint: preview.cardsFingerprint, legacy: proof.legacy,
       protectedLegacy: proof.legacy.filter(({ id }) => protectedGenerated.has(id)),
       beforeRemovalFingerprint: proof.fingerprint, replacementFingerprint: proof.replacementFingerprint,
-      afterRemovalFingerprint: (await stateProof(predicted)).fingerprint, batchPrewriteFingerprints };
+      afterRemovalFingerprint: (await stateProof(predicted)).fingerprint, batchPrewriteFingerprints, batchPostwriteFingerprints };
     if (generatedScope) plan.semanticGuard = await stampGuard(generatedScope, before, replaced, predicted);
     const originalProof = await stateProof(originalize(replaced));
     reviewedPlan = { ...plan, initialFingerprint: (await stateProof(originalize(before))).fingerprint,
@@ -146,7 +152,7 @@ async function replay(input: Input) {
       protectedLegacy: originalProof.legacy.filter(({ id }) => originalProtected.has(id)),
       replacementFingerprint: originalProof.replacementFingerprint,
       afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint,
-      batchPrewriteFingerprints: reviewedBatchPrewriteFingerprints };
+      batchPrewriteFingerprints: reviewedBatchPrewriteFingerprints, batchPostwriteFingerprints: reviewedBatchPostwriteFingerprints };
     if (semanticScope) reviewedPlan.semanticGuard = await stampGuard(semanticScope,
       originalize(before), originalize(replaced), originalize(predicted));
     result = await t.mutation(makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy"), { plan });
