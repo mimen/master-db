@@ -159,6 +159,15 @@ test("a post-batch proof mismatch rolls back the entire reconciliation mutation"
   await expect(t.mutation(batch, { cards: [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
     phones: [], emails: ["new@example.test", "extra@example.test"] }], expectedStateFingerprint: pre }))
     .rejects.toThrow("Paired SHA-256 cleanup batch proofs required");
+  const guarded = makeFunctionReference<"mutation", { cards: { humanId: string; canonicalHumanId: string | null;
+    phones: string[]; emails: string[] }[]; semanticGuard: { allowAppleUpdatedAt: boolean; legacyOwnerRows: never[];
+    derivedPeople: never[]; initialFingerprint: string; beforeRemovalFingerprint: string;
+    afterRemovalFingerprint: string; legacyFingerprint: string } }>("identity/canonicalReconciliation:reconcileBatch");
+  await expect(t.mutation(guarded, { cards: [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: ["new@example.test", "extra@example.test"] }],
+    semanticGuard: { allowAppleUpdatedAt: false, legacyOwnerRows: [], derivedPeople: [],
+      initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" } }))
+    .rejects.toThrow("Paired SHA-256 cleanup batch proofs required");
   expect(await state()).toEqual(before);
 });
 test("allowed legacy owner movement cannot commit a different canonical replacement owner", async () => {
