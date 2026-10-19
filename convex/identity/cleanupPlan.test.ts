@@ -78,6 +78,59 @@ test("semantic cleanup guard rejects a changed independent contact atomically", 
   await expect(t.mutation(remove, { plan })).rejects.toThrow("Cleanup plan drift");
   expect(await state()).toEqual(drifted);
 });
+test("remote-capture drift stops before the first replacement mutation", async () => {
+  const { t, state, plan, before, predicted } = await fixture({ apple: true });
+  const scope = { allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
+    initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" };
+  const initial = await semanticStateProof(before, scope);
+  const after = await semanticStateProof(predicted, scope);
+  plan.semanticGuard = { ...scope, initialFingerprint: initial.fingerprint,
+    beforeRemovalFingerprint: initial.fingerprint, afterRemovalFingerprint: after.fingerprint,
+    legacyFingerprint: initial.legacyFingerprint };
+  vi.stubEnv("AIRTABLE_API_KEY", "synthetic");
+  vi.stubEnv("AUF_CANONICAL_CONTACT_READ_TOKEN", "synthetic");
+  vi.stubEnv("AUF_CANONICAL_CONTACT_READ_URL", "https://fixture.convex.site/canonical-contacts/read");
+  const apple = before.identities.find(row => row.source === "apple_contact")!;
+  let driftOnFetch = false;
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
+    if (String(input).includes("api.airtable.com")) {
+      if (driftOnFetch) {
+        driftOnFetch = false;
+        await t.run(ctx => ctx.db.patch(apple._id, { normalized: "changed@example.test" }));
+      }
+      return Response.json({ records: [{ id: "recAAAAAAAAAAAAAA", fields: { Name: "Fixture" } }] });
+    }
+    const { humanIds } = JSON.parse(init!.body as string) as { humanIds: string[] };
+    return Response.json({ resolutions: humanIds.map(humanId => ({ humanId, canonicalHumanId: humanId })),
+      contacts: humanIds.map(humanId => ({ humanId, channel: "email", value: "new@example.test", primary: true })) });
+  }));
+  const operator = makeFunctionReference<"action", { apply?: boolean; plan?: CleanupPlan }, { cardsFingerprint: string }>("identity/airtableSync:reconcileLegacyAirtableHumans");
+  plan.cardsFingerprint = (await t.action(operator, {})).cardsFingerprint;
+  driftOnFetch = true;
+  await expect(t.action(operator, { apply: true, plan })).rejects.toThrow("Cleanup pre-write state drift");
+  const unchanged = await state();
+  expect(unchanged.identities).toHaveLength(before.identities.length);
+  expect(unchanged.identities.find(row => row._id === apple._id)?.normalized).toBe("changed@example.test");
+  expect(unchanged.identities.filter(row => row.source === "airtable_human")).toEqual(before.identities.filter(row => row.source === "airtable_human"));
+  expect(unchanged.people).toEqual(before.people);
+});
+test("each batch checks the reviewed state atomically before writing", async () => {
+  const { t, state } = await fixture({ apple: true });
+  const batch = makeFunctionReference<"mutation", { cards: { humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }[];
+    expectedStateFingerprint: string }>("identity/canonicalReconciliation:reconcileBatch");
+  const first = { humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: ["new@example.test", "first@example.test"] };
+  const firstFingerprint = (await stateProof(await state())).fingerprint;
+  await t.mutation(batch, { cards: [first], expectedStateFingerprint: firstFingerprint });
+  const afterFirst = await state();
+  const secondFingerprint = (await stateProof(afterFirst)).fingerprint;
+  const apple = afterFirst.identities.find(row => row.source === "apple_contact")!;
+  await t.run(ctx => ctx.db.patch(apple._id, { normalized: "changed@example.test" }));
+  const afterDrift = await state();
+  await expect(t.mutation(batch, { cards: [{ ...first, emails: ["new@example.test", "second@example.test"] }],
+    expectedStateFingerprint: secondFingerprint })).rejects.toThrow("Cleanup batch pre-write state drift");
+  expect(await state()).toEqual(afterDrift);
+});
 test("semantic guard binds a legacy owner move and only its derived people", async () => {
   const { before, plan } = await fixture();
   const original = before.people[0];

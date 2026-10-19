@@ -91,6 +91,7 @@ async function replay(input: Input) {
       person_id: r.person_id ? originalPeople.get(r.person_id) as Id<"people"> : undefined })),
   });
   let result: unknown; let reviewedPlan: CleanupPlan | undefined;
+  const batchMutationDurationsMs: number[] = [];
   try {
     const seededLegacy = new Map((await stateProof(before)).legacy.map(({ id, fingerprint }) => [id, fingerprint]));
     protectedLegacy.clear();
@@ -103,7 +104,20 @@ async function replay(input: Input) {
       cards: Array<{ humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }>;
       cardsFingerprint: string;
     }>("identity/airtableSync:reconcileLegacyAirtableHumans"), {});
-    for (let i = 0; i < preview.cards.length; i += 50) await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards }>("identity/canonicalReconciliation:reconcileBatch"), { cards: preview.cards.slice(i,i+50) });
+    const batchPrewriteFingerprints: string[] = [];
+    const reviewedBatchPrewriteFingerprints: string[] = [];
+    for (let i = 0; i < preview.cards.length; i += 50) {
+      const prewrite = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+      const generatedFingerprint = generatedScope ? (await semanticStateProof(prewrite, generatedScope)).fingerprint : (await stateProof(prewrite)).fingerprint;
+      const reviewedPrewrite = originalize(prewrite);
+      const reviewedFingerprint = semanticScope ? (await semanticStateProof(reviewedPrewrite, semanticScope)).fingerprint : (await stateProof(reviewedPrewrite)).fingerprint;
+      batchPrewriteFingerprints.push(generatedFingerprint);
+      reviewedBatchPrewriteFingerprints.push(reviewedFingerprint);
+      const batchStart = performance.now();
+      await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards; expectedStateFingerprint: string; semanticGuard?: SemanticGuard }>("identity/canonicalReconciliation:reconcileBatch"),
+        { cards: preview.cards.slice(i,i+50), expectedStateFingerprint: generatedFingerprint, semanticGuard: generatedScope });
+      batchMutationDurationsMs.push(Math.round(performance.now() - batchStart));
+    }
     const replaced = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
     const proof = await stateProof(replaced);
     let predicted: State | undefined;
@@ -124,14 +138,15 @@ async function replay(input: Input) {
       cardsFingerprint: preview.cardsFingerprint, legacy: proof.legacy,
       protectedLegacy: proof.legacy.filter(({ id }) => protectedGenerated.has(id)),
       beforeRemovalFingerprint: proof.fingerprint, replacementFingerprint: proof.replacementFingerprint,
-      afterRemovalFingerprint: (await stateProof(predicted)).fingerprint };
+      afterRemovalFingerprint: (await stateProof(predicted)).fingerprint, batchPrewriteFingerprints };
     if (generatedScope) plan.semanticGuard = await stampGuard(generatedScope, before, replaced, predicted);
     const originalProof = await stateProof(originalize(replaced));
     reviewedPlan = { ...plan, initialFingerprint: (await stateProof(originalize(before))).fingerprint,
       legacy: originalProof.legacy, beforeRemovalFingerprint: originalProof.fingerprint,
       protectedLegacy: originalProof.legacy.filter(({ id }) => originalProtected.has(id)),
       replacementFingerprint: originalProof.replacementFingerprint,
-      afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint };
+      afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint,
+      batchPrewriteFingerprints: reviewedBatchPrewriteFingerprints };
     if (semanticScope) reviewedPlan.semanticGuard = await stampGuard(semanticScope,
       originalize(before), originalize(replaced), originalize(predicted));
     result = await t.mutation(makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy"), { plan });
@@ -142,12 +157,35 @@ async function replay(input: Input) {
   }
   const after = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
   const independentBefore = before.identities.filter(r => r.source !== "airtable_human");
-  const independentChanged = independentBefore.filter(r => JSON.stringify(r) !== JSON.stringify(after.identities.find(a => a._id === r._id)));
+  const afterIdentitiesById = new Map(after.identities.map(row => [row._id, row]));
+  const independentChanged = independentBefore.filter(r => JSON.stringify(r) !== JSON.stringify(afterIdentitiesById.get(r._id)));
   if (independentChanged.length) throw new Error("Independent source changed");
   const originalPerson = new Map([...ids].map(([a, b]) => [b, a]));
+  const groupBy = <T,>(rows: T[], key: (row: T) => string | undefined) => {
+    const groups = new Map<string, T[]>();
+    for (const row of rows) {
+      const id = key(row);
+      if (id === undefined) continue;
+      const group = groups.get(id) ?? [];
+      group.push(row);
+      groups.set(id, group);
+    }
+    return groups;
+  };
+  const inputPeople = new Map(input.people.map(person => [person._id, person]));
+  const beforeByPerson = groupBy(before.identities, row => row.person_id);
+  const afterByPerson = groupBy(after.identities, row => row.person_id);
+  const beforeByHuman = groupBy(input.identities.filter(row => row.source === "airtable_human"),
+    row => row.source_contact_id || (row.person_id ? inputPeople.get(row.person_id)?.airtable_human_id : undefined));
+  const afterByHuman = groupBy(after.identities.filter(row => row.source === "airtable_human"), row => row.source_contact_id);
+  const contactsByHuman = groupBy(input.canonical.contacts, row => row.humanId);
+  const recordsById = new Map<string, RecordRow>();
+  for (const row of input.records) if (!recordsById.has(row.id)) recordsById.set(row.id, row);
+  const resolutionsByHuman = groupBy(input.canonical.resolutions, row => row.humanId);
+  const afterPeopleById = new Map(after.people.map(person => [person._id, person]));
   const personDetails = before.people.map(p => {
-    const a = after.people.find(x => x._id === p._id)!;
-    const old = before.identities.filter(r => r.person_id === p._id), next = after.identities.filter(r => r.person_id === p._id);
+    const a = afterPeopleById.get(p._id)!;
+    const old = beforeByPerson.get(p._id) ?? [], next = afterByPerson.get(p._id) ?? [];
     const oldKeys = sorted(old.map(key)), newKeys = sorted(next.map(key));
     return { personId: originalPerson.get(p._id), humanIdBefore: p.airtable_human_id, humanIdAfter: a.airtable_human_id,
       independentSources: old.filter(r => r.source !== "airtable_human").length,
@@ -155,26 +193,30 @@ async function replay(input: Input) {
       after: next.map(r => ({ key: key(r), source: r.source, humanId: r.source_contact_id })),
       removedKeys: oldKeys.filter(k => !newKeys.includes(k)), addedKeys: newKeys.filter(k => !oldKeys.includes(k)),
       disposition: newKeys.length ? "retains-identifiers" : "no-identifiers",
-      canonicalProof: input.canonical.resolutions.filter(r => r.humanId === p.airtable_human_id),
-      canonicalContacts: input.canonical.contacts.filter(r => r.humanId === p.airtable_human_id),
+      canonicalProof: p.airtable_human_id ? resolutionsByHuman.get(p.airtable_human_id) ?? [] : [],
+      canonicalContacts: p.airtable_human_id ? contactsByHuman.get(p.airtable_human_id) ?? [] : [],
       aggregatesBefore: { phones: p.normalized_phones, emails: p.normalized_emails, primaryHandle: p.primary_handle },
       aggregatesAfter: { phones: a.normalized_phones, emails: a.normalized_emails, primaryHandle: a.primary_handle } };
   });
   const humanIds = sorted([...input.records.map(r => r.id), ...input.canonical.resolutions.map(r => r.humanId)]);
   const humans = humanIds.map(humanId => ({ humanId,
-    nativeDisplay: input.records.find(r => r.id === humanId)?.fields,
-    resolution: input.canonical.resolutions.find(r => r.humanId === humanId),
-    canonicalContacts: input.canonical.contacts.filter(r => r.humanId === humanId),
-    before: input.identities.filter(r => r.source === "airtable_human" && (r.source_contact_id === humanId || (!r.source_contact_id && input.people.find(p => p._id === r.person_id)?.airtable_human_id === humanId))),
-    after: after.identities.filter(r => r.source === "airtable_human" && r.source_contact_id === humanId).map(r => ({ ...r, person_id: r.person_id ? originalPerson.get(r.person_id) : undefined })) }));
+    nativeDisplay: recordsById.get(humanId)?.fields,
+    resolution: resolutionsByHuman.get(humanId)?.[0],
+    canonicalContacts: contactsByHuman.get(humanId) ?? [],
+    before: beforeByHuman.get(humanId) ?? [],
+    after: (afterByHuman.get(humanId) ?? []).map(r => ({ ...r, person_id: r.person_id ? originalPerson.get(r.person_id) : undefined })) }));
   const special = personDetails.filter(p => !p.independentSources && p.before.some(r => r.source === "airtable_human"));
   const globalAfter = new Set(after.identities.map(key));
+  const beforeIdentityIds = new Set(before.identities.map(row => row._id));
+  const sortedBatchDurations = [...batchMutationDurationsMs].sort((a,b) => a - b);
   const summary = { liveWrites: 0, peopleBefore: before.people.length, peopleAfter: after.people.length,
+    batchCount: batchMutationDurationsMs.length, maxBatchMutationMs: sortedBatchDurations.at(-1) ?? 0,
+    p95BatchMutationMs: sortedBatchDurations[Math.floor(sortedBatchDurations.length * 0.95)] ?? 0,
     identitiesBefore: before.identities.length, identitiesAfter: after.identities.length,
     legacyRemoved: (result as { removed: number }).removed,
     protectedLegacyRetained: protectedGenerated.size,
     canonicalRowsAfter: after.identities.filter(r => r.source === "airtable_human").length,
-    newlyInsertedRows: after.identities.filter(r => !before.identities.some(b => b._id === r._id)).length,
+    newlyInsertedRows: after.identities.filter(r => !beforeIdentityIds.has(r._id)).length,
     genuinelyRemovedDistinctIdentifiers: sorted(before.identities.map(key)).filter(k => !globalAfter.has(k)).length,
     removedPersonIdentifierPairs: personDetails.reduce((n,p) => n + p.removedKeys.length, 0),
     addedPersonIdentifierPairs: personDetails.reduce((n,p) => n + p.addedKeys.length, 0),
@@ -185,7 +227,7 @@ async function replay(input: Input) {
   return { summary, result, reviewedPlan, humans, people: personDetails, withoutIndependentSources: special };
 }
 
-test("offline operator preserves independent ownership and proves replacement delta", async () => {
+test.skipIf(Boolean(process.env.CANONICAL_PREVIEW_INPUT))("offline operator preserves independent ownership and proves replacement delta", async () => {
   const now = "2026-10-18"; const person = "fixture" as Id<"people">; const human = "recAAAAAAAAAAAAAA";
   const p = { _id: person, _creationTime: 1, normalized_phones: [], normalized_emails: ["old@example.test"], identity_count: 1, message_count: 0, is_self: false, auto_clustered: true, created_at: now, updated_at: now, airtable_human_id: human };
   const row = { _id: "legacy" as Id<"identities">, _creationTime: 1, person_id: person, kind: "email", value: "old@example.test", normalized: "old@example.test", message_count: 0, chat_count: 0, is_self: false, source: "airtable_human", created_at: now, updated_at: now };

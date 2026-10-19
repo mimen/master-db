@@ -76,7 +76,7 @@ export function toContactCard(r: AirtableRecord, contacts: CanonicalContact[]): 
 
 type SnapshotCard = { humanId: string; canonicalHumanId: string | null; display_name?: string; first_name?: string; last_name?: string; phones: string[]; emails: string[] };
 const sourceState = makeFunctionReference<"query", Record<string, never>, { humanIds: string[]; legacyCount: number }>("identity/canonicalReconciliation:sourceState");
-const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[] }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
+const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[]; expectedStateFingerprint?: string; semanticGuard?: SemanticGuard }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
 const removeLegacy = makeFunctionReference<"mutation", { plan: CleanupPlan }, { removed: number }>("identity/canonicalReconciliation:removeLegacy");
 const cleanupState = makeFunctionReference<"query", { semanticGuard?: SemanticGuard }, { fingerprint: string; legacy: CleanupPlan["legacy"]; semanticFingerprint?: string }>("identity/canonicalReconciliation:cleanupState");
 
@@ -129,10 +129,16 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       snapshot.contacts.push(...page.contacts);
       snapshot.resolutions.push(...page.resolutions);
     }
+    const contactsByHuman = new Map<string, CanonicalContact[]>();
+    for (const contact of snapshot.contacts) {
+      const contacts = contactsByHuman.get(contact.humanId) ?? [];
+      contacts.push(contact);
+      contactsByHuman.set(contact.humanId, contacts);
+    }
     const cards: SnapshotCard[] = snapshot.resolutions.map(({ humanId, canonicalHumanId }) => {
       // A complete Airtable enumeration proves whether the canonical Human still exists.
       const record = canonicalHumanId ? records.get(canonicalHumanId) : undefined;
-      const contactCard = record ? toContactCard({ ...record, id: humanId }, snapshot.contacts) : null;
+      const contactCard = record ? toContactCard({ ...record, id: humanId }, contactsByHuman.get(humanId) ?? []) : null;
       return { humanId, canonicalHumanId: record ? canonicalHumanId : null,
         display_name: record?.fields.Name, first_name: record?.fields["First Name"], last_name: record?.fields["Last Name"],
         phones: contactCard?.phones ?? [],
@@ -142,9 +148,18 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
     const cardsFingerprint = await fingerprint(cards);
     if (migration === "preview") return { recordsSeen: records.size, legacyWouldRemove: state.legacyCount, humansToReconcile: cards.length, cards, cardsFingerprint, initialFingerprint: initial!.fingerprint, legacy: initial!.legacy };
     if (plan && cardsFingerprint !== plan.cardsFingerprint) throw new Error("Canonical replacement manifest drift");
+    if (plan) {
+      const preWrite = await ctx.runQuery(cleanupState, { semanticGuard: plan.semanticGuard });
+      if (plan.semanticGuard
+        ? preWrite.semanticFingerprint !== plan.semanticGuard.initialFingerprint
+        : preWrite.fingerprint !== plan.initialFingerprint) throw new Error("Cleanup pre-write state drift");
+      if (plan.batchPrewriteFingerprints?.length !== Math.ceil(cards.length / 50))
+        throw new Error("Exact reviewed batch proofs required");
+    }
     const result = { recordsSeen: records.size, peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0, legacyRemoved: 0 };
     for (let i = 0; i < cards.length; i += 50) {
-      const batch = await ctx.runMutation(reconcileBatch, { cards: cards.slice(i, i + 50) });
+      const batch = await ctx.runMutation(reconcileBatch, { cards: cards.slice(i, i + 50),
+        expectedStateFingerprint: plan?.batchPrewriteFingerprints?.[i / 50], semanticGuard: plan?.semanticGuard });
       result.peopleReused += batch.peopleReused;
       result.identitiesWritten += batch.identitiesWritten;
       result.identitiesRemoved += batch.identitiesRemoved;

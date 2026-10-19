@@ -26,6 +26,18 @@ afterEach(() => {
 });
 
 describe("canonical Airtable sync", () => {
+  test("per-Human contact grouping preserves primary order and deduplication", () => {
+    const mixed: CanonicalContact[] = [
+      { humanId: "recBBBBBBBBBBBBBB", channel: "email", value: "other@example.test", primary: true },
+      { humanId: id, channel: "email", value: "secondary@example.test", primary: false },
+      { humanId: id, channel: "sms", value: "+16195550100", primary: false },
+      { humanId: "recBBBBBBBBBBBBBB", channel: "sms", value: "+16195550999", primary: true },
+      { humanId: id, channel: "email", value: "primary@example.test", primary: true },
+      { humanId: id, channel: "email", value: "secondary@example.test", primary: false },
+    ];
+    expect(toContactCard(record, mixed.filter(contact => contact.humanId === id))).toEqual(toContactCard(record, mixed));
+    expect(toContactCard(record, mixed)?.emails).toEqual(["primary@example.test", "secondary@example.test"]);
+  });
   test("retains all contacts beyond the old slot count, deduplicates, and isolates Humans", () => {
     const card = toContactCard(record, [...contacts, contacts[0], { ...contacts[0], humanId: "recBBBBBBBBBBBBBB", value: "other@example.test" }]);
     expect(card?.emails).toHaveLength(6);

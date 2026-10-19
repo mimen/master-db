@@ -30,11 +30,16 @@ export const sourceState = internalQuery({
 });
 
 export const reconcileBatch = internalMutation({
-  args: { cards: v.array(snapshotCard) },
+  args: { cards: v.array(snapshotCard), expectedStateFingerprint: v.optional(v.string()), semanticGuard: v.optional(semanticGuard) },
   returns: v.object({ peopleReused: v.number(), identitiesWritten: v.number(), identitiesRemoved: v.number(), skippedNoMatch: v.number(), linksUpdated: v.number() }),
-  handler: async (ctx, { cards }) => {
+  handler: async (ctx, { cards, expectedStateFingerprint, semanticGuard: guard }) => {
     if (cards.length > 50) throw new Error("Canonical reconciliation batch exceeds 50 Humans");
     if (await protectedDriftCount((id) => ctx.db.get(id))) throw new Error("Protected legacy identity drift");
+    if (expectedStateFingerprint) {
+      const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+      const actual = guard ? (await semanticStateProof(state, guard)).fingerprint : (await stateProof(state)).fingerprint;
+      if (actual !== expectedStateFingerprint) throw new Error("Cleanup batch pre-write state drift");
+    }
     const result = { peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0 };
     const affected = new Set<Id<"people">>();
     for (const card of cards) {

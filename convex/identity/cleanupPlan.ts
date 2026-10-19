@@ -18,6 +18,7 @@ export const cleanupPlan = v.object({
   legacy: v.array(v.object({ id: v.id("identities"), fingerprint: v.string() })),
   protectedLegacy: v.optional(v.array(v.object({ id: v.id("identities"), fingerprint: v.string() }))),
   semanticGuard: v.optional(semanticGuard),
+  batchPrewriteFingerprints: v.optional(v.array(v.string())),
 });
 export type SemanticGuard = {
   allowAppleUpdatedAt: boolean;
@@ -32,6 +33,7 @@ export type CleanupPlan = {
   legacy: { id: Doc<"identities">["_id"]; fingerprint: string }[];
   protectedLegacy?: { id: Doc<"identities">["_id"]; fingerprint: string }[];
   semanticGuard?: SemanticGuard;
+  batchPrewriteFingerprints?: string[];
 };
 export type State = { people: Doc<"people">[]; identities: Doc<"identities">[] };
 function stable(value: unknown): string {
@@ -40,9 +42,16 @@ function stable(value: unknown): string {
   if (value && typeof value === "object") return `{${Object.entries(value).filter(([,v]) => v !== undefined).sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
   return JSON.stringify(value);
 }
-export async function fingerprint(value: unknown): Promise<string> {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(stable(value)));
+function sortStable<T>(values: T[]): T[] {
+  return values.map(value => ({ value, key: stable(value) }))
+    .sort((a,b) => a.key.localeCompare(b.key)).map(({ value }) => value);
+}
+async function fingerprintText(value: string): Promise<string> {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, "0")).join("");
+}
+export async function fingerprint(value: unknown): Promise<string> {
+  return fingerprintText(stable(value));
 }
 // Generated row IDs and wall-clock fields cannot be predicted offline. All identity
 // ownership/contact/name fields and person links/aggregates remain fingerprinted.
@@ -58,9 +67,9 @@ export async function legacyRowFingerprint(row: Doc<"identities">): Promise<stri
 }
 export async function stateProof(state: State) {
   const canonical = state.identities.filter(r => r.source === "airtable_human" && r.source_contact_id);
-  const replacements = canonical.map(r => projected(r, true)).sort((a,b) => stable(a).localeCompare(stable(b)));
-  const identities = state.identities.map(r => projected(r, r.source === "airtable_human" && Boolean(r.source_contact_id))).sort((a,b) => stable(a).localeCompare(stable(b)));
-  const people = state.people.map(r => projected(r, false, true)).sort((a,b) => stable(a).localeCompare(stable(b)));
+  const replacements = sortStable(canonical.map(r => projected(r, true)));
+  const identities = sortStable(state.identities.map(r => projected(r, r.source === "airtable_human" && Boolean(r.source_contact_id))));
+  const people = sortStable(state.people.map(r => projected(r, false, true)));
   const legacy = await Promise.all(state.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).map(async r => ({ id: r._id, fingerprint: await legacyRowFingerprint(r) })));
   legacy.sort((a,b) => a.id.localeCompare(b.id));
   return { fingerprint: await fingerprint({ people, identities }), replacementFingerprint: await fingerprint(replacements), legacy, replacements };
@@ -86,7 +95,7 @@ export async function semanticStateProof(state: State, guard: SemanticGuard) {
       delete projectedRow.updated_at;
     }
     return projectedRow;
-  }).sort((a,b) => stable(a).localeCompare(stable(b)));
+  });
   const people = state.people.map((row) => {
     const projectedRow = projected(row, false, true);
     if (derivedPeople.has(row._id)) {
@@ -95,12 +104,18 @@ export async function semanticStateProof(state: State, guard: SemanticGuard) {
       delete projectedRow.normalized_emails;
     }
     return projectedRow;
-  }).sort((a,b) => stable(a).localeCompare(stable(b)));
+  });
   const legacy = state.identities.filter(row => row.source === "airtable_human" && !row.source_contact_id)
     .map(row => {
       const projectedRow = projected(row, false);
       if (ownerRows.has(row._id)) { delete projectedRow.person_id; delete projectedRow.updated_at; }
       return { id: row._id, row: projectedRow };
     }).sort((a,b) => a.id.localeCompare(b.id));
-  return { fingerprint: await fingerprint({ people, identities }), legacyFingerprint: await fingerprint(legacy) };
+  const identityText = identities.map(stable).sort((a,b) => a.localeCompare(b)).join(",");
+  const peopleText = people.map(stable).sort((a,b) => a.localeCompare(b)).join(",");
+  const legacyText = legacy.map(stable).join(",");
+  return {
+    fingerprint: await fingerprintText(`{"identities":[${identityText}],"people":[${peopleText}]}`),
+    legacyFingerprint: await fingerprintText(`[${legacyText}]`),
+  };
 }
