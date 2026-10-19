@@ -79,6 +79,73 @@ test("semantic cleanup guard rejects a changed independent contact atomically", 
   await expect(t.mutation(remove, { plan })).rejects.toThrow("Cleanup plan drift");
   expect(await state()).toEqual(drifted);
 });
+test("touched cleanup proof ignores unrelated source drift but includes actual match candidates", async () => {
+  const { t, state, before, plan } = await fixture({ apple: true });
+  const scope = { scope: "touched" as const, touchedPersonIds: before.people.filter(p => p.airtable_human_id).map(p => p._id),
+    allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
+    initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" };
+  const cards = [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: ["new@example.test"] }];
+  const first = await semanticStateProof(before, scope, cards);
+  const apple = before.identities.find(row => row.source === "apple_contact")!;
+  await t.run(ctx => ctx.db.patch(apple._id, { normalized: "unrelated-change@example.test", updated_at: "later" }));
+  const canonical = before.identities.find(row => row.source === "airtable_human" && row.source_contact_id)!;
+  await t.run(ctx => ctx.db.patch(canonical._id, { message_count: canonical.message_count + 1,
+    updated_at: "later" }));
+  expect((await semanticStateProof(await state(), scope, cards)).fingerprint).toBe(first.fingerprint);
+  const batch = makeFunctionReference<"mutation", { cards: typeof cards; semanticGuard: typeof scope;
+    expectedStateFingerprint: string; expectedPostwriteFingerprint: string }>("identity/canonicalReconciliation:reconcileBatch");
+  await t.mutation(batch, { cards, semanticGuard: scope, expectedStateFingerprint: first.fingerprint,
+    expectedPostwriteFingerprint: first.fingerprint });
+  await t.run(async ctx => {
+    const { _id, _creationTime, ...copy } = apple;
+    void _id; void _creationTime;
+    await ctx.db.insert("identities", { ...copy, value: "new@example.test", normalized: "new@example.test" });
+  });
+  const drifted = await state();
+  expect((await semanticStateProof(drifted, scope, cards)).fingerprint).not.toBe(first.fingerprint);
+  await expect(t.mutation(batch, { cards, semanticGuard: scope, expectedStateFingerprint: first.fingerprint,
+    expectedPostwriteFingerprint: first.fingerprint })).rejects.toThrow("pre-write state drift");
+  expect(await state()).toEqual(drifted);
+  const legacy = drifted.identities.find(row => row._id === plan.legacy[0].id)!;
+  await t.run(ctx => ctx.db.patch(legacy._id, { value: "touched-change@example.test" }));
+  expect((await semanticStateProof(await state(), scope, cards)).legacyFingerprint).not.toBe(first.legacyFingerprint);
+});
+test("touched proof detects a new normalized match winner before a batch write", async () => {
+  const { t, state, before } = await fixture({ apple: true });
+  const scope = { scope: "touched" as const, touchedPersonIds: before.people.filter(p => p.airtable_human_id).map(p => p._id),
+    allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
+    initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" };
+  const cards = [{ humanId: "recBBBBBBBBBBBBBB", canonicalHumanId: "recBBBBBBBBBBBBBB",
+    phones: [], emails: ["norm@example.test"] }];
+  const expected = (await semanticStateProof(before, scope, cards)).fingerprint;
+  const apple = before.identities.find(row => row.source === "apple_contact")!;
+  await t.run(async ctx => {
+    const { _id, _creationTime, ...copy } = apple;
+    void _id; void _creationTime;
+    await ctx.db.insert("identities", { ...copy, value: "NORM@example.test", normalized: "norm@example.test" });
+  });
+  const drifted = await state();
+  expect((await semanticStateProof(drifted, scope, cards)).fingerprint).not.toBe(expected);
+  const batch = makeFunctionReference<"mutation", { cards: typeof cards; semanticGuard: typeof scope;
+    expectedStateFingerprint: string; expectedPostwriteFingerprint: string }>("identity/canonicalReconciliation:reconcileBatch");
+  await expect(t.mutation(batch, { cards, semanticGuard: scope, expectedStateFingerprint: expected,
+    expectedPostwriteFingerprint: expected })).rejects.toThrow("pre-write state drift");
+  expect(await state()).toEqual(drifted);
+});
+test("touched cleanup refuses to retire the last copy of any normalized identifier", async () => {
+  const { t, state, plan, before, predicted } = await fixture();
+  const scope = { scope: "touched" as const, touchedPersonIds: before.people.filter(p => p.airtable_human_id).map(p => p._id),
+    allowAppleUpdatedAt: false, legacyOwnerRows: [], derivedPeople: [],
+    initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" };
+  const initial = await semanticStateProof(before, scope);
+  const after = await semanticStateProof(predicted, scope);
+  plan.semanticGuard = { ...scope, initialFingerprint: initial.fingerprint,
+    beforeRemovalFingerprint: initial.fingerprint, afterRemovalFingerprint: after.fingerprint,
+    legacyFingerprint: initial.legacyFingerprint };
+  await expect(t.mutation(remove, { plan })).rejects.toThrow("newly lose an identifier");
+  expect(await state()).toEqual(before);
+});
 test("remote-capture drift stops before the first replacement mutation", async () => {
   const { t, state, plan, before, predicted } = await fixture({ apple: true });
   const scope = { allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
@@ -184,14 +251,14 @@ test("allowed legacy owner movement cannot commit a different canonical replacem
     await recomputePersonAggregates(ctx, secondId);
     return { firstId: _id, secondId };
   });
-  const scope = { allowAppleUpdatedAt: false,
+  const scope = { scope: "touched" as const, touchedPersonIds: [firstId, secondId], allowAppleUpdatedAt: false,
     legacyOwnerRows: [{ id: legacyId, allowedPersonIds: [firstId, secondId] }],
     derivedPeople: [firstId, secondId], initialFingerprint: "", beforeRemovalFingerprint: "",
     afterRemovalFingerprint: "", legacyFingerprint: "" };
   const baseline = await state();
-  const pre = (await semanticStateProof(baseline, scope)).fingerprint;
   const cards = [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
     phones: [], emails: ["old@example.test"] }];
+  const pre = (await semanticStateProof(baseline, scope, cards)).fingerprint;
   let expectedPost = "";
   const rollback = new Error("test rollback");
   try {
@@ -200,7 +267,7 @@ test("allowed legacy owner movement cannot commit a different canonical replacem
         cards: typeof cards; expectedStateFingerprint?: string; semanticGuard?: typeof scope
       }) => Promise<unknown> })._handler(ctx, { cards });
       expectedPost = (await semanticStateProof({ people: await ctx.db.query("people").collect(),
-        identities: await ctx.db.query("identities").collect() }, scope)).fingerprint;
+        identities: await ctx.db.query("identities").collect() }, scope, cards)).fingerprint;
       throw rollback;
     });
   } catch (error) { if (error !== rollback) throw error; }
@@ -212,7 +279,7 @@ test("allowed legacy owner movement cannot commit a different canonical replacem
     await recomputePersonAggregates(ctx, secondId);
   });
   const moved = await state();
-  expect((await semanticStateProof(moved, scope)).fingerprint).toBe(pre);
+  expect((await semanticStateProof(moved, scope, cards)).fingerprint).toBe(pre);
   const batch = makeFunctionReference<"mutation", { cards: typeof cards; expectedStateFingerprint: string;
     expectedPostwriteFingerprint: string; semanticGuard: typeof scope }>("identity/canonicalReconciliation:reconcileBatch");
   await expect(t.mutation(batch, { cards, expectedStateFingerprint: pre,

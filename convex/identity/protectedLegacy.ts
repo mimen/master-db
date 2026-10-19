@@ -33,6 +33,9 @@ export function assertProtectedPlan(plan: CleanupPlan): void {
   if (actual.some(({ id }) => !protectedLegacy.has(id))) throw new Error("Unapproved protected legacy ID");
   const guard = plan.semanticGuard;
   if (!guard) return;
+  if (guard.scope === "touched" && (!guard.touchedPersonIds?.length ||
+      new Set(guard.touchedPersonIds).size !== guard.touchedPersonIds.length))
+    throw new Error("Exact touched person scope required");
   const legacyIds = new Set(plan.legacy.map(({ id }) => id));
   const ownerIds = new Set<string>();
   const affectedPeople = new Set<string>();

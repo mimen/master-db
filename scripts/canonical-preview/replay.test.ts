@@ -76,6 +76,11 @@ async function replay(input: Input) {
   );
   const semanticScope = process.env.CANONICAL_PREVIEW_SEMANTIC_SCOPE
     ? JSON.parse(readFileSync(process.env.CANONICAL_PREVIEW_SEMANTIC_SCOPE, "utf8")) as SemanticGuard : undefined;
+  if (semanticScope?.scope === "touched") {
+    semanticScope.touchedPersonIds = before.people.filter(person => person.airtable_human_id ||
+      before.identities.some(row => row.source === "airtable_human" && row.person_id === person._id))
+      .map(person => originalPeople.get(person._id) as Id<"people">);
+  }
   const generatedScope = semanticScope ? {
     ...semanticScope,
     legacyOwnerRows: semanticScope.legacyOwnerRows.map(({ id, allowedPersonIds }) => ({
@@ -83,6 +88,7 @@ async function replay(input: Input) {
       allowedPersonIds: allowedPersonIds.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown reviewed person ID"); })()),
     })),
     derivedPeople: semanticScope.derivedPeople.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown derived person ID"); })()),
+    touchedPersonIds: semanticScope.touchedPersonIds?.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown touched person ID"); })()),
   } : undefined;
   const originalize = (state: State): State => ({
     people: state.people.map(p => ({ ...p, _id: originalPeople.get(p._id) as Id<"people">,
@@ -110,14 +116,14 @@ async function replay(input: Input) {
     const batchPostwriteFingerprints: string[] = [];
     const reviewedBatchPostwriteFingerprints: string[] = [];
     for (let i = 0; i < preview.cards.length; i += 50) {
+      const cards = preview.cards.slice(i, i + 50);
       const prewrite = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
-      const generatedFingerprint = generatedScope ? (await semanticStateProof(prewrite, generatedScope)).fingerprint : (await stateProof(prewrite)).fingerprint;
+      const generatedFingerprint = generatedScope ? (await semanticStateProof(prewrite, generatedScope, cards)).fingerprint : (await stateProof(prewrite)).fingerprint;
       const reviewedPrewrite = originalize(prewrite);
-      const reviewedFingerprint = semanticScope ? (await semanticStateProof(reviewedPrewrite, semanticScope)).fingerprint : (await stateProof(reviewedPrewrite)).fingerprint;
+      const reviewedFingerprint = semanticScope ? (await semanticStateProof(reviewedPrewrite, semanticScope, cards)).fingerprint : (await stateProof(reviewedPrewrite)).fingerprint;
       batchPrewriteFingerprints.push(generatedFingerprint);
       reviewedBatchPrewriteFingerprints.push(reviewedFingerprint);
       const batchStart = performance.now();
-      const cards = preview.cards.slice(i, i + 50);
       let predictedPost: State | undefined;
       const rollbackBatch = new Error("OFFLINE_BATCH_PREDICTION_ROLLBACK");
       try {
@@ -129,17 +135,17 @@ async function replay(input: Input) {
         });
       } catch (error) { if (error !== rollbackBatch) throw error; }
       if (!predictedPost) throw new Error("Offline batch prediction missing");
-      const generatedPost = generatedScope ? (await semanticStateProof(predictedPost, generatedScope)).fingerprint
+      const generatedPost = generatedScope ? (await semanticStateProof(predictedPost, generatedScope, cards)).fingerprint
         : (await stateProof(predictedPost)).fingerprint;
       const reviewedPost = originalize(predictedPost);
-      const reviewedPostFingerprint = semanticScope ? (await semanticStateProof(reviewedPost, semanticScope)).fingerprint
+      const reviewedPostFingerprint = semanticScope ? (await semanticStateProof(reviewedPost, semanticScope, cards)).fingerprint
         : (await stateProof(reviewedPost)).fingerprint;
       await t.mutation(makeFunctionReference<"mutation", { cards: typeof cards; expectedStateFingerprint: string;
         expectedPostwriteFingerprint: string; semanticGuard?: SemanticGuard }>("identity/canonicalReconciliation:reconcileBatch"),
       { cards, expectedStateFingerprint: generatedFingerprint, expectedPostwriteFingerprint: generatedPost,
         semanticGuard: generatedScope });
       const actualPost = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
-      const actualFingerprint = generatedScope ? (await semanticStateProof(actualPost, generatedScope)).fingerprint
+      const actualFingerprint = generatedScope ? (await semanticStateProof(actualPost, generatedScope, cards)).fingerprint
         : (await stateProof(actualPost)).fingerprint;
       if (actualFingerprint !== generatedPost) throw new Error("Offline batch post-state differs from reviewed prediction");
       batchPostwriteFingerprints.push(generatedPost);

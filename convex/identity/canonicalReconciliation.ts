@@ -42,11 +42,12 @@ export const reconcileBatch = internalMutation({
     if (await protectedDriftCount((id) => ctx.db.get(id))) throw new Error("Protected legacy identity drift");
     if (expectedStateFingerprint !== undefined) {
       const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
-      const actual = guard ? (await semanticStateProof(state, guard)).fingerprint : (await stateProof(state)).fingerprint;
+      const actual = guard ? (await semanticStateProof(state, guard, cards)).fingerprint : (await stateProof(state)).fingerprint;
       if (actual !== expectedStateFingerprint) throw new Error("Cleanup batch pre-write state drift");
     }
     const result = { peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0 };
     const affected = new Set<Id<"people">>();
+    const validated = new Set<Id<"people">>();
     for (const card of cards) {
       const prior = await ctx.db.query("identities").withIndex("by_source_contact", (q) => q.eq("source", "airtable_human").eq("source_contact_id", card.humanId)).collect();
       // Only the endpoint's verified resolution (or a complete Airtable absence) moves a link.
@@ -63,6 +64,7 @@ export const reconcileBatch = internalMutation({
         if (ingested.outcome === "reused") {
           result.peopleReused++;
           result.identitiesWritten += ingested.identitiesWritten;
+          validated.add(ingested.personId);
         } else if (ingested.outcome === "skipped_no_match") result.skippedNoMatch++;
       }
       const keys = new Set([...card.phones.map((value) => `phone:${normalizePhone(value)}`), ...card.emails.map((value) => `email:${normalizeEmail(value)}`)]);
@@ -76,7 +78,12 @@ export const reconcileBatch = internalMutation({
     for (const personId of affected) await recomputePersonAggregates(ctx, personId);
     if (expectedPostwriteFingerprint !== undefined) {
       const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
-      const actual = guard ? (await semanticStateProof(state, guard)).fingerprint : (await stateProof(state)).fingerprint;
+      for (const id of new Set([...affected, ...validated])) {
+        const person = state.people.find(row => row._id === id);
+        if (person && personAggregatePatch(person, state.identities.filter(row => row.person_id === id)))
+          throw new Error("Cleanup touched person aggregates are stale");
+      }
+      const actual = guard ? (await semanticStateProof(state, guard, cards)).fingerprint : (await stateProof(state)).fingerprint;
       if (actual !== expectedPostwriteFingerprint) throw new Error("Cleanup batch post-write state drift");
     }
     return result;
@@ -105,7 +112,8 @@ export const removeLegacy = internalMutation({
             semanticBefore!.legacyFingerprint !== plan.semanticGuard.legacyFingerprint ||
             legacyIds.length !== plan.legacy.length || legacyIds.some((id, index) => id !== plan.legacy[index].id)
           : before.fingerprint !== plan.beforeRemovalFingerprint || await fingerprint(before.legacy) !== await fingerprint(plan.legacy)) ||
-        before.replacementFingerprint !== plan.replacementFingerprint) throw new Error("Cleanup plan drift or unverified replacements");
+        (plan.semanticGuard?.scope !== "touched" && before.replacementFingerprint !== plan.replacementFingerprint))
+      throw new Error("Cleanup plan drift or unverified replacements");
     const affected = new Set<Id<"people">>();
     // No rescan-and-delete: only the immutable approved IDs can be retired.
     const protectedIds = new Set((plan.protectedLegacy ?? []).map(({ id }) => id));
@@ -117,11 +125,20 @@ export const removeLegacy = internalMutation({
     }
     const removed = new Set(plan.legacy.filter(({ id }) => !protectedIds.has(id)).map(r => r.id));
     const remaining = state.identities.filter(r => !removed.has(r._id));
+    const identifierKey = (row: (typeof state.identities)[number]) => `${row.kind}:${row.normalized}`;
+    const beforeIdentifiers = new Set(state.identities.map(identifierKey));
+    const afterIdentifiers = new Set(remaining.map(identifierKey));
+    if (plan.semanticGuard?.scope === "touched" && [...beforeIdentifiers].some(key => !afterIdentifiers.has(key)))
+      throw new Error("Cleanup would newly lose an identifier");
     const people = [];
     for (const person of state.people) {
       const patch = affected.has(person._id) ? personAggregatePatch(person, remaining.filter(r => r.person_id === person._id)) : null;
       if (patch) await ctx.db.patch(person._id, patch);
       people.push(patch ? { ...person, ...patch } : person);
+    }
+    for (const person of people.filter(row => affected.has(row._id))) {
+      if (personAggregatePatch(person, remaining.filter(row => row.person_id === person._id)))
+        throw new Error("Cleanup retired person aggregates are stale");
     }
     const after = await stateProof({ people, identities: remaining });
     const semanticAfter = plan.semanticGuard ? await semanticStateProof({ people, identities: remaining }, plan.semanticGuard) : undefined;
