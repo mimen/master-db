@@ -8,6 +8,7 @@ import { test, vi, expect } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { CanonicalSnapshot } from "../../convex/identity/canonicalContacts";
+import { reconcileBatch } from "../../convex/identity/canonicalReconciliation";
 import { semanticStateProof, stateProof, type CleanupPlan, type SemanticGuard, type State } from "../../convex/identity/cleanupPlan";
 import { recomputePersonAggregates } from "../../convex/identity/internal";
 import { protectedLegacy } from "../../convex/identity/protectedLegacy";
@@ -116,12 +117,33 @@ async function replay(input: Input) {
       batchPrewriteFingerprints.push(generatedFingerprint);
       reviewedBatchPrewriteFingerprints.push(reviewedFingerprint);
       const batchStart = performance.now();
-      await t.mutation(makeFunctionReference<"mutation", { cards: typeof preview.cards; expectedStateFingerprint: string; semanticGuard?: SemanticGuard }>("identity/canonicalReconciliation:reconcileBatch"),
-        { cards: preview.cards.slice(i,i+50), expectedStateFingerprint: generatedFingerprint, semanticGuard: generatedScope });
-      const postwrite = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
-      batchPostwriteFingerprints.push(generatedScope ? (await semanticStateProof(postwrite, generatedScope)).fingerprint : (await stateProof(postwrite)).fingerprint);
-      const reviewedPostwrite = originalize(postwrite);
-      reviewedBatchPostwriteFingerprints.push(semanticScope ? (await semanticStateProof(reviewedPostwrite, semanticScope)).fingerprint : (await stateProof(reviewedPostwrite)).fingerprint);
+      const cards = preview.cards.slice(i, i + 50);
+      let predictedPost: State | undefined;
+      const rollbackBatch = new Error("OFFLINE_BATCH_PREDICTION_ROLLBACK");
+      try {
+        await t.run(async ctx => {
+          await (reconcileBatch as unknown as { _handler: (context: typeof ctx, args: { cards: typeof cards }) => Promise<unknown> })
+            ._handler(ctx, { cards });
+          predictedPost = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+          throw rollbackBatch;
+        });
+      } catch (error) { if (error !== rollbackBatch) throw error; }
+      if (!predictedPost) throw new Error("Offline batch prediction missing");
+      const generatedPost = generatedScope ? (await semanticStateProof(predictedPost, generatedScope)).fingerprint
+        : (await stateProof(predictedPost)).fingerprint;
+      const reviewedPost = originalize(predictedPost);
+      const reviewedPostFingerprint = semanticScope ? (await semanticStateProof(reviewedPost, semanticScope)).fingerprint
+        : (await stateProof(reviewedPost)).fingerprint;
+      await t.mutation(makeFunctionReference<"mutation", { cards: typeof cards; expectedStateFingerprint: string;
+        expectedPostwriteFingerprint: string; semanticGuard?: SemanticGuard }>("identity/canonicalReconciliation:reconcileBatch"),
+      { cards, expectedStateFingerprint: generatedFingerprint, expectedPostwriteFingerprint: generatedPost,
+        semanticGuard: generatedScope });
+      const actualPost = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));
+      const actualFingerprint = generatedScope ? (await semanticStateProof(actualPost, generatedScope)).fingerprint
+        : (await stateProof(actualPost)).fingerprint;
+      if (actualFingerprint !== generatedPost) throw new Error("Offline batch post-state differs from reviewed prediction");
+      batchPostwriteFingerprints.push(generatedPost);
+      reviewedBatchPostwriteFingerprints.push(reviewedPostFingerprint);
       batchMutationDurationsMs.push(Math.round(performance.now() - batchStart));
     }
     const replaced = await t.run(async ctx => ({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }));

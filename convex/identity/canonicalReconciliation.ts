@@ -34,8 +34,13 @@ export const reconcileBatch = internalMutation({
   returns: v.object({ peopleReused: v.number(), identitiesWritten: v.number(), identitiesRemoved: v.number(), skippedNoMatch: v.number(), linksUpdated: v.number() }),
   handler: async (ctx, { cards, expectedStateFingerprint, expectedPostwriteFingerprint, semanticGuard: guard }) => {
     if (cards.length > 50) throw new Error("Canonical reconciliation batch exceeds 50 Humans");
+    if (expectedStateFingerprint !== undefined || expectedPostwriteFingerprint !== undefined) {
+      if (!expectedStateFingerprint || !/^[0-9a-f]{64}$/.test(expectedStateFingerprint) ||
+          !expectedPostwriteFingerprint || !/^[0-9a-f]{64}$/.test(expectedPostwriteFingerprint))
+        throw new Error("Paired SHA-256 cleanup batch proofs required");
+    }
     if (await protectedDriftCount((id) => ctx.db.get(id))) throw new Error("Protected legacy identity drift");
-    if (expectedStateFingerprint) {
+    if (expectedStateFingerprint !== undefined) {
       const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
       const actual = guard ? (await semanticStateProof(state, guard)).fingerprint : (await stateProof(state)).fingerprint;
       if (actual !== expectedStateFingerprint) throw new Error("Cleanup batch pre-write state drift");
@@ -69,7 +74,7 @@ export const reconcileBatch = internalMutation({
       }
     }
     for (const personId of affected) await recomputePersonAggregates(ctx, personId);
-    if (expectedPostwriteFingerprint) {
+    if (expectedPostwriteFingerprint !== undefined) {
       const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
       const actual = guard ? (await semanticStateProof(state, guard)).fingerprint : (await stateProof(state)).fingerprint;
       if (actual !== expectedPostwriteFingerprint) throw new Error("Cleanup batch post-write state drift");

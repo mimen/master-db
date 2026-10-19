@@ -153,8 +153,9 @@ async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "appl
       if (plan.semanticGuard
         ? preWrite.semanticFingerprint !== plan.semanticGuard.initialFingerprint
         : preWrite.fingerprint !== plan.initialFingerprint) throw new Error("Cleanup pre-write state drift");
-      if (plan.batchPrewriteFingerprints?.length !== Math.ceil(cards.length / 50) ||
-          plan.batchPostwriteFingerprints?.length !== Math.ceil(cards.length / 50))
+      const validProofs = (hashes: string[] | undefined) => hashes?.length === Math.ceil(cards.length / 50) &&
+        hashes.every((hash) => /^[0-9a-f]{64}$/.test(hash));
+      if (!validProofs(plan.batchPrewriteFingerprints) || !validProofs(plan.batchPostwriteFingerprints))
         throw new Error("Exact reviewed pre/post batch proofs required");
     }
     const result = { recordsSeen: records.size, peopleReused: 0, identitiesWritten: 0, identitiesRemoved: 0, skippedNoMatch: 0, linksUpdated: 0, legacyRemoved: 0 };

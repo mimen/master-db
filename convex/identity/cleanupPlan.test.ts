@@ -118,18 +118,21 @@ test("remote-capture drift stops before the first replacement mutation", async (
 test("each batch checks the reviewed state atomically before writing", async () => {
   const { t, state } = await fixture({ apple: true });
   const batch = makeFunctionReference<"mutation", { cards: { humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }[];
-    expectedStateFingerprint: string }>("identity/canonicalReconciliation:reconcileBatch");
+    expectedStateFingerprint?: string; expectedPostwriteFingerprint?: string }>("identity/canonicalReconciliation:reconcileBatch");
   const first = { humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
     phones: [], emails: ["new@example.test", "first@example.test"] };
   const firstFingerprint = (await stateProof(await state())).fingerprint;
-  await t.mutation(batch, { cards: [first], expectedStateFingerprint: firstFingerprint });
+  expect(firstFingerprint).toMatch(/^[0-9a-f]{64}$/);
+  // The scheduled path has no plan and may reconcile without paired proofs.
+  await t.mutation(batch, { cards: [first] });
   const afterFirst = await state();
   const secondFingerprint = (await stateProof(afterFirst)).fingerprint;
   const apple = afterFirst.identities.find(row => row.source === "apple_contact")!;
   await t.run(ctx => ctx.db.patch(apple._id, { normalized: "changed@example.test" }));
   const afterDrift = await state();
   await expect(t.mutation(batch, { cards: [{ ...first, emails: ["new@example.test", "second@example.test"] }],
-    expectedStateFingerprint: secondFingerprint })).rejects.toThrow("Cleanup batch pre-write state drift");
+    expectedStateFingerprint: secondFingerprint, expectedPostwriteFingerprint: secondFingerprint }))
+    .rejects.toThrow("Cleanup batch pre-write state drift");
   expect(await state()).toEqual(afterDrift);
 });
 test("a post-batch proof mismatch rolls back the entire reconciliation mutation", async () => {
@@ -138,12 +141,24 @@ test("a post-batch proof mismatch rolls back the entire reconciliation mutation"
   const pre = (await stateProof(before)).fingerprint;
   const batch = makeFunctionReference<"mutation", {
     cards: { humanId: string; canonicalHumanId: string | null; phones: string[]; emails: string[] }[];
-    expectedStateFingerprint: string; expectedPostwriteFingerprint: string
+    expectedStateFingerprint?: string; expectedPostwriteFingerprint?: string
   }>("identity/canonicalReconciliation:reconcileBatch");
   await expect(t.mutation(batch, { cards: [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
     phones: [], emails: ["new@example.test", "extra@example.test"] }],
     expectedStateFingerprint: pre, expectedPostwriteFingerprint: pre }))
     .rejects.toThrow("Cleanup batch post-write state drift");
+  expect(await state()).toEqual(before);
+  await expect(t.mutation(batch, { cards: [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: ["new@example.test", "extra@example.test"] }],
+    expectedStateFingerprint: pre, expectedPostwriteFingerprint: "" }))
+    .rejects.toThrow("Paired SHA-256 cleanup batch proofs required");
+  await expect(t.mutation(batch, { cards: [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: ["new@example.test", "extra@example.test"] }],
+    expectedStateFingerprint: "", expectedPostwriteFingerprint: pre }))
+    .rejects.toThrow("Paired SHA-256 cleanup batch proofs required");
+  await expect(t.mutation(batch, { cards: [{ humanId: "recAAAAAAAAAAAAAA", canonicalHumanId: "recAAAAAAAAAAAAAA",
+    phones: [], emails: ["new@example.test", "extra@example.test"] }], expectedStateFingerprint: pre }))
+    .rejects.toThrow("Paired SHA-256 cleanup batch proofs required");
   expect(await state()).toEqual(before);
 });
 test("allowed legacy owner movement cannot commit a different canonical replacement owner", async () => {
@@ -173,8 +188,8 @@ test("allowed legacy owner movement cannot commit a different canonical replacem
   try {
     await t.run(async ctx => {
       await (reconcileBatch as unknown as { _handler: (context: typeof ctx, args: {
-        cards: typeof cards; expectedStateFingerprint: string; semanticGuard: typeof scope
-      }) => Promise<unknown> })._handler(ctx, { cards, expectedStateFingerprint: pre, semanticGuard: scope });
+        cards: typeof cards; expectedStateFingerprint?: string; semanticGuard?: typeof scope
+      }) => Promise<unknown> })._handler(ctx, { cards });
       expectedPost = (await semanticStateProof({ people: await ctx.db.query("people").collect(),
         identities: await ctx.db.query("identities").collect() }, scope)).fingerprint;
       throw rollback;
