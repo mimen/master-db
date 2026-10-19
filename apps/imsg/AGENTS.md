@@ -78,6 +78,12 @@ and Restart banners.
   `/api/desktop-release/artifact/:filename`, and `/api/desktop-version`. It also serves static
   files and the SPA, with a 404 boundary for unknown `/api/*` paths. Feature REST routes and
   `/events` are gone; the bridge still uses the local services directly.
+- **Agents call authed functions as Milad** from the repo root with
+  `bunx convex run --identity '{"subject":"agent","email":"milad@afternoonumbrellafriends.com"}' <fn> '<args>'`;
+  the `authed*` guards accept that admin identity. A plain `convex run` is rejected as Unauthorized.
+  Reads are free. Writes (outbox commands) change real data: only for what Milad asked.
+  `bun scripts/settle.ts <conversationId|name> ...` settles conversations the way ⌘E does and reports
+  the Mini's answer.
 - Convex functions deploy separately from the repo root with
   `CONVEX_DEPLOYMENT=dev:shiny-gerbil-853 bunx convex dev --once`. A push to main deploys only imsg.
 
