@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { internalAction, type ActionCtx } from "../_generated/server";
 
 import { contactValues, readCanonicalSnapshot, type CanonicalContact, type CanonicalSnapshot } from "./canonicalContacts";
-import { cleanupPlan, fingerprint, type CleanupPlan } from "./cleanupPlan";
+import { cleanupPlan, fingerprint, type CleanupPlan, type SemanticGuard } from "./cleanupPlan";
 import { assertProtectedPlan } from "./protectedLegacy";
 
 /**
@@ -78,14 +78,16 @@ type SnapshotCard = { humanId: string; canonicalHumanId: string | null; display_
 const sourceState = makeFunctionReference<"query", Record<string, never>, { humanIds: string[]; legacyCount: number }>("identity/canonicalReconciliation:sourceState");
 const reconcileBatch = makeFunctionReference<"mutation", { cards: SnapshotCard[] }, { peopleReused: number; identitiesWritten: number; identitiesRemoved: number; skippedNoMatch: number; linksUpdated: number }>("identity/canonicalReconciliation:reconcileBatch");
 const removeLegacy = makeFunctionReference<"mutation", { plan: CleanupPlan }, { removed: number }>("identity/canonicalReconciliation:removeLegacy");
-const cleanupState = makeFunctionReference<"query", Record<string, never>, { fingerprint: string; legacy: CleanupPlan["legacy"] }>("identity/canonicalReconciliation:cleanupState");
+const cleanupState = makeFunctionReference<"query", { semanticGuard?: SemanticGuard }, { fingerprint: string; legacy: CleanupPlan["legacy"]; semanticFingerprint?: string }>("identity/canonicalReconciliation:cleanupState");
 
 async function synchronize(ctx: ActionCtx, migration: "none" | "preview" | "apply", plan?: CleanupPlan) {
     const state = await ctx.runQuery(sourceState, {});
     if (migration === "apply" && !plan) throw new Error("Exact reviewed cleanup plan required");
     if (plan) assertProtectedPlan(plan);
-    const initial = migration !== "none" ? await ctx.runQuery(cleanupState, {}) : undefined;
-    if (plan && initial?.fingerprint !== plan.initialFingerprint) throw new Error("Cleanup initial state drift");
+    const initial = migration !== "none" ? await ctx.runQuery(cleanupState, { semanticGuard: plan?.semanticGuard }) : undefined;
+    if (plan && (plan.semanticGuard
+      ? initial?.semanticFingerprint !== plan.semanticGuard.initialFingerprint
+      : initial?.fingerprint !== plan.initialFingerprint)) throw new Error("Cleanup initial state drift");
     if (migration === "none" && state.legacyCount)
       throw new Error("Legacy Airtable identities require reviewed canonical cleanup before hourly sync");
     const apiKey = process.env.AIRTABLE_API_KEY;

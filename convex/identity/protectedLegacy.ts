@@ -22,6 +22,7 @@ export function approvedProtectedEntries(legacy: Legacy): Legacy {
 export function assertProtectedPlan(plan: CleanupPlan): void {
   const expected = approvedProtectedEntries(plan.legacy);
   const actual = plan.protectedLegacy ?? [];
+  if (expected.length !== protectedLegacy.size) throw new Error("All protected legacy IDs required in cleanup plan");
   if (actual.length !== expected.length) throw new Error("Exact protected legacy manifest required");
   const byId = new Map(actual.map(({ id, fingerprint }) => [id, fingerprint]));
   if (byId.size !== actual.length) throw new Error("Duplicate protected legacy ID");
@@ -30,6 +31,22 @@ export function assertProtectedPlan(plan: CleanupPlan): void {
       throw new Error("Protected legacy fingerprint drift");
   }
   if (actual.some(({ id }) => !protectedLegacy.has(id))) throw new Error("Unapproved protected legacy ID");
+  const guard = plan.semanticGuard;
+  if (!guard) return;
+  const legacyIds = new Set(plan.legacy.map(({ id }) => id));
+  const ownerIds = new Set<string>();
+  const affectedPeople = new Set<string>();
+  for (const entry of guard.legacyOwnerRows) {
+    if (ownerIds.has(entry.id) || !legacyIds.has(entry.id) || protectedLegacy.has(entry.id) || !entry.allowedPersonIds.length)
+      throw new Error("Unreviewed legacy owner drift scope");
+    ownerIds.add(entry.id);
+    const unique = new Set(entry.allowedPersonIds);
+    if (unique.size !== entry.allowedPersonIds.length) throw new Error("Duplicate reviewed legacy owner");
+    for (const id of unique) affectedPeople.add(id);
+  }
+  if (new Set(guard.derivedPeople).size !== guard.derivedPeople.length ||
+      guard.derivedPeople.some(id => !affectedPeople.has(id)))
+    throw new Error("Derived aggregate scope exceeds reviewed legacy owners");
 }
 
 export function unreviewedLegacyCount(legacy: Legacy): number {

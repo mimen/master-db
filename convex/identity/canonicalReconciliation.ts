@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 
-import { cleanupPlan, fingerprint, stateProof } from "./cleanupPlan";
+import { cleanupPlan, fingerprint, semanticGuard, semanticStateProof, stateProof } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { personAggregatePatch, recomputePersonAggregates } from "./internal";
 import { normalizeEmail, normalizePhone } from "./normalize";
@@ -70,8 +70,12 @@ export const reconcileBatch = internalMutation({
 
 // Final deletion is one atomic transaction, bound to the approved local replay.
 export const cleanupState = internalQuery({
-  args: {},
-  handler: async (ctx) => stateProof({ people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() }),
+  args: { semanticGuard: v.optional(semanticGuard) },
+  handler: async (ctx, { semanticGuard: guard }) => {
+    const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
+    const proof = await stateProof(state);
+    return { ...proof, semanticFingerprint: guard ? (await semanticStateProof(state, guard)).fingerprint : undefined };
+  },
 });
 export const removeLegacy = internalMutation({
   args: { plan: cleanupPlan },
@@ -79,8 +83,14 @@ export const removeLegacy = internalMutation({
     assertProtectedPlan(plan);
     const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
     const before = await stateProof(state);
-    if (before.fingerprint !== plan.beforeRemovalFingerprint || before.replacementFingerprint !== plan.replacementFingerprint ||
-        await fingerprint(before.legacy) !== await fingerprint(plan.legacy)) throw new Error("Cleanup plan drift or unverified replacements");
+    const semanticBefore = plan.semanticGuard ? await semanticStateProof(state, plan.semanticGuard) : undefined;
+    const legacyIds = before.legacy.map(({ id }) => id);
+    if ((plan.semanticGuard
+          ? semanticBefore!.fingerprint !== plan.semanticGuard.beforeRemovalFingerprint ||
+            semanticBefore!.legacyFingerprint !== plan.semanticGuard.legacyFingerprint ||
+            legacyIds.length !== plan.legacy.length || legacyIds.some((id, index) => id !== plan.legacy[index].id)
+          : before.fingerprint !== plan.beforeRemovalFingerprint || await fingerprint(before.legacy) !== await fingerprint(plan.legacy)) ||
+        before.replacementFingerprint !== plan.replacementFingerprint) throw new Error("Cleanup plan drift or unverified replacements");
     const affected = new Set<Id<"people">>();
     // No rescan-and-delete: only the immutable approved IDs can be retired.
     const protectedIds = new Set((plan.protectedLegacy ?? []).map(({ id }) => id));
@@ -99,8 +109,12 @@ export const removeLegacy = internalMutation({
       people.push(patch ? { ...person, ...patch } : person);
     }
     const after = await stateProof({ people, identities: remaining });
-    if (after.fingerprint !== plan.afterRemovalFingerprint) throw new Error("Cleanup after-state does not match reviewed plan");
+    const semanticAfter = plan.semanticGuard ? await semanticStateProof({ people, identities: remaining }, plan.semanticGuard) : undefined;
+    if (plan.semanticGuard
+      ? semanticAfter!.fingerprint !== plan.semanticGuard.afterRemovalFingerprint
+      : after.fingerprint !== plan.afterRemovalFingerprint) throw new Error("Cleanup after-state does not match reviewed plan");
     return { removed: removed.size, beforeFingerprint: before.fingerprint, afterFingerprint: after.fingerprint,
-      replacementFingerprint: before.replacementFingerprint, legacy: plan.legacy.filter(({ id }) => removed.has(id)) };
+      replacementFingerprint: before.replacementFingerprint, legacy: plan.legacy.filter(({ id }) => removed.has(id)),
+      semanticBeforeFingerprint: semanticBefore?.fingerprint, semanticAfterFingerprint: semanticAfter?.fingerprint };
   },
 });

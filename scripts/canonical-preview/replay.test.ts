@@ -1,4 +1,6 @@
-import { readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, chmodSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { makeFunctionReference } from "convex/server";
 import { convexTest } from "convex-test";
@@ -6,7 +8,7 @@ import { test, vi, expect } from "vitest";
 
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { CanonicalSnapshot } from "../../convex/identity/canonicalContacts";
-import { stateProof, type CleanupPlan, type State } from "../../convex/identity/cleanupPlan";
+import { semanticStateProof, stateProof, type CleanupPlan, type SemanticGuard, type State } from "../../convex/identity/cleanupPlan";
 import { recomputePersonAggregates } from "../../convex/identity/internal";
 import { protectedLegacy } from "../../convex/identity/protectedLegacy";
 import schema from "../../convex/schema";
@@ -18,6 +20,14 @@ type Input = { people: Doc<"people">[]; identities: Doc<"identities">[]; records
 const key = (r: Doc<"identities">) => `${r.kind}:${r.normalized}`;
 const sorted = (xs: string[]) => [...new Set(xs)].sort();
 const save = (path: string, value: unknown) => { writeFileSync(path, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" }); chmodSync(path, 0o600); };
+
+async function stampGuard(scope: SemanticGuard, initial: State, replaced: State, after: State): Promise<SemanticGuard> {
+  const first = await semanticStateProof(initial, scope);
+  const second = await semanticStateProof(replaced, scope);
+  const third = await semanticStateProof(after, scope);
+  return { ...scope, initialFingerprint: first.fingerprint, beforeRemovalFingerprint: second.fingerprint,
+    afterRemovalFingerprint: third.fingerprint, legacyFingerprint: second.legacyFingerprint };
+}
 
 async function replay(input: Input) {
   if (!input.complete) throw new Error("Complete input required");
@@ -63,6 +73,16 @@ async function replay(input: Input) {
   const protectedGenerated = new Set(
     [...oldIdentityIds].filter(([original]) => originalProtected.has(original)).map(([, generated]) => generated),
   );
+  const semanticScope = process.env.CANONICAL_PREVIEW_SEMANTIC_SCOPE
+    ? JSON.parse(readFileSync(process.env.CANONICAL_PREVIEW_SEMANTIC_SCOPE, "utf8")) as SemanticGuard : undefined;
+  const generatedScope = semanticScope ? {
+    ...semanticScope,
+    legacyOwnerRows: semanticScope.legacyOwnerRows.map(({ id, allowedPersonIds }) => ({
+      id: oldIdentityIds.get(id) ?? (() => { throw new Error("Unknown reviewed legacy owner ID"); })(),
+      allowedPersonIds: allowedPersonIds.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown reviewed person ID"); })()),
+    })),
+    derivedPeople: semanticScope.derivedPeople.map(personId => ids.get(personId) ?? (() => { throw new Error("Unknown derived person ID"); })()),
+  } : undefined;
   const originalize = (state: State): State => ({
     people: state.people.map(p => ({ ...p, _id: originalPeople.get(p._id) as Id<"people">,
       merged_into: p.merged_into ? originalPeople.get(p.merged_into) as Id<"people"> : undefined,
@@ -105,12 +125,15 @@ async function replay(input: Input) {
       protectedLegacy: proof.legacy.filter(({ id }) => protectedGenerated.has(id)),
       beforeRemovalFingerprint: proof.fingerprint, replacementFingerprint: proof.replacementFingerprint,
       afterRemovalFingerprint: (await stateProof(predicted)).fingerprint };
+    if (generatedScope) plan.semanticGuard = await stampGuard(generatedScope, before, replaced, predicted);
     const originalProof = await stateProof(originalize(replaced));
     reviewedPlan = { ...plan, initialFingerprint: (await stateProof(originalize(before))).fingerprint,
       legacy: originalProof.legacy, beforeRemovalFingerprint: originalProof.fingerprint,
       protectedLegacy: originalProof.legacy.filter(({ id }) => originalProtected.has(id)),
       replacementFingerprint: originalProof.replacementFingerprint,
       afterRemovalFingerprint: (await stateProof(originalize(predicted))).fingerprint };
+    if (semanticScope) reviewedPlan.semanticGuard = await stampGuard(semanticScope,
+      originalize(before), originalize(replaced), originalize(predicted));
     result = await t.mutation(makeFunctionReference<"mutation", { plan: CleanupPlan }>("identity/canonicalReconciliation:removeLegacy"), { plan });
   } finally {
     protectedLegacy.clear();
@@ -171,6 +194,25 @@ test("offline operator preserves independent ownership and proves replacement de
   const empty = await replay({ complete: true, people: [p], identities: [row], records: [{ id: human, fields: { Name: "Fixture" } }], canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [] } });
   expect(empty.summary).toMatchObject({ withoutIndependentSources: 1, withoutIndependentSourcesLosingAllIdentifiers: 1, genuinelyRemovedDistinctIdentifiers: 1 });
   expect(empty.withoutIndependentSources[0].canonicalProof).toEqual([{ humanId: human, canonicalHumanId: human }]);
+});
+
+test("offline operator stamps an optional bounded semantic guard", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "canonical-replay-scope-"));
+  const path = join(dir, "scope.json");
+  writeFileSync(path, JSON.stringify({ allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
+    initialFingerprint: "", beforeRemovalFingerprint: "", afterRemovalFingerprint: "", legacyFingerprint: "" }), { mode: 0o600 });
+  vi.stubEnv("CANONICAL_PREVIEW_SEMANTIC_SCOPE", path);
+  try {
+    const person = "fixture" as Id<"people">; const human = "recAAAAAAAAAAAAAA";
+    const before = { _id: person, _creationTime: 1, normalized_phones: [], normalized_emails: ["old@example.test"],
+      identity_count: 1, message_count: 0, is_self: false, auto_clustered: true, created_at: "fixture", updated_at: "fixture", airtable_human_id: human };
+    const legacy = { _id: "legacy" as Id<"identities">, _creationTime: 1, person_id: person, kind: "email", value: "old@example.test",
+      normalized: "old@example.test", message_count: 0, chat_count: 0, is_self: false, source: "airtable_human", created_at: "fixture", updated_at: "fixture" };
+    const result = await replay({ complete: true, people: [before], identities: [legacy], records: [{ id: human, fields: { Name: "Fixture" } }],
+      canonical: { resolutions: [{ humanId: human, canonicalHumanId: human }], contacts: [{ humanId: human, channel: "email", value: "new@example.test", primary: true }] } });
+    expect(result.reviewedPlan?.semanticGuard).toMatchObject({ allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [] });
+    expect(result.summary.legacyRemoved).toBe(1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test.skipIf(!process.env.CANONICAL_PREVIEW_INPUT)("restricted offline snapshot replay", async () => {
