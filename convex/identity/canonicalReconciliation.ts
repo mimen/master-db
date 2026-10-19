@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 
-import { cleanupPlan, fingerprint, semanticGuard, semanticStateProof, stateProof } from "./cleanupPlan";
+import { cleanupPlan, fingerprint, semanticGuard, semanticStateProof, stateProof, stateProofSummary } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { personAggregatePatch, recomputePersonAggregates } from "./internal";
 import { normalizeEmail, normalizePhone } from "./normalize";
@@ -112,21 +112,24 @@ export const removeLegacy = internalMutation({
   handler: async (ctx, { plan }) => {
     assertProtectedPlan(plan);
     const state = { people: await ctx.db.query("people").collect(), identities: await ctx.db.query("identities").collect() };
-    const before = await stateProof(state);
+    const touched = plan.semanticGuard?.scope === "touched";
+    const before = touched ? await stateProofSummary(state) : await stateProof(state);
     const semanticBefore = plan.semanticGuard ? await semanticStateProof(state, plan.semanticGuard) : undefined;
-    const legacyIds = before.legacy.map(({ id }) => id);
+    const legacyIds = "legacyIds" in before ? before.legacyIds : before.legacy.map(({ id }) => id);
     if ((plan.semanticGuard
           ? semanticBefore!.fingerprint !== plan.semanticGuard.beforeRemovalFingerprint ||
             semanticBefore!.legacyFingerprint !== plan.semanticGuard.legacyFingerprint ||
             legacyIds.length !== plan.legacy.length || legacyIds.some((id, index) => id !== plan.legacy[index].id)
-          : before.fingerprint !== plan.beforeRemovalFingerprint || await fingerprint(before.legacy) !== await fingerprint(plan.legacy)) ||
-        (plan.semanticGuard?.scope !== "touched" && before.replacementFingerprint !== plan.replacementFingerprint))
+          : before.fingerprint !== plan.beforeRemovalFingerprint ||
+            await fingerprint("legacy" in before ? before.legacy : []) !== await fingerprint(plan.legacy)) ||
+        (!touched && before.replacementFingerprint !== plan.replacementFingerprint))
       throw new Error("Cleanup plan drift or unverified replacements");
     const affected = new Set<Id<"people">>();
+    const byId = new Map(state.identities.map(row => [row._id, row]));
     // No rescan-and-delete: only the immutable approved IDs can be retired.
     const protectedIds = new Set((plan.protectedLegacy ?? []).map(({ id }) => id));
     for (const entry of plan.legacy.filter(({ id }) => !protectedIds.has(id))) {
-      const row = state.identities.find(r => r._id === entry.id);
+      const row = byId.get(entry.id);
       if (!row || row.source !== "airtable_human" || row.source_contact_id) throw new Error("Cleanup legacy scope changed");
       await ctx.db.delete(entry.id);
       if (row.person_id) affected.add(row.person_id);
@@ -136,20 +139,28 @@ export const removeLegacy = internalMutation({
     const identifierKey = (row: (typeof state.identities)[number]) => `${row.kind}:${row.normalized}`;
     const beforeIdentifiers = new Set(state.identities.map(identifierKey));
     const afterIdentifiers = new Set(remaining.map(identifierKey));
-    if (plan.semanticGuard?.scope === "touched" && [...beforeIdentifiers].some(key => !afterIdentifiers.has(key)))
+    if (touched && [...beforeIdentifiers].some(key => !afterIdentifiers.has(key)))
       throw new Error("Cleanup would newly lose an identifier");
+    const remainingByPerson = new Map<Id<"people">, typeof remaining>();
+    for (const row of remaining) {
+      if (!row.person_id) continue;
+      const owned = remainingByPerson.get(row.person_id) ?? [];
+      owned.push(row);
+      remainingByPerson.set(row.person_id, owned);
+    }
     const people = [];
     for (const person of state.people) {
-      const patch = affected.has(person._id) ? personAggregatePatch(person, remaining.filter(r => r.person_id === person._id)) : null;
+      const patch = affected.has(person._id) ? personAggregatePatch(person, remainingByPerson.get(person._id) ?? []) : null;
       if (patch) await ctx.db.patch(person._id, patch);
       people.push(patch ? { ...person, ...patch } : person);
     }
     for (const person of people.filter(row => affected.has(row._id))) {
-      if (personAggregatePatch(person, remaining.filter(row => row.person_id === person._id)))
+      if (personAggregatePatch(person, remainingByPerson.get(person._id) ?? []))
         throw new Error("Cleanup retired person aggregates are stale");
     }
-    const after = await stateProof({ people, identities: remaining });
-    const semanticAfter = plan.semanticGuard ? await semanticStateProof({ people, identities: remaining }, plan.semanticGuard) : undefined;
+    const afterState = { people, identities: remaining };
+    const after = touched ? await stateProofSummary(afterState) : await stateProof(afterState);
+    const semanticAfter = plan.semanticGuard ? await semanticStateProof(afterState, plan.semanticGuard) : undefined;
     if (plan.semanticGuard
       ? semanticAfter!.fingerprint !== plan.semanticGuard.afterRemovalFingerprint
       : after.fingerprint !== plan.afterRemovalFingerprint) throw new Error("Cleanup after-state does not match reviewed plan");

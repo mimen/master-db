@@ -73,13 +73,24 @@ export async function legacyRowFingerprint(row: Doc<"identities">): Promise<stri
   return fingerprint(projected(row, false));
 }
 export async function stateProof(state: State) {
+  const summary = await stateProofSummary(state);
+  const legacy = await Promise.all(state.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).map(async r => ({ id: r._id, fingerprint: await legacyRowFingerprint(r) })));
+  legacy.sort((a,b) => a.id.localeCompare(b.id));
+  return { fingerprint: summary.fingerprint, replacementFingerprint: summary.replacementFingerprint,
+    legacy, replacements: summary.replacements };
+}
+
+// The final touched-scope mutation needs the full-state receipt hashes and exact
+// legacy ID set, but its approved plan already carries the per-row legacy hashes.
+// Avoid hashing those 2,000+ rows a second time inside the one-second mutation.
+export async function stateProofSummary(state: State) {
   const canonical = state.identities.filter(r => r.source === "airtable_human" && r.source_contact_id);
   const replacements = sortStable(canonical.map(r => projected(r, true)));
   const identities = sortStable(state.identities.map(r => projected(r, r.source === "airtable_human" && Boolean(r.source_contact_id))));
   const people = sortStable(state.people.map(r => projected(r, false, true)));
-  const legacy = await Promise.all(state.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id).map(async r => ({ id: r._id, fingerprint: await legacyRowFingerprint(r) })));
-  legacy.sort((a,b) => a.id.localeCompare(b.id));
-  return { fingerprint: await fingerprint({ people, identities }), replacementFingerprint: await fingerprint(replacements), legacy, replacements };
+  const legacyIds = state.identities.filter(r => r.source === "airtable_human" && !r.source_contact_id)
+    .map(r => r._id).sort((a,b) => a.localeCompare(b));
+  return { fingerprint: await fingerprint({ people, identities }), replacementFingerprint: await fingerprint(replacements), legacyIds, replacements };
 }
 
 /** Fingerprint every semantic field while permitting only the reviewed transient fields. */

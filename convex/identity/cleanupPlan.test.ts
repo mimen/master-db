@@ -7,7 +7,7 @@ import schema from "../schema";
 import { normalizeModules } from "../test-utils.vitest";
 
 import { reconcileBatch } from "./canonicalReconciliation";
-import { semanticStateProof, stateProof, type CleanupPlan, type State } from "./cleanupPlan";
+import { semanticStateProof, stateProof, stateProofSummary, type CleanupPlan, type State } from "./cleanupPlan";
 import { ingestOneCard } from "./ingestContacts";
 import { recomputePersonAggregates } from "./internal";
 import { assertProtectedPlan, protectedLegacy, unreviewedLegacyCount } from "./protectedLegacy";
@@ -43,6 +43,27 @@ async function fixture(options: { apple?: boolean } = {}) {
   if (!predicted) throw new Error("Missing predicted state");
   return { t, state, plan, before, predicted };
 }
+test("final summary proof preserves full receipt hashes and exact legacy IDs", async () => {
+  const { before, predicted } = await fixture({ apple: true });
+  for (const state of [before, predicted]) {
+    const full = await stateProof(state);
+    const summary = await stateProofSummary(state);
+    expect(summary.fingerprint).toBe(full.fingerprint);
+    expect(summary.replacementFingerprint).toBe(full.replacementFingerprint);
+    expect(summary.replacements).toEqual(full.replacements);
+    expect(summary.legacyIds).toEqual(full.legacy.map(({ id }) => id));
+  }
+});
+test("final summary keeps the fixed full-state fingerprint contract", async () => {
+  const fixed = { people: [{ _id: "person-fixed", _creationTime: 1, identity_count: 1,
+    normalized_emails: ["synthetic@example.test"] }], identities: [{ _id: "legacy-fixed", _creationTime: 2,
+    source: "airtable_human", kind: "email", value: "synthetic@example.test",
+    normalized: "synthetic@example.test", person_id: "person-fixed", message_count: 0, is_self: false }] } as unknown as State;
+  const summary = await stateProofSummary(fixed);
+  expect(summary.fingerprint).toBe("11d14553111d8383c48d24061cd1d5acf9654b7df7d31555dd8a685ef8efc1db");
+  expect(summary.replacementFingerprint).toBe("4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945");
+  expect(summary.legacyIds).toEqual(["legacy-fixed"]);
+});
 test("semantic cleanup guard permits only Apple update time drift", async () => {
   const { t, state, plan, before, predicted } = await fixture({ apple: true });
   const scope = { allowAppleUpdatedAt: true, legacyOwnerRows: [], derivedPeople: [],
