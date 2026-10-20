@@ -88,12 +88,17 @@ export class ConvexIngest {
     return storageId;
   }
 
-  async post<K extends keyof Bodies>(kind: K, body: Bodies[K]): Promise<Results[K]> {
+  post<K extends keyof Bodies>(kind: K, body: Bodies[K]): Promise<Results[K]> {
+    return this.request<Results[K]>(kind, body);
+  }
+
+  /** Untyped route access for callers that name routes the generated API predates. */
+  async request<T>(kind: string, body: unknown): Promise<T> {
     const { convexSiteUrl, commaBridgeSecret } = this.config;
     if (!commaBridgeSecret) throw new Error("Comma bridge disabled, COMMA_BRIDGE_SECRET is unset");
     if (!convexSiteUrl) throw new Error("CONVEX_SITE_URL is unset");
     // Claiming twice after a lost response would abandon the first batch's leases.
-    const retries = kind === "claim" ? 0 : kind === "renew" ? 1 : 4;
+    const retries = kind === "claim" || kind === "agentClaim" ? 0 : kind === "renew" ? 1 : 4;
     for (let attempt = 0; ; attempt++) {
       let response: Response;
       try {
@@ -118,7 +123,7 @@ export class ConvexIngest {
         console.error(`Comma ingest ${kind} HTTP ${response.status}: ${detail}`);
         throw new Error(`Comma ingest ${kind} HTTP ${response.status}`);
       }
-      const envelope = await response.json() as { ok: boolean; result: Results[K] };
+      const envelope = await response.json() as { ok: boolean; result: T };
       if (!envelope.ok) throw new Error(`Comma ingest ${kind} rejected the batch`);
       return envelope.result;
     }
