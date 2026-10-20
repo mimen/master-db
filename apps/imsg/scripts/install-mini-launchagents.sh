@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Renders and installs the production Mini server and Expo LaunchAgents.
+# Renders and installs the production Mini server, Expo, and agent-runner LaunchAgents.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -109,7 +109,7 @@ restore_changed() {
   done
 }
 
-for label in com.milad.imsg com.milad.imsg-expo; do
+for label in com.milad.imsg com.milad.imsg-expo com.milad.imsg-agent; do
   if render "$label"; then
     CHANGED_LABELS+=("$label")
     changed=1
@@ -129,7 +129,8 @@ done
 
 if [ "$LOAD" -eq 1 ]; then
   if ! verify_identity com.milad.imsg comma:server \
-    || ! verify_identity com.milad.imsg-expo comma:expo; then
+    || ! verify_identity com.milad.imsg-expo comma:expo \
+    || ! verify_identity com.milad.imsg-agent comma:agent; then
     restore_changed
     exit 1
   fi

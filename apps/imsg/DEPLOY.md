@@ -51,7 +51,7 @@ Production deploys automatically when `main` changes under `apps/imsg/**` or the
 2. The Mini pulls `main`, installs locked dependencies, then runs imsg typecheck, lint, and tests.
 3. Web builds into a sibling `.dist-staging-*` directory. If shell inputs changed, the Mini also builds immutable `Comma-<sha>.app.zip` bytes without moving `desktop/releases/current.json`.
 4. Only after every required build succeeds, the completed web directory swaps atomically into `client/dist`. One prior asset set remains live for already-open clients; two prior full dist generations are retained as bounded recovery archives.
-5. The Mini installs or updates the checked-in `comma:server` and `comma:expo` LaunchAgents, restarts both services, verifies local and tailnet API plus real `/` health, then publishes `web-release.json` and repoints `desktop/releases/current.json`. A failed restart or health check leaves both release pointers unchanged.
+5. The Mini installs or updates the checked-in `comma:server`, `comma:expo` and `comma:agent` LaunchAgents, restarts the services, verifies local and tailnet API plus real `/` health and that `comma:agent` is running, then publishes `web-release.json` and repoints `desktop/releases/current.json`. A failed restart or health check leaves both release pointers unchanged.
 6. `bun run deploy:install-laptop-agents` copies the stager and cleanup launchers into `~/Library/Application Support/Comma/Deployment` and installs LaunchAgents that depend on that stable path, never a worktree or stale primary checkout. The stager downloads and verifies size, checksum, ad-hoc signature, bundle ID, architecture, semver, and embedded SHA. It stages beside the canonical app without replacing the running bundle.
 7. Comma shows Reload and Restart banners when deployed identity differs from running identity.
 8. Restart uses a detached activator. It waits for Comma to exit, swaps atomically, retains `Comma.app.previous` for seven days, relaunches, and rolls back automatically if the new app does not verify.
@@ -84,6 +84,7 @@ Production singletons use `comma:<role>`. Concurrent branch resources add a norm
 ```text
 comma:server
 comma:expo
+comma:agent
 comma:stager
 comma:activator
 comma:preview@<ref>

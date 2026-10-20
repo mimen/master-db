@@ -35,6 +35,12 @@ describe("production deployment publication order", () => {
     expect(deploy).toContain('rm -f "$REPO_DIR/apps/imsg/desktop/releases/current.json"');
   });
 
+  test("restarts the agent runner and fails the deploy when its identity is not running", () => {
+    const restart = position('launchctl kickstart -k "gui/$(id -u)/com.milad.imsg-agent"');
+    const health = position("== Health checks ==", restart);
+    expect(position("production health check failed: comma:agent is not running", health)).toBeLessThan(position("== Publishing verified release identity =="));
+  });
+
   test("includes lint in the production gate", () => {
     expect(position("bun run typecheck:imsg")).toBeLessThan(position("(cd apps/imsg && bun run lint)"));
     expect(position("(cd apps/imsg && bun run lint)")).toBeLessThan(position("(cd apps/imsg && bun test)"));

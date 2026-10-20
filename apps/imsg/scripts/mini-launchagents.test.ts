@@ -39,6 +39,11 @@ describe("Mini LaunchAgent installation", () => {
     expect(expo).toContain('EXPO_PUBLIC_IMSG_WEB_SHA="$(git rev-parse HEAD)"');
     expect(server).not.toContain("__REPO_DIR__");
     expect(expo).not.toContain("__HOME__");
+    const agent = readFileSync(join(install, "com.milad.imsg-agent.plist"), "utf8");
+    expect(agent).toContain("exec -a comma:agent");
+    expect(agent).toContain("server/agent/main.ts");
+    expect(agent).toContain(`<string>${repo}/apps/imsg</string>`);
+    expect(agent).not.toMatch(/__(HOME|REPO_DIR)__/);
     const backup = join(home, "Library/Application Support/imsg-deploy/launchagents");
     expect(readFileSync(join(backup, "com.milad.imsg.previous.plist"), "utf8")).toBe("prior server plist");
     expect(readFileSync(join(backup, "com.milad.imsg-expo.previous.plist"), "utf8")).toBe("prior expo plist");

@@ -1,0 +1,135 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { query, type Options } from "@anthropic-ai/claude-agent-sdk";
+import { loadGatewayKey } from "../config";
+import { DEFAULT_ADDENDUM, readAddendum } from "./context";
+import { convexPort, type Port } from "./convex-port";
+import { Sessions, type SessionOptionsInput } from "./sessions";
+import { commaServer } from "./tools";
+
+export type AgentConfig = {
+  convexCloudUrl: string;
+  convexSiteUrl: string;
+  commaBridgeSecret: string;
+  gatewayUrl: string;
+  gatewayKey: string;
+  defaultModel: string;
+  addendumPath: string;
+  scratchRoot: string;
+  ccsBin: string;
+};
+
+const HEARTBEAT_MS = 30_000;
+const SWEEP_MS = 60_000;
+
+export function agentEnabled(env: Record<string, string | undefined>): boolean {
+  return ["1", "true", "yes"].includes(env.COMMA_AGENT_ENABLED?.trim().toLowerCase() ?? "");
+}
+
+export function loadAgentConfig(env: Record<string, string | undefined>, gatewayKey: string): AgentConfig {
+  const required = (name: string) => {
+    const value = env[name]?.trim();
+    if (!value) throw new Error(`comma agent: ${name} is unset`);
+    return value.replace(/\/$/, "");
+  };
+  if (!gatewayKey) throw new Error("comma agent: AI_GATEWAY_KEY is unset");
+  return {
+    convexCloudUrl: required("CONVEX_CLOUD_URL"),
+    convexSiteUrl: required("CONVEX_SITE_URL"),
+    commaBridgeSecret: required("COMMA_BRIDGE_SECRET"),
+    gatewayUrl: (env.AI_GATEWAY_URL ?? "http://127.0.0.1:8317").replace(/\/$/, ""),
+    gatewayKey,
+    defaultModel: env.COMMA_AGENT_MODEL ?? "claude-opus-5-5",
+    addendumPath: env.COMMA_AGENT_ADDENDUM ?? DEFAULT_ADDENDUM,
+    scratchRoot: env.COMMA_AGENT_SCRATCH ?? join(env.HOME ?? "", ".local/share/comma-agent"),
+    ccsBin: env.AI_CCS_BIN ?? "ccs",
+  };
+}
+
+/** The Claude Code child gets the gateway credentials and drops the runner's process identity. */
+export function childEnv(config: AgentConfig, env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const { PROCID: _id, PROCID_REF: _ref, PROCID_OFF: _off, ...rest } = env;
+  return { ...rest, ANTHROPIC_BASE_URL: config.gatewayUrl, ANTHROPIC_API_KEY: config.gatewayKey, COMMA_AGENT: "1" };
+}
+
+/** The spike-proven SDK options (2026-10-20, SDK 0.3.304), plus thinking summaries as T3 requests them. */
+export function queryOptions(config: AgentConfig, input: SessionOptionsInput & { cwd: string; env: Record<string, string | undefined>; mcp: ReturnType<typeof commaServer> }): Options {
+  return {
+    model: input.chat.model || config.defaultModel,
+    effort: input.chat.effort,
+    thinking: { type: "adaptive", display: "summarized" },
+    cwd: input.cwd,
+    env: input.env,
+    executable: "bun",
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    includePartialMessages: true,
+    settings: { enabledPlugins: { "pstack@house": false, "ponytail@ponytail": false }, showThinkingSummaries: true },
+    systemPrompt: { type: "preset", preset: "claude_code", append: input.append },
+    mcpServers: { comma: input.mcp },
+    ...(input.resume ? { resume: input.sessionId } : { sessionId: input.sessionId }),
+  };
+}
+
+export async function reserveSession(config: AgentConfig, cwd: string, title: string): Promise<string> {
+  const child = Bun.spawn([config.ccsBin, "session", "new", "--top-level", "--print-id", "--cwd", cwd, "--title", title, "--category", "personal-apps"], {
+    env: { ...process.env, CCS_CREATOR_KIND: "automation", CCS_CREATOR_REF: "comma-agent" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  const id = stdout.trim().split(/\s+/).pop();
+  if (code !== 0 || !id) throw new Error(`ccs session new failed (${code}): ${stderr.trim() || stdout.trim()}`);
+  return id;
+}
+
+export function createSessions(config: AgentConfig, port: Port): Sessions {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const scratch = (chatId: string) => {
+    const dir = join(config.scratchRoot, chatId);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  };
+  return new Sessions({
+    port,
+    query,
+    now: Date.now,
+    timeZone,
+    reserve: (chatId, title) => reserveSession(config, scratch(chatId), title),
+    readAddendum: () => readAddendum(config.addendumPath),
+    options: (input) => {
+      const cwd = scratch(input.chatId);
+      const mcp = commaServer({ port, chatId: input.chatId, conversationId: input.chat.conversationId, scratchDir: cwd, timeZone, fetch: (url) => fetch(url) });
+      return queryOptions(config, { ...input, cwd, env: childEnv(config, process.env), mcp });
+    },
+  });
+}
+
+async function main() {
+  if (!agentEnabled(Bun.env)) {
+    console.error("comma agent: COMMA_AGENT_ENABLED is off; idling without a heartbeat");
+    setInterval(() => {}, 1 << 30);
+    return;
+  }
+  const config = loadAgentConfig(Bun.env, loadGatewayKey());
+  mkdirSync(config.scratchRoot, { recursive: true });
+  const convex = convexPort(config);
+  const sessions = createSessions(config, convex.port);
+  const recovered = await sessions.recover();
+  console.error(`comma agent: started; recovered ${recovered.chatIds.length} interrupted chats`);
+  const heartbeat = () => convex.port.post("agentHeartbeat", { now: Date.now() }).catch((error) => console.error(`comma agent heartbeat: ${String(error)}`));
+  void heartbeat();
+  const timers = [setInterval(heartbeat, HEARTBEAT_MS), setInterval(() => void sessions.sweep(), SWEEP_MS)];
+  const unsubscribe = convex.subscribe((rows) => sessions.receive(rows));
+  const shutdown = async () => {
+    timers.forEach(clearInterval);
+    unsubscribe();
+    await sessions.closeAll();
+    await convex.close();
+    process.exit(0);
+  };
+  process.once("SIGTERM", () => void shutdown());
+  process.once("SIGINT", () => void shutdown());
+}
+
+if (import.meta.main) await main();
