@@ -9,8 +9,10 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
   const calls: { route: keyof Routes; body: unknown }[] = [];
   const claimed = new Set<string>();
   let pending: CommandRow[] = [];
+  const hooks: { before?: (route: keyof Routes, body: unknown) => Promise<void> | void; reserve?: () => void } = {};
   const port: Port = {
     async post(route, body) {
+      await hooks.before?.(route, body);
       calls.push({ route, body });
       if (route === "agentClaim") {
         const ids = (body as Routes["agentClaim"][0]).ids;
@@ -33,7 +35,11 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
   let now = 1_000_000;
   const sessions = new Sessions({
     port, query, now: () => now, timeZone: "America/Los_Angeles",
-    reserve: async (_chatId, title) => { reserved.push(title); return `reserved-${reserved.length}`; },
+    reserve: async (_chatId, title) => {
+      hooks.reserve?.();
+      reserved.push(title);
+      return `reserved-${reserved.length}`;
+    },
     readAddendum: () => "ADDENDUM: answer briefly.",
     options: (input) => { options.push(input); return { model: input.chat.model }; },
     log: () => {},
@@ -50,7 +56,7 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
     await settle();
   };
   const ask = (chatId: string, text: string, chat: Partial<Chat> = {}) => send(chatId, { kind: "message", text, steer: false }, chat);
-  return { sessions, calls, queries, reserved, options, send, ask, thread, advance: (ms: number) => { now += ms; }, routes: () => calls.map((call) => call.route) };
+  return { sessions, calls, hooks, queries, reserved, options, send, ask, thread, advance: (ms: number) => { now += ms; }, routes: () => calls.map((call) => call.route) };
 }
 
 describe("Sessions", () => {
@@ -163,5 +169,71 @@ describe("Sessions", () => {
     await settle();
     await h.send("a", { kind: "answer", requestId: "toolu_1", answers: { "Which list?": "Freaquency" } });
     expect(await decision).toMatchObject({ behavior: "allow", updatedInput: { answers: { "Which list?": "Freaquency" } } });
+  });
+
+  test("eviction keeps a session waiting on an answer and closes the longest idle one", async () => {
+    const h = harness();
+    await h.ask("a", "add them");
+    void h.queries[0].askTool("AskUserQuestion", { questions: [{ question: "Which list?", multiSelect: false, options: [{ label: "Freaquency" }] }] }, "toolu_1");
+    await settle();
+    h.advance(60_000);
+    for (const chat of ["b", "c", "d"]) {
+      await h.ask(chat, "hi");
+      h.queries.at(-1)!.emit(sdkResult(`r-${chat}`, "hi"));
+      await settle();
+      h.advance(60_000);
+    }
+    await h.ask("e", "fifth");
+    expect<string[]>(h.sessions.liveChatIds.sort()).toEqual(["a", "c", "d", "e"]);
+    expect(h.queries[0].closed).toBe(false);
+    expect(h.queries[1].closed).toBe(true);
+  });
+
+  test("eviction falls back to the oldest busy session when none is idle", async () => {
+    const h = harness();
+    for (const chat of ["a", "b", "c", "d"]) {
+      await h.ask(chat, "long job");
+      h.advance(60_000);
+    }
+    await h.ask("e", "fifth");
+    expect<string[]>(h.sessions.liveChatIds.sort()).toEqual(["b", "c", "d", "e"]);
+  });
+
+  const failures = (h: ReturnType<typeof harness>, chatId: string) => ({
+    state: h.calls.filter((call) => call.route === "agentChat" && (call.body as { chatId: string; state?: string }).chatId === chatId).map((call) => (call.body as { state?: string }).state).filter(Boolean).at(-1),
+    ends: h.calls.filter((call) => call.route === "agentItems" && (call.body as { chatId: string }).chatId === chatId)
+      .flatMap((call) => (call.body as Routes["agentItems"][0]).items).map((item) => item.entry).filter((entry) => entry.kind === "turn_end"),
+  });
+
+  test("a message whose dispatch fails ends the chat as failed with the error", async () => {
+    const h = harness();
+    await h.ask("a", "first");
+    h.queries[0].emit(sdkResult("r1", "ok"));
+    await settle();
+    h.hooks.before = (route, body) => {
+      if (route === "agentContext" && (body as Routes["agentContext"][0]).sinceMessageAt !== undefined) throw new Error("context unavailable");
+    };
+    await h.ask("a", "second");
+    expect(failures(h, "a")).toEqual({
+      state: "failed",
+      ends: [{ kind: "turn_end", outcome: "completed", durationMs: 10 }, { kind: "turn_end", outcome: "failed", error: "context unavailable" }],
+    });
+  });
+
+  test("a chat whose session cannot be reserved ends as failed", async () => {
+    const h = harness();
+    h.hooks.reserve = () => { throw new Error("ccs session new failed (1)"); };
+    await h.ask("a", "hello");
+    expect(failures(h, "a")).toEqual({ state: "failed", ends: [{ kind: "turn_end", outcome: "failed", error: "ccs session new failed (1)" }] });
+  });
+
+  test("closeAll waits for an in-flight dispatch before closing", async () => {
+    const h = harness();
+    h.hooks.before = async (route) => { if (route === "agentContext") await Bun.sleep(20); };
+    const asking = h.ask("a", "hi");
+    await settle(1);
+    await h.sessions.closeAll();
+    expect(h.queries.map((query) => [query.sent.map((m) => m.message.content), query.closed])).toEqual([[["hi"], true]]);
+    await asking;
   });
 });
