@@ -35,6 +35,12 @@ describe("global chords", () => {
     expect(matchBinding(stroke({ key: "f", metaKey: true }))?.commandId).toBe("conversation.find");
   });
 
+  test("⌘J opens the agent from the composer while bare j still glides", () => {
+    expect(matchBinding(stroke({ key: "j", metaKey: true }))).toMatchObject({ commandId: "agent.open", allowInEditable: true });
+    expect(matchBinding(stroke({ key: "j", ctrlKey: true }))?.commandId).toBe("agent.open");
+    expect(matchBinding(stroke({ key: "j" }))).toMatchObject({ commandId: "conversation.next", allowInEditable: false });
+  });
+
   test("escape matches without modifiers and never preventDefaults", () => {
     const binding = matchBinding(stroke({ key: "Escape" }));
     expect(binding?.commandId).toBe("navigation.escape");

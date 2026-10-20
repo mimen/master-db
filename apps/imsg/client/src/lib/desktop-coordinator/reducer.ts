@@ -39,6 +39,7 @@ function sameUtility(left: DesktopUtility, right: DesktopUtility): boolean {
       );
     case "scheduled":
     case "settings":
+    case "agent":
       return true;
   }
 }
@@ -48,14 +49,16 @@ function commitRoute(
   route: DesktopRouteProjection,
 ): DesktopShellState {
   const workspaceChanged = route.workspace !== state.activeWorkspace;
-  const globalUtility =
+  const keptUtility =
     state.utility?.kind === "scheduled" || state.utility?.kind === "settings"
       ? { ...state.utility, workspace: route.workspace }
-      : null;
+      : state.utility?.kind === "agent" && route.workspace === "messages"
+        ? state.utility
+        : null;
   const base: DesktopShellState = {
     ...state,
     activeWorkspace: route.workspace,
-    utility: globalUtility,
+    utility: keptUtility,
     routeOverlay: null,
     transientOverlay: workspaceChanged ? null : state.transientOverlay,
   };
@@ -120,6 +123,7 @@ export function reduceDesktopShell(
         messages: { ...state.messages, selection: null },
         utility:
           state.utility?.kind === "chat-info" ||
+          state.utility?.kind === "agent" ||
           (state.utility?.kind === "person" && state.utility.workspace === "messages")
             ? null
             : state.utility,

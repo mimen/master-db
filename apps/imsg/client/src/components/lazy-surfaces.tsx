@@ -38,6 +38,7 @@ function deferred<P extends object>(
   return Object.assign(Deferred, { preload });
 }
 
+export const AgentPane = deferred(() => import("@/components/agent/agent-pane").then((m) => m.AgentPane));
 export const ChatInfoContent = deferred(() => import("@/components/chat-info-content").then((m) => m.ChatInfoContent));
 export const CommandPalette = deferred(() => import("@/components/command-palette").then((m) => m.CommandPalette));
 export const ContactsWorkspace = deferred(() => import("@/components/contacts-workspace").then((m) => m.ContactsWorkspace));
@@ -58,7 +59,7 @@ export const RowPan = deferred(
 /** Dev and fixture only, so it is not preloaded. */
 export const UiGallery = deferred(() => import("@/components/ui-gallery").then((m) => m.UiGallery));
 
-const surfaces = [ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan];
+const surfaces = [AgentPane, ChatInfoContent, CommandPalette, ContactsWorkspace, ForwardContent, NewChatContent, PersonContent, ScheduledContent, SearchContent, SettingsContent, RowPan];
 
 /** Fetches every surface chunk off the critical path, so a first open renders without the empty frame. */
 export function preloadSurfaces(): void {

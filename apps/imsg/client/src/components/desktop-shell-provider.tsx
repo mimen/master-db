@@ -10,6 +10,7 @@ import {
 } from "@/components/desktop-shell-context";
 import { DesktopUtilityPane } from "@/components/desktop-split";
 import {
+  AgentPane,
   ChatInfoContent,
   CommandPalette,
   ContactsWorkspace,
@@ -24,8 +25,10 @@ import {
 import { MessagesWorkspace } from "@/components/messages-workspace";
 import { OverlayShell } from "@/components/overlay-shell";
 import { Type } from "@/constants/theme";
+import { useAgentEnabled } from "@/hooks/use-agent";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { onOpenAgentPane } from "@/lib/agent-pane";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
 import {
@@ -59,6 +62,8 @@ function desktopProjection(
 const HELP_ENTRIES = helpEntries();
 /** Room for round4 desk-settings: label and dropdown on one line in a 576px column. */
 const SETTINGS_PANE_WIDTH = 640;
+/** A transcript with question cards reads poorly at the 312 minimum. */
+const AGENT_PANE_WIDTH = 420;
 
 function utilityForPerson(
   workspace: "messages" | "contacts",
@@ -105,6 +110,9 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const [contactsVisited, setContactsVisited] = useState(false);
   if (activeWorkspace === "contacts" && !contactsVisited) setContactsVisited(true);
   const shellOwnsRoute = wide && projection !== null;
+  const agentEnabled = useAgentEnabled();
+  const agentOpen = useRef(false);
+  agentOpen.current = state.utility?.kind === "agent";
 
   useEffect(() => {
     if (projection === null) {
@@ -163,7 +171,12 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
         utility: { kind: "settings", workspace: activeWorkspace },
       });
     });
+    const stopAgent = onOpenAgentPane(() => {
+      if (agentOpen.current) return;
+      dispatch({ type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
+    });
     return () => {
+      stopAgent();
       stopChatInfo();
       stopPerson();
       stopScheduled();
@@ -226,6 +239,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
       settleSelected: () => undefined,
       markUnreadSelected: () => undefined,
       toggleDetails: () => undefined,
+      openAgent: () => undefined,
       focusListSearch: () => undefined,
       undoLast: () => undefined,
       escape: () => { closeContactsPanel(); },
@@ -249,11 +263,15 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     [activeWorkspace, closeTopSurface, closeUtility, openHelp, openPalette, registerMessagesActions, reportMessagesRail, state],
   );
   const utilityIsGlobal = state.utility?.kind === "scheduled" || state.utility?.kind === "settings";
+  const agentGuid = agentEnabled ? state.messages.selection?.guid : undefined;
   const utility =
-    shellOwnsRoute && state.utility && (utilityIsGlobal || state.utility.workspace === activeWorkspace)
+    shellOwnsRoute && state.utility && (utilityIsGlobal || state.utility.workspace === activeWorkspace) &&
+    (state.utility.kind !== "agent" || agentGuid !== undefined)
       ? state.utility
       : null;
-  const utilityContent = utility?.kind === "chat-info" ? (
+  const utilityContent = utility?.kind === "agent" && agentGuid ? (
+    <AgentPane key={agentGuid} chatGuid={agentGuid} onClose={closeUtility} />
+  ) : utility?.kind === "chat-info" ? (
     <ChatInfoContent
       key={utility.guid}
       guid={utility.guid}
@@ -292,7 +310,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     <SettingsContent key="settings" showHeader onClose={closeUtility} />
   ) : null;
   const utilityPane = (
-    <DesktopUtilityPane open={utility !== null} onClose={closeUtility} width={utility?.kind === "settings" ? SETTINGS_PANE_WIDTH : undefined}>
+    <DesktopUtilityPane open={utility !== null} onClose={closeUtility} width={utility?.kind === "settings" ? SETTINGS_PANE_WIDTH : utility?.kind === "agent" ? AGENT_PANE_WIDTH : undefined}>
       {utilityContent}
     </DesktopUtilityPane>
   );

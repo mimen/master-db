@@ -118,6 +118,18 @@ describe("desktop shell reducer", () => {
     expect(state.utility).toEqual({ kind: "scheduled", workspace: "messages" });
   });
 
+  test("the agent pane follows the open conversation and closes with it or on leaving Messages", () => {
+    let state = dispatchRoute(INITIAL_DESKTOP_SHELL_STATE, "/chat/chat-1");
+    state = reduceDesktopShell(state, { type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
+    state = dispatchRoute(state, "/chat/chat-2");
+    expect(state.utility).toEqual({ kind: "agent", workspace: "messages" });
+    expect(state.messages.selection?.guid).toBe("chat-2");
+
+    expect(reduceDesktopShell(state, { type: "messages/chat-settled" }).utility).toBeNull();
+    expect(dispatchRoute(state, "/contacts").utility).toBeNull();
+    expect(reduceDesktopShell(state, { type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } }).utility).toBeNull();
+  });
+
   test("closes route overlays and transient overlays on workspace switches", () => {
     let state = reduceDesktopShell(INITIAL_DESKTOP_SHELL_STATE, {
       type: "utility/toggled",

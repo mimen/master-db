@@ -1,13 +1,17 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { Message } from "@shared/types";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
-import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { DesktopShellContext } from "@/components/desktop-shell-context";
+import { useAgentChat, useAgentEnabled } from "@/hooks/use-agent";
+import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
+import { openAgentPane } from "@/lib/agent-pane";
+import { agentStripState, type AgentStripState } from "@/lib/agent-transcript";
 import { stripCopy, type StripTone } from "@/lib/state-strip";
 
 import { BlurSwap } from "./motion/blur-swap";
@@ -35,6 +39,38 @@ function ToneIcon({ tone, colors }: { readonly tone: StripTone; readonly colors:
   );
 }
 
+const AGENT_COPY: Record<AgentStripState, string> = {
+  asking: "Agent is asking you something",
+  working: "Agent is working",
+  drafted: "Agent drafted a reply",
+};
+
+/** While the Agent pane is closed, what the agent is up to in this conversation. */
+function useAgentStrip(chatGuid: string): AgentStripState | null {
+  const enabled = useAgentEnabled();
+  const shell = useContext(DesktopShellContext);
+  const paneOpen = shell?.state.utility?.kind === "agent";
+  const { conversationId } = useConversationRef(chatGuid);
+  const { chat, items } = useAgentChat(conversationId, enabled && !paneOpen);
+  return enabled && !paneOpen ? agentStripState(chat, items) : null;
+}
+
+function AgentChip({ chatGuid, state, colors }: { readonly chatGuid: string; readonly state: AgentStripState; readonly colors: ReturnType<typeof useTheme> }) {
+  return (
+    <Pressable
+      testID="agent-strip"
+      accessibilityRole="button"
+      accessibilityLabel={`${AGENT_COPY[state]}. Open the agent`}
+      onPress={() => openAgentPane(chatGuid)}
+      hitSlop={4}
+      style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: colors.rowHover }]}
+    >
+      <Ionicons name={state === "asking" ? "help-circle-outline" : state === "working" ? "ellipsis-horizontal-circle-outline" : "create-outline"} size={14} color={colors.accent} />
+      <Text numberOfLines={1} style={[styles.actionText, { color: colors.text }]}>{AGENT_COPY[state]}</Text>
+    </Pressable>
+  );
+}
+
 /**
  * The triage state of the open conversation, sitting on top of the composer card:
  * whose turn it is and for how long, with Settle or Un-settle beside it.
@@ -53,9 +89,18 @@ export function StateStrip({
   const { wide } = useLayoutMode();
   const now = useMinuteClock();
   const [actionHovered, setActionHovered] = useState(false);
+  const agent = useAgentStrip(chatGuid);
   if (!chat) return null;
   const copy = stripCopy({ chat, messages, historyComplete, now, compact: !wide });
-  if (!copy) return null;
+  if (!copy && !agent) return null;
+  const agentChip = agent ? <AgentChip chatGuid={chatGuid} state={agent} colors={colors} /> : null;
+  if (!copy) {
+    return (
+      <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>
+        {agentChip}
+      </View>
+    );
+  }
 
   const actionLabel = copy.action === "unsettle" ? "Un-settle" : "Settle";
   const actionName = wide ? `${actionLabel} (⌘E)` : actionLabel;
@@ -73,6 +118,7 @@ export function StateStrip({
           )}
         </View>
       </BlurSwap>
+      {agentChip}
       {/* Waiting has a settle action too, but the strip only offers it where it is the next step. */}
       {copy.tone !== "waiting" && copy.action && (
         <Pressable
