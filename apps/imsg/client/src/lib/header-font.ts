@@ -3,7 +3,7 @@ import { Platform, type TextStyle } from "react-native";
 /**
  * Bricolage Grotesque 600, a static instance cut from the variable font so
  * every platform renders the same weight. Only the brand name, the lens tabs
- * and the thread title use it. Loaded by expo-font in the root layout.
+ * and the toolbar titles (thread and PaneHeader) use it. Loaded by expo-font in the root layout.
  */
 export const HEADER_FONT = "Bricolage Grotesque";
 /** Defined in lib/web-css.ts, which must not import this file: the require below is a font asset. */
@@ -18,3 +18,6 @@ export const HEADER_FONT_SOURCE = require("../../assets/fonts/BricolageGrotesque
  * the lens tabs do not move when the real face swaps in.
  */
 export const headerFace: TextStyle = { fontFamily: Platform.OS === "web" ? `"${HEADER_FONT}", "${HEADER_FALLBACK}"` : HEADER_FONT };
+
+/** The title in the bar on top of the thread and every pane beside it, so the bars read as one toolbar. */
+export const toolbarTitle: TextStyle = { ...headerFace, fontSize: 15.5, letterSpacing: -0.15 };

@@ -55,7 +55,7 @@ import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { TriageGeometry } from "@/constants/triage-theme";
-import { headerFace } from "@/lib/header-font";
+import { toolbarTitle } from "@/lib/header-font";
 import { TypingIndicator } from "./typing-indicator";
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -916,7 +916,7 @@ const styles = StyleSheet.create({
   crumbSlash: { fontSize: 14, marginHorizontal: 8 },
   peopleCount: { flexShrink: 0, fontSize: 12.5, marginLeft: 12 },
   titleSwap: { flexShrink: 1, minWidth: 0 },
-  threadTitle: { ...headerFace, flexShrink: 1, fontSize: 15.5, letterSpacing: -0.15 },
+  threadTitle: { ...toolbarTitle, flexShrink: 1 },
   vsep: { height: 16, marginHorizontal: 6, width: 1 },
   searchShelfAction: { alignItems: "center", borderRadius: 6, justifyContent: "center", minWidth: 22, paddingHorizontal: 5, paddingVertical: 3 },
   searchShelf: {

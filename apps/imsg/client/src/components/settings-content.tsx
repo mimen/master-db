@@ -9,6 +9,7 @@ import { Dropdown, type DropdownOption } from "./ui/dropdown";
 import { Fonts } from "@/constants/theme";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { useActionSheet } from "@/lib/action-sheet";
@@ -349,7 +350,7 @@ const styles = StyleSheet.create({
   paneHeader: {
     flexDirection: "row",
     alignItems: "center",
-    height: 46,
+    height: TriageGeometry.threadHeaderHeight,
     justifyContent: "space-between",
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,

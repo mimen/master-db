@@ -40,6 +40,7 @@ import { MediaUnavailable } from "./media";
 import { CenteredSpinner } from "./empty-state";
 import { ListRow } from "./list-row";
 import { ServiceLabel } from "./service-label";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
 
@@ -609,7 +610,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    height: 52,
+    height: TriageGeometry.threadHeaderHeight,
     justifyContent: "space-between",
     paddingLeft: 20,
     paddingRight: 10,

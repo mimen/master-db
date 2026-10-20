@@ -22,6 +22,7 @@ import { type Person, useAddHandle, useRenamePerson, useSetPrimaryHandle } from 
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
 import { ContactAddPanel } from "./contacts-add-panel";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import { EnterFromBelow, HEADER_FONT, ServiceDot } from "./contacts-theme";
 import { Card, ContactsButton, ContactsTopBar, IconAction, rowDivider, SectionHeader, TextAction } from "./contacts-ui";
@@ -520,7 +521,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   spinner: { marginTop: 48 },
   unknownWrap: { alignItems: "center", padding: 24 },
-  auxHeader: { alignItems: "center", borderBottomWidth: 1, flexDirection: "row", height: 48, justifyContent: "space-between", paddingHorizontal: 12 },
+  auxHeader: { alignItems: "center", borderBottomWidth: 1, flexDirection: "row", height: TriageGeometry.threadHeaderHeight, justifyContent: "space-between", paddingHorizontal: 12 },
   auxTitle: { fontSize: 13, fontWeight: "600" },
   back: { alignItems: "center", flexDirection: "row", gap: 2 },
   pp: { flex: 1, flexDirection: "row" },

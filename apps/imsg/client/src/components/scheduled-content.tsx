@@ -11,6 +11,7 @@ import { chatIsSMS } from "@/lib/chat-service";
 import { groupScheduled, isNotSent } from "@/lib/scheduled-groups";
 import { showToast } from "@/lib/toast";
 import { ChatAvatar, PersonAvatar } from "./avatar";
+import { TriageGeometry } from "@/constants/triage-theme";
 import { useTheme } from "@/hooks/use-theme";
 import type { ThemeColors } from "@/components/ui/interaction";
 
@@ -219,7 +220,7 @@ function QuietAction({ label, icon, a11y, theme, onPress }: { label?: string; ic
 }
 
 const styles = StyleSheet.create({
-  paneHeader: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, height: 52, paddingLeft: 22, paddingRight: 12 },
+  paneHeader: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, height: TriageGeometry.threadHeaderHeight, paddingLeft: 22, paddingRight: 12 },
   paneHeaderTitle: { fontSize: 15.5, fontWeight: "600", letterSpacing: -0.15 },
   count: { fontSize: 12, fontVariant: ["tabular-nums"] },
   headerIcon: { alignItems: "center", borderRadius: 6, height: 28, justifyContent: "center", width: 28 },
