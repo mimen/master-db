@@ -1,6 +1,11 @@
 import { defineTable } from "convex/server";
+import { v } from "convex/values";
 
 import {
+  agentBridgeStateFields,
+  agentChatFields,
+  agentCommandFields,
+  agentItemFields,
   attachmentFields,
   presenceFields,
   bridgeStateFields,
@@ -71,5 +76,12 @@ export const comma_suggestions = defineTable(suggestionFields)
 export const comma_sync_state = defineTable(syncStateFields).index("by_key", ["key"]);
 
 export const comma_presence = defineTable(presenceFields).index("by_conversationId", ["conversationId"]);
-export const comma_bridge_state = defineTable(bridgeStateFields).index("by_key", ["key"]);
+export const comma_bridge_state = defineTable(v.union(v.object(bridgeStateFields), v.object(agentBridgeStateFields)))
+  .index("by_key", ["key"]);
 export const comma_uploads = defineTable(uploadFields).index("by_storageId", ["storageId"]).index("by_commandId", ["commandId"]);
+
+export const comma_agent_chats = defineTable(agentChatFields).index("by_conversationId", ["conversationId"]);
+export const comma_agent_items = defineTable(agentItemFields)
+  .index("by_chat_ordinal", ["chatId", "ordinal"])
+  .index("by_chat_key", ["chatId", "key"]);
+export const comma_agent_commands = defineTable(agentCommandFields).index("by_status_createdAt", ["status", "createdAt"]);

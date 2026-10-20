@@ -94,7 +94,7 @@ export const transcriptState = query({
     if (attachment.transcriptState === "failed") return { state: "failed", error: attachment.transcriptError ?? "Transcription failed" };
     if (attachment.transcriptState === "unavailable") return { state: "unavailable", detail: attachment.transcriptDetail ?? "Transcription unavailable" };
     const bridge = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "mini")).unique();
-    if (bridge && !bridge.whisperAvailable) return { state: "unavailable", detail: bridge.whisperDetail ?? "Whisper unavailable" };
+    if (bridge?.key === "mini" && !bridge.whisperAvailable) return { state: "unavailable", detail: bridge.whisperDetail ?? "Whisper unavailable" };
     return { state: "not-requested" };
   },
 });

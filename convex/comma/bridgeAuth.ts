@@ -12,3 +12,9 @@ export function checkBridgeAuth(request: Request): Response | null {
     ? null
     : jsonResponse({ ok: false, error: "unauthorized" }, 401);
 }
+
+/** The bridge key a ConvexClient subscription passes in place of the bearer header. */
+export function sameSecret(provided: string): boolean {
+  const expected = process.env.COMMA_BRIDGE_SECRET;
+  return !!expected && constantTimeEqual(expected, provided);
+}

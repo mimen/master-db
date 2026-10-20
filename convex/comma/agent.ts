@@ -1,0 +1,275 @@
+import { v } from "convex/values";
+
+import type { Doc, Id } from "../_generated/dataModel";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { assertAllowed } from "../_lib/authed";
+import {
+  agentAnswers, agentChatDoc, agentChatState, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc, pendingAgentCommand,
+  type AgentCommand, type AgentDraftPlacement, type AgentEntry, type PendingAgentCommand,
+} from "../schema/comma/validators";
+
+import { sameSecret } from "./bridgeAuth";
+import { recordedAttachments, writeAgentDraft } from "./drafts";
+import { enqueueCommand } from "./outbox";
+
+/**
+ * The agent pane. The client asks, answers, and stops through the public mutations; the runner on
+ * the Mini subscribes to pendingAgentCommands, claims them, and writes the transcript back through
+ * the bridge ingest routes.
+ */
+
+async function liveChatFor(ctx: QueryCtx, conversationId: Id<"comma_conversations">) {
+  return await ctx.db.query("comma_agent_chats")
+    .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId))
+    .filter((q) => q.eq(q.field("archivedAt"), undefined))
+    .unique();
+}
+
+async function requireChat(ctx: QueryCtx, chatId: Id<"comma_agent_chats">) {
+  const chat = await ctx.db.get(chatId);
+  if (!chat) throw new Error("Agent chat not found");
+  return chat;
+}
+
+async function itemFor(ctx: QueryCtx, chatId: Id<"comma_agent_chats">, key: string) {
+  return await ctx.db.query("comma_agent_items").withIndex("by_chat_key", (q) => q.eq("chatId", chatId).eq("key", key)).unique();
+}
+
+/** Existing keys are patched in place; new keys take the next ordinals in array order. */
+async function upsertItems(ctx: MutationCtx, chatId: Id<"comma_agent_chats">, items: { key: string; entry: AgentEntry }[], now = Date.now()) {
+  const last = await ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chatId)).order("desc").first();
+  let ordinal = last?.ordinal ?? 0;
+  for (const { key, entry } of items) {
+    const existing = await itemFor(ctx, chatId, key);
+    if (existing) await ctx.db.patch(existing._id, { entry, updatedAt: now });
+    else await ctx.db.insert("comma_agent_items", { chatId, key, ordinal: ++ordinal, entry, createdAt: now, updatedAt: now });
+  }
+}
+
+async function insertCommand(ctx: MutationCtx, chatId: Id<"comma_agent_chats">, command: AgentCommand) {
+  await ctx.db.insert("comma_agent_commands", { chatId, command, status: "pending", createdAt: Date.now() });
+}
+
+async function withChat(ctx: QueryCtx, row: Doc<"comma_agent_commands">): Promise<PendingAgentCommand> {
+  const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt } = await requireChat(ctx, row.chatId);
+  return {
+    _id: row._id, chatId: row.chatId, command: row.command, createdAt: row.createdAt,
+    chat: { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt },
+  };
+}
+
+export const liveChat = query({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.union(agentChatDoc, v.null()),
+  handler: async (ctx, { conversationId }) => {
+    await assertAllowed(ctx);
+    return await liveChatFor(ctx, conversationId);
+  },
+});
+
+export const listItems = query({
+  args: { chatId: v.id("comma_agent_chats") },
+  returns: v.array(agentItemDoc),
+  handler: async (ctx, { chatId }) => {
+    await assertAllowed(ctx);
+    const newest = await ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chatId)).order("desc").take(400);
+    return newest.reverse();
+  },
+});
+
+/** Idempotent on the client's key, so a retried send never asks twice. */
+export const ask = mutation({
+  args: {
+    conversationId: v.id("comma_conversations"), key: v.string(), text: v.string(), steer: v.boolean(), model: v.string(), effort: agentEffort,
+  },
+  returns: v.id("comma_agent_chats"),
+  handler: async (ctx, { conversationId, key, text, steer, model, effort }) => {
+    await assertAllowed(ctx);
+    if (!await ctx.db.get(conversationId)) throw new Error("Conversation not found");
+    const now = Date.now();
+    const live = await liveChatFor(ctx, conversationId);
+    const chatId = live?._id ?? await ctx.db.insert("comma_agent_chats", {
+      conversationId, model, effort, state: "pending", createdAt: now, updatedAt: now,
+    });
+    if (await itemFor(ctx, chatId, key)) return chatId;
+    await upsertItems(ctx, chatId, [{ key, entry: { kind: "user", text, steer } }], now);
+    await insertCommand(ctx, chatId, { kind: "message", text, steer });
+    const busy = live?.state === "running" || live?.state === "waiting_input";
+    await ctx.db.patch(chatId, { state: busy ? live.state : "pending", updatedAt: now });
+    return chatId;
+  },
+});
+
+export const answer = mutation({
+  args: { chatId: v.id("comma_agent_chats"), requestId: v.string(), answers: agentAnswers },
+  returns: v.null(),
+  handler: async (ctx, { chatId, requestId, answers }) => {
+    await assertAllowed(ctx);
+    await requireChat(ctx, chatId);
+    for await (const item of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chatId)).order("desc")) {
+      const { entry } = item;
+      if (entry.kind !== "question" || entry.requestId !== requestId) continue;
+      if (entry.status !== "pending") return null;
+      await ctx.db.patch(item._id, { entry: { ...entry, status: "resolved", answers }, updatedAt: Date.now() });
+      await insertCommand(ctx, chatId, { kind: "answer", requestId, answers });
+      return null;
+    }
+    return null;
+  },
+});
+
+export const stop = mutation({
+  args: { chatId: v.id("comma_agent_chats") },
+  returns: v.null(),
+  handler: async (ctx, { chatId }) => {
+    await assertAllowed(ctx);
+    await requireChat(ctx, chatId);
+    await insertCommand(ctx, chatId, { kind: "stop" });
+    return null;
+  },
+});
+
+export const newChat = mutation({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.null(),
+  handler: async (ctx, { conversationId }) => {
+    await assertAllowed(ctx);
+    const live = await liveChatFor(ctx, conversationId);
+    if (!live) return null;
+    const now = Date.now();
+    await ctx.db.patch(live._id, { archivedAt: now, updatedAt: now });
+    if (live.sessionId) await insertCommand(ctx, live._id, { kind: "close" });
+    return null;
+  },
+});
+
+/** Puts a draft the agent left in the pane into the composer, over whatever the user typed. */
+export const useDraft = mutation({
+  args: { itemId: v.id("comma_agent_items") },
+  returns: v.null(),
+  handler: async (ctx, { itemId }) => {
+    await assertAllowed(ctx);
+    const item = await ctx.db.get(itemId);
+    if (item?.entry.kind !== "draft" || item.entry.placed !== "pane") throw new Error("Not a draft waiting in the pane");
+    const { conversationId } = await requireChat(ctx, item.chatId);
+    const { text, note, attachments = [] } = item.entry;
+    await writeAgentDraft(ctx, conversationId, { text, note, attachments, force: true });
+    await ctx.db.patch(itemId, { entry: { ...item.entry, used: true }, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+/**
+ * The runner subscribes to this with ConvexClient, so like pendingOutbox it is public and gated
+ * by the bridge secret instead of Convex Auth.
+ */
+export const pendingAgentCommands = query({
+  args: { bridgeKey: v.string() },
+  returns: v.array(pendingAgentCommand),
+  handler: async (ctx, { bridgeKey }) => {
+    if (!sameSecret(bridgeKey)) throw new Error("Unauthorized");
+    const rows = await ctx.db.query("comma_agent_commands").withIndex("by_status_createdAt", (q) => q.eq("status", "pending")).order("asc").take(50);
+    return await Promise.all(rows.map((row) => withChat(ctx, row)));
+  },
+});
+
+/** Returns only the rows this call took, so two claimers never act on one command. */
+export const agentClaim = internalMutation({
+  args: { ids: v.array(v.id("comma_agent_commands")) },
+  returns: v.array(pendingAgentCommand),
+  handler: async (ctx, { ids }) => {
+    const claimed = [];
+    for (const id of ids) {
+      const row = await ctx.db.get(id);
+      if (row?.status !== "pending") continue;
+      await ctx.db.patch(id, { status: "taken", takenAt: Date.now() });
+      claimed.push(await withChat(ctx, row));
+    }
+    return claimed;
+  },
+});
+
+/** Runner boot: no turn survives a restart, so open turns end as interrupted and their questions close. */
+export const agentRecover = internalMutation({
+  args: { now: v.number() },
+  returns: v.object({ chatIds: v.array(v.id("comma_agent_chats")) }),
+  handler: async (ctx, { now }) => {
+    const open = await ctx.db.query("comma_agent_chats")
+      .filter((q) => q.or(q.eq(q.field("state"), "running"), q.eq(q.field("state"), "waiting_input")))
+      .collect();
+    for (const chat of open) {
+      for await (const item of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id))) {
+        if (item.entry.kind === "question" && item.entry.status === "pending") {
+          await ctx.db.patch(item._id, { entry: { ...item.entry, status: "cancelled" }, updatedAt: now });
+        }
+      }
+      await upsertItems(ctx, chat._id, [{ key: `recover-${now}`, entry: { kind: "turn_end", outcome: "interrupted" } }], now);
+      await ctx.db.patch(chat._id, { state: "interrupted", updatedAt: now });
+    }
+    return { chatIds: open.map(({ _id }) => _id) };
+  },
+});
+
+export const agentChat = internalMutation({
+  args: {
+    chatId: v.id("comma_agent_chats"), sessionId: v.optional(v.string()), state: v.optional(agentChatState),
+    seenThroughMessageAt: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, { chatId, ...patch }) => {
+    await requireChat(ctx, chatId);
+    await ctx.db.patch(chatId, { ...patch, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const agentItems = internalMutation({
+  args: { chatId: v.id("comma_agent_chats"), items: v.array(v.object({ key: v.string(), entry: agentEntry })) },
+  returns: v.null(),
+  handler: async (ctx, { chatId, items }) => {
+    await requireChat(ctx, chatId);
+    await upsertItems(ctx, chatId, items);
+    return null;
+  },
+});
+
+export const agentHeartbeat = internalMutation({
+  args: { now: v.number() },
+  returns: v.null(),
+  handler: async (ctx, { now }) => {
+    const row = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "agent")).unique();
+    if (row?.key === "agent") await ctx.db.patch(row._id, { updatedAt: now });
+    else await ctx.db.insert("comma_bridge_state", { key: "agent", updatedAt: now });
+    return null;
+  },
+});
+
+/**
+ * The agent's draft lands in the composer unless the user has typed there; then it waits in the
+ * pane for useDraft. Idempotent on itemKey, so a retried post keeps its first placement.
+ */
+export const agentDraft = internalMutation({
+  args: {
+    chatId: v.id("comma_agent_chats"), conversationId: v.id("comma_conversations"), itemKey: v.string(), text: v.string(),
+    note: v.optional(v.string()), attachments: v.optional(v.array(v.id("_storage"))),
+  },
+  returns: v.object({ placed: agentDraftPlacement }),
+  handler: async (ctx, { chatId, conversationId, itemKey, text, note, attachments: storageIds = [] }) => {
+    const chat = await requireChat(ctx, chatId);
+    if (chat.conversationId !== conversationId) throw new Error("The agent chat belongs to another conversation");
+    const existing = await itemFor(ctx, chatId, itemKey);
+    if (existing?.entry.kind === "draft") return { placed: existing.entry.placed };
+    if (!text.trim() && storageIds.length === 0) throw new Error("A draft needs text or an attachment");
+    const attachments = await recordedAttachments(ctx, storageIds);
+    const placed: AgentDraftPlacement = await writeAgentDraft(ctx, conversationId, { text, note, attachments }) ? "composer" : "pane";
+    const entry = { kind: "draft" as const, text, note, attachments: attachments.length ? attachments : undefined, placed, used: false };
+    await upsertItems(ctx, chatId, [{ key: itemKey, entry }]);
+    return { placed };
+  },
+});
+
+export const agentSend = internalMutation({
+  args: { conversationId: v.id("comma_conversations"), clientKey: v.string(), text: v.string() },
+  returns: v.id("comma_outbox"),
+  handler: async (ctx, { conversationId, clientKey, text }) => await enqueueCommand(ctx, { conversationId, clientKey, payload: { kind: "send", text } }),
+});

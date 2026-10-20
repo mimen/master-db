@@ -1,10 +1,11 @@
 import { v } from "convex/values";
 
-import type { Doc } from "../_generated/dataModel";
-import { internalMutation, mutation, query } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import { internalMutation, mutation, query, type MutationCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
 
+import { sameSecret } from "./bridgeAuth";
 import { deleteConversationDraft } from "./drafts";
 import { refoldTarget, refreshLastMessage } from "./internal";
 import { sendService, tempGuid } from "./tempMessage";
@@ -33,63 +34,70 @@ export const GLOBAL_KINDS = new Set<CommaOutboxPayload["kind"]>(["createChat", "
 export const enqueue = mutation({
   args: { clientKey: v.string(), conversationId: v.optional(v.id("comma_conversations")), payload: outboxPayload },
   returns: v.id("comma_outbox"),
-  handler: async (ctx, { clientKey, conversationId, payload }) => {
+  handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    const existing = await ctx.db
-      .query("comma_outbox")
-      .withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey))
-      .unique();
-    if (existing) return existing._id;
-    if (!conversationId && !GLOBAL_KINDS.has(payload.kind)) throw new Error("conversationId is required for this command");
-    const conversation = conversationId ? await ctx.db.get(conversationId) : null;
-    if (conversationId && !conversation) throw new Error("Conversation not found");
-    const now = Date.now();
-    const id = await ctx.db.insert("comma_outbox", {
-      clientKey,
-      conversationId,
-      payload,
-      status: "pending",
-      attempts: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-    if (payload.kind === "sendAttachment" && conversation) {
-      // Sending a drafted attachment sends the whole draft; the composer holds the rest.
-      const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
-      if (draft?.attachments?.some((a) => a.storageId === payload.storageId)) await ctx.db.delete(draft._id);
-    }
-    if (payload.kind === "send" && conversation) {
-      await deleteConversationDraft(ctx, conversation._id);
-      // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.
-      // The real row's refreshLastMessage overwrites it, and a failed send stays the preview.
-      await ctx.db.patch(conversation._id, {
-        lastMessage: { guid: tempGuid(clientKey), text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
-        lastMessageAt: Math.max(conversation.lastMessageAt, now),
-      });
-      await ctx.db.insert("comma_messages", {
-        guid: tempGuid(clientKey),
-        conversationId: conversation._id,
-        chatGuid: conversation.primaryChatGuid,
-        dateCreated: now,
-        isFromMe: true,
-        text: payload.text,
-        service: sendService(conversation.primaryChatGuid),
-        error: 0,
-        edited: false,
-        retracted: false,
-        isTapback: false,
-        reactions: [],
-        replyToGuid: payload.replyToGuid,
-        isGroupEvent: false,
-        mentions: payload.mentions ?? [],
-        attachmentGuids: [],
-        clientKey,
-        sourceVersion: 0,
-      });
-    }
-    return id;
+    return await enqueueCommand(ctx, args);
   },
 });
+
+/** Idempotent on clientKey. A send also clears the draft and shows the temp bubble at once. */
+export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversationId, payload }: {
+  clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload;
+}): Promise<Id<"comma_outbox">> {
+  const existing = await ctx.db
+    .query("comma_outbox")
+    .withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey))
+    .unique();
+  if (existing) return existing._id;
+  if (!conversationId && !GLOBAL_KINDS.has(payload.kind)) throw new Error("conversationId is required for this command");
+  const conversation = conversationId ? await ctx.db.get(conversationId) : null;
+  if (conversationId && !conversation) throw new Error("Conversation not found");
+  const now = Date.now();
+  const id = await ctx.db.insert("comma_outbox", {
+    clientKey,
+    conversationId,
+    payload,
+    status: "pending",
+    attempts: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  if (payload.kind === "sendAttachment" && conversation) {
+    // Sending a drafted attachment sends the whole draft; the composer holds the rest.
+    const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
+    if (draft?.attachments?.some((a) => a.storageId === payload.storageId)) await ctx.db.delete(draft._id);
+  }
+  if (payload.kind === "send" && conversation) {
+    await deleteConversationDraft(ctx, conversation._id);
+    // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.
+    // The real row's refreshLastMessage overwrites it, and a failed send stays the preview.
+    await ctx.db.patch(conversation._id, {
+      lastMessage: { guid: tempGuid(clientKey), text: payload.text, dateCreated: now, isFromMe: true, senderName: null, hasAttachments: false },
+      lastMessageAt: Math.max(conversation.lastMessageAt, now),
+    });
+    await ctx.db.insert("comma_messages", {
+      guid: tempGuid(clientKey),
+      conversationId: conversation._id,
+      chatGuid: conversation.primaryChatGuid,
+      dateCreated: now,
+      isFromMe: true,
+      text: payload.text,
+      service: sendService(conversation.primaryChatGuid),
+      error: 0,
+      edited: false,
+      retracted: false,
+      isTapback: false,
+      reactions: [],
+      replyToGuid: payload.replyToGuid,
+      isGroupEvent: false,
+      mentions: payload.mentions ?? [],
+      attachmentGuids: [],
+      clientKey,
+      sourceVersion: 0,
+    });
+  }
+  return id;
+}
 
 export const getCommand = query({
   args: { commandId: v.id("comma_outbox") },
@@ -120,14 +128,6 @@ export const outboxStatusFor = query({
     return rows;
   },
 });
-
-function sameSecret(provided: string): boolean {
-  const expected = process.env.COMMA_BRIDGE_SECRET ?? "";
-  if (!expected) return false;
-  let difference = expected.length ^ provided.length;
-  for (let i = 0; i < expected.length; i++) difference |= expected.charCodeAt(i) ^ (provided.charCodeAt(i) || 0);
-  return difference === 0;
-}
 
 /**
  * The bridge subscribes to this with ConvexClient for push delivery. Internal

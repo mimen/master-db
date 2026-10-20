@@ -192,6 +192,163 @@ export declare const api: {
     signOut: FunctionReference<"action", "public", {}, any>;
   };
   comma: {
+    agent: {
+      answer: FunctionReference<
+        "mutation",
+        "public",
+        {
+          answers: Record<string, string>;
+          chatId: Id<"comma_agent_chats">;
+          requestId: string;
+        },
+        null
+      >;
+      ask: FunctionReference<
+        "mutation",
+        "public",
+        {
+          conversationId: Id<"comma_conversations">;
+          effort: "low" | "medium" | "high" | "xhigh" | "max";
+          key: string;
+          model: string;
+          steer: boolean;
+          text: string;
+        },
+        Id<"comma_agent_chats">
+      >;
+      listItems: FunctionReference<
+        "query",
+        "public",
+        { chatId: Id<"comma_agent_chats"> },
+        Array<{
+          _creationTime: number;
+          _id: Id<"comma_agent_items">;
+          chatId: Id<"comma_agent_chats">;
+          createdAt: number;
+          entry:
+            | { kind: "user"; steer: boolean; text: string }
+            | { kind: "assistant"; streaming: boolean; text: string }
+            | { kind: "thinking"; streaming: boolean; text: string }
+            | {
+                detail?: string;
+                kind: "tool";
+                name: string;
+                status: "running" | "done" | "failed";
+                summary: string;
+              }
+            | {
+                answers?: Record<string, string>;
+                kind: "question";
+                questions: Array<{
+                  header?: string;
+                  multiSelect: boolean;
+                  options: Array<{ description?: string; label: string }>;
+                  question: string;
+                }>;
+                requestId: string;
+                status: "pending" | "resolved" | "cancelled";
+              }
+            | {
+                attachments?: Array<{
+                  filename: string;
+                  mimeType: string;
+                  size: number;
+                  storageId: Id<"_storage">;
+                }>;
+                kind: "draft";
+                note?: string;
+                placed: "composer" | "pane";
+                text: string;
+                used: boolean;
+              }
+            | {
+                durationMs?: number;
+                error?: string;
+                kind: "turn_end";
+                outcome: "completed" | "interrupted" | "failed";
+              };
+          key: string;
+          ordinal: number;
+          updatedAt: number;
+        }>
+      >;
+      liveChat: FunctionReference<
+        "query",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        {
+          _creationTime: number;
+          _id: Id<"comma_agent_chats">;
+          archivedAt?: number;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          effort: "low" | "medium" | "high" | "xhigh" | "max";
+          model: string;
+          seenThroughMessageAt?: number;
+          sessionId?: string;
+          state:
+            | "idle"
+            | "pending"
+            | "running"
+            | "waiting_input"
+            | "interrupted"
+            | "failed";
+          updatedAt: number;
+        } | null
+      >;
+      newChat: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
+      pendingAgentCommands: FunctionReference<
+        "query",
+        "public",
+        { bridgeKey: string },
+        Array<{
+          _id: Id<"comma_agent_commands">;
+          chat: {
+            archivedAt?: number;
+            conversationId: Id<"comma_conversations">;
+            effort: "low" | "medium" | "high" | "xhigh" | "max";
+            model: string;
+            seenThroughMessageAt?: number;
+            sessionId?: string;
+            state:
+              | "idle"
+              | "pending"
+              | "running"
+              | "waiting_input"
+              | "interrupted"
+              | "failed";
+          };
+          chatId: Id<"comma_agent_chats">;
+          command:
+            | { kind: "message"; steer: boolean; text: string }
+            | {
+                answers: Record<string, string>;
+                kind: "answer";
+                requestId: string;
+              }
+            | { kind: "stop" }
+            | { kind: "close" };
+          createdAt: number;
+        }>
+      >;
+      stop: FunctionReference<
+        "mutation",
+        "public",
+        { chatId: Id<"comma_agent_chats"> },
+        null
+      >;
+      useDraft: FunctionReference<
+        "mutation",
+        "public",
+        { itemId: Id<"comma_agent_items"> },
+        null
+      >;
+    };
     bridgeState: {
       bridgeState: FunctionReference<
         "query",
@@ -1946,7 +2103,7 @@ export declare const api: {
         "query",
         "public",
         {},
-        { reactionSuggestions: boolean; suggestions: boolean }
+        { agent: boolean; reactionSuggestions: boolean; suggestions: boolean }
       >;
       getSuggestions: FunctionReference<
         "query",
@@ -3485,6 +3642,219 @@ export declare const internal: {
     syncState: FunctionReference<"mutation", "internal", any, any>;
   };
   comma: {
+    agent: {
+      agentChat: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          chatId: Id<"comma_agent_chats">;
+          seenThroughMessageAt?: number;
+          sessionId?: string;
+          state?:
+            | "idle"
+            | "pending"
+            | "running"
+            | "waiting_input"
+            | "interrupted"
+            | "failed";
+        },
+        null
+      >;
+      agentClaim: FunctionReference<
+        "mutation",
+        "internal",
+        { ids: Array<Id<"comma_agent_commands">> },
+        Array<{
+          _id: Id<"comma_agent_commands">;
+          chat: {
+            archivedAt?: number;
+            conversationId: Id<"comma_conversations">;
+            effort: "low" | "medium" | "high" | "xhigh" | "max";
+            model: string;
+            seenThroughMessageAt?: number;
+            sessionId?: string;
+            state:
+              | "idle"
+              | "pending"
+              | "running"
+              | "waiting_input"
+              | "interrupted"
+              | "failed";
+          };
+          chatId: Id<"comma_agent_chats">;
+          command:
+            | { kind: "message"; steer: boolean; text: string }
+            | {
+                answers: Record<string, string>;
+                kind: "answer";
+                requestId: string;
+              }
+            | { kind: "stop" }
+            | { kind: "close" };
+          createdAt: number;
+        }>
+      >;
+      agentDraft: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          attachments?: Array<Id<"_storage">>;
+          chatId: Id<"comma_agent_chats">;
+          conversationId: Id<"comma_conversations">;
+          itemKey: string;
+          note?: string;
+          text: string;
+        },
+        { placed: "composer" | "pane" }
+      >;
+      agentHeartbeat: FunctionReference<
+        "mutation",
+        "internal",
+        { now: number },
+        null
+      >;
+      agentItems: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          chatId: Id<"comma_agent_chats">;
+          items: Array<{
+            entry:
+              | { kind: "user"; steer: boolean; text: string }
+              | { kind: "assistant"; streaming: boolean; text: string }
+              | { kind: "thinking"; streaming: boolean; text: string }
+              | {
+                  detail?: string;
+                  kind: "tool";
+                  name: string;
+                  status: "running" | "done" | "failed";
+                  summary: string;
+                }
+              | {
+                  answers?: Record<string, string>;
+                  kind: "question";
+                  questions: Array<{
+                    header?: string;
+                    multiSelect: boolean;
+                    options: Array<{ description?: string; label: string }>;
+                    question: string;
+                  }>;
+                  requestId: string;
+                  status: "pending" | "resolved" | "cancelled";
+                }
+              | {
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    size: number;
+                    storageId: Id<"_storage">;
+                  }>;
+                  kind: "draft";
+                  note?: string;
+                  placed: "composer" | "pane";
+                  text: string;
+                  used: boolean;
+                }
+              | {
+                  durationMs?: number;
+                  error?: string;
+                  kind: "turn_end";
+                  outcome: "completed" | "interrupted" | "failed";
+                };
+            key: string;
+          }>;
+        },
+        null
+      >;
+      agentRecover: FunctionReference<
+        "mutation",
+        "internal",
+        { now: number },
+        { chatIds: Array<Id<"comma_agent_chats">> }
+      >;
+      agentSend: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          clientKey: string;
+          conversationId: Id<"comma_conversations">;
+          text: string;
+        },
+        Id<"comma_outbox">
+      >;
+    };
+    agentContext: {
+      agentAttachment: FunctionReference<
+        "mutation",
+        "internal",
+        { guid: string },
+        null | { mime: string | null; name: string | null; url: string | null }
+      >;
+      agentContext: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          beforeMessageAt?: number;
+          conversationId: Id<"comma_conversations">;
+          limit: number;
+          sinceMessageAt?: number;
+        },
+        {
+          messages: Array<{
+            at: number;
+            attachments: Array<{
+              guid: string;
+              mime: string | null;
+              name: string | null;
+            }>;
+            fromMe: boolean;
+            guid: string;
+            sender: string;
+            text: string;
+          }>;
+          participants: Array<{ handles: Array<string>; name: string }>;
+          title: string;
+        }
+      >;
+      agentPeople: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations"> },
+        Array<{
+          address: string;
+          events: Array<{
+            airtable_event_id: string;
+            event_name: string;
+            start_date?: string;
+          }>;
+          handles: Array<string>;
+          is_favorite?: boolean;
+          name: string;
+          notes?: string;
+          organization?: string;
+          personId?: Id<"people">;
+          priority?: number | "high" | "normal" | "low";
+          tags: Array<string>;
+        }>
+      >;
+      agentSearch: FunctionReference<
+        "mutation",
+        "internal",
+        { conversationId: Id<"comma_conversations">; query: string },
+        Array<{
+          at: number;
+          attachments: Array<{
+            guid: string;
+            mime: string | null;
+            name: string | null;
+          }>;
+          fromMe: boolean;
+          guid: string;
+          sender: string;
+          text: string;
+        }>
+      >;
+    };
     deletions: {
       deleteChat: FunctionReference<
         "mutation",

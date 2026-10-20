@@ -31,6 +31,18 @@ const ROUTES = {
   claim: internal.comma.outbox.claimOutbox,
   complete: internal.comma.outbox.completeOutbox,
   renew: internal.comma.outbox.renewOutbox,
+  agentClaim: internal.comma.agent.agentClaim,
+  agentRecover: internal.comma.agent.agentRecover,
+  agentChat: internal.comma.agent.agentChat,
+  agentItems: internal.comma.agent.agentItems,
+  agentHeartbeat: internal.comma.agent.agentHeartbeat,
+  agentDraft: internal.comma.agent.agentDraft,
+  agentSend: internal.comma.agent.agentSend,
+  agentContext: internal.comma.agentContext.agentContext,
+  agentSearch: internal.comma.agentContext.agentSearch,
+  agentPeople: internal.comma.agentContext.agentPeople,
+  agentAttachment: internal.comma.agentContext.agentAttachment,
+  agentRecordUpload: internal.comma.drafts.recordUpload,
 } as const;
 
 export type IngestKind = keyof typeof ROUTES;
