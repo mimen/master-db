@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentEnabled, childEnv, loadAgentConfig, queryOptions, reserveSession, type AgentConfig } from "./main";
+import { fakeId } from "./query-fake";
 import { commaServer } from "./tools";
 
 const env = { CONVEX_CLOUD_URL: "https://x.convex.cloud/", CONVEX_SITE_URL: "https://x.convex.site", COMMA_BRIDGE_SECRET: "secret", HOME: "/Users/test" };
@@ -47,9 +48,9 @@ describe("comma agent main", () => {
 
   test("builds the spike's SDK options with the chat's model and effort", () => {
     const config = loadAgentConfig(env, "gateway-key");
-    const mcp = commaServer({ port: { post: async () => null as never, upload: async () => "" }, chatId: "c", conversationId: "v", scratchDir: "/tmp", timeZone: "UTC", fetch });
-    const base = { chatId: "c", sessionId: "s-1", append: "You are a Comma agent", cwd: "/tmp/c", env: childEnv(config, { PROCID: "comma:agent", PATH: "/bin" }), mcp };
-    const chat = { conversationId: "v", model: "claude-opus-5-5", effort: "high" as const, state: "pending" as const };
+    const mcp = commaServer({ port: { post: async () => null as never, upload: async () => fakeId("") }, chatId: fakeId("c"), conversationId: fakeId("v"), scratchDir: "/tmp", timeZone: "UTC", fetch });
+    const base = { chatId: fakeId<"comma_agent_chats">("c"), sessionId: "s-1", append: "You are a Comma agent", cwd: "/tmp/c", env: childEnv(config, { PROCID: "comma:agent", PATH: "/bin" }), mcp };
+    const chat = { conversationId: fakeId<"comma_conversations">("v"), model: "claude-opus-5-5", effort: "high" as const, state: "pending" as const };
     const fresh = queryOptions(config, { ...base, chat, resume: false });
     expect(fresh).toMatchObject({
       model: "claude-opus-5-5",

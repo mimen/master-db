@@ -18,7 +18,7 @@ export function formatMessages(messages: ThreadMessage[], timeZone: string): str
   return messages.map((message) => {
     const at = new Date(message.at).toLocaleString("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" });
     const sender = message.fromMe ? "Milad (me)" : message.sender;
-    const files = message.attachments.map((file) => ` [attachment ${file.name} (${file.mime}), guid ${file.guid}]`).join("");
+    const files = message.attachments.map((file) => ` [attachment ${file.name ?? "unnamed"}${file.mime ? ` (${file.mime})` : ""}, guid ${file.guid}]`).join("");
     return `[${at}] ${sender}: ${message.text}${files}`;
   }).join("\n");
 }

@@ -1,13 +1,13 @@
 import type { CanUseTool, Options, PermissionResult, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { continuesTurn, Normalizer, questionItem, turnEndItem } from "./normalize";
-import type { ChatState, Item, Question } from "./convex-port";
+import type { AgentChatState, Item, AgentQuestion } from "./convex-port";
 
 export type QueryFactory = (params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) =>
   AsyncIterable<SDKMessage> & Pick<Query, "interrupt" | "close">;
 
 type Turn = { id: string; startedAt: number; steerPending: boolean };
-type PendingQuestion = { questions: Question[]; resolve: (result: PermissionResult) => void };
+type PendingQuestion = { questions: AgentQuestion[]; resolve: (result: PermissionResult) => void };
 /** idle, running and waiting_input are live; ended is terminal and the process is gone. */
 export type SessionState =
   | { kind: "idle" }
@@ -15,8 +15,8 @@ export type SessionState =
   | { kind: "waiting_input"; turn: Turn; requests: Map<string, PendingQuestion> }
   | { kind: "ended"; outcome: "interrupted" | "failed" | "closed" };
 
-const CHAT_STATE: Record<SessionState["kind"], ChatState> = { idle: "idle", running: "running", waiting_input: "waiting_input", ended: "idle" };
-const chatState = (state: SessionState): ChatState => state.kind === "ended" && state.outcome !== "closed" ? state.outcome : CHAT_STATE[state.kind];
+const CHAT_STATE: Record<SessionState["kind"], AgentChatState> = { idle: "idle", running: "running", waiting_input: "waiting_input", ended: "idle" };
+const chatState = (state: SessionState): AgentChatState => state.kind === "ended" && state.outcome !== "closed" ? state.outcome : CHAT_STATE[state.kind];
 
 const TURN_OUTPUT = new Set<SDKMessage["type"]>(["stream_event", "assistant", "user", "result"]);
 
@@ -61,7 +61,7 @@ export type SessionDeps = {
   query: QueryFactory;
   now: () => number;
   writeItems: (items: Item[]) => Promise<unknown>;
-  writeState: (state: ChatState) => Promise<unknown>;
+  writeState: (state: AgentChatState) => Promise<unknown>;
   onError: (error: unknown) => void;
 };
 

@@ -1,11 +1,11 @@
 import { basename } from "node:path";
 import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { makeAssistantStreamingFilter } from "./assistant-streaming";
-import type { Entry, Item, Question } from "./convex-port";
+import type { AgentEntry, Item, AgentQuestion } from "./convex-port";
 
 type TextKind = "assistant" | "thinking";
 type TextBlock = { key: string; kind: TextKind; text: string; done: boolean };
-type ToolEntry = Extract<Entry, { kind: "tool" }>;
+type ToolEntry = Extract<AgentEntry, { kind: "tool" }>;
 
 const DETAIL_LIMIT = 4000;
 // AskUserQuestion surfaces as a question item through canUseTool, not as a tool step.
@@ -61,7 +61,7 @@ export function continuesTurn(result: SDKResultMessage, steerPending: boolean): 
   return steerPending && result.subtype === "success" && !result.result.trim();
 }
 
-export function questionItem(requestId: string, questions: Question[], status: "pending" | "resolved" | "cancelled", answers?: Record<string, string>): Item {
+export function questionItem(requestId: string, questions: AgentQuestion[], status: "pending" | "resolved" | "cancelled", answers?: Record<string, string>): Item {
   return { key: requestId, entry: { kind: "question", requestId, questions, status, ...(answers ? { answers } : {}) } };
 }
 

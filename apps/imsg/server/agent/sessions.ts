@@ -1,14 +1,14 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { RetryWork } from "../bridge/retry";
 import { newestMessageAt, PACKET_MESSAGES, systemAppend, withThreadDelta } from "./context";
-import type { Chat, CommandRow, Port } from "./convex-port";
+import type { Chat, ChatId, CommandRow, ConversationId, Port } from "./convex-port";
 import { turnEndItem } from "./normalize";
 import { AgentSession, type QueryFactory } from "./session";
 
 export const MAX_LIVE = 4;
 export const IDLE_CLOSE_MS = 10 * 60_000;
 
-export type SessionOptionsInput = { chatId: string; chat: Chat; sessionId: string; resume: boolean; append: string };
+export type SessionOptionsInput = { chatId: ChatId; chat: Chat; sessionId: string; resume: boolean; append: string };
 
 export type SessionsDeps = {
   port: Port;
@@ -16,29 +16,29 @@ export type SessionsDeps = {
   now: () => number;
   timeZone: string;
   /** Reserves a ccs session for a new chat, in the chat's working directory, and returns its id. */
-  reserve: (chatId: string, title: string) => Promise<string>;
+  reserve: (chatId: ChatId, title: string) => Promise<string>;
   readAddendum: () => string | null;
   options: (input: SessionOptionsInput) => Options;
   log?: (message: string) => void;
 };
 
-type Live = { session: AgentSession; conversationId: string; seenThrough?: number; persistedSeen?: number };
+type Live = { session: AgentSession; conversationId: ConversationId; seenThrough?: number; persistedSeen?: number };
 
 /** The runner's live sessions: at most four, idle ones closed after ten minutes, the longest idle evicted first. */
 export class Sessions {
-  private live = new Map<string, Live>();
-  private sessionIds = new Map<string, string>();
-  private chains = new Map<string, Promise<void>>();
+  private live = new Map<ChatId, Live>();
+  private sessionIds = new Map<ChatId, string>();
+  private chains = new Map<ChatId, Promise<void>>();
   private opening: Promise<unknown> = Promise.resolve();
   private latest: CommandRow[] = [];
-  private requested = new Set<string>();
+  private requested = new Set<CommandRow["_id"]>();
   private work = new RetryWork("agent commands", () => this.claim());
 
   constructor(private deps: SessionsDeps) {}
 
   private log(message: string) { (this.deps.log ?? console.error)(`comma agent: ${message}`); }
 
-  get liveChatIds(): string[] { return [...this.live.keys()]; }
+  get liveChatIds(): ChatId[] { return [...this.live.keys()]; }
 
   /** Runs once at boot: chats a previous process left mid-turn become interrupted. */
   recover() {
@@ -106,13 +106,13 @@ export class Sessions {
     }
   }
 
-  private current(chatId: string): Live | undefined {
+  private current(chatId: ChatId): Live | undefined {
     const live = this.live.get(chatId);
     if (live && !live.session.live) this.live.delete(chatId);
     return live?.session.live ? live : undefined;
   }
 
-  private open(chatId: string, chat: Chat): Promise<Live | null> {
+  private open(chatId: ChatId, chat: Chat): Promise<Live | null> {
     const opened = this.opening.then(() => this.start(chatId, chat));
     this.opening = opened.catch(() => {});
     return opened.catch(async (error) => {
@@ -124,7 +124,7 @@ export class Sessions {
     });
   }
 
-  private async start(chatId: string, chat: Chat): Promise<Live> {
+  private async start(chatId: ChatId, chat: Chat): Promise<Live> {
     const { port, now } = this.deps;
     const context = await port.post("agentContext", { conversationId: chat.conversationId, limit: PACKET_MESSAGES });
     const existing = chat.sessionId ?? this.sessionIds.get(chatId);
@@ -150,7 +150,7 @@ export class Sessions {
     return live;
   }
 
-  private async withDelta(chatId: string, live: Live, text: string): Promise<string> {
+  private async withDelta(chatId: ChatId, live: Live, text: string): Promise<string> {
     const { port } = this.deps;
     const delta = live.seenThrough === undefined ? [] : (await port.post("agentContext", {
       conversationId: live.conversationId, sinceMessageAt: live.seenThrough, limit: PACKET_MESSAGES,
@@ -176,7 +176,7 @@ export class Sessions {
     await this.closeChat(chatId);
   }
 
-  private async closeChat(chatId: string) {
+  private async closeChat(chatId: ChatId) {
     const live = this.live.get(chatId);
     this.live.delete(chatId);
     await live?.session.close();

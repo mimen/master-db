@@ -1,4 +1,5 @@
 import type { CanUseTool, Options, PermissionResult, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { GenericId } from "convex/values";
 import type { QueryFactory } from "./session";
 
 /** A scriptable stand-in for the SDK's query(): tests emit SDK messages and read what the runner pushed. */
@@ -67,3 +68,6 @@ export const sdkResult = (uuid: string, text: string, extra: object = {}) =>
   ({ type: "result", subtype: "success", uuid, result: text, is_error: false, duration_ms: 10, queued_turn_count: 0, ...extra });
 export const sdkText = (id: string, text: string) =>
   ({ type: "assistant", uuid: `${id}-frame`, parent_tool_use_id: null, message: { id, content: [{ type: "text", text }] } });
+
+/** Test ids: the runner only ever compares them. */
+export const fakeId = <Table extends string>(value: string) => value as GenericId<Table>;

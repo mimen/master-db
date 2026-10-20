@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { IDLE_CLOSE_MS, MAX_LIVE, Sessions, type SessionOptionsInput } from "./sessions";
-import { fakeQueries, sdkResult, settle } from "./query-fake";
+import { fakeId, fakeQueries, sdkResult, settle } from "./query-fake";
 import type { Chat, Command, CommandRow, Port, Routes, ThreadMessage } from "./convex-port";
 
 const message = (at: number, text: string): ThreadMessage => ({ guid: `g${at}`, at, fromMe: false, sender: "Jesse Brennan", text, attachments: [] });
@@ -25,7 +25,7 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
       if (route === "agentRecover") return { chatIds: [] } as never;
       return null as never;
     },
-    upload: async () => "storage",
+    upload: async () => fakeId("storage"),
   };
   const { query, queries } = fakeQueries();
   const reserved: string[] = [];
@@ -39,10 +39,10 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
     log: () => {},
   });
   let next = 0;
-  const send = async (chatId: string, command: Command, chat: Partial<Chat> = {}) => {
+  const send = async (chat_: string, command: Command, chat: Partial<Chat> = {}) => {
     const row: CommandRow = {
-      _id: `cmd${++next}`, chatId, command, createdAt: next,
-      chat: { conversationId: `conv-${chatId}`, model: "claude-opus-5-5", effort: "high", state: "pending", ...chat },
+      _id: fakeId(`cmd${++next}`), chatId: fakeId(chat_), command, createdAt: next,
+      chat: { conversationId: fakeId(`conv-${chat_}`), model: "claude-opus-5-5", effort: "high", state: "pending", ...chat },
     };
     pending = [...pending.filter((r) => !claimed.has(r._id)), row];
     sessions.receive(pending);
@@ -103,7 +103,7 @@ describe("Sessions", () => {
     await settle();
     h.advance(60_000);
     await h.ask("e", "fifth");
-    expect(h.sessions.liveChatIds.sort()).toEqual(["a", "c", "d", "e"]);
+    expect<string[]>(h.sessions.liveChatIds.sort()).toEqual(["a", "c", "d", "e"]);
     expect(h.sessions.liveChatIds).toHaveLength(MAX_LIVE);
     expect(h.queries[1].closed).toBe(true);
     expect(h.queries.filter((q) => !q.closed)).toHaveLength(MAX_LIVE);
