@@ -115,7 +115,7 @@ export class AgentSession {
     await this.runtime.interrupt().catch(this.deps.onError);
     this.shutdown();
     const now = this.deps.now();
-    this.emit([...this.normalizer.flush(now), turnEndItem(`${turn.id}:interrupted`, "interrupted", now - turn.startedAt)]);
+    this.emit([...this.normalizer.flush(now, "failed"), turnEndItem(`${turn.id}:interrupted`, "interrupted", now - turn.startedAt)]);
     await this.writes;
   }
 
@@ -221,6 +221,6 @@ export class AgentSession {
     this.transition({ kind: "ended", outcome: turn ? "failed" : "closed" });
     this.shutdown();
     const now = this.deps.now();
-    if (turn) this.emit([...this.normalizer.flush(now), turnEndItem(`${turn.id}:failed`, "failed", now - turn.startedAt, error)]);
+    if (turn) this.emit([...this.normalizer.flush(now, "failed"), turnEndItem(`${turn.id}:failed`, "failed", now - turn.startedAt, error)]);
   }
 }
