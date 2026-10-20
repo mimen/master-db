@@ -271,5 +271,5 @@ export const agentDraft = internalMutation({
 export const agentSend = internalMutation({
   args: { conversationId: v.id("comma_conversations"), clientKey: v.string(), text: v.string() },
   returns: v.id("comma_outbox"),
-  handler: async (ctx, { conversationId, clientKey, text }) => await enqueueCommand(ctx, { conversationId, clientKey, payload: { kind: "send", text } }),
+  handler: async (ctx, { conversationId, clientKey, text }) => (await enqueueCommand(ctx, { conversationId, clientKey, payload: { kind: "send", text } })).id,
 });

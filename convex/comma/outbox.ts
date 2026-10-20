@@ -36,19 +36,28 @@ export const enqueue = mutation({
   returns: v.id("comma_outbox"),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    return await enqueueCommand(ctx, args);
+    const { id, created } = await enqueueCommand(ctx, args);
+    const { conversationId, payload } = args;
+    // The composer's own send takes its draft with it; an agent send leaves the user's draft alone.
+    if (created && conversationId && payload.kind === "send") await deleteConversationDraft(ctx, conversationId);
+    if (created && conversationId && payload.kind === "sendAttachment") {
+      // Sending a drafted attachment sends the whole draft; the composer holds the rest.
+      const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).unique();
+      if (draft?.attachments?.some((a) => a.storageId === payload.storageId)) await ctx.db.delete(draft._id);
+    }
+    return id;
   },
 });
 
-/** Idempotent on clientKey. A send also clears the draft and shows the temp bubble at once. */
+/** Idempotent on clientKey. A send shows the temp bubble at once. */
 export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversationId, payload }: {
   clientKey: string; conversationId?: Id<"comma_conversations">; payload: CommaOutboxPayload;
-}): Promise<Id<"comma_outbox">> {
+}): Promise<{ id: Id<"comma_outbox">; created: boolean }> {
   const existing = await ctx.db
     .query("comma_outbox")
     .withIndex("by_clientKey", (q) => q.eq("clientKey", clientKey))
     .unique();
-  if (existing) return existing._id;
+  if (existing) return { id: existing._id, created: false };
   if (!conversationId && !GLOBAL_KINDS.has(payload.kind)) throw new Error("conversationId is required for this command");
   const conversation = conversationId ? await ctx.db.get(conversationId) : null;
   if (conversationId && !conversation) throw new Error("Conversation not found");
@@ -62,13 +71,7 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
     createdAt: now,
     updatedAt: now,
   });
-  if (payload.kind === "sendAttachment" && conversation) {
-    // Sending a drafted attachment sends the whole draft; the composer holds the rest.
-    const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversation._id)).unique();
-    if (draft?.attachments?.some((a) => a.storageId === payload.storageId)) await ctx.db.delete(draft._id);
-  }
   if (payload.kind === "send" && conversation) {
-    await deleteConversationDraft(ctx, conversation._id);
     // The sidebar moves with the temp bubble rather than a BlueBubbles round trip later.
     // The real row's refreshLastMessage overwrites it, and a failed send stays the preview.
     await ctx.db.patch(conversation._id, {
@@ -96,7 +99,7 @@ export async function enqueueCommand(ctx: MutationCtx, { clientKey, conversation
       sourceVersion: 0,
     });
   }
-  return id;
+  return { id, created: true };
 }
 
 export const getCommand = query({

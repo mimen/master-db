@@ -278,14 +278,14 @@ describe("runner functions", () => {
     expect(await as.query(api.comma.bridgeState.bridgeState, {})).toMatchObject({ key: "mini", suggestions: true });
   });
 
-  test("agentSend enqueues a send the way the composer does", async () => {
+  test("agentSend enqueues a send the way the composer does and leaves the user's draft alone", async () => {
     const { t, as, conversationId } = await setup();
     await as.mutation(api.comma.drafts.setDraft, { conversationId, text: "unsent" });
     const id = await t.mutation(internal.comma.agent.agentSend, { conversationId, clientKey: "agent-1", text: "hello" });
     expect(await t.mutation(internal.comma.agent.agentSend, { conversationId, clientKey: "agent-1", text: "hello" })).toBe(id);
     expect(await t.run((ctx) => ctx.db.get(id))).toMatchObject({ payload: { kind: "send", text: "hello" }, status: "pending" });
     expect(await t.run((ctx) => ctx.db.query("comma_messages").collect())).toMatchObject([{ guid: "temp-agent-1", text: "hello" }]);
-    expect(await as.query(api.comma.queries.getDraft, { conversationId })).toBeNull();
+    expect(await as.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "unsent", source: "user" });
   });
 });
 
