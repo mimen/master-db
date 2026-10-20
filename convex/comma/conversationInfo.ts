@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 
-import { query } from "../_generated/server";
+import type { Doc } from "../_generated/dataModel";
+import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 
 import { conversationKey } from "./conversationKey";
@@ -44,11 +45,17 @@ export const chatInfo = query({
       .withIndex("by_chatGuid", (q) => q.eq("chatGuid", chatGuid)).unique();
     const conversation = alias ? await ctx.db.get(alias.conversationId) : null;
     if (!conversation) return null;
-    const participants = await Promise.all(conversation.participants.map(async (participant) => {
-      const person = await personForAddress(ctx, participant.address);
-      return { address: participant.address, name: person?.display_name ?? participant.name ?? participant.address,
-        ...(person?.is_favorite !== undefined ? { is_favorite: person.is_favorite } : {}) };
+    const participants = (await conversationPeople(ctx, conversation)).map(({ address, name, person }) => ({
+      address, name, ...(person?.is_favorite !== undefined ? { is_favorite: person.is_favorite } : {}),
     }));
     return { guid: chatGuid, displayName: conversation.rawDisplayName || null, isGroup: conversation.isGroup, participants };
   },
 });
+
+/** Each participant with their contact, named the way the app names them. */
+export async function conversationPeople(ctx: QueryCtx, conversation: Doc<"comma_conversations">) {
+  return await Promise.all(conversation.participants.map(async (participant) => {
+    const person = await personForAddress(ctx, participant.address);
+    return { address: participant.address, name: person?.display_name ?? participant.name ?? participant.address, person };
+  }));
+}

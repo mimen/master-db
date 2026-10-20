@@ -466,3 +466,103 @@ export const commandReceipt = v.object({
 });
 
 export type CommandReceipt = Infer<typeof commandReceipt>;
+
+/** The agent runner's liveness row in comma_bridge_state, beside the Mini bridge's. */
+export const agentBridgeStateFields = { key: v.literal("agent"), updatedAt: v.number() };
+
+export const agentEffort = v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("xhigh"), v.literal("max"));
+export const agentChatState = v.union(
+  v.literal("idle"), v.literal("pending"), v.literal("running"), v.literal("waiting_input"), v.literal("interrupted"), v.literal("failed"),
+);
+
+export const agentChatFields = {
+  conversationId: v.id("comma_conversations"),
+  /** Reserved through ccs and set by the runner. */
+  sessionId: v.optional(v.string()),
+  state: agentChatState,
+  /** Fixed at chat creation from the client's settings. */
+  model: v.string(),
+  effort: agentEffort,
+  /** Newest thread message dateCreated the agent has been given. */
+  seenThroughMessageAt: v.optional(v.number()),
+  /** Set by New chat; a conversation has at most one chat without it. */
+  archivedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+};
+
+export const agentQuestion = v.object({
+  question: v.string(), header: v.optional(v.string()), multiSelect: v.boolean(),
+  options: v.array(v.object({ label: v.string(), description: v.optional(v.string()) })),
+});
+export const agentAnswers = v.record(v.string(), v.string());
+
+export const agentUserEntry = v.object({ kind: v.literal("user"), text: v.string(), steer: v.boolean() });
+export const agentAssistantEntry = v.object({ kind: v.literal("assistant"), text: v.string(), streaming: v.boolean() });
+export const agentThinkingEntry = v.object({ kind: v.literal("thinking"), text: v.string(), streaming: v.boolean() });
+export const agentToolEntry = v.object({
+  kind: v.literal("tool"), name: v.string(), summary: v.string(), detail: v.optional(v.string()),
+  status: v.union(v.literal("running"), v.literal("done"), v.literal("failed")),
+});
+export const agentQuestionEntry = v.object({
+  kind: v.literal("question"), requestId: v.string(), questions: v.array(agentQuestion),
+  status: v.union(v.literal("pending"), v.literal("resolved"), v.literal("cancelled")),
+  answers: v.optional(agentAnswers),
+});
+export const agentDraftPlacement = v.union(v.literal("composer"), v.literal("pane"));
+export const agentDraftEntry = v.object({
+  kind: v.literal("draft"), text: v.string(), note: v.optional(v.string()), attachments: v.optional(v.array(draftAttachment)),
+  placed: agentDraftPlacement, used: v.boolean(),
+});
+export const agentTurnEndEntry = v.object({
+  kind: v.literal("turn_end"), outcome: v.union(v.literal("completed"), v.literal("interrupted"), v.literal("failed")),
+  error: v.optional(v.string()), durationMs: v.optional(v.number()),
+});
+export const agentEntry = v.union(
+  agentUserEntry, agentAssistantEntry, agentThinkingEntry, agentToolEntry, agentQuestionEntry, agentDraftEntry, agentTurnEndEntry,
+);
+
+export const agentItemFields = {
+  chatId: v.id("comma_agent_chats"),
+  /** Chosen by the writer: an SDK uuid or tool_use_id from the runner, a crypto uuid from the client. */
+  key: v.string(),
+  /** max(ordinal) + 1 within the chat, assigned on insert. */
+  ordinal: v.number(),
+  entry: agentEntry,
+  createdAt: v.number(),
+  updatedAt: v.number(),
+};
+
+export const agentMessageCommand = v.object({ kind: v.literal("message"), text: v.string(), steer: v.boolean() });
+export const agentAnswerCommand = v.object({ kind: v.literal("answer"), requestId: v.string(), answers: agentAnswers });
+export const agentStopCommand = v.object({ kind: v.literal("stop") });
+/** Emitted by New chat for the archived chat's live session. */
+export const agentCloseCommand = v.object({ kind: v.literal("close") });
+export const agentCommand = v.union(agentMessageCommand, agentAnswerCommand, agentStopCommand, agentCloseCommand);
+
+export const agentCommandFields = {
+  chatId: v.id("comma_agent_chats"),
+  command: agentCommand,
+  status: v.union(v.literal("pending"), v.literal("taken")),
+  createdAt: v.number(),
+  takenAt: v.optional(v.number()),
+};
+
+export const agentChatDoc = withSystemFields("comma_agent_chats", agentChatFields);
+export const agentItemDoc = withSystemFields("comma_agent_items", agentItemFields);
+const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt } = agentChatFields;
+export const pendingAgentCommand = v.object({
+  _id: v.id("comma_agent_commands"), chatId: v.id("comma_agent_chats"), command: agentCommand, createdAt: v.number(),
+  chat: v.object({ conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt }),
+});
+
+export type DraftAttachment = Infer<typeof draftAttachment>;
+export type AgentEffort = Infer<typeof agentEffort>;
+export type AgentChatState = Infer<typeof agentChatState>;
+export type AgentQuestion = Infer<typeof agentQuestion>;
+export type AgentDraftPlacement = Infer<typeof agentDraftPlacement>;
+export type AgentEntry = Infer<typeof agentEntry>;
+export type AgentCommand = Infer<typeof agentCommand>;
+export type AgentChatDoc = Infer<typeof agentChatDoc>;
+export type AgentItemDoc = Infer<typeof agentItemDoc>;
+export type PendingAgentCommand = Infer<typeof pendingAgentCommand>;

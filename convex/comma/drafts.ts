@@ -4,7 +4,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { draftListItem } from "../schema/comma/validators";
+import { draftListItem, type DraftAttachment } from "../schema/comma/validators";
 
 import { conversationKey } from "./conversationKey";
 
@@ -98,22 +98,37 @@ export const prepareDraft = internalMutation({
     if (!text.trim() && attachments.length === 0) throw new Error("A draft needs text or an attachment");
     const conversation = await resolveConversation(ctx, to);
     if (!conversation) throw new Error(`No conversation for ${to.conversationId ?? to.chatGuid ?? to.address}`);
-    const stored = [];
-    for (const storageId of attachments) {
-      const upload = await ctx.db.query("comma_uploads").withIndex("by_storageId", (q) => q.eq("storageId", storageId)).unique();
-      if (!upload) throw new Error(`Attachment ${storageId} was not stored through storeAttachment`);
-      stored.push({ storageId, filename: upload.filename, mimeType: upload.mimeType, size: upload.totalBytes });
-    }
-    const existing = await draftFor(ctx, conversation._id);
-    if (existing && existing.source !== "agent" && existing.text.trim() && !force) {
-      throw new Error("The conversation has an unsent draft the user wrote. Pass force to replace it.");
-    }
-    const fields = { text, updatedAt: Date.now(), source: "agent" as const, note, attachments: stored.length ? stored : undefined };
-    if (existing) await ctx.db.patch(existing._id, fields);
-    const draftId = existing?._id ?? await ctx.db.insert("comma_drafts", { conversationId: conversation._id, ...fields });
-    return { conversationId: conversation._id, draftId, replaced: existing !== null };
+    const written = await writeAgentDraft(ctx, conversation._id, { text, note, attachments: await recordedAttachments(ctx, attachments), force });
+    if (!written) throw new Error("The conversation has an unsent draft the user wrote. Pass force to replace it.");
+    return { conversationId: conversation._id, ...written };
   },
 });
+
+/** The composer attachment for each upload recorded by recordUpload, so sendAttachment accepts it. */
+export async function recordedAttachments(ctx: QueryCtx, storageIds: Id<"_storage">[]): Promise<DraftAttachment[]> {
+  const stored = [];
+  for (const storageId of storageIds) {
+    const upload = await ctx.db.query("comma_uploads").withIndex("by_storageId", (q) => q.eq("storageId", storageId)).unique();
+    if (!upload) throw new Error(`Attachment ${storageId} was not stored through storeAttachment`);
+    stored.push({ storageId, filename: upload.filename, mimeType: upload.mimeType, size: upload.totalBytes });
+  }
+  return stored;
+}
+
+/**
+ * Writes an agent draft into the composer. Replaces an earlier agent draft, but never text the
+ * user typed unless forced; that case writes nothing and returns null.
+ */
+export async function writeAgentDraft(ctx: MutationCtx, conversationId: Id<"comma_conversations">, { text, note, attachments, force }: {
+  text: string; note?: string; attachments: DraftAttachment[]; force?: boolean;
+}): Promise<{ draftId: Id<"comma_drafts">; replaced: boolean } | null> {
+  const existing = await draftFor(ctx, conversationId);
+  if (existing && existing.source !== "agent" && existing.text.trim() && !force) return null;
+  const fields = { text, updatedAt: Date.now(), source: "agent" as const, note, attachments: attachments.length ? attachments : undefined };
+  if (existing) await ctx.db.patch(existing._id, fields);
+  const draftId = existing?._id ?? await ctx.db.insert("comma_drafts", { conversationId, ...fields });
+  return { draftId, replaced: existing !== null };
+}
 
 /** Large files skip base64: the CLI posts bytes to this URL, then records the upload. */
 export const generateUploadUrl = internalMutation({

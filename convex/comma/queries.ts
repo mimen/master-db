@@ -234,24 +234,30 @@ export const searchMessages = query({
   returns: v.array(messageDoc),
   handler: async (ctx, args) => {
     await assertAllowed(ctx);
-    return await ctx.db
-      .query("comma_messages")
-      .withSearchIndex("search_text", (q) => {
-        let search = q.search("text", args.query).eq("isTapback", false).eq("retracted", false);
-        if (args.conversationId) search = search.eq("conversationId", args.conversationId);
-        // The sibling schema branch adds isFromMe to search_text.filterFields.
-        if (args.from) {
-          const senderSearch = search as SearchFilterFinalizer<CommaMessageDoc, {
-            searchField: "text";
-            filterFields: "conversationId" | "isTapback" | "retracted" | "isFromMe";
-          }>;
-          return senderSearch.eq("isFromMe", args.from === "me");
-        }
-        return search;
-      })
-      .take(50);
+    return await searchMessageRows(ctx, args);
   },
 });
+
+export async function searchMessageRows(ctx: QueryCtx, args: {
+  query: string; conversationId?: Id<"comma_conversations">; from?: "me" | "them";
+}): Promise<CommaMessageDoc[]> {
+  return await ctx.db
+    .query("comma_messages")
+    .withSearchIndex("search_text", (q) => {
+      let search = q.search("text", args.query).eq("isTapback", false).eq("retracted", false);
+      if (args.conversationId) search = search.eq("conversationId", args.conversationId);
+      // The sibling schema branch adds isFromMe to search_text.filterFields.
+      if (args.from) {
+        const senderSearch = search as SearchFilterFinalizer<CommaMessageDoc, {
+          searchField: "text";
+          filterFields: "conversationId" | "isTapback" | "retracted" | "isFromMe";
+        }>;
+        return senderSearch.eq("isFromMe", args.from === "me");
+      }
+      return search;
+    })
+    .take(50);
+}
 
 export const resolveChat = query({
   args: { chatGuid: v.string() },

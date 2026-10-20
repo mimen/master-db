@@ -9,7 +9,7 @@ export type BridgeState = typeof bridgeStateValue.type;
 
 export async function publishBridgeState(ctx: MutationCtx, state: BridgeState): Promise<void> {
   const existing = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "mini")).unique();
-  if (existing && existing.lastSeenAt > state.lastSeenAt) return;
+  if (existing?.key === "mini" && existing.lastSeenAt > state.lastSeenAt) return;
   if (existing) await ctx.db.replace(existing._id, state);
   else await ctx.db.insert("comma_bridge_state", state);
 }
@@ -20,7 +20,7 @@ export const bridgeState = query({
   handler: async (ctx) => {
     await assertAllowed(ctx);
     const row = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "mini")).unique();
-    if (!row) return null;
+    if (row?.key !== "mini") return null;
     const { _id: _id, _creationTime: _creationTime, ...state } = row;
     return state;
   },
