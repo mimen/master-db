@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { AgentSession } from "./session";
 import { fakeQueries, sdkResult, sdkText, settle } from "./query-fake";
-import type { ChatState, Item } from "./convex-port";
+import type { AgentChatState, Item } from "./convex-port";
 
 function harness() {
   const { query, queries } = fakeQueries();
   const items: Item[] = [];
-  const states: ChatState[] = [];
+  const states: AgentChatState[] = [];
   const errors: unknown[] = [];
   let now = 1_000;
   const session = new AgentSession({

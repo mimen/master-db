@@ -3,14 +3,14 @@ import { basename, join, relative, resolve, isAbsolute } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { formatMessages } from "./context";
-import type { Port } from "./convex-port";
+import type { ChatId, ConversationId, Port, StorageId } from "./convex-port";
 
 type ToolResult = Awaited<ReturnType<Parameters<typeof tool>[3]>>;
 
 export type ToolDeps = {
   port: Port;
-  chatId: string;
-  conversationId: string;
+  chatId: ChatId;
+  conversationId: ConversationId;
   scratchDir: string;
   timeZone: string;
   fetch: (url: string) => Promise<Response>;
@@ -43,7 +43,7 @@ async function download(deps: ToolDeps, url: string): Promise<{ bytes: Uint8Arra
 /** The comma MCP tools, bound to one chat's conversation and scratch folder. */
 export function commaTools(deps: ToolDeps) {
   const { port, chatId, conversationId } = deps;
-  const staged: string[] = [];
+  const staged: StorageId[] = [];
   return [
     tool("read_thread", "Read this conversation's messages before a point in time, newest last. Page back with the oldest timestamp you have seen.", {
       beforeMessageAt: z.number().optional().describe("Epoch milliseconds; omit for the latest messages"),
@@ -54,20 +54,25 @@ export function commaTools(deps: ToolDeps) {
       return text(`${formatMessages(context.messages, deps.timeZone)}${oldest ? `\n\n(oldest shown: ${oldest})` : "\n\n(no messages)"}`);
     })),
     tool("search_thread", "Search this conversation's full history.", { query: z.string().min(1) },
-      (args) => guarded(async () => text(JSON.stringify(await port.post("agentSearch", { conversationId, query: args.query }))))),
+      (args) => guarded(async () => {
+        const messages = await port.post("agentSearch", { conversationId, query: args.query });
+        return text(messages.length ? formatMessages(messages, deps.timeZone) : "(no matches)");
+      })),
     tool("get_people", "List this conversation's participants with handles, emails and CRM fields.", {},
       () => guarded(async () => text(JSON.stringify(await port.post("agentPeople", { conversationId }))))),
     tool("get_attachment", "Download an attachment from this thread into the scratch folder. Images are returned for you to see.", { guid: z.string() },
       (args) => guarded(async () => {
         const attachment = await port.post("agentAttachment", { guid: args.guid });
         if (!attachment) throw new Error(`No attachment ${args.guid} in this thread`);
-        const { bytes } = await download(deps, attachment.url);
+        if (!attachment.url) throw new Error(`Attachment ${args.guid} has not been copied to Comma's storage yet`);
+        const { bytes, mime: served } = await download(deps, attachment.url);
+        const mime = attachment.mime ?? served;
         await mkdir(deps.scratchDir, { recursive: true });
-        const path = join(deps.scratchDir, basename(attachment.name) || args.guid);
+        const path = join(deps.scratchDir, basename(attachment.name ?? "") || args.guid);
         await Bun.write(path, bytes);
-        const saved = `Saved ${attachment.name} (${attachment.mime}) to ${path}`;
-        if (!attachment.mime.startsWith("image/")) return text(saved);
-        return { content: [{ type: "image", data: Buffer.from(bytes).toString("base64"), mimeType: attachment.mime }, { type: "text", text: saved }] };
+        const saved = `Saved ${attachment.name ?? args.guid} (${mime}) to ${path}`;
+        if (!mime.startsWith("image/")) return text(saved);
+        return { content: [{ type: "image", data: Buffer.from(bytes).toString("base64"), mimeType: mime }, { type: "text", text: saved }] };
       })),
     tool("attach_file", "Stage a file for the next set_draft call: a path inside the scratch folder, or a URL.", {
       path: z.string().optional(),

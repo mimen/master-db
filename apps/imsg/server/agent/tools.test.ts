@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { commaTools, scratchPath } from "./tools";
 import type { Port, Routes } from "./convex-port";
+import { fakeId } from "./query-fake";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -15,11 +16,11 @@ function harness(responses: Partial<{ [K in keyof Routes]: Routes[K][1] }> = {})
   const uploads: { size: number; mime: string }[] = [];
   const port: Port = {
     post: async (route, body) => { calls.push({ route, body }); return (responses[route] ?? null) as never; },
-    upload: async (bytes, mime) => { uploads.push({ size: bytes.length, mime }); return `storage-${uploads.length}`; },
+    upload: async (bytes, mime) => { uploads.push({ size: bytes.length, mime }); return fakeId(`storage-${uploads.length}`); },
   };
   const png = new Uint8Array([137, 80, 78, 71]);
   const fetch = async (url: string) => url.endsWith("missing") ? new Response("no", { status: 404 }) : new Response(png, { headers: { "content-type": "image/png" } });
-  const tools = commaTools({ port, chatId: "chat-1", conversationId: "conv-1", scratchDir, timeZone: "UTC", fetch });
+  const tools = commaTools({ port, chatId: fakeId("chat-1"), conversationId: fakeId("conv-1"), scratchDir, timeZone: "UTC", fetch });
   const call = (name: string, args: Record<string, unknown> = {}) => tools.find((t) => t.name === name)!.handler(args as never, {});
   return { call, calls, uploads, scratchDir };
 }
@@ -34,7 +35,7 @@ describe("comma tools", () => {
   });
 
   test("attach_file uploads a scratch file and set_draft places it with the reply once", async () => {
-    const h = harness({ agentRecordUpload: { storageId: "storage-1", size: 4 }, agentDraft: { placed: "composer" } });
+    const h = harness({ agentRecordUpload: { storageId: fakeId("storage-1"), size: 4 }, agentDraft: { placed: "composer" } });
     writeFileSync(join(h.scratchDir, "flyer.png"), new Uint8Array([1, 2, 3, 4]));
     expect((await h.call("attach_file", { path: "flyer.png" })).isError).toBeUndefined();
     expect(h.calls[0]).toEqual({ route: "agentRecordUpload", body: { storageId: "storage-1", filename: "flyer.png", mimeType: "image/png" } });
@@ -69,6 +70,19 @@ describe("comma tools", () => {
     const result = await h.call("get_attachment", { guid: "att-1" });
     expect(result.content[0]).toEqual({ type: "image", data: Buffer.from([137, 80, 78, 71]).toString("base64"), mimeType: "image/png" });
     expect(await Bun.file(join(h.scratchDir, "flyer.png")).bytes()).toEqual(new Uint8Array([137, 80, 78, 71]));
+  });
+
+  test("get_attachment names unknown files by guid and refuses ones not yet in storage", async () => {
+    const h = harness({ agentAttachment: { url: "https://files/x", name: null, mime: null } });
+    expect((await h.call("get_attachment", { guid: "att-2" })).content[0]).toMatchObject({ type: "image", mimeType: "image/png" });
+    expect(await Bun.file(join(h.scratchDir, "att-2")).exists()).toBe(true);
+    const pending = harness({ agentAttachment: { url: null, name: "a.png", mime: "image/png" } });
+    expect(await pending.call("get_attachment", { guid: "att-3" })).toMatchObject({ isError: true });
+  });
+
+  test("search_thread lists matches in the read_thread format", async () => {
+    const h = harness({ agentSearch: [{ guid: "g", at: Date.UTC(2026, 9, 19, 18), fromMe: true, sender: "Me", text: "the list", attachments: [] }] });
+    expect((await h.call("search_thread", { query: "list" })).content[0]).toMatchObject({ text: expect.stringContaining("Milad (me): the list") });
   });
 
   test("read_thread pages back from a timestamp", async () => {

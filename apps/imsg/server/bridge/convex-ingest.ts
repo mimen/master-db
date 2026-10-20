@@ -92,7 +92,7 @@ export class ConvexIngest {
     return this.request<Results[K]>(kind, body);
   }
 
-  /** Untyped route access for callers that name routes the generated API predates. */
+  /** Route access typed by the caller; the agent runner types its routes in agent/convex-port.ts. */
   async request<T>(kind: string, body: unknown): Promise<T> {
     const { convexSiteUrl, commaBridgeSecret } = this.config;
     if (!commaBridgeSecret) throw new Error("Comma bridge disabled, COMMA_BRIDGE_SECRET is unset");
