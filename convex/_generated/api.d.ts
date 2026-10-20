@@ -2106,6 +2106,27 @@ export declare const api: {
         any
       >;
     };
+    guestList: {
+      addToGuestList: FunctionReference<
+        "action",
+        "public",
+        {
+          email: string;
+          eventId: string;
+          firstName: string;
+          key?: string;
+          lastName: string;
+          tierId: string;
+        },
+        any
+      >;
+      upcomingGuestLists: FunctionReference<
+        "action",
+        "public",
+        { key?: string },
+        any
+      >;
+    };
     mutations: {
       addHandle: FunctionReference<
         "mutation",
@@ -4966,11 +4987,31 @@ export declare const internal: {
           apply?: boolean;
           plan?: {
             afterRemovalFingerprint: string;
+            batchPostwriteFingerprints?: Array<string>;
+            batchPrewriteFingerprints?: Array<string>;
             beforeRemovalFingerprint: string;
             cardsFingerprint: string;
             initialFingerprint: string;
             legacy: Array<{ fingerprint: string; id: Id<"identities"> }>;
+            protectedLegacy?: Array<{
+              fingerprint: string;
+              id: Id<"identities">;
+            }>;
             replacementFingerprint: string;
+            semanticGuard?: {
+              afterRemovalFingerprint: string;
+              allowAppleUpdatedAt: boolean;
+              beforeRemovalFingerprint: string;
+              derivedPeople: Array<Id<"people">>;
+              initialFingerprint: string;
+              legacyFingerprint: string;
+              legacyOwnerRows: Array<{
+                allowedPersonIds: Array<Id<"people">>;
+                id: Id<"identities">;
+              }>;
+              scope?: "touched";
+              touchedPersonIds?: Array<Id<"people">>;
+            };
           };
         },
         any
@@ -4978,7 +5019,27 @@ export declare const internal: {
       syncAirtableHumans: FunctionReference<"action", "internal", {}, any>;
     };
     canonicalReconciliation: {
-      cleanupState: FunctionReference<"query", "internal", {}, any>;
+      cleanupState: FunctionReference<
+        "query",
+        "internal",
+        {
+          semanticGuard?: {
+            afterRemovalFingerprint: string;
+            allowAppleUpdatedAt: boolean;
+            beforeRemovalFingerprint: string;
+            derivedPeople: Array<Id<"people">>;
+            initialFingerprint: string;
+            legacyFingerprint: string;
+            legacyOwnerRows: Array<{
+              allowedPersonIds: Array<Id<"people">>;
+              id: Id<"identities">;
+            }>;
+            scope?: "touched";
+            touchedPersonIds?: Array<Id<"people">>;
+          };
+        },
+        any
+      >;
       reconcileBatch: FunctionReference<
         "mutation",
         "internal",
@@ -4992,6 +5053,22 @@ export declare const internal: {
             last_name?: string;
             phones: Array<string>;
           }>;
+          expectedPostwriteFingerprint?: string;
+          expectedStateFingerprint?: string;
+          semanticGuard?: {
+            afterRemovalFingerprint: string;
+            allowAppleUpdatedAt: boolean;
+            beforeRemovalFingerprint: string;
+            derivedPeople: Array<Id<"people">>;
+            initialFingerprint: string;
+            legacyFingerprint: string;
+            legacyOwnerRows: Array<{
+              allowedPersonIds: Array<Id<"people">>;
+              id: Id<"identities">;
+            }>;
+            scope?: "touched";
+            touchedPersonIds?: Array<Id<"people">>;
+          };
         },
         {
           identitiesRemoved: number;
@@ -5007,11 +5084,31 @@ export declare const internal: {
         {
           plan: {
             afterRemovalFingerprint: string;
+            batchPostwriteFingerprints?: Array<string>;
+            batchPrewriteFingerprints?: Array<string>;
             beforeRemovalFingerprint: string;
             cardsFingerprint: string;
             initialFingerprint: string;
             legacy: Array<{ fingerprint: string; id: Id<"identities"> }>;
+            protectedLegacy?: Array<{
+              fingerprint: string;
+              id: Id<"identities">;
+            }>;
             replacementFingerprint: string;
+            semanticGuard?: {
+              afterRemovalFingerprint: string;
+              allowAppleUpdatedAt: boolean;
+              beforeRemovalFingerprint: string;
+              derivedPeople: Array<Id<"people">>;
+              initialFingerprint: string;
+              legacyFingerprint: string;
+              legacyOwnerRows: Array<{
+                allowedPersonIds: Array<Id<"people">>;
+                id: Id<"identities">;
+              }>;
+              scope?: "touched";
+              touchedPersonIds?: Array<Id<"people">>;
+            };
           };
         },
         any

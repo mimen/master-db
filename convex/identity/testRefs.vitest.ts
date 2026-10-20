@@ -14,6 +14,8 @@ import { makeFunctionReference } from "convex/server";
 
 import type { Id } from "../_generated/dataModel";
 
+import type { GuestAddResult, GuestListEvent } from "./guestList";
+
 export const whoIsRef = makeFunctionReference<
   "query",
   { key: string; handle: string },
@@ -188,6 +190,18 @@ export const unlinkEventRef = makeFunctionReference<
   { key: string; linkId: Id<"event_links"> },
   null
 >("identity/events:unlinkEvent");
+
+export const upcomingGuestListsRef = makeFunctionReference<
+  "action",
+  { key: string },
+  GuestListEvent[]
+>("identity/guestList:upcomingGuestLists");
+
+export const addToGuestListRef = makeFunctionReference<
+  "action",
+  { key: string; eventId: string; tierId: string; firstName: string; lastName: string; email: string },
+  GuestAddResult
+>("identity/guestList:addToGuestList");
 
 export const migratePriorityToNumericRef = makeFunctionReference<
   "mutation",
