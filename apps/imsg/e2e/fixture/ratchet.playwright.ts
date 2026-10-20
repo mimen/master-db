@@ -541,10 +541,11 @@ test("ratchet: an AI reaction shows on its message within 50 ms of confirming", 
 test("Details paints the conversation's people from the list before chatInfo answers", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
-  let held = true;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
   await page.route("**/__fixture/convex", async (route) => {
     const body = route.request().postDataJSON() as { name: string };
-    while (held && body.name === "comma/conversationInfo:chatInfo") await new Promise((resolve) => setTimeout(resolve, 50));
+    if (body.name === "comma/conversationInfo:chatInfo") await released;
     await route.continue();
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -552,7 +553,8 @@ test("Details paints the conversation's people from the list before chatInfo ans
   await page.keyboard.press("Meta+i");
   await expect(page.getByText("Details", { exact: true })).toBeVisible();
   await expect(page.getByText("Reach Alex at", { exact: true })).toBeVisible({ timeout: 2_000 });
-  held = false;
+  release();
+  await page.unrouteAll({ behavior: "wait" });
 });
 
 test("a contact search hit for a listed conversation opens it without waiting on findChat", async ({ desk }) => {
