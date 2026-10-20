@@ -23,12 +23,12 @@ export function GuestListRows({ person, events, onAdded }: {
   const [busy, setBusy] = useState<string | null>(null);
   const emails = draft.email.trim() ? [...person.normalized_emails, draft.email.trim()] : person.normalized_emails;
 
-  const submit = async (event: GuestListEvent, tierId: string) => {
+  const submit = async (event: GuestListEvent) => {
     setBusy(event.eventId);
     try {
-      const result = await addToGuestList({ eventId: event.eventId, tierId, ...draft });
+      const result = await addToGuestList({ eventId: event.eventId, ...draft });
       if (result.outcome === "confirmed") {
-        onAdded(withGuest(event, tierId, draft.email));
+        onAdded(withGuest(event, draft.email));
         setFormFor(null);
         showToast(`Added to ${event.name}`);
       } else {
@@ -46,23 +46,22 @@ export function GuestListRows({ person, events, onAdded }: {
       {events.map((event, i) => {
         const state = guestRowState(event, emails, Date.now());
         const when = eventTile(event.startDate)?.long;
-        const detail = state.kind === "open" ? `${when} · ${state.tier.remaining} left` : when;
         return (
           <View key={event.eventId} style={[styles.row, i > 0 && { borderTopColor: colors.divider, borderTopWidth: StyleSheet.hairlineWidth }]}>
             <View style={styles.line}>
               <View style={styles.text}>
                 <Text numberOfLines={1} style={[styles.name, { color: colors.text }]}>{event.name}</Text>
-                {detail ? <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{detail}</Text> : null}
+                {when ? <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{when}</Text> : null}
               </View>
               {busy === event.eventId ? (
                 <ActivityIndicator size="small" />
-              ) : state.kind === "open" ? (
+              ) : state === "open" ? (
                 formFor === event.eventId ? null : (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Add to ${event.name} guest list`}
                     hitSlop={6}
-                    onPress={() => (isCompleteContact(draft) ? void submit(event, state.tier.tierId) : setFormFor(event.eventId))}
+                    onPress={() => (isCompleteContact(draft) ? void submit(event) : setFormFor(event.eventId))}
                     style={({ hovered, pressed }) => [styles.add, { borderColor: colors.accent }, (hovered || pressed) && { backgroundColor: colors.rowHover }]}
                   >
                     <Ionicons name="add" size={13} color={colors.accent} />
@@ -71,14 +70,12 @@ export function GuestListRows({ person, events, onAdded }: {
                 )
               ) : (
                 <View style={styles.status}>
-                  {state.kind === "on-list" ? <Ionicons name="checkmark-circle" size={14} color={colors.accent} /> : null}
-                  <Text style={[styles.detail, { color: colors.textSecondary }]}>
-                    {state.kind === "on-list" ? "On list" : state.kind === "full" ? "Full" : "Closed"}
-                  </Text>
+                  {state === "on-list" ? <Ionicons name="checkmark-circle" size={14} color={colors.accent} /> : null}
+                  <Text style={[styles.detail, { color: colors.textSecondary }]}>{state === "on-list" ? "On list" : "Closed"}</Text>
                 </View>
               )}
             </View>
-            {formFor === event.eventId && state.kind === "open" ? (
+            {formFor === event.eventId && state === "open" ? (
               <View style={styles.form}>
                 {(["firstName", "lastName", "email"] as const).map((field) => (
                   <TextInput
@@ -102,7 +99,7 @@ export function GuestListRows({ person, events, onAdded }: {
                     accessibilityLabel={`Add ${draft.firstName || "guest"} to ${event.name}`}
                     disabled={!isCompleteContact(draft) || busy !== null}
                     hitSlop={6}
-                    onPress={() => void submit(event, state.tier.tierId)}
+                    onPress={() => void submit(event)}
                   >
                     <Text style={[styles.addText, { color: isCompleteContact(draft) ? colors.accent : colors.textTertiary }]}>Add to list</Text>
                   </Pressable>

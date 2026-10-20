@@ -2,18 +2,12 @@ import type { GuestListEvent, Person } from "@/lib/identity";
 
 export type GuestContact = { firstName: string; lastName: string; email: string };
 
-export type GuestRowState =
-  | { kind: "on-list" }
-  | { kind: "closed" }
-  | { kind: "full" }
-  | { kind: "open"; tier: GuestListEvent["tiers"][number] };
+export type GuestRowState = "on-list" | "closed" | "open";
 
-/** What one upcoming event offers this person: already listed, past its comp deadline, out of spots, or addable on its first tier with room. */
+/** What one upcoming event offers this person. Milad's list is uncapped, so only the comp deadline closes it. */
 export function guestRowState(event: GuestListEvent, personEmails: readonly string[], now: number): GuestRowState {
-  if (personEmails.some((e) => event.guestEmails.includes(e.toLowerCase()))) return { kind: "on-list" };
-  if (event.deadline && Date.parse(event.deadline) < now) return { kind: "closed" };
-  const tier = event.tiers.find((t) => t.remaining > 0);
-  return tier ? { kind: "open", tier } : { kind: "full" };
+  if (personEmails.some((e) => event.guestEmails.includes(e.toLowerCase()))) return "on-list";
+  return event.deadline && Date.parse(event.deadline) < now ? "closed" : "open";
 }
 
 /** Prism requires all three, so a contact missing any of them gets the inline form instead of a one-tap add. */
@@ -31,10 +25,6 @@ export function isCompleteContact(c: GuestContact): boolean {
 }
 
 /** The event after a confirmed add, so the row flips to "On list" without refetching. */
-export function withGuest(event: GuestListEvent, tierId: string, email: string): GuestListEvent {
-  return {
-    ...event,
-    guestEmails: [...event.guestEmails, email.trim().toLowerCase()],
-    tiers: event.tiers.map((t) => (t.tierId === tierId ? { ...t, remaining: t.remaining - 1 } : t)),
-  };
+export function withGuest(event: GuestListEvent, email: string): GuestListEvent {
+  return { ...event, guestEmails: [...event.guestEmails, email.trim().toLowerCase()] };
 }

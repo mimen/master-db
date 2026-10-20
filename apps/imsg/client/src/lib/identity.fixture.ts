@@ -402,29 +402,25 @@ const guestLists: GuestListEvent[] = [
     name: "Freakuency 2027",
     startDate: "2027-11-01T03:00:00.000Z",
     deadline: null,
-    tiers: [{ tierId: "recFixtureGA", tierName: "General Admission", remaining: 5 }],
     guestEmails: ["maya@okafor.example"],
   },
   {
     eventId: "recFixtureKiki",
     name: "Kiki Factory 2027",
     startDate: "2027-07-17T04:00:00.000Z",
-    deadline: null,
-    tiers: [{ tierId: "recFixtureGA", tierName: "General Admission", remaining: 0 }],
+    deadline: "2026-01-01T00:00:00.000Z",
     guestEmails: [],
   },
 ];
 
 export function useUpcomingGuestLists(): () => Promise<GuestListEvent[]> {
-  return async () => guestLists.map((e) => ({ ...e, tiers: e.tiers.map((t) => ({ ...t })), guestEmails: [...e.guestEmails] }));
+  return async () => guestLists.map((e) => ({ ...e, guestEmails: [...e.guestEmails] }));
 }
 
-export function useAddToGuestList(): (args: { eventId: string; tierId: string; firstName: string; lastName: string; email: string }) => Promise<GuestAddResult> {
-  return async ({ eventId, tierId, email }) => {
+export function useAddToGuestList(): (args: { eventId: string; firstName: string; lastName: string; email: string }) => Promise<GuestAddResult> {
+  return async ({ eventId, email }) => {
     const event = guestLists.find((e) => e.eventId === eventId);
-    const tier = event?.tiers.find((t) => t.tierId === tierId);
-    if (!event || !tier || tier.remaining < 1) return { outcome: "rejected", reason: "No spots left" };
-    tier.remaining -= 1;
+    if (!event) return { outcome: "rejected", reason: "Unknown event" };
     event.guestEmails.push(email.trim().toLowerCase());
     return { outcome: "confirmed" };
   };

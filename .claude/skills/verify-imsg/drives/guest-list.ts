@@ -16,9 +16,9 @@ test("guest-list: one tap from the DM info pane, re-read on the contact card", a
 
   const list = page.getByTestId("guest-list");
   await expect(list).toContainText("Freakuency 2027");
-  await expect(list).toContainText("5 left");
+  await expect(list).not.toContainText("left");
   await expect(list).toContainText("Kiki Factory 2027");
-  await expect(list).toContainText("Full");
+  await expect(list).toContainText("Closed");
   await expect(list.getByRole("button", { name: "Add to Kiki Factory 2027 guest list" })).toHaveCount(0);
   await page.screenshot({ path: `${out}/dm-before.png` });
 

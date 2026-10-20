@@ -128,7 +128,6 @@ export type GuestListEvent = {
   name: string;
   startDate: string;
   deadline: string | null;
-  tiers: { tierId: string; tierName: string; remaining: number }[];
   guestEmails: string[];
 };
 
@@ -315,7 +314,7 @@ const upcomingGuestListsRef = makeFunctionReference<"action", Record<string, nev
 
 const addToGuestListRef = makeFunctionReference<
   "action",
-  { eventId: string; tierId: string; firstName: string; lastName: string; email: string },
+  { eventId: string; firstName: string; lastName: string; email: string },
   GuestAddResult
 >("identity/guestList:addToGuestList");
 
@@ -441,7 +440,7 @@ export function useUpcomingGuestLists() {
 
 export function useAddToGuestList() {
   const run = useAction(addToGuestListRef);
-  return (args: { eventId: string; tierId: string; firstName: string; lastName: string; email: string }) => run(args);
+  return (args: { eventId: string; firstName: string; lastName: string; email: string }) => run(args);
 }
 
 export function useSetNotes() {

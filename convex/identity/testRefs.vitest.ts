@@ -199,7 +199,7 @@ export const upcomingGuestListsRef = makeFunctionReference<
 
 export const addToGuestListRef = makeFunctionReference<
   "action",
-  { key: string; eventId: string; tierId: string; firstName: string; lastName: string; email: string },
+  { key: string; eventId: string; firstName: string; lastName: string; email: string },
   GuestAddResult
 >("identity/guestList:addToGuestList");
 

@@ -5,28 +5,23 @@ import type { GuestListEvent } from "@/lib/identity";
 import { guestContact, guestRowState, isCompleteContact, withGuest } from "./guest-list";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
-const ga = { tierId: "recGA", tierName: "General Admission", remaining: 2 };
 const event: GuestListEvent = {
   eventId: "recEvt",
   name: "Freakuency 2026",
   startDate: "2026-11-01T03:00:00.000Z",
   deadline: "2026-11-01T00:00:00.000Z",
-  tiers: [{ ...ga, tierId: "recAA", remaining: 0 }, ga],
   guestEmails: ["chase@example.test"],
 };
 
 describe("guestRowState", () => {
   test("a person whose email is already on the list reads as listed, whatever its case", () => {
-    expect(guestRowState(event, ["Chase@Example.test"], NOW)).toEqual({ kind: "on-list" });
+    expect(guestRowState(event, ["Chase@Example.test"], NOW)).toBe("on-list");
   });
 
-  test("an open event offers the first tier that still has room", () => {
-    expect(guestRowState(event, ["new@example.test"], NOW)).toEqual({ kind: "open", tier: ga });
-  });
-
-  test("past the comp deadline it is closed, and with no room it is full", () => {
-    expect(guestRowState(event, [], Date.parse("2026-11-01T01:00:00Z"))).toEqual({ kind: "closed" });
-    expect(guestRowState({ ...event, tiers: [{ ...ga, remaining: 0 }] }, [], NOW)).toEqual({ kind: "full" });
+  test("anyone else can be added until the comp deadline, with no cap", () => {
+    expect(guestRowState(event, ["new@example.test"], NOW)).toBe("open");
+    expect(guestRowState({ ...event, deadline: null }, [], NOW)).toBe("open");
+    expect(guestRowState(event, [], Date.parse("2026-11-01T01:00:00Z"))).toBe("closed");
   });
 });
 
@@ -45,8 +40,6 @@ describe("guestContact", () => {
   });
 });
 
-test("withGuest lists the email and spends one spot on its tier only", () => {
-  const next = withGuest(event, "recGA", " New@Example.test ");
-  expect(next.guestEmails).toEqual(["chase@example.test", "new@example.test"]);
-  expect(next.tiers.map((t) => t.remaining)).toEqual([0, 1]);
+test("withGuest lists the email, normalized", () => {
+  expect(withGuest(event, " New@Example.test ").guestEmails).toEqual(["chase@example.test", "new@example.test"]);
 });

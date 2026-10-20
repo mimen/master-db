@@ -2116,7 +2116,6 @@ export declare const api: {
           firstName: string;
           key?: string;
           lastName: string;
-          tierId: string;
         },
         any
       >;
