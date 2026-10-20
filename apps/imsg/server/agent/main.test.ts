@@ -72,6 +72,19 @@ describe("comma agent main", () => {
     expect(resumed).not.toHaveProperty("sessionId");
   });
 
+  test("the Claude child gets the gateway key only as ANTHROPIC_API_KEY and none of the runner's secrets", () => {
+    const config = loadAgentConfig(env, "gateway-key");
+    const secrets = {
+      COMMA_BRIDGE_SECRET: "s", BB_PASSWORD: "s", IMSG_SERVER_SECRET: "s", IMSG_IDENTITY_KEY: "s", AI_GATEWAY_KEY: "gateway-key",
+      CLAUDE_GPT_GATEWAY_API_KEY: "gateway-key", OTHER_SECRET: "s", DB_PASSWORD: "s", GITHUB_TOKEN: "s",
+    };
+    const child = childEnv(config, { ...secrets, PATH: "/bin", HOME: "/Users/test", TOKEN_PATH: "/tmp/x" });
+    expect(child).toEqual({
+      PATH: "/bin", HOME: "/Users/test", TOKEN_PATH: "/tmp/x",
+      ANTHROPIC_BASE_URL: "http://127.0.0.1:8317", ANTHROPIC_API_KEY: "gateway-key", COMMA_AGENT: "1",
+    });
+  });
+
   test("reserves a ccs session as the comma-agent automation and reads the id from the last line", async () => {
     const root = mkdtempSync(join(tmpdir(), "comma-agent-ccs-"));
     roots.push(root);
