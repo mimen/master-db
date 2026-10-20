@@ -56,6 +56,7 @@ export function AgentInput({ running, onSend, onStop }: {
         accessibilityLabel="Ask the agent"
         multiline
         enterKeyHint="send"
+        {...(Platform.OS === "web" ? {} : { submitBehavior: "submit" as const, onSubmitEditing: () => sendRef.current(false) })}
         {...({ dataSet: { agentInput: "true" } } as object)}
         style={[
           styles.input,
