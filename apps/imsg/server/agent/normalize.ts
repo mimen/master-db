@@ -82,22 +82,26 @@ export class Normalizer {
     if (message.type === "assistant") return this.assistant(message.message.id, message.uuid, message.message.content, now);
     if (message.type === "user") return this.toolResults(message.message.content);
     if (message.type === "result") {
-      const items = this.flush(now);
-      if (continuesTurn(message, steerPending)) return items;
+      if (continuesTurn(message, steerPending)) return this.flush(now);
       const failed = message.is_error || message.subtype !== "success";
+      const items = this.flush(now, failed ? "failed" : "done");
       const error = !failed ? undefined : message.subtype === "success" ? message.result : message.errors.join("\n");
       return [...items, turnEndItem(message.uuid, failed ? "failed" : "completed", message.duration_ms, error)];
     }
     return [];
   }
 
-  /** Finalizes every block still streaming, for a result or an interrupted turn. */
-  flush(now: number): Item[] {
+  /** Finalizes every block still streaming; at a turn's end, also settles the tool steps still running. */
+  flush(now: number, tools?: "done" | "failed"): Item[] {
     const items: Item[] = [];
     for (const blocks of this.blocks.values()) {
       for (const block of blocks) if (!block.done) items.push(...this.finish(block, block.text, now));
     }
     this.blocks.clear();
+    if (tools) {
+      for (const [key, entry] of this.tools) items.push({ key, entry: { ...entry, status: tools } });
+      this.tools.clear();
+    }
     return items;
   }
 

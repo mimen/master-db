@@ -125,6 +125,28 @@ describe("AgentSession", () => {
     expect(session.live).toBe(false);
   });
 
+  test("every turn end settles the tool steps still running: done on completion, failed otherwise", async () => {
+    const toolUse = (id: string) => ({ type: "assistant", uuid: `${id}-frame`, parent_tool_use_id: null, message: { id: `m-${id}`, content: [{ type: "tool_use", id, name: "Read", input: { file_path: "/a.ts" } }] } });
+    const toolStatus = (items: Item[], key: string) => items.filter((item) => item.key === key).map((item) => item.entry.kind === "tool" ? item.entry.status : item.entry.kind).at(-1);
+    const ends = {
+      completed: (sdk: ReturnType<typeof harness>["sdk"]) => sdk.emit(sdkResult("r1", "done")),
+      failed: (sdk: ReturnType<typeof harness>["sdk"]) => sdk.fail(new Error("spawn bun ENOENT")),
+      interrupted: (_sdk: ReturnType<typeof harness>["sdk"], session: AgentSession) => session.interrupt(),
+    };
+    const outcomes: Record<string, string | undefined> = {};
+    for (const [outcome, end] of Object.entries(ends)) {
+      const { session, sdk, items } = harness();
+      await session.send("go", false);
+      sdk.emit(toolUse("toolu_r"));
+      await settle();
+      expect(toolStatus(items, "toolu_r")).toBe("running");
+      await end(sdk, session);
+      await settle();
+      outcomes[outcome] = toolStatus(items, "toolu_r");
+    }
+    expect(outcomes).toEqual({ completed: "done", failed: "failed", interrupted: "failed" });
+  });
+
   test("closing an idle session leaves the chat idle", async () => {
     const { session, sdk, states } = harness();
     await session.close();
