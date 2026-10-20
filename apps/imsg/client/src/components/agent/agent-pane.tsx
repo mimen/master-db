@@ -9,6 +9,7 @@ import { PaneHeader } from "@/components/ui/pane-header";
 import { Space } from "@/constants/tokens";
 import { useAgentChat } from "@/hooks/use-agent";
 import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 import { agentApi, agentItemKey, type AgentItem, type AgentItemId } from "@/lib/agent-api";
@@ -40,6 +41,7 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
   const [pending, setPending] = useState<readonly AgentItem[]>([]);
   const { scrollProps, follow, disclosure } = useLiveFollow();
   const running = agentIsRunning(chat?.state);
+  const keyboardHeight = useKeyboardHeight();
 
   const shownPending = pending.filter((ask) => !items.some((item) => item.key === ask.key));
   const rows = transcriptRows([...items, ...shownPending]);
@@ -76,7 +78,7 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
   };
 
   return (
-    <View testID="agent-pane" style={[styles.root, { backgroundColor: theme.thread }]} {...({ dataSet: { agentPane: "true" } } as object)}>
+    <View testID="agent-pane" style={[styles.root, { backgroundColor: theme.thread, paddingBottom: keyboardHeight }]} {...({ dataSet: { agentPane: "true" } } as object)}>
       <PaneHeader
         title={`Agent · ${name}`}
         actions={<>

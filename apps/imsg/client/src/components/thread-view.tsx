@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import Reanimated, { FadeInUp } from "react-native-reanimated";
 import {
   FlatList,
-  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -27,6 +26,7 @@ import { tempMessage } from "@/lib/local-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
 import { useAgentEnabled } from "@/hooks/use-agent";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
@@ -544,34 +544,9 @@ export function ThreadView({
     />
   ), [columnW, desk, highlightGuid, isGroup, latestInboundAt, latestOutgoingGuid, openMessageSheet, retry, showReactions, unreadCount]);
 
-  // The thread's bottom inset, driven by the keyboard rather than by
-  // KeyboardAvoidingView — which silently applies NO padding on this
-  // RN/Fabric build, leaving the composer rendered UNDERNEATH the keyboard
-  // (verified in the simulator: setting keyboardVerticalOffset to 0 changed
-  // nothing, so it was never the offset value). The keyboard events below do
-  // fire; the composer already relies on them for its own spacing.
-  //
-  // With the keyboard closed the inset is the safe area instead, so the
-  // composer stops running off the screen into the home indicator and the
-  // display's rounded corners. One value covers both states: whichever is
-  // taller. The keyboard's reported height already includes the safe-area
-  // region, hence max() rather than a sum.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const change = Keyboard.addListener("keyboardWillChangeFrame", (e) =>
-      setKeyboardHeight(e.endCoordinates.height),
-    );
-    const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardHeight(0));
-    return () => {
-      change.remove();
-      hide.remove();
-    };
-  }, []);
-  // Keyboard height ONLY. The safe-area strip belongs to the composer, whose
-  // background fills it — lifting the whole thread by the inset instead left a
-  // dead gap under the bar.
-  const bottomInset = Platform.OS === "web" ? 0 : keyboardHeight;
+  // Keyboard height only. The safe-area strip belongs to the composer, whose
+  // background fills it; lifting the whole thread by the inset left a dead gap under the bar.
+  const bottomInset = useKeyboardHeight();
 
   return (
     <View
