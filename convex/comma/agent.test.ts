@@ -263,6 +263,26 @@ describe("runner functions", () => {
     expect((await items(idle)).map(({ key }) => key)).toEqual(["k2"]);
   });
 
+  test("agentRecover interrupts a pending chat whose command a dead runner took, and fails its running tool steps", async () => {
+    const { t, as, conversationId, ask, items } = await setup();
+    const stranded = await ask("k1");
+    const [taken] = await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET });
+    await t.mutation(internal.comma.agent.agentClaim, { ids: [taken._id] });
+    await t.mutation(internal.comma.agent.agentItems, { chatId: stranded, items: [
+      { key: "t1", entry: { kind: "tool", name: "Read", summary: "Read a.ts", status: "running" } },
+      { key: "t0", entry: { kind: "tool", name: "Read", summary: "Read b.ts", status: "done" } },
+    ] });
+    await as.mutation(api.comma.agent.newChat, { conversationId });
+    const queued = await ask("k2");
+
+    expect(await t.mutation(internal.comma.agent.agentRecover, { now: 50 })).toEqual({ chatIds: [stranded] });
+    expect(await t.run((ctx) => ctx.db.get(stranded))).toMatchObject({ state: "interrupted" });
+    expect(await t.run((ctx) => ctx.db.get(queued))).toMatchObject({ state: "pending" });
+    expect((await items(stranded)).map(({ key, entry }) => [key, entry.kind === "tool" ? entry.status : entry.kind])).toEqual([
+      ["k1", "user"], ["t1", "failed"], ["t0", "done"], ["recover-50", "turn_end"],
+    ]);
+  });
+
   test("aiStatus reports the runner's latest heartbeat beside the Mini's capabilities", async () => {
     const { t, as } = await setup();
     await t.run((ctx) => ctx.db.insert("comma_bridge_state", {
@@ -307,7 +327,7 @@ describe("POST /comma/ingest/agent*", () => {
     const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["bytes"], { type: "image/png" })));
     const cases: [string, unknown, unknown][] = [
       ["agentClaim", { ids: [pending._id] }, [pending]],
-      ["agentRecover", { now: 1 }, { chatIds: [] }],
+      ["agentRecover", { now: 1 }, { chatIds: [chatId] }],
       ["agentChat", { chatId, state: "running" }, null],
       ["agentItems", { chatId, items: [{ key: "a", entry: { kind: "thinking", text: "hm", streaming: false } }] }, null],
       ["agentHeartbeat", { now: 1 }, null],
