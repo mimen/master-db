@@ -170,6 +170,9 @@ export function runCommand(id: CommandId, _source: CommandSource): boolean {
     case "conversation.details":
       rt.toggleDetails();
       return true;
+    case "agent.open":
+      rt.openAgent();
+      return true;
     case "list.focusSearch":
       rt.focusListSearch();
       return true;

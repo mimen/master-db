@@ -125,9 +125,11 @@ workspace owns its `DesktopSplit`. Compact route adapters remain under
 - Wide list panes never render navigation rails. `DesktopShellProvider` owns
   exactly one `TriageNavigationRail`, using `DESKTOP_RAIL_WIDTH` as the
   canonical width; sidebar width and resize math exclude the rail.
-- The shell owns one utility surface for Details, Contact, Scheduled, and
-  Settings. Workspace changes close it plus transient and shadow surfaces;
-  inactive workspaces cannot retain a visible modal.
+- The shell owns one utility surface for Details, Contact, Scheduled,
+  Settings, and Agent. Workspace changes close it plus transient and shadow
+  surfaces; inactive workspaces cannot retain a visible modal. Agent names no
+  conversation: it follows the Messages selection and closes when the
+  selection clears or the workspace leaves Messages.
 - The glass bar is the ONLY fixed list chrome; content scrolls behind it.
 - Mobile Tabs remain eager (`lazy: false`) and retain their route structure;
   persistent shell projection applies only to the wide `/` and `/contacts`

@@ -1,4 +1,5 @@
 import type { StateFilter, SuggestionModel } from "@shared/types";
+import type { AgentEffort } from "./agent-api";
 
 export type SuggestionMode = "off" | "on-demand" | "auto";
 
@@ -17,6 +18,10 @@ export type OpenOnLens = Exclude<StateFilter, "settled">;
 /** How every lens sections its conversations. */
 export type GroupConversationsBy = "last-message" | "person" | "none";
 
+export const AGENT_MODELS = ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"] as const;
+export type AgentModel = (typeof AGENT_MODELS)[number];
+export const AGENT_EFFORTS: readonly AgentEffort[] = ["low", "medium", "high", "xhigh", "max"];
+
 export interface Settings {
   /** How reply suggestions appear: never, on a tap, or automatically on open. */
   suggestionMode: SuggestionMode;
@@ -27,6 +32,11 @@ export interface Settings {
   theme: ThemePreference;
   openOn: OpenOnLens;
   groupBy: GroupConversationsBy;
+  /** The Agent tab in the utility pane, and ⌘J. Shown only while the Mini's agent runner is up. */
+  agentPane: boolean;
+  /** Fixed into a chat when it starts; a change applies to the next chat. */
+  agentModel: AgentModel;
+  agentEffort: AgentEffort;
 }
 
 export const DEFAULT: Settings = {
@@ -36,6 +46,9 @@ export const DEFAULT: Settings = {
   theme: "system",
   openOn: "unresponded",
   groupBy: "last-message",
+  agentPane: true,
+  agentModel: "claude-opus-5-5",
+  agentEffort: "high",
 };
 
 function isMode(value: unknown): value is SuggestionMode {
@@ -62,6 +75,14 @@ function isGroupBy(value: unknown): value is GroupConversationsBy {
   return value === "last-message" || value === "person" || value === "none";
 }
 
+function isAgentModel(value: unknown): value is AgentModel {
+  return AGENT_MODELS.includes(value as AgentModel);
+}
+
+function isAgentEffort(value: unknown): value is AgentEffort {
+  return AGENT_EFFORTS.includes(value as AgentEffort);
+}
+
 export function parseSettings(raw: string): Settings {
   const value: unknown = JSON.parse(raw);
   if (!value || typeof value !== "object") return { ...DEFAULT };
@@ -73,5 +94,8 @@ export function parseSettings(raw: string): Settings {
     theme: isTheme(parsed.theme) ? parsed.theme : DEFAULT.theme,
     openOn: isOpenOn(parsed.openOn) ? parsed.openOn : DEFAULT.openOn,
     groupBy: isGroupBy(parsed.groupBy) ? parsed.groupBy : DEFAULT.groupBy,
+    agentPane: typeof parsed.agentPane === "boolean" ? parsed.agentPane : DEFAULT.agentPane,
+    agentModel: isAgentModel(parsed.agentModel) ? parsed.agentModel : DEFAULT.agentModel,
+    agentEffort: isAgentEffort(parsed.agentEffort) ? parsed.agentEffort : DEFAULT.agentEffort,
   };
 }

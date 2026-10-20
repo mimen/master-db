@@ -5,6 +5,7 @@ import type { AiStatus } from "@shared/types";
 const UNREACHABLE: AiStatus = {
   suggestions: false,
   reactionSuggestions: false,
+  agent: false,
 };
 
 /** Mini capability published by the presence bridge. */

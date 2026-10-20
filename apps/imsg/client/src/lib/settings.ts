@@ -8,10 +8,12 @@ import type { SuggestionModel } from "@shared/types";
  * mirrored to AsyncStorage — but reactive, so a change in the settings picker
  * updates every reader (the suggestion shelf) immediately.
  */
-export type { Settings, SuggestionMode, NameOrder, ThemePreference, OpenOnLens, GroupConversationsBy } from "./settings-values";
+export type { Settings, SuggestionMode, NameOrder, ThemePreference, OpenOnLens, GroupConversationsBy, AgentModel } from "./settings-values";
+import type { AgentEffort } from "./agent-api";
 import {
   DEFAULT,
   parseSettings,
+  type AgentModel,
   type GroupConversationsBy,
   type NameOrder,
   type OpenOnLens,
@@ -98,6 +100,12 @@ export function setGroupBy(groupBy: GroupConversationsBy): void {
   persist();
 }
 
+export function setAgentSettings(next: Partial<Pick<Settings, "agentPane" | "agentModel" | "agentEffort">>): void {
+  state = { ...state, ...next };
+  emit();
+  persist();
+}
+
 function subscribe(callback: () => void): () => void {
   listeners.add(callback);
   return () => listeners.delete(callback);
@@ -137,4 +145,22 @@ export function useOpenOn(): OpenOnLens {
 
 export function useGroupBy(): GroupConversationsBy {
   return useSyncExternalStore(subscribe, () => state.groupBy, () => state.groupBy);
+}
+
+export interface AgentSettings {
+  readonly agentPane: boolean;
+  readonly agentModel: AgentModel;
+  readonly agentEffort: AgentEffort;
+}
+
+let agentSnapshot: AgentSettings | null = null;
+function agentSettings(): AgentSettings {
+  if (agentSnapshot?.agentPane !== state.agentPane || agentSnapshot.agentModel !== state.agentModel || agentSnapshot.agentEffort !== state.agentEffort) {
+    agentSnapshot = { agentPane: state.agentPane, agentModel: state.agentModel, agentEffort: state.agentEffort };
+  }
+  return agentSnapshot;
+}
+
+export function useAgentSettings(): AgentSettings {
+  return useSyncExternalStore(subscribe, agentSettings, agentSettings);
 }

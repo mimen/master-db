@@ -21,7 +21,8 @@ export type CommandId =
   | "navigation.escape"
   | "navigation.close"
   | "help.open"
-  | "settings.open";
+  | "settings.open"
+  | "agent.open";
 
 export type ScopeKind = "global" | "list" | "thread" | "composer" | "inspector" | "overlay";
 
@@ -63,6 +64,8 @@ export interface KeyboardRuntime {
   settleSelected(): void;
   markUnreadSelected(): void;
   toggleDetails(): void;
+  /** Opens the Agent tab for the open conversation and focuses its input. */
+  openAgent(): void;
   focusListSearch(): void;
   undoLast(): void;
   escape(): void;

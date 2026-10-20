@@ -12,6 +12,7 @@ import { useDesktopShellContext } from "@/components/desktop-shell-context";
 import { DesktopSplit } from "@/components/desktop-split";
 import { EmptyState } from "@/components/empty-state";
 import { ThreadView } from "@/components/lazy-surfaces";
+import { useAgentEnabled } from "@/hooks/use-agent";
 import { useChats } from "@/hooks/use-chats";
 import { type JumpTarget } from "@/hooks/use-messages";
 import { Springs } from "@/constants/springs";
@@ -20,6 +21,7 @@ import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
 import { advanceTarget, publishQueuePosition, queueOrder, queuePosition } from "@/hooks/use-queue-position";
 import { traceTriage } from "@/lib/triage-trace";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
+import { openAgentPane } from "@/lib/agent-pane";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
 import {
@@ -278,12 +280,13 @@ export function MessagesWorkspace({
   // Synced in an effect, not during render: a render-phase ref write makes the
   // React Compiler bail on this entire screen, and the readers are all keyboard
   // handlers that run well after commit.
-  const overlaysRef = useRef({ utilityOpen });
+  const agentEnabled = useAgentEnabled();
+  const overlaysRef = useRef({ utilityOpen, agentEnabled });
   useEffect(() => {
     selectedRef.current = selected;
     stateRef.current = state;
     openChatRef.current = openChat;
-    overlaysRef.current = { utilityOpen };
+    overlaysRef.current = { utilityOpen, agentEnabled };
   });
   useEffect(() => {
     if (Platform.OS !== "web" || !wide || !active) return;
@@ -331,12 +334,21 @@ export function MessagesWorkspace({
           utility: { kind: "chat-info", workspace: "messages", guid: sel.guid },
         });
       },
+      openAgent: () => {
+        const sel = selectedRef.current;
+        if (sel && overlaysRef.current.agentEnabled) openAgentPane(sel.guid);
+      },
       focusListSearch: () => getListAdapter()?.focusSearch(),
       undoLast: () => showToast(undoLastAction() ? "Undone" : "Nothing to undo"),
       // Esc precedence ladder — first applicable step only.
       escape: () => {
         if (shell.closeTopSurface()) return;
         const o = overlaysRef.current;
+        const focused = globalThis.document.activeElement;
+        if (focused instanceof HTMLElement && focused.closest("[data-agent-pane]")) {
+          requestFocus("composer");
+          return;
+        }
         // An active list search clears before anything else closes.
         if (getListAdapter()?.clearSearch()) return;
         if (!isListMode()) {
