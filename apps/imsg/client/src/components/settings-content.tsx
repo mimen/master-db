@@ -15,19 +15,23 @@ import { useActionSheet } from "@/lib/action-sheet";
 import { runCommand } from "@/lib/keyboard/controller";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { releaseStatus } from "@/lib/release-status";
+import type { AgentEffort } from "@/lib/agent-api";
 import {
+  setAgentSettings,
   setGroupBy,
   setNameOrder,
   setOpenOn,
   setSuggestionMode,
   setSuggestionModel,
   setTheme,
+  useAgentSettings,
   useGroupBy,
   useNameOrder,
   useOpenOn,
   useSuggestionMode,
   useSuggestionModel,
   useThemePreference,
+  type AgentModel,
   type GroupConversationsBy,
   type NameOrder,
   type OpenOnLens,
@@ -78,6 +82,25 @@ const THEME_OPTIONS: readonly DropdownOption<ThemePreference>[] = [
   { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
+];
+
+const AGENT_PANE_OPTIONS: readonly DropdownOption<"on" | "off">[] = [
+  { value: "on", label: "On" },
+  { value: "off", label: "Off" },
+];
+
+const AGENT_MODEL_OPTIONS: readonly DropdownOption<AgentModel>[] = [
+  { value: "claude-opus-5-5", label: "Opus 5.5" },
+  { value: "claude-fable-5-1", label: "Fable 5.1" },
+  { value: "claude-sonnet-5-5", label: "Sonnet 5.5" },
+];
+
+const AGENT_EFFORT_OPTIONS: readonly DropdownOption<AgentEffort>[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra high" },
+  { value: "max", label: "Max" },
 ];
 
 const FIELD_WIDTH = 196;
@@ -178,6 +201,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   const suggestionMode = useSuggestionMode();
   const suggestionModel = useSuggestionModel();
   const themePreference = useThemePreference();
+  const agent = useAgentSettings();
   const aiStatus = useAiStatus();
   const showSheet = useActionSheet();
   const keyboard = Platform.OS === "web" && wide;
@@ -268,6 +292,20 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
                 >
                   <Text style={[styles.quietButtonText, { color: theme.destructive }]}>Clear suggestion learning</Text>
                 </Pressable>
+              </SettingRow>
+            </Group>
+          )}
+
+          {aiStatus?.agent && (
+            <Group title="Agent">
+              <SettingRow first title="Agent pane" caption="Ask about the open conversation with ⌘J. The agent drafts replies; it sends only when you tell it to.">
+                <Dropdown label="Agent pane" value={agent.agentPane ? "on" : "off"} options={AGENT_PANE_OPTIONS} onChange={(value) => setAgentSettings({ agentPane: value === "on" })} />
+              </SettingRow>
+              <SettingRow title="Model" caption="Set when a chat starts. New chat picks up a change.">
+                <Dropdown label="Agent model" value={agent.agentModel} options={AGENT_MODEL_OPTIONS} onChange={(agentModel) => setAgentSettings({ agentModel })} />
+              </SettingRow>
+              <SettingRow title="Effort" caption="Higher effort thinks longer before it answers.">
+                <Dropdown label="Agent effort" value={agent.agentEffort} options={AGENT_EFFORT_OPTIONS} onChange={(agentEffort) => setAgentSettings({ agentEffort })} />
               </SettingRow>
             </Group>
           )}

@@ -87,6 +87,7 @@ export default function RootLayout() {
                   <Stack.Screen name="new-chat" options={{ presentation: "modal", title: "New message" }} />
                   <Stack.Screen name="chat-info" options={{ presentation: "modal", title: "Details" }} />
                   <Stack.Screen name="scheduled" options={{ presentation: "modal", title: "Scheduled" }} />
+                  <Stack.Screen name="agent" options={{ presentation: "modal", headerShown: false }} />
                   <Stack.Screen name="forward" options={{ presentation: "modal", title: "Forward" }} />
                   <Stack.Screen name="person" options={{ presentation: "modal", title: "Contact" }} />
                     <Stack.Screen name="settings" options={{ presentation: "modal", title: "Settings" }} />

@@ -253,6 +253,8 @@ export interface AiStatus {
   suggestions: boolean;
   /** Whether this BlueBubbles server supports outbound tapbacks. */
   reactionSuggestions: boolean;
+  /** The Mini's agent runner sent a heartbeat in the last two minutes. */
+  agent: boolean;
 }
 
 export interface ReplySuggestion {

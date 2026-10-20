@@ -46,6 +46,7 @@ Global (work everywhere, incl. composer):
 | ⌘F | Find in conversation (browser CAN yield this via preventDefault) |
 | ⌘⇧F | Search the conversation list |
 | ⌘I | Toggle details pane |
+| ⌘J | Open the Agent pane and focus its input; Esc there returns to the composer. Bare `j` still glides |
 | ⌘E | Settle / un-settle the selected conversation |
 | ⌘U | Mark unread (not a toggle; activation already marks read) |
 | ⌘⇧Z | Undo the last settle or mark-unread |

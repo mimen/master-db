@@ -3,12 +3,14 @@ import { useHeaderHeight } from "expo-router/react-navigation";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { formatAddress } from "@shared/address";
+import { useAgentEnabled } from "@/hooks/use-agent";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { PersonAvatar, GroupPhotoAvatar } from "@/components/avatar";
 import { ThreadView } from "@/components/lazy-surfaces";
 import { FaceTimeButton } from "@/components/facetime-button";
+import { openAgentPane } from "@/lib/agent-pane";
 import { openThreadSearch } from "@/lib/thread-search";
 import { goBackOrHome } from "@/lib/back-navigation";
 import type { JumpTarget } from "@/hooks/use-messages";
@@ -79,6 +81,7 @@ export default function ChatScreen(): React.JSX.Element | null {
   const headerHeight = useHeaderHeight();
   const theme = useTheme();
   const { wide } = useLayoutMode();
+  const agentEnabled = useAgentEnabled();
   const isGroup = params.isGroup === "1" || params.guid.includes(";+;");
   const jumpTarget: JumpTarget | null =
     params.targetGuid && params.targetDate
@@ -116,6 +119,11 @@ export default function ChatScreen(): React.JSX.Element | null {
               <Pressable accessibilityRole="button" accessibilityLabel="Search conversation" onPress={() => openThreadSearch()} hitSlop={8}>
                 <Ionicons name="search" size={22} color={theme.accent} />
               </Pressable>
+              {agentEnabled ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Ask the agent" onPress={() => openAgentPane(params.guid)} hitSlop={8}>
+                  <Ionicons name="sparkles-outline" size={22} color={theme.accent} />
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Details"

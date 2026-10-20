@@ -26,6 +26,8 @@ import { setForwardText } from "@/lib/forward";
 import { tempMessage } from "@/lib/local-sends";
 import { onOpenThreadSearch } from "@/lib/thread-search";
 import { readChat } from "@/lib/chat-actions";
+import { useAgentEnabled } from "@/hooks/use-agent";
+import { openAgentPane } from "@/lib/agent-pane";
 import { openChatInfo } from "@/lib/chat-info";
 import { openPersonPane } from "@/lib/person-pane";
 import type { Message, Participant } from "@shared/types";
@@ -48,6 +50,7 @@ import { BlurSwap } from "./motion/blur-swap";
 import { ThreadSkeleton } from "./thread-skeleton";
 import { FaceTimeButton } from "./facetime-button";
 import { IconButton } from "./ui/icon-button";
+import AiChat02Icon from "@hugeicons/core-free-icons/AiChat02Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
 import SidebarRightIcon from "@hugeicons/core-free-icons/SidebarRightIcon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
@@ -133,6 +136,7 @@ export function ThreadView({
   const type = useType();
   const privateApi = usePrivateApi();
   const aiStatus = useAiStatus();
+  const agentEnabled = useAgentEnabled();
   const showSheet = useActionSheet();
   const paneRef = useRef<View>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
@@ -620,6 +624,11 @@ export function ThreadView({
             <IconButton label="Search conversation" onPress={() => setSearchOpen(true)} style={styles.headerIconButton}>
               {({ active }) => <HugeiconsIcon icon={Search01Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
             </IconButton>
+            {agentEnabled ? (
+              <IconButton label="Ask the agent (⌘J)" onPress={() => openAgentPane(chatGuid)} style={styles.headerIconButton}>
+                {({ active }) => <HugeiconsIcon icon={AiChat02Icon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
+              </IconButton>
+            ) : null}
             <IconButton label="Conversation info" onPress={() => openChatInfo(chatGuid)} style={styles.headerIconButton}>
               {({ active }) => <HugeiconsIcon icon={SidebarRightIcon} size={18} color={active ? theme.text : theme.icon} strokeWidth={1.6} />}
             </IconButton>

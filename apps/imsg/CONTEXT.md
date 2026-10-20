@@ -71,3 +71,13 @@ Agents write them with `bun scripts/prepare-draft.ts --to <address|chatGuid|conv
 [--note …] [--attach <path> …] [--force]`, which calls the internal `comma/drafts:prepareDraft`.
 `comma/drafts:listAgentDrafts` and `comma/drafts:deleteAgentDraft` list and remove agent drafts.
 _Avoid_: suggestion (the reply shelf), scheduled message
+
+**Agent pane**:
+The Agent tab in the shell's utility surface (⌘J), bound to the open conversation. Each
+conversation has one live **agent chat** (`comma_agent_chats`) whose **items** (`comma_agent_items`)
+are the transcript: the user's asks, assistant paragraphs, thinking, tool steps, questions, drafts
+and turn ends. "New chat" archives the live chat. A reply the agent drafts goes into the
+composer as an agent Draft; when the user has typed there, it waits in the pane as a **pane draft**
+with "Use in composer". The pane exists only while `aiStatus.agent` is true and the Settings toggle
+is on. Plan: `docs/plans/comma-agent-pane.html`.
+_Avoid_: assistant (that is one item kind), suggestion
