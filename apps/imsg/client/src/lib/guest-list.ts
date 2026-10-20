@@ -1,0 +1,40 @@
+import type { GuestListEvent, Person } from "@/lib/identity";
+
+export type GuestContact = { firstName: string; lastName: string; email: string };
+
+export type GuestRowState =
+  | { kind: "on-list" }
+  | { kind: "closed" }
+  | { kind: "full" }
+  | { kind: "open"; tier: GuestListEvent["tiers"][number] };
+
+/** What one upcoming event offers this person: already listed, past its comp deadline, out of spots, or addable on its first tier with room. */
+export function guestRowState(event: GuestListEvent, personEmails: readonly string[], now: number): GuestRowState {
+  if (personEmails.some((e) => event.guestEmails.includes(e.toLowerCase()))) return { kind: "on-list" };
+  if (event.deadline && Date.parse(event.deadline) < now) return { kind: "closed" };
+  const tier = event.tiers.find((t) => t.remaining > 0);
+  return tier ? { kind: "open", tier } : { kind: "full" };
+}
+
+/** Prism requires all three, so a contact missing any of them gets the inline form instead of a one-tap add. */
+export function guestContact(person: Pick<Person, "first_name" | "last_name" | "display_name" | "normalized_emails">): GuestContact {
+  const [first = "", ...rest] = (person.display_name ?? "").trim().split(/\s+/);
+  return {
+    firstName: person.first_name ?? first,
+    lastName: person.last_name ?? rest.join(" "),
+    email: person.normalized_emails[0] ?? "",
+  };
+}
+
+export function isCompleteContact(c: GuestContact): boolean {
+  return c.firstName.trim() !== "" && c.lastName.trim() !== "" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim());
+}
+
+/** The event after a confirmed add, so the row flips to "On list" without refetching. */
+export function withGuest(event: GuestListEvent, tierId: string, email: string): GuestListEvent {
+  return {
+    ...event,
+    guestEmails: [...event.guestEmails, email.trim().toLowerCase()],
+    tiers: event.tiers.map((t) => (t.tierId === tierId ? { ...t, remaining: t.remaining - 1 } : t)),
+  };
+}

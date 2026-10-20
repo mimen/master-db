@@ -122,6 +122,21 @@ export type ChatCrm = {
 
 export type AirtableEventRow = { record_id: string; name: string; start_date?: string };
 
+/** One upcoming AUF event on Milad's own guest list. See convex/identity/guestList.ts. */
+export type GuestListEvent = {
+  eventId: string;
+  name: string;
+  startDate: string;
+  deadline: string | null;
+  tiers: { tierId: string; tierName: string; remaining: number }[];
+  guestEmails: string[];
+};
+
+export type GuestAddResult =
+  | { outcome: "confirmed" }
+  | { outcome: "rejected"; reason: string }
+  | { outcome: "unconfirmed" };
+
 export type AirtableHumanRow = {
   record_id: string;
   display_name: string;
@@ -294,6 +309,16 @@ const unlinkEventRef = makeFunctionReference<"mutation", { linkId: string }, nul
   "identity/events:unlinkEvent",
 );
 
+const upcomingGuestListsRef = makeFunctionReference<"action", Record<string, never>, GuestListEvent[]>(
+  "identity/guestList:upcomingGuestLists",
+);
+
+const addToGuestListRef = makeFunctionReference<
+  "action",
+  { eventId: string; tierId: string; firstName: string; lastName: string; email: string },
+  GuestAddResult
+>("identity/guestList:addToGuestList");
+
 export function useWhoIs(handle: string | null): WhoIsResult | undefined {
   return useQuery(whoIsRef, handle ? { handle } : "skip");
 }
@@ -407,6 +432,16 @@ export function useLinkEvent() {
   const mutate = useMutation(linkEventRef);
   return (args: { personId?: string; chatGuid?: string; airtable_event_id: string; event_name: string; start_date?: string }) =>
     mutate(args);
+}
+
+export function useUpcomingGuestLists() {
+  const run = useAction(upcomingGuestListsRef);
+  return () => run({});
+}
+
+export function useAddToGuestList() {
+  const run = useAction(addToGuestListRef);
+  return (args: { eventId: string; tierId: string; firstName: string; lastName: string; email: string }) => run(args);
 }
 
 export function useSetNotes() {

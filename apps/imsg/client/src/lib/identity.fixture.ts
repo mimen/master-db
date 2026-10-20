@@ -7,6 +7,8 @@ import type {
   ChatCrm,
   ContactListRow,
   EventLink,
+  GuestAddResult,
+  GuestListEvent,
   IdentityRow,
   Priority,
   WhoIsResult,
@@ -18,6 +20,8 @@ export type {
   ChatCrm,
   ContactListRow,
   EventLink,
+  GuestAddResult,
+  GuestListEvent,
   IdentityRow,
   Person,
   Priority,
@@ -390,6 +394,40 @@ export function useLinkEvent(): (args: {
 
 export function useUnlinkEvent(): (args: { linkId: string }) => Promise<null> {
   return async ({ linkId }) => commit(people.map((p) => ({ ...p, events: p.events?.filter((e) => e.linkId !== linkId) })));
+}
+
+const guestLists: GuestListEvent[] = [
+  {
+    eventId: "recFixtureFreak",
+    name: "Freakuency 2027",
+    startDate: "2027-11-01T03:00:00.000Z",
+    deadline: null,
+    tiers: [{ tierId: "recFixtureGA", tierName: "General Admission", remaining: 5 }],
+    guestEmails: ["maya@okafor.example"],
+  },
+  {
+    eventId: "recFixtureKiki",
+    name: "Kiki Factory 2027",
+    startDate: "2027-07-17T04:00:00.000Z",
+    deadline: null,
+    tiers: [{ tierId: "recFixtureGA", tierName: "General Admission", remaining: 0 }],
+    guestEmails: [],
+  },
+];
+
+export function useUpcomingGuestLists(): () => Promise<GuestListEvent[]> {
+  return async () => guestLists.map((e) => ({ ...e, tiers: e.tiers.map((t) => ({ ...t })), guestEmails: [...e.guestEmails] }));
+}
+
+export function useAddToGuestList(): (args: { eventId: string; tierId: string; firstName: string; lastName: string; email: string }) => Promise<GuestAddResult> {
+  return async ({ eventId, tierId, email }) => {
+    const event = guestLists.find((e) => e.eventId === eventId);
+    const tier = event?.tiers.find((t) => t.tierId === tierId);
+    if (!event || !tier || tier.remaining < 1) return { outcome: "rejected", reason: "No spots left" };
+    tier.remaining -= 1;
+    event.guestEmails.push(email.trim().toLowerCase());
+    return { outcome: "confirmed" };
+  };
 }
 
 export function primaryHandle(p: Pick<ContactListRow, "normalized_phones" | "normalized_emails" | "primary_handle">): string | null {

@@ -267,6 +267,7 @@ function FoundPerson({
       events={events}
       notes={person.notes}
       notesUpdatedAt={person.notes_updated_at}
+      guest={person}
       grouped={narrow}
     />
   );

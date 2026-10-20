@@ -21,7 +21,7 @@ import { type PopoverAnchor, useActionSheet } from "@/lib/action-sheet";
 import { copyHandleAction } from "@/lib/copy-handle";
 import { pinChat, writeFlags } from "@/lib/chat-actions";
 import { contactService } from "@/lib/contact-service";
-import { useAddChatTag } from "@/lib/identity";
+import { useAddChatTag, useWhoIs } from "@/lib/identity";
 import { useLightbox } from "@/lib/lightbox";
 import { showToast } from "@/lib/toast";
 import type { ChatSummary, Contact, ContactSuggestion } from "@shared/types";
@@ -31,6 +31,8 @@ import { useAiStatus } from "@/hooks/use-ai";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { ChatAvatar, GroupPhotoAvatar, PersonAvatar } from "./avatar";
 import { ChatCrmSection } from "./chat-crm-section";
+import { useGuestLists } from "@/hooks/use-guest-lists";
+import { GuestListRows } from "./guest-list-quick-add";
 import { useQuery } from "convex/react";
 import { commaApi } from "@/lib/convex-api";
 import { mediaApi } from "@/lib/media-api";
@@ -459,7 +461,10 @@ export function ChatInfoContent({
             <ChatCrmSection chatGuid={guid} />
           </View>
         ) : (
-          crm && <DmCrmNote crm={crm} />
+          <>
+            {crm && <DmCrmNote crm={crm} />}
+            {peer && <DmGuestList address={peer.address} />}
+          </>
         )}
 
         <View style={[styles.section, styles.danger, { borderTopColor: theme.divider }]}>
@@ -516,6 +521,19 @@ function Section({
       </View>
       {children}
     </View>
+  );
+}
+
+/** Milad's upcoming guest lists for the person behind this DM. Hidden for an unknown handle or when no list has spots. */
+function DmGuestList({ address }: { address: string }) {
+  const theme = useTheme();
+  const who = useWhoIs(address);
+  const { events, update } = useGuestLists();
+  if (!who?.found || !events?.length) return null;
+  return (
+    <Section title="Guest list" divider={theme.divider} labelColor={theme.textSecondary}>
+      <GuestListRows key={who.person._id} person={who.person} events={events} onAdded={update} />
+    </Section>
   );
 }
 

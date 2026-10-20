@@ -18,6 +18,8 @@ import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
 import { Card, ContactsDropdown, ContactsSwitch, rowDivider, SectionHeader, TextAction } from "./contacts-ui";
 import { CrmEventsEditor } from "./crm-events-editor";
+import { useGuestLists } from "@/hooks/use-guest-lists";
+import { GuestListRows, type GuestPerson } from "./guest-list-quick-add";
 
 export interface PersonRelationshipProps {
   readonly personId: string;
@@ -27,12 +29,13 @@ export interface PersonRelationshipProps {
   readonly events: EventLink[];
   readonly notes: string | undefined;
   readonly notesUpdatedAt: string | undefined;
+  readonly guest: GuestPerson;
   /** Phone: each block sits in an inset grouped card. */
   readonly grouped: boolean;
 }
 
-/** The relationship column: Favorite, Priority, Tags, Notes and Linked events. */
-export function PersonRelationship({ personId, isFavorite, priority, tags, events, notes, notesUpdatedAt, grouped }: PersonRelationshipProps) {
+/** The relationship column: Favorite, Priority, Tags, Notes, Linked events and Milad's upcoming guest lists. */
+export function PersonRelationship({ personId, isFavorite, priority, tags, events, notes, notesUpdatedAt, guest, grouped }: PersonRelationshipProps) {
   const colors = useTheme();
   const setFavorite = useSetFavorite();
   const setPriority = useSetPriority();
@@ -92,6 +95,19 @@ export function PersonRelationship({ personId, isFavorite, priority, tags, event
       )}
       <NotesBlock personId={personId} notes={notes} updatedAt={notesUpdatedAt} />
       <LinkedEvents personId={personId} events={events} grouped={grouped} />
+      <GuestLists person={guest} grouped={grouped} />
+    </View>
+  );
+}
+
+function GuestLists({ person, grouped }: { readonly person: GuestPerson; readonly grouped: boolean }) {
+  const { events, update } = useGuestLists();
+  if (!events?.length) return null;
+  const rows = <GuestListRows person={person} events={events} onAdded={update} />;
+  return (
+    <View>
+      <SectionHeader title="Guest list" />
+      {grouped ? <Card style={styles.guestCard}>{rows}</Card> : rows}
     </View>
   );
 }
@@ -265,4 +281,5 @@ const styles = StyleSheet.create({
   evName: { fontSize: 12.5, fontWeight: "600" },
   evTime: { fontSize: 12, marginTop: 2 },
   linker: { marginTop: 8 },
+  guestCard: { paddingHorizontal: 14, paddingVertical: 2 },
 });
