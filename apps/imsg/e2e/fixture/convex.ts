@@ -126,8 +126,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const ai = controls.ai;
   const search = new MessageSearch(bb, names);
   const health = () => controls.health();
+  const miniAi = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi });
   // The fake runner beats on the wall clock the browser judges it by, not the pinned Date.now.
-  const aiStatus = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi, agentHeartbeatAt: new Date().getTime() });
+  const aiStatus = () => ({ ...miniAi(), agentHeartbeatAt: new Date().getTime() });
   const agent = createAgentFixture({
     userText: (conversationId) => {
       const draft = drafts.get(conversationId);
@@ -359,7 +360,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return row ? { ...row, peerTyping: row.peerTyping && row.expiresAt > new Date().getTime() } : null;
     },
     "comma/bridgeState:bridgeState": async () => {
-      return { key: "mini", ...health(), ...aiStatus(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
+      return { key: "mini", ...health(), ...miniAi(), whisperAvailable: false, whisperDetail: "Fixture transcription unavailable", lastSeenAt: Date.now() };
     },
     "comma/uploads:generateAttachmentUploadUrl": async () => "/__fixture/upload",
     "comma/uploads:finalizeUpload": async (args) => {
