@@ -189,18 +189,27 @@ export const agentClaim = internalMutation({
   },
 });
 
-/** Runner boot: no turn survives a restart, so open turns end as interrupted and their questions close. */
+/**
+ * Runner boot: no turn survives a restart, so open turns end as interrupted, their questions close
+ * and their tool steps fail. A pending chat with no pending command lost its command to a dead runner.
+ */
 export const agentRecover = internalMutation({
   args: { now: v.number() },
   returns: v.object({ chatIds: v.array(v.id("comma_agent_chats")) }),
   handler: async (ctx, { now }) => {
-    const open = await ctx.db.query("comma_agent_chats")
-      .filter((q) => q.or(q.eq(q.field("state"), "running"), q.eq(q.field("state"), "waiting_input")))
-      .collect();
+    const queued = new Set((await ctx.db.query("comma_agent_commands").withIndex("by_status_createdAt", (q) => q.eq("status", "pending")).collect())
+      .map(({ chatId }) => chatId));
+    const open = (await ctx.db.query("comma_agent_chats")
+      .filter((q) => q.or(q.eq(q.field("state"), "running"), q.eq(q.field("state"), "waiting_input"), q.eq(q.field("state"), "pending")))
+      .collect())
+      .filter((chat) => chat.state !== "pending" || !queued.has(chat._id));
     for (const chat of open) {
       for await (const item of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id))) {
-        if (item.entry.kind === "question" && item.entry.status === "pending") {
-          await ctx.db.patch(item._id, { entry: { ...item.entry, status: "cancelled" }, updatedAt: now });
+        const { entry } = item;
+        if (entry.kind === "question" && entry.status === "pending") {
+          await ctx.db.patch(item._id, { entry: { ...entry, status: "cancelled" }, updatedAt: now });
+        } else if (entry.kind === "tool" && entry.status === "running") {
+          await ctx.db.patch(item._id, { entry: { ...entry, status: "failed" }, updatedAt: now });
         }
       }
       await upsertItems(ctx, chat._id, [{ key: `recover-${now}`, entry: { kind: "turn_end", outcome: "interrupted" } }], now);
