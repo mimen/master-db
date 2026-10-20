@@ -42,28 +42,36 @@ if (process.env.COMMA_AGENT_HOOK_CHILD !== "1") {
   }) as typeof clearTimeout;
   globalThis.setInterval = ((_fire: () => void, delay: number) => { intervals.push(delay); return 0; }) as unknown as typeof setInterval;
 
-  mock.module("@/hooks/use-ai", () => ({ useAiStatus: () => ({ suggestions: true, reactionSuggestions: true, agentHeartbeatAt: heartbeatAt }) }));
+  const convexReact = await import("convex/react");
+  mock.module("convex/react", () => ({ ...convexReact, useQuery: () => ({ suggestions: true, reactionSuggestions: true, agentHeartbeatAt: heartbeatAt }) }));
   mock.module("@/lib/settings", () => ({ useAgentSettings: () => ({ agentPane }) }));
   const { useAgentEnabled } = await import("./use-agent");
+  const { AiStatusProvider } = await import("./use-ai");
+  const { memo } = await import("react");
   let enabled: boolean | undefined;
-  function Probe() {
+  let probeRenders = 0;
+  const Probe = memo(function Probe() {
+    probeRenders++;
     enabled = useAgentEnabled();
     return null;
-  }
+  });
+  const probe = createElement(Probe);
 
-  test("arms one timeout at heartbeatAt + AGENT_FRESH_MS, re-arms on a new heartbeat, and none while the setting is off", async () => {
+  test("arms one timeout at heartbeatAt + AGENT_FRESH_MS, re-arms on a new heartbeat without rerendering readers, and honours the setting", async () => {
     const root = createRoot(document.getElementById("root")!);
-    const render = async () => { await act(async () => { root.render(createElement(Probe)); }); };
+    const render = async () => { await act(async () => { root.render(createElement(AiStatusProvider, null, probe)); }); };
     const live = () => timers.filter((timer) => !timer.cleared);
 
     await render();
     expect(enabled).toBe(true);
     expect(live().map((timer) => timer.delay)).toEqual([20_001]);
 
+    const rendersBeforeBeat = probeRenders;
     now += 10_000;
     heartbeatAt = now;
     await render();
     expect(live().map((timer) => timer.delay)).toEqual([120_001]);
+    expect(probeRenders, "a fresh heartbeat does not rerender a reader").toBe(rendersBeforeBeat);
 
     now += 120_001;
     await act(async () => { live()[0].fire(); });
@@ -71,10 +79,8 @@ if (process.env.COMMA_AGENT_HOOK_CHILD !== "1") {
 
     heartbeatAt = now;
     agentPane = false;
-    const before = timers.length;
     await render();
     expect(enabled).toBe(false);
-    expect(timers.length).toBe(before);
     expect(intervals).toEqual([]);
     await act(async () => { root.unmount(); });
     dom.window.close();

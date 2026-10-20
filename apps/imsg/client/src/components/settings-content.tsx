@@ -7,7 +7,6 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 import { Dropdown, type DropdownOption } from "./ui/dropdown";
 
 import { Fonts } from "@/constants/theme";
-import { useAgentAvailable } from "@/hooks/use-agent";
 import { useAiStatus } from "@/hooks/use-ai";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -204,7 +203,6 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
   const themePreference = useThemePreference();
   const agent = useAgentSettings();
   const aiStatus = useAiStatus();
-  const agentAvailable = useAgentAvailable();
   const showSheet = useActionSheet();
   const keyboard = Platform.OS === "web" && wide;
   const [inline, setInline] = useState(false);
@@ -298,7 +296,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
             </Group>
           )}
 
-          {agentAvailable && (
+          {aiStatus.agentAvailable && (
             <Group title="Agent">
               <SettingRow first title="Agent pane" caption="Ask about the open conversation with ⌘J. The agent drafts replies; it sends only when you tell it to.">
                 <Dropdown label="Agent pane" value={agent.agentPane ? "on" : "off"} options={AGENT_PANE_OPTIONS} onChange={(value) => setAgentSettings({ agentPane: value === "on" })} />

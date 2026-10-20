@@ -10,6 +10,7 @@ import { GestureRoot } from "@/components/gesture-root";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { DesktopShellProvider } from "@/components/desktop-shell-provider";
+import { AiStatusProvider } from "@/hooks/use-ai";
 import { ChatDirectoryProvider } from "@/hooks/use-chats";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";
 import { ActionSheetProvider } from "@/lib/action-sheet";
@@ -62,6 +63,7 @@ export default function RootLayout() {
     <GestureRoot style={{ flex: 1 }}>
       <ClientAuthProvider>
       <ChatDirectoryProvider>
+      <AiStatusProvider>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <ActionSheetProvider>
             <LightboxProvider>
@@ -99,6 +101,7 @@ export default function RootLayout() {
             </LightboxProvider>
           </ActionSheetProvider>
         </ThemeProvider>
+      </AiStatusProvider>
       </ChatDirectoryProvider>
       </ClientAuthProvider>
     </GestureRoot>
