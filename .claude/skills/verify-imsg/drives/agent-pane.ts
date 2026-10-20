@@ -158,3 +158,23 @@ test("agent-pane: below the three-column breakpoint the pane presents as the uti
   await expect.poll(opacity).toBe(1);
   await page.screenshot({ path: shot("11-narrow-overlay") });
 });
+
+test("agent-pane: a runner that goes stale closes the pane for real, so ⌘W closes the conversation instead of the hidden pane", async ({ desk }) => {
+  const page = desk.page;
+  await page.clock.install();
+  await page.goto(`/chat/${encodeURIComponent(desk.chats.needs)}`, { waitUntil: "domcontentloaded" });
+  const composer = page.getByPlaceholder("iMessage");
+  await composer.click();
+  await page.keyboard.press("Meta+j");
+  await expect(page.getByTestId("agent-pane")).toBeVisible();
+
+  await page.clock.fastForward(130_000);
+  await expect(page.getByTestId("agent-pane")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Ask the agent (⌘J)" })).toHaveCount(0);
+  await page.screenshot({ path: shot("12-stale-runner-hides-pane") });
+
+  await composer.click();
+  await page.keyboard.press("Meta+w");
+  await expect(page.getByTestId("thread-view")).toHaveCount(0);
+  await page.screenshot({ path: shot("13-cmd-w-closes-conversation") });
+});
