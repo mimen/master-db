@@ -68,13 +68,9 @@ export const getSuggestions = query({
   },
 });
 
-// ponytail: a cached query does not rerun as time passes, so a dead runner reads as live until
-// another write to the row invalidates it. A scheduled expiry write would close that gap.
-const AGENT_FRESH_MS = 120_000;
-
 export const aiStatus = query({
   args: {},
-  returns: v.object({ suggestions: v.boolean(), reactionSuggestions: v.boolean(), agent: v.boolean() }),
+  returns: v.object({ suggestions: v.boolean(), reactionSuggestions: v.boolean(), agentHeartbeatAt: v.union(v.number(), v.null()) }),
   handler: async (ctx) => {
     await assertAllowed(ctx);
     const state = await ctx.db.query("comma_bridge_state").withIndex("by_key", (q) => q.eq("key", "mini")).unique();
@@ -83,7 +79,7 @@ export const aiStatus = query({
     return {
       suggestions: mini?.suggestions ?? false,
       reactionSuggestions: mini?.reactionSuggestions ?? false,
-      agent: runner?.key === "agent" && Math.abs(Date.now() - runner.updatedAt) <= AGENT_FRESH_MS,
+      agentHeartbeatAt: runner?.key === "agent" ? runner.updatedAt : null,
     };
   },
 });

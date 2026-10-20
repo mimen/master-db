@@ -263,17 +263,17 @@ describe("runner functions", () => {
     expect((await items(idle)).map(({ key }) => key)).toEqual(["k2"]);
   });
 
-  test("aiStatus.agent is true only within 120 s of the last heartbeat", async () => {
+  test("aiStatus reports the runner's latest heartbeat beside the Mini's capabilities", async () => {
     const { t, as } = await setup();
     await t.run((ctx) => ctx.db.insert("comma_bridge_state", {
       key: "mini", privateApi: true, suggestions: true, reactionSuggestions: false, whisperAvailable: false, lastSeenAt: 1,
     }));
     const status = () => as.query(api.comma.suggestions.aiStatus, {});
-    expect(await status()).toEqual({ suggestions: true, reactionSuggestions: false, agent: false });
-    await t.mutation(internal.comma.agent.agentHeartbeat, { now: Date.now() - 115_000 });
-    expect((await status()).agent).toBe(true);
-    await t.mutation(internal.comma.agent.agentHeartbeat, { now: Date.now() - 125_000 });
-    expect((await status()).agent).toBe(false);
+    expect(await status()).toEqual({ suggestions: true, reactionSuggestions: false, agentHeartbeatAt: null });
+    await t.mutation(internal.comma.agent.agentHeartbeat, { now: 1_000 });
+    expect((await status()).agentHeartbeatAt).toBe(1_000);
+    await t.mutation(internal.comma.agent.agentHeartbeat, { now: 2_000 });
+    expect((await status()).agentHeartbeatAt).toBe(2_000);
     expect(await t.run((ctx) => ctx.db.query("comma_bridge_state").collect())).toHaveLength(2);
     expect(await as.query(api.comma.bridgeState.bridgeState, {})).toMatchObject({ key: "mini", suggestions: true });
   });

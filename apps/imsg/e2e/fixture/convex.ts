@@ -126,7 +126,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const ai = controls.ai;
   const search = new MessageSearch(bb, names);
   const health = () => controls.health();
-  const aiStatus = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi, agent: true });
+  // The fake runner beats on the wall clock the browser judges it by, not the pinned Date.now.
+  const aiStatus = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi, agentHeartbeatAt: new Date().getTime() });
   const agent = createAgentFixture({
     userText: (conversationId) => {
       const draft = drafts.get(conversationId);

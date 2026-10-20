@@ -30,7 +30,7 @@ function fixture() {
       const name = getFunctionName(ref);
       reads.push({ name, args });
       const value = name === "comma/queries:resolveChat" ? { _id: "conversation" } : name === "comma/suggestions:aiStatus"
-        ? { suggestions: false, reactionSuggestions: false, agent: false } : cache.get((args as { model: string }).model) ?? null;
+        ? { suggestions: false, reactionSuggestions: false, agentHeartbeatAt: null } : cache.get((args as { model: string }).model) ?? null;
       return value as FunctionReturnType<Ref>;
     },
     async mutation<Ref extends FunctionReference<"mutation">>(ref: Ref, args: FunctionArgs<Ref>): Promise<FunctionReturnType<Ref>> {
@@ -95,6 +95,6 @@ test("global clear waits for its result, identify preserves its shape, and statu
   expect(await h.api.clearSuggestionLearning()).toEqual({ ok: true });
   expect(h.commands[0]).toMatchObject({ chatGuid: null, payload: { kind: "clearSuggestionLearning" } });
   expect(await h.api.aiIdentify("chat")).toEqual({ name: "Alex", confidence: "high", reasoning: "vault" });
-  expect(await h.api.aiStatus()).toEqual({ suggestions: false, reactionSuggestions: false, agent: false });
+  expect(await h.api.aiStatus()).toEqual({ suggestions: false, reactionSuggestions: false, agentHeartbeatAt: null });
   expect(h.reads.at(-1)?.name).toBe("comma/suggestions:aiStatus");
 });
