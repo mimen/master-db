@@ -64,7 +64,7 @@ function required(name: string): string {
  * Adapter, and in a dotfile on older ones. Read either; an absent key disables
  * the AI surfaces instead of failing startup, so the rest of the app still runs.
  */
-function loadGatewayKey(): string {
+export function loadGatewayKey(): string {
   const fromEnv = Bun.env.AI_GATEWAY_KEY ?? Bun.env.CLAUDE_GPT_GATEWAY_API_KEY;
   if (fromEnv) return fromEnv.trim();
   const home = Bun.env.HOME;
