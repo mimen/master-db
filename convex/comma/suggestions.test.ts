@@ -12,7 +12,7 @@ import type { ShelfUpdate } from "./suggestions";
 const modules = normalizeModules(import.meta.glob("../**/*.*s"), import.meta.url);
 const publishRef = makeFunctionReference<"mutation", { update: ShelfUpdate }, boolean>("comma/suggestions:publish");
 const getRef = makeFunctionReference<"query", { chatGuid: string; model: "opus" | "terra" }, typeof suggestionDoc.type | null>("comma/suggestions:getSuggestions");
-const statusRef = makeFunctionReference<"query", Record<string, never>, { suggestions: boolean; reactionSuggestions: boolean; agent: boolean }>("comma/suggestions:aiStatus");
+const statusRef = makeFunctionReference<"query", Record<string, never>, { suggestions: boolean; reactionSuggestions: boolean; agentHeartbeatAt: number | null }>("comma/suggestions:aiStatus");
 const CHAT = "iMessage;-;+15550001111";
 
 beforeEach(() => { process.env.COMMA_BRIDGE_SECRET = "test"; });
@@ -105,11 +105,11 @@ test("global clear invalidates all shelves, fences old generations, and deduplic
 
 test("capabilities come from the singleton and are unavailable until it exists", async () => {
   const h = await fixture();
-  expect(await h.authed.query(statusRef, {})).toEqual({ suggestions: false, reactionSuggestions: false, agent: false });
+  expect(await h.authed.query(statusRef, {})).toEqual({ suggestions: false, reactionSuggestions: false, agentHeartbeatAt: null });
   await h.t.run((ctx) => ctx.db.insert("comma_bridge_state", {
     key: "mini", privateApi: true, suggestions: true, reactionSuggestions: false, whisperAvailable: false, lastSeenAt: 1,
   }));
-  expect(await h.authed.query(statusRef, {})).toEqual({ suggestions: true, reactionSuggestions: false, agent: false });
+  expect(await h.authed.query(statusRef, {})).toEqual({ suggestions: true, reactionSuggestions: false, agentHeartbeatAt: null });
   await expect(h.t.query(statusRef, {})).rejects.toThrow("Unauthorized");
   await expect(h.t.query(getRef, { chatGuid: CHAT, model: "opus" })).rejects.toThrow("Unauthorized");
 });

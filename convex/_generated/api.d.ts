@@ -2103,7 +2103,11 @@ export declare const api: {
         "query",
         "public",
         {},
-        { agent: boolean; reactionSuggestions: boolean; suggestions: boolean }
+        {
+          agentHeartbeatAt: number | null;
+          reactionSuggestions: boolean;
+          suggestions: boolean;
+        }
       >;
       getSuggestions: FunctionReference<
         "query",
