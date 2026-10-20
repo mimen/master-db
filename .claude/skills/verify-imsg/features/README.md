@@ -37,3 +37,4 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Settle a conversation](./settle.md) covers settling from the row, the header and the keyboard, and Undo.
 - [Send attachments](./attachments.md) covers file drops with a caption, voice memos, and an unknown outcome.
 - [Schedule a message](./schedule.md) covers Send later, the date editor, and the Scheduled list.
+- [Agent pane](./agent-pane.md) covers ⌘J, asking, the work log, question cards, composer and pane drafts, New chat, and the state strip. Its drive is `drives/agent-pane.ts`.
