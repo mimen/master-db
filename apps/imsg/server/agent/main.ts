@@ -46,10 +46,16 @@ export function loadAgentConfig(env: Record<string, string | undefined>, gateway
   };
 }
 
-/** The Claude Code child gets the gateway credentials and drops the runner's process identity. */
+const RUNNER_ONLY = new Set([
+  "PROCID", "PROCID_REF", "PROCID_OFF",
+  "COMMA_BRIDGE_SECRET", "BB_PASSWORD", "IMSG_SERVER_SECRET", "IMSG_IDENTITY_KEY", "AI_GATEWAY_KEY", "CLAUDE_GPT_GATEWAY_API_KEY",
+]);
+const SECRET_NAME = /_(SECRET|PASSWORD|TOKEN)$/;
+
+/** The Claude Code child gets the gateway credentials and none of the runner's own identity or secrets. */
 export function childEnv(config: AgentConfig, env: Record<string, string | undefined>): Record<string, string | undefined> {
-  const { PROCID: _id, PROCID_REF: _ref, PROCID_OFF: _off, ...rest } = env;
-  return { ...rest, ANTHROPIC_BASE_URL: config.gatewayUrl, ANTHROPIC_API_KEY: config.gatewayKey, COMMA_AGENT: "1" };
+  const kept = Object.entries(env).filter(([name]) => !RUNNER_ONLY.has(name) && !SECRET_NAME.test(name));
+  return { ...Object.fromEntries(kept), ANTHROPIC_BASE_URL: config.gatewayUrl, ANTHROPIC_API_KEY: config.gatewayKey, COMMA_AGENT: "1" };
 }
 
 /** The spike-proven SDK options (2026-10-20, SDK 0.3.304), plus thinking summaries as T3 requests them. */
