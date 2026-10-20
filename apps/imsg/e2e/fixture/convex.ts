@@ -13,6 +13,7 @@ import { ChatCommands } from "../../server/commands";
 import { WhisperService } from "../../server/whisper";
 import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
+import { createAgentFixture } from "./agent";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
@@ -125,7 +126,17 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
   const ai = controls.ai;
   const search = new MessageSearch(bb, names);
   const health = () => controls.health();
-  const aiStatus = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi });
+  const aiStatus = () => ({ suggestions: ai.available, reactionSuggestions: bb.hasPrivateApi, agent: true });
+  const agent = createAgentFixture({
+    userText: (conversationId) => {
+      const draft = drafts.get(conversationId);
+      return draft && draft.source !== "agent" ? draft.text : "";
+    },
+    writeAgentDraft: (conversationId, text, note) => {
+      drafts.set(conversationId, { _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId),
+        text, note, updatedAt: Date.now(), source: "agent" });
+    },
+  });
   const chatSummaries = async () => {
     const result = await controls.directory.summaries();
     if (!result.ok) throw new FixtureError(result.error, 502);
@@ -328,6 +339,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const url = typeof args.url === "string" ? parsePublicPreviewUrl(args.url) : null;
       return url ? extractLinkPreview('<title>Fixture link preview</title><meta name="description" content="A deterministic preview for fixture messages.">', url) : null;
     },
+    ...agent.handlers,
     ...additionalHandlers,
     "identity/queries:searchContacts": async (args) => searchContacts(String(args.q), args.limit === undefined ? 25 : Number(args.limit)),
     "comma/conversationInfo:findChat": async (args) => {
@@ -505,6 +517,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { agent.reset(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }
