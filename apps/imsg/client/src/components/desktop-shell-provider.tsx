@@ -113,6 +113,11 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   const agentEnabled = useAgentEnabled();
   const agentOpen = useRef(false);
   agentOpen.current = state.utility?.kind === "agent";
+  // A pane hidden by a stale runner or the setting closes for real, so Esc and ⌘W are not spent on it.
+  const agentHidden = agentOpen.current && !agentEnabled;
+  useEffect(() => {
+    if (agentHidden) dispatch({ type: "utility/closed" });
+  }, [agentHidden]);
 
   useEffect(() => {
     if (projection === null) {
