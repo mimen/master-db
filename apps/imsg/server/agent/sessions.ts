@@ -87,10 +87,12 @@ export class Sessions {
     switch (command.kind) {
       case "message": {
         if (chat.archivedAt) return;
-        const target = live ?? await this.open(chatId, chat);
-        if (!target) return;
-        const text = await this.withDelta(chatId, target, command.text);
-        await target.session.send(text, command.steer);
+        try {
+          const target = live ?? await this.open(chatId, chat);
+          await target.session.send(await this.withDelta(chatId, target, command.text), command.steer);
+        } catch (error) {
+          await this.failChat(chatId, error);
+        }
         return;
       }
       case "answer":
@@ -112,16 +114,18 @@ export class Sessions {
     return live?.session.live ? live : undefined;
   }
 
-  private open(chatId: ChatId, chat: Chat): Promise<Live | null> {
+  private open(chatId: ChatId, chat: Chat): Promise<Live> {
     const opened = this.opening.then(() => this.start(chatId, chat));
     this.opening = opened.catch(() => {});
-    return opened.catch(async (error) => {
-      this.log(`opening ${chatId}: ${String(error)}`);
-      const message = error instanceof Error ? error.message : String(error);
-      await this.deps.port.post("agentItems", { chatId, items: [turnEndItem(`open-${crypto.randomUUID()}`, "failed", undefined, message)] });
-      await this.deps.port.post("agentChat", { chatId, state: "failed" });
-      return null;
-    });
+    return opened;
+  }
+
+  /** A claimed message that never reached Claude ends its chat as failed, so the pane is not left pending. */
+  private async failChat(chatId: ChatId, error: unknown) {
+    this.log(`message for ${chatId}: ${String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    await this.deps.port.post("agentItems", { chatId, items: [turnEndItem(`dispatch-${crypto.randomUUID()}`, "failed", undefined, message)] });
+    await this.deps.port.post("agentChat", { chatId, state: "failed" });
   }
 
   private async start(chatId: ChatId, chat: Chat): Promise<Live> {
@@ -167,12 +171,13 @@ export class Sessions {
     return [...this.live.keys()].filter((chatId) => this.current(chatId)).length;
   }
 
+  /** The longest-idle idle session goes first; a busy one only when none is idle. */
   private async evict() {
     const [chatId] = [...this.live.entries()]
       .filter(([, live]) => live.session.live)
-      .sort(([, a], [, b]) => a.session.lastActivity - b.session.lastActivity)[0] ?? [];
+      .sort(([, a], [, b]) => Number(b.session.state.kind === "idle") - Number(a.session.state.kind === "idle") || a.session.lastActivity - b.session.lastActivity)[0] ?? [];
     if (!chatId) return;
-    this.log(`evicting ${chatId}, the longest idle of ${MAX_LIVE} live sessions`);
+    this.log(`evicting ${chatId} to stay within ${MAX_LIVE} live sessions`);
     await this.closeChat(chatId);
   }
 
@@ -191,8 +196,10 @@ export class Sessions {
     }
   }
 
-  async closeAll() {
+  /** Stops claiming, gives in-flight dispatches up to graceMs to land, then closes every session. */
+  async closeAll(graceMs = 5_000) {
     this.work.stop();
+    await Promise.race([this.flush(), new Promise((resolve) => setTimeout(resolve, graceMs).unref())]);
     await Promise.all([...this.live.keys()].map((chatId) => this.closeChat(chatId)));
   }
 }
