@@ -143,12 +143,18 @@ test("agent-pane: Settings turns the pane off, and with it ⌘J and the header b
 
 test("agent-pane: below the three-column breakpoint the pane presents as the utility overlay", async ({ desk }) => {
   const page = desk.page;
-  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto(`/chat/${encodeURIComponent(desk.chats.needs)}`, { waitUntil: "domcontentloaded" });
   await page.getByPlaceholder("iMessage").click();
   await page.keyboard.press("Meta+j");
   await expect(page.getByTestId("agent-pane")).toBeVisible();
   await expect(page.getByTestId("desktop-utility-pane-content")).toHaveAttribute("data-utility-presentation", "overlay");
   await expect(page.getByRole("textbox", { name: "Ask the agent" })).toBeFocused();
+  const opacity = () => page.getByTestId("agent-pane").evaluate((node) => {
+    let value = 1;
+    for (let el: Element | null = node; el; el = el.parentElement) value *= Number(getComputedStyle(el).opacity);
+    return value;
+  });
+  await expect.poll(opacity).toBe(1);
   await page.screenshot({ path: shot("11-narrow-overlay") });
 });
