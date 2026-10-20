@@ -1,4 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import AiChat02Icon from "@hugeicons/core-free-icons/AiChat02Icon";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useConvex } from "convex/react";
 import { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -78,9 +80,11 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
   };
 
   return (
-    <View testID="agent-pane" style={[styles.root, { backgroundColor: theme.thread, paddingBottom: keyboardHeight }]} {...({ dataSet: { agentPane: "true" } } as object)}>
+    <View testID="agent-pane" style={[styles.root, { backgroundColor: theme.background, paddingBottom: keyboardHeight }]} {...({ dataSet: { agentPane: "true" } } as object)}>
       <PaneHeader
-        title={`Agent · ${name}`}
+        title="Agent"
+        detail={name}
+        leading={<HugeiconsIcon icon={AiChat02Icon} size={18} color={theme.text} strokeWidth={1.6} />}
         actions={<>
           <Button label="New chat" onPress={startOver} disabled={!chat || items.length === 0} />
           {onClose ? (

@@ -131,6 +131,8 @@ export const Colors = {
     /** Popovers: menus, the command palette, dropdown lists. */
     popBg: "#FFFFFF",
     popShadow: "0 0 0 1px rgba(0,0,0,0.08), 0 18px 48px -12px rgba(0,0,0,0.28)",
+    /** In-flow cards on a white pane (the agent's questions and drafts); the 1px border draws the edge. */
+    raisedShadow: "0 1px 2px rgba(0,0,0,0.05), 0 4px 12px -4px rgba(0,0,0,0.10)",
     popSelected: "rgba(0,0,0,0.075)",
     popTertiary: "#64646B",
     skeleton: "rgba(0,0,0,0.06)",
@@ -177,6 +179,7 @@ export const Colors = {
     backdrop: "rgba(0,0,0,0.5)",
     popBg: "#232326",
     popShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 18px 48px -12px rgba(0,0,0,0.8)",
+    raisedShadow: "0 1px 2px rgba(0,0,0,0.4), 0 6px 16px -6px rgba(0,0,0,0.6)",
     popSelected: "rgba(255,255,255,0.06)",
     popTertiary: "#A0A0A7",
     skeleton: "rgba(255,255,255,0.07)",

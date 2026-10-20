@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, TextInput, View } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 
-import { Button } from "@/components/ui/button";
+import { HOVER_DIM, PRESS_DIM } from "@/constants/interaction";
 import { Radius, Space } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
@@ -45,35 +46,73 @@ export function AgentInput({ running, onSend, onStop }: {
   }, []);
 
   return (
-    <View style={[styles.bar, { borderTopColor: theme.divider }]}>
-      <TextInput
-        ref={inputRef}
-        value={text}
-        onChangeText={setText}
-        onFocus={() => setListMode(false)}
-        placeholder={running ? "Steer the agent…" : "Ask about this conversation…"}
-        placeholderTextColor={theme.textTertiary}
-        accessibilityLabel="Ask the agent"
-        multiline
-        enterKeyHint="send"
-        {...(Platform.OS === "web" ? {} : { submitBehavior: "submit" as const, onSubmitEditing: () => sendRef.current(false) })}
-        {...({ dataSet: { agentInput: "true" } } as object)}
-        style={[
-          styles.input,
-          Platform.OS === "web" && ({ outlineStyle: "none", resize: "none" } as object),
-          { backgroundColor: theme.surface, borderColor: theme.dividerStrong, color: theme.text, fontSize: type.body },
-        ]}
-      />
-      <View style={styles.actions}>
-        {running ? <Button label="Stop" variant="ghost" onPress={onStop} /> : null}
-        <Button label="Send" variant="primary" disabled={!text.trim()} onPress={() => send(false)} />
+    <View style={styles.bar}>
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.dividerStrong }]}>
+        <TextInput
+          ref={inputRef}
+          value={text}
+          onChangeText={setText}
+          onFocus={() => setListMode(false)}
+          placeholder={running ? "Steer the agent…" : "Ask about this conversation…"}
+          placeholderTextColor={theme.textTertiary}
+          accessibilityLabel="Ask the agent"
+          multiline
+          enterKeyHint="send"
+          {...(Platform.OS === "web" ? {} : { submitBehavior: "submit" as const, onSubmitEditing: () => sendRef.current(false) })}
+          {...({ dataSet: { agentInput: "true" } } as object)}
+          style={[
+            styles.input,
+            Platform.OS === "web" && ({ outlineStyle: "none", resize: "none" } as object),
+            { color: theme.text, fontSize: type.body },
+          ]}
+        />
+        <View style={styles.tools}>
+          {running ? (
+            <RoundButton label="Stop" fill={theme.field} onPress={onStop}>
+              <Ionicons name="stop" size={12} color={theme.text} />
+            </RoundButton>
+          ) : null}
+          <RoundButton label="Send" fill={theme.accent} disabled={!text.trim()} onPress={() => send(false)}>
+            <Ionicons name="arrow-up" size={17} color={theme.onAccent} />
+          </RoundButton>
+        </View>
       </View>
     </View>
   );
 }
 
+/** The thread composer's round send button, at the 28pt icon-button size. */
+function RoundButton({ label, fill, disabled, onPress, children }: {
+  readonly label: string;
+  readonly fill: string;
+  readonly disabled?: boolean;
+  readonly onPress: () => void;
+  readonly children: ReactNode;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={6}
+      onPress={onPress}
+      style={({ hovered, pressed }) => [
+        styles.round,
+        { backgroundColor: fill, opacity: disabled ? 0.4 : pressed ? PRESS_DIM : hovered ? HOVER_DIM : 1 },
+        pressed && styles.pressed,
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  bar: { borderTopWidth: StyleSheet.hairlineWidth, gap: Space.md, padding: Space.lg },
-  input: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, maxHeight: 160, minHeight: 64, paddingHorizontal: Space.lg, paddingVertical: Space.md },
-  actions: { flexDirection: "row", gap: Space.md, justifyContent: "flex-end" },
+  bar: { paddingBottom: Space.gutter, paddingHorizontal: Space.gutter, paddingTop: Space.xs },
+  card: { borderRadius: Radius.lg, borderWidth: 1 },
+  input: { maxHeight: 160, minHeight: 44, paddingBottom: Space.xs, paddingHorizontal: Space.lg, paddingTop: Space.lg },
+  tools: { flexDirection: "row", gap: Space.sm, justifyContent: "flex-end", paddingBottom: Space.md, paddingHorizontal: Space.md },
+  round: { alignItems: "center", borderRadius: Radius.full, height: 28, justifyContent: "center", width: 28 },
+  pressed: { transform: [{ scale: 0.96 }] },
 });

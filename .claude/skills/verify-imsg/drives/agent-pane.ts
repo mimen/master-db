@@ -36,7 +36,8 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   const input = page.getByRole("textbox", { name: "Ask the agent" });
   await page.keyboard.press("Meta+j");
   await expect(pane).toBeVisible();
-  await expect(pane.getByRole("heading", { name: "Agent · Alex Rivera" })).toBeVisible();
+  await expect(pane.getByRole("heading", { name: "Agent", exact: true })).toBeVisible();
+  await expect(pane.getByTestId("pane-header")).toContainText("Alex Rivera");
   await expect(input).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(composer).toBeFocused();

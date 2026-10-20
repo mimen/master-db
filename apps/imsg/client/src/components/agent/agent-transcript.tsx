@@ -11,7 +11,7 @@ import type { AgentEntry, AgentItem } from "@/lib/agent-api";
 import type { TranscriptRow } from "@/lib/agent-transcript";
 
 import { AgentMarkdown } from "./agent-markdown";
-import { QuestionCard } from "./question-card";
+import { QuestionCard, RaisedCard } from "./question-card";
 
 type Entry<Kind extends AgentEntry["kind"]> = Extract<AgentEntry, { kind: Kind }>;
 
@@ -85,7 +85,7 @@ function DraftCard({ item, entry, onUse }: { readonly item: AgentItem; readonly 
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <View testID="agent-draft" style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}>
+    <RaisedCard testID="agent-draft">
       <Text style={[styles.meta, { color: theme.textTertiary }]}>Draft reply · you have text in the composer</Text>
       {entry.note ? <Text style={[styles.meta, { color: theme.textSecondary }]}>{entry.note}</Text> : null}
       <Text selectable style={{ color: theme.text, fontSize: type.body, lineHeight: Math.round(type.body * 1.5) }}>{entry.text}</Text>
@@ -108,7 +108,7 @@ function DraftCard({ item, entry, onUse }: { readonly item: AgentItem; readonly 
           }}
         />
       </View>
-    </View>
+    </RaisedCard>
   );
 }
 
@@ -170,7 +170,6 @@ const styles = StyleSheet.create({
   detail: { fontFamily: Fonts.mono, fontSize: 11.5, lineHeight: 16 },
   failed: { borderLeftWidth: 2, gap: Space.xs, paddingLeft: Space.md },
   user: { alignSelf: "flex-end", borderRadius: Radius.md, gap: Space.xxs, maxWidth: "88%", paddingHorizontal: Space.lg, paddingVertical: Space.md },
-  card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, gap: Space.md, padding: Space.lg },
   cardActions: { alignItems: "flex-end" },
   attachment: { alignItems: "center", flexDirection: "row", gap: Space.sm },
 });

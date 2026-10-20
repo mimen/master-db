@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Radius, Space, Weight } from "@/constants/tokens";
@@ -17,6 +17,24 @@ import {
 } from "@/lib/agent-transcript";
 
 type QuestionEntry = Extract<AgentEntry, { kind: "question" }>;
+
+/** A card in the transcript: a 1px edge and a soft lift, so it stands off the white pane. */
+export function RaisedCard({ testID, style, children }: { readonly testID: string; readonly style?: StyleProp<ViewStyle>; readonly children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View
+      testID={testID}
+      style={[
+        styles.card,
+        { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
+        Platform.OS === "web" && ({ boxShadow: theme.raisedShadow } as ViewStyle),
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
 
 /** T3 lets a single-select pick land visibly before it advances. */
 const AUTO_ADVANCE_MS = 200;
@@ -81,7 +99,7 @@ export function QuestionCard({ entry, shortcuts, onAnswer }: {
   }, [active, editable, entry.questions, shortcuts]);
 
   return (
-    <View testID="agent-question" style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}>
+    <RaisedCard testID="agent-question" style={styles.questionCard}>
       {entry.questions.map((question, questionIndex) => {
         const selection = selections[question.question] ?? EMPTY_SELECTION;
         if (!pending) {
@@ -156,12 +174,14 @@ export function QuestionCard({ entry, shortcuts, onAnswer }: {
           <Button label={sending ? "Sending…" : "Answer"} variant="primary" disabled={!answers || sending} onPress={() => submit(answers)} />
         </View>
       ) : null}
-    </View>
+    </RaisedCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, gap: Space.xl, padding: Space.lg },
+  /** Concentric: the card radius is its controls' Radius.sm plus its Space.lg padding. */
+  card: { borderRadius: Radius.sm + Space.lg, borderWidth: 1, gap: Space.md, padding: Space.lg },
+  questionCard: { gap: Space.xl },
   question: { gap: Space.sm },
   title: { fontWeight: Weight.semibold },
   hint: { fontSize: 12, lineHeight: 16 },
