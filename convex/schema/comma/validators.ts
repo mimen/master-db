@@ -480,7 +480,7 @@ export const agentChatFields = {
   /** Reserved through ccs and set by the runner. */
   sessionId: v.optional(v.string()),
   state: agentChatState,
-  /** Fixed at chat creation from the client's settings. */
+  /** The last ask's selection; the runner applies each message's own. */
   model: v.string(),
   effort: agentEffort,
   /** Newest thread message dateCreated the agent has been given. */
@@ -497,12 +497,28 @@ export const agentQuestion = v.object({
 });
 export const agentAnswers = v.record(v.string(), v.string());
 
-export const agentUserEntry = v.object({ kind: v.literal("user"), text: v.string(), steer: v.boolean() });
+export const agentAttachment = draftAttachment;
+const { filename, mimeType, size } = draftAttachment.fields;
+export const agentUserEntry = v.object({
+  kind: v.literal("user"), text: v.string(), steer: v.boolean(), attachments: v.optional(v.array(v.object({ filename, mimeType, size }))),
+});
 export const agentAssistantEntry = v.object({ kind: v.literal("assistant"), text: v.string(), streaming: v.boolean() });
 export const agentThinkingEntry = v.object({ kind: v.literal("thinking"), text: v.string(), streaming: v.boolean() });
 export const agentToolEntry = v.object({
   kind: v.literal("tool"), name: v.string(), summary: v.string(), detail: v.optional(v.string()),
   status: v.union(v.literal("running"), v.literal("done"), v.literal("failed")),
+  /** JSON of the tool input, clipped like detail. Absent for credential reads. */
+  input: v.optional(v.string()),
+  startedAt: v.optional(v.number()),
+  endedAt: v.optional(v.number()),
+});
+/** The root agent's TodoWrite list, one item per turn. */
+export const agentTodosEntry = v.object({
+  kind: v.literal("todos"),
+  todos: v.array(v.object({
+    content: v.string(), activeForm: v.optional(v.string()),
+    status: v.union(v.literal("pending"), v.literal("in_progress"), v.literal("completed")),
+  })),
 });
 export const agentQuestionEntry = v.object({
   kind: v.literal("question"), requestId: v.string(), questions: v.array(agentQuestion),
@@ -517,9 +533,12 @@ export const agentDraftEntry = v.object({
 export const agentTurnEndEntry = v.object({
   kind: v.literal("turn_end"), outcome: v.union(v.literal("completed"), v.literal("interrupted"), v.literal("failed")),
   error: v.optional(v.string()), durationMs: v.optional(v.number()),
+  /** The selection that answered the turn. */
+  model: v.optional(v.string()), effort: v.optional(agentEffort),
 });
 export const agentEntry = v.union(
   agentUserEntry, agentAssistantEntry, agentThinkingEntry, agentToolEntry, agentQuestionEntry, agentDraftEntry, agentTurnEndEntry,
+  agentTodosEntry,
 );
 
 export const agentItemFields = {
@@ -533,7 +552,11 @@ export const agentItemFields = {
   updatedAt: v.number(),
 };
 
-export const agentMessageCommand = v.object({ kind: v.literal("message"), text: v.string(), steer: v.boolean() });
+/** model, effort and attachments are absent on commands written before per-message selection. */
+export const agentMessageCommand = v.object({
+  kind: v.literal("message"), text: v.string(), steer: v.boolean(),
+  model: v.optional(v.string()), effort: v.optional(agentEffort), attachments: v.optional(v.array(agentAttachment)),
+});
 export const agentAnswerCommand = v.object({ kind: v.literal("answer"), requestId: v.string(), answers: agentAnswers });
 export const agentStopCommand = v.object({ kind: v.literal("stop") });
 /** Emitted by New chat for the archived chat's live session. */
@@ -551,8 +574,14 @@ export const agentCommandFields = {
 export const agentChatDoc = withSystemFields("comma_agent_chats", agentChatFields);
 export const agentItemDoc = withSystemFields("comma_agent_items", agentItemFields);
 const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt } = agentChatFields;
+/** A message attachment as the runner downloads it; url is null once the file is gone from storage. */
+export const agentAttachmentLink = v.object({ url: v.union(v.string(), v.null()), filename, mimeType, size });
+export const pendingAgentCommandBody = v.union(
+  v.object({ ...agentMessageCommand.fields, attachments: v.optional(v.array(agentAttachmentLink)) }),
+  agentAnswerCommand, agentStopCommand, agentCloseCommand,
+);
 export const pendingAgentCommand = v.object({
-  _id: v.id("comma_agent_commands"), chatId: v.id("comma_agent_chats"), command: agentCommand, createdAt: v.number(),
+  _id: v.id("comma_agent_commands"), chatId: v.id("comma_agent_chats"), command: pendingAgentCommandBody, createdAt: v.number(),
   chat: v.object({ conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt }),
 });
 
@@ -562,6 +591,9 @@ export type AgentChatState = Infer<typeof agentChatState>;
 export type AgentQuestion = Infer<typeof agentQuestion>;
 export type AgentDraftPlacement = Infer<typeof agentDraftPlacement>;
 export type AgentEntry = Infer<typeof agentEntry>;
+export type AgentAttachment = Infer<typeof agentAttachment>;
+export type AgentAttachmentLink = Infer<typeof agentAttachmentLink>;
+export type PendingAgentCommandBody = Infer<typeof pendingAgentCommandBody>;
 export type AgentCommand = Infer<typeof agentCommand>;
 export type AgentChatDoc = Infer<typeof agentChatDoc>;
 export type AgentItemDoc = Infer<typeof agentItemDoc>;

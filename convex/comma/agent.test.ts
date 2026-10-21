@@ -69,22 +69,43 @@ describe("client functions", () => {
       ["k1", 1, { kind: "user", text: "draft a reply", steer: false }],
     ]);
     expect((await commands()).map(({ command, status }) => [command, status])).toEqual([
-      [{ kind: "message", text: "draft a reply", steer: false }, "pending"],
+      [{ kind: "message", text: "draft a reply", steer: false, model: "claude-opus-5-5", effort: "high" }, "pending"],
     ]);
   });
 
-  test("a later ask reuses the chat's model and keeps a busy state", async () => {
-    const { t, as, conversationId, ask, items } = await setup();
+  test("a later ask carries its own selection, moves the chat's to it, and keeps a busy state", async () => {
+    const { t, as, conversationId, ask, commands, items } = await setup();
     const chatId = await ask("k1");
     await t.mutation(internal.comma.agent.agentChat, { chatId, state: "running" });
-    await as.mutation(api.comma.agent.ask, { conversationId, key: "k2", text: "faster", steer: true, model: "other", effort: "low" });
-    expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ state: "running", model: "claude-opus-5-5", effort: "high" });
+    await as.mutation(api.comma.agent.ask, { conversationId, key: "k2", text: "faster", steer: true, model: "gpt-6-luna", effort: "low" });
+    expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ state: "running", model: "gpt-6-luna", effort: "low" });
+    expect((await commands()).map(({ command }) => command)).toMatchObject([
+      { text: "k1", model: "claude-opus-5-5", effort: "high" }, { text: "faster", model: "gpt-6-luna", effort: "low" },
+    ]);
     expect((await items(chatId)).map(({ ordinal, entry }) => [ordinal, entry])).toEqual([
       [1, { kind: "user", text: "k1", steer: false }], [2, { kind: "user", text: "faster", steer: true }],
     ]);
     await t.mutation(internal.comma.agent.agentChat, { chatId, state: "idle" });
     await ask("k3");
     expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ state: "pending" });
+  });
+
+  test("ask takes recorded uploads, shows their metadata, and refuses one that was never recorded", async () => {
+    const { t, as, conversationId, commands, items } = await setup();
+    const storageId = await upload(t, "menu.png");
+    const chatId = await as.mutation(api.comma.agent.ask, {
+      conversationId, key: "k1", text: "what is this", steer: false, model: "claude-opus-5-5", effort: "high",
+      attachments: [{ storageId, filename: "renamed.exe", mimeType: "application/x-msdownload", size: 1 }],
+    });
+    expect((await items(chatId))[0].entry).toEqual({
+      kind: "user", text: "what is this", steer: false, attachments: [{ filename: "menu.png", mimeType: "image/png", size: 5 }],
+    });
+    expect((await commands())[0].command).toMatchObject({ attachments: [{ storageId, filename: "menu.png", mimeType: "image/png", size: 5 }] });
+    const stray = await t.run((ctx) => ctx.storage.store(new Blob(["x"])));
+    await expect(as.mutation(api.comma.agent.ask, {
+      conversationId, key: "k2", text: "and this", steer: false, model: "claude-opus-5-5", effort: "high",
+      attachments: [{ storageId: stray, filename: "x", mimeType: "text/plain", size: 1 }],
+    })).rejects.toThrow("was not stored");
   });
 
   test("listItems returns the newest 400 in ascending order", async () => {
@@ -113,7 +134,7 @@ describe("client functions", () => {
     const chatId = await ask("k1");
     await as.mutation(api.comma.agent.stop, { chatId });
     expect((await commands()).map(({ chatId: id, command }) => [id, command])).toEqual([
-      [chatId, { kind: "message", text: "k1", steer: false }], [chatId, { kind: "stop" }],
+      [chatId, { kind: "message", text: "k1", steer: false, model: "claude-opus-5-5", effort: "high" }], [chatId, { kind: "stop" }],
     ]);
   });
 
@@ -202,9 +223,39 @@ describe("runner functions", () => {
     await ask("k2");
     const pending = await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET });
     expect(pending.map(({ command }) => command)).toEqual([
-      { kind: "message", text: "k1", steer: false }, { kind: "message", text: "k2", steer: false },
+      { kind: "message", text: "k1", steer: false, model: "claude-opus-5-5", effort: "high" },
+      { kind: "message", text: "k2", steer: false, model: "claude-opus-5-5", effort: "high" },
     ]);
     expect(pending[0]).toMatchObject({ chatId, chat: { model: "claude-opus-5-5", effort: "high", state: "pending" } });
+  });
+
+  test("pendingAgentCommands and agentClaim give each attachment a download URL, and null once it is gone", async () => {
+    const { t, as, conversationId } = await setup();
+    const kept = await upload(t, "kept.png");
+    const gone = await upload(t, "gone.png");
+    await as.mutation(api.comma.agent.ask, {
+      conversationId, key: "k1", text: "look", steer: false, model: "claude-opus-5-5", effort: "high",
+      attachments: [kept, gone].map((storageId) => ({ storageId, filename: "", mimeType: "", size: 0 })),
+    });
+    await t.run((ctx) => ctx.storage.delete(gone));
+    const [pending] = await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET });
+    expect(pending.command).toEqual({
+      kind: "message", text: "look", steer: false, model: "claude-opus-5-5", effort: "high", attachments: [
+        { url: await t.run((ctx) => ctx.storage.getUrl(kept)), filename: "kept.png", mimeType: "image/png", size: 5 },
+        { url: null, filename: "gone.png", mimeType: "image/png", size: 5 },
+      ],
+    });
+    expect(await t.mutation(internal.comma.agent.agentClaim, { ids: [pending._id] })).toEqual([pending]);
+  });
+
+  test("a command row written before per-message selection still reaches the runner as it was", async () => {
+    const { t, ask } = await setup();
+    const chatId = await ask("k1");
+    await t.run((ctx) => ctx.db.insert("comma_agent_commands", {
+      chatId, command: { kind: "message", text: "old", steer: false }, status: "pending", createdAt: Date.now() + 1,
+    }));
+    const pending = await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET });
+    expect(pending[1].command).toEqual({ kind: "message", text: "old", steer: false });
   });
 
   test("agentClaim takes pending rows once and never returns a taken row", async () => {
