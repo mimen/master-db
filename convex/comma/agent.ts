@@ -4,8 +4,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
-  agentAnswers, agentChatDoc, agentChatState, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc, pendingAgentCommand,
-  type AgentCommand, type AgentDraftPlacement, type AgentEntry, type PendingAgentCommand,
+  agentAnswers, agentAttachment, agentChatDoc, agentChatState, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc, pendingAgentCommand,
+  type AgentCommand, type AgentDraftPlacement, type AgentEntry, type PendingAgentCommand, type PendingAgentCommandBody,
 } from "../schema/comma/validators";
 
 import { sameSecret } from "./bridgeAuth";
@@ -50,10 +50,20 @@ async function insertCommand(ctx: MutationCtx, chatId: Id<"comma_agent_chats">, 
   await ctx.db.insert("comma_agent_commands", { chatId, command, status: "pending", createdAt: Date.now() });
 }
 
+/** The runner downloads a message's files, so it gets each one's URL instead of its storage id. */
+async function withLinks(ctx: QueryCtx, command: AgentCommand): Promise<PendingAgentCommandBody> {
+  if (command.kind !== "message") return command;
+  const { attachments, ...rest } = command;
+  if (!attachments) return rest;
+  const links = await Promise.all(attachments.map(async ({ storageId, filename, mimeType, size }) =>
+    ({ url: await ctx.storage.getUrl(storageId), filename, mimeType, size })));
+  return { ...rest, attachments: links };
+}
+
 async function withChat(ctx: QueryCtx, row: Doc<"comma_agent_commands">): Promise<PendingAgentCommand> {
   const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt } = await requireChat(ctx, row.chatId);
   return {
-    _id: row._id, chatId: row.chatId, command: row.command, createdAt: row.createdAt,
+    _id: row._id, chatId: row.chatId, command: await withLinks(ctx, row.command), createdAt: row.createdAt,
     chat: { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt },
   };
 }
@@ -77,13 +87,18 @@ export const listItems = query({
   },
 });
 
-/** Idempotent on the client's key, so a retried send never asks twice. */
+/**
+ * Idempotent on the client's key, so a retried send never asks twice. Each message carries its own
+ * model and effort, and the chat keeps the last ask's. Attachments are uploads recorded by
+ * finalizeUpload; their name, type and size come from that record, not the caller.
+ */
 export const ask = mutation({
   args: {
     conversationId: v.id("comma_conversations"), key: v.string(), text: v.string(), steer: v.boolean(), model: v.string(), effort: agentEffort,
+    attachments: v.optional(v.array(agentAttachment)),
   },
   returns: v.id("comma_agent_chats"),
-  handler: async (ctx, { conversationId, key, text, steer, model, effort }) => {
+  handler: async (ctx, { conversationId, key, text, steer, model, effort, attachments: sent = [] }) => {
     await assertAllowed(ctx);
     if (!await ctx.db.get(conversationId)) throw new Error("Conversation not found");
     const now = Date.now();
@@ -92,10 +107,12 @@ export const ask = mutation({
       conversationId, model, effort, state: "pending", createdAt: now, updatedAt: now,
     });
     if (await itemFor(ctx, chatId, key)) return chatId;
-    await upsertItems(ctx, chatId, [{ key, entry: { kind: "user", text, steer } }], now);
-    await insertCommand(ctx, chatId, { kind: "message", text, steer });
+    const attachments = await recordedAttachments(ctx, sent.map(({ storageId }) => storageId));
+    const shown = attachments.map(({ filename, mimeType, size }) => ({ filename, mimeType, size }));
+    await upsertItems(ctx, chatId, [{ key, entry: { kind: "user", text, steer, ...(shown.length ? { attachments: shown } : {}) } }], now);
+    await insertCommand(ctx, chatId, { kind: "message", text, steer, model, effort, ...(attachments.length ? { attachments } : {}) });
     const busy = live?.state === "running" || live?.state === "waiting_input";
-    await ctx.db.patch(chatId, { state: busy ? live.state : "pending", updatedAt: now });
+    await ctx.db.patch(chatId, { model, effort, state: busy ? live.state : "pending", updatedAt: now });
     return chatId;
   },
 });

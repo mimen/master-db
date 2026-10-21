@@ -207,6 +207,12 @@ export declare const api: {
         "mutation",
         "public",
         {
+          attachments?: Array<{
+            filename: string;
+            mimeType: string;
+            size: number;
+            storageId: Id<"_storage">;
+          }>;
           conversationId: Id<"comma_conversations">;
           effort: "low" | "medium" | "high" | "xhigh" | "max";
           key: string;
@@ -226,13 +232,25 @@ export declare const api: {
           chatId: Id<"comma_agent_chats">;
           createdAt: number;
           entry:
-            | { kind: "user"; steer: boolean; text: string }
+            | {
+                attachments?: Array<{
+                  filename: string;
+                  mimeType: string;
+                  size: number;
+                }>;
+                kind: "user";
+                steer: boolean;
+                text: string;
+              }
             | { kind: "assistant"; streaming: boolean; text: string }
             | { kind: "thinking"; streaming: boolean; text: string }
             | {
                 detail?: string;
+                endedAt?: number;
+                input?: string;
                 kind: "tool";
                 name: string;
+                startedAt?: number;
                 status: "running" | "done" | "failed";
                 summary: string;
               }
@@ -263,9 +281,19 @@ export declare const api: {
               }
             | {
                 durationMs?: number;
+                effort?: "low" | "medium" | "high" | "xhigh" | "max";
                 error?: string;
                 kind: "turn_end";
+                model?: string;
                 outcome: "completed" | "interrupted" | "failed";
+              }
+            | {
+                kind: "todos";
+                todos: Array<{
+                  activeForm?: string;
+                  content: string;
+                  status: "pending" | "in_progress" | "completed";
+                }>;
               };
           key: string;
           ordinal: number;
@@ -325,7 +353,19 @@ export declare const api: {
           };
           chatId: Id<"comma_agent_chats">;
           command:
-            | { kind: "message"; steer: boolean; text: string }
+            | {
+                attachments?: Array<{
+                  filename: string;
+                  mimeType: string;
+                  size: number;
+                  url: string | null;
+                }>;
+                effort?: "low" | "medium" | "high" | "xhigh" | "max";
+                kind: "message";
+                model?: string;
+                steer: boolean;
+                text: string;
+              }
             | {
                 answers: Record<string, string>;
                 kind: "answer";
@@ -3687,7 +3727,19 @@ export declare const internal: {
           };
           chatId: Id<"comma_agent_chats">;
           command:
-            | { kind: "message"; steer: boolean; text: string }
+            | {
+                attachments?: Array<{
+                  filename: string;
+                  mimeType: string;
+                  size: number;
+                  url: string | null;
+                }>;
+                effort?: "low" | "medium" | "high" | "xhigh" | "max";
+                kind: "message";
+                model?: string;
+                steer: boolean;
+                text: string;
+              }
             | {
                 answers: Record<string, string>;
                 kind: "answer";
@@ -3724,13 +3776,25 @@ export declare const internal: {
           chatId: Id<"comma_agent_chats">;
           items: Array<{
             entry:
-              | { kind: "user"; steer: boolean; text: string }
+              | {
+                  attachments?: Array<{
+                    filename: string;
+                    mimeType: string;
+                    size: number;
+                  }>;
+                  kind: "user";
+                  steer: boolean;
+                  text: string;
+                }
               | { kind: "assistant"; streaming: boolean; text: string }
               | { kind: "thinking"; streaming: boolean; text: string }
               | {
                   detail?: string;
+                  endedAt?: number;
+                  input?: string;
                   kind: "tool";
                   name: string;
+                  startedAt?: number;
                   status: "running" | "done" | "failed";
                   summary: string;
                 }
@@ -3761,9 +3825,19 @@ export declare const internal: {
                 }
               | {
                   durationMs?: number;
+                  effort?: "low" | "medium" | "high" | "xhigh" | "max";
                   error?: string;
                   kind: "turn_end";
+                  model?: string;
                   outcome: "completed" | "interrupted" | "failed";
+                }
+              | {
+                  kind: "todos";
+                  todos: Array<{
+                    activeForm?: string;
+                    content: string;
+                    status: "pending" | "in_progress" | "completed";
+                  }>;
                 };
             key: string;
           }>;

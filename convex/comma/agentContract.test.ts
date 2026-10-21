@@ -1,5 +1,9 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { convexTest } from "convex-test";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test } from "vitest";
 
 import { ingestPort } from "../../apps/imsg/server/agent/convex-port";
 import { fakeQueries, sdkResult, sdkText, settle } from "../../apps/imsg/server/agent/query-fake";
@@ -21,6 +25,7 @@ const modules = {
   ...commaModules,
   "../../comma/agent.ts": () => import("./agent"),
   "../../comma/agentContext.ts": () => import("./agentContext"),
+  "../../comma/uploads.ts": () => import("./uploads"),
   "../../http.ts": () => import("../http"),
 };
 const SECRET = "contract-secret";
@@ -48,7 +53,7 @@ async function eventually(check: () => unknown) {
   }
 }
 
-test("ask, claim, transcript and draft round-trip between the runner and Convex", async () => {
+test("ask, claim, transcript, draft, a model switch and an image round-trip between the runner and Convex", async () => {
   const t = convexTest(schema, modules);
   globalThis.fetch = ((url: string, init?: RequestInit) => t.fetch(url.slice(SITE.length), init)) as typeof fetch;
   const conversationId = await t.run(async (ctx) => {
@@ -71,12 +76,17 @@ test("ask, claim, transcript and draft round-trip between the runner and Convex"
   });
 
   const port = ingestPort({ convexSiteUrl: SITE, commaBridgeSecret: SECRET });
+  const scratchRoot = mkdtempSync(join(tmpdir(), "comma-contract-"));
+  onTestFinished(() => rmSync(scratchRoot, { recursive: true, force: true }));
+  let storageFetch = async (_url: string) => new Response(null, { status: 404 });
   const { query, queries } = fakeQueries();
   const sessions = new Sessions({
     port, query, now: () => 5_000, timeZone: "UTC",
     reserve: async () => "session-1",
     readAddendum: () => null,
-    options: (input) => ({ model: input.chat.model, systemPrompt: { type: "preset", preset: "claude_code", append: input.append } }),
+    options: (input) => ({ model: input.selection.model, systemPrompt: { type: "preset", preset: "claude_code", append: input.append } }),
+    scratch: (id) => `${scratchRoot}/${id}`,
+    fetch: (url) => storageFetch(url),
     log: (message) => { throw new Error(message); },
   });
   sessions.receive(await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET }));
@@ -101,10 +111,50 @@ test("ask, claim, transcript and draft round-trip between the runner and Convex"
       { kind: "user", text: "Draft a yes", steer: false },
       { kind: "assistant", text: "Here is a yes.", streaming: false },
       { kind: "draft", text: "Yes, Friday works!", note: "Confirms Friday", placed: "composer", used: false },
-      { kind: "turn_end", outcome: "completed", durationMs: 10 },
+      { kind: "turn_end", outcome: "completed", durationMs: 0, model: "claude-opus-5-5", effort: "high" },
     ]);
   });
   expect(await milad.query(api.comma.agent.liveChat, { conversationId })).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 });
   expect(await milad.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "Yes, Friday works!", source: "agent", note: "Confirms Friday" });
+
+  const image = new Uint8Array([137, 80, 78, 71, 13, 10]);
+  const storageId = await t.run((ctx) => ctx.storage.store(new Blob([image], { type: "image/png" })));
+  await milad.mutation(api.comma.uploads.finalizeUpload, { storageId, filename: "menu.png", mimeType: "image/png" });
+  const imageUrl = await t.run((ctx) => ctx.storage.getUrl(storageId));
+  storageFetch = async (url) => url === imageUrl ? new Response(await t.run(async (ctx) => await (await ctx.storage.get(storageId))!.arrayBuffer())) : new Response(null, { status: 404 });
+  await milad.mutation(api.comma.agent.ask, {
+    conversationId, key: "ask-2", text: "What does this menu say?", steer: false, model: "gpt-6-luna", effort: "low",
+    attachments: [{ storageId, filename: "menu.png", mimeType: "image/png", size: image.byteLength }],
+  });
+  sessions.receive(await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET }));
+  await sessions.flush();
+  expect(queries).toHaveLength(1);
+  expect(queries[0].switches).toEqual([{ model: "gpt-6-luna" }, { effortLevel: "low" }]);
+  await eventually(() => expect(queries[0].sent).toHaveLength(2));
+  const [imageBlock, textBlock] = queries[0].sent[1].message.content as { type: string; source?: object; text?: string }[];
+  expect(imageBlock).toEqual({ type: "image", source: { type: "base64", media_type: "image/png", data: Buffer.from(image).toString("base64") } });
+  expect(textBlock.text).toMatch(/^What does this menu say\?\n\n\[Attached image "menu\.png" is saved at: .+\/attachments\/.+\/menu\.png\]$/);
+
+  queries[0].emit({
+    type: "assistant", uuid: "a2-frame", parent_tool_use_id: null, message: { id: "a2", content: [
+      { type: "tool_use", id: "todo-1", name: "TodoWrite", input: { todos: [{ content: "Read the menu", activeForm: "Reading the menu", status: "in_progress" }] } },
+      { type: "tool_use", id: "op-1", name: "Bash", input: { command: "op read op://Sol/Menu/password", description: "Read the menu password" } },
+    ] },
+  });
+  queries[0].emit({ type: "user", parent_tool_use_id: null, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "op-1", content: "hunter2" }] } });
+  queries[0].emit(sdkText("a3", "Tacos, three ways."));
+  queries[0].emit(sdkResult("r2", "Tacos, three ways."));
+  await settle();
+  await eventually(async () => {
+    const entries = (await milad.query(api.comma.agent.listItems, { chatId })).slice(4).map(({ entry }) => entry);
+    expect(entries).toEqual([
+      { kind: "user", text: "What does this menu say?", steer: false, attachments: [{ filename: "menu.png", mimeType: "image/png", size: 6 }] },
+      { kind: "todos", todos: [{ content: "Read the menu", activeForm: "Reading the menu", status: "in_progress" }] },
+      { kind: "tool", name: "Bash", summary: "Read a credential", status: "done", startedAt: 5_000, endedAt: 5_000 },
+      { kind: "assistant", text: "Tacos, three ways.", streaming: false },
+      { kind: "turn_end", outcome: "completed", durationMs: 0, model: "gpt-6-luna", effort: "low" },
+    ]);
+  });
+  expect(await milad.query(api.comma.agent.liveChat, { conversationId })).toMatchObject({ model: "gpt-6-luna", effort: "low", state: "idle" });
   await sessions.closeAll();
 });
