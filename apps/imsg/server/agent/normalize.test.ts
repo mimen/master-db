@@ -67,14 +67,14 @@ describe("Normalizer", () => {
     const bash = { kind: "tool", name: "Bash", summary: "Ran: date +%S", input: '{"command":"date +%S"}', startedAt: 0 } as const;
     const read = { kind: "tool", name: "Read", summary: "Read guests.csv", input: '{"file_path":"/Users/mimen/scratch/guests.csv"}', startedAt: 0 } as const;
     expect(items).toEqual([
-      { key: "tool_bash", entry: { ...bash, detail: bash.input, status: "running" } },
-      { key: "tool_read", entry: { ...read, detail: read.input, status: "running" } },
-      { key: "tool_search", entry: { kind: "tool", name: "mcp__comma__search_thread", summary: "Searched: guest list", input: '{"query":"guest list"}', detail: '{"query":"guest list"}', status: "running", startedAt: 0 } },
-      { key: "tool_bash", entry: { ...bash, detail: `${bash.input}\n\n42`, status: "done", endedAt: 1 } },
-      { key: "tool_read", entry: { ...read, detail: `${read.input}\n\nno such file`, status: "failed", endedAt: 1 } },
+      { key: "tool_bash", entry: { ...bash, status: "running" } },
+      { key: "tool_read", entry: { ...read, status: "running" } },
+      { key: "tool_search", entry: { kind: "tool", name: "mcp__comma__search_thread", summary: "Searched: guest list", input: '{"query":"guest list"}', status: "running", startedAt: 0 } },
+      { key: "tool_bash", entry: { ...bash, detail: "42", status: "done", endedAt: 1 } },
+      { key: "tool_read", entry: { ...read, detail: "no such file", status: "failed", endedAt: 1 } },
     ]);
     expect(normalizer.flush(9, "failed")).toEqual([
-      { key: "tool_search", entry: { kind: "tool", name: "mcp__comma__search_thread", summary: "Searched: guest list", input: '{"query":"guest list"}', detail: '{"query":"guest list"}', status: "failed", startedAt: 0, endedAt: 9 } },
+      { key: "tool_search", entry: { kind: "tool", name: "mcp__comma__search_thread", summary: "Searched: guest list", input: '{"query":"guest list"}', status: "failed", startedAt: 0, endedAt: 9 } },
     ]);
   });
 

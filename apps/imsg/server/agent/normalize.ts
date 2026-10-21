@@ -198,7 +198,7 @@ export class Normalizer {
         items.push({ key: this.todosKey, entry: { kind: "todos", todos: todoList(block.input) } });
       } else if (block.type === "tool_use" && block.name !== QUESTION_TOOL) {
         const fields = typeof block.input === "object" && block.input !== null ? block.input as Fields : {};
-        const input = isCredentialRead(block.name, fields) ? {} : { input: clip(JSON.stringify(block.input)), detail: clip(JSON.stringify(block.input)) };
+        const input = isCredentialRead(block.name, fields) ? {} : { input: clip(JSON.stringify(block.input)) };
         const entry: ToolEntry = { kind: "tool", name: block.name, summary: toolSummary(block.name, block.input), ...input, status: "running", startedAt: now };
         this.tools.set(block.id, entry);
         items.push({ key: block.id, entry });
@@ -222,7 +222,7 @@ export class Normalizer {
         continue;
       }
       const output = resultText(block.content);
-      items.push({ key: block.tool_use_id, entry: { ...started, status, endedAt: now, detail: clip([started.detail, output].filter(Boolean).join("\n\n")) } });
+      items.push({ key: block.tool_use_id, entry: { ...started, status, endedAt: now, ...(output ? { detail: clip(output) } : {}) } });
     }
     return items;
   }
