@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, type GestureResponderEvent, type Insets, type St
 import { Radius } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 
-import { focusRing, focusVisible, stepFill, type InteractionState } from "./interaction";
+import { focusRing, focusVisible, pressableKey, stepFill, type InteractionState } from "./interaction";
 
 export const ICON_BUTTON_SIZE = 28;
 
@@ -24,6 +24,7 @@ export function IconButton({ label, onPress, disabled, hitSlop, style, children 
   const theme = useTheme();
   return (
     <Pressable
+      key={pressableKey(disabled)}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}

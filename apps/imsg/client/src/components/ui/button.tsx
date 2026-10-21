@@ -5,7 +5,7 @@ import { Radius, Space, Weight } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 
-import { focusRing, focusVisible, stepFill, type InteractionState, type ThemeColors } from "./interaction";
+import { focusRing, focusVisible, pressableKey, stepFill, type InteractionState, type ThemeColors } from "./interaction";
 
 export type ButtonVariant = "primary" | "ghost" | "danger";
 
@@ -36,6 +36,7 @@ export function Button({ label, onPress, variant = "ghost", disabled, style }: B
   const type = useTypeRamp();
   return (
     <Pressable
+      key={pressableKey(disabled)}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}

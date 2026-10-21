@@ -30,6 +30,13 @@ export function focusVisible(state: InteractionState): boolean {
   return state.focused === true && keyboardModality;
 }
 
+/**
+ * Remounts a Pressable when it is disabled or re-enabled. A focused web button that turns disabled
+ * loses focus during React's commit, while React DOM ignores events, so the blur never reaches
+ * RNW's Pressable; its stale `focused` would draw the ring once the button is enabled again.
+ */
+export const pressableKey = (disabled: boolean | undefined) => (disabled ? "disabled" : "enabled");
+
 export function focusRing(theme: ThemeColors): ViewStyle {
   // outline* are web-only style keys RN's types do not list.
   return { outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 2 } as ViewStyle;
