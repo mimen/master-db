@@ -332,8 +332,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     return null;
   };
   app.post("/__fixture/upload", async (c) => {
+    // Read the body before naming the upload, so two uploads in flight never share an id.
+    const bytes = new Blob([await c.req.arrayBuffer()], { type: c.req.header("Content-Type")?.split(";")[0].trim() });
     const storageId = `fixture-storage-${uploads.size + 1}`;
-    uploads.set(storageId, { bytes: new Blob([await c.req.arrayBuffer()], { type: c.req.header("Content-Type")?.split(";")[0].trim() }) });
+    uploads.set(storageId, { bytes });
     return c.json({ storageId });
   });
   app.get("/__fixture/media/:guid", (c) => {
