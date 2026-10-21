@@ -90,10 +90,11 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
   };
 
   const ask = (args: AskArgs): AgentChatId => {
+    // Convex records what finalizeUpload stored, not what the client says about the file.
     const attachments = (args.attachments ?? []).map((attachment) => {
       const stored = drafts.upload?.(attachment.storageId);
       if (drafts.upload && !stored) throw new Error("Finalized upload not found");
-      return { filename: attachment.filename, mimeType: attachment.mimeType, size: attachment.size };
+      return stored ?? { filename: attachment.filename, mimeType: attachment.mimeType, size: attachment.size };
     });
     let chat = liveChat(args.conversationId);
     if (!chat) {
@@ -108,7 +109,7 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
     patchChat(chatId, { state: "running", model: args.model, effort: args.effort });
     turnStarts.set(chatId, now());
     const turn = `${args.key}-turn`;
-    upsert(chatId, `${turn}-todos`, { kind: "todos", todos: todos(0) });
+    upsert(chatId, `${turn}:todos`, { kind: "todos", todos: todos(0) });
     upsert(chatId, `${turn}-think`, { kind: "thinking", streaming: true, text: "**Reading the thread**\n\nLooking for when he first asked, and who he wants on the list." });
     upsert(chatId, `${turn}-read`, comma("read_thread", "Read the thread"));
     upsert(chatId, `${turn}-lists`, bash("bun scripts/guest-list.ts --upcoming", "Check the guest lists", "running"));
@@ -124,7 +125,7 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
       upsert(chatId, `${turn}-ref`, read("messaging"));
       upsert(chatId, `${turn}-photo`, comma("get_attachment", "Opened an attachment"));
       upsert(chatId, `${turn}-count`, bash("bun scripts/guest-list.ts --count", "Count the spots left", "done", "2"));
-      upsert(chatId, `${turn}-todos`, { kind: "todos", todos: todos(3) });
+      upsert(chatId, `${turn}:todos`, { kind: "todos", todos: todos(3) });
       if (/guest list/i.test(args.text)) {
         upsert(chatId, `${turn}-reply`, { kind: "assistant", streaming: false,
           text: "Jesse wants himself and **Rebecca Berens** (rebeccaberens@gmail.com) on the list." });
