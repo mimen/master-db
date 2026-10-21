@@ -155,20 +155,42 @@ describe("prompt history", () => {
     expect(history).toEqual(["first", "second", "steer"]);
   });
 
-  test("up walks back from an empty input, down walks forward and then clears", () => {
-    const one = stepPromptHistory(history, null, "", "back");
-    expect(one).toEqual({ index: 2, text: "steer" });
-    const two = stepPromptHistory(history, one!.index, one!.text, "back");
-    expect(two).toEqual({ index: 1, text: "second" });
-    expect(stepPromptHistory(history, two!.index, two!.text, "forward")).toEqual({ index: 2, text: "steer" });
-    expect(stepPromptHistory(history, 2, "steer", "forward")).toEqual({ index: null, text: "" });
-    expect(stepPromptHistory(history, 0, "first", "back")).toBeNull();
+  const fresh = { index: null, draft: "" };
+  const end = (text: string) => ({ start: text.length, end: text.length });
+
+  test("up walks back from an empty input, down walks forward and then back to the empty input", () => {
+    const one = stepPromptHistory(history, fresh, "", end(""), "back");
+    expect(one).toEqual({ index: 2, draft: "", text: "steer" });
+    const two = stepPromptHistory(history, one!, one!.text, end(one!.text), "back");
+    expect(two).toEqual({ index: 1, draft: "", text: "second" });
+    expect(stepPromptHistory(history, two!, "second", end("second"), "forward")).toEqual({ index: 2, draft: "", text: "steer" });
+    expect(stepPromptHistory(history, { index: 2, draft: "" }, "steer", end("steer"), "forward")).toEqual({ index: null, draft: "", text: "" });
+    expect(stepPromptHistory(history, { index: 0, draft: "" }, "first", end("first"), "back")).toBeNull();
+    expect(stepPromptHistory(history, fresh, "", end(""), "forward")).toBeNull();
   });
 
-  test("up leaves typed text alone, including an edited recall", () => {
-    expect(stepPromptHistory(history, null, "draft", "back")).toBeNull();
-    expect(stepPromptHistory(history, 2, "steer!", "back")).toBeNull();
-    expect(stepPromptHistory(history, null, "", "forward")).toBeNull();
+  test("down past the newest entry restores the draft the user had before recalling", () => {
+    const recalled = stepPromptHistory(history, fresh, "half a thought", end("half a thought"), "back");
+    expect(recalled).toEqual({ index: 2, draft: "half a thought", text: "steer" });
+    expect(stepPromptHistory(history, recalled!, "steer", end("steer"), "forward")).toEqual({ index: null, draft: "", text: "half a thought" });
+  });
+
+  test("in a multiline prompt, up recalls only from the first line and down only from the last", () => {
+    const multi = ["one\ntwo\nthree"];
+    const text = multi[0]!;
+    const recalled = { index: 0, draft: "mine" };
+    const caret = (at: number) => ({ start: at, end: at });
+    expect(stepPromptHistory(multi, recalled, text, caret(text.length), "back")).toBeNull();
+    expect(stepPromptHistory(multi, recalled, text, caret(5), "back")).toBeNull();
+    expect(stepPromptHistory([...multi, "later"], recalled, text, caret(2), "forward")).toBeNull();
+    expect(stepPromptHistory([...multi, "later"], recalled, text, caret(5), "forward")).toBeNull();
+    expect(stepPromptHistory([...multi, "later"], recalled, text, caret(text.length), "forward")).toEqual({ index: 1, draft: "mine", text: "later" });
+    expect(stepPromptHistory(["zero", ...multi], { index: 1, draft: "mine" }, text, caret(2), "back")).toEqual({ index: 0, draft: "mine", text: "zero" });
+    expect(stepPromptHistory(history, fresh, "a\nb", caret(3), "back")).toBeNull();
+  });
+
+  test("a selection moves the caret instead of recalling", () => {
+    expect(stepPromptHistory(history, fresh, "draft", { start: 0, end: 5 }, "back")).toBeNull();
   });
 });
 

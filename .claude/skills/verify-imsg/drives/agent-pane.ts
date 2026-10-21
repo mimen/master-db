@@ -83,10 +83,10 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   await expect(pane.getByTestId("agent-reply")).toContainText("Here is what the thread says.");
   await expect(pane.getByTestId("agent-reply").getByText("rebeccaberens@gmail.com")).toBeVisible();
   const turn = pane.getByTestId("agent-turn").first();
-  await expect(turn.getByRole("button", { name: "Worked for 2m 5s" })).toBeVisible();
+  await expect(turn.getByRole("button", { name: "Worked for 2m 5s · Opus 5.5" })).toBeVisible();
   await expect(pane.getByRole("button", { name: "Check the guest lists" })).toHaveCount(0);
   await expect(pane.getByTestId("agent-todos")).toContainText("Tasks · 3 of 3 done");
-  await turn.getByRole("button", { name: "Worked for 2m 5s" }).click();
+  await turn.getByRole("button", { name: "Worked for 2m 5s · Opus 5.5" }).click();
   await turn.getByRole("button", { name: VERBS }).click();
   await expect(turn).toContainText("Searched the thread for names and emails");
   await expect(turn).toContainText("Loaded auf skill");
@@ -177,6 +177,14 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   await expect(input, "the oldest prompt stays put").toHaveValue("put both on the guest list");
   await page.keyboard.press("ArrowDown");
   await expect(input).toHaveValue("");
+  await input.fill("first line\nsecond line");
+  await page.keyboard.press("ArrowUp");
+  await expect(input, "up on the last line of a draft moves the caret").toHaveValue("first line\nsecond line");
+  await page.keyboard.press("ArrowUp");
+  await expect(input, "up on the first line recalls").toHaveValue("put both on the guest list");
+  await page.keyboard.press("ArrowDown");
+  await expect(input, "down past the newest restores the draft").toHaveValue("first line\nsecond line");
+  await input.fill("");
   writeFileSync(join(evidence, "aria.txt"), await pane.ariaSnapshot());
   writeFileSync(join(evidence, "side-effects.json"), JSON.stringify({ calls, items: await liveItems() }, null, 2));
 });
