@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   todo: { alignItems: "flex-start", flexDirection: "row", gap: Space.sm },
   todoIcon: { marginTop: 1.5 },
   user: { alignSelf: "flex-end", borderRadius: Radius.md, gap: Space.xs, maxWidth: "88%", paddingHorizontal: Space.lg, paddingVertical: Space.md },
-  userAttachments: { flexDirection: "row", flexWrap: "wrap", gap: Space.xs, justifyContent: "flex-end" },
+  userAttachments: { flexDirection: "row", flexWrap: "wrap", gap: Space.xs },
   thumb: { borderRadius: Radius.sm, borderWidth: 1, height: 64, width: 64 },
   fileChip: { alignItems: "center", borderRadius: Radius.sm, flexDirection: "row", gap: Space.xs, maxWidth: 220, paddingHorizontal: Space.md, paddingVertical: Space.xs },
   reply: { gap: Space.xxs },
