@@ -11,7 +11,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 import type { AgentEffort } from "@/lib/agent-api";
 import { AGENT_EFFORTS, AGENT_MODELS, withModel, type AgentModel, type AgentModelChoice } from "@/lib/agent-models";
-import { stepPromptHistory } from "@/lib/agent-transcript";
+import { stepPromptHistory, type HistoryCursor } from "@/lib/agent-transcript";
 import { useActionSheet } from "@/lib/action-sheet";
 import { AGENT_ATTACHMENT_LIMIT, filesFromTransfer, MAX_PENDING_ATTACHMENTS, mergePendingAttachments, splitOversized, type PendingAttachmentAsset } from "@/lib/attachments";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
@@ -26,6 +26,7 @@ export type StagedAttachment = PendingAttachmentAsset & { readonly blob?: Blob }
 /** `alternate` is Option+Enter, T3's "the other dispatch" while a turn runs. */
 export type SendIntent = { readonly text: string; readonly alternate: boolean; readonly attachments: readonly StagedAttachment[] };
 
+const NO_RECALL: HistoryCursor = { index: null, draft: "" };
 const MODEL_OPTIONS: readonly DropdownOption<AgentModel>[] = AGENT_MODELS.map((model) => ({ value: model.id, label: model.label }));
 const EFFORT_OPTIONS: readonly DropdownOption<AgentEffort>[] = AGENT_EFFORTS.map((effort) => ({ value: effort.id, label: effort.label }));
 
@@ -83,7 +84,7 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
   textRef.current = text;
   const historyRef = useRef(history);
   historyRef.current = history;
-  const recalled = useRef<number | null>(null);
+  const recalled = useRef<HistoryCursor>(NO_RECALL);
 
   const stage = (incoming: readonly StagedAttachment[]) => {
     if (incoming.length === 0) return;
@@ -102,7 +103,7 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
     if (!canSend) return;
     setText("");
     setStaged([]);
-    recalled.current = null;
+    recalled.current = NO_RECALL;
     onSend({ text: text.trim(), alternate, attachments: staged });
   };
   const sendRef = useRef(send);
@@ -117,10 +118,11 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
     if (!node || !card || typeof node.addEventListener !== "function") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        const step = stepPromptHistory(historyRef.current, recalled.current, textRef.current, event.key === "ArrowUp" ? "back" : "forward");
+        const caret = { start: node.selectionStart, end: node.selectionEnd };
+        const step = stepPromptHistory(historyRef.current, recalled.current, textRef.current, caret, event.key === "ArrowUp" ? "back" : "forward");
         if (!step) return;
         event.preventDefault();
-        recalled.current = step.index;
+        recalled.current = step;
         setText(step.text);
         return;
       }

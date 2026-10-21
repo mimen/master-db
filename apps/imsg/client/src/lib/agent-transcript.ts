@@ -223,22 +223,29 @@ export function promptHistory(items: readonly AgentItem[]): string[] {
   return history;
 }
 
-export interface HistoryStep { readonly index: number | null; readonly text: string }
+/** Which prompt is recalled, and what the user had typed before the first recall. */
+export interface HistoryCursor { readonly index: number | null; readonly draft: string }
+export interface HistoryStep extends HistoryCursor { readonly text: string }
 
 /**
- * T3's prompt history rule: up recalls only from an empty input or one still holding a recalled
- * prompt, and down past the newest entry clears the input.
+ * Shell-style prompt history: up recalls only with the caret on the first line and down only on
+ * the last, so the arrows still move the caret inside a multiline prompt. Down past the newest
+ * entry restores the draft. Null means the arrow keeps its default.
  */
-export function stepPromptHistory(history: readonly string[], index: number | null, current: string, direction: "back" | "forward"): HistoryStep | null {
-  const active = index !== null && history[index] === current ? index : null;
+export function stepPromptHistory(
+  history: readonly string[], cursor: HistoryCursor, current: string, caret: { readonly start: number; readonly end: number }, direction: "back" | "forward",
+): HistoryStep | null {
+  if (caret.start !== caret.end) return null;
+  const onEdge = direction === "back" ? !current.slice(0, caret.start).includes("\n") : !current.slice(caret.end).includes("\n");
+  if (!onEdge) return null;
+  const active = cursor.index !== null && history[cursor.index] === current ? cursor.index : null;
   if (direction === "back") {
-    if (active === null && current !== "") return null;
     const next = active === null ? history.length - 1 : active - 1;
-    return next >= 0 ? { index: next, text: history[next]! } : null;
+    return next >= 0 ? { index: next, draft: active === null ? current : cursor.draft, text: history[next]! } : null;
   }
   if (active === null) return null;
   const next = active + 1;
-  return next < history.length ? { index: next, text: history[next]! } : { index: null, text: "" };
+  return next < history.length ? { index: next, draft: cursor.draft, text: history[next]! } : { index: null, draft: "", text: cursor.draft };
 }
 
 export function agentIsRunning(state: AgentChatState | undefined): boolean {
