@@ -1,5 +1,6 @@
 import { liveThoughtLine } from "../components/agent/vendor/live-thought-line";
 import type { AgentChatState, AgentEntry, AgentItem, AgentQuestion } from "./agent-api";
+import { agentModelLabel } from "./agent-models";
 
 type Entry<Kind extends AgentEntry["kind"]> = Extract<AgentEntry, { kind: Kind }>;
 
@@ -7,7 +8,7 @@ export type TranscriptRow =
   | { readonly kind: "item"; readonly key: string; readonly item: AgentItem }
   /** Consecutive steps, summarized as verbs: "Ran 3 commands and read 2 files". */
   | { readonly kind: "work"; readonly key: string; readonly items: readonly AgentItem[]; readonly summary: string; readonly running: boolean }
-  /** A finished turn's work, folded behind "Worked for 2m" or "You stopped after 12s". */
+  /** A finished turn's work, folded behind "Worked for 2m · Luna" or "You stopped after 12s". */
   | { readonly kind: "turn"; readonly key: string; readonly label: string; readonly rows: readonly TranscriptRow[] };
 
 function isStep(item: AgentItem): boolean {
@@ -134,7 +135,8 @@ function foldTurn(turn: readonly AgentItem[]): TranscriptRow[] | null {
   const hidden = turn.filter(folds);
   if (hidden.length === 0) return null;
   const elapsed = end.entry.durationMs ?? end.createdAt - turn[0]!.createdAt;
-  const label = end.entry.outcome === "interrupted" ? stoppedLabel(elapsed) : `Worked for ${formatDuration(elapsed)}`;
+  const outcome = end.entry.outcome === "interrupted" ? stoppedLabel(elapsed) : `Worked for ${formatDuration(elapsed)}`;
+  const label = end.entry.model ? `${outcome} · ${agentModelLabel(end.entry.model)}` : outcome;
   const rows: TranscriptRow[] = [];
   for (const item of turn) {
     if (item === hidden[0]) rows.push({ kind: "turn", key: `turn-${item.key}`, label, rows: stepRows(hidden) });

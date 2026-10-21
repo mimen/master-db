@@ -67,6 +67,14 @@ describe("a finished turn", () => {
       .toEqual(["user", { "Worked for 2m 5s": ["work:Ran 1 command", "assistant", "work:Read 1 file"] }, "assistant"]);
   });
 
+  test("the folded row names the model that answered", () => {
+    const answered = (model: string, outcome: "completed" | "interrupted") =>
+      rowsOf([user("go"), tool("done"), assistant("done"), item({ kind: "turn_end", outcome, durationMs: 125_000, model, effort: "low" })])[1];
+    expect(answered("gpt-6-luna", "completed")).toEqual({ "Worked for 2m 5s · Luna": ["work:Ran 1 command"] });
+    expect(answered("claude-opus-5-5", "interrupted")).toEqual({ "You stopped after 2m 5s · Opus 5.5": ["work:Ran 1 command"] });
+    expect(answered("claude-fable-5-1", "completed")).toEqual({ "Worked for 2m 5s · claude-fable-5-1": ["work:Ran 1 command"] });
+  });
+
   test("a stopped turn reads You stopped after, and its own end row goes", () => {
     expect(rowsOf([user("go"), thinking("hm"), tool("done"), end("interrupted", 12_000)]))
       .toEqual(["user", { "You stopped after 12s": ["work:Ran 1 command"] }]);
