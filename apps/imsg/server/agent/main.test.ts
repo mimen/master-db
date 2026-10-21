@@ -46,29 +46,40 @@ describe("comma agent main", () => {
     });
   });
 
-  test("builds the spike's SDK options with the chat's model and effort", () => {
+  test("builds the spike's SDK options on the message's selection, with claudex's model environment", () => {
     const config = loadAgentConfig(env, "gateway-key");
     const mcp = commaServer({ port: { post: async () => null as never, upload: async () => fakeId("") }, chatId: fakeId("c"), conversationId: fakeId("v"), scratchDir: "/tmp", timeZone: "UTC", fetch });
-    const base = { chatId: fakeId<"comma_agent_chats">("c"), sessionId: "s-1", append: "You are a Comma agent", cwd: "/tmp/c", env: childEnv(config, { PROCID: "comma:agent", PATH: "/bin" }), mcp };
+    const base = {
+      chatId: fakeId<"comma_agent_chats">("c"), sessionId: "s-1", append: "You are a Comma agent", cwd: "/tmp/c", mcp,
+      env: childEnv(config, { PROCID: "comma:agent", PATH: "/bin", CLAUDE_CODE_SUBAGENT_MODEL: "x", CLAUDE_CODE_AUTO_COMPACT_WINDOW: "1" }),
+    };
     const chat = { conversationId: fakeId<"comma_conversations">("v"), model: "claude-opus-5-5", effort: "high" as const, state: "pending" as const };
-    const fresh = queryOptions(config, { ...base, chat, resume: false });
+    const selection = { model: "claude-opus-5-5", effort: "high" as const };
+    const fresh = queryOptions({ ...base, chat, selection, resume: false });
     expect(fresh).toMatchObject({
-      model: "claude-opus-5-5",
+      model: "claude-opus-5-5[1m]",
       effort: "high",
+      disallowedTools: ["Artifact"],
       executable: "bun",
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       includePartialMessages: true,
       cwd: "/tmp/c",
       sessionId: "s-1",
-      settings: { enabledPlugins: { "pstack@house": false, "ponytail@ponytail": false } },
+      settings: {
+        enabledPlugins: { "pstack@house": false, "ponytail@ponytail": false },
+        modelSettings: { "muse-wonder-full-1.0": { autoCompactWindow: 1_000_000 } },
+      },
       systemPrompt: { type: "preset", preset: "claude_code", append: "You are a Comma agent" },
-      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317", ANTHROPIC_API_KEY: "gateway-key", COMMA_AGENT: "1", PATH: "/bin" },
+      env: {
+        ANTHROPIC_BASE_URL: "http://127.0.0.1:8317", ANTHROPIC_API_KEY: "gateway-key", COMMA_AGENT: "1", PATH: "/bin",
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "gpt-6.1-sol", ANTHROPIC_DEFAULT_HAIKU_MODEL: "gpt-6-luna(low)", CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1050000",
+      },
     });
-    expect(fresh.env).not.toHaveProperty("PROCID");
+    for (const name of ["PROCID", "CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_AUTO_COMPACT_WINDOW"]) expect(fresh.env).not.toHaveProperty(name);
     expect(fresh.mcpServers).toHaveProperty("comma");
-    const resumed = queryOptions(config, { ...base, chat, resume: true });
-    expect(resumed.resume).toBe("s-1");
+    const resumed = queryOptions({ ...base, chat, selection: { model: "gpt-6-luna", effort: "low" }, resume: true });
+    expect(resumed).toMatchObject({ resume: "s-1", model: "gpt-6-luna", effort: "low" });
     expect(resumed).not.toHaveProperty("sessionId");
   });
 
@@ -82,6 +93,8 @@ describe("comma agent main", () => {
     expect(child).toEqual({
       PATH: "/bin", HOME: "/Users/test", TOKEN_PATH: "/tmp/x",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317", ANTHROPIC_API_KEY: "gateway-key", COMMA_AGENT: "1",
+      ANTHROPIC_DEFAULT_FABLE_MODEL: "claude-fable-5-1[1m]", ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-5-5[1m]",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "gpt-6.1-sol", ANTHROPIC_DEFAULT_HAIKU_MODEL: "gpt-6-luna(low)", CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1050000",
     });
   });
 

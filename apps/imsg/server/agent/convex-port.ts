@@ -4,7 +4,7 @@ import type { api, internal } from "../../../../convex/_generated/api";
 import type { AgentEntry, PendingAgentCommand } from "../../../../convex/schema/comma/validators";
 import { ConvexIngest } from "../bridge/convex-ingest";
 
-export type { AgentChatState, AgentEntry, AgentQuestion } from "../../../../convex/schema/comma/validators";
+export type { AgentAttachmentLink, AgentChatState, AgentEffort, AgentEntry, AgentQuestion } from "../../../../convex/schema/comma/validators";
 export type CommandRow = PendingAgentCommand;
 export type Command = CommandRow["command"];
 export type Chat = CommandRow["chat"];
