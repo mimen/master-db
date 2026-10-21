@@ -9,6 +9,8 @@ import { useTypeRamp } from "@/hooks/use-type";
 import { openExternalUrl } from "@/lib/external-link";
 import { showToast } from "@/lib/toast";
 
+import { CopyButton } from "./copy-button";
+
 type Theme = ReturnType<typeof useTheme>;
 
 const OPENABLE = /^(https?:|mailto:)/i;
@@ -68,9 +70,12 @@ function blocks(tokens: readonly Token[], theme: Theme, body: number): ReactNode
         );
       case "code":
         return (
-          <ScrollView key={index} horizontal style={[styles.codeBlock, { backgroundColor: theme.field }]}>
-            <Text selectable style={[styles.code, { color: theme.text }]}>{token.text}</Text>
-          </ScrollView>
+          <View key={index} testID="agent-code-block" style={[styles.codeBlock, { backgroundColor: theme.field }]}>
+            <ScrollView horizontal contentContainerStyle={styles.codeScroll}>
+              <Text selectable style={[styles.code, { color: theme.text }]}>{token.text}</Text>
+            </ScrollView>
+            <View style={styles.codeCopy}><CopyButton text={token.text} label="Copy code" /></View>
+          </View>
         );
       case "blockquote":
         return (
@@ -141,7 +146,10 @@ const styles = StyleSheet.create({
   italic: { fontStyle: "italic" },
   deleted: { textDecorationLine: "line-through" },
   code: { borderRadius: 4, fontFamily: Fonts.mono, fontSize: 12, lineHeight: 18 },
-  codeBlock: { borderRadius: Radius.sm, padding: Space.lg },
+  codeBlock: { borderRadius: Radius.sm },
+  // The right inset clears the copy button, so the first line never runs under it.
+  codeScroll: { padding: Space.lg, paddingRight: Space.lg + 28 },
+  codeCopy: { position: "absolute", right: Space.xs, top: Space.xs },
   quote: { borderLeftWidth: 2, gap: Space.md, paddingLeft: Space.lg },
   list: { gap: Space.xs },
   listRow: { flexDirection: "row", gap: Space.md },

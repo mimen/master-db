@@ -15,6 +15,12 @@ export function openAgentPane(chatGuid: string): void {
   for (const listener of listeners) listener();
 }
 
+/**
+ * Local previews of what an ask carried, by item key. The stored user entry names its files but
+ * holds no URL, so a thumbnail lasts as long as this session; after a reload it reads as a chip.
+ */
+export const attachmentPreviews = new Map<string, readonly (string | undefined)[]>();
+
 export function onOpenAgentPane(listener: Listener): () => void {
   listeners.add(listener);
   return () => {

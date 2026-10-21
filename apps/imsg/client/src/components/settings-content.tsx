@@ -17,6 +17,7 @@ import { runCommand } from "@/lib/keyboard/controller";
 import { shortcutFor } from "@/lib/keyboard/registry";
 import { releaseStatus } from "@/lib/release-status";
 import type { AgentEffort } from "@/lib/agent-api";
+import { AGENT_EFFORTS, AGENT_MODELS } from "@/lib/agent-models";
 import {
   setAgentSettings,
   setGroupBy,
@@ -90,19 +91,8 @@ const AGENT_PANE_OPTIONS: readonly DropdownOption<"on" | "off">[] = [
   { value: "off", label: "Off" },
 ];
 
-const AGENT_MODEL_OPTIONS: readonly DropdownOption<AgentModel>[] = [
-  { value: "claude-opus-5-5", label: "Opus 5.5" },
-  { value: "claude-fable-5-1", label: "Fable 5.1" },
-  { value: "claude-sonnet-5-5", label: "Sonnet 5.5" },
-];
-
-const AGENT_EFFORT_OPTIONS: readonly DropdownOption<AgentEffort>[] = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra high" },
-  { value: "max", label: "Max" },
-];
+const AGENT_MODEL_OPTIONS: readonly DropdownOption<AgentModel>[] = AGENT_MODELS.map((model) => ({ value: model.id, label: model.label }));
+const AGENT_EFFORT_OPTIONS: readonly DropdownOption<AgentEffort>[] = AGENT_EFFORTS.map((effort) => ({ value: effort.id, label: effort.label }));
 
 const FIELD_WIDTH = 196;
 
@@ -302,7 +292,7 @@ export function SettingsContent({ showHeader = false, onClose, onBack, backLabel
               <SettingRow first title="Agent pane" caption="Ask about the open conversation with ⌘J. The agent drafts replies; it sends only when you tell it to.">
                 <Dropdown label="Agent pane" value={agent.agentPane ? "on" : "off"} options={AGENT_PANE_OPTIONS} onChange={(value) => setAgentSettings({ agentPane: value === "on" })} />
               </SettingRow>
-              <SettingRow title="Model" caption="Set when a chat starts. New chat picks up a change.">
+              <SettingRow title="Model" caption="What a new chat starts with. Switch it for one chat from the pane's input.">
                 <Dropdown label="Agent model" value={agent.agentModel} options={AGENT_MODEL_OPTIONS} onChange={(agentModel) => setAgentSettings({ agentModel })} />
               </SettingRow>
               <SettingRow title="Effort" caption="Higher effort thinks longer before it answers.">

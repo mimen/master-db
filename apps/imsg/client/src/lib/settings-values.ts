@@ -1,5 +1,8 @@
 import type { StateFilter, SuggestionModel } from "@shared/types";
 import type { AgentEffort } from "./agent-api";
+import { agentModelChoice, DEFAULT_AGENT_CHOICE, type AgentModel } from "./agent-models";
+
+export type { AgentModel } from "./agent-models";
 
 export type SuggestionMode = "off" | "on-demand" | "auto";
 
@@ -18,9 +21,6 @@ export type OpenOnLens = Exclude<StateFilter, "settled">;
 /** How every lens sections its conversations. */
 export type GroupConversationsBy = "last-message" | "person" | "none";
 
-export const AGENT_MODELS = ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"] as const;
-export type AgentModel = (typeof AGENT_MODELS)[number];
-export const AGENT_EFFORTS: readonly AgentEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
 export interface Settings {
   /** How reply suggestions appear: never, on a tap, or automatically on open. */
@@ -47,8 +47,8 @@ export const DEFAULT: Settings = {
   openOn: "unresponded",
   groupBy: "last-message",
   agentPane: true,
-  agentModel: "claude-opus-5-5",
-  agentEffort: "high",
+  agentModel: DEFAULT_AGENT_CHOICE.model,
+  agentEffort: DEFAULT_AGENT_CHOICE.effort,
 };
 
 function isMode(value: unknown): value is SuggestionMode {
@@ -75,12 +75,9 @@ function isGroupBy(value: unknown): value is GroupConversationsBy {
   return value === "last-message" || value === "person" || value === "none";
 }
 
-function isAgentModel(value: unknown): value is AgentModel {
-  return AGENT_MODELS.includes(value as AgentModel);
-}
-
-function isAgentEffort(value: unknown): value is AgentEffort {
-  return AGENT_EFFORTS.includes(value as AgentEffort);
+function agentChoiceSettings(model: unknown, effort: unknown): Pick<Settings, "agentModel" | "agentEffort"> {
+  const choice = agentModelChoice(model, effort);
+  return { agentModel: choice.model, agentEffort: choice.effort };
 }
 
 export function parseSettings(raw: string): Settings {
@@ -95,7 +92,6 @@ export function parseSettings(raw: string): Settings {
     openOn: isOpenOn(parsed.openOn) ? parsed.openOn : DEFAULT.openOn,
     groupBy: isGroupBy(parsed.groupBy) ? parsed.groupBy : DEFAULT.groupBy,
     agentPane: typeof parsed.agentPane === "boolean" ? parsed.agentPane : DEFAULT.agentPane,
-    agentModel: isAgentModel(parsed.agentModel) ? parsed.agentModel : DEFAULT.agentModel,
-    agentEffort: isAgentEffort(parsed.agentEffort) ? parsed.agentEffort : DEFAULT.agentEffort,
+    ...agentChoiceSettings(parsed.agentModel, parsed.agentEffort),
   };
 }

@@ -34,6 +34,11 @@ test("theme, open-on lens and grouping round-trip", () => {
 });
 
 test("agent pane, model and effort round-trip", () => {
-  expect(parseSettings(JSON.stringify({ agentPane: false, agentModel: "claude-fable-5-1", agentEffort: "max" })))
-    .toMatchObject({ agentPane: false, agentModel: "claude-fable-5-1", agentEffort: "max" });
+  expect(parseSettings(JSON.stringify({ agentPane: false, agentModel: "gpt-6.1-sol", agentEffort: "max" })))
+    .toMatchObject({ agentPane: false, agentModel: "gpt-6.1-sol", agentEffort: "max" });
+});
+
+test("a saved model that left the list falls back to the default model at the default effort", () => {
+  expect(parseSettings(JSON.stringify({ agentModel: "claude-fable-5-1", agentEffort: "max" })))
+    .toMatchObject({ agentModel: "claude-opus-5-5", agentEffort: "high" });
 });

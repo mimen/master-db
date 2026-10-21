@@ -43,6 +43,8 @@ export interface DropdownProps<T extends string | number> {
   readonly onChange: (value: T) => void;
   /** The menu is at least as wide as the field; pass this for a wider one. */
   readonly menuWidth?: number;
+  /** "chip" is a borderless trigger for a toolbar, such as the agent input's model picker. */
+  readonly variant?: "field" | "chip";
   readonly style?: StyleProp<ViewStyle>;
 }
 
@@ -56,13 +58,14 @@ const LISTBOX = { role: "listbox" } as object;
  * anchored listbox (arrows move, Enter picks, Escape closes, focus returns to the
  * field); on native it opens an action-sheet list. Every non-lens choice uses it.
  */
-export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, style }: DropdownProps<T>): JSX.Element {
+export function Dropdown<T extends string | number>({ label, value, options, onChange, menuWidth, variant = "field", style }: DropdownProps<T>): JSX.Element {
   const theme = useTheme();
   const type = useTypeRamp();
   const fieldRef = useRef<View>(null);
   const [anchor, setAnchor] = useState<Rect | null>(null);
   const [active, setActive] = useState(0);
   const current = options.find((option) => option.value === value);
+  const chip = variant === "chip";
 
   const open = (): void => {
     setActive(initialIndex(options.map((option) => option.value), value));
@@ -107,19 +110,19 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
         aria-expanded={anchor !== null}
         onPress={open}
         style={(state: InteractionState) => [
-          styles.field,
-          { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
-          state.hovered && { backgroundColor: theme.backgroundElement },
+          chip ? styles.chip : styles.field,
+          chip ? { backgroundColor: "transparent" } : { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
+          (state.hovered || (chip && state.pressed)) && { backgroundColor: chip ? theme.rowHover : theme.backgroundElement },
           (anchor !== null || focusVisible(state)) && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as ViewStyle),
           style,
         ]}
       >
         {current?.dot && <View style={[styles.dot, { backgroundColor: current.dot }]} />}
-        <Text numberOfLines={1} style={[styles.value, { color: theme.text, fontSize: type.body }]}>
+        <Text numberOfLines={1} style={[!chip && styles.value, { color: chip ? theme.textSecondary : theme.text, fontSize: chip ? type.secondary : type.body }]}>
           {current?.label ?? ""}
           {current?.detail && <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{`  ${current.detail}`}</Text>}
         </Text>
-        <Ionicons name="chevron-expand" size={14} color={theme.icon} />
+        <Ionicons name={chip ? "chevron-down" : "chevron-expand"} size={chip ? 11 : 14} color={theme.icon} />
       </Pressable>
       {web ? (
         <WebMenu
@@ -351,6 +354,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     borderWidth: 1,
   },
+  chip: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, borderRadius: Radius.sm },
   value: { flex: 1 },
   dot: { width: 8, height: 8, borderRadius: Radius.full },
   menu: { position: "absolute", borderRadius: Radius.md, overflow: "hidden" },
