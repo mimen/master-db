@@ -11,8 +11,8 @@ type Fields = Record<string, unknown>;
 
 const DETAIL_LIMIT = 4000;
 // AskUserQuestion surfaces as a question item through canUseTool, and TodoWrite as the turn's
-// todos item, not as tool steps.
-const QUESTION_TOOL = "AskUserQuestion";
+// todos item, not as tool steps. ToolSearch is Claude Code loading its own deferred tools.
+const UNSHOWN_TOOLS = new Set(["AskUserQuestion", "ToolSearch"]);
 const TODO_TOOL = "TodoWrite";
 
 // A command word: the start of the command or of a pipeline, list, subshell, substitution, or
@@ -214,7 +214,7 @@ export class Normalizer {
       } else if (block.type === "tool_use" && block.name === TODO_TOOL) {
         this.todosKey ??= `${block.id}:todos`;
         items.push({ key: this.todosKey, entry: { kind: "todos", todos: todoList(block.input) } });
-      } else if (block.type === "tool_use" && block.name !== QUESTION_TOOL) {
+      } else if (block.type === "tool_use" && !UNSHOWN_TOOLS.has(block.name)) {
         const fields = typeof block.input === "object" && block.input !== null ? block.input as Fields : {};
         const credential = this.isCredential(block.name, fields);
         if (credential) this.credentialTools.add(block.id);

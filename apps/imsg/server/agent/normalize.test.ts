@@ -194,6 +194,14 @@ describe("Normalizer", () => {
     expect(items).toEqual([]);
   });
 
+  test("hides ToolSearch, Claude Code's own lookup of deferred tools", () => {
+    const items = run(new Normalizer(), [
+      [assistant("msg_9", "f1", { type: "tool_use", id: "search_1", name: "ToolSearch", input: { query: "select:TodoWrite" } }), 0],
+      [toolResult("search_1", "TodoWrite"), 1],
+    ]);
+    expect(items).toEqual([]);
+  });
+
   test("a steer-induced empty result keeps the turn open and the steer's answer ends it", () => {
     const items = run(new Normalizer(), [
       [assistant("msg_6", "f1", { type: "tool_use", id: "tool_1", name: "Bash", input: { command: "date +%S" } }), 0],
