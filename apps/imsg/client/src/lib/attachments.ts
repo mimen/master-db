@@ -1,4 +1,6 @@
 export const MAX_PENDING_ATTACHMENTS = 10;
+/** The agent runner's cap; the pane refuses a larger file before uploading it. */
+export const AGENT_ATTACHMENT_LIMIT = 100 * 1024 * 1024;
 
 export interface PendingAttachmentAsset {
   uri: string;
@@ -6,6 +8,8 @@ export interface PendingAttachmentAsset {
   mime: string;
   isImage: boolean;
   cleanup: "object-url" | "cache-file" | null;
+  /** Bytes, when the source reports it. */
+  size?: number;
 }
 
 export interface MergeAttachmentResult<T> {
@@ -39,6 +43,12 @@ export function mergePendingAttachments<T>(
     items: [...current, ...incoming.slice(0, available)],
     rejected: incoming.slice(available),
   };
+}
+
+/** An item of unknown size passes; the runner checks it again. */
+export function splitOversized<T extends { size?: number }>(incoming: readonly T[], limit: number): MergeAttachmentResult<T> {
+  const over = (item: T) => (item.size ?? 0) > limit;
+  return { items: incoming.filter((item) => !over(item)), rejected: incoming.filter(over) };
 }
 
 export function releaseObjectUrl(

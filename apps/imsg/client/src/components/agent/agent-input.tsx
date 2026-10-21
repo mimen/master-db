@@ -13,7 +13,7 @@ import type { AgentEffort } from "@/lib/agent-api";
 import { AGENT_EFFORTS, AGENT_MODELS, withModel, type AgentModel, type AgentModelChoice } from "@/lib/agent-models";
 import { stepPromptHistory } from "@/lib/agent-transcript";
 import { useActionSheet } from "@/lib/action-sheet";
-import { filesFromTransfer, MAX_PENDING_ATTACHMENTS, mergePendingAttachments, type PendingAttachmentAsset } from "@/lib/attachments";
+import { AGENT_ATTACHMENT_LIMIT, filesFromTransfer, MAX_PENDING_ATTACHMENTS, mergePendingAttachments, splitOversized, type PendingAttachmentAsset } from "@/lib/attachments";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { showToast } from "@/lib/toast";
 
@@ -55,7 +55,7 @@ async function stageFiles(files: readonly File[]): Promise<StagedAttachment[]> {
   return Promise.all(files.map(async (file, index) => {
     const mime = file.type || "application/octet-stream";
     const blob = await fitImage(file, mime);
-    return { uri: URL.createObjectURL(blob), blob, name: file.name || `pasted-${index + 1}`, mime, isImage: mime.startsWith("image/"), cleanup: "object-url" as const };
+    return { uri: URL.createObjectURL(blob), blob, name: file.name || `pasted-${index + 1}`, mime, isImage: mime.startsWith("image/"), cleanup: "object-url" as const, size: blob.size };
   }));
 }
 
@@ -87,9 +87,11 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
 
   const stage = (incoming: readonly StagedAttachment[]) => {
     if (incoming.length === 0) return;
-    const merged = mergePendingAttachments(stagedRef.current, incoming);
-    for (const rejected of merged.rejected) if (rejected.cleanup === "object-url") URL.revokeObjectURL(rejected.uri);
-    if (merged.rejected.length > 0) showToast(`You can attach up to ${MAX_PENDING_ATTACHMENTS} items`);
+    const sized = splitOversized(incoming, AGENT_ATTACHMENT_LIMIT);
+    const merged = mergePendingAttachments(stagedRef.current, sized.items);
+    for (const rejected of [...sized.rejected, ...merged.rejected]) if (rejected.cleanup === "object-url") URL.revokeObjectURL(rejected.uri);
+    if (sized.rejected.length > 0) showToast(`${sized.rejected.length === 1 ? `${sized.rejected[0]!.name} is` : `${sized.rejected.length} files are`} over the 100 MB limit`);
+    else if (merged.rejected.length > 0) showToast(`You can attach up to ${MAX_PENDING_ATTACHMENTS} items`);
     setStaged(merged.items);
   };
   const stageRef = useRef(stage);

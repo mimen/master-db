@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+  AGENT_ATTACHMENT_LIMIT,
   browserFilesToAttachments,
   filesFromTransfer,
   guardWindowFileDrops,
   MAX_PENDING_ATTACHMENTS,
   mergePendingAttachments,
   releaseObjectUrl,
+  splitOversized,
 } from "./attachments";
 
 describe("browser attachment staging", () => {
@@ -52,6 +54,14 @@ describe("browser attachment staging", () => {
     expect(result.items).toHaveLength(MAX_PENDING_ATTACHMENTS);
     expect(result.items.slice(-2)).toEqual(["new-0", "new-1"]);
     expect(result.rejected).toEqual(["new-2", "new-3", "new-4"]);
+  });
+
+  test("refuses a file known to be over the agent's 100 MB cap and keeps one of unknown size", () => {
+    const over = { name: "clip.mov", size: AGENT_ATTACHMENT_LIMIT + 1 };
+    const at = { name: "deck.pdf", size: AGENT_ATTACHMENT_LIMIT };
+    const unknown: { name: string; size?: number } = { name: "pasted.png" };
+    expect(AGENT_ATTACHMENT_LIMIT).toBe(100 * 1024 * 1024);
+    expect(splitOversized([over, at, unknown], AGENT_ATTACHMENT_LIMIT)).toEqual({ items: [at, unknown], rejected: [over] });
   });
 
   test("reads dropped files from the file list, falling back to file items", () => {
