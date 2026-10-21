@@ -138,6 +138,10 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       drafts.set(conversationId, { _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId),
         text, note, updatedAt: Date.now(), source: "agent" });
     },
+    upload: (storageId) => {
+      const upload = uploads.get(storageId);
+      return upload?.filename && upload.mimeType ? { filename: upload.filename, mimeType: upload.mimeType, size: upload.bytes.size } : null;
+    },
   });
   const chatSummaries = async () => {
     const result = await controls.directory.summaries();
