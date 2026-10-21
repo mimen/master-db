@@ -13,10 +13,7 @@ import {
 import { Image } from "expo-image";
 import Reanimated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import * as Clipboard from "expo-clipboard";
-import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
-import { cacheDirectory, deleteAsync, EncodingType, writeAsStringAsync } from "expo-file-system/legacy";
+import { deleteAsync } from "expo-file-system/legacy";
 import * as Location from "expo-location";
 import {
   AudioModule,
@@ -32,6 +29,7 @@ import { api } from "@/lib/api";
 import { chatIsSMS } from "@/lib/chat-service";
 import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
 import { uploadAndSendAttachment } from "@/lib/attachment-upload";
+import { pasteNativeImage, pickFiles, pickPhotos, takePhoto } from "@/lib/attachment-pickers";
 import { setTyping as sendTyping } from "@/lib/presence-api";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { sendWithSuggestionFeedback } from "@/lib/ai-api";
@@ -728,33 +726,6 @@ export function Composer({
     };
   }, [stage, dropTargetRef, onDragActiveChange]);
 
-  const pasteNativeImage = async (): Promise<void> => {
-    try {
-      const image = await Clipboard.getImageAsync({ format: "png" });
-      if (!image) {
-        showToast("The clipboard doesn't contain an image");
-        return;
-      }
-      if (!cacheDirectory) throw new Error("Expo cache directory is unavailable");
-      const separator = image.data.indexOf(",");
-      if (separator < 0) throw new Error("Clipboard image data is malformed");
-      const filename = `clipboard-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.png`;
-      const uri = `${cacheDirectory}${filename}`;
-      await writeAsStringAsync(uri, image.data.slice(separator + 1), { encoding: EncodingType.Base64 });
-      stage([
-        {
-          uri,
-          name: filename,
-          mime: "image/png",
-          isImage: true,
-          cleanup: "cache-file",
-        },
-      ]);
-    } catch {
-      showToast("Couldn't paste the image. Try copying it again.");
-    }
-  };
-
   const addCurrentLocation = async (): Promise<void> => {
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const blocked = webLocationBlockReason(window.isSecureContext, window.location.hostname);
@@ -827,56 +798,6 @@ ${url}` : url;
     return true;
   };
 
-  const pickPhotos = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images", "videos"],
-      allowsMultipleSelection: true,
-      selectionLimit: 8,
-      quality: 0.9,
-    });
-    stage(
-      (result.assets ?? []).map((asset) => ({
-        uri: asset.uri,
-        name: asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
-        mime: asset.mimeType ?? "image/jpeg",
-        isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
-        cleanup: null,
-      })),
-    );
-  };
-
-  const takePhoto = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      showToast("Camera access is off. Allow it in Settings.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.9, mediaTypes: ["images", "videos"] });
-    stage(
-      (result.assets ?? []).map((asset) => ({
-        uri: asset.uri,
-        name: asset.fileName ?? `photo.${asset.uri.split(".").pop() ?? "jpg"}`,
-        mime: asset.mimeType ?? "image/jpeg",
-        isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
-        cleanup: null,
-      })),
-    );
-  };
-
-  const pickFiles = async () => {
-    const result = await DocumentPicker.getDocumentAsync({ multiple: true });
-    if (result.canceled) return;
-    stage(
-      (result.assets ?? []).map((asset) => ({
-        uri: asset.uri,
-        name: asset.name,
-        mime: asset.mimeType ?? "application/octet-stream",
-        isImage: (asset.mimeType ?? "").startsWith("image/"),
-        cleanup: null,
-      })),
-    );
-  };
-
   const stageContact = (contact: Contact) => {
     stage([
       {
@@ -895,14 +816,15 @@ ${url}` : url;
   const scheduleBtnRef = useRef<View>(null);
   const serviceBtnRef = useRef<View>(null);
   const openAttachSheet = () => {
-    const actions = [{ label: "Photo or Video Library", onPress: () => void pickPhotos() }];
+    const pick = (picker: () => Promise<PendingAttachment[]>) => () => void picker().then(stage);
+    const actions = [{ label: "Photo or Video Library", onPress: pick(pickPhotos) }];
     if (Platform.OS !== "web") {
-      actions.unshift({ label: "Take Photo or Video", onPress: () => void takePhoto() });
-      actions.push({ label: "Paste Image", onPress: () => void pasteNativeImage() });
+      actions.unshift({ label: "Take Photo or Video", onPress: pick(takePhoto) });
+      actions.push({ label: "Paste Image", onPress: pick(pasteNativeImage) });
     }
     actions.push({ label: "Current Location", onPress: () => void addCurrentLocation() });
     actions.push({ label: "Contact", onPress: () => void setContactPickerOpen(true) });
-    actions.push({ label: "File", onPress: () => void pickFiles() });
+    actions.push({ label: "File", onPress: pick(pickFiles) });
     // Desktop: popover mounted at the + button (opens upward); mobile keeps the sheet.
     if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && attachBtnRef.current) {
       attachBtnRef.current.measureInWindow((x, y) => showSheet({ actions, anchor: { x, y } }));

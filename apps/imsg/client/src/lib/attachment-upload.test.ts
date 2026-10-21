@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { uploadAndSendAttachmentVia, type AttachmentUploadDeps } from "./attachment-upload";
+import { storeAttachmentVia, uploadAndSendAttachmentVia, type AttachmentUploadDeps } from "./attachment-upload";
 import type { Message } from "@shared/types";
 
 function harness() {
@@ -20,6 +20,12 @@ test("uploads raw bytes, finalizes before enqueue, and preserves caption and voi
   const options = { uri: "file://memo.m4a", filename: "memo.m4a", mimeType: "audio/mp4", caption: "listen", isAudioMessage: true };
   expect(await uploadAndSendAttachmentVia(deps, "chat", options)).toBe(message);
   expect(calls).toEqual([{ uri: options.uri }, "issue", { url: "https://convex.test/upload", type: "audio/mp4", body: "voice" }, { finalize: { storageId: "file", filename: "memo.m4a", mimeType: "audio/mp4" } }, { chat: "chat", payload: { kind: "sendAttachment", storageId: "file", filename: "memo.m4a", mimeType: "audio/mp4", caption: "listen", isAudioMessage: true } }]);
+});
+
+test("storing for an agent ask uploads and finalizes, reports the size, and sends nothing", async () => {
+  const { deps, calls } = harness();
+  expect(await storeAttachmentVia(deps, { blob: new Blob(["photo"]), filename: "photo.png", mimeType: "image/png" })).toEqual({ storageId: "file" as never, size: 5 });
+  expect(calls).toEqual(["issue", { url: "https://convex.test/upload", type: "image/png", body: "photo" }, { finalize: { storageId: "file", filename: "photo.png", mimeType: "image/png" } }]);
 });
 
 test("accepts a blob without reading a URI", async () => {
