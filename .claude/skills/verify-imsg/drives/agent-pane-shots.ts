@@ -117,10 +117,13 @@ test("agent-pane-shots: batch 2 in light and dark, running, stopped, and finishe
   await both(page, pane, "staged");
   await input.press("Enter");
   const turn = pane.getByTestId("agent-turn").first();
-  await expect(turn.getByRole("button", { name: "Worked for 2m 5s" })).toBeVisible();
+  await expect(turn.getByRole("button", { name: "Worked for 2m 5s · Sonnet 5.5" })).toBeVisible();
+  const newChat = pane.getByRole("button", { name: "New chat" });
+  await expect(newChat).toBeEnabled();
+  expect(await newChat.evaluate((node) => getComputedStyle(node).outlineStyle), "New chat, re-enabled after a pointer click, draws no focus ring").toBe("none");
   await both(page, pane, "folded");
 
-  await turn.getByRole("button", { name: "Worked for 2m 5s" }).click();
+  await turn.getByRole("button", { name: "Worked for 2m 5s · Sonnet 5.5" }).click();
   await turn.getByRole("button", { name: "Ran 3 commands, read 2 files, and 4 other actions" }).click();
   await turn.getByRole("button", { name: "Check the guest lists" }).click();
   await turn.getByRole("button", { name: "Searched the thread for names and emails" }).click();
