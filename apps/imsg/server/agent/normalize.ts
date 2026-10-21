@@ -15,12 +15,21 @@ const DETAIL_LIMIT = 4000;
 const QUESTION_TOOL = "AskUserQuestion";
 const TODO_TOOL = "TodoWrite";
 
-const CREDENTIAL_READ = /\bop\s+(?:read|item\s+get)\b/;
+// A command word: the start of the command or of a pipeline, list, subshell, substitution, or
+// quoted `bash -c` script, past any variable assignments and plain wrappers.
+const COMMAND_WORD = String.raw`(?:^|[;&|(\x60\n"']|\$\()\s*(?:(?:\w+=\S*|sudo|env|exec|command|nohup|time|xargs|eval)\s+)*`;
+// The 1Password CLI under any subcommand, a Keychain password lookup, or any op:// reference.
+const CREDENTIAL_COMMAND = new RegExp(String.raw`${COMMAND_WORD}(?:(?:\S*/)?op(?:[\s)"'\x60;&|]|$)|security\s+find-[\w-]*-password\b)|op://`);
+const SECRET_WORDS = /op:\/\/|\b(?:tokens?|passwords?|passphrases?|secrets?|credentials?|keys?)\b/i;
+const BACKGROUND_TASK = /running in background with ID: (\w+)/;
 const SKILL_FILE = /\/skills\/([^/]+)\/(?:SKILL\.md$|references\/)/;
 const CONVEX_FUNCTION = /^[\w./-]+:[\w.]+$/;
 
-/** A 1Password read: the step shows no command, input, or output, since any of them can carry the secret. */
-export const isCredentialRead = (name: string, input: Fields) => name === "Bash" && CREDENTIAL_READ.test(String(input.command ?? ""));
+/** The model's description when it names no secret; a credential step never shows its command. */
+function credentialSummary(input: Fields): string {
+  const description = typeof input.description === "string" ? input.description.replace(/\s+/g, " ").trim() : "";
+  return description && !SECRET_WORDS.test(description) ? description.slice(0, 160) : "Used a credential";
+}
 
 /** `bunx convex run [flags] <module>:<fn> [args]` names its function; the label is the function's own name. */
 function convexFunction(command: string): string | null {
@@ -31,7 +40,6 @@ function convexFunction(command: string): string | null {
 
 function bashSummary(input: Fields): string {
   const command = String(input.command ?? "");
-  if (CREDENTIAL_READ.test(command)) return "Read a credential";
   const convex = convexFunction(command);
   if (convex) return `Ran ${convex}`;
   return typeof input.description === "string" && input.description.trim() ? input.description : `Ran: ${command}`;
@@ -126,9 +134,19 @@ export class Normalizer {
   private tools = new Map<string, ToolEntry>();
   /** The turn's todos item key, taken from its first TodoWrite call. */
   private todosKey: string | null = null;
+  /**
+   * Credential steps' tool_use ids, and the ids of their background tasks, whose output the agent
+   * can read back later through a task's output file. Kept for the session.
+   */
+  private credentialTools = new Set<string>();
+  private credentialTasks = new Set<string>();
 
   consume(message: SDKMessage, now: number, steerPending = false): Item[] {
     if ("parent_tool_use_id" in message && message.parent_tool_use_id) return [];
+    if (message.type === "system" && (message.subtype === "task_started" || message.subtype === "task_notification")) {
+      if (message.tool_use_id && this.credentialTools.has(message.tool_use_id)) this.credentialTasks.add(message.task_id);
+      return [];
+    }
     if (message.type === "stream_event") return this.streamEvent(message.event, now);
     if (message.type === "assistant") return this.assistant(message.message.id, message.uuid, message.message.content, now);
     if (message.type === "user") return this.toolResults(message.message.content, now);
@@ -198,8 +216,12 @@ export class Normalizer {
         items.push({ key: this.todosKey, entry: { kind: "todos", todos: todoList(block.input) } });
       } else if (block.type === "tool_use" && block.name !== QUESTION_TOOL) {
         const fields = typeof block.input === "object" && block.input !== null ? block.input as Fields : {};
-        const input = isCredentialRead(block.name, fields) ? {} : { input: clip(JSON.stringify(block.input)) };
-        const entry: ToolEntry = { kind: "tool", name: block.name, summary: toolSummary(block.name, block.input), ...input, status: "running", startedAt: now };
+        const credential = this.isCredential(block.name, fields);
+        if (credential) this.credentialTools.add(block.id);
+        const shown = credential
+          ? { summary: credentialSummary(fields) }
+          : { summary: toolSummary(block.name, block.input), input: clip(JSON.stringify(block.input)) };
+        const entry: ToolEntry = { kind: "tool", name: block.name, ...shown, status: "running", startedAt: now };
         this.tools.set(block.id, entry);
         items.push({ key: block.id, entry });
       }
@@ -216,15 +238,24 @@ export class Normalizer {
       if (!started) continue;
       this.tools.delete(block.tool_use_id);
       const status = block.is_error ? "failed" : "done";
-      // A credential read carries no input, and its output is the secret itself.
-      if (started.input === undefined) {
+      const output = resultText(block.content);
+      // A credential step's output can be the secret itself.
+      if (this.credentialTools.has(block.tool_use_id)) {
+        const task = BACKGROUND_TASK.exec(output)?.[1];
+        if (task) this.credentialTasks.add(task);
         items.push({ key: block.tool_use_id, entry: { ...started, status, endedAt: now } });
         continue;
       }
-      const output = resultText(block.content);
       items.push({ key: block.tool_use_id, entry: { ...started, status, endedAt: now, ...(output ? { detail: clip(output) } : {}) } });
     }
     return items;
+  }
+
+  /** A credential command, or any step that touches a credential command's background task. */
+  private isCredential(name: string, input: Fields): boolean {
+    if (name === "Bash" && CREDENTIAL_COMMAND.test(String(input.command ?? ""))) return true;
+    const text = JSON.stringify(input);
+    return text.includes("op://") || [...this.credentialTasks].some((task) => text.includes(task));
   }
 
   private finish(block: TextBlock, text: string, now: number): Item[] {

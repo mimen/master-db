@@ -93,18 +93,75 @@ describe("Normalizer", () => {
     expect(label("Bash", { command: "bunx convex run todoist:sync.runInitialSync" })).toMatchObject({ summary: "Ran runInitialSync" });
   });
 
-  test("a credential read never stores its command, input, or output", () => {
+  const hidden = (summary: string, startedAt = 0, endedAt?: number, name = "Bash"): Item["entry"] =>
+    ({ kind: "tool", name, summary, status: endedAt === undefined ? "running" : "done", startedAt, ...(endedAt === undefined ? {} : { endedAt }) });
+  const step = (command: string, description?: string) =>
+    new Normalizer().consume(assistant("m", "f", { type: "tool_use", id: "t", name: "Bash", input: { command, ...(description ? { description } : {}) } }), 0)[0]?.entry;
+
+  test("a credential step never stores its command, input, or output", () => {
     const normalizer = new Normalizer();
     const command = `op read "op://Sol/Todoist Env/notesPlain"`;
     const items = run(normalizer, [
       [assistant("m", "f", { type: "tool_use", id: "t_op", name: "Bash", input: { command, description: "Read the Todoist token" } }), 0],
       [toolResult("t_op", "TODOIST_TOKEN=abc123"), 4],
     ]);
-    expect(items).toEqual([
-      { key: "t_op", entry: { kind: "tool", name: "Bash", summary: "Read a credential", status: "running", startedAt: 0 } },
-      { key: "t_op", entry: { kind: "tool", name: "Bash", summary: "Read a credential", status: "done", startedAt: 0, endedAt: 4 } },
-    ]);
+    expect(items).toEqual([{ key: "t_op", entry: hidden("Used a credential") }, { key: "t_op", entry: hidden("Used a credential", 0, 4) }]);
     expect(JSON.stringify(items)).not.toMatch(/op:\/\/|abc123|Todoist token/);
+  });
+
+  test("any 1Password CLI call, a Keychain password lookup, or an op:// reference is a credential step", () => {
+    const credentials = [
+      "op item get Todoist --fields password", "op document get deploy-key > key.pem", "op inject -i env.tpl -o .env",
+      "op run --env-file=.env -- bunx convex run todoist:sync.runInitialSync", "eval $(op signin)", "op whoami",
+      "cd ~/x && OP_ACCOUNT=my op read x", `TOKEN=$(op read x) curl -H "Authorization: $TOKEN" api`, "/opt/homebrew/bin/op item list",
+      "bash -c 'op read x'", "env OP_ACCOUNT=me op read x", "security find-generic-password -s todoist -w",
+      "security find-internet-password -a me -w", `curl -H "$(cat headers)" "https://x.test/?ref=op://Sol/x"`, "echo hi | op inject",
+    ];
+    for (const command of credentials) expect({ command, entry: step(command) }).toEqual({ command, entry: hidden("Used a credential") });
+    for (const command of ["git stop", "cat scope.txt", "echo top", "security list-keychains", "rg -n develop src", "ls ./op-notes"]) {
+      expect({ command, shown: "input" in (step(command) ?? {}) }).toEqual({ command, shown: true });
+    }
+  });
+
+  test("a credential step keeps a description that names no secret", () => {
+    expect(step("op run --env-file=.env -- bun sync.ts", "Sync Todoist tasks")).toEqual(hidden("Sync Todoist tasks"));
+    for (const description of ["Read the Todoist API key", "Get the deploy password", "Fetch op://Sol/x", "Load secrets", "Grab the token"]) {
+      expect(step("op read x", description)).toEqual(hidden("Used a credential"));
+    }
+  });
+
+  test("a backgrounded credential command's output stays hidden when it comes back later", () => {
+    const normalizer = new Normalizer();
+    const output = "/private/tmp/claude-501/tasks/b7k2q9x1.output";
+    const items = run(normalizer, [
+      [assistant("m", "f1", { type: "tool_use", id: "t_bg", name: "Bash", input: { command: "op read op://Sol/x", run_in_background: true } }), 0],
+      [sdk({ type: "system", subtype: "task_started", task_id: "b7k2q9x1", tool_use_id: "t_bg", description: "op read op://Sol/x" }), 0],
+      [toolResult("t_bg", `Command running in background with ID: b7k2q9x1. Output is being written to: ${output}`), 1],
+      [sdk({ type: "system", subtype: "task_notification", task_id: "b7k2q9x1", tool_use_id: "t_bg", status: "completed", output_file: output, summary: "op read op://Sol/x" }), 2],
+      [assistant("m", "f2", { type: "tool_use", id: "t_read", name: "Read", input: { file_path: output } }), 3],
+      [toolResult("t_read", "sk-live-secret"), 4],
+      [assistant("m", "f3", { type: "tool_use", id: "t_tail", name: "Bash", input: { command: `tail -5 ${output}`, description: "Check the output" } }), 5],
+      [toolResult("t_tail", "sk-live-secret"), 6],
+    ]);
+    expect(items).toEqual([
+      { key: "t_bg", entry: hidden("Used a credential") },
+      { key: "t_bg", entry: hidden("Used a credential", 0, 1) },
+      { key: "t_read", entry: hidden("Used a credential", 3, undefined, "Read") },
+      { key: "t_read", entry: hidden("Used a credential", 3, 4, "Read") },
+      { key: "t_tail", entry: hidden("Check the output", 5) },
+      { key: "t_tail", entry: hidden("Check the output", 5, 6) },
+    ]);
+    expect(JSON.stringify(items)).not.toMatch(/sk-live|op:\/\/|b7k2q9x1/);
+  });
+
+  test("a credential command backgrounded by its task id alone is still tracked", () => {
+    const normalizer = new Normalizer();
+    const items = run(normalizer, [
+      [assistant("m", "f1", { type: "tool_use", id: "t_bg", name: "Bash", input: { command: "op read x" } }), 0],
+      [sdk({ type: "system", subtype: "task_started", task_id: "q1w2e3", tool_use_id: "t_bg", description: "op read x" }), 0],
+      [assistant("m", "f2", { type: "tool_use", id: "t_read", name: "Read", input: { file_path: "/tmp/tasks/q1w2e3.output" } }), 3],
+    ]);
+    expect(items.at(-1)).toEqual({ key: "t_read", entry: hidden("Used a credential", 3, undefined, "Read") });
   });
 
   test("TodoWrite becomes one todos item per turn and no tool step", () => {
