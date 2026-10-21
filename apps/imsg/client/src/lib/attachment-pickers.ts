@@ -14,6 +14,7 @@ function fromImagePicker(result: ImagePicker.ImagePickerResult): PendingAttachme
     mime: asset.mimeType ?? "image/jpeg",
     isImage: (asset.mimeType ?? "image/jpeg").startsWith("image/"),
     cleanup: null,
+    ...(asset.fileSize === undefined ? {} : { size: asset.fileSize }),
   }));
 }
 
@@ -44,6 +45,7 @@ export async function pickFiles(): Promise<PendingAttachmentAsset[]> {
     mime: asset.mimeType ?? "application/octet-stream",
     isImage: (asset.mimeType ?? "").startsWith("image/"),
     cleanup: null,
+    ...(asset.size === undefined ? {} : { size: asset.size }),
   }));
 }
 

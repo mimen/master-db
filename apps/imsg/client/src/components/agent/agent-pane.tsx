@@ -61,7 +61,7 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
     if (!conversationId) return;
     const steer = resolveComposerDispatchMode({ running, alternateModifier: alternate }) === "steer";
     const key = agentItemKey();
-    const meta = attachments.map((attachment) => ({ filename: attachment.name, mimeType: attachment.mime, size: attachment.blob?.size ?? 0 }));
+    const meta = attachments.map((attachment) => ({ filename: attachment.name, mimeType: attachment.mime, size: attachment.blob?.size ?? attachment.size ?? 0 }));
     if (attachments.length) attachmentPreviews.set(key, attachments.map((attachment) => attachment.isImage ? attachment.uri : undefined));
     setPending((current) => [...current, pendingAsk(key, text, steer, meta, Date.now())]);
     follow();
