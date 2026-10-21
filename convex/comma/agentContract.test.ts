@@ -117,7 +117,7 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
   expect(await milad.query(api.comma.agent.liveChat, { conversationId })).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 });
   expect(await milad.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "Yes, Friday works!", source: "agent", note: "Confirms Friday" });
 
-  const image = new Uint8Array([137, 80, 78, 71, 13, 10]);
+  const image = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));
   const storageId = await t.run((ctx) => ctx.storage.store(new Blob([image], { type: "image/png" })));
   await milad.mutation(api.comma.uploads.finalizeUpload, { storageId, filename: "menu.png", mimeType: "image/png" });
   const imageUrl = await t.run((ctx) => ctx.storage.getUrl(storageId));
@@ -148,9 +148,9 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
   await eventually(async () => {
     const entries = (await milad.query(api.comma.agent.listItems, { chatId })).slice(4).map(({ entry }) => entry);
     expect(entries).toEqual([
-      { kind: "user", text: "What does this menu say?", steer: false, attachments: [{ filename: "menu.png", mimeType: "image/png", size: 6 }] },
+      { kind: "user", text: "What does this menu say?", steer: false, attachments: [{ filename: "menu.png", mimeType: "image/png", size: image.byteLength }] },
       { kind: "todos", todos: [{ content: "Read the menu", activeForm: "Reading the menu", status: "in_progress" }] },
-      { kind: "tool", name: "Bash", summary: "Read a credential", status: "done", startedAt: 5_000, endedAt: 5_000 },
+      { kind: "tool", name: "Bash", summary: "Used a credential", status: "done", startedAt: 5_000, endedAt: 5_000 },
       { kind: "assistant", text: "Tacos, three ways.", streaming: false },
       { kind: "turn_end", outcome: "completed", durationMs: 0, model: "gpt-6-luna", effort: "low" },
     ]);
