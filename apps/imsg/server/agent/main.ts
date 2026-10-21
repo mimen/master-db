@@ -60,6 +60,10 @@ const CLAUDEX_ENV = {
   ANTHROPIC_DEFAULT_SONNET_MODEL: "gpt-6.1-sol",
   ANTHROPIC_DEFAULT_HAIKU_MODEL: "gpt-6-luna(low)",
   CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1050000",
+  // The bundled CLI turns task tools off for these models, and the Mini's user settings turn on
+  // TaskCreate/TaskUpdate instead; the todos item reads TodoWrite (proven on Opus 5.5 and Luna).
+  CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+  CLAUDE_CODE_ENABLE_TASKS: "0",
 };
 const CLAUDEX_CLEARED = ["CLAUDE_CODE_SUBAGENT_MODEL", "CLAUDE_CODE_AUTO_COMPACT_WINDOW"];
 // claudex.settings.json: Muse is pinned below the envelope, at Meta's real window.
