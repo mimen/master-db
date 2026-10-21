@@ -310,17 +310,18 @@ describe("Sessions", () => {
 
   test("a message's attachments reach Claude as image blocks ahead of text that names each saved file", async () => {
     const h = harness();
-    h.files.set("https://files/menu", new Response(new Uint8Array([137, 80, 78, 71])));
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    h.files.set("https://files/menu", new Response(Buffer.from(png, "base64")));
     h.files.set("https://files/notes", new Response("guest list"));
     await h.send("a", {
       kind: "message", text: "what is this", steer: false, attachments: [
-        { url: "https://files/menu", filename: "menu.png", mimeType: "image/png", size: 4 },
+        { url: "https://files/menu", filename: "menu.png", mimeType: "image/png", size: 70 },
         { url: "https://files/notes", filename: "notes.txt", mimeType: "text/plain", size: 10 },
       ],
     });
     const dir = join(scratchRoot, "a", "attachments", "cmd1");
     expect(h.queries[0].sent[0].message.content).toEqual([
-      { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw==" } },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: png } },
       { type: "text", text: `what is this\n\n[Attached image "menu.png" is saved at: ${dir}/menu.png]\n\n[Attached file "notes.txt" is saved at: ${dir}/notes.txt]` },
     ]);
     expect(await Bun.file(join(dir, "notes.txt")).text()).toBe("guest list");
