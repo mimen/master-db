@@ -89,12 +89,13 @@ describe("comma agent main", () => {
       COMMA_BRIDGE_SECRET: "s", BB_PASSWORD: "s", IMSG_SERVER_SECRET: "s", IMSG_IDENTITY_KEY: "s", AI_GATEWAY_KEY: "gateway-key",
       CLAUDE_GPT_GATEWAY_API_KEY: "gateway-key", OTHER_SECRET: "s", DB_PASSWORD: "s", GITHUB_TOKEN: "s",
     };
-    const child = childEnv(config, { ...secrets, PATH: "/bin", HOME: "/Users/test", TOKEN_PATH: "/tmp/x" });
+    const child = childEnv(config, { ...secrets, PATH: "/bin", HOME: "/Users/test", TOKEN_PATH: "/tmp/x", CLAUDE_CODE_ENABLE_TASKS: "1" });
     expect(child).toEqual({
       PATH: "/bin", HOME: "/Users/test", TOKEN_PATH: "/tmp/x",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317", ANTHROPIC_API_KEY: "gateway-key", COMMA_AGENT: "1",
       ANTHROPIC_DEFAULT_FABLE_MODEL: "claude-fable-5-1[1m]", ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-5-5[1m]",
       ANTHROPIC_DEFAULT_SONNET_MODEL: "gpt-6.1-sol", ANTHROPIC_DEFAULT_HAIKU_MODEL: "gpt-6-luna(low)", CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1050000",
+      CLAUDE_CODE_ENABLE_TODO_TOOLS: "1", CLAUDE_CODE_ENABLE_TASKS: "0",
     });
   });
 
