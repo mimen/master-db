@@ -15,6 +15,7 @@
     "core:default",
     "core:event:default",
     "core:window:allow-close",
+    "core:window:allow-set-badge-count",
     "core:window:allow-start-dragging",
     "opener:default"
   ]

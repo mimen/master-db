@@ -5,6 +5,7 @@ import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@
 import { conversationToChat, withDrafts } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { publishKnownConversations } from "@/lib/convex-commands";
+import { setDesktopBadgeCount } from "@/lib/desktop-shell";
 import { usePendingFlags } from "@/lib/pending-flags";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
@@ -104,14 +105,15 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
   // Dock/home-screen unread badge (Safari web apps + installed PWAs).
   useEffect(() => {
     if (Platform.OS !== "web") return;
+    // "known", not "all": the dock badge must never count junk or messages
+    // from unrecognised numbers, and "all" now includes both.
+    const unread = all.filter((c) => matchesFilters(c, "unread", "known")).length;
+    if (setDesktopBadgeCount(unread)) return;
     const nav = navigator as Navigator & {
       setAppBadge?: (n: number) => Promise<void>;
       clearAppBadge?: () => Promise<void>;
     };
     if (!nav.setAppBadge) return;
-    // "known", not "all": the dock badge must never count junk or messages
-    // from unrecognised numbers, and "all" now includes both.
-    const unread = all.filter((c) => matchesFilters(c, "unread", "known")).length;
     if (unread > 0) void nav.setAppBadge(unread).catch(() => undefined);
     else void nav.clearAppBadge?.().catch(() => undefined);
   }, [all]);

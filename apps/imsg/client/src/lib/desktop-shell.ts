@@ -29,6 +29,7 @@ type TauriGlobal = {
       close: () => Promise<void>;
       isFullscreen?: () => Promise<boolean>;
       onResized?: (handler: () => void) => Promise<TauriListenUnlisten>;
+      setBadgeCount?: (count?: number) => Promise<void>;
     };
   };
 };
@@ -75,6 +76,20 @@ export async function openUrlViaShell(
   } catch {
     return false;
   }
+}
+
+/**
+ * WKWebView has no `navigator.setAppBadge`, so the shell sets the Dock badge
+ * natively. False outside Tauri; 0 clears the badge.
+ */
+export function setDesktopBadgeCount(
+  count: number,
+  win: DesktopShellWindow | undefined = defaultWindow(),
+): boolean {
+  const currentWindow = tauriGlobal(win)?.window.getCurrentWindow();
+  if (!currentWindow?.setBadgeCount) return false;
+  void currentWindow.setBadgeCount(count > 0 ? count : undefined).catch(() => undefined);
+  return true;
 }
 
 /**

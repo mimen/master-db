@@ -7,6 +7,7 @@ import {
   isDesktopShell,
   readShellReleaseState,
   restartToStagedShell,
+  setDesktopBadgeCount,
   SHELL_ACTIVATE_COMMAND,
   SHELL_RELEASE_STATE_COMMAND,
   SHELL_RESTART_COMMAND,
@@ -36,6 +37,32 @@ describe("isDesktopShell", () => {
 
   test("true when the native-shell init flag is set", () => {
     expect(isDesktopShell({ __IMSG_NATIVE_SHELL__: true })).toBe(true);
+  });
+});
+
+describe("Dock badge", () => {
+  test("sets the unread count and clears it at zero", async () => {
+    const calls: Array<number | undefined> = [];
+    const win: DesktopShellWindow = {
+      __TAURI__: {
+        event: { listen: async () => () => undefined },
+        window: {
+          getCurrentWindow: () => ({
+            close: async () => undefined,
+            setBadgeCount: async (count?: number) => {
+              calls.push(count);
+            },
+          }),
+        },
+      },
+    };
+    expect(setDesktopBadgeCount(3, win)).toBe(true);
+    expect(setDesktopBadgeCount(0, win)).toBe(true);
+    expect(calls).toEqual([3, undefined]);
+  });
+
+  test("defers to the browser badge outside Tauri", () => {
+    expect(setDesktopBadgeCount(3, {})).toBe(false);
   });
 });
 
