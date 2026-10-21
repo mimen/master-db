@@ -13,7 +13,7 @@ export type UserContent = SDKUserMessage["message"]["content"];
 type ImageType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
 
 /** The pane refuses a larger file before upload; one that arrives anyway is not downloaded. */
-export const ATTACHMENT_LIMIT = 100 * 1024 * 1024;
+const ATTACHMENT_LIMIT = 100 * 1024 * 1024;
 // Anthropic's limits: a 2000px edge, and 5 MB of base64, which is 3.75 MB of bytes. A larger
 // image fails the whole turn, so it is fitted first.
 const IMAGE_EDGE = 2000;
