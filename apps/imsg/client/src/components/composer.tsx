@@ -29,7 +29,6 @@ import { api } from "@/lib/api";
 import { chatIsSMS } from "@/lib/chat-service";
 import { INPUT_BORDER_W, INPUT_PADDING_H, MIRROR_INSET_H } from "@/lib/composer-metrics";
 import { uploadAndSendAttachment } from "@/lib/attachment-upload";
-import { pasteNativeImage, pickFiles, pickPhotos, takePhoto } from "@/lib/attachment-pickers";
 import { setTyping as sendTyping } from "@/lib/presence-api";
 import { messagingCommandError } from "@/lib/messaging-api";
 import { sendWithSuggestionFeedback } from "@/lib/ai-api";
@@ -816,15 +815,17 @@ ${url}` : url;
   const scheduleBtnRef = useRef<View>(null);
   const serviceBtnRef = useRef<View>(null);
   const openAttachSheet = () => {
-    const pick = (picker: () => Promise<PendingAttachment[]>) => () => void picker().then(stage);
-    const actions = [{ label: "Photo or Video Library", onPress: pick(pickPhotos) }];
+    // Loaded on use, as in the agent pane, so neither surface pulls the pickers into the first visit.
+    type Pickers = typeof import("@/lib/attachment-pickers");
+    const pick = (name: keyof Pickers) => () => void import("@/lib/attachment-pickers").then((pickers) => pickers[name]()).then(stage);
+    const actions = [{ label: "Photo or Video Library", onPress: pick("pickPhotos") }];
     if (Platform.OS !== "web") {
-      actions.unshift({ label: "Take Photo or Video", onPress: pick(takePhoto) });
-      actions.push({ label: "Paste Image", onPress: pick(pasteNativeImage) });
+      actions.unshift({ label: "Take Photo or Video", onPress: pick("takePhoto") });
+      actions.push({ label: "Paste Image", onPress: pick("pasteNativeImage") });
     }
     actions.push({ label: "Current Location", onPress: () => void addCurrentLocation() });
     actions.push({ label: "Contact", onPress: () => void setContactPickerOpen(true) });
-    actions.push({ label: "File", onPress: pick(pickFiles) });
+    actions.push({ label: "File", onPress: pick("pickFiles") });
     // Desktop: popover mounted at the + button (opens upward); mobile keeps the sheet.
     if (Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth >= 768 && attachBtnRef.current) {
       attachBtnRef.current.measureInWindow((x, y) => showSheet({ actions, anchor: { x, y } }));

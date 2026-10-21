@@ -13,7 +13,6 @@ import type { AgentEffort } from "@/lib/agent-api";
 import { AGENT_EFFORTS, AGENT_MODELS, withModel, type AgentModel, type AgentModelChoice } from "@/lib/agent-models";
 import { stepPromptHistory } from "@/lib/agent-transcript";
 import { useActionSheet } from "@/lib/action-sheet";
-import { pasteNativeImage, pickFiles, pickPhotos, takePhoto } from "@/lib/attachment-pickers";
 import { filesFromTransfer, MAX_PENDING_ATTACHMENTS, mergePendingAttachments, type PendingAttachmentAsset } from "@/lib/attachments";
 import { registerFocusTarget, setListMode } from "@/lib/keyboard/controller";
 import { showToast } from "@/lib/toast";
@@ -173,13 +172,15 @@ export function AgentInput({ running, history, choice, onChoice, onSend, onStop 
   }, []);
 
   const openPicker = () => {
-    const pick = (picker: () => Promise<StagedAttachment[]>) => () => void picker().then(stage);
-    const actions = [{ label: "Photo or Video Library", onPress: pick(pickPhotos) }];
+    // Loaded on use: a static import would put the pickers, which the composer shares, in every first visit's bundle.
+    type Pickers = typeof import("@/lib/attachment-pickers");
+    const pick = (name: keyof Pickers) => () => void import("@/lib/attachment-pickers").then((pickers) => pickers[name]()).then(stage);
+    const actions = [{ label: "Photo or Video Library", onPress: pick("pickPhotos") }];
     if (Platform.OS !== "web") {
-      actions.unshift({ label: "Take Photo or Video", onPress: pick(takePhoto) });
-      actions.push({ label: "Paste Image", onPress: pick(pasteNativeImage) });
+      actions.unshift({ label: "Take Photo or Video", onPress: pick("takePhoto") });
+      actions.push({ label: "Paste Image", onPress: pick("pasteNativeImage") });
     }
-    actions.push({ label: "File", onPress: pick(pickFiles) });
+    actions.push({ label: "File", onPress: pick("pickFiles") });
     if (Platform.OS === "web" && attachRef.current) attachRef.current.measureInWindow((x, y) => showSheet({ actions, anchor: { x, y } }));
     else showSheet({ actions });
   };

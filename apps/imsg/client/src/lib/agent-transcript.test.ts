@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AgentChat, AgentEntry, AgentItem, AgentQuestion } from "./agent-api";
+import type { AgentEntry, AgentItem, AgentQuestion } from "./agent-api";
 import {
-  agentStripState,
   formatWorking,
   liveStatus,
   promptHistory,
@@ -162,25 +161,6 @@ describe("prompt history", () => {
     expect(stepPromptHistory(history, null, "draft", "back")).toBeNull();
     expect(stepPromptHistory(history, 2, "steer!", "back")).toBeNull();
     expect(stepPromptHistory(history, null, "", "forward")).toBeNull();
-  });
-});
-
-describe("state strip", () => {
-  const chat = (state: AgentChat["state"]) => ({ state } as AgentChat);
-  const draft = (used: boolean) => item({ kind: "draft", text: "hey", placed: "pane", used });
-
-  test("asking beats working, and nothing shows for an idle chat with no draft", () => {
-    expect(agentStripState(chat("waiting_input"), [])).toBe("asking");
-    expect(agentStripState(chat("running"), [])).toBe("working");
-    expect(agentStripState(chat("pending"), [])).toBe("working");
-    expect(agentStripState(chat("idle"), [user("hi"), assistant("hello")])).toBeNull();
-    expect(agentStripState(null, [draft(false)])).toBeNull();
-  });
-
-  test("only an unused draft from the latest turn counts", () => {
-    expect(agentStripState(chat("idle"), [user("draft it"), draft(false)])).toBe("drafted");
-    expect(agentStripState(chat("idle"), [user("draft it"), draft(true)])).toBeNull();
-    expect(agentStripState(chat("idle"), [user("draft it"), draft(false), user("thanks"), assistant("np")])).toBeNull();
   });
 });
 

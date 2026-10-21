@@ -1,5 +1,5 @@
 import { liveThoughtLine } from "../components/agent/vendor/live-thought-line";
-import type { AgentChat, AgentChatState, AgentEntry, AgentItem, AgentQuestion } from "./agent-api";
+import type { AgentChatState, AgentEntry, AgentItem, AgentQuestion } from "./agent-api";
 
 type Entry<Kind extends AgentEntry["kind"]> = Extract<AgentEntry, { kind: Kind }>;
 
@@ -241,18 +241,6 @@ export function stepPromptHistory(history: readonly string[], index: number | nu
 
 export function agentIsRunning(state: AgentChatState | undefined): boolean {
   return state === "pending" || state === "running" || state === "waiting_input";
-}
-
-export type AgentStripState = "asking" | "working" | "drafted";
-
-/** What the state strip says about the agent while its pane is closed. Only the latest turn counts. */
-export function agentStripState(chat: AgentChat | null | undefined, items: readonly AgentItem[]): AgentStripState | null {
-  if (!chat) return null;
-  if (chat.state === "waiting_input") return "asking";
-  if (chat.state === "running" || chat.state === "pending") return "working";
-  const lastAsk = items.findLastIndex((item) => item.entry.kind === "user");
-  const drafted = items.slice(lastAsk + 1).some((item) => item.entry.kind === "draft" && !item.entry.used);
-  return drafted ? "drafted" : null;
 }
 
 export interface QuestionSelection {
