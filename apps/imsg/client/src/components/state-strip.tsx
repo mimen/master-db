@@ -11,7 +11,7 @@ import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { openAgentPane } from "@/lib/agent-pane";
-import { agentStripState, type AgentStripState } from "@/lib/agent-transcript";
+import { agentStripState, type AgentStripState } from "@/lib/agent-strip";
 import { stripCopy, type StripTone } from "@/lib/state-strip";
 
 import { BlurSwap } from "./motion/blur-swap";

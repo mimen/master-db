@@ -18,7 +18,6 @@ import { agentApi, agentItemKey, type AgentAttachmentMeta, type AgentItem, type 
 import { agentModelChoice, type AgentModelChoice } from "@/lib/agent-models";
 import { attachmentPreviews } from "@/lib/agent-pane";
 import { agentIsRunning, liveStatus, promptHistory, transcriptRows } from "@/lib/agent-transcript";
-import { storeAttachment } from "@/lib/attachment-upload";
 import { useAgentSettings } from "@/lib/settings";
 import { showToast } from "@/lib/toast";
 
@@ -68,6 +67,8 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
     follow();
     Promise.all(attachments.map(async (attachment) => {
       const file = { filename: attachment.name, mimeType: attachment.mime };
+      // Loaded on use, like the pickers: the composer shares this module, and a static import would put it in the first visit.
+      const { storeAttachment } = await import("@/lib/attachment-upload");
       const stored = await storeAttachment(attachment.blob ? { ...file, blob: attachment.blob } : { ...file, uri: attachment.uri });
       return { ...file, ...stored };
     }))
