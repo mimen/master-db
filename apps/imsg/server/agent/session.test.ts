@@ -11,6 +11,7 @@ function harness() {
   let now = 1_000;
   const session = new AgentSession({
     sessionId: "session-1",
+    selection: { model: "claude-opus-5-5", effort: "high" },
     options: { model: "claude-opus-5-5" },
     query,
     now: () => now,
@@ -26,17 +27,18 @@ const question = { question: "Which list?", header: "List", multiSelect: true, o
 
 describe("AgentSession", () => {
   test("a message runs one turn and the result returns the chat to idle", async () => {
-    const { session, sdk, items, states } = harness();
+    const { session, sdk, items, states, advance } = harness();
     await session.send("add them to the guest list", false);
     await settle();
     expect(sdk.sent).toEqual([{ type: "user", message: { role: "user", content: "add them to the guest list" }, parent_tool_use_id: null, session_id: "session-1" }]);
     expect(session.state.kind).toBe("running");
     sdk.emit(sdkText("m1", "Done."));
+    advance(2_500);
     sdk.emit(sdkResult("r1", "Done."));
     await settle();
     expect(session.state.kind).toBe("idle");
     expect(states).toEqual(["running", "idle"]);
-    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "completed", durationMs: 10 }]);
+    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "completed", durationMs: 2_500, model: "claude-opus-5-5", effort: "high" }]);
   });
 
   test("a steer mid-turn goes in with priority now and its empty result does not end the turn", async () => {
@@ -98,7 +100,7 @@ describe("AgentSession", () => {
     expect(sdk.calls).toEqual(["interrupt", "close"]);
     expect(await decision).toMatchObject({ behavior: "deny" });
     expect(items.find((item) => item.key === "toolu_ask" && item.entry.kind === "question" && item.entry.status === "cancelled")).toBeDefined();
-    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "interrupted", durationMs: 5_000 }]);
+    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "interrupted", durationMs: 5_000, model: "claude-opus-5-5", effort: "high" }]);
     expect(states.at(-1)).toBe("interrupted");
     expect(session.live).toBe(false);
     await expect(session.send("again", false)).rejects.toThrow("ended");
@@ -110,7 +112,7 @@ describe("AgentSession", () => {
     sdk.emit({ type: "result", subtype: "error_during_execution", uuid: "r1", is_error: true, duration_ms: 3, errors: ["gateway 502"] });
     await settle();
     expect(states).toEqual(["running", "failed"]);
-    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "failed", durationMs: 3, error: "gateway 502" }]);
+    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "failed", durationMs: 0, error: "gateway 502", model: "claude-opus-5-5", effort: "high" }]);
     expect(sdk.closed).toBe(true);
   });
 
@@ -120,7 +122,7 @@ describe("AgentSession", () => {
     sdk.fail(new Error("spawn bun ENOENT"));
     await settle();
     expect(states.at(-1)).toBe("failed");
-    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "failed", durationMs: 0, error: "spawn bun ENOENT" }]);
+    expect(turnEnds(items)).toEqual([{ kind: "turn_end", outcome: "failed", durationMs: 0, error: "spawn bun ENOENT", model: "claude-opus-5-5", effort: "high" }]);
     expect(errors).toHaveLength(1);
     expect(session.live).toBe(false);
   });

@@ -25,6 +25,18 @@ export class FakeQuery {
     return canUseTool(name, input, { signal, toolUseID, requestId: `request-${toolUseID}` });
   }
 
+  /** Each live selection change, in order; set rejectSwitch to make the CLI refuse the next one. */
+  switches: ({ model: string | undefined } | { effortLevel: unknown })[] = [];
+  rejectSwitch: Error | null = null;
+  async setModel(model?: string) {
+    if (this.rejectSwitch) throw this.rejectSwitch;
+    this.switches.push({ model });
+  }
+  async applyFlagSettings(settings: { effortLevel?: unknown }) {
+    if (this.rejectSwitch) throw this.rejectSwitch;
+    this.switches.push({ effortLevel: settings.effortLevel });
+  }
+
   async interrupt() {
     this.calls.push("interrupt");
     return undefined;

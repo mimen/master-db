@@ -1,14 +1,17 @@
+import { join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { RetryWork } from "../bridge/retry";
+import { userContent } from "./attachments";
 import { newestMessageAt, PACKET_MESSAGES, systemAppend, withThreadDelta } from "./context";
 import type { Chat, ChatId, CommandRow, ConversationId, Port } from "./convex-port";
+import { resolveSelection, type Selection } from "./models";
 import { turnEndItem } from "./normalize";
 import { AgentSession, type QueryFactory } from "./session";
 
 export const MAX_LIVE = 4;
 export const IDLE_CLOSE_MS = 10 * 60_000;
 
-export type SessionOptionsInput = { chatId: ChatId; chat: Chat; sessionId: string; resume: boolean; append: string };
+export type SessionOptionsInput = { chatId: ChatId; chat: Chat; selection: Selection; sessionId: string; resume: boolean; append: string };
 
 export type SessionsDeps = {
   port: Port;
@@ -19,6 +22,9 @@ export type SessionsDeps = {
   reserve: (chatId: ChatId, title: string) => Promise<string>;
   readAddendum: () => string | null;
   options: (input: SessionOptionsInput) => Options;
+  /** The chat's working directory; message attachments are saved under it. */
+  scratch: (chatId: ChatId) => string;
+  fetch: (url: string) => Promise<Response>;
   log?: (message: string) => void;
 };
 
@@ -82,14 +88,17 @@ export class Sessions {
     return next;
   }
 
-  private async handle({ chatId, chat, command }: CommandRow) {
+  private async handle({ _id, chatId, chat, command }: CommandRow) {
     const live = this.current(chatId);
     switch (command.kind) {
       case "message": {
         if (chat.archivedAt) return;
         try {
-          const target = live ?? await this.open(chatId, chat);
-          await target.session.send(await this.withDelta(chatId, target, command.text), command.steer);
+          const selection = resolveSelection(command.model ?? chat.model, command.effort ?? chat.effort);
+          const target = await this.selected(chatId, chat, selection, live);
+          const text = await this.withDelta(chatId, target, command.text);
+          const dir = join(this.deps.scratch(chatId), "attachments", _id);
+          await target.session.send(await userContent(text, command.attachments ?? [], { fetch: this.deps.fetch, dir }), command.steer);
         } catch (error) {
           await this.failChat(chatId, error);
         }
@@ -114,8 +123,25 @@ export class Sessions {
     return live?.session.live ? live : undefined;
   }
 
-  private open(chatId: ChatId, chat: Chat): Promise<Live> {
-    const opened = this.opening.then(() => this.start(chatId, chat));
+  /**
+   * The live session on the message's selection. Every model runs on one gateway environment, so
+   * a switch is live; when the CLI rejects one, the session resumes in a new process on the new
+   * selection. A busy session keeps its turn's selection and switches at the next idle message.
+   */
+  private async selected(chatId: ChatId, chat: Chat, selection: Selection, live: Live | undefined): Promise<Live> {
+    if (!live) return await this.open(chatId, chat, selection);
+    try {
+      await live.session.select(selection);
+      return live;
+    } catch (error) {
+      this.log(`live switch to ${selection.model} at ${selection.effort} failed for ${chatId}, resuming in a new process: ${String(error)}`);
+      await this.closeChat(chatId);
+      return await this.open(chatId, chat, selection);
+    }
+  }
+
+  private open(chatId: ChatId, chat: Chat, selection: Selection): Promise<Live> {
+    const opened = this.opening.then(() => this.start(chatId, chat, selection));
     this.opening = opened.catch(() => {});
     return opened;
   }
@@ -128,7 +154,7 @@ export class Sessions {
     await this.deps.port.post("agentChat", { chatId, state: "failed" });
   }
 
-  private async start(chatId: ChatId, chat: Chat): Promise<Live> {
+  private async start(chatId: ChatId, chat: Chat, selection: Selection): Promise<Live> {
     const { port, now } = this.deps;
     const context = await port.post("agentContext", { conversationId: chat.conversationId, limit: PACKET_MESSAGES });
     const existing = chat.sessionId ?? this.sessionIds.get(chatId);
@@ -139,7 +165,8 @@ export class Sessions {
     const append = systemAppend({ addendum: this.deps.readAddendum(), conversationId: chat.conversationId, context, now: now(), timeZone: this.deps.timeZone });
     const session = new AgentSession({
       sessionId,
-      options: this.deps.options({ chatId, chat, sessionId, resume: Boolean(existing), append }),
+      selection,
+      options: this.deps.options({ chatId, chat, selection, sessionId, resume: Boolean(existing), append }),
       query: this.deps.query,
       now,
       writeItems: (items) => port.post("agentItems", { chatId, items }),

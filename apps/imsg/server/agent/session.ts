@@ -1,10 +1,12 @@
 import type { CanUseTool, Options, PermissionResult, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { continuesTurn, Normalizer, questionItem, turnEndItem } from "./normalize";
+import type { UserContent } from "./attachments";
 import type { AgentChatState, Item, AgentQuestion } from "./convex-port";
+import { sameSelection, sdkModel, type Selection } from "./models";
 
 export type QueryFactory = (params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) =>
-  AsyncIterable<SDKMessage> & Pick<Query, "interrupt" | "close">;
+  AsyncIterable<SDKMessage> & Pick<Query, "interrupt" | "close" | "setModel" | "applyFlagSettings">;
 
 type Turn = { id: string; startedAt: number; steerPending: boolean };
 type PendingQuestion = { questions: AgentQuestion[]; resolve: (result: PermissionResult) => void };
@@ -57,6 +59,8 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
 
 export type SessionDeps = {
   sessionId: string;
+  /** The selection the options start the process on. */
+  selection: Selection;
   options: Options;
   query: QueryFactory;
   now: () => number;
@@ -69,6 +73,7 @@ export type SessionDeps = {
 export class AgentSession {
   state: SessionState = { kind: "idle" };
   lastActivity: number;
+  selection: Selection;
   private input = new InputQueue();
   private normalizer = new Normalizer();
   private runtime: ReturnType<QueryFactory>;
@@ -76,14 +81,28 @@ export class AgentSession {
 
   constructor(private deps: SessionDeps) {
     this.lastActivity = deps.now();
+    this.selection = deps.selection;
     this.runtime = deps.query({ prompt: this.input, options: { ...deps.options, canUseTool: this.canUseTool } });
     void this.consume();
   }
 
   get live(): boolean { return this.state.kind !== "ended"; }
 
+  /**
+   * Ported from T3 Code's live selection switch (ClaudeAdapterV2.ts at 05696c63, lines 9061-9082):
+   * setModel, then the effort as a flag setting, on the running process. Only an idle session
+   * switches; a message that arrives mid-turn runs on the turn's selection. A rejected switch
+   * throws, and the caller resumes the session in a new process instead.
+   */
+  async select(next: Selection): Promise<void> {
+    if (this.state.kind !== "idle" || sameSelection(next, this.selection)) return;
+    if (next.model !== this.selection.model) await this.runtime.setModel(sdkModel(next.model));
+    await this.runtime.applyFlagSettings({ effortLevel: next.effort });
+    this.selection = next;
+  }
+
   /** Starts a turn, or joins the running one: a steer interrupts it, a plain message queues behind it. */
-  async send(text: string, steer: boolean): Promise<void> {
+  async send(content: UserContent, steer: boolean): Promise<void> {
     if (this.state.kind === "ended") throw new Error("Session has ended");
     this.lastActivity = this.deps.now();
     if (this.state.kind === "waiting_input") this.cancelQuestions("The user replied in the chat instead of answering.");
@@ -92,7 +111,7 @@ export class AgentSession {
     else if (steering && "turn" in this.state) this.state.turn.steerPending = true;
     this.input.push({
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content },
       parent_tool_use_id: null,
       session_id: this.deps.sessionId,
       ...(steering ? { priority: "now" as const } : {}),
@@ -138,8 +157,15 @@ export class AgentSession {
     if (changed) this.enqueue(() => this.deps.writeState(chatState(next)));
   }
 
-  private emit(items: Item[]) {
-    if (items.length) this.enqueue(() => this.deps.writeItems(items));
+  /** Every turn end names the selection that answered; with its turn, it also takes the runner's own duration. */
+  private emit(items: Item[], turn?: Turn | null) {
+    if (!items.length) return;
+    const { model, effort } = this.selection;
+    const now = this.deps.now();
+    const stamped = items.map((item): Item => item.entry.kind !== "turn_end" ? item : {
+      ...item, entry: { ...item.entry, model, effort, ...(turn ? { durationMs: now - turn.startedAt } : {}) },
+    });
+    this.enqueue(() => this.deps.writeItems(stamped));
   }
 
   private enqueue(write: () => Promise<unknown>) {
@@ -195,7 +221,7 @@ export class AgentSession {
         // Output with no turn open means a queued send started one the runner did not see begin.
         if (this.state.kind === "idle" && TURN_OUTPUT.has(message.type)) this.transition({ kind: "running", turn: this.newTurn() });
         const turn = "turn" in this.state ? this.state.turn : null;
-        this.emit(this.normalizer.consume(message, now, turn?.steerPending ?? false));
+        this.emit(this.normalizer.consume(message, now, turn?.steerPending ?? false), turn);
         if (message.type !== "result" || !turn) continue;
         const steered = turn.steerPending;
         turn.steerPending = false;

@@ -1,7 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { IDLE_CLOSE_MS, MAX_LIVE, Sessions, type SessionOptionsInput } from "./sessions";
 import { fakeId, fakeQueries, sdkResult, settle } from "./query-fake";
 import type { Chat, Command, CommandRow, Port, Routes, ThreadMessage } from "./convex-port";
+
+const scratchRoot = mkdtempSync(join(tmpdir(), "comma-sessions-"));
+afterAll(() => rmSync(scratchRoot, { recursive: true, force: true }));
 
 const message = (at: number, text: string): ThreadMessage => ({ guid: `g${at}`, at, fromMe: false, sender: "Jesse Brennan", text, attachments: [] });
 
@@ -32,6 +38,8 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
   const { query, queries } = fakeQueries();
   const reserved: string[] = [];
   const options: SessionOptionsInput[] = [];
+  const files = new Map<string, Response>();
+  const logs: string[] = [];
   let now = 1_000_000;
   const sessions = new Sessions({
     port, query, now: () => now, timeZone: "America/Los_Angeles",
@@ -41,8 +49,10 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
       return `reserved-${reserved.length}`;
     },
     readAddendum: () => "ADDENDUM: answer briefly.",
-    options: (input) => { options.push(input); return { model: input.chat.model }; },
-    log: () => {},
+    options: (input) => { options.push(input); return { model: input.selection.model }; },
+    scratch: (chatId) => join(scratchRoot, chatId),
+    fetch: async (url) => files.get(url) ?? new Response("gone", { status: 404 }),
+    log: (line) => logs.push(line),
   });
   let next = 0;
   const send = async (chat_: string, command: Command, chat: Partial<Chat> = {}) => {
@@ -56,7 +66,7 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
     await settle();
   };
   const ask = (chatId: string, text: string, chat: Partial<Chat> = {}) => send(chatId, { kind: "message", text, steer: false }, chat);
-  return { sessions, calls, hooks, queries, reserved, options, send, ask, thread, advance: (ms: number) => { now += ms; }, routes: () => calls.map((call) => call.route) };
+  return { sessions, calls, hooks, queries, files, logs, reserved, options, send, ask, thread, advance: (ms: number) => { now += ms; }, routes: () => calls.map((call) => call.route) };
 }
 
 describe("Sessions", () => {
@@ -216,7 +226,10 @@ describe("Sessions", () => {
     await h.ask("a", "second");
     expect(failures(h, "a")).toEqual({
       state: "failed",
-      ends: [{ kind: "turn_end", outcome: "completed", durationMs: 10 }, { kind: "turn_end", outcome: "failed", error: "context unavailable" }],
+      ends: [
+        { kind: "turn_end", outcome: "completed", durationMs: 0, model: "claude-opus-5-5", effort: "high" },
+        { kind: "turn_end", outcome: "failed", error: "context unavailable" },
+      ],
     });
   });
 
@@ -225,6 +238,92 @@ describe("Sessions", () => {
     h.hooks.reserve = () => { throw new Error("ccs session new failed (1)"); };
     await h.ask("a", "hello");
     expect(failures(h, "a")).toEqual({ state: "failed", ends: [{ kind: "turn_end", outcome: "failed", error: "ccs session new failed (1)" }] });
+  });
+
+  const turnEnds = (h: ReturnType<typeof harness>) => failures(h, "a").ends;
+  const pick = (text: string, model: string, effort: "low" | "medium" | "high", steer = false): Command => ({ kind: "message", text, steer, model, effort });
+
+  test("an idle session switches model and effort live for a message that asks for them, and back", async () => {
+    const h = harness();
+    await h.ask("a", "first");
+    h.queries[0].emit(sdkResult("r1", "ok"));
+    await settle();
+    await h.send("a", pick("now cheap", "gpt-6-luna", "low"));
+    h.queries[0].emit(sdkResult("r2", "ok"));
+    await settle();
+    await h.send("a", pick("back", "claude-opus-5-5", "high"));
+    h.queries[0].emit(sdkResult("r3", "ok"));
+    await settle();
+    expect(h.queries).toHaveLength(1);
+    expect(h.queries[0].switches).toEqual([{ model: "gpt-6-luna" }, { effortLevel: "low" }, { model: "claude-opus-5-5[1m]" }, { effortLevel: "high" }]);
+    expect(turnEnds(h).map((entry) => entry.kind === "turn_end" && [entry.model, entry.effort])).toEqual([
+      ["claude-opus-5-5", "high"], ["gpt-6-luna", "low"], ["claude-opus-5-5", "high"],
+    ]);
+  });
+
+  test("a new chat starts its process on the first message's selection", async () => {
+    const h = harness();
+    await h.send("a", pick("hi", "gpt-6.1-sol", "medium"));
+    expect(h.options[0].selection).toEqual({ model: "gpt-6.1-sol", effort: "medium" });
+    expect(h.queries[0].switches).toEqual([]);
+  });
+
+  test("a message sent mid-turn runs on the turn's selection, and the next idle message switches", async () => {
+    const h = harness();
+    await h.ask("a", "long job");
+    await h.send("a", pick("faster, on luna", "gpt-6-luna", "low", true));
+    expect(h.queries[0].switches).toEqual([]);
+    h.queries[0].emit(sdkResult("r1", "done"));
+    await settle();
+    expect(turnEnds(h)).toMatchObject([{ model: "claude-opus-5-5", effort: "high" }]);
+    await h.send("a", pick("next", "gpt-6-luna", "low"));
+    expect(h.queries[0].switches).toEqual([{ model: "gpt-6-luna" }, { effortLevel: "low" }]);
+  });
+
+  test("an effort change alone applies only the effort", async () => {
+    const h = harness();
+    await h.ask("a", "first");
+    h.queries[0].emit(sdkResult("r1", "ok"));
+    await settle();
+    await h.send("a", pick("think harder", "claude-opus-5-5", "medium"));
+    expect(h.queries[0].switches).toEqual([{ effortLevel: "medium" }]);
+  });
+
+  test("a switch the CLI rejects resumes the session in a new process on the new selection", async () => {
+    const h = harness();
+    await h.ask("a", "first");
+    h.queries[0].emit(sdkResult("r1", "ok"));
+    await settle();
+    h.queries[0].rejectSwitch = new Error("model not available");
+    await h.send("a", pick("on sol", "gpt-6.1-sol", "high"));
+    expect(h.queries[0].closed).toBe(true);
+    expect(h.options[1]).toMatchObject({ sessionId: "reserved-1", resume: true, selection: { model: "gpt-6.1-sol", effort: "high" } });
+    expect(h.queries[1].sent.map((m) => m.message.content)).toEqual(["on sol"]);
+    expect(h.logs.join("\n")).toContain("model not available");
+  });
+
+  test("a saved model that left the list runs as Opus 5.5 at high", async () => {
+    const h = harness();
+    await h.send("a", pick("hi", "claude-fable-5-1", "low"));
+    expect(h.options[0].selection).toEqual({ model: "claude-opus-5-5", effort: "high" });
+  });
+
+  test("a message's attachments reach Claude as image blocks ahead of text that names each saved file", async () => {
+    const h = harness();
+    h.files.set("https://files/menu", new Response(new Uint8Array([137, 80, 78, 71])));
+    h.files.set("https://files/notes", new Response("guest list"));
+    await h.send("a", {
+      kind: "message", text: "what is this", steer: false, attachments: [
+        { url: "https://files/menu", filename: "menu.png", mimeType: "image/png", size: 4 },
+        { url: "https://files/notes", filename: "notes.txt", mimeType: "text/plain", size: 10 },
+      ],
+    });
+    const dir = join(scratchRoot, "a", "attachments", "cmd1");
+    expect(h.queries[0].sent[0].message.content).toEqual([
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw==" } },
+      { type: "text", text: `what is this\n\n[Attached image "menu.png" is saved at: ${dir}/menu.png]\n\n[Attached file "notes.txt" is saved at: ${dir}/notes.txt]` },
+    ]);
+    expect(await Bun.file(join(dir, "notes.txt")).text()).toBe("guest list");
   });
 
   test("closeAll waits for an in-flight dispatch before closing", async () => {
