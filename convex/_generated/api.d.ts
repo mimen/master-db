@@ -231,7 +231,9 @@ export declare const api: {
           _id: Id<"comma_agent_chats">;
           conversationId: Id<"comma_conversations">;
           createdAt: number;
+          effort: "low" | "medium" | "high" | "xhigh" | "max";
           lastTurnEndedAt?: number;
+          model: string;
           preview?: {
             kind: "question" | "draft" | "reply" | "thinking" | "error";
             text: string;
@@ -257,7 +259,9 @@ export declare const api: {
           _id: Id<"comma_agent_chats">;
           conversationId: Id<"comma_conversations">;
           createdAt: number;
+          effort: "low" | "medium" | "high" | "xhigh" | "max";
           lastTurnEndedAt?: number;
+          model: string;
           preview?: {
             kind: "question" | "draft" | "reply" | "thinking" | "error";
             text: string;

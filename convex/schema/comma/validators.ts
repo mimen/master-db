@@ -602,7 +602,7 @@ export const agentPreview = v.object({
 });
 /** An agent chat as lists show it. title falls back to the clipped first ask until the runner names the chat. */
 export const agentChatSummary = v.object({
-  _id: v.id("comma_agent_chats"), conversationId, title: v.string(), state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+  _id: v.id("comma_agent_chats"), conversationId, title: v.string(), state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
   preview: v.optional(agentPreview),
 });
 

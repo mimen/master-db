@@ -108,9 +108,9 @@ async function summarize(ctx: QueryCtx, chat: Doc<"comma_agent_chats">): Promise
   const byOrdinal = () => ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id));
   const newest = await byOrdinal().order("desc").take(PREVIEW_ITEMS);
   const first = chat.title === undefined ? (await byOrdinal().first())?.entry : undefined;
-  const { _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
+  const { _id, conversationId, state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
   return {
-    _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+    _id, conversationId, state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
     title: chat.title ?? askTitle(first?.kind === "user" ? first.text : ""),
     preview: chatPreview(newest.map(({ entry }) => entry), state),
   };

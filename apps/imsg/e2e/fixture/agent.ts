@@ -128,9 +128,9 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
   const summary = (chat: AgentChat): AgentChatSummary => {
     const list = items.get(chat._id) ?? [];
     const first = list[0]?.entry;
-    const { _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
+    const { _id, conversationId, state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
     return {
-      _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+      _id, conversationId, state, model, effort, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
       title: chat.title ?? askTitle(first?.kind === "user" ? first.text : ""),
       preview: chatPreview(list.slice(-40).reverse().map((item) => item.entry), state),
     };
