@@ -7,10 +7,12 @@ import {
   conversationToChat,
   mergeConvexMessages,
   messageToMessage,
+  withAgents,
   withDrafts,
   type ConvexConversation,
   type ConvexMessage,
 } from "./convex-adapters";
+import type { AgentChatSummary } from "./agent-api";
 
 const flags = { unresponded: true, waiting: false, unread: true, pinned: true, mutedUnresponded: false, archived: false };
 
@@ -107,6 +109,41 @@ describe("withDrafts", () => {
     ]);
     expect(marked?.draft).toEqual({ text: "hi", updatedAt: 5, source: "agent", note: "context", attachmentCount: 2 });
     expect(untouched).toBe(other);
+  });
+});
+
+describe("withAgents", () => {
+  const summary = (overrides: Partial<AgentChatSummary>): AgentChatSummary => ({
+    _id: "chat-1" as never, conversationId: "c1" as never, title: "Guest list", state: "idle", model: "claude-opus-5-5", effort: "high",
+    createdAt: 1, updatedAt: 10, lastTurnEndedAt: 10, seenAt: 20, ...overrides,
+  });
+  const alex = conversationToChat(conversation());
+  const blake = conversationToChat(conversation({ _id: "c2" as never, primaryChatGuid: "iMessage;-;+15550002222" }));
+
+  test("summarizes a conversation by its most urgent unsettled chat and leaves the rest untouched", () => {
+    const [joined, untouched] = withAgents([alex, blake], [
+      summary({ _id: "open" as never, updatedAt: 30 }),
+      summary({ _id: "asking" as never, state: "waiting_input", updatedAt: 20, preview: { kind: "question", text: "Which list?" } }),
+      summary({ _id: "closed" as never, state: "waiting_input", settledAt: 25, updatedAt: 40 }),
+    ], []);
+    expect(joined?.agent).toEqual({ attention: "needs_you", chatId: "asking", title: "Guest list", preview: { kind: "question", text: "Which list?" }, openCount: 2, activityAt: 20 });
+    expect(untouched).toBe(blake);
+  });
+
+  test("hands back the previous row when the same summaries arrive again, and a new row only where a chat moved", () => {
+    const summaries = () => [summary({}), summary({ _id: "chat-2" as never, conversationId: "c2" as never })];
+    const first = withAgents([alex, blake], summaries(), []);
+    const again = withAgents([alex, blake], summaries(), first);
+    expect(again).toBe(first);
+    const moved = withAgents([alex, blake], [summary({}), summary({ _id: "chat-2" as never, conversationId: "c2" as never, state: "running" })], again);
+    expect(moved[0]).toBe(first[0]!);
+    expect(moved[1]?.agent?.attention).toBe("working");
+  });
+
+  test("a changed conversation row is not mistaken for its previous join", () => {
+    const first = withAgents([alex], [summary({})], []);
+    const renamed = { ...alex, displayName: "Alex R" };
+    expect(withAgents([renamed], [summary({})], first)[0]?.displayName).toBe("Alex R");
   });
 });
 

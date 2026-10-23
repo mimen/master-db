@@ -1,5 +1,7 @@
 import type { FunctionReturnType } from "convex/server";
+import { agentAttention, mostUrgent } from "@shared/agent-attention";
 import type { AttachmentSummary, ChatSummary, Message, ScheduledMessage } from "@shared/types";
+import type { AgentChatSummary } from "./agent-api";
 import type { commaApi } from "./convex-api";
 
 export type ConvexConversation = FunctionReturnType<typeof commaApi.listConversations>["page"][number];
@@ -41,6 +43,44 @@ export function withDrafts(chats: ChatSummary[], drafts: readonly ConvexDraftLis
     const draft = chat.conversationId ? byConversation.get(chat.conversationId) : undefined;
     return draft ? { ...chat, draft } : chat;
   });
+}
+
+type RowAgent = NonNullable<ChatSummary["agent"]>;
+
+function sameAgent(a: RowAgent | undefined, b: RowAgent): boolean {
+  return a !== undefined && a.attention === b.attention && a.chatId === b.chatId && a.title === b.title &&
+    a.openCount === b.openCount && a.activityAt === b.activityAt && a.preview?.kind === b.preview?.kind && a.preview?.text === b.preview?.text;
+}
+
+/**
+ * Summarizes each conversation's unsettled agent chats by its most urgent one. `previous` is this
+ * function's last result: a row whose fields and agent did not change comes back as that same
+ * object, and an unchanged list as that same array, because listAgentChats re-sends every summary
+ * when any one chat moves.
+ */
+export function withAgents(chats: ChatSummary[], summaries: readonly AgentChatSummary[], previous: ChatSummary[]): ChatSummary[] {
+  if (summaries.length === 0) return chats;
+  const open = new Map<string, AgentChatSummary[]>();
+  for (const summary of summaries) {
+    if (summary.settledAt === undefined) open.set(summary.conversationId, [...(open.get(summary.conversationId) ?? []), summary]);
+  }
+  const before = new Map(previous.map((row) => [row.guid, row]));
+  const joined = chats.map((chat) => {
+    const mine = chat.conversationId ? open.get(chat.conversationId) : undefined;
+    const top = mine && mostUrgent(mine);
+    if (!mine || !top) return chat;
+    const attention = agentAttention(top);
+    if (attention === "settled") return chat;
+    const agent: RowAgent = {
+      attention, chatId: top._id, title: top.title, ...(top.preview ? { preview: top.preview } : {}), openCount: mine.length, activityAt: top.updatedAt,
+    };
+    const last = before.get(chat.guid);
+    const keys = Object.keys(chat) as (keyof ChatSummary)[];
+    const unchanged = last !== undefined && sameAgent(last.agent, agent) &&
+      Object.keys(last).length === keys.length + 1 && keys.every((key) => last[key] === chat[key]);
+    return unchanged ? last : { ...chat, agent };
+  });
+  return joined.length === previous.length && joined.every((row, index) => row === previous[index]) ? previous : joined;
 }
 
 function visibleAttachments(attachments: ConvexMessage["attachments"]): ConvexMessage["attachments"] {

@@ -2,11 +2,13 @@ import { useConvexConnectionState, usePaginatedQuery, useQuery } from "convex/re
 import { createElement, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Platform } from "react-native";
 import { bridgeSnapshot, readChatSnapshot, webStore, writeChatSnapshot } from "@/lib/chat-snapshot";
-import { conversationToChat, withDrafts } from "@/lib/convex-adapters";
+import { agentApi } from "@/lib/agent-api";
+import { conversationToChat, withAgents, withDrafts } from "@/lib/convex-adapters";
 import { commaApi } from "@/lib/convex-api";
 import { publishKnownConversations } from "@/lib/convex-commands";
 import { setDesktopBadgeCount } from "@/lib/desktop-shell";
 import { usePendingFlags } from "@/lib/pending-flags";
+import { useAgentSettings } from "@/lib/settings";
 import { computeCounts, matchesFilters } from "@shared/chat-state";
 import type { ChatSummary, StateCounts, StateFilter, TypeFilter } from "@shared/types";
 import { ChatDirectoryContext, useChatDirectory } from "./use-chat-directory";
@@ -55,7 +57,15 @@ export function ChatDirectoryProvider({ children }: { readonly children: ReactNo
   const { chats: conversations } = useConvexChats();
   // A separate subscription: draft writes as the user types must not re-run listConversations pages.
   const drafts = useQuery(commaApi.listDrafts, {});
-  const chats = useMemo(() => (conversations && drafts ? withDrafts(conversations, drafts) : conversations), [conversations, drafts]);
+  const { agentPane } = useAgentSettings();
+  const agentChats = useQuery(agentApi.listAgentChats, agentPane ? {} : "skip");
+  const joined = useRef<ChatSummary[]>([]);
+  const chats = useMemo(() => {
+    const drafted = conversations && drafts ? withDrafts(conversations, drafts) : conversations;
+    if (!drafted || !agentChats) return drafted;
+    joined.current = withAgents(drafted, agentChats, joined.current);
+    return joined.current;
+  }, [conversations, drafts, agentChats]);
   const shown = usePendingFlags(chats);
   useEffect(() => publishKnownConversations(chats ?? []), [chats]);
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
@@ -85,7 +95,7 @@ export function useChats(state: StateFilter, type: TypeFilter, freezeMembership 
     guids: new Set(),
   });
   const chats = useMemo(() => {
-    if (state === "all" || state === "unresponded" || state === "waiting" || state === "drafts" || !freezeMembership) {
+    if (state === "all" || state === "unresponded" || state === "waiting" || state === "drafts" || state === "agents" || !freezeMembership) {
       frozenRef.current = { state, guids: new Set() };
       return all.filter((c) => c.guid === held || matchesFilters(c, state, type));
     }
