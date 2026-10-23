@@ -20,16 +20,27 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { markChatRead, markChatUnread } from "@/lib/chat-actions";
 import { pressAnchor } from "@/lib/action-sheet";
 import { formatListTimestamp } from "@/lib/format";
-import { draftPreview } from "@/lib/inbox-model";
+import { AGENT_ATTENTION, agentStatusLine, draftPreview } from "@/lib/inbox-model";
+import { compactAge } from "@/lib/turn-age";
 import { RowAge } from "./conversations/row-age";
 import { ROW_SIGNAL_SIZE, UNREAD_DOT_SIZE, rowSignal } from "@/lib/row-signal";
 import { SWIPE_THRESHOLD } from "@/lib/row-swipe";
 import { hapticCommit } from "@/lib/haptics";
 import { useWebContextMenu } from "@/lib/use-web-context-menu";
 
+import { AgentBadge } from "./agent-badge";
 import { ChatAvatar } from "./avatar";
 import { RowPan } from "./lazy-surfaces";
 import { FAVORITE_GOLD } from "./person-crm-section";
+
+/** The Agents lens status word's color: the attention's own, so the line reads like the badge. */
+const STATUS_COLOR = {
+  needs_you: "turn",
+  failed: "destructive",
+  ready: "accent",
+  working: "textSecondary",
+  open: "textTertiary",
+} as const satisfies Record<NonNullable<ChatSummary["agent"]>["attention"], keyof ReturnType<typeof useTheme>>;
 
 function RowSignal({ chat }: { readonly chat: ChatSummary }): React.JSX.Element {
   const theme = useTheme();
@@ -95,6 +106,7 @@ function ChatRowInner({
   selected,
   keyboardFocused = false,
   onOpen,
+  agentLens = false,
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another with the same name. */
@@ -103,6 +115,8 @@ function ChatRowInner({
   /** Glide-mode cursor: the persimmon ring on the selected row while navigating. */
   keyboardFocused?: boolean;
   onOpen: (chat: ChatSummary) => void;
+  /** The Agents lens: the row also shows the agent chat's title and status, and its time is the agent's. */
+  agentLens?: boolean;
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
@@ -125,6 +139,12 @@ function ChatRowInner({
         last.text || (last.hasAttachments ? "Attachment" : "")
       }`
     : "";
+
+  const agent = agentLens ? chat.agent : undefined;
+  const status = agent ? agentStatusLine(agent) : null;
+  const chats = agent && agent.openCount > 1 ? ` · ${agent.openCount} chats` : "";
+  const spoken = agent && status ? [`${agent.title}${chats}`, status.word ? `${status.word}, ${status.text}` : status.text]
+    : [snippet, last ? formatListTimestamp(last.dateCreated) : null];
 
   const contextRef = useWebContextMenu<typeof Pressable>((anchor) => openMenu(chat, anchor));
 
@@ -177,7 +197,7 @@ function ChatRowInner({
       ref={contextRef as never}
       role="button"
       // The dot is drawn, so unread has to be spoken here too.
-      aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, snippet, last ? formatListTimestamp(last.dateCreated) : null].filter(Boolean).join(", ")}
+      aria-label={[chat.displayName, chat.flags.unread || chat.unreadCount > 0 ? "unread" : null, chat.agent ? AGENT_ATTENTION[chat.agent.attention].spoken : null, ...spoken].filter(Boolean).join(", ")}
       aria-selected={selected}
       onPress={() => onOpen(chat)}
       onPressIn={() => markOpenStart(chat.guid)}
@@ -190,7 +210,10 @@ function ChatRowInner({
         keyboardFocused && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: -2 } as object),
       ]}
     >
-      <ChatAvatar chat={chat} size={compact ? 32 : 44} />
+      <View>
+        <ChatAvatar chat={chat} size={compact ? 32 : 44} />
+        {chat.agent ? <AgentBadge attention={chat.agent.attention} size={compact ? 16 : 19} /> : null}
+      </View>
       <View style={styles.content}>
         <View style={styles.topLine}>
           <View style={styles.nameGroup}>
@@ -228,6 +251,8 @@ function ChatRowInner({
                 <Ionicons name={settleAction === "unsettle" ? "arrow-undo-outline" : "checkmark"} size={13} color={settleHovered ? theme.text : theme.textSecondary} />
                 <Text numberOfLines={1} style={[styles.inlineSettleText, { color: settleHovered ? theme.text : theme.textSecondary }]}>{settleLabel}</Text>
               </Pressable>
+            ) : agent ? (
+              <Text style={[styles.time, { color: theme.textTertiary, fontSize: compact ? 12 : 15 }]}>{compactAge(Date.now() - agent.activityAt)}</Text>
             ) : last ? (
               <Text style={[styles.time, { color: theme.textTertiary, fontSize: compact ? 12 : 15 }]}>
                 <RowAge chat={chat} />
@@ -235,12 +260,23 @@ function ChatRowInner({
             ) : null}
           </View>
         </View>
+        {agent ? (
+          <Text numberOfLines={1} style={[styles.agentTitle, { color: theme.text, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}>
+            {agent.title}
+            {chats ? <Text style={[styles.agentChats, { color: theme.textTertiary }]}>{chats}</Text> : null}
+          </Text>
+        ) : null}
         <View style={styles.messageRow}>
           <Text
             numberOfLines={2}
             style={[styles.messagePreview, { color: theme.textSecondary, fontSize: compact ? 12.5 : 15, lineHeight: compact ? 17 : 20 }]}
           >
-            {draft ? (
+            {agent && status ? (
+              <>
+                {status.word ? <Text style={[styles.statusWord, { color: theme[STATUS_COLOR[agent.attention]] }]}>{status.word}</Text> : null}
+                {status.word && status.text ? ` · ${status.text}` : status.text}
+              </>
+            ) : draft ? (
               <>
                 <Text style={{ color: theme.turn, fontWeight: "600" }}>
                   {chat.draft?.source === "agent" ? <Ionicons name="sparkles" size={compact ? 11 : 13} color={theme.turn} /> : null}
@@ -372,6 +408,16 @@ const styles = StyleSheet.create({
     flexShrink: 2,
     fontSize: 12,
     minWidth: 0,
+  },
+  agentTitle: {
+    fontWeight: "600",
+    marginTop: 1,
+  },
+  agentChats: {
+    fontWeight: "500",
+  },
+  statusWord: {
+    fontWeight: "600",
   },
   messageRow: {
     alignItems: "flex-start",

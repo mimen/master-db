@@ -301,9 +301,10 @@ export function ConversationListPane({
         selected={row.kind === "chat" && wide && selectedGuid === row.chat.guid}
         keyboardFocused={row.kind === "chat" && wide && glide && selectedGuid === row.chat.guid}
         onOpen={openRow}
+        agentLens={filters.state === "agents"}
       />
     ),
-    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow],
+    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state],
   );
   // Needs reply and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -499,7 +500,7 @@ export function ConversationListPane({
  * One list cell. Memoized with primitive props so a click or a lens switch re-renders only the
  * cells whose row, selection or leave state changed, not all ~700 mounted ones.
  */
-const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen }: {
+const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen, agentLens }: {
   readonly row: InboxRow;
   readonly gone: boolean;
   readonly onCollapsed: (key: string) => void;
@@ -508,6 +509,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
   readonly selected: boolean;
   readonly keyboardFocused: boolean;
   readonly onOpen: (chat: ChatSummary) => void;
+  readonly agentLens: boolean;
 }) {
   return (
     // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
@@ -519,7 +521,7 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
             <Text style={[styles.groupCount, { color: labelColor }]}>{row.count}</Text>
           </View>
         ) : (
-          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} />
+          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} />
         )}
       </Collapse>
     </View>
