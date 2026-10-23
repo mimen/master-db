@@ -43,7 +43,7 @@ function formatCount(count: number): string {
 
 /**
  * The lens tab row, the app's only segmented control. Needs reply carries a turn-colored count,
- * Unread a gray one. On the phone the tabs are the page title and scroll sideways, without the bar.
+ * Unread and Agents gray ones. On the phone the tabs are the page title and scroll sideways, without the bar.
  */
 export function LensTabs({
   state,
@@ -81,7 +81,12 @@ export function LensTabs({
         const turnCount = lens.count === "turn" && (count ?? 0) > 0;
         return (
           <>
-            <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
+            {lens.value === "agents" ? (
+              // The mark agent drafts carry in rows; a sixth word would not fit the sidebar.
+              <Ionicons aria-hidden name="sparkles" size={phone ? 24 : 14} color={color} style={phone ? styles.sparklePhone : styles.sparkle} />
+            ) : (
+              <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
+            )}
             {lens.count && count === undefined ? (
               // Counts are unknown until the first list arrives; two digits hold their place.
               <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countSlot, styles.countPlaceholder]}>00</Text>
@@ -430,6 +435,8 @@ const styles = StyleSheet.create({
   tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18, marginLeft: 5 },
   tabCountPhone: { alignSelf: "flex-start", fontSize: 13, lineHeight: 16, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
   tabCountTurn: { fontWeight: "600" },
+  sparkle: { lineHeight: 18 },
+  sparklePhone: { lineHeight: 32 },
   countPlaceholder: { opacity: 0 },
   // Two tabular digits wide at any count under 100, so 8 to 16 to 44 while pages load never moves the tabs.
   countSlot: { minWidth: "2ch", alignItems: "flex-end", textAlign: "right" } as object,

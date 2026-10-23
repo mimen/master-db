@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   desktopInboxTitle,
   activeChips,
+  agentStatusLine,
   checkboxCounts,
   DEFAULT_INBOX_FILTERS,
   DEFAULT_REFINEMENTS,
@@ -330,5 +331,45 @@ describe("Drafts lens", () => {
       .toEqual({ label: "Agent draft", body: "They asked about Friday" });
     expect(draftPreview({ source: "agent", text: "", attachmentCount: 1, updatedAt: 1 })).toEqual({ label: "Agent draft", body: "Attachment" });
     expect(draftPreview({ source: "user", text: "half typed", note: "ignored", attachmentCount: 0, updatedAt: 1 })).toEqual({ label: "Draft", body: "half typed" });
+  });
+});
+
+describe("Agents lens", () => {
+  type Agent = NonNullable<ChatSummary["agent"]>;
+  const agent = (attention: Agent["attention"], activityAt: number, preview?: Agent["preview"]): Agent =>
+    ({ attention, chatId: `chat-${attention}-${activityAt}`, title: "Title", openCount: 1, activityAt, ...(preview ? { preview } : {}) });
+  const refine: RefineContext = { refinements: DEFAULT_REFINEMENTS, scheduled: new Set(), now: NOW };
+
+  test("groups people by their most urgent chat under Needs you, Failed, Ready, Working, Open, newest activity first", () => {
+    const chats = [
+      makeChat({ guid: "open", agent: agent("open", 50) }),
+      makeChat({ guid: "ready-old", agent: agent("ready", 10), lastMessage: { ...makeChat().lastMessage!, dateCreated: NOW } }),
+      makeChat({ guid: "none" }),
+      makeChat({ guid: "working", agent: agent("working", 40) }),
+      makeChat({ guid: "ready-new", agent: agent("ready", 30) }),
+      makeChat({ guid: "failed", agent: agent("failed", 5) }),
+      makeChat({ guid: "asking", agent: agent("needs_you", 1) }),
+    ];
+    const model = deriveInboxModel(chats, { state: "agents", type: "all" }, "", undefined, undefined, refine);
+    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.guid : `${row.label} ${row.count}`)).toEqual([
+      "Needs you 1", "asking", "Failed 1", "failed", "Ready 2", "ready-new", "ready-old", "Working 1", "working", "Open 1", "open",
+    ]);
+    expect(model.listChats.map((chat) => chat.guid)).toEqual(["asking", "failed", "ready-new", "ready-old", "working", "open"]);
+  });
+
+  test("search still spans every conversation and groups by match, not attention", () => {
+    const chats = [makeChat({ guid: "riley", displayName: "Riley Chen", agent: agent("ready", 1) }), makeChat({ guid: "rita", displayName: "Rita" })];
+    const model = deriveInboxModel(chats, { state: "agents", type: "all" }, "ri", undefined, undefined, refine);
+    expect(model.rows.map((row) => row.kind === "chat" ? row.chat.guid : row.label)).toEqual(["Conversations", "riley", "rita"]);
+  });
+
+  test("the status line names the state, says Draft ready for a draft, and keeps a working chat to its first thought", () => {
+    expect(agentStatusLine(agent("needs_you", 1, { kind: "question", text: "Which load-in time?" }))).toEqual({ word: "Needs you", text: "Which load-in time?" });
+    expect(agentStatusLine(agent("ready", 1, { kind: "draft", text: "See you Friday" }))).toEqual({ word: "Draft ready", text: "See you Friday" });
+    expect(agentStatusLine(agent("ready", 1, { kind: "reply", text: "Done.\n\n- Two spots" }))).toEqual({ word: "Ready", text: "Done. - Two spots" });
+    expect(agentStatusLine(agent("failed", 1, { kind: "error", text: "Timed out." }))).toEqual({ word: "Failed", text: "Timed out." });
+    expect(agentStatusLine(agent("working", 1, { kind: "thinking", text: "**Searching the thread**\n\nLooking for venues." }))).toEqual({ word: "Working", text: "Searching the thread" });
+    expect(agentStatusLine(agent("working", 1, { kind: "thinking", text: "Reading it now. Then the list." }))).toEqual({ word: "Working", text: "Reading it now." });
+    expect(agentStatusLine(agent("open", 1, { kind: "reply", text: "90 minutes." }))).toEqual({ word: null, text: "90 minutes." });
   });
 });

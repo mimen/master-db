@@ -1,4 +1,5 @@
 import { isSettled, matchesFilters } from "@shared/chat-state";
+import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two lenses the workspace owns: which queue, and whose conversations. */
@@ -37,6 +38,7 @@ export const LENSES: readonly { value: Lens; label: string; count: "turn" | "pla
   { value: "waiting", label: "Waiting", count: null },
   { value: "all", label: "All", count: null },
   { value: "drafts", label: "Drafts", count: null },
+  { value: "agents", label: "Agents", count: "plain" },
 ];
 
 export function lensOf(state: StateFilter): Lens | null {
@@ -369,6 +371,21 @@ function groupBySearchMatch(chats: readonly ChatSummary[], searchQuery: string, 
   });
 }
 
+/** Agents lens: a group per attention, most urgent first, newest agent activity first within each. */
+function groupByAttention(chats: readonly ChatSummary[], now: number, oldestFirst = false): InboxRow[] {
+  const direction = oldestFirst ? -1 : 1;
+  const groups = ATTENTION_ORDER.flatMap((attention): InboxRow[] => {
+    const group = chats.filter((chat) => chat.agent?.attention === attention)
+      .sort((a, b) => direction * ((b.agent?.activityAt ?? 0) - (a.agent?.activityAt ?? 0)));
+    return group.length === 0 ? [] : [
+      { kind: "section", key: `section-${attention}`, label: AGENT_ATTENTION[attention].header, count: group.length },
+      ...group.map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat })),
+    ];
+  });
+  // Also include can widen the lens with conversations that have no agent chat.
+  return [...groups, ...groupByAge(chats.filter((chat) => chat.agent === undefined), now, oldestFirst)];
+}
+
 /** The complete presentation model: filtering, age grouping, and keyboard order in one pure pass. */
 export function deriveInboxModel(
   chats: readonly ChatSummary[],
@@ -381,11 +398,12 @@ export function deriveInboxModel(
   const now = refine?.now ?? Date.now();
   const filtered = filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine);
   const oldestFirst = refine?.refinements.oldestFirst;
-  // Drafts read as one queue of prepared replies, ordered by when the draft was written, not by message age.
-  const rows = filters.state === "drafts" && !searchQuery.trim()
-    ? [...filtered].sort((a, b) => (oldestFirst ? -1 : 1) * ((b.draft?.updatedAt ?? 0) - (a.draft?.updatedAt ?? 0)))
+  const rows = searchQuery.trim() ? groupBySearchMatch(filtered, searchQuery, deepMatchGuids)
+    // Drafts read as one queue of prepared replies, ordered by when the draft was written, not by message age.
+    : filters.state === "drafts" ? [...filtered].sort((a, b) => (oldestFirst ? -1 : 1) * ((b.draft?.updatedAt ?? 0) - (a.draft?.updatedAt ?? 0)))
       .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }))
-    : searchQuery.trim() ? groupBySearchMatch(filtered, searchQuery, deepMatchGuids) : groupByAge(filtered, now, oldestFirst);
+    : filters.state === "agents" ? groupByAttention(filtered, now, oldestFirst)
+    : groupByAge(filtered, now, oldestFirst);
   const navigationEntries = rows.flatMap((row, index) => (row.kind === "chat" ? [{ chat: row.chat, index }] : []));
   return { listChats: navigationEntries.map((e) => e.chat), rows, navigationEntries };
 }
@@ -416,4 +434,32 @@ export function draftPreview(draft: NonNullable<ChatSummary["draft"]>): { label:
   const fallback = draft.text || (draft.attachmentCount > 0 ? "Attachment" : "");
   if (draft.source === "user") return { label: "Draft", body: fallback };
   return { label: "Agent draft", body: draft.note?.split("\n").find((line) => line.trim())?.trim() || fallback };
+}
+
+type AgentSummary = NonNullable<ChatSummary["agent"]>;
+
+/** Each attention a row can show: its Agents lens header and status word, and what the row and a toast say aloud. */
+export const AGENT_ATTENTION: Record<AgentSummary["attention"], { header: string; spoken: string }> = {
+  needs_you: { header: "Needs you", spoken: "agent needs you" },
+  failed: { header: "Failed", spoken: "agent failed" },
+  ready: { header: "Ready", spoken: "agent finished" },
+  working: { header: "Working", spoken: "agent working" },
+  open: { header: "Open", spoken: "agent chat open" },
+};
+const ATTENTION_ORDER = Object.keys(AGENT_ATTENTION) as AgentSummary["attention"][];
+
+/** An Agents lens row's status line: a state word, then the question, draft, reply, thought or error. Open shows only the reply. */
+export function agentStatusLine(agent: AgentSummary): { word: string | null; text: string } {
+  const raw = agent.preview?.text ?? "";
+  const text = raw.replace(/\s+/g, " ").trim();
+  switch (agent.attention) {
+    case "open":
+      return { word: null, text };
+    case "ready":
+      return { word: agent.preview?.kind === "draft" ? "Draft ready" : "Ready", text };
+    case "working":
+      return { word: "Working", text: liveThoughtLine(raw) };
+    default:
+      return { word: AGENT_ATTENTION[agent.attention].header, text };
+  }
 }
