@@ -8,9 +8,11 @@ export interface AiCapabilities {
   readonly suggestions: boolean;
   readonly reactionSuggestions: boolean;
   readonly agentAvailable: boolean;
+  /** False until the first aiStatus arrives, so nothing treats "not heard yet" as "down". */
+  readonly loaded: boolean;
 }
 
-const UNREACHABLE: AiCapabilities = { suggestions: false, reactionSuggestions: false, agentAvailable: false };
+const UNREACHABLE: AiCapabilities = { suggestions: false, reactionSuggestions: false, agentAvailable: false, loaded: false };
 const AiStatusContext = createContext<AiCapabilities>(UNREACHABLE);
 
 /**
@@ -30,9 +32,10 @@ export function AiStatusProvider({ children }: { readonly children: ReactNode })
   }, [agentAvailable, heartbeatAt]);
   const suggestions = status?.suggestions ?? false;
   const reactionSuggestions = status?.reactionSuggestions ?? false;
+  const loaded = status !== undefined;
   const value = useMemo(
-    () => ({ suggestions, reactionSuggestions, agentAvailable }),
-    [suggestions, reactionSuggestions, agentAvailable],
+    () => ({ suggestions, reactionSuggestions, agentAvailable, loaded }),
+    [suggestions, reactionSuggestions, agentAvailable, loaded],
   );
   return createElement(AiStatusContext.Provider, { value }, children);
 }
