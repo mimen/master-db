@@ -15,7 +15,9 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
   const calls: { route: keyof Routes; body: unknown }[] = [];
   const claimed = new Set<string>();
   let pending: CommandRow[] = [];
-  const hooks: { before?: (route: keyof Routes, body: unknown) => Promise<void> | void; reserve?: () => void } = {};
+  const hooks: {
+    before?: (route: keyof Routes, body: unknown) => Promise<void> | void; reserve?: () => void; title?: (ask: string) => Promise<string | null>;
+  } = {};
   const port: Port = {
     async post(route, body) {
       await hooks.before?.(route, body);
@@ -52,6 +54,7 @@ function harness(thread: ThreadMessage[] = [message(100, "Thanks brother. Rebecc
     options: (input) => { options.push(input); return { model: input.selection.model }; },
     scratch: (chatId) => join(scratchRoot, chatId),
     fetch: async (url) => files.get(url) ?? new Response("gone", { status: 404 }),
+    title: (ask) => hooks.title?.(ask) ?? Promise.resolve(null),
     log: (line) => logs.push(line),
   });
   let next = 0;
@@ -213,6 +216,36 @@ describe("Sessions", () => {
     state: h.calls.filter((call) => call.route === "agentChat" && (call.body as { chatId: string; state?: string }).chatId === chatId).map((call) => (call.body as { state?: string }).state).filter(Boolean).at(-1),
     ends: h.calls.filter((call) => call.route === "agentItems" && (call.body as { chatId: string }).chatId === chatId)
       .flatMap((call) => (call.body as Routes["agentItems"][0]).items).map((item) => item.entry).filter((entry) => entry.kind === "turn_end"),
+  });
+
+  const titles = (h: ReturnType<typeof harness>) =>
+    h.calls.filter((call) => call.route === "agentChat" && "title" in (call.body as object)).map((call) => call.body);
+
+  test("an untitled chat is named from its first ask once, beside the turn rather than ahead of it", async () => {
+    const h = harness();
+    let land!: (title: string | null) => void;
+    const asked: string[] = [];
+    h.hooks.title = (ask) => { asked.push(ask); return new Promise((resolve) => { land = resolve; }); };
+    await h.ask("a", "add Jesse and Rebecca to the guest list");
+    expect(h.queries[0].sent.map((m) => m.message.content)).toEqual(["add Jesse and Rebecca to the guest list"]);
+    await h.ask("a", "steer: Friday only");
+    expect(asked).toEqual(["add Jesse and Rebecca to the guest list"]);
+    land("Halloween guest list");
+    await settle();
+    expect(titles(h)).toEqual([{ chatId: "a", title: "Halloween guest list" }]);
+  });
+
+  test("a titled chat is left alone, and a title that never came is asked for again on the next message", async () => {
+    const h = harness();
+    const asked: string[] = [];
+    h.hooks.title = async (ask) => { asked.push(ask); return null; };
+    await h.ask("titled", "hello", { title: "Friday plans" });
+    await h.ask("a", "first");
+    await settle();
+    await h.ask("a", "second");
+    await settle();
+    expect(asked).toEqual(["first", "second"]);
+    expect(titles(h)).toEqual([]);
   });
 
   test("a message whose dispatch fails ends the chat as failed with the error", async () => {

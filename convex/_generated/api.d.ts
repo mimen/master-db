@@ -378,6 +378,7 @@ export declare const api: {
               | "waiting_input"
               | "interrupted"
               | "failed";
+            title?: string;
           };
           chatId: Id<"comma_agent_chats">;
           command:
@@ -3765,6 +3766,7 @@ export declare const internal: {
               | "waiting_input"
               | "interrupted"
               | "failed";
+            title?: string;
           };
           chatId: Id<"comma_agent_chats">;
           command:

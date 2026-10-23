@@ -87,6 +87,7 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
     options: (input) => ({ model: input.selection.model, systemPrompt: { type: "preset", preset: "claude_code", append: input.append } }),
     scratch: (id) => `${scratchRoot}/${id}`,
     fetch: (url) => storageFetch(url),
+    title: async () => "Friday plans",
     log: (message) => { throw new Error(message); },
   });
   sessions.receive(await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET }));
@@ -115,6 +116,9 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
     ]);
   });
   expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 });
+  expect(await milad.query(api.comma.agent.chatsFor, { conversationId })).toMatchObject([
+    { _id: chatId, title: "Friday plans", state: "idle", lastTurnEndedAt: expect.any(Number), preview: { kind: "draft", text: "Yes, Friday works!" } },
+  ]);
   expect(await milad.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "Yes, Friday works!", source: "agent", note: "Confirms Friday" });
 
   const image = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));

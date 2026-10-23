@@ -6,6 +6,7 @@ import { DEFAULT_ADDENDUM, readAddendum } from "./context";
 import { convexPort, type Port } from "./convex-port";
 import { sdkModel } from "./models";
 import { Sessions, type SessionOptionsInput } from "./sessions";
+import { chatTitle } from "./title";
 import { commaServer } from "./tools";
 
 export type AgentConfig = {
@@ -128,6 +129,7 @@ export function createSessions(config: AgentConfig, port: Port): Sessions {
     readAddendum: () => readAddendum(config.addendumPath),
     scratch,
     fetch: (url) => fetch(url),
+    title: (ask) => chatTitle(ask, { fetch: (url, init) => fetch(url, init), baseUrl: config.gatewayUrl, apiKey: config.gatewayKey }),
     options: (input) => {
       const cwd = scratch(input.chatId);
       const mcp = commaServer({ port, chatId: input.chatId, conversationId: input.chat.conversationId, scratchDir: cwd, timeZone, fetch: (url) => fetch(url) });

@@ -25,6 +25,8 @@ export type SessionsDeps = {
   /** The chat's working directory; message attachments are saved under it. */
   scratch: (chatId: ChatId) => string;
   fetch: (url: string) => Promise<Response>;
+  /** A title for a chat from its first ask, or null when none came back. */
+  title: (firstAsk: string) => Promise<string | null>;
   log?: (message: string) => void;
 };
 
@@ -38,6 +40,8 @@ export class Sessions {
   private opening: Promise<unknown> = Promise.resolve();
   private latest: CommandRow[] = [];
   private requested = new Set<CommandRow["_id"]>();
+  /** Chats with a title request in flight or landed; a failed one leaves so the next ask retries. */
+  private titling = new Set<ChatId>();
   private work = new RetryWork("agent commands", () => this.claim());
 
   constructor(private deps: SessionsDeps) {}
@@ -92,6 +96,7 @@ export class Sessions {
     const live = this.current(chatId);
     switch (command.kind) {
       case "message": {
+        if (!chat.title) this.nameChat(chatId, command.text);
         try {
           const selection = resolveSelection(command.model ?? chat.model, command.effort ?? chat.effort);
           const target = await this.selected(chatId, chat, selection, live);
@@ -114,6 +119,19 @@ export class Sessions {
         await this.closeChat(chatId);
         return;
     }
+  }
+
+  /** Runs beside the turn, never ahead of it. */
+  private nameChat(chatId: ChatId, ask: string) {
+    if (this.titling.has(chatId)) return;
+    this.titling.add(chatId);
+    const failed = (reason: string) => {
+      this.titling.delete(chatId);
+      this.log(`title for ${chatId}: ${reason}`);
+    };
+    void this.deps.title(ask)
+      .then(async (title) => title ? await this.deps.port.post("agentChat", { chatId, title }) : failed("none came back"))
+      .catch((error) => failed(String(error)));
   }
 
   private current(chatId: ChatId): Live | undefined {

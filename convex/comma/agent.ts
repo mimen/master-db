@@ -131,10 +131,10 @@ async function withLinks(ctx: QueryCtx, command: AgentCommand): Promise<PendingA
 }
 
 async function withChat(ctx: QueryCtx, row: Doc<"comma_agent_commands">): Promise<PendingAgentCommand> {
-  const { conversationId, sessionId, model, effort, state, seenThroughMessageAt } = await requireChat(ctx, row.chatId);
+  const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, title } = await requireChat(ctx, row.chatId);
   return {
     _id: row._id, chatId: row.chatId, command: await withLinks(ctx, row.command), createdAt: row.createdAt,
-    chat: { conversationId, sessionId, model, effort, state, seenThroughMessageAt },
+    chat: { conversationId, sessionId, model, effort, state, seenThroughMessageAt, title },
   };
 }
 
