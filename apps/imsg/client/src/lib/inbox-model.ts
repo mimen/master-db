@@ -29,7 +29,7 @@ export function resetInboxFilters(): InboxFilters {
 }
 
 /** The tab row. Settled is reached through "Also include", not a tab. */
-export type Lens = "unresponded" | "unread" | "waiting" | "all" | "drafts";
+export type Lens = "unresponded" | "unread" | "waiting" | "all" | "drafts" | "agents";
 
 export const LENSES: readonly { value: Lens; label: string; count: "turn" | "plain" | null }[] = [
   { value: "unresponded", label: "Needs reply", count: "turn" },
@@ -83,6 +83,7 @@ const LENS_TITLES: Record<StateFilter, string> = {
   unresponded: "Needs reply",
   waiting: "Waiting",
   drafts: "Drafts",
+  agents: "Agents",
   settled: "Settled",
 };
 

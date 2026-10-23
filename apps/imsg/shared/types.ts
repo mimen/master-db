@@ -1,6 +1,13 @@
+import type { AgentAttention } from "./agent-attention";
 import type { MentionAnnotation } from "./mentions";
 
-export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "drafts" | "settled";
+export type StateFilter = "all" | "unread" | "unresponded" | "waiting" | "drafts" | "agents" | "settled";
+
+/** The line an agent chat shows in lists: its open question, draft, reply, latest thought, or error. */
+export interface AgentPreview {
+  kind: "question" | "draft" | "reply" | "thinking" | "error";
+  text: string;
+}
 /** One axis, ordered as the filter rail renders it. See matchesFilters for what
  * each lens does with screened conversations. */
 export type TypeFilter = "all" | "known" | "dm" | "group" | "unknown";
@@ -164,6 +171,15 @@ export interface ChatSummary {
     note?: string;
     attachmentCount: number;
     updatedAt: number;
+  };
+  /** The conversation's unsettled agent chats, summarized by the most urgent one. Absent when none. */
+  agent?: {
+    attention: Exclude<AgentAttention, "settled">;
+    chatId: string;
+    title: string;
+    preview?: AgentPreview;
+    openCount: number;
+    activityAt: number;
   };
 }
 

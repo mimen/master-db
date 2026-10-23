@@ -1,3 +1,4 @@
+import { WANTS_YOU } from "./agent-attention";
 import type { ChatFlags, ChatSummary, Message, StateCounts, StateFilter, TypeFilter } from "./types";
 
 /**
@@ -94,18 +95,22 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
     case "unread":
       return chat.flags.unread;
     case "unresponded":
-      return chat.flags.unresponded;
+      // An open agent chat is a reply the user owes too, whatever the last message was.
+      return chat.flags.unresponded || chat.agent !== undefined;
     case "waiting":
       return chat.flags.waiting;
     case "drafts":
       return chat.draft !== undefined;
+    case "agents":
+      return chat.agent !== undefined;
     case "settled":
       return isSettled(chat);
   }
 }
 
 /**
- * Settled: a conversation with a last message and neither triage flag.
+ * Settled: a conversation with a last message, neither triage flag, and no
+ * unsettled agent chat.
  *
  * The client never sees a dismissal GUID, so settled is read off the derived
  * flags instead. Equivalent by construction: for a chat with a last message,
@@ -114,7 +119,7 @@ export function matchesFilters(chat: ChatSummary, state: StateFilter, type: Type
  * dismissed.
  */
 export function isSettled(chat: ChatSummary): boolean {
-  return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting;
+  return chat.lastMessage !== null && !chat.flags.unresponded && !chat.flags.waiting && chat.agent === undefined;
 }
 
 /** What the one triage gesture does to a conversation in its current state. */
@@ -122,12 +127,12 @@ export type SettleAction = "settle" | "unsettle" | "none";
 
 /**
  * Settle is one toggle keyed to conversation state, never to the lens: a
- * conversation carrying either triage flag settles, a settled one un-settles.
- * "none" is only ever a conversation with no messages, where there is no
- * triage state to move in either direction.
+ * conversation carrying either triage flag or an unsettled agent chat
+ * settles, a settled one un-settles. "none" is only ever a conversation with
+ * no messages, where there is no triage state to move in either direction.
  */
 export function settleActionFor(chat: ChatSummary): SettleAction {
-  if (chat.flags.unresponded || chat.flags.waiting) return "settle";
+  if (chat.flags.unresponded || chat.flags.waiting || chat.agent !== undefined) return "settle";
   return isSettled(chat) ? "unsettle" : "none";
 }
 
@@ -145,17 +150,24 @@ export function settleLeavesLens(action: SettleAction, state: StateFilter): bool
       return false;
     case "unresponded":
     case "waiting":
+    case "agents":
       return action === "settle";
     case "settled":
       return action === "unsettle";
   }
 }
 
-const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "drafts", "settled"];
+const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "drafts", "agents", "settled"];
+
+/** The Agents count is only the chats that want the user; a working or open one shows in the lens without counting. */
+function counts(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {
+  if (!matchesFilters(chat, state, type)) return false;
+  return state !== "agents" || (chat.agent !== undefined && WANTS_YOU.has(chat.agent.attention));
+}
 
 export function computeCounts(chats: ChatSummary[], type: TypeFilter): StateCounts {
   return Object.fromEntries(
-    STATES.map((state) => [state, chats.filter((c) => matchesFilters(c, state, type)).length]),
+    STATES.map((state) => [state, chats.filter((c) => counts(c, state, type)).length]),
   ) as StateCounts;
 }
 

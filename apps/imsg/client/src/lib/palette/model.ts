@@ -47,6 +47,7 @@ const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
   unresponded: { title: "Needs reply", keywords: ["view", "filter", "your turn", "unresponded"] },
   waiting: { title: "Waiting", keywords: ["view", "filter", "awaiting reply"] },
   drafts: { title: "Drafts", keywords: ["view", "filter", "unsent", "prepared", "agent"] },
+  agents: { title: "Agents", keywords: ["view", "filter", "agent chats", "assistant"] },
   settled: { title: "Settled", keywords: ["view", "filter", "done", "handled", "archive"] },
 };
 

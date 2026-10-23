@@ -428,6 +428,44 @@ describe("matchesFilters — screened conversation exclusion", () => {
 
 // ---------------------------------------------------------------- computeCounts
 
+describe("agent chats", () => {
+  const agent = (attention: NonNullable<ChatSummary["agent"]>["attention"]): ChatSummary["agent"] =>
+    ({ attention, chatId: "agent-1", title: "Guest list", openCount: 1, activityAt: 1 });
+  // Flags clear and an outbound last message: settled but for the agent chat.
+  const quiet = (attention: NonNullable<ChatSummary["agent"]>["attention"]) =>
+    makeChat({ guid: `quiet-${attention}`, agent: agent(attention), lastMessage: { ...makeChat().lastMessage!, isFromMe: true } });
+
+  test("an open agent chat puts a conversation with clear flags in Needs reply and Agents, not Settled", () => {
+    const row = quiet("working");
+    expect(matchesFilters(row, "unresponded", "all")).toBe(true);
+    expect(matchesFilters(row, "agents", "all")).toBe(true);
+    expect(matchesFilters(row, "waiting", "all")).toBe(false);
+    expect(isSettled(row)).toBe(false);
+    expect(matchesFilters(row, "settled", "all")).toBe(false);
+  });
+
+  test("without an agent chat the conversation is settled and outside Agents", () => {
+    const row = makeChat({ lastMessage: { ...makeChat().lastMessage!, isFromMe: true } });
+    expect(matchesFilters(row, "agents", "all")).toBe(false);
+    expect(matchesFilters(row, "unresponded", "all")).toBe(false);
+    expect(isSettled(row)).toBe(true);
+  });
+
+  test("settle is offered when an agent chat is the only reason to be in Needs reply, and it leaves Agents", () => {
+    expect(settleActionFor(quiet("open"))).toBe("settle");
+    expect(settleLeavesLens("settle", "agents")).toBe(true);
+    expect(settleLeavesLens("unsettle", "agents")).toBe(false);
+  });
+
+  test("Needs reply counts agent rows; Agents counts only the ones that want the user", () => {
+    const rows = (["needs_you", "failed", "ready", "working", "open"] as const).map(quiet);
+    const counts = computeCounts([...rows, makeChat({ guid: "inbound", flags: makeFlags({ unresponded: true }) })], "all");
+    expect(counts.unresponded).toBe(6);
+    expect(counts.agents).toBe(3);
+    expect(counts.settled).toBe(0);
+  });
+});
+
 describe("computeCounts", () => {
   test("counts each state lens", () => {
     const chats = [
