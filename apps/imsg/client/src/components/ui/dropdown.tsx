@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEffect, useId, useRef, useState, type JSX } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type JSX, type ReactNode } from "react";
 import {
   Modal,
   Platform,
@@ -17,9 +17,10 @@ import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSprin
 import { Springs } from "@/constants/springs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Radius } from "@/constants/tokens";
+import { Radius, Weight } from "@/constants/tokens";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
+import { toolbarTitle } from "@/lib/header-font";
 
 import { initialIndex, menuKey, placeMenu, type Rect } from "./dropdown-model";
 import { focusVisible, type InteractionState } from "./interaction";
@@ -33,6 +34,15 @@ export interface DropdownOption<T extends string | number> {
   readonly description?: string;
   /** A small colored dot before the label, as for a service. */
   readonly dot?: string;
+  /** A mark before the label in place of a dot, such as an agent chat's state. */
+  readonly icon?: ReactNode;
+  /** Quiet text at the menu row's trailing edge ("Ready", "Oct 9"). */
+  readonly trailing?: string;
+  /**
+   * Options sharing a section run together; a hairline starts each new one, under this heading
+   * when it is not empty.
+   */
+  readonly section?: string;
 }
 
 export interface DropdownProps<T extends string | number> {
@@ -43,8 +53,11 @@ export interface DropdownProps<T extends string | number> {
   readonly onChange: (value: T) => void;
   /** The menu is at least as wide as the field; pass this for a wider one. */
   readonly menuWidth?: number;
-  /** "chip" is a borderless trigger for a toolbar, such as the agent input's model picker. */
-  readonly variant?: "field" | "chip";
+  /**
+   * "chip" is a borderless trigger for a toolbar, such as the agent input's model picker; "title"
+   * stands in for a pane header's title and opens its menu from the leading edge.
+   */
+  readonly variant?: "field" | "chip" | "title";
   readonly style?: StyleProp<ViewStyle>;
 }
 
@@ -66,6 +79,8 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
   const [active, setActive] = useState(0);
   const current = options.find((option) => option.value === value);
   const chip = variant === "chip";
+  const title = variant === "title";
+  const bare = chip || title;
 
   const open = (): void => {
     setActive(initialIndex(options.map((option) => option.value), value));
@@ -110,19 +125,24 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
         aria-expanded={anchor !== null}
         onPress={open}
         style={(state: InteractionState) => [
-          chip ? styles.chip : styles.field,
-          chip ? { backgroundColor: "transparent" } : { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
-          (state.hovered || (chip && state.pressed)) && { backgroundColor: chip ? theme.rowHover : theme.backgroundElement },
+          title ? styles.title : chip ? styles.chip : styles.field,
+          bare ? { backgroundColor: "transparent" } : { backgroundColor: theme.surface, borderColor: theme.dividerStrong },
+          (state.hovered || (bare && state.pressed)) && { backgroundColor: bare ? theme.rowHover : theme.backgroundElement },
           (anchor !== null || focusVisible(state)) && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: 1 } as ViewStyle),
           style,
         ]}
       >
-        {current?.dot && <View style={[styles.dot, { backgroundColor: current.dot }]} />}
-        <Text numberOfLines={1} style={[!chip && styles.value, { color: chip ? theme.textSecondary : theme.text, fontSize: chip ? type.secondary : type.body }]}>
+        {current?.icon ?? (current?.dot && <View style={[styles.dot, { backgroundColor: current.dot }]} />)}
+        <Text
+          numberOfLines={1}
+          style={title
+            ? [toolbarTitle, styles.titleText, { color: theme.text }]
+            : [!chip && styles.value, { color: chip ? theme.textSecondary : theme.text, fontSize: chip ? type.secondary : type.body }]}
+        >
           {current?.label ?? ""}
           {current?.detail && <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{`  ${current.detail}`}</Text>}
         </Text>
-        <Ionicons name={chip ? "chevron-down" : "chevron-expand"} size={chip ? 11 : 14} color={theme.icon} />
+        <Ionicons name={bare ? "chevron-down" : "chevron-expand"} size={bare ? 11 : 14} color={theme.icon} />
       </Pressable>
       {web ? (
         <WebMenu
@@ -132,6 +152,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
           value={value}
           active={active}
           menuWidth={menuWidth}
+          align={title ? "start" : "end"}
           onActive={setActive}
           onChoose={choose}
           onClose={close}
@@ -150,12 +171,13 @@ interface MenuProps<T extends string | number> {
   readonly value: T;
   readonly active: number;
   readonly menuWidth?: number;
+  readonly align: "start" | "end";
   readonly onActive: (index: number) => void;
   readonly onChoose: (index: number) => void;
   readonly onClose: () => void;
 }
 
-function WebMenu<T extends string | number>({ label, anchor, options, value, active, menuWidth, onActive, onChoose, onClose }: MenuProps<T>): JSX.Element {
+function WebMenu<T extends string | number>({ label, anchor, options, value, active, menuWidth, align, onActive, onChoose, onClose }: MenuProps<T>): JSX.Element {
   const theme = useTheme();
   const type = useTypeRamp();
   const viewport = useWindowDimensions();
@@ -196,7 +218,7 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
     }
   }, [visible, progress]);
 
-  const place = anchor && size ? placeMenu(anchor, size, viewport) : null;
+  const place = anchor && size ? placeMenu(anchor, size, viewport, align) : null;
   useEffect(() => {
     if (!place) return;
     progress.value = reduceMotion ? 1 : withSpring(1, Springs.snappy);
@@ -227,7 +249,7 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
             { width, backgroundColor: theme.popBg, boxShadow: theme.popShadow, maxHeight: viewport.height - 16 },
             place ? { left: place.left, top: place.top } : { left: anchor.x, top: anchor.y + anchor.height + 4 },
             animated,
-            { transformOrigin: place && place.top < anchor.y ? "bottom right" : "top right" } as ViewStyle,
+            { transformOrigin: `${place && place.top < anchor.y ? "bottom" : "top"} ${align === "start" ? "left" : "right"}` } as ViewStyle,
           ]}
         >
           <ScrollView bounces={false}>
@@ -244,37 +266,40 @@ function WebMenu<T extends string | number>({ label, anchor, options, value, act
               {options.map((option, index) => {
                 const selected = option.value === value;
                 return (
-                  <Pressable
-                    key={String(option.value)}
-                    id={optionId(index)}
-                    role="option"
-                    aria-selected={selected}
-                    tabIndex={-1}
-                    onHoverIn={() => {
-                      if (pointerMoved.current) onActive(index);
-                    }}
-                    onPointerMove={() => {
-                      if (index !== active) onActive(index);
-                    }}
-                    onPress={() => onChoose(index)}
-                    style={[styles.option, index === active && { backgroundColor: theme.popSelected }]}
-                  >
-                    <View style={styles.check}>
-                      {selected && <Ionicons name="checkmark" size={15} color={theme.text} />}
-                    </View>
-                    <View style={styles.optionBody}>
-                      <View style={styles.optionTitle}>
-                        {option.dot && <View style={[styles.dot, { backgroundColor: option.dot }]} />}
-                        <Text style={{ color: theme.text, fontSize: type.body }}>{option.label}</Text>
-                        {option.detail && !option.description && (
-                          <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{option.detail}</Text>
+                  <Fragment key={String(option.value)}>
+                    <SectionStart options={options} index={index} />
+                    <Pressable
+                      id={optionId(index)}
+                      role="option"
+                      aria-selected={selected}
+                      tabIndex={-1}
+                      onHoverIn={() => {
+                        if (pointerMoved.current) onActive(index);
+                      }}
+                      onPointerMove={() => {
+                        if (index !== active) onActive(index);
+                      }}
+                      onPress={() => onChoose(index)}
+                      style={[styles.option, index === active && { backgroundColor: theme.popSelected }]}
+                    >
+                      <View style={styles.check}>
+                        {selected && <Ionicons name="checkmark" size={15} color={theme.text} />}
+                      </View>
+                      <View style={styles.optionBody}>
+                        <View style={styles.optionTitle}>
+                          {option.icon ?? (option.dot && <View style={[styles.dot, { backgroundColor: option.dot }]} />)}
+                          <Text numberOfLines={1} style={[styles.optionLabel, { color: theme.text, fontSize: type.body }]}>{option.label}</Text>
+                          {option.detail && !option.description && (
+                            <Text style={{ color: theme.textTertiary, fontSize: type.secondary }}>{option.detail}</Text>
+                          )}
+                          {option.trailing && <Text style={[styles.trailing, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.trailing}</Text>}
+                        </View>
+                        {option.description && (
+                          <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>
                         )}
                       </View>
-                      {option.description && (
-                        <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>
-                      )}
-                    </View>
-                  </Pressable>
+                    </Pressable>
+                  </Fragment>
                 );
               })}
             </View>
@@ -307,27 +332,30 @@ function NativeSheet<T extends string | number>({ label, visible, options, value
           {options.map((option, index) => {
             const selected = option.value === value;
             return (
-              <Pressable
-                key={String(option.value)}
-                role="option"
-                aria-selected={selected}
-                onPress={() => onChoose(index)}
-                style={({ pressed }) => [
-                  styles.sheetOption,
-                  { borderTopColor: theme.divider },
-                  pressed && { backgroundColor: theme.popSelected },
-                ]}
-              >
-                <View style={styles.optionBody}>
-                  <View style={styles.optionTitle}>
-                    {option.dot && <View style={[styles.dot, { backgroundColor: option.dot }]} />}
-                    <Text style={{ color: theme.text, fontSize: type.title }}>{option.label}</Text>
-                    {option.detail && !option.description && <Text style={{ color: theme.textTertiary, fontSize: type.body }}>{option.detail}</Text>}
+              <Fragment key={String(option.value)}>
+                <SectionStart options={options} index={index} sheet />
+                <Pressable
+                  role="option"
+                  aria-selected={selected}
+                  onPress={() => onChoose(index)}
+                  style={({ pressed }) => [
+                    styles.sheetOption,
+                    { borderTopColor: theme.divider },
+                    pressed && { backgroundColor: theme.popSelected },
+                  ]}
+                >
+                  <View style={styles.optionBody}>
+                    <View style={styles.optionTitle}>
+                      {option.icon ?? (option.dot && <View style={[styles.dot, { backgroundColor: option.dot }]} />)}
+                      <Text numberOfLines={1} style={[styles.optionLabel, { color: theme.text, fontSize: type.title }]}>{option.label}</Text>
+                      {option.detail && !option.description && <Text style={{ color: theme.textTertiary, fontSize: type.body }}>{option.detail}</Text>}
+                      {option.trailing && <Text style={[styles.trailing, { color: theme.textTertiary, fontSize: type.body }]}>{option.trailing}</Text>}
+                    </View>
+                    {option.description && <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>}
                   </View>
-                  {option.description && <Text style={[styles.description, { color: theme.textTertiary, fontSize: type.secondary }]}>{option.description}</Text>}
-                </View>
-                {selected && <Ionicons name="checkmark" size={20} color={theme.accent} />}
-              </Pressable>
+                  {selected && <Ionicons name="checkmark" size={20} color={theme.accent} />}
+                </Pressable>
+              </Fragment>
             );
           })}
         </View>
@@ -343,6 +371,26 @@ function NativeSheet<T extends string | number>({ label, visible, options, value
   );
 }
 
+/** The hairline and heading that open a new section. The sheet's rows draw their own hairlines. */
+function SectionStart<T extends string | number>({ options, index, sheet = false }: {
+  readonly options: readonly DropdownOption<T>[];
+  readonly index: number;
+  readonly sheet?: boolean;
+}): JSX.Element | null {
+  const theme = useTheme();
+  const type = useTypeRamp();
+  const section = options[index]?.section;
+  if (section === undefined || (index > 0 && options[index - 1]?.section === section)) return null;
+  return (
+    <>
+      {index > 0 && !sheet && <View style={[styles.separator, { backgroundColor: theme.divider }]} />}
+      {section !== "" && (
+        <Text style={[styles.heading, sheet && styles.sheetHeading, { color: theme.textTertiary, fontSize: sheet ? type.secondary : type.caption }]}>{section}</Text>
+      )}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
   field: {
     minHeight: 30,
@@ -355,6 +403,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chip: { minHeight: 28, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, borderRadius: Radius.sm },
+  title: { flexShrink: 1, minWidth: 0, minHeight: 28, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6, borderRadius: Radius.sm },
+  titleText: { flexShrink: 1 },
   value: { flex: 1 },
   dot: { width: 8, height: 8, borderRadius: Radius.full },
   menu: { position: "absolute", borderRadius: Radius.md, overflow: "hidden" },
@@ -373,6 +423,11 @@ const styles = StyleSheet.create({
   check: { width: 18, paddingTop: 1, alignItems: "center" },
   optionBody: { flex: 1 },
   optionTitle: { flexDirection: "row", alignItems: "center", gap: 6 },
+  optionLabel: { flexShrink: 1 },
+  trailing: { marginLeft: "auto", paddingLeft: 12 },
+  separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 6, marginVertical: 4 },
+  heading: { fontWeight: Weight.semibold, paddingHorizontal: 8, paddingTop: 6, paddingBottom: 3 },
+  sheetHeading: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 6 },
   description: { marginTop: 1, lineHeight: 16 },
   sheet: { position: "absolute", left: 8, right: 8, bottom: 0, gap: 8 },
   sheetGroup: { borderRadius: Radius.lg, overflow: "hidden" },

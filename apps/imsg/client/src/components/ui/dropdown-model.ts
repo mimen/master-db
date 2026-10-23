@@ -43,16 +43,18 @@ const GAP = 4;
 const EDGE = 8;
 
 /**
- * Places the menu under its field, trailing edges aligned when the menu is wider,
- * and flips it above when it would run off the bottom and there is more room above.
+ * Places the menu under its field, trailing edges aligned when the menu is wider (leading
+ * edges for a field at the start of a bar), and flips it above when it would run off the
+ * bottom and there is more room above.
  */
 export function placeMenu(
   field: Rect,
   menu: { readonly width: number; readonly height: number },
   viewport: { readonly width: number; readonly height: number },
+  align: "start" | "end" = "end",
 ): { left: number; top: number } {
-  const right = field.x + field.width;
-  const left = Math.max(EDGE, Math.min(right - menu.width, viewport.width - menu.width - EDGE));
+  const start = align === "start" ? field.x : field.x + field.width - menu.width;
+  const left = Math.max(EDGE, Math.min(start, viewport.width - menu.width - EDGE));
   const below = field.y + field.height + GAP;
   const roomBelow = viewport.height - EDGE - below;
   const roomAbove = field.y - GAP - EDGE;

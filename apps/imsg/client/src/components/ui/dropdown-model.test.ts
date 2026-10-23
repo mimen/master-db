@@ -59,4 +59,9 @@ describe("placeMenu", () => {
     expect(placeMenu({ x: 4, y: 100, width: 100, height: 30 }, { width: 256, height: 60 }, viewport).left).toBe(8);
     expect(placeMenu({ x: 1300, y: 100, width: 196, height: 30 }, { width: 256, height: 60 }, viewport).left).toBe(1176);
   });
+
+  test("a start-aligned menu grows from the field's leading edge, still inside the viewport", () => {
+    expect(placeMenu({ x: 1080, y: 10, width: 150, height: 30 }, { width: 300, height: 200 }, viewport, "start")).toEqual({ left: 1080, top: 44 });
+    expect(placeMenu({ x: 1200, y: 10, width: 150, height: 30 }, { width: 300, height: 200 }, viewport, "start").left).toBe(1132);
+  });
 });

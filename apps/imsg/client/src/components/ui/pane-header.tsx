@@ -8,7 +8,8 @@ import { useTypeRamp } from "@/hooks/use-type";
 import { toolbarTitle } from "@/lib/header-font";
 
 export interface PaneHeaderProps {
-  readonly title: string;
+  /** The title text, or a control standing in for it, such as the agent pane's chat switcher. */
+  readonly title: string | React.JSX.Element;
   /** Quieter text after the title, such as the conversation a pane is about. It truncates before the title does. */
   readonly detail?: string;
   /** Back or close control, or an identity glyph, left of the title. */
@@ -26,13 +27,15 @@ export function PaneHeader({ title, detail, leading, actions, style }: PaneHeade
     <View testID="pane-header" style={[styles.base, { borderBottomColor: theme.divider }, style]}>
       {leading}
       <View style={styles.titles}>
-        <Text
-          accessibilityRole="header"
-          numberOfLines={1}
-          style={[styles.title, { color: theme.text, flexShrink: detail ? 0 : 1 }]}
-        >
-          {title}
-        </Text>
+        {typeof title === "string" ? (
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={[styles.title, { color: theme.text, flexShrink: detail ? 0 : 1 }]}
+          >
+            {title}
+          </Text>
+        ) : title}
         {detail ? <Text numberOfLines={1} style={[styles.detail, { color: theme.textTertiary, fontSize: type.body }]}>{detail}</Text> : null}
       </View>
       {actions !== undefined && <View style={styles.actions}>{actions}</View>}
