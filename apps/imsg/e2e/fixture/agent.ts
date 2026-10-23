@@ -41,14 +41,28 @@ const comma = (name: string, summary: string, input: Record<string, unknown> = {
 const read = (skill: string): ToolEntry =>
   ({ kind: "tool", name: "Read", summary: `Loaded ${skill} skill`, input: JSON.stringify({ file_path: `~/.claude/skills/${skill}/SKILL.md` }), status: "done" });
 
+/** A chat the fixture world starts with. Its times count back from the moment the world resets. */
+export interface SeedAgentChat {
+  conversationId: string;
+  title: string;
+  state: AgentChat["state"];
+  minutesAgo: number;
+  /** The user has looked since the last turn ended. */
+  seen?: boolean;
+  /** Settled from the pane ("chat") or by settling the conversation ("conversation"). */
+  settled?: "chat" | "conversation";
+  entries: AgentEntry[];
+}
+
 /**
  * A scripted stand-in for the comma:agent runner behind the client's agent functions. An ask
  * starts a running turn with a checklist, a thinking summary and a command; one step later it ends
  * with a reply, nine steps and a measured duration. A message mentioning "guest list" asks which
  * list instead, and the answer drafts a reply, into the composer or, when the user has typed
- * there, into the pane. A message saying "take your time" keeps working until Stop.
+ * there, into the pane. A message saying "take your time" keeps working until Stop. Seeded chats
+ * come back on every reset; a seeded working chat runs until Stop.
  */
-export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
+export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: readonly SeedAgentChat[] = []) {
   const chats = new Map<string, AgentChat>();
   const items = new Map<string, AgentItem[]>();
   const turnStarts = new Map<string, number>();
@@ -56,6 +70,26 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
   let serial = 0;
   // The fixture server pins Date.now; the pane's timer counts on the browser's wall clock.
   const now = () => new Date().getTime();
+
+  const seed = () => {
+    seeds.forEach((row, index) => {
+      const at = now() - row.minutesAgo * 60_000;
+      const chatId = `seed-chat-${index + 1}` as AgentChatId;
+      const ended = row.entries.some((entry) => entry.kind === "turn_end");
+      chats.set(chatId, {
+        _id: chatId, _creationTime: at, conversationId: row.conversationId as AgentChat["conversationId"], state: row.state,
+        model: "claude-opus-5-5", effort: "high", title: row.title, createdAt: at - 60_000, updatedAt: at,
+        ...(ended ? { lastTurnEndedAt: at } : {}), ...(row.seen ? { seenAt: at } : {}),
+        ...(row.settled ? { settledAt: at, settledWithConversation: row.settled === "conversation" } : {}),
+      });
+      items.set(chatId, row.entries.map((entry, ordinal) => ({
+        _id: `seed-item-${index + 1}-${ordinal + 1}` as AgentItemId, _creationTime: at, chatId, key: `seed-${index + 1}-${ordinal + 1}`,
+        ordinal: ordinal + 1, entry, createdAt: at, updatedAt: at,
+      })));
+      if (row.state === "running") turnStarts.set(chatId, at);
+    });
+  };
+  seed();
 
   const later = (run: () => void) => {
     const timer = setTimeout(() => {
@@ -258,6 +292,7 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
     chats.clear();
     items.clear();
     turnStarts.clear();
+    seed();
   };
   return { handlers, outbox, reset };
 }

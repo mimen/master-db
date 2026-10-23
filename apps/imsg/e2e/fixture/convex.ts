@@ -15,7 +15,7 @@ import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import { createAgentFixture } from "./agent";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
-import { fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
+import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
 type Conversation = Infer<typeof conversationDoc> & Pick<ChatSummary, "flags" | "unreadCount"> & { groupPhotoUrl: string | null };
 type ConvexMessage = Infer<typeof messageDoc> & { attachments: Array<Infer<typeof attachmentDoc> & { thumbUrl: string | null; originalUrl: string | null }> };
@@ -142,7 +142,7 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const upload = uploads.get(storageId);
       return upload?.filename && upload.mimeType ? { filename: upload.filename, mimeType: upload.mimeType, size: upload.bytes.size } : null;
     },
-  });
+  }, 400, AGENT_SEED);
   const chatSummaries = async () => {
     const result = await controls.directory.summaries();
     if (!result.ok) throw new FixtureError(result.error, 502);

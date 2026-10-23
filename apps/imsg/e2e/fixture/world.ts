@@ -3,6 +3,8 @@ import type { BBContact, BBMessage } from "../../server/bb-types";
 import type { FakeSeed } from "../../server/bluebubbles-fake";
 import type { IdentityDirectory } from "../../server/app";
 import type { CrmData, NameSource } from "../../server/name-resolver";
+import type { AgentEntry } from "../../client/src/lib/agent-api";
+import type { SeedAgentChat } from "./agent";
 
 export const FIXTURE_NOW = Date.UTC(2026, 7, 20, 19, 30, 0);
 const fixtureImageBytes = Uint8Array.from(readFileSync(new URL("./assets/run-of-show.png", import.meta.url)));
@@ -162,6 +164,87 @@ export function fixtureSeed(): FakeSeed {
     },
   };
 }
+
+/** Backlog conversations the seeded agent chats sit in, one per attention. Nina is left out: live-thread and the ratchets open her. */
+export const AGENT_CHAT_GUIDS = {
+  needsYou: "iMessage;-;+16195550202",
+  ready: "iMessage;-;+16195550203",
+  working: "iMessage;-;+16195550204",
+  failed: "iMessage;-;+16195550205",
+  open: "iMessage;-;+16195550206",
+  several: "iMessage;-;+16195550207",
+} as const;
+
+const ask = (text: string): AgentEntry => ({ kind: "user", text, steer: false });
+const reply = (text: string): AgentEntry => ({ kind: "assistant", text, streaming: false });
+const done = (durationMs: number): AgentEntry => ({ kind: "turn_end", outcome: "completed", durationMs, model: "claude-opus-5-5", effort: "high" });
+
+/**
+ * One chat per attention across five people, and Leah Kim with two open chats (one ready, one
+ * open) and two settled ones (one from the pane, one by settling the conversation).
+ */
+export const AGENT_SEED: readonly SeedAgentChat[] = [
+  {
+    conversationId: AGENT_CHAT_GUIDS.needsYou, title: "Load-in time for Saturday", state: "waiting_input", minutesAgo: 4,
+    entries: [
+      ask("Ask me before you give Diego a load-in time"),
+      { kind: "thinking", streaming: false, text: "**Checking the run of show**\n\nDoors are at 9, so load-in is 6 or 7." },
+      reply("The run of show allows two load-in windows."),
+      { kind: "question", requestId: "seed-load-in", status: "pending", questions: [{
+        question: "Which load-in time should I give Diego?", header: "Load-in", multiSelect: false,
+        options: [{ label: "6 pm", description: "Before soundcheck" }, { label: "7 pm" }],
+      }] },
+    ],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.ready, title: "Reply about the guest list", state: "idle", minutesAgo: 12,
+    entries: [
+      ask("Draft a yes to Riley's guest list question"),
+      reply("Riley is on Freaquency 10/31. The draft is below."),
+      { kind: "draft", text: "You're on the list for Friday, see you there", note: "Confirmed on Freaquency 10/31", placed: "pane", used: false },
+      done(42_000),
+    ],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.working, title: "Venues Taylor mentioned", state: "running", minutesAgo: 1,
+    entries: [
+      ask("Find every venue Taylor mentioned this month"),
+      { kind: "todos", todos: [
+        { content: "Search the thread", activeForm: "Searching the thread", status: "in_progress" },
+        { content: "List the venues", activeForm: "Listing the venues", status: "pending" },
+      ] },
+      { kind: "thinking", streaming: true, text: "**Searching the thread**\n\nLooking for venue names Taylor mentioned since October 1." },
+      { kind: "tool", name: "mcp__comma__search_thread", summary: "Searching the thread for venues", input: JSON.stringify({ query: "venue" }), status: "running" },
+    ],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.failed, title: "Priya's deposit", state: "failed", minutesAgo: 30,
+    entries: [
+      ask("Did Priya's deposit clear?"),
+      { kind: "turn_end", outcome: "failed", error: "The gateway timed out after 120 s.", durationMs: 120_000, model: "claude-opus-5-5", effort: "high" },
+    ],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.open, title: "Marcus's set length", state: "idle", minutesAgo: 120, seen: true,
+    entries: [ask("How long is Marcus's set?"), reply("Marcus plays 90 minutes, 11 to 12:30."), done(9_000)],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.several, title: "Rideshare codes", state: "idle", minutesAgo: 20,
+    entries: [ask("Send Leah the rideshare codes"), reply("Here are the three codes Leah asked for."), done(15_000)],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.several, title: "Hotel block for the crew", state: "idle", minutesAgo: 300, seen: true,
+    entries: [ask("Hold a hotel block for Leah's crew"), reply("The block is held until Thursday."), done(31_000)],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.several, title: "Flyer feedback", state: "idle", minutesAgo: 1_440, seen: true, settled: "conversation",
+    entries: [ask("What did Leah think of the flyer?"), reply("She liked it and asked for a bigger date."), done(12_000)],
+  },
+  {
+    conversationId: AGENT_CHAT_GUIDS.several, title: "Leah's birthday dinner", state: "idle", minutesAgo: 2_880, seen: true, settled: "chat",
+    entries: [ask("Find a place for Leah's birthday dinner"), reply("Three places have a table for eight on the 14th."), done(48_000)],
+  },
+];
 
 const names = new Map<string, string>([
   ["+16195550101", "Alex Rivera"],

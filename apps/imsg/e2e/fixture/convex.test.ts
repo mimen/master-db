@@ -6,7 +6,8 @@ import type { ChatSummary, Message } from "../../shared/types";
 import type { CommaOutboxPayload } from "../../../../convex/schema/comma/validators";
 import { fixtureMessageWindow, registerConvexFixture } from "./convex";
 import { FixtureBlueBubbles } from "./fake-bluebubbles";
-import { CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
+import { agentAttention, mostUrgent, type AttentionInput } from "../../shared/agent-attention";
+import { AGENT_CHAT_GUIDS, CHAT_GUIDS, FIXTURE_NOW, FixtureIdentity, fixtureSeed } from "./world";
 
 const config: Config = {
   bbUrl: "fixture://bluebubbles", bbPassword: "fixture", hostname: "127.0.0.1", port: 0,
@@ -117,6 +118,32 @@ test("settle and un-settle carry the conversation's agent chats, and sending a c
   await command({ kind: "send", text: "See you there" });
   expect((await chat(drafted)).settledAt).toEqual(expect.any(Number));
   expect((await chat(working)).settledAt).toBeUndefined();
+});
+
+test("the seeded agent chats cover every attention, come back on reset, and Leah has two open and two settled", async () => {
+  type Summary = AttentionInput & { _id: string; conversationId: string; title: string; preview?: { kind: string } };
+  const attentions = async () => {
+    const open = await call<Summary[]>("comma/agent:listAgentChats");
+    const people = Object.entries(AGENT_CHAT_GUIDS).map(([name, guid]) => {
+      const top = mostUrgent(open.filter((chat) => chat.conversationId === guid));
+      return [name, top ? agentAttention(top) : "none"];
+    });
+    return { count: open.length, people: Object.fromEntries(people) };
+  };
+  const seeded = { count: 7, people: { needsYou: "needs_you", ready: "ready", working: "working", failed: "failed", open: "open", several: "ready" } };
+  expect(await attentions()).toEqual(seeded);
+  const leah = await call<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.several });
+  expect(leah.map((chat) => [chat.title, chat.settledAt !== undefined, agentAttention(chat)])).toEqual([
+    ["Rideshare codes", false, "ready"], ["Hotel block for the crew", false, "open"],
+    ["Flyer feedback", true, "settled"], ["Leah's birthday dinner", true, "settled"],
+  ]);
+  const ready = await call<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.ready });
+  expect(ready[0]?.preview).toEqual({ kind: "draft", text: "You're on the list for Friday, see you there" });
+
+  await command({ kind: "settle" }, AGENT_CHAT_GUIDS.needsYou);
+  expect(await attentions()).toEqual({ count: 6, people: { ...seeded.people, needsYou: "none" } });
+  reset();
+  expect(await attentions()).toEqual(seeded);
 });
 
 test("concurrent enqueue retries execute a send once and failed execution can retry", async () => {
