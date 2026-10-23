@@ -79,24 +79,26 @@ export function LensTabs({
         const lens = LENSES.find((l) => l.value === tab.key)!;
         const count = lens.count ? counts?.[lens.value] : undefined;
         const turnCount = lens.count === "turn" && (count ?? 0) > 0;
+        // The Agents count is rarely past one digit, and the sixth tab needs the room.
+        const slot = lens.value === "agents" ? styles.sparkleCount : styles.countSlot;
         return (
           <>
             {lens.value === "agents" ? (
               // The mark agent drafts carry in rows; a sixth word would not fit the sidebar.
-              <Ionicons aria-hidden name="sparkles" size={phone ? 24 : 14} color={color} style={phone ? styles.sparklePhone : styles.sparkle} />
+              <Ionicons aria-hidden name="sparkles" size={phone ? 24 : 13} color={color} style={phone ? styles.sparklePhone : styles.sparkle} />
             ) : (
               <Text numberOfLines={1} style={[phone ? styles.tabLabelPhone : styles.tabLabel, { color }]}>{tab.label}</Text>
             )}
             {lens.count && count === undefined ? (
               // Counts are unknown until the first list arrives; two digits hold their place.
-              <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countSlot, styles.countPlaceholder]}>00</Text>
+              <Text aria-hidden style={[phone ? styles.tabCountPhone : styles.tabCount, slot, styles.countPlaceholder]}>{lens.value === "agents" ? "0" : "00"}</Text>
             ) : count === undefined ? null : lens.count === "turn" && count <= 999 ? (
               // The Needs reply count is the app badge; it rolls on snappy as it changes.
               <View style={[phone ? styles.rollPhone : styles.roll, styles.countSlot]}>
                 <RollingNumber value={count} style={[phone ? styles.tabCountPhone : styles.tabCount, styles.rollText, { color: turnCount ? theme.turn : theme.textTertiary }, turnCount && styles.tabCountTurn]} />
               </View>
             ) : (
-              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, styles.countSlot, { color: theme.textTertiary }]}>{formatCount(count)}</Text>
+              <Text style={[phone ? styles.tabCountPhone : styles.tabCount, slot, { color: theme.textTertiary }]}>{formatCount(count)}</Text>
             )}
           </>
         );
@@ -427,16 +429,19 @@ export function ConversationFiltersPanel(props: FilterPanelProps) {
 
 const styles = StyleSheet.create({
   // Five tabs fill the default sidebar; space-between keeps them inside it instead of clipping Drafts.
-  tabs: { gap: 6, justifyContent: "space-between" },
+  // Six tabs fill the sidebar at its default width; space-between spreads what is left.
+  tabs: { gap: 2, justifyContent: "space-between" },
   tabsPhone: { gap: 22, paddingHorizontal: 20 },
   tabPhone: { paddingBottom: 6 },
-  tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.15, lineHeight: 18 },
+  tabLabel: { ...headerFace, fontSize: 14.5, letterSpacing: -0.25, lineHeight: 18 },
   tabLabelPhone: { ...headerFace, fontSize: 26, letterSpacing: -0.5, lineHeight: 32 },
   tabCount: { fontSize: 11.5, fontVariant: ["tabular-nums"], fontWeight: "500", lineHeight: 18, marginLeft: 5 },
   tabCountPhone: { alignSelf: "flex-start", fontSize: 13, lineHeight: 16, fontVariant: ["tabular-nums"], fontWeight: "500", marginLeft: 3, marginTop: 2 },
   tabCountTurn: { fontWeight: "600" },
-  sparkle: { lineHeight: 18 },
-  sparklePhone: { lineHeight: 32 },
+  // A fixed box: the icon font can land after first paint, and a fallback glyph's width would move the row.
+  sparkle: { lineHeight: 18, textAlign: "center", width: 13 },
+  sparkleCount: { marginLeft: 3 },
+  sparklePhone: { lineHeight: 32, textAlign: "center", width: 24 },
   countPlaceholder: { opacity: 0 },
   // Two tabular digits wide at any count under 100, so 8 to 16 to 44 while pages load never moves the tabs.
   countSlot: { minWidth: "2ch", alignItems: "flex-end", textAlign: "right" } as object,
