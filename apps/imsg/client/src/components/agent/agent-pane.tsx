@@ -12,6 +12,7 @@ import { Radius, Space } from "@/constants/tokens";
 import { useAgentChats, useAgentItems } from "@/hooks/use-agent";
 import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
+import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { useTypeRamp } from "@/hooks/use-type";
 import { agentApi, agentItemKey, type AgentAttachmentMeta, type AgentChatId, type AgentItem, type AgentItemId } from "@/lib/agent-api";
@@ -65,6 +66,7 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
   const { scrollProps, follow, disclosure } = useLiveFollow();
   const running = agentIsRunning(chat?.state);
   const keyboardHeight = useKeyboardHeight();
+  const { wide } = useLayoutMode();
   // A pick in the input lasts for the shown chat; once sent, the chat carries it.
   const [picked, setPicked] = useState<{ readonly chatId: AgentChatId; readonly choice: AgentModelChoice } | null>(null);
   const shownId = chatId ?? NEW_CHAT;
@@ -143,7 +145,8 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
         leading={<HugeiconsIcon icon={AiChat02Icon} size={18} color={theme.text} strokeWidth={1.6} />}
         actions={<>
           {chat && settled === undefined ? <Button label="Settle" onPress={settle} /> : null}
-          <Button label="New chat" onPress={() => choose({ kind: "new" })} disabled={selection?.kind !== "chat"} />
+          {/* A phone's header has no room for it beside the title; the switcher's menu carries New chat. */}
+          {wide ? <Button label="New chat" onPress={() => choose({ kind: "new" })} disabled={selection?.kind !== "chat"} /> : null}
           {onClose ? (
             <IconButton label="Close agent" onPress={onClose}>
               {({ active }) => <Ionicons name="close" size={18} color={active ? theme.text : theme.icon} />}

@@ -18,7 +18,7 @@ function dotStyle(attention: AgentAttention, theme: Theme): ViewStyle {
     case "ready": return { backgroundColor: theme.accent };
     case "working": return { borderWidth: 1.5, borderColor: theme.icon, borderStyle: "dotted" };
     case "open": return { borderWidth: 1.5, borderColor: theme.textTertiary };
-    case "settled": return { backgroundColor: theme.backgroundSelected };
+    case "settled": return { backgroundColor: theme.disabled };
   }
 }
 
