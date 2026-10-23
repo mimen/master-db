@@ -222,6 +222,58 @@ export declare const api: {
         },
         Id<"comma_agent_chats">
       >;
+      chatsFor: FunctionReference<
+        "query",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        Array<{
+          _id: Id<"comma_agent_chats">;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          lastTurnEndedAt?: number;
+          preview?: {
+            kind: "question" | "draft" | "reply" | "thinking" | "error";
+            text: string;
+          };
+          seenAt?: number;
+          settledAt?: number;
+          state:
+            | "idle"
+            | "pending"
+            | "running"
+            | "waiting_input"
+            | "interrupted"
+            | "failed";
+          title: string;
+          updatedAt: number;
+        }>
+      >;
+      listAgentChats: FunctionReference<
+        "query",
+        "public",
+        {},
+        Array<{
+          _id: Id<"comma_agent_chats">;
+          conversationId: Id<"comma_conversations">;
+          createdAt: number;
+          lastTurnEndedAt?: number;
+          preview?: {
+            kind: "question" | "draft" | "reply" | "thinking" | "error";
+            text: string;
+          };
+          seenAt?: number;
+          settledAt?: number;
+          state:
+            | "idle"
+            | "pending"
+            | "running"
+            | "waiting_input"
+            | "interrupted"
+            | "failed";
+          title: string;
+          updatedAt: number;
+        }>
+      >;
       listItems: FunctionReference<
         "query",
         "public",
@@ -328,6 +380,12 @@ export declare const api: {
           updatedAt: number;
         } | null
       >;
+      markSeen: FunctionReference<
+        "mutation",
+        "public",
+        { chatId: Id<"comma_agent_chats"> },
+        null
+      >;
       newChat: FunctionReference<
         "mutation",
         "public",
@@ -378,6 +436,18 @@ export declare const api: {
             | { kind: "close" };
           createdAt: number;
         }>
+      >;
+      reopen: FunctionReference<
+        "mutation",
+        "public",
+        { chatId: Id<"comma_agent_chats"> },
+        null
+      >;
+      settle: FunctionReference<
+        "mutation",
+        "public",
+        { chatId: Id<"comma_agent_chats"> },
+        null
       >;
       stop: FunctionReference<
         "mutation",
@@ -3705,6 +3775,7 @@ export declare const internal: {
             | "waiting_input"
             | "interrupted"
             | "failed";
+          title?: string;
         },
         null
       >;

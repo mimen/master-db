@@ -155,6 +155,121 @@ describe("client functions", () => {
   });
 });
 
+describe("chat lists, settle, reopen and seen", () => {
+  const chatRow = (t: Awaited<ReturnType<typeof setup>>["t"], chatId: Id<"comma_agent_chats">) => t.run((ctx) => ctx.db.get(chatId));
+
+  test("listAgentChats lists only unsettled chats, most recent activity first, titled by the runner or the first ask", async () => {
+    const { t, as, ask } = await setup();
+    const settled = await ask("k1", "settle me");
+    await as.mutation(api.comma.agent.settle, { chatId: settled });
+    const older = await ask("k2", "Find Rebecca's email in   the thread");
+    await t.mutation(internal.comma.agent.agentChat, { chatId: older, state: "running" });
+    await as.mutation(api.comma.agent.settle, { chatId: older });
+    const newer = await ask("k3", "Draft a yes");
+    await t.mutation(internal.comma.agent.agentChat, { chatId: newer, title: "Friday confirmation" });
+    await as.mutation(api.comma.agent.reopen, { chatId: older });
+    const listed = await as.query(api.comma.agent.listAgentChats, {});
+    expect(listed.map(({ _id, title, state }) => [_id, title, state])).toEqual([
+      [newer, "Friday confirmation", "pending"], [older, "Find Rebecca's email in the thread", "running"],
+    ]);
+    expect(listed[0]).not.toHaveProperty("settledAt");
+  });
+
+  test("chatsFor lists a conversation's open and settled chats with a preview of each", async () => {
+    const { t, as, conversationId, ask } = await setup();
+    const first = await ask("k1", "which list");
+    await t.mutation(internal.comma.agent.agentItems, { chatId: first, items: [{ key: "q", entry: question("r1") }] });
+    await t.mutation(internal.comma.agent.agentChat, { chatId: first, state: "waiting_input" });
+    await as.mutation(api.comma.agent.settle, { chatId: first });
+    const second = await ask("k2", "say hi");
+    await t.mutation(internal.comma.agent.agentItems, { chatId: second, items: [
+      { key: "a", entry: { kind: "assistant", text: "Said hi.", streaming: false } },
+      { key: "end", entry: { kind: "turn_end", outcome: "completed" } },
+    ] });
+    await t.mutation(internal.comma.agent.agentChat, { chatId: second, state: "idle" });
+    const listed = await as.query(api.comma.agent.chatsFor, { conversationId });
+    expect(listed.map(({ _id, settledAt, preview }) => [_id, settledAt !== undefined, preview])).toEqual([
+      [second, false, { kind: "reply", text: "Said hi." }],
+      [first, true, undefined],
+    ]);
+    expect(listed[0].lastTurnEndedAt).toEqual(expect.any(Number));
+  });
+
+  test("settling a waiting chat dismisses its question and stops the turn; it stays settled once stopped", async () => {
+    const { t, as, ask, commands, items } = await setup();
+    const chatId = await ask("k1");
+    await t.mutation(internal.comma.agent.agentItems, { chatId, items: [{ key: "q", entry: question("r1") }, { key: "q0", entry: question("r0", "resolved") }] });
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "waiting_input", sessionId: "s1" });
+    await as.mutation(api.comma.agent.settle, { chatId });
+    await as.mutation(api.comma.agent.settle, { chatId });
+    expect(await chatRow(t, chatId)).toMatchObject({ settledAt: expect.any(Number), settledWithConversation: false });
+    expect((await items(chatId)).map(({ entry }) => entry.kind === "question" ? entry.status : entry.kind)).toEqual(["user", "cancelled", "resolved"]);
+    expect((await commands()).map(({ command }) => command.kind)).toEqual(["message", "stop"]);
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "interrupted" });
+    expect(await chatRow(t, chatId)).toMatchObject({ settledAt: expect.any(Number) });
+  });
+
+  test("settling closes an idle chat's session, leaves a sessionless one alone, and lets a running turn finish", async () => {
+    const { t, as, ask, commands } = await setup();
+    const idle = await ask("k1");
+    await t.mutation(internal.comma.agent.agentChat, { chatId: idle, state: "idle", sessionId: "s1" });
+    await as.mutation(api.comma.agent.settle, { chatId: idle });
+    const unstarted = await ask("k2");
+    await t.mutation(internal.comma.agent.agentChat, { chatId: unstarted, state: "failed" });
+    await as.mutation(api.comma.agent.settle, { chatId: unstarted });
+    const running = await ask("k3");
+    await t.mutation(internal.comma.agent.agentChat, { chatId: running, state: "running", sessionId: "s3" });
+    await as.mutation(api.comma.agent.settle, { chatId: running });
+    expect((await commands()).filter(({ command }) => command.kind !== "message").map(({ chatId, command }) => [chatId, command.kind]))
+      .toEqual([[idle, "close"]]);
+    expect(await chatRow(t, running)).toMatchObject({ state: "running", settledAt: expect.any(Number) });
+  });
+
+  test("a settled chat that asks a question reopens itself", async () => {
+    const { t, as, ask } = await setup();
+    const chatId = await ask("k1");
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "running" });
+    await as.mutation(api.comma.agent.settle, { chatId });
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "waiting_input" });
+    const row = await chatRow(t, chatId);
+    expect(row).toMatchObject({ state: "waiting_input" });
+    expect(row).not.toHaveProperty("settledAt");
+    expect(row).not.toHaveProperty("settledWithConversation");
+  });
+
+  test("a turn_end stamps lastTurnEndedAt, including recovery's, and markSeen writes only after a new turn ends", async () => {
+    const { t, as, ask } = await setup();
+    const chatId = await ask("k1");
+    await t.mutation(internal.comma.agent.agentItems, { chatId, items: [{ key: "a", entry: { kind: "assistant", text: "hi", streaming: false } }] });
+    expect(await chatRow(t, chatId)).not.toHaveProperty("lastTurnEndedAt");
+    await as.mutation(api.comma.agent.markSeen, { chatId });
+    expect(await chatRow(t, chatId)).not.toHaveProperty("seenAt");
+
+    await t.mutation(internal.comma.agent.agentItems, { chatId, items: [{ key: "end", entry: { kind: "turn_end", outcome: "completed" } }] });
+    const { lastTurnEndedAt } = (await chatRow(t, chatId))!;
+    expect(lastTurnEndedAt).toEqual(expect.any(Number));
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await as.mutation(api.comma.agent.markSeen, { chatId });
+    const { seenAt } = (await chatRow(t, chatId))!;
+    expect(seenAt).toBeGreaterThan(lastTurnEndedAt!);
+    await as.mutation(api.comma.agent.markSeen, { chatId });
+    expect((await chatRow(t, chatId))!.seenAt).toBe(seenAt);
+
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "running" });
+    await t.mutation(internal.comma.agent.agentRecover, { now: seenAt! + 100 });
+    expect((await chatRow(t, chatId))!.lastTurnEndedAt).toBe(seenAt! + 100);
+  });
+
+  test("settle, reopen and markSeen reject callers who are not Milad", async () => {
+    const { t, ask } = await setup();
+    const chatId = await ask("k1");
+    for (const fn of [api.comma.agent.settle, api.comma.agent.reopen, api.comma.agent.markSeen]) {
+      await expect(t.mutation(fn, { chatId })).rejects.toThrow("Unauthorized");
+    }
+    await expect(t.query(api.comma.agent.listAgentChats, {})).rejects.toThrow("Unauthorized");
+  });
+});
+
 describe("drafts", () => {
   test("land in an empty composer with their attachments", async () => {
     const { t, as, conversationId, ask, items } = await setup();

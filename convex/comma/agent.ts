@@ -4,10 +4,12 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
-  agentAnswers, agentAttachment, agentChatDoc, agentChatState, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc, pendingAgentCommand,
-  type AgentCommand, type AgentDraftPlacement, type AgentEntry, type PendingAgentCommand, type PendingAgentCommandBody,
+  agentAnswers, agentAttachment, agentChatDoc, agentChatState, agentChatSummary, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc,
+  pendingAgentCommand,
+  type AgentChatSummary, type AgentCommand, type AgentDraftPlacement, type AgentEntry, type PendingAgentCommand, type PendingAgentCommandBody,
 } from "../schema/comma/validators";
 
+import { askTitle, chatPreview } from "./agentSummary";
 import { sameSecret } from "./bridgeAuth";
 import { recordedAttachments, writeAgentDraft } from "./drafts";
 import { enqueueCommand } from "./outbox";
@@ -35,7 +37,7 @@ async function itemFor(ctx: QueryCtx, chatId: Id<"comma_agent_chats">, key: stri
   return await ctx.db.query("comma_agent_items").withIndex("by_chat_key", (q) => q.eq("chatId", chatId).eq("key", key)).unique();
 }
 
-/** Existing keys are patched in place; new keys take the next ordinals in array order. */
+/** Existing keys are patched in place; new keys take the next ordinals in array order. A turn_end stamps the chat. */
 async function upsertItems(ctx: MutationCtx, chatId: Id<"comma_agent_chats">, items: { key: string; entry: AgentEntry }[], now = Date.now()) {
   const last = await ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chatId)).order("desc").first();
   let ordinal = last?.ordinal ?? 0;
@@ -44,10 +46,60 @@ async function upsertItems(ctx: MutationCtx, chatId: Id<"comma_agent_chats">, it
     if (existing) await ctx.db.patch(existing._id, { entry, updatedAt: now });
     else await ctx.db.insert("comma_agent_items", { chatId, key, ordinal: ++ordinal, entry, createdAt: now, updatedAt: now });
   }
+  if (items.some(({ entry }) => entry.kind === "turn_end")) await ctx.db.patch(chatId, { lastTurnEndedAt: now });
 }
 
 async function insertCommand(ctx: MutationCtx, chatId: Id<"comma_agent_chats">, command: AgentCommand) {
   await ctx.db.insert("comma_agent_commands", { chatId, command, status: "pending", createdAt: Date.now() });
+}
+
+const REOPENED = { settledAt: undefined, settledWithConversation: undefined };
+
+/**
+ * Settles a chat by what it is doing: an open question is dismissed and its turn stopped, a
+ * finished chat's session closes, and a running turn carries on until it ends on its own. One
+ * conversation settle passes one `now` to every chat so un-settle can find them together.
+ */
+export async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { withConversation, now = Date.now() }: {
+  withConversation: boolean; now?: number;
+}) {
+  await ctx.db.patch(chat._id, { settledAt: now, settledWithConversation: withConversation });
+  switch (chat.state) {
+    case "waiting_input":
+      for await (const item of ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id))) {
+        if (item.entry.kind === "question" && item.entry.status === "pending") {
+          await ctx.db.patch(item._id, { entry: { ...item.entry, status: "cancelled" }, updatedAt: now });
+        }
+      }
+      await insertCommand(ctx, chat._id, { kind: "stop" });
+      return;
+    case "idle":
+    case "interrupted":
+    case "failed":
+      if (chat.sessionId) await insertCommand(ctx, chat._id, { kind: "close" });
+      return;
+    case "pending":
+    case "running":
+      return;
+  }
+}
+
+const PREVIEW_ITEMS = 40;
+
+async function summarize(ctx: QueryCtx, chat: Doc<"comma_agent_chats">): Promise<AgentChatSummary> {
+  const byOrdinal = () => ctx.db.query("comma_agent_items").withIndex("by_chat_ordinal", (q) => q.eq("chatId", chat._id));
+  const newest = await byOrdinal().order("desc").take(PREVIEW_ITEMS);
+  const first = chat.title === undefined ? (await byOrdinal().first())?.entry : undefined;
+  const { _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
+  return {
+    _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+    title: chat.title ?? askTitle(first?.kind === "user" ? first.text : ""),
+    preview: chatPreview(newest.map(({ entry }) => entry), state),
+  };
+}
+
+async function summaries(ctx: QueryCtx, chats: Doc<"comma_agent_chats">[]) {
+  return await Promise.all(chats.sort((a, b) => b.updatedAt - a.updatedAt).map((chat) => summarize(ctx, chat)));
 }
 
 /** The runner downloads a message's files, so it gets each one's URL instead of its storage id. */
@@ -74,6 +126,29 @@ export const liveChat = query({
   handler: async (ctx, { conversationId }) => {
     await assertAllowed(ctx);
     return await liveChatFor(ctx, conversationId);
+  },
+});
+
+/** Every unsettled chat across conversations, most recent activity first. */
+export const listAgentChats = query({
+  args: {},
+  returns: v.array(agentChatSummary),
+  handler: async (ctx) => {
+    await assertAllowed(ctx);
+    // ponytail: the 100 newest open chats by creation; index updatedAt if that many ever stay open.
+    const open = await ctx.db.query("comma_agent_chats").withIndex("by_settledAt", (q) => q.eq("settledAt", undefined)).order("desc").take(100);
+    return await summaries(ctx, open);
+  },
+});
+
+/** One conversation's chats, open and settled, most recent activity first. */
+export const chatsFor = query({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.array(agentChatSummary),
+  handler: async (ctx, { conversationId }) => {
+    await assertAllowed(ctx);
+    const chats = await ctx.db.query("comma_agent_chats").withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).order("desc").take(50);
+    return await summaries(ctx, chats);
   },
 });
 
@@ -160,6 +235,41 @@ export const newChat = mutation({
   },
 });
 
+/** The pane's Settle: this chat only. */
+export const settle = mutation({
+  args: { chatId: v.id("comma_agent_chats") },
+  returns: v.null(),
+  handler: async (ctx, { chatId }) => {
+    await assertAllowed(ctx);
+    const chat = await requireChat(ctx, chatId);
+    if (chat.settledAt === undefined) await settleChat(ctx, chat, { withConversation: false });
+    return null;
+  },
+});
+
+export const reopen = mutation({
+  args: { chatId: v.id("comma_agent_chats") },
+  returns: v.null(),
+  handler: async (ctx, { chatId }) => {
+    await assertAllowed(ctx);
+    await requireChat(ctx, chatId);
+    await ctx.db.patch(chatId, REOPENED);
+    return null;
+  },
+});
+
+/** The pane calls this while it shows the chat; it writes only when a turn ended since the last look. */
+export const markSeen = mutation({
+  args: { chatId: v.id("comma_agent_chats") },
+  returns: v.null(),
+  handler: async (ctx, { chatId }) => {
+    await assertAllowed(ctx);
+    const chat = await requireChat(ctx, chatId);
+    if ((chat.lastTurnEndedAt ?? 0) > (chat.seenAt ?? 0)) await ctx.db.patch(chatId, { seenAt: Date.now() });
+    return null;
+  },
+});
+
 /** Puts a draft the agent left in the pane into the composer, over whatever the user typed. */
 export const useDraft = mutation({
   args: { itemId: v.id("comma_agent_items") },
@@ -239,12 +349,14 @@ export const agentRecover = internalMutation({
 export const agentChat = internalMutation({
   args: {
     chatId: v.id("comma_agent_chats"), sessionId: v.optional(v.string()), state: v.optional(agentChatState),
-    seenThroughMessageAt: v.optional(v.number()),
+    seenThroughMessageAt: v.optional(v.number()), title: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, { chatId, ...patch }) => {
-    await requireChat(ctx, chatId);
-    await ctx.db.patch(chatId, { ...patch, updatedAt: Date.now() });
+    const chat = await requireChat(ctx, chatId);
+    // A settled chat that asks a question wants the user again.
+    const reopened = patch.state === "waiting_input" && chat.settledAt !== undefined ? REOPENED : {};
+    await ctx.db.patch(chatId, { ...patch, ...reopened, updatedAt: Date.now() });
     return null;
   },
 });

@@ -594,6 +594,18 @@ export const pendingAgentCommand = v.object({
   chat: v.object({ conversationId, sessionId, model, effort, state, seenThroughMessageAt }),
 });
 
+const { settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = agentChatFields;
+export const agentPreview = v.object({
+  kind: v.union(v.literal("question"), v.literal("draft"), v.literal("reply"), v.literal("thinking"), v.literal("error")),
+  /** At most 200 characters. */
+  text: v.string(),
+});
+/** An agent chat as lists show it. title falls back to the clipped first ask until the runner names the chat. */
+export const agentChatSummary = v.object({
+  _id: v.id("comma_agent_chats"), conversationId, title: v.string(), state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+  preview: v.optional(agentPreview),
+});
+
 export type DraftAttachment = Infer<typeof draftAttachment>;
 export type AgentEffort = Infer<typeof agentEffort>;
 export type AgentChatState = Infer<typeof agentChatState>;
@@ -607,3 +619,5 @@ export type AgentCommand = Infer<typeof agentCommand>;
 export type AgentChatDoc = Infer<typeof agentChatDoc>;
 export type AgentItemDoc = Infer<typeof agentItemDoc>;
 export type PendingAgentCommand = Infer<typeof pendingAgentCommand>;
+export type AgentPreview = Infer<typeof agentPreview>;
+export type AgentChatSummary = Infer<typeof agentChatSummary>;
