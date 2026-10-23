@@ -78,7 +78,7 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
     });
     items.set(chatId, list);
   };
-  const liveChat = (conversationId: string) => [...chats.values()].find((chat) => chat.conversationId === conversationId && chat.archivedAt === undefined);
+  const liveChat = (conversationId: string) => [...chats.values()].find((chat) => chat.conversationId === conversationId && chat.settledAt === undefined);
   const chatOf = (args: Record<string, unknown>) => {
     const chat = chats.get(String(args.chatId));
     if (!chat) throw new Error("Agent chat not found");
@@ -182,7 +182,7 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
     },
     "comma/agent:newChat": async (args) => {
       const chat = liveChat(String(args.conversationId));
-      if (chat) patchChat(chat._id, { archivedAt: now() });
+      if (chat) patchChat(chat._id, { settledAt: now() });
       return null;
     },
     "comma/agent:useDraft": async (args) => {

@@ -307,7 +307,6 @@ export declare const api: {
         {
           _creationTime: number;
           _id: Id<"comma_agent_chats">;
-          archivedAt?: number;
           conversationId: Id<"comma_conversations">;
           createdAt: number;
           effort: "low" | "medium" | "high" | "xhigh" | "max";
@@ -342,7 +341,6 @@ export declare const api: {
         Array<{
           _id: Id<"comma_agent_commands">;
           chat: {
-            archivedAt?: number;
             conversationId: Id<"comma_conversations">;
             effort: "low" | "medium" | "high" | "xhigh" | "max";
             model: string;
@@ -3717,7 +3715,6 @@ export declare const internal: {
         Array<{
           _id: Id<"comma_agent_commands">;
           chat: {
-            archivedAt?: number;
             conversationId: Id<"comma_conversations">;
             effort: "low" | "medium" | "high" | "xhigh" | "max";
             model: string;
@@ -3866,7 +3863,6 @@ export declare const internal: {
         },
         Id<"comma_outbox">
       >;
-      migrateArchivedAt: FunctionReference<"mutation", "internal", {}, number>;
     };
     agentContext: {
       agentAttachment: FunctionReference<

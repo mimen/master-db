@@ -487,8 +487,6 @@ export const agentChatFields = {
   effort: agentEffort,
   /** Newest thread message dateCreated the agent has been given. */
   seenThroughMessageAt: v.optional(v.number()),
-  /** Superseded by settledAt; migrateArchivedAt moves it there. */
-  archivedAt: v.optional(v.number()),
   /** Absent while the chat is open. */
   settledAt: v.optional(v.number()),
   /** True when a conversation settle closed the chat, so un-settling the conversation reopens it. */
@@ -584,7 +582,7 @@ export const agentCommandFields = {
 
 export const agentChatDoc = withSystemFields("comma_agent_chats", agentChatFields);
 export const agentItemDoc = withSystemFields("comma_agent_items", agentItemFields);
-const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt } = agentChatFields;
+const { conversationId, sessionId, model, effort, state, seenThroughMessageAt } = agentChatFields;
 /** A message attachment as the runner downloads it; url is null once the file is gone from storage. */
 export const agentAttachmentLink = v.object({ url: v.union(v.string(), v.null()), filename, mimeType, size });
 export const pendingAgentCommandBody = v.union(
@@ -593,7 +591,7 @@ export const pendingAgentCommandBody = v.union(
 );
 export const pendingAgentCommand = v.object({
   _id: v.id("comma_agent_commands"), chatId: v.id("comma_agent_chats"), command: pendingAgentCommandBody, createdAt: v.number(),
-  chat: v.object({ conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt }),
+  chat: v.object({ conversationId, sessionId, model, effort, state, seenThroughMessageAt }),
 });
 
 export type DraftAttachment = Infer<typeof draftAttachment>;

@@ -21,7 +21,7 @@ import { enqueueCommand } from "./outbox";
 async function liveChatFor(ctx: QueryCtx, conversationId: Id<"comma_conversations">) {
   return await ctx.db.query("comma_agent_chats")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId))
-    .filter((q) => q.and(q.eq(q.field("archivedAt"), undefined), q.eq(q.field("settledAt"), undefined)))
+    .filter((q) => q.eq(q.field("settledAt"), undefined))
     .unique();
 }
 
@@ -61,10 +61,10 @@ async function withLinks(ctx: QueryCtx, command: AgentCommand): Promise<PendingA
 }
 
 async function withChat(ctx: QueryCtx, row: Doc<"comma_agent_commands">): Promise<PendingAgentCommand> {
-  const { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt } = await requireChat(ctx, row.chatId);
+  const { conversationId, sessionId, model, effort, state, seenThroughMessageAt } = await requireChat(ctx, row.chatId);
   return {
     _id: row._id, chatId: row.chatId, command: await withLinks(ctx, row.command), createdAt: row.createdAt,
-    chat: { conversationId, sessionId, model, effort, state, seenThroughMessageAt, archivedAt },
+    chat: { conversationId, sessionId, model, effort, state, seenThroughMessageAt },
   };
 }
 
@@ -233,17 +233,6 @@ export const agentRecover = internalMutation({
       await ctx.db.patch(chat._id, { state: "interrupted", updatedAt: now });
     }
     return { chatIds: open.map(({ _id }) => _id) };
-  },
-});
-
-/** Moves New chat's old archivedAt onto settledAt. Idempotent; returns how many chats it moved. */
-export const migrateArchivedAt = internalMutation({
-  args: {},
-  returns: v.number(),
-  handler: async (ctx) => {
-    const archived = await ctx.db.query("comma_agent_chats").filter((q) => q.neq(q.field("archivedAt"), undefined)).collect();
-    for (const chat of archived) await ctx.db.patch(chat._id, { settledAt: chat.settledAt ?? chat.archivedAt, archivedAt: undefined });
-    return archived.length;
   },
 });
 

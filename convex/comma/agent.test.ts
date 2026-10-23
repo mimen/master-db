@@ -334,21 +334,6 @@ describe("runner functions", () => {
     ]);
   });
 
-  test("migrateArchivedAt moves archivedAt onto settledAt once and leaves open chats alone", async () => {
-    const { t, conversationId } = await setup();
-    const chat = { conversationId, state: "idle" as const, model: "claude-opus-5-5", effort: "high" as const, createdAt: 1, updatedAt: 1 };
-    const [archived, open] = await t.run(async (ctx) => [
-      await ctx.db.insert("comma_agent_chats", { ...chat, archivedAt: 40 }),
-      await ctx.db.insert("comma_agent_chats", chat),
-    ]);
-    expect(await t.mutation(internal.comma.agent.migrateArchivedAt, {})).toBe(1);
-    expect(await t.mutation(internal.comma.agent.migrateArchivedAt, {})).toBe(0);
-    const [moved, untouched] = await t.run(async (ctx) => [await ctx.db.get(archived), await ctx.db.get(open)]);
-    expect(moved).toMatchObject({ settledAt: 40 });
-    expect(moved).not.toHaveProperty("archivedAt");
-    expect(untouched).not.toHaveProperty("settledAt");
-  });
-
   test("aiStatus reports the runner's latest heartbeat beside the Mini's capabilities", async () => {
     const { t, as } = await setup();
     await t.run((ctx) => ctx.db.insert("comma_bridge_state", {

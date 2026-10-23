@@ -92,7 +92,6 @@ export class Sessions {
     const live = this.current(chatId);
     switch (command.kind) {
       case "message": {
-        if (chat.archivedAt) return;
         try {
           const selection = resolveSelection(command.model ?? chat.model, command.effort ?? chat.effort);
           const target = await this.selected(chatId, chat, selection, live);
