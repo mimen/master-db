@@ -19,8 +19,8 @@ import type { PaneSelection } from "@/lib/agent-chats";
 import { agentModelChoice, type AgentModelChoice } from "@/lib/agent-models";
 import { attachmentPreviews } from "@/lib/agent-pane";
 import { agentIsRunning, liveStatus, promptHistory, transcriptRows } from "@/lib/agent-transcript";
+import { formatReceiptTime } from "@/lib/format";
 import { useAgentSettings } from "@/lib/settings";
-import { relativeDay } from "@/lib/state-strip";
 import { showToast } from "@/lib/toast";
 
 import { AgentInput, type SendIntent } from "./agent-input";
@@ -153,7 +153,7 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
       />
       {settled !== undefined ? (
         <View testID="agent-settled-bar" style={[styles.settledBar, { backgroundColor: theme.backgroundElement }]}>
-          <Text style={[styles.settledText, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled {relativeDay(settled, Date.now())}</Text>
+          <Text style={[styles.settledText, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled {formatReceiptTime(settled)}</Text>
           <Button label="Reopen" onPress={reopen} style={styles.reopen} />
         </View>
       ) : null}
