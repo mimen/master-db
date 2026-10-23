@@ -1,5 +1,6 @@
+import { askTitle, chatPreview } from "../../../../convex/comma/agentSummary";
 import type {
-  AgentAttachmentMeta, AgentChat, AgentChatId, AgentEntry, AgentItem, AgentItemId, AgentTodo, AskArgs,
+  AgentAttachmentMeta, AgentChat, AgentChatId, AgentChatSummary, AgentEntry, AgentItem, AgentItemId, AgentTodo, AskArgs,
 } from "../../client/src/lib/agent-api";
 
 /** The composer side of the fixture world the fake agent writes through. */
@@ -63,9 +64,15 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
     }, stepMs);
     timers.add(timer);
   };
+  const reopened = { settledAt: undefined, settledWithConversation: undefined };
+  /** The runner's agentChat: a settled chat that asks a question reopens. */
   const patchChat = (chatId: string, patch: Partial<AgentChat>) => {
     const chat = chats.get(chatId)!;
-    chats.set(chatId, { ...chat, ...patch, updatedAt: now() });
+    const reopen = patch.state === "waiting_input" && chat.settledAt !== undefined ? reopened : {};
+    chats.set(chatId, { ...chat, ...patch, ...reopen, updatedAt: now() });
+  };
+  const markChat = (chatId: string, patch: Partial<AgentChat>) => {
+    chats.set(chatId, { ...chats.get(chatId)!, ...patch });
   };
   const upsert = (chatId: string, key: string, entry: AgentEntry) => {
     const list = items.get(chatId) ?? [];
@@ -77,12 +84,38 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
       ordinal: list.length + 1, entry, createdAt: at, updatedAt: at,
     });
     items.set(chatId, list);
+    if (entry.kind === "turn_end") markChat(chatId, { lastTurnEndedAt: at });
   };
-  const liveChat = (conversationId: string) => [...chats.values()].find((chat) => chat.conversationId === conversationId && chat.settledAt === undefined);
   const chatOf = (args: Record<string, unknown>) => {
     const chat = chats.get(String(args.chatId));
     if (!chat) throw new Error("Agent chat not found");
     return chat;
+  };
+  const summary = (chat: AgentChat): AgentChatSummary => {
+    const list = items.get(chat._id) ?? [];
+    const first = list[0]?.entry;
+    const { _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt } = chat;
+    return {
+      _id, conversationId, state, settledAt, seenAt, lastTurnEndedAt, createdAt, updatedAt,
+      title: chat.title ?? askTitle(first?.kind === "user" ? first.text : ""),
+      preview: chatPreview(list.slice(-40).reverse().map((item) => item.entry), state),
+    };
+  };
+  const summaries = (rows: AgentChat[]) => rows.sort((a, b) => b.updatedAt - a.updatedAt).map(summary);
+  /** The runner's side of a stop: open questions cancel, running steps end, and the turn ends interrupted. */
+  const interrupt = (chat: AgentChat) => {
+    for (const item of items.get(chat._id) ?? []) {
+      if (item.entry.kind === "question" && item.entry.status === "pending") upsert(chat._id, item.key, { ...item.entry, status: "cancelled" });
+      if (item.entry.kind === "tool" && item.entry.status === "running") upsert(chat._id, item.key, { ...item.entry, status: "done" });
+      if (item.entry.kind === "thinking" && item.entry.streaming) upsert(chat._id, item.key, { ...item.entry, streaming: false });
+    }
+    upsert(chat._id, `stop-${++serial}`, { kind: "turn_end", outcome: "interrupted", durationMs: now() - (turnStarts.get(chat._id) ?? now()), model: chat.model, effort: chat.effort });
+    patchChat(chat._id, { state: "interrupted" });
+  };
+  /** Convex's settleChat with the fake runner's answer folded in: a waiting chat's turn stops at once. */
+  const settleChat = (chat: AgentChat, withConversation: boolean, at = now()) => {
+    markChat(chat._id, { settledAt: at, settledWithConversation: withConversation });
+    if (chat.state === "waiting_input") interrupt(chats.get(chat._id)!);
   };
   const endTurn = (chat: AgentChat, key: string) => {
     upsert(chat._id, key, { kind: "turn_end", outcome: "completed", durationMs: TURN_MS, model: chat.model, effort: chat.effort });
@@ -90,13 +123,15 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
   };
 
   const ask = (args: AskArgs): AgentChatId => {
+    for (const [chatId, list] of items) if (list.some((item) => item.key === args.key)) return chatId as AgentChatId;
     // Convex records what finalizeUpload stored, not what the client says about the file.
     const attachments = (args.attachments ?? []).map((attachment) => {
       const stored = drafts.upload?.(attachment.storageId);
       if (drafts.upload && !stored) throw new Error("Finalized upload not found");
       return stored ?? { filename: attachment.filename, mimeType: attachment.mimeType, size: attachment.size };
     });
-    let chat = liveChat(args.conversationId);
+    let chat = args.chatId ? chatOf(args) : undefined;
+    if (chat && chat.conversationId !== args.conversationId) throw new Error("The agent chat belongs to another conversation");
     if (!chat) {
       const at = now();
       chat = { _id: `agent-chat-${++serial}` as AgentChatId, _creationTime: at, conversationId: args.conversationId,
@@ -104,9 +139,8 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
       chats.set(chat._id, chat);
     }
     const chatId = chat._id;
-    if (items.get(chatId)?.some((item) => item.key === args.key)) return chatId;
     upsert(chatId, args.key, { kind: "user", text: args.text, steer: args.steer, ...(attachments.length ? { attachments } : {}) });
-    patchChat(chatId, { state: "running", model: args.model, effort: args.effort });
+    patchChat(chatId, { state: "running", model: args.model, effort: args.effort, ...reopened });
     turnStarts.set(chatId, now());
     const turn = `${args.key}-turn`;
     upsert(chatId, `${turn}:todos`, { kind: "todos", todos: todos(0) });
@@ -160,7 +194,8 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
   };
 
   const handlers: Record<string, Handler> = {
-    "comma/agent:liveChat": async (args) => liveChat(String(args.conversationId)) ?? null,
+    "comma/agent:listAgentChats": async () => summaries([...chats.values()].filter((chat) => chat.settledAt === undefined)),
+    "comma/agent:chatsFor": async (args) => summaries([...chats.values()].filter((chat) => chat.conversationId === args.conversationId)),
     "comma/agent:listItems": async (args) => items.get(String(args.chatId)) ?? [],
     "comma/agent:ask": async (args) => ask(args as unknown as AskArgs),
     "comma/agent:answer": async (args) => {
@@ -171,18 +206,21 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
       const chat = chatOf(args);
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
-      for (const item of items.get(chat._id) ?? []) {
-        if (item.entry.kind === "question" && item.entry.status === "pending") upsert(chat._id, item.key, { ...item.entry, status: "cancelled" });
-        if (item.entry.kind === "tool" && item.entry.status === "running") upsert(chat._id, item.key, { ...item.entry, status: "done" });
-        if (item.entry.kind === "thinking" && item.entry.streaming) upsert(chat._id, item.key, { ...item.entry, streaming: false });
-      }
-      upsert(chat._id, `stop-${++serial}`, { kind: "turn_end", outcome: "interrupted", durationMs: now() - (turnStarts.get(chat._id) ?? now()), model: chat.model, effort: chat.effort });
-      patchChat(chat._id, { state: "interrupted" });
+      interrupt(chat);
       return null;
     },
-    "comma/agent:newChat": async (args) => {
-      const chat = liveChat(String(args.conversationId));
-      if (chat) patchChat(chat._id, { settledAt: now() });
+    "comma/agent:settle": async (args) => {
+      const chat = chatOf(args);
+      if (chat.settledAt === undefined) settleChat(chat, false);
+      return null;
+    },
+    "comma/agent:reopen": async (args) => {
+      markChat(chatOf(args)._id, reopened);
+      return null;
+    },
+    "comma/agent:markSeen": async (args) => {
+      const chat = chatOf(args);
+      if ((chat.lastTurnEndedAt ?? 0) > (chat.seenAt ?? 0)) markChat(chat._id, { seenAt: now() });
       return null;
     },
     "comma/agent:useDraft": async (args) => {

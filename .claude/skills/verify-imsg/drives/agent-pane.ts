@@ -15,7 +15,7 @@ function recordCalls(page: Page): Call[] {
   page.on("request", (request) => {
     if (!request.url().endsWith("/__fixture/convex")) return;
     const body = request.postDataJSON() as Call;
-    if (/^comma\/agent:(ask|answer|newChat|useDraft|stop)$/.test(body.name)) calls.push(body);
+    if (/^comma\/agent:(ask|answer|settle|useDraft|stop)$/.test(body.name)) calls.push(body);
   });
   return calls;
 }
@@ -53,7 +53,8 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
     return response.json() as Promise<T>;
   };
   const liveItems = async () => {
-    const chat = await convex<{ _id: string } | null>("comma/agent:liveChat", { conversationId: desk.chats.needs });
+    const chats = await convex<Array<{ _id: string; settledAt?: number }>>("comma/agent:chatsFor", { conversationId: desk.chats.needs });
+    const chat = chats.find((row) => row.settledAt === undefined);
     return chat ? convex<Array<{ entry: { kind: string; placed?: string; used?: boolean } }>>("comma/agent:listItems", { chatId: chat._id }) : [];
   };
 
@@ -294,8 +295,9 @@ test("agent-pane: a pasted image, a long paste and a dropped file go with an ask
     return { width: bitmap.width, height: bitmap.height };
   }, flyer.storageId);
   expect(uploaded, "the image was downscaled to a 2000 px edge before upload").toEqual({ width: 2000, height: 1000 });
-  const chat = await (await desk.request.post("/__fixture/convex", { data: { name: "comma/agent:liveChat", args: { conversationId: desk.chats.needs } } })).json() as { model: string; effort: string };
-  expect(chat).toMatchObject({ model: "claude-sonnet-5-5", effort: "low" });
+  const [chat] = await (await desk.request.post("/__fixture/convex", { data: { name: "comma/agent:chatsFor", args: { conversationId: desk.chats.needs } } })).json() as Array<{ _id: string }>;
+  const items = await (await desk.request.post("/__fixture/convex", { data: { name: "comma/agent:listItems", args: { chatId: chat!._id } } })).json() as Array<{ entry: { kind: string } }>;
+  expect(items.at(-1)?.entry, "the turn ran on the selection the ask carried").toMatchObject({ kind: "turn_end", model: "claude-sonnet-5-5", effort: "low" });
   await expect(pane.getByRole("button", { name: "Model, Sonnet 5.5" })).toBeVisible();
   await page.screenshot({ path: shot("17-ask-with-attachments") });
   writeFileSync(join(evidence, "aria-attachments.txt"), await pane.ariaSnapshot());

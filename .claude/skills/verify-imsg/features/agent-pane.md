@@ -34,9 +34,9 @@ Preconditions:
 - **Question.** Ask anything containing "guest list". `getByTestId("agent-question")` shows radios `Freaquency 10/31`, `Afterparty 11/1` and `Other`. With the empty input focused, press `1`; the card resolves to `Freaquency 10/31`.
 - **Draft in the composer.** The composer's value becomes the drafted reply and `getByTestId("draft-note")` shows the agent's note.
 - **Strip.** Close with `getByRole("button", { name: "Close agent" })`. `getByTestId("agent-strip")` reads `Agent drafted a reply` (or `Agent is asking you something` while a question waits). Clicking it reopens the pane.
-- **New chat.** `getByRole("button", { name: "New chat" })` empties the transcript; `comma/agent:liveChat` returns null.
+- **New chat.** `getByRole("button", { name: "New chat" })` empties the transcript; `comma/agent:chatsFor` lists the old chat with a `settledAt`.
 - **Pane draft.** Type in the composer and wait until `comma/queries:getDraft` reports `source: "user"`. Ask about the guest list again and answer. `getByTestId("agent-draft")` shows the reply while the composer keeps the typed text. "Use in composer" replaces it and turns into a disabled "In the composer".
-- **Side effects.** Capture `/__fixture/convex` bodies named `comma/agent:ask`, `answer`, `newChat` and `useDraft`; re-read `comma/agent:liveChat` and `comma/agent:listItems` for the stored items.
+- **Side effects.** Capture `/__fixture/convex` bodies named `comma/agent:ask`, `answer`, `settle` and `useDraft`; re-read `comma/agent:chatsFor` and `comma/agent:listItems` for the stored items.
 - **Proof.** Run `drives/agent-pane.ts`. It writes `01-before.png` through `09-used-in-composer.png`, `aria-question.txt`, `aria.txt` and `side-effects.json`.
 
 ## Gotchas

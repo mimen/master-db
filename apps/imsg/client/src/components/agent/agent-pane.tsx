@@ -48,9 +48,7 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
   const keyboardHeight = useKeyboardHeight();
   // A pick in the input lasts for this conversation until it is sent; the chat then remembers it.
   const [picked, setPicked] = useState<{ readonly conversationId: string; readonly choice: AgentModelChoice } | null>(null);
-  const choice = picked && picked.conversationId === conversationId
-    ? picked.choice
-    : chat ? agentModelChoice(chat.model, chat.effort) : agentModelChoice(settings.agentModel, settings.agentEffort);
+  const choice = picked && picked.conversationId === conversationId ? picked.choice : agentModelChoice(settings.agentModel, settings.agentEffort);
   const history = useMemo(() => promptHistory(items), [items]);
 
   const shownPending = pending.filter((ask) => !items.some((item) => item.key === ask.key));
@@ -73,7 +71,7 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
       return { ...file, ...stored };
     }))
       .then((stored) => convex.mutation(agentApi.ask, {
-        conversationId, key, text, steer, model: choice.model, effort: choice.effort, ...(stored.length ? { attachments: stored } : {}),
+        conversationId, chatId: chat?._id, key, text, steer, model: choice.model, effort: choice.effort, ...(stored.length ? { attachments: stored } : {}),
       }))
       .catch(() => {
         setPending((current) => current.filter((ask) => ask.key !== key));
@@ -93,10 +91,10 @@ export function AgentPane({ chatGuid, onClose }: { readonly chatGuid: string; re
   }), [chatId, convex, disclosure]);
 
   const startOver = () => {
-    if (!conversationId) return;
+    if (!chatId) return;
     setPending([]);
     setPicked(null);
-    convex.mutation(agentApi.newChat, { conversationId }).catch(() => showToast("Couldn't start a new chat. Try again."));
+    convex.mutation(agentApi.settle, { chatId }).catch(() => showToast("Couldn't start a new chat. Try again."));
   };
 
   return (

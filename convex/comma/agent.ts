@@ -4,7 +4,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
-  agentAnswers, agentAttachment, agentChatDoc, agentChatState, agentChatSummary, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc,
+  agentAnswers, agentAttachment, agentChatState, agentChatSummary, agentDraftPlacement, agentEffort, agentEntry, agentItemDoc,
   pendingAgentCommand,
   type AgentChatSummary, type AgentCommand, type AgentDraftPlacement, type AgentEntry, type PendingAgentCommand, type PendingAgentCommandBody,
 } from "../schema/comma/validators";
@@ -19,13 +19,6 @@ import { enqueueCommand } from "./outbox";
  * the Mini subscribes to pendingAgentCommands, claims them, and writes the transcript back through
  * the bridge ingest routes.
  */
-
-async function liveChatFor(ctx: QueryCtx, conversationId: Id<"comma_conversations">) {
-  return await ctx.db.query("comma_agent_chats")
-    .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId))
-    .filter((q) => q.eq(q.field("settledAt"), undefined))
-    .unique();
-}
 
 async function requireChat(ctx: QueryCtx, chatId: Id<"comma_agent_chats">) {
   const chat = await ctx.db.get(chatId);
@@ -120,15 +113,6 @@ async function withChat(ctx: QueryCtx, row: Doc<"comma_agent_commands">): Promis
   };
 }
 
-export const liveChat = query({
-  args: { conversationId: v.id("comma_conversations") },
-  returns: v.union(agentChatDoc, v.null()),
-  handler: async (ctx, { conversationId }) => {
-    await assertAllowed(ctx);
-    return await liveChatFor(ctx, conversationId);
-  },
-});
-
 /** Every unsettled chat across conversations, most recent activity first. */
 export const listAgentChats = query({
   args: {},
@@ -163,31 +147,34 @@ export const listItems = query({
 });
 
 /**
- * Idempotent on the client's key, so a retried send never asks twice. Each message carries its own
- * model and effort, and the chat keeps the last ask's. Attachments are uploads recorded by
- * finalizeUpload; their name, type and size come from that record, not the caller.
+ * Asks in the chat named, reopening it if it was settled, or starts a new chat. Idempotent on the
+ * client's key across every chat, so a retried send never asks twice or starts a second chat.
+ * Each message carries its own model and effort, and the chat keeps the last ask's. Attachments
+ * are uploads recorded by finalizeUpload; their name, type and size come from that record.
  */
 export const ask = mutation({
   args: {
-    conversationId: v.id("comma_conversations"), key: v.string(), text: v.string(), steer: v.boolean(), model: v.string(), effort: agentEffort,
-    attachments: v.optional(v.array(agentAttachment)),
+    conversationId: v.id("comma_conversations"), chatId: v.optional(v.id("comma_agent_chats")), key: v.string(), text: v.string(),
+    steer: v.boolean(), model: v.string(), effort: agentEffort, attachments: v.optional(v.array(agentAttachment)),
   },
   returns: v.id("comma_agent_chats"),
-  handler: async (ctx, { conversationId, key, text, steer, model, effort, attachments: sent = [] }) => {
+  handler: async (ctx, { conversationId, chatId: named, key, text, steer, model, effort, attachments: sent = [] }) => {
     await assertAllowed(ctx);
     if (!await ctx.db.get(conversationId)) throw new Error("Conversation not found");
+    const asked = await ctx.db.query("comma_agent_items").withIndex("by_key", (q) => q.eq("key", key)).first();
+    if (asked) return asked.chatId;
+    const chat = named ? await requireChat(ctx, named) : null;
+    if (chat && chat.conversationId !== conversationId) throw new Error("The agent chat belongs to another conversation");
     const now = Date.now();
-    const live = await liveChatFor(ctx, conversationId);
-    const chatId = live?._id ?? await ctx.db.insert("comma_agent_chats", {
+    const chatId = chat?._id ?? await ctx.db.insert("comma_agent_chats", {
       conversationId, model, effort, state: "pending", createdAt: now, updatedAt: now,
     });
-    if (await itemFor(ctx, chatId, key)) return chatId;
     const attachments = await recordedAttachments(ctx, sent.map(({ storageId }) => storageId));
     const shown = attachments.map(({ filename, mimeType, size }) => ({ filename, mimeType, size }));
     await upsertItems(ctx, chatId, [{ key, entry: { kind: "user", text, steer, ...(shown.length ? { attachments: shown } : {}) } }], now);
     await insertCommand(ctx, chatId, { kind: "message", text, steer, model, effort, ...(attachments.length ? { attachments } : {}) });
-    const busy = live?.state === "running" || live?.state === "waiting_input";
-    await ctx.db.patch(chatId, { model, effort, state: busy ? live.state : "pending", updatedAt: now });
+    const busy = chat?.state === "running" || chat?.state === "waiting_input";
+    await ctx.db.patch(chatId, { model, effort, state: busy ? chat.state : "pending", updatedAt: now, ...REOPENED });
     return chatId;
   },
 });
@@ -217,20 +204,6 @@ export const stop = mutation({
     await assertAllowed(ctx);
     await requireChat(ctx, chatId);
     await insertCommand(ctx, chatId, { kind: "stop" });
-    return null;
-  },
-});
-
-export const newChat = mutation({
-  args: { conversationId: v.id("comma_conversations") },
-  returns: v.null(),
-  handler: async (ctx, { conversationId }) => {
-    await assertAllowed(ctx);
-    const live = await liveChatFor(ctx, conversationId);
-    if (!live) return null;
-    const now = Date.now();
-    await ctx.db.patch(live._id, { settledAt: now, updatedAt: now });
-    if (live.sessionId) await insertCommand(ctx, live._id, { kind: "close" });
     return null;
   },
 });

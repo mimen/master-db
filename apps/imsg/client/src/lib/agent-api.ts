@@ -2,7 +2,9 @@ import type { api } from "@convex-api";
 import { anyApi, type FunctionArgs } from "convex/server";
 import type { AgentChatDoc, AgentEntry, AgentItemDoc } from "../../../../../convex/schema/comma/validators";
 
-export type { AgentAttachment, AgentChatState, AgentEffort, AgentEntry, AgentQuestion } from "../../../../../convex/schema/comma/validators";
+export type {
+  AgentAttachment, AgentChatState, AgentChatSummary, AgentEffort, AgentEntry, AgentQuestion,
+} from "../../../../../convex/schema/comma/validators";
 export type AgentChat = AgentChatDoc;
 export type AgentItem = AgentItemDoc;
 export type AgentChatId = AgentChat["_id"];

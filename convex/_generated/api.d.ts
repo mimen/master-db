@@ -213,6 +213,7 @@ export declare const api: {
             size: number;
             storageId: Id<"_storage">;
           }>;
+          chatId?: Id<"comma_agent_chats">;
           conversationId: Id<"comma_conversations">;
           effort: "low" | "medium" | "high" | "xhigh" | "max";
           key: string;
@@ -352,44 +353,10 @@ export declare const api: {
           updatedAt: number;
         }>
       >;
-      liveChat: FunctionReference<
-        "query",
-        "public",
-        { conversationId: Id<"comma_conversations"> },
-        {
-          _creationTime: number;
-          _id: Id<"comma_agent_chats">;
-          conversationId: Id<"comma_conversations">;
-          createdAt: number;
-          effort: "low" | "medium" | "high" | "xhigh" | "max";
-          lastTurnEndedAt?: number;
-          model: string;
-          seenAt?: number;
-          seenThroughMessageAt?: number;
-          sessionId?: string;
-          settledAt?: number;
-          settledWithConversation?: boolean;
-          state:
-            | "idle"
-            | "pending"
-            | "running"
-            | "waiting_input"
-            | "interrupted"
-            | "failed";
-          title?: string;
-          updatedAt: number;
-        } | null
-      >;
       markSeen: FunctionReference<
         "mutation",
         "public",
         { chatId: Id<"comma_agent_chats"> },
-        null
-      >;
-      newChat: FunctionReference<
-        "mutation",
-        "public",
-        { conversationId: Id<"comma_conversations"> },
         null
       >;
       pendingAgentCommands: FunctionReference<

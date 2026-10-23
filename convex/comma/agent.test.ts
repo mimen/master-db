@@ -35,8 +35,8 @@ async function setup() {
     lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
   }));
   const as = t.withIdentity({ email: ALLOWED_EMAIL });
-  const ask = (key: string, text = key, steer = false) =>
-    as.mutation(api.comma.agent.ask, { conversationId, key, text, steer, model: "claude-opus-5-5", effort: "high" });
+  const ask = (key: string, text = key, chatId?: Id<"comma_agent_chats">) =>
+    as.mutation(api.comma.agent.ask, { conversationId, chatId, key, text, steer: false, model: "claude-opus-5-5", effort: "high" });
   const commands = () => t.run((ctx) => ctx.db.query("comma_agent_commands").collect());
   const items = (chatId: Id<"comma_agent_chats">) => as.query(api.comma.agent.listItems, { chatId });
   return { t, as, conversationId, ask, commands, items };
@@ -54,30 +54,54 @@ async function upload(t: Awaited<ReturnType<typeof setup>>["t"], filename: strin
 describe("client functions", () => {
   test("reject callers who are not Milad", async () => {
     const { t, conversationId } = await setup();
-    await expect(t.query(api.comma.agent.liveChat, { conversationId })).rejects.toThrow("Unauthorized");
-    await expect(t.mutation(api.comma.agent.newChat, { conversationId })).rejects.toThrow("Unauthorized");
+    await expect(t.query(api.comma.agent.chatsFor, { conversationId })).rejects.toThrow("Unauthorized");
+    await expect(t.mutation(api.comma.agent.ask, { conversationId, key: "k", text: "hi", steer: false, model: "claude-opus-5-5", effort: "high" }))
+      .rejects.toThrow("Unauthorized");
   });
 
-  test("ask creates the live chat once and is idempotent on its key", async () => {
-    const { as, conversationId, ask, commands, items } = await setup();
+  test("ask without a chat starts one, and its key is idempotent across every chat", async () => {
+    const { t, as, conversationId, ask, commands, items } = await setup();
     const chatId = await ask("k1", "draft a reply");
+    const other = await ask("k2", "something else");
+    expect(other).not.toBe(chatId);
     expect(await ask("k1", "draft a reply")).toBe(chatId);
-    expect(await as.query(api.comma.agent.liveChat, { conversationId })).toMatchObject({
-      _id: chatId, state: "pending", model: "claude-opus-5-5", effort: "high",
-    });
+    expect(await ask("k1", "draft a reply", other)).toBe(chatId);
+    expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ state: "pending", model: "claude-opus-5-5", effort: "high" });
+    expect((await as.query(api.comma.agent.chatsFor, { conversationId })).map(({ _id }) => _id).sort()).toEqual([chatId, other].sort());
     expect((await items(chatId)).map(({ key, ordinal, entry }) => [key, ordinal, entry])).toEqual([
       ["k1", 1, { kind: "user", text: "draft a reply", steer: false }],
     ]);
-    expect((await commands()).map(({ command, status }) => [command, status])).toEqual([
-      [{ kind: "message", text: "draft a reply", steer: false, model: "claude-opus-5-5", effort: "high" }, "pending"],
+    expect((await commands()).map(({ chatId: id, command, status }) => [id, command, status])).toEqual([
+      [chatId, { kind: "message", text: "draft a reply", steer: false, model: "claude-opus-5-5", effort: "high" }, "pending"],
+      [other, { kind: "message", text: "something else", steer: false, model: "claude-opus-5-5", effort: "high" }, "pending"],
     ]);
+  });
+
+  test("ask in a settled chat reopens it, and refuses a chat from another conversation", async () => {
+    const { t, as, ask, items } = await setup();
+    const chatId = await ask("k1");
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "idle" });
+    await as.mutation(api.comma.agent.settle, { chatId });
+    expect(await ask("k2", "one more thing", chatId)).toBe(chatId);
+    const row = await t.run((ctx) => ctx.db.get(chatId));
+    expect(row).toMatchObject({ state: "pending" });
+    expect(row).not.toHaveProperty("settledAt");
+    expect(row).not.toHaveProperty("settledWithConversation");
+    expect((await items(chatId)).map(({ key }) => key)).toEqual(["k1", "k2"]);
+
+    const other = await t.run((ctx) => ctx.db.insert("comma_conversations", {
+      conversationKey: "dm:other", primaryChatGuid: "x", chatGuids: ["x"], displayName: "Other", isGroup: false, participants: [],
+      lastMessageAt: 1, isSpam: false, hasGroupPhoto: false, updatedAt: 1,
+    }));
+    await expect(as.mutation(api.comma.agent.ask, { conversationId: other, chatId, key: "k3", text: "hi", steer: false, model: "claude-opus-5-5", effort: "high" }))
+      .rejects.toThrow("another conversation");
   });
 
   test("a later ask carries its own selection, moves the chat's to it, and keeps a busy state", async () => {
     const { t, as, conversationId, ask, commands, items } = await setup();
     const chatId = await ask("k1");
     await t.mutation(internal.comma.agent.agentChat, { chatId, state: "running" });
-    await as.mutation(api.comma.agent.ask, { conversationId, key: "k2", text: "faster", steer: true, model: "gpt-6-luna", effort: "low" });
+    await as.mutation(api.comma.agent.ask, { conversationId, chatId, key: "k2", text: "faster", steer: true, model: "gpt-6-luna", effort: "low" });
     expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ state: "running", model: "gpt-6-luna", effort: "low" });
     expect((await commands()).map(({ command }) => command)).toMatchObject([
       { text: "k1", model: "claude-opus-5-5", effort: "high" }, { text: "faster", model: "gpt-6-luna", effort: "low" },
@@ -86,7 +110,7 @@ describe("client functions", () => {
       [1, { kind: "user", text: "k1", steer: false }], [2, { kind: "user", text: "faster", steer: true }],
     ]);
     await t.mutation(internal.comma.agent.agentChat, { chatId, state: "idle" });
-    await ask("k3");
+    await ask("k3", "k3", chatId);
     expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ state: "pending" });
   });
 
@@ -135,22 +159,6 @@ describe("client functions", () => {
     await as.mutation(api.comma.agent.stop, { chatId });
     expect((await commands()).map(({ chatId: id, command }) => [id, command])).toEqual([
       [chatId, { kind: "message", text: "k1", steer: false, model: "claude-opus-5-5", effort: "high" }], [chatId, { kind: "stop" }],
-    ]);
-  });
-
-  test("newChat settles the live chat and closes its session", async () => {
-    const { t, as, conversationId, ask, commands } = await setup();
-    const unstarted = await ask("k1");
-    await as.mutation(api.comma.agent.newChat, { conversationId });
-    expect((await commands()).map(({ command }) => command.kind)).toEqual(["message"]);
-    const started = await ask("k2");
-    expect(started).not.toBe(unstarted);
-    await t.mutation(internal.comma.agent.agentChat, { chatId: started, sessionId: "session-1" });
-    await as.mutation(api.comma.agent.newChat, { conversationId });
-    expect(await as.query(api.comma.agent.liveChat, { conversationId })).toBeNull();
-    expect(await t.run((ctx) => ctx.db.get(started))).toMatchObject({ settledAt: expect.any(Number) });
-    expect((await commands()).map(({ chatId, command }) => [chatId, command.kind])).toEqual([
-      [unstarted, "message"], [started, "message"], [started, "close"],
     ]);
   });
 });
@@ -411,11 +419,10 @@ describe("runner functions", () => {
   });
 
   test("agentRecover interrupts open turns, cancels their questions, and is idempotent", async () => {
-    const { t, as, conversationId, ask, items } = await setup();
+    const { t, ask, items } = await setup();
     const running = await ask("k1");
     await t.mutation(internal.comma.agent.agentChat, { chatId: running, state: "waiting_input" });
     await t.mutation(internal.comma.agent.agentItems, { chatId: running, items: [{ key: "q1", entry: question("r1") }, { key: "q0", entry: question("r0", "resolved") }] });
-    await as.mutation(api.comma.agent.newChat, { conversationId });
     const idle = await ask("k2");
     await t.mutation(internal.comma.agent.agentChat, { chatId: idle, state: "idle" });
 
@@ -430,7 +437,7 @@ describe("runner functions", () => {
   });
 
   test("agentRecover interrupts a pending chat whose command a dead runner took, and fails its running tool steps", async () => {
-    const { t, as, conversationId, ask, items } = await setup();
+    const { t, ask, items } = await setup();
     const stranded = await ask("k1");
     const [taken] = await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET });
     await t.mutation(internal.comma.agent.agentClaim, { ids: [taken._id] });
@@ -438,7 +445,6 @@ describe("runner functions", () => {
       { key: "t1", entry: { kind: "tool", name: "Read", summary: "Read a.ts", status: "running" } },
       { key: "t0", entry: { kind: "tool", name: "Read", summary: "Read b.ts", status: "done" } },
     ] });
-    await as.mutation(api.comma.agent.newChat, { conversationId });
     const queued = await ask("k2");
 
     expect(await t.mutation(internal.comma.agent.agentRecover, { now: 50 })).toEqual({ chatIds: [stranded] });

@@ -114,7 +114,7 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
       { kind: "turn_end", outcome: "completed", durationMs: 0, model: "claude-opus-5-5", effort: "high" },
     ]);
   });
-  expect(await milad.query(api.comma.agent.liveChat, { conversationId })).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 });
+  expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ sessionId: "session-1", state: "idle", seenThroughMessageAt: 100 });
   expect(await milad.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ text: "Yes, Friday works!", source: "agent", note: "Confirms Friday" });
 
   const image = new Uint8Array(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"));
@@ -123,7 +123,7 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
   const imageUrl = await t.run((ctx) => ctx.storage.getUrl(storageId));
   storageFetch = async (url) => url === imageUrl ? new Response(await t.run(async (ctx) => await (await ctx.storage.get(storageId))!.arrayBuffer())) : new Response(null, { status: 404 });
   await milad.mutation(api.comma.agent.ask, {
-    conversationId, key: "ask-2", text: "What does this menu say?", steer: false, model: "gpt-6-luna", effort: "low",
+    conversationId, chatId, key: "ask-2", text: "What does this menu say?", steer: false, model: "gpt-6-luna", effort: "low",
     attachments: [{ storageId, filename: "menu.png", mimeType: "image/png", size: image.byteLength }],
   });
   sessions.receive(await t.query(api.comma.agent.pendingAgentCommands, { bridgeKey: SECRET }));
@@ -155,6 +155,6 @@ test("ask, claim, transcript, draft, a model switch and an image round-trip betw
       { kind: "turn_end", outcome: "completed", durationMs: 0, model: "gpt-6-luna", effort: "low" },
     ]);
   });
-  expect(await milad.query(api.comma.agent.liveChat, { conversationId })).toMatchObject({ model: "gpt-6-luna", effort: "low", state: "idle" });
+  expect(await t.run((ctx) => ctx.db.get(chatId))).toMatchObject({ model: "gpt-6-luna", effort: "low", state: "idle" });
   await sessions.closeAll();
 });
