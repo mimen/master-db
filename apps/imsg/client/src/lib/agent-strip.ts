@@ -1,13 +1,18 @@
-import type { AgentChatState, AgentItem } from "./agent-api";
+import { agentAttention, type AttentionInput } from "@shared/agent-attention";
 
-export type AgentStripState = "asking" | "working" | "drafted";
+import type { AgentChatSummary } from "./agent-api";
 
-/** What the state strip says about the agent while its pane is closed. Only the latest turn counts. */
-export function agentStripState(chat: { readonly state: AgentChatState } | null | undefined, items: readonly AgentItem[]): AgentStripState | null {
+export type AgentStripState = "asking" | "working" | "drafted" | "replied" | "failed";
+
+/** What the state strip says, while the pane is closed, about the conversation's most urgent open chat. An open chat says nothing. */
+export function agentStripState(chat: (AttentionInput & Pick<AgentChatSummary, "preview">) | undefined): AgentStripState | null {
   if (!chat) return null;
-  if (chat.state === "waiting_input") return "asking";
-  if (chat.state === "running" || chat.state === "pending") return "working";
-  const lastAsk = items.findLastIndex((item) => item.entry.kind === "user");
-  const drafted = items.slice(lastAsk + 1).some((item) => item.entry.kind === "draft" && !item.entry.used);
-  return drafted ? "drafted" : null;
+  switch (agentAttention(chat)) {
+    case "needs_you": return "asking";
+    case "working": return "working";
+    case "ready": return chat.preview?.kind === "draft" ? "drafted" : "replied";
+    case "failed": return "failed";
+    case "open":
+    case "settled": return null;
+  }
 }

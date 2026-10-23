@@ -1,4 +1,3 @@
-import { mostUrgent } from "@shared/agent-attention";
 import { useQuery } from "convex/react";
 import type { GenericId } from "convex/values";
 
@@ -22,18 +21,4 @@ export function useAgentChats(conversationId: GenericId<"comma_conversations"> |
 
 export function useAgentItems(chatId: AgentChatId | undefined): readonly AgentItem[] {
   return useQuery(agentApi.listItems, chatId ? { chatId } : "skip") ?? NO_ITEMS;
-}
-
-/**
- * The conversation's most urgent open chat and its items. `chat` is undefined while loading, null
- * when no chat is open.
- */
-export function useAgentChat(conversationId: GenericId<"comma_conversations"> | null, enabled = true): {
-  chat: AgentChatSummary | null | undefined;
-  items: readonly AgentItem[];
-} {
-  const chats = useQuery(agentApi.chatsFor, enabled && conversationId ? { conversationId } : "skip");
-  const chat = chats && (mostUrgent(chats) ?? null);
-  const items = useQuery(agentApi.listItems, chat ? { chatId: chat._id } : "skip");
-  return { chat, items: chat ? items ?? NO_ITEMS : NO_ITEMS };
 }

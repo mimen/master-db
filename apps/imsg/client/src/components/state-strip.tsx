@@ -1,11 +1,12 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { mostUrgent } from "@shared/agent-attention";
 import type { Message } from "@shared/types";
 import { useContext, useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
 import { DesktopShellContext } from "@/components/desktop-shell-context";
-import { useAgentChat, useAgentEnabled } from "@/hooks/use-agent";
+import { useAgentChats, useAgentEnabled } from "@/hooks/use-agent";
 import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
@@ -39,34 +40,41 @@ function ToneIcon({ tone, colors }: { readonly tone: StripTone; readonly colors:
   );
 }
 
-const AGENT_COPY: Record<AgentStripState, string> = {
-  asking: "Agent is asking you something",
-  working: "Agent is working",
-  drafted: "Agent drafted a reply",
+const AGENT_CHIP: Record<AgentStripState, { readonly copy: string; readonly icon: React.ComponentProps<typeof Ionicons>["name"] }> = {
+  asking: { copy: "Agent is asking you something", icon: "help-circle-outline" },
+  working: { copy: "Agent is working", icon: "ellipsis-horizontal-circle-outline" },
+  drafted: { copy: "Agent drafted a reply", icon: "create-outline" },
+  replied: { copy: "Agent replied", icon: "chatbubble-ellipses-outline" },
+  failed: { copy: "Agent hit an error", icon: "alert-circle-outline" },
 };
 
-/** While the Agent pane is closed, what the agent is up to in this conversation. */
-function useAgentStrip(chatGuid: string): AgentStripState | null {
+interface AgentStrip { readonly state: AgentStripState; readonly chatId: string }
+
+/** While the Agent pane is closed, what the conversation's most urgent open chat wants. */
+function useAgentStrip(chatGuid: string): AgentStrip | null {
   const enabled = useAgentEnabled();
   const shell = useContext(DesktopShellContext);
   const paneOpen = shell?.state.utility?.kind === "agent";
   const { conversationId } = useConversationRef(chatGuid);
-  const { chat, items } = useAgentChat(conversationId, enabled && !paneOpen);
-  return enabled && !paneOpen ? agentStripState(chat, items) : null;
+  // Subscribed while the pane is open too (the pane holds the same query), so closing it shows the chip at once.
+  const chat = mostUrgent(useAgentChats(conversationId, enabled) ?? []);
+  const state = enabled && !paneOpen ? agentStripState(chat) : null;
+  return state && chat ? { state, chatId: chat._id } : null;
 }
 
-function AgentChip({ chatGuid, state, colors }: { readonly chatGuid: string; readonly state: AgentStripState; readonly colors: ReturnType<typeof useTheme> }) {
+function AgentChip({ chatGuid, agent, colors }: { readonly chatGuid: string; readonly agent: AgentStrip; readonly colors: ReturnType<typeof useTheme> }) {
+  const { copy, icon } = AGENT_CHIP[agent.state];
   return (
     <Pressable
       testID="agent-strip"
       accessibilityRole="button"
-      accessibilityLabel={`${AGENT_COPY[state]}. Open the agent`}
-      onPress={() => openAgentPane(chatGuid)}
+      accessibilityLabel={`${copy}. Open the agent`}
+      onPress={() => openAgentPane(chatGuid, agent.chatId)}
       hitSlop={4}
       style={({ hovered, pressed }) => [styles.action, (hovered || pressed) && { backgroundColor: colors.rowHover }]}
     >
-      <Ionicons name={state === "asking" ? "help-circle-outline" : state === "working" ? "ellipsis-horizontal-circle-outline" : "create-outline"} size={14} color={colors.accent} />
-      <Text numberOfLines={1} style={[styles.actionText, { color: colors.text }]}>{AGENT_COPY[state]}</Text>
+      <Ionicons name={icon} size={14} color={agent.state === "failed" ? colors.destructive : colors.accent} />
+      <Text numberOfLines={1} style={[styles.actionText, { color: colors.text }]}>{copy}</Text>
     </Pressable>
   );
 }
@@ -93,7 +101,7 @@ export function StateStrip({
   if (!chat) return null;
   const copy = stripCopy({ chat, messages, historyComplete, now, compact: !wide });
   if (!copy && !agent) return null;
-  const agentChip = agent ? <AgentChip chatGuid={chatGuid} state={agent} colors={colors} /> : null;
+  const agentChip = agent ? <AgentChip chatGuid={chatGuid} agent={agent} colors={colors} /> : null;
   if (!copy) {
     return (
       <View testID="state-strip" style={[styles.strip, { backgroundColor: colors.strip, borderColor: colors.divider }]}>
