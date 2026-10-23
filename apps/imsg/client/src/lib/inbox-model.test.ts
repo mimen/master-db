@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   desktopInboxTitle,
   activeChips,
+  agentArrivals,
   agentStatusLine,
   checkboxCounts,
   DEFAULT_INBOX_FILTERS,
@@ -371,5 +372,24 @@ describe("Agents lens", () => {
     expect(agentStatusLine(agent("working", 1, { kind: "thinking", text: "**Searching the thread**\n\nLooking for venues." }))).toEqual({ word: "Working", text: "Searching the thread" });
     expect(agentStatusLine(agent("working", 1, { kind: "thinking", text: "Reading it now. Then the list." }))).toEqual({ word: "Working", text: "Reading it now." });
     expect(agentStatusLine(agent("open", 1, { kind: "reply", text: "90 minutes." }))).toEqual({ word: null, text: "90 minutes." });
+  });
+});
+
+describe("agentArrivals", () => {
+  const chat = (id: string, overrides: Record<string, unknown> = {}) => ({
+    _id: id, conversationId: "c1", title: "T", state: "running", model: "claude-opus-5-5", effort: "high", createdAt: 1, updatedAt: 1, ...overrides,
+  }) as never;
+
+  test("the first list only sets the baseline, then a chat that finishes, asks or fails arrives once", () => {
+    const first = agentArrivals(null, [chat("a", { state: "waiting_input" }), chat("b")]);
+    expect(first.arrivals).toEqual([]);
+    const finished = agentArrivals(first.seen, [chat("a", { state: "waiting_input" }), chat("b", { state: "idle", lastTurnEndedAt: 5 })]);
+    expect(finished.arrivals.map(({ attention }) => attention)).toEqual(["ready"]);
+    expect(agentArrivals(finished.seen, [chat("a", { state: "waiting_input" }), chat("b", { state: "idle", lastTurnEndedAt: 5 })]).arrivals).toEqual([]);
+  });
+
+  test("a new chat that already wants the user arrives; one that is working or seen does not", () => {
+    const { arrivals } = agentArrivals(new Map(), [chat("x", { state: "failed", lastTurnEndedAt: 5 }), chat("y"), chat("z", { state: "idle", lastTurnEndedAt: 5, seenAt: 6 })]);
+    expect(arrivals.map(({ chat: c, attention }) => `${(c as { _id: string })._id} ${attention}`)).toEqual(["x failed"]);
   });
 });

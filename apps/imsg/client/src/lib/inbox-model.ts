@@ -1,5 +1,7 @@
+import { agentAttention, WANTS_YOU, type AgentAttention } from "@shared/agent-attention";
 import { isSettled, matchesFilters } from "@shared/chat-state";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
+import type { AgentChatSummary } from "./agent-api";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two lenses the workspace owns: which queue, and whose conversations. */
@@ -446,7 +448,7 @@ export const AGENT_ATTENTION: Record<AgentSummary["attention"], { header: string
   working: { header: "Working", spoken: "agent working" },
   open: { header: "Open", spoken: "agent chat open" },
 };
-const ATTENTION_ORDER = Object.keys(AGENT_ATTENTION) as AgentSummary["attention"][];
+export const ATTENTION_ORDER = Object.keys(AGENT_ATTENTION) as AgentSummary["attention"][];
 
 /** An Agents lens row's status line: a state word, then the question, draft, reply, thought or error. Open shows only the reply. */
 export function agentStatusLine(agent: AgentSummary): { word: string | null; text: string } {
@@ -462,4 +464,22 @@ export function agentStatusLine(agent: AgentSummary): { word: string | null; tex
     default:
       return { word: AGENT_ATTENTION[agent.attention].header, text };
   }
+}
+
+/**
+ * The chats that just turned needs_you, ready or failed, judged against the attentions the last list
+ * showed. `before` is null for the first list, which only sets the baseline.
+ */
+export function agentArrivals(
+  before: ReadonlyMap<string, AgentAttention> | null,
+  summaries: readonly AgentChatSummary[],
+): { arrivals: { chat: AgentChatSummary; attention: Exclude<AgentAttention, "settled"> }[]; seen: Map<string, AgentAttention> } {
+  const seen = new Map(summaries.map((chat) => [chat._id as string, agentAttention(chat)]));
+  if (!before) return { arrivals: [], seen };
+  const arrivals = summaries.flatMap((chat) => {
+    const attention = seen.get(chat._id)!;
+    if (attention === "settled" || !WANTS_YOU.has(attention) || before.get(chat._id) === attention) return [];
+    return [{ chat, attention }];
+  });
+  return { arrivals, seen };
 }

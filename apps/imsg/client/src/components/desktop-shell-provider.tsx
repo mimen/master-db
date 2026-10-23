@@ -26,11 +26,13 @@ import { MessagesWorkspace } from "@/components/messages-workspace";
 import { OverlayShell } from "@/components/overlay-shell";
 import { Type } from "@/constants/theme";
 import { useAgentEnabled } from "@/hooks/use-agent";
+import { useAgentToasts } from "@/hooks/use-agent-toasts";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
 import { onOpenAgentPane } from "@/lib/agent-pane";
 import { onOpenChatInfo } from "@/lib/chat-info";
 import { DEFAULT_INBOX_FILTERS } from "@/lib/inbox-model";
+import { WANTS_YOU } from "@shared/agent-attention";
 import {
   createInitialDesktopShellState,
   INITIAL_DESKTOP_SHELL_STATE,
@@ -64,6 +66,12 @@ const HELP_ENTRIES = helpEntries();
 const SETTINGS_PANE_WIDTH = 640;
 /** A transcript with question cards reads poorly at the 312 minimum. */
 const AGENT_PANE_WIDTH = 420;
+
+/** Its own component so each agent list update re-renders only this, not the shell. */
+function AgentToasts({ lookingAt }: { readonly lookingAt: string | null }): null {
+  useAgentToasts(lookingAt);
+  return null;
+}
 
 function utilityForPerson(
   workspace: "messages" | "contacts",
@@ -118,6 +126,20 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   useEffect(() => {
     if (agentHidden) dispatch({ type: "utility/closed" });
   }, [agentHidden]);
+  // Opening a conversation whose agent wants the user opens its pane, as does any pick in the Agents
+  // lens. The pane then shows the most urgent chat, the one the row's badge names. Focus stays where
+  // the open put it, so j/k keeps walking the list.
+  const selectedGuid = state.messages.selection?.guid;
+  const autoOpen = useRef({ wide: false, agentEnabled, rail: messagesRail });
+  autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail };
+  useEffect(() => {
+    const { wide: shellWide, agentEnabled: enabled, rail } = autoOpen.current;
+    if (!shellWide || !enabled || !selectedGuid || agentOpen.current) return;
+    const agent = rail.allChats.find((chat) => chat.guid === selectedGuid)?.agent;
+    if (agent && (rail.state === "agents" || WANTS_YOU.has(agent.attention))) {
+      dispatch({ type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
+    }
+  }, [selectedGuid]);
 
   useEffect(() => {
     if (projection === null) {
@@ -274,6 +296,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
     (state.utility.kind !== "agent" || agentGuid !== undefined)
       ? state.utility
       : null;
+  const phoneAgentGuid = pathname === "/agent" && typeof params.guid === "string" ? params.guid : null;
   const utilityContent = utility?.kind === "agent" && agentGuid ? (
     <AgentPane key={agentGuid} chatGuid={agentGuid} onClose={closeUtility} />
   ) : utility?.kind === "chat-info" ? (
@@ -350,6 +373,7 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   return (
     <DesktopShellContext.Provider value={context}>
       <View style={styles.root}>
+        <AgentToasts lookingAt={wide ? (utility?.kind === "agent" ? agentGuid ?? null : null) : phoneAgentGuid} />
         <View
           style={shellOwnsRoute ? styles.hiddenRouteHost : styles.routeHost}
           accessibilityElementsHidden={shellOwnsRoute}
