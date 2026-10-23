@@ -110,7 +110,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   // In the Agents lens any pick opens the pane, working chats included.
   await row("Taylor Morgan").click();
   await expect(pane, "an Agents lens pick opens the pane").toBeVisible();
-  await expect(pane.getByTestId("pane-header")).toContainText("Taylor Morgan");
+  await expect(pane.getByTestId("pane-header")).toContainText("Venues Taylor mentioned");
   await closePane();
 
   await lens(/^All/).click();
@@ -118,7 +118,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await expect(pane).toBeHidden();
   await row("Riley Chen").click();
   await expect(pane, "selecting a conversation whose agent is ready opens the pane").toBeVisible();
-  await expect(pane.getByTestId("pane-header")).toContainText("Riley Chen");
+  await expect(pane.getByTestId("pane-header")).toContainText("Reply about the guest list");
   await expect(composer, "focus stays in the composer").toBeFocused();
   await page.screenshot({ path: shot("06-auto-open-riley") });
   await closePane();
@@ -136,7 +136,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await expect(page.getByTestId("thread-view")).toContainText("Taylor Morgan");
   await expect(pane).toBeVisible();
-  await expect(pane.getByTestId("pane-header")).toContainText("Taylor Morgan");
+  await expect(pane.getByTestId("pane-header")).toContainText("Venues Taylor mentioned");
   await page.screenshot({ path: shot("08-toast-open") });
   await closePane();
 
@@ -176,7 +176,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   writeFileSync(join(evidence, "aria-palette.txt"), await palette.ariaSnapshot());
   await palette.getByText("Reply about the guest list").click();
   await expect(page.getByTestId("thread-view")).toContainText("Riley Chen");
-  await expect(pane.getByTestId("pane-header")).toContainText("Riley Chen");
+  await expect(pane.getByTestId("pane-header")).toContainText("Reply about the guest list");
   await page.screenshot({ path: shot("14-palette-open") });
 
   await page.setViewportSize({ width: 390, height: 844 });
