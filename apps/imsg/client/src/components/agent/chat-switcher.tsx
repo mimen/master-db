@@ -10,7 +10,7 @@ import { switcherRows, type PaneSelection, type SwitcherValue } from "@/lib/agen
 
 type Theme = ReturnType<typeof useTheme>;
 
-/** Shape carries the state as well as color: filled for what wants the user, a ring for the rest. */
+/** Shape carries the state as well as color: a dotted ring while working, a plain ring when open. */
 function dotStyle(attention: AgentAttention, theme: Theme): ViewStyle {
   switch (attention) {
     case "needs_you": return { backgroundColor: theme.turnMark };
