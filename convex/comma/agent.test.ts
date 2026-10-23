@@ -138,7 +138,7 @@ describe("client functions", () => {
     ]);
   });
 
-  test("newChat archives the live chat and closes its session", async () => {
+  test("newChat settles the live chat and closes its session", async () => {
     const { t, as, conversationId, ask, commands } = await setup();
     const unstarted = await ask("k1");
     await as.mutation(api.comma.agent.newChat, { conversationId });
@@ -148,7 +148,7 @@ describe("client functions", () => {
     await t.mutation(internal.comma.agent.agentChat, { chatId: started, sessionId: "session-1" });
     await as.mutation(api.comma.agent.newChat, { conversationId });
     expect(await as.query(api.comma.agent.liveChat, { conversationId })).toBeNull();
-    expect(await t.run((ctx) => ctx.db.get(started))).toMatchObject({ archivedAt: expect.any(Number) });
+    expect(await t.run((ctx) => ctx.db.get(started))).toMatchObject({ settledAt: expect.any(Number) });
     expect((await commands()).map(({ chatId, command }) => [chatId, command.kind])).toEqual([
       [unstarted, "message"], [started, "message"], [started, "close"],
     ]);
@@ -332,6 +332,21 @@ describe("runner functions", () => {
     expect((await items(stranded)).map(({ key, entry }) => [key, entry.kind === "tool" ? entry.status : entry.kind])).toEqual([
       ["k1", "user"], ["t1", "failed"], ["t0", "done"], ["recover-50", "turn_end"],
     ]);
+  });
+
+  test("migrateArchivedAt moves archivedAt onto settledAt once and leaves open chats alone", async () => {
+    const { t, conversationId } = await setup();
+    const chat = { conversationId, state: "idle" as const, model: "claude-opus-5-5", effort: "high" as const, createdAt: 1, updatedAt: 1 };
+    const [archived, open] = await t.run(async (ctx) => [
+      await ctx.db.insert("comma_agent_chats", { ...chat, archivedAt: 40 }),
+      await ctx.db.insert("comma_agent_chats", chat),
+    ]);
+    expect(await t.mutation(internal.comma.agent.migrateArchivedAt, {})).toBe(1);
+    expect(await t.mutation(internal.comma.agent.migrateArchivedAt, {})).toBe(0);
+    const [moved, untouched] = await t.run(async (ctx) => [await ctx.db.get(archived), await ctx.db.get(open)]);
+    expect(moved).toMatchObject({ settledAt: 40 });
+    expect(moved).not.toHaveProperty("archivedAt");
+    expect(untouched).not.toHaveProperty("settledAt");
   });
 
   test("aiStatus reports the runner's latest heartbeat beside the Mini's capabilities", async () => {

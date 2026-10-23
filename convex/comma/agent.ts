@@ -21,7 +21,7 @@ import { enqueueCommand } from "./outbox";
 async function liveChatFor(ctx: QueryCtx, conversationId: Id<"comma_conversations">) {
   return await ctx.db.query("comma_agent_chats")
     .withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId))
-    .filter((q) => q.eq(q.field("archivedAt"), undefined))
+    .filter((q) => q.and(q.eq(q.field("archivedAt"), undefined), q.eq(q.field("settledAt"), undefined)))
     .unique();
 }
 
@@ -154,7 +154,7 @@ export const newChat = mutation({
     const live = await liveChatFor(ctx, conversationId);
     if (!live) return null;
     const now = Date.now();
-    await ctx.db.patch(live._id, { archivedAt: now, updatedAt: now });
+    await ctx.db.patch(live._id, { settledAt: now, updatedAt: now });
     if (live.sessionId) await insertCommand(ctx, live._id, { kind: "close" });
     return null;
   },
@@ -233,6 +233,17 @@ export const agentRecover = internalMutation({
       await ctx.db.patch(chat._id, { state: "interrupted", updatedAt: now });
     }
     return { chatIds: open.map(({ _id }) => _id) };
+  },
+});
+
+/** Moves New chat's old archivedAt onto settledAt. Idempotent; returns how many chats it moved. */
+export const migrateArchivedAt = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const archived = await ctx.db.query("comma_agent_chats").filter((q) => q.neq(q.field("archivedAt"), undefined)).collect();
+    for (const chat of archived) await ctx.db.patch(chat._id, { settledAt: chat.settledAt ?? chat.archivedAt, archivedAt: undefined });
+    return archived.length;
   },
 });
 

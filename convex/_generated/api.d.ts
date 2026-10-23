@@ -311,9 +311,13 @@ export declare const api: {
           conversationId: Id<"comma_conversations">;
           createdAt: number;
           effort: "low" | "medium" | "high" | "xhigh" | "max";
+          lastTurnEndedAt?: number;
           model: string;
+          seenAt?: number;
           seenThroughMessageAt?: number;
           sessionId?: string;
+          settledAt?: number;
+          settledWithConversation?: boolean;
           state:
             | "idle"
             | "pending"
@@ -321,6 +325,7 @@ export declare const api: {
             | "waiting_input"
             | "interrupted"
             | "failed";
+          title?: string;
           updatedAt: number;
         } | null
       >;
@@ -1758,6 +1763,7 @@ export declare const api: {
         {
           _creationTime: number;
           _id: Id<"comma_drafts">;
+          agentChatId?: Id<"comma_agent_chats">;
           attachments?: Array<{
             filename: string;
             mimeType: string;
@@ -3860,6 +3866,7 @@ export declare const internal: {
         },
         Id<"comma_outbox">
       >;
+      migrateArchivedAt: FunctionReference<"mutation", "internal", {}, number>;
     };
     agentContext: {
       agentAttachment: FunctionReference<

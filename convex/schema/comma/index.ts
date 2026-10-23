@@ -80,8 +80,11 @@ export const comma_bridge_state = defineTable(v.union(v.object(bridgeStateFields
   .index("by_key", ["key"]);
 export const comma_uploads = defineTable(uploadFields).index("by_storageId", ["storageId"]).index("by_commandId", ["commandId"]);
 
-export const comma_agent_chats = defineTable(agentChatFields).index("by_conversationId", ["conversationId"]);
+export const comma_agent_chats = defineTable(agentChatFields)
+  .index("by_conversationId", ["conversationId"])
+  .index("by_settledAt", ["settledAt"]);
 export const comma_agent_items = defineTable(agentItemFields)
   .index("by_chat_ordinal", ["chatId", "ordinal"])
-  .index("by_chat_key", ["chatId", "key"]);
+  .index("by_chat_key", ["chatId", "key"])
+  .index("by_key", ["key"]);
 export const comma_agent_commands = defineTable(agentCommandFields).index("by_status_createdAt", ["status", "createdAt"]);
