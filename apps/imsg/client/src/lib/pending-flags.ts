@@ -50,23 +50,30 @@ function overlayOf(chat: ChatSummary): ChatState {
   };
 }
 
-function apply(chat: ChatSummary, intents: readonly FlagIntent[]): ChatSummary {
+function apply(chat: ChatSummary, pending: readonly PendingFlag[]): ChatSummary {
+  const intents = pending.map(({ intent }) => intent);
   const state = intents.reduce((current, intent) => write(current, intent, chat.lastMessage), overlayOf(chat));
   // listConversations' rule: a read at or after the last message zeroes the count.
   const unreadCount = (state.readAt ?? -1) >= (chat.lastMessage?.dateCreated ?? 0) ? 0 : chat.unreadCount;
   const flags = computeFlags(state, chat.lastMessage, unreadCount);
   const displayName = intents.reduce((name, intent) => intent.change === "rename" ? intent.name : name, chat.displayName);
-  const same = unreadCount === chat.unreadCount && displayName === chat.displayName &&
+  // Convex settles the agent chats when it takes the command, so by the bridge's confirmation the
+  // directory already shows them gone; one still there then is a chat that reopened itself.
+  const dropAgent = chat.agent !== undefined && pending.some(({ intent, confirmed }) => intent.change === "settle" && !confirmed);
+  const same = !dropAgent && unreadCount === chat.unreadCount && displayName === chat.displayName &&
     (Object.keys(flags) as (keyof typeof flags)[]).every((key) => flags[key] === chat.flags[key]);
+  if (same) return chat;
   // firstUnreadAt stays: the open thread still needs it to place its unread divider.
-  return same ? chat : { ...chat, flags, unreadCount, displayName };
+  const shown = { ...chat, flags, unreadCount, displayName };
+  if (dropAgent) delete shown.agent;
+  return shown;
 }
 
 /** The directory as the user's pending intents leave it. Returns `chats` itself when no row changes. */
 export function applyFlagIntents(chats: ChatSummary[], pending: PendingFlags): ChatSummary[] {
   if (pending.size === 0) return chats;
-  const byChat = new Map<string, FlagIntent[]>();
-  for (const { intent } of pending.values()) byChat.set(intent.chatGuid, [...(byChat.get(intent.chatGuid) ?? []), intent]);
+  const byChat = new Map<string, PendingFlag[]>();
+  for (const flag of pending.values()) byChat.set(flag.intent.chatGuid, [...(byChat.get(flag.intent.chatGuid) ?? []), flag]);
   const shown = chats.map((chat) => {
     const mine = byChat.get(chat.guid);
     return mine ? apply(chat, mine) : chat;
@@ -78,9 +85,9 @@ export function applyFlagIntents(chats: ChatSummary[], pending: PendingFlags): C
 export function retireFlagIntents(pending: PendingFlags, chats: readonly ChatSummary[]): PendingFlags {
   if (pending.size === 0) return pending;
   const byGuid = new Map(chats.map((chat) => [chat.guid, chat]));
-  const done = [...pending].filter(([, { intent, confirmed }]) => {
-    const chat = byGuid.get(intent.chatGuid);
-    return confirmed && chat !== undefined && apply(chat, [intent]) === chat;
+  const done = [...pending].filter(([, flag]) => {
+    const chat = byGuid.get(flag.intent.chatGuid);
+    return flag.confirmed && chat !== undefined && apply(chat, [flag]) === chat;
   });
   if (done.length === 0) return pending;
   const next = new Map(pending);

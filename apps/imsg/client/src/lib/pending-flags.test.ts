@@ -28,6 +28,30 @@ describe("applyFlagIntents", () => {
     expect(after[1]).toBe(before[1]);
   });
 
+  test("a settle takes a row that is in Needs reply only for its agent chat out on the same pass", () => {
+    const agent = { attention: "open", chatId: "a1", title: "Set length", openCount: 1, activityAt: 100 } as const;
+    const answered = chat({ lastMessage: { ...inbound, isFromMe: true }, unreadCount: 0, flags: { ...chat().flags, unresponded: false, unread: false }, agent });
+    const [shown] = applyFlagIntents([answered], pending([{ change: "settle", chatGuid: "c1", seen: "m2" }]));
+    expect(computeCounts([answered], "all")).toMatchObject({ unresponded: 1, agents: 0 });
+    expect(shown?.agent).toBeUndefined();
+    expect(computeCounts([shown!], "all")).toMatchObject({ unresponded: 0, agents: 0, settled: 1 });
+  });
+
+  test("an un-settle brings no agent chat back before the directory does", () => {
+    const settled = chat({ flags: { ...chat().flags, unresponded: false } });
+    const [shown] = applyFlagIntents([settled], pending([{ change: "unsettle", chatGuid: "c1" }]));
+    expect(shown?.flags.unresponded).toBe(true);
+    expect(shown?.agent).toBeUndefined();
+  });
+
+  test("a confirmed settle shows an agent chat that reopened itself, and retires", () => {
+    const agent = { attention: "needs_you", chatId: "a1", title: "Load-in", openCount: 1, activityAt: 300 } as const;
+    const reopened = chat({ flags: { ...chat().flags, unresponded: false }, agent });
+    const settle = pending([{ change: "settle", chatGuid: "c1", seen: "m2" }, true]);
+    expect(applyFlagIntents([reopened], settle)[0]).toBe(reopened);
+    expect(retireFlagIntents(settle, [reopened]).size).toBe(0);
+  });
+
   test("a settle of a message the user never saw changes nothing", () => {
     const newer = chat({ lastMessage: { ...inbound, guid: "m3", dateCreated: 300 } });
     const [shown] = applyFlagIntents([newer], pending([{ change: "settle", chatGuid: "c1", seen: "m2" }]));
