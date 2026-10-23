@@ -117,14 +117,17 @@ export async function recordedAttachments(ctx: QueryCtx, storageIds: Id<"_storag
 
 /**
  * Writes an agent draft into the composer. Replaces an earlier agent draft, but never text the
- * user typed unless forced; that case writes nothing and returns null.
+ * user typed unless forced; that case writes nothing and returns null. chatId names the agent
+ * chat that wrote it; a draft from the CLI has none.
  */
-export async function writeAgentDraft(ctx: MutationCtx, conversationId: Id<"comma_conversations">, { text, note, attachments, force }: {
-  text: string; note?: string; attachments: DraftAttachment[]; force?: boolean;
+export async function writeAgentDraft(ctx: MutationCtx, conversationId: Id<"comma_conversations">, { text, note, attachments, force, chatId }: {
+  text: string; note?: string; attachments: DraftAttachment[]; force?: boolean; chatId?: Id<"comma_agent_chats">;
 }): Promise<{ draftId: Id<"comma_drafts">; replaced: boolean } | null> {
   const existing = await draftFor(ctx, conversationId);
   if (existing && existing.source !== "agent" && existing.text.trim() && !force) return null;
-  const fields = { text, updatedAt: Date.now(), source: "agent" as const, note, attachments: attachments.length ? attachments : undefined };
+  const fields = {
+    text, updatedAt: Date.now(), source: "agent" as const, note, attachments: attachments.length ? attachments : undefined, agentChatId: chatId,
+  };
   if (existing) await ctx.db.patch(existing._id, fields);
   const draftId = existing?._id ?? await ctx.db.insert("comma_drafts", { conversationId, ...fields });
   return { draftId, replaced: existing !== null };

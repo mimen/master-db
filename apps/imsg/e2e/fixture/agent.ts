@@ -7,7 +7,7 @@ import type {
 export interface AgentDraftPort {
   /** Text the user typed into this conversation's composer, or "" for none or an agent draft. */
   userText(conversationId: string): string;
-  writeAgentDraft(conversationId: string, text: string, note: string): void;
+  writeAgentDraft(conversationId: string, text: string, note: string, chatId: string): void;
   /** A finalized upload, or null; an ask may carry only finalized files. */
   upload?(storageId: string): AgentAttachmentMeta | null;
 }
@@ -185,7 +185,7 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
       const text = `You're both on the list for ${list} 🎃 see you there`;
       const note = `Added Jesse + Rebecca to ${list}`;
       const placed = drafts.userText(chat.conversationId).trim() ? "pane" : "composer";
-      if (placed === "composer") drafts.writeAgentDraft(chat.conversationId, text, note);
+      if (placed === "composer") drafts.writeAgentDraft(chat.conversationId, text, note, chat._id);
       upsert(chat._id, `${requestId}-draft`, { kind: "draft", text, note, placed, used: false });
       upsert(chat._id, `${requestId}-reply`, { kind: "assistant", streaming: false,
         text: placed === "composer" ? `Added Jesse and Rebecca to ${list}. The reply is in the composer.` : `Added Jesse and Rebecca to ${list}. You have text in the composer, so the reply is below.` });
@@ -227,11 +227,28 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
       for (const [chatId, list] of items) {
         const item = list.find((row) => row._id === args.itemId);
         if (item?.entry.kind !== "draft" || item.entry.placed !== "pane") continue;
-        drafts.writeAgentDraft(chats.get(chatId)!.conversationId, item.entry.text, item.entry.note ?? "");
+        drafts.writeAgentDraft(chats.get(chatId)!.conversationId, item.entry.text, item.entry.note ?? "", chatId);
         upsert(chatId, item.key, { ...item.entry, used: true });
         return null;
       }
       throw new Error("No pane draft with that id");
+    },
+  };
+
+  /** The outbox's side of Convex's enqueue: a conversation settle carries its chats, and sending a chat's draft settles it. */
+  const outbox = {
+    settle: (conversationId: string) => {
+      const at = now();
+      for (const chat of [...chats.values()]) if (chat.conversationId === conversationId && chat.settledAt === undefined) settleChat(chat, true, at);
+    },
+    unsettle: (conversationId: string) => {
+      const closed = [...chats.values()].filter((chat) => chat.conversationId === conversationId && chat.settledWithConversation === true && chat.settledAt !== undefined);
+      const latest = Math.max(...closed.map((chat) => chat.settledAt!));
+      for (const chat of closed) if (chat.settledAt === latest) markChat(chat._id, reopened);
+    },
+    sentDraft: (chatId: string | undefined) => {
+      const chat = chatId ? chats.get(chatId) : undefined;
+      if (chat && chat.settledAt === undefined) settleChat(chat, false);
     },
   };
 
@@ -242,5 +259,5 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400) {
     items.clear();
     turnStarts.clear();
   };
-  return { handlers, reset };
+  return { handlers, outbox, reset };
 }

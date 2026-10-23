@@ -53,7 +53,7 @@ const REOPENED = { settledAt: undefined, settledWithConversation: undefined };
  * finished chat's session closes, and a running turn carries on until it ends on its own. One
  * conversation settle passes one `now` to every chat so un-settle can find them together.
  */
-export async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { withConversation, now = Date.now() }: {
+async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { withConversation, now = Date.now() }: {
   withConversation: boolean; now?: number;
 }) {
   await ctx.db.patch(chat._id, { settledAt: now, settledWithConversation: withConversation });
@@ -75,6 +75,31 @@ export async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats"
     case "running":
       return;
   }
+}
+
+/** A conversation settle settles every unsettled chat with one `now`, marked so un-settle can reopen them together. */
+export async function settleConversationChats(ctx: MutationCtx, conversationId: Id<"comma_conversations">) {
+  const now = Date.now();
+  for (const chat of await chatsOf(ctx, conversationId)) {
+    if (chat.settledAt === undefined) await settleChat(ctx, chat, { withConversation: true, now });
+  }
+}
+
+/** Un-settle reopens exactly the chats the latest conversation settle closed. */
+export async function reopenConversationChats(ctx: MutationCtx, conversationId: Id<"comma_conversations">) {
+  const closed = (await chatsOf(ctx, conversationId)).filter((chat) => chat.settledWithConversation === true && chat.settledAt !== undefined);
+  const latest = Math.max(...closed.map((chat) => chat.settledAt!));
+  for (const chat of closed) if (chat.settledAt === latest) await ctx.db.patch(chat._id, REOPENED);
+}
+
+/** Sending the draft a chat wrote settles that chat, edited or not. */
+export async function settleDraftChat(ctx: MutationCtx, draft: Doc<"comma_drafts">) {
+  const chat = draft.agentChatId ? await ctx.db.get(draft.agentChatId) : null;
+  if (chat && chat.settledAt === undefined) await settleChat(ctx, chat, { withConversation: false });
+}
+
+async function chatsOf(ctx: QueryCtx, conversationId: Id<"comma_conversations">) {
+  return await ctx.db.query("comma_agent_chats").withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).collect();
 }
 
 const PREVIEW_ITEMS = 40;
@@ -253,7 +278,7 @@ export const useDraft = mutation({
     if (item?.entry.kind !== "draft" || item.entry.placed !== "pane") throw new Error("Not a draft waiting in the pane");
     const { conversationId } = await requireChat(ctx, item.chatId);
     const { text, note, attachments = [] } = item.entry;
-    await writeAgentDraft(ctx, conversationId, { text, note, attachments, force: true });
+    await writeAgentDraft(ctx, conversationId, { text, note, attachments, force: true, chatId: item.chatId });
     await ctx.db.patch(itemId, { entry: { ...item.entry, used: true }, updatedAt: Date.now() });
     return null;
   },
@@ -372,7 +397,7 @@ export const agentDraft = internalMutation({
     if (existing?.entry.kind === "draft") return { placed: existing.entry.placed };
     if (!text.trim() && storageIds.length === 0) throw new Error("A draft needs text or an attachment");
     const attachments = await recordedAttachments(ctx, storageIds);
-    const placed: AgentDraftPlacement = await writeAgentDraft(ctx, conversationId, { text, note, attachments }) ? "composer" : "pane";
+    const placed: AgentDraftPlacement = await writeAgentDraft(ctx, conversationId, { text, note, attachments, chatId }) ? "composer" : "pane";
     const entry = { kind: "draft" as const, text, note, attachments: attachments.length ? attachments : undefined, placed, used: false };
     await upsertItems(ctx, chatId, [{ key: itemKey, entry }]);
     return { placed };

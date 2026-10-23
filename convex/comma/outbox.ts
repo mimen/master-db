@@ -5,8 +5,8 @@ import { internalMutation, mutation, query, type MutationCtx } from "../_generat
 import { assertAllowed } from "../_lib/authed";
 import { commandReceipt, commandResult, outboxDoc, outboxPayload, outboxStatus, type CommaOutboxPayload } from "../schema/comma/validators";
 
+import { reopenConversationChats, settleConversationChats, settleDraftChat } from "./agent";
 import { sameSecret } from "./bridgeAuth";
-import { deleteConversationDraft } from "./drafts";
 import { refoldTarget, refreshLastMessage } from "./internal";
 import { sendService, tempGuid } from "./tempMessage";
 
@@ -38,12 +38,18 @@ export const enqueue = mutation({
     await assertAllowed(ctx);
     const { id, created } = await enqueueCommand(ctx, args);
     const { conversationId, payload } = args;
-    // The composer's own send takes its draft with it; an agent send leaves the user's draft alone.
-    if (created && conversationId && payload.kind === "send") await deleteConversationDraft(ctx, conversationId);
-    if (created && conversationId && payload.kind === "sendAttachment") {
-      // Sending a drafted attachment sends the whole draft; the composer holds the rest.
+    if (!created || !conversationId) return id;
+    // A conversation's triage gesture carries its agent chats with it.
+    if (payload.kind === "settle") await settleConversationChats(ctx, conversationId);
+    if (payload.kind === "unsettle") await reopenConversationChats(ctx, conversationId);
+    if (payload.kind === "send" || payload.kind === "sendAttachment") {
+      // The composer's own send takes its draft with it, and sending a drafted attachment sends the
+      // whole draft. An agent send goes through enqueueCommand and leaves the user's draft alone.
       const draft = await ctx.db.query("comma_drafts").withIndex("by_conversationId", (q) => q.eq("conversationId", conversationId)).unique();
-      if (draft?.attachments?.some((a) => a.storageId === payload.storageId)) await ctx.db.delete(draft._id);
+      if (draft && (payload.kind === "send" || draft.attachments?.some((a) => a.storageId === payload.storageId))) {
+        await settleDraftChat(ctx, draft);
+        await ctx.db.delete(draft._id);
+      }
     }
     return id;
   },

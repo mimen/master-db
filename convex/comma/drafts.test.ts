@@ -125,6 +125,19 @@ test("prepareDraft never overwrites the user's own text unless forced, and repla
   expect(draft?.attachments?.[0]?.url).toEqual(expect.any(String));
 });
 
+test("an agent chat's draft names its chat through the user's edit, and a CLI draft over it names none", async () => {
+  const { t, as, conversationId } = await setup();
+  const chatId = await t.run((ctx) => ctx.db.insert("comma_agent_chats", {
+    conversationId, state: "idle", model: "claude-opus-5-5", effort: "high", createdAt: 1, updatedAt: 1,
+  }));
+  await t.mutation(internal.comma.agent.agentDraft, { chatId, conversationId, itemKey: "d", text: "On my way" });
+  expect(await as.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ agentChatId: chatId, source: "agent" });
+  await as.mutation(api.comma.drafts.setDraft, { conversationId, text: "On my way!" });
+  expect(await as.query(api.comma.queries.getDraft, { conversationId })).toMatchObject({ agentChatId: chatId, source: "user" });
+  await t.mutation(internal.comma.drafts.prepareDraft, { conversationId, text: "From the CLI", force: true });
+  expect(await as.query(api.comma.queries.getDraft, { conversationId })).not.toHaveProperty("agentChatId");
+});
+
 test("prepareDraft rejects attachments that skipped storeAttachment", async () => {
   const { t, conversationId } = await setup();
   const raw = await t.run((ctx) => ctx.storage.store(new Blob(["x"])));

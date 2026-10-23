@@ -93,6 +93,32 @@ test("read, unread, settle, unsettle, pin, and mute update the shared overlay", 
   expect(db.getAll().get(CHAT_GUIDS.needs)?.mutedUnresponded).toBe(1);
 });
 
+test("settle and un-settle carry the conversation's agent chats, and sending a chat's draft settles it", async () => {
+  type Summary = { _id: string; settledAt?: number; state: string };
+  const ask = (key: string, text: string) => call<string>("comma/agent:ask", { conversationId: CHAT_GUIDS.needs, key, text, steer: false, model: "claude-opus-5-5", effort: "high" });
+  const chat = async (chatId: string) => (await call<Summary[]>("comma/agent:chatsFor", { conversationId: CHAT_GUIDS.needs })).find((row) => row._id === chatId)!;
+  const working = await ask("k1", "take your time");
+  const own = await ask("k2", "take your time too");
+  await call("comma/agent:settle", { chatId: own });
+  await command({ kind: "settle" });
+  expect((await chat(working)).settledAt).toEqual(expect.any(Number));
+  await command({ kind: "unsettle" });
+  expect((await chat(working)).settledAt).toBeUndefined();
+  expect((await chat(own)).settledAt).toEqual(expect.any(Number));
+
+  const until = async (done: () => Promise<boolean>) => { for (let tries = 0; !(await done()) && tries < 100; tries++) await Bun.sleep(20); };
+  const drafted = await ask("k3", "add them to the guest list");
+  await until(async () => (await chat(drafted)).state === "waiting_input");
+  await call("comma/agent:answer", { chatId: drafted, requestId: "k3-turn-question", answers: { "Which list?": "Freaquency 10/31" } });
+  const draft = () => query<{ agentChatId?: string } | null>("getDraft", { conversationId: CHAT_GUIDS.needs });
+  await until(async () => (await draft()) !== null);
+  expect((await draft())?.agentChatId).toBe(drafted);
+  await call("comma/drafts:setDraft", { conversationId: CHAT_GUIDS.needs, text: "See you there" });
+  await command({ kind: "send", text: "See you there" });
+  expect((await chat(drafted)).settledAt).toEqual(expect.any(Number));
+  expect((await chat(working)).settledAt).toBeUndefined();
+});
+
 test("concurrent enqueue retries execute a send once and failed execution can retry", async () => {
   const payload = { kind: "send", text: "concurrent send" } as const;
   bb.setFault("sendText", "offline");

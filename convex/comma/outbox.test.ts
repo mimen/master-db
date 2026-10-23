@@ -2,7 +2,7 @@ import { convexTest, type TestConvex } from "convex-test";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { api, internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import { ALLOWED_EMAIL } from "../_lib/authed";
 import schema from "../schema";
 import type { CommaOutboxPayload } from "../schema/comma/validators";
@@ -275,6 +275,86 @@ test("the full cutover schema keeps legacy rows valid and registers new state ta
   });
   await as.mutation(api.comma.outbox.enqueue, { clientKey: "search", conversationId: c, payload: send });
   expect(await t.run((ctx) => ctx.db.query("comma_messages").withSearchIndex("search_text", (q) => q.search("text", "hello").eq("isFromMe", true)).collect())).toHaveLength(1);
+});
+
+describe("agent chats follow the conversation", () => {
+  type Chat = Partial<Doc<"comma_agent_chats">> & Pick<Doc<"comma_agent_chats">, "state">;
+  async function chats(t: T, c: Id<"comma_conversations">, rows: Chat[]) {
+    return await t.run(async (ctx) => Promise.all(rows.map((row) =>
+      ctx.db.insert("comma_agent_chats", { conversationId: c, model: "claude-opus-5-5", effort: "high", createdAt: 1, updatedAt: 1, ...row }))));
+  }
+  const rows = (t: T, ids: Id<"comma_agent_chats">[]) => t.run(async (ctx) => Promise.all(ids.map((id) => ctx.db.get(id))));
+  const commands = (t: T) => t.run(async (ctx) => (await ctx.db.query("comma_agent_commands").collect()).map(({ chatId, command }) => [chatId, command.kind]));
+
+  test("settling a conversation settles a working, a waiting and an idle chat, stopping only the waiting one and closing only the idle one", async () => {
+    const { t, as, c } = await setup();
+    const [working, waiting, idle] = await chats(t, c, [
+      { state: "running", sessionId: "s-working" }, { state: "waiting_input", sessionId: "s-waiting" }, { state: "idle", sessionId: "s-idle" },
+    ]);
+    const question = await t.run((ctx) => ctx.db.insert("comma_agent_items", { chatId: waiting!, key: "q", ordinal: 1, createdAt: 1, updatedAt: 1,
+      entry: { kind: "question", requestId: "q", status: "pending", questions: [{ question: "Which?", multiSelect: false, options: [] }] } }));
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-1", conversationId: c, payload: { kind: "settle", messageGuid: "m" } });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-1", conversationId: c, payload: { kind: "settle", messageGuid: "m" } });
+    const settled = await rows(t, [working!, waiting!, idle!]);
+    expect(settled.map((chat) => [chat?.state, chat?.settledWithConversation])).toEqual([["running", true], ["waiting_input", true], ["idle", true]]);
+    expect(new Set(settled.map((chat) => chat?.settledAt)).size).toBe(1);
+    expect(await commands(t)).toEqual([[waiting, "stop"], [idle, "close"]]);
+    expect((await t.run((ctx) => ctx.db.get(question)))?.entry).toMatchObject({ status: "cancelled" });
+  });
+
+  test("un-settling reopens exactly the chats the latest conversation settle closed", async () => {
+    const { t, as, c } = await setup();
+    const [own, earlier, latest, open] = await chats(t, c, [
+      { state: "idle", settledAt: 50, settledWithConversation: false },
+      { state: "idle", settledAt: 60, settledWithConversation: true },
+      { state: "idle" }, { state: "idle" },
+    ]);
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle", conversationId: c, payload: { kind: "settle" } });
+    await t.run((ctx) => ctx.db.patch(open!, { settledAt: undefined, settledWithConversation: undefined }));
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "unsettle", conversationId: c, payload: { kind: "unsettle" } });
+    const [ownRow, earlierRow, latestRow, openRow] = await rows(t, [own!, earlier!, latest!, open!]);
+    expect([ownRow?.settledAt, earlierRow?.settledAt]).toEqual([50, 60]);
+    expect(latestRow).not.toHaveProperty("settledAt");
+    expect(latestRow).not.toHaveProperty("settledWithConversation");
+    expect(openRow).not.toHaveProperty("settledAt");
+  });
+
+  test("sending an agent draft settles its chat, after an edit too; clearing the composer or an agent send does not", async () => {
+    const { t, as, c } = await setup();
+    const [edited, cleared, sentByAgent] = await chats(t, c, [{ state: "idle" }, { state: "idle" }, { state: "idle" }]);
+    const draft = (chatId: Id<"comma_agent_chats">) => t.mutation(internal.comma.agent.agentDraft, { chatId, conversationId: c, itemKey: `d-${chatId}`, text: "On my way" });
+
+    await draft(cleared!);
+    await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "" });
+    await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "my own words" });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s1", conversationId: c, payload: { kind: "send", text: "my own words" } });
+
+    await draft(sentByAgent!);
+    await t.mutation(internal.comma.agent.agentSend, { conversationId: c, clientKey: "agent-send", text: "hi" });
+
+    await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "" });
+    await draft(edited!);
+    await as.mutation(api.comma.drafts.setDraft, { conversationId: c, text: "On my way, 10 min" });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "s2", conversationId: c, payload: { kind: "send", text: "On my way, 10 min" } });
+
+    const [editedRow, clearedRow, agentRow] = await rows(t, [edited!, cleared!, sentByAgent!]);
+    expect(editedRow).toMatchObject({ settledAt: expect.any(Number), settledWithConversation: false });
+    expect(clearedRow).not.toHaveProperty("settledAt");
+    expect(agentRow).not.toHaveProperty("settledAt");
+    expect(await as.query(api.comma.queries.getDraft, { conversationId: c })).toBeNull();
+  });
+
+  test("sending a drafted attachment settles the chat that drafted it", async () => {
+    const { t, as, c } = await setup();
+    const [chatId] = await chats(t, c, [{ state: "idle", sessionId: "s1" }]);
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["png"], { type: "image/png" })));
+    await t.mutation(internal.comma.drafts.recordUpload, { storageId, filename: "a.png", mimeType: "image/png" });
+    await t.mutation(internal.comma.agent.agentDraft, { chatId: chatId!, conversationId: c, itemKey: "d", text: "", attachments: [storageId] });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "a1", conversationId: c,
+      payload: { kind: "sendAttachment", storageId, filename: "a.png", mimeType: "image/png", isAudioMessage: false } });
+    expect((await rows(t, [chatId!]))[0]).toMatchObject({ settledAt: expect.any(Number) });
+    expect(await commands(t)).toEqual([[chatId, "close"]]);
+  });
 });
 
 describe("react remove", () => {

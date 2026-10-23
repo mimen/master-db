@@ -134,9 +134,9 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       const draft = drafts.get(conversationId);
       return draft && draft.source !== "agent" ? draft.text : "";
     },
-    writeAgentDraft: (conversationId, text, note) => {
+    writeAgentDraft: (conversationId, text, note, chatId) => {
       drafts.set(conversationId, { _id: id(`draft-${conversationId}`), _creationTime: FIXTURE_NOW, conversationId: id(conversationId),
-        text, note, updatedAt: Date.now(), source: "agent" });
+        text, note, updatedAt: Date.now(), source: "agent", agentChatId: id(chatId) });
     },
     upload: (storageId) => {
       const upload = uploads.get(storageId);
@@ -481,6 +481,8 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         if (payload.kind === "createChat" || payload.kind === "clearSuggestionLearning") {
           if (chatGuid) throw new FixtureError(`${payload.kind} must be global`, 400);
         } else if (!(await conversations()).some((row) => row._id === chatGuid)) throw new FixtureError("Conversation not found", 400);
+        if (payload.kind === "settle") agent.outbox.settle(chatGuid);
+        if (payload.kind === "unsettle") agent.outbox.unsettle(chatGuid);
         // Production's enqueue writes this temp row; the bridge's completion retires it.
         if (payload.kind === "send") {
           const primaryChatGuid = (await conversations()).find((row) => row._id === chatGuid)!.primaryChatGuid;
@@ -495,7 +497,11 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
         }
         const result = await execute(chatGuid, payload, clientKey).finally(() => temps.delete(clientKey));
         const resultGuid = result && "message" in result ? result.message.guid : undefined;
-        if (payload.kind === "send" || (payload.kind === "sendAttachment" && drafts.get(chatGuid)?.attachments?.some((a) => a.storageId === payload.storageId))) drafts.delete(chatGuid);
+        const draft = drafts.get(chatGuid);
+        if (draft && (payload.kind === "send" || (payload.kind === "sendAttachment" && draft.attachments?.some((a) => a.storageId === payload.storageId)))) {
+          agent.outbox.sentDraft(draft.agentChatId);
+          drafts.delete(chatGuid);
+        }
         const receipt = { id: `outbox-${clientKey}`, clientKey, updatedAt: Date.now(), status: "sent" as const, ...(result ? { result } : {}), ...(resultGuid ? { resultGuid } : {}) };
         receipts.set(clientKey, receipt);
         return receipt.id;
