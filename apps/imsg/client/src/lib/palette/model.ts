@@ -1,4 +1,5 @@
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import { ATTENTION_ORDER } from "@/lib/inbox-model";
 import { shortcutFor } from "@/lib/keyboard/registry";
 
 import { inboxFilterSnapshot, type SavedView } from "./saved-views";
@@ -86,7 +87,8 @@ export type PaletteItem =
   | { kind: "conversation"; key: string; chat: ChatSummary }
   | { kind: "group"; key: string; chat: ChatSummary; matchedMember: string | null }
   | { kind: "message"; key: string; message: Message }
-  | { kind: "contact"; key: string; contact: Contact };
+  | { kind: "contact"; key: string; contact: Contact }
+  | { kind: "agent"; key: string; chat: ChatSummary; agent: NonNullable<ChatSummary["agent"]> };
 
 export interface PaletteSection {
   title: string;
@@ -119,7 +121,7 @@ function bestParticipantMatch(needle: string, chat: ChatSummary): { score: numbe
   return { score, name };
 }
 
-const CAPS = { commands: 6, conversations: 5, groups: 5, messages: 8, contacts: 6 } as const;
+const CAPS = { commands: 6, conversations: 5, groups: 5, messages: 8, contacts: 6, agents: 5 } as const;
 
 /** Favorites win ties and near-ties without outranking a clearly better
  * textual match: matchScore's tiers (0/1/2/3, or 0/2/4/6 for a group name
@@ -152,6 +154,17 @@ export function viewCommands(views: readonly SavedView[]): PaletteCommand[] {
     title: `Open ${view.name}`,
     keywords: ["view", "saved", "filter"],
   }));
+}
+
+/** Each conversation's most urgent open agent chat, matched on its title or the person, most urgent first. */
+export function agentChatsSection(chats: readonly ChatSummary[], needle: string): PaletteSection | null {
+  const items = chats
+    .flatMap((chat) => chat.agent && (!needle || matchScore(needle, chat.agent.title) > 0 || matchScore(needle, chat.displayName) > 0)
+      ? [{ kind: "agent", key: `agent-${chat.guid}`, chat, agent: chat.agent } satisfies PaletteItem]
+      : [])
+    .sort((a, b) => ATTENTION_ORDER.indexOf(a.agent.attention) - ATTENTION_ORDER.indexOf(b.agent.attention) || b.agent.activityAt - a.agent.activityAt)
+    .slice(0, CAPS.agents);
+  return items.length > 0 ? { title: "Agent chats", items } : null;
 }
 
 /** Section order is the approved ranking: Commands (only when matched) →
@@ -234,6 +247,8 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
 
   const people = [...conversations, ...groups];
   if (people.length > 0) sections.push({ title: "People", items: people });
+  const agents = agentChatsSection(input.chats, needle);
+  if (agents) sections.push(agents);
   if (input.messages.length > 0) {
     sections.push({
       title: "Messages",

@@ -14,6 +14,7 @@ import { HOVER_DIM, PRESS_DIM } from "@/constants/theme";
 import { api } from "@/lib/api";
 import { formatReceiptTime } from "@/lib/format";
 import {
+  agentChatsSection,
   buildPaletteSections,
   flattenSections,
   type PaletteCommand,
@@ -33,8 +34,11 @@ import { useTheme } from "@/hooks/use-theme";
 import { addressesMatch, formatAddress } from "@shared/address";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
+import { openAgentChat } from "@/hooks/use-agent-toasts";
+import { AGENT_ATTENTION } from "@/lib/inbox-model";
 import { localSends, tempMessage } from "@/lib/local-sends";
 import { afterPaint } from "@/lib/open-timing";
+import { AgentBadge } from "./agent-badge";
 import { ChatAvatar, PersonAvatar } from "./avatar";
 import { MorphSendButton } from "./motion/morph-send-button";
 import {
@@ -160,7 +164,10 @@ function PaletteRoot({
       // ">" asks for commands only: the engine with no conversations yields just its command list.
       return buildPaletteSections({ query: commandFilter, chats: [], messages: [], contacts: [] });
     }
-    if (query.trim() === "") return people.sections;
+    if (query.trim() === "") {
+      const agents = agentChatsSection(chats, "");
+      return agents ? [...people.sections, agents] : people.sections;
+    }
     return buildPaletteSections({ query, chats, messages, contacts });
   }, [commandFilter, query, chats, messages, contacts, people]);
   const flat = useMemo(() => flattenSections(sections), [sections]);
@@ -223,6 +230,8 @@ function PaletteRoot({
         });
         return;
       }
+      case "agent":
+        return openAgentChat(item.chat, item.agent.chatId);
       case "contact":
         // Opens the person card in the desktop right pane (no back target —
         // the palette jump has no originating conversation).
@@ -443,6 +452,20 @@ function PaletteRowContent({ item, needle, age, now }: { item: PaletteItem; need
         </>
       );
     }
+    case "agent":
+      return (
+        <>
+          <View>
+            <ChatAvatar chat={item.chat} size={26} />
+            <AgentBadge attention={item.agent.attention} size={14} />
+          </View>
+          <View style={[paletteStyles.textCol, styles.inline]}>
+            <Highlighted text={item.agent.title} needle={needle} color={theme.text} style={[paletteStyles.title, styles.shrink]} />
+            <Highlighted text={item.chat.displayName} needle={needle} color={theme.popTertiary} style={[paletteStyles.subtitle, styles.noShrink]} />
+          </View>
+          <Text style={[styles.age, { color: theme.popTertiary }]}>{AGENT_ATTENTION[item.agent.attention].header}</Text>
+        </>
+      );
     case "contact":
       return (
         <>

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ChatSummary, Contact, Message } from "@shared/types";
 
-import { buildPaletteSections, flattenSections, matchScore, PALETTE_COMMANDS } from "./model";
+import { agentChatsSection, buildPaletteSections, flattenSections, matchScore, PALETTE_COMMANDS } from "./model";
 
 const chat = (over: Partial<ChatSummary>): ChatSummary => ({
   guid: over.guid ?? "g",
@@ -268,5 +268,32 @@ describe("buildPaletteSections", () => {
         "Maya",
       ]);
     });
+  });
+});
+
+describe("agentChatsSection", () => {
+  const agent = (attention: NonNullable<ChatSummary["agent"]>["attention"], title: string, activityAt: number): ChatSummary["agent"] =>
+    ({ attention, chatId: `chat-${title}`, title, openCount: 1, activityAt });
+  const chats = [
+    chat({ guid: "marcus", displayName: "Marcus Reed", agent: agent("open", "Set length", 9) }),
+    chat({ guid: "none", displayName: "Nobody" }),
+    chat({ guid: "riley", displayName: "Riley Chen", agent: agent("ready", "Guest list reply", 5) }),
+    chat({ guid: "diego", displayName: "Diego Santos", agent: agent("needs_you", "Load-in time", 1) }),
+  ];
+
+  test("lists every conversation with an open agent chat, most urgent first, by its chat", () => {
+    const section = agentChatsSection(chats, "");
+    expect(section?.title).toBe("Agent chats");
+    expect(section?.items.map((item) => item.kind === "agent" ? `${item.chat.guid} ${item.agent.chatId}` : item.kind)).toEqual([
+      "diego chat-Load-in time", "riley chat-Guest list reply", "marcus chat-Set length",
+    ]);
+  });
+
+  test("a typed query matches the chat's title or the person, and joins the typed sections", () => {
+    expect(agentChatsSection(chats, "guest")?.items.map((item) => item.key)).toEqual(["agent-riley"]);
+    expect(agentChatsSection(chats, "marcus")?.items.map((item) => item.key)).toEqual(["agent-marcus"]);
+    expect(agentChatsSection(chats, "zzz")).toBeNull();
+    const sections = buildPaletteSections({ query: "load", chats, messages: [], contacts: [] });
+    expect(sections.find((section) => section.title === "Agent chats")?.items.map((item) => item.key)).toEqual(["agent-diego"]);
   });
 });
