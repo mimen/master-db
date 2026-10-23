@@ -8,7 +8,7 @@ const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
 /** The phone's Agent tab. Wide screens open the same pane in the shell's utility surface. */
 export default function AgentScreen(): React.JSX.Element | null {
-  const { guid } = useLocalSearchParams<{ guid: string }>();
+  const { guid, chat } = useLocalSearchParams<{ guid: string; chat?: string }>();
   const { wide } = useLayoutMode();
   const enabled = useAgentEnabled();
   // A runner that goes stale, or the setting turning off, dismisses the tab.
@@ -16,5 +16,5 @@ export default function AgentScreen(): React.JSX.Element | null {
     if (!wide && !enabled) close();
   }, [wide, enabled]);
   if (wide || !guid || !enabled) return null;
-  return <AgentPane chatGuid={guid} onClose={close} />;
+  return <AgentPane chatGuid={guid} requestedChatId={chat} onClose={close} />;
 }
