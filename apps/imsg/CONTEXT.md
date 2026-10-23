@@ -73,10 +73,14 @@ Agents write them with `bun scripts/prepare-draft.ts --to <address|chatGuid|conv
 _Avoid_: suggestion (the reply shelf), scheduled message
 
 **Agent pane**:
-The Agent tab in the shell's utility surface (⌘J), bound to the open conversation. Each
-conversation has one live **agent chat** (`comma_agent_chats`) whose **items** (`comma_agent_items`)
-are the transcript: the user's asks, assistant paragraphs, thinking, tool steps, questions, drafts
-and turn ends. "New chat" archives the live chat. A reply the agent drafts goes into the
+The Agent tab in the shell's utility surface (⌘J), bound to the open conversation. A
+conversation has any number of **agent chats** (`comma_agent_chats`), each open or settled, whose
+**items** (`comma_agent_items`) are the transcript: the user's asks, assistant paragraphs, thinking,
+tool steps, questions, drafts and turn ends. The pane's title is a switcher over the conversation's
+chats; it shows a requested chat, else the most urgent open one, else an empty new chat that its
+first ask creates. "New chat" leaves the other chats running, and the pane's Settle settles only
+the chat it shows. Showing a chat while the window has focus marks its finished turn seen
+(`seenAt`). A reply the agent drafts goes into the
 composer as an agent Draft; when the user has typed there, it waits in the pane as a **pane draft**
 with "Use in composer". The pane exists only while `aiStatus.agent` is true and the Settings toggle
 is on. Plan: `docs/plans/comma-agent-pane.html`.

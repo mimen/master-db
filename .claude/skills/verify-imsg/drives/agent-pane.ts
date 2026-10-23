@@ -1,8 +1,9 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Locator, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { renderCounter, type Renders } from "../bench/renders";
 import { expect, test } from "../fixtures/desk";
+import { AGENT_CHAT_GUIDS } from "./world";
 
 const evidence = process.env.VERIFY_IMSG_EVIDENCE!;
 const shot = (name: string) => join(evidence, `${name}.png`);
@@ -10,14 +11,31 @@ const DRAFT = "You're both on the list for Freaquency 10/31 🎃 see you there";
 const VERBS = "Ran 3 commands, read 2 files, and 4 other actions";
 
 type Call = { name: string; args: Record<string, unknown> };
-function recordCalls(page: Page): Call[] {
+function recordCalls(page: Page, names = /^comma\/agent:(ask|answer|settle|reopen|useDraft|stop)$/): Call[] {
   const calls: Call[] = [];
   page.on("request", (request) => {
     if (!request.url().endsWith("/__fixture/convex")) return;
     const body = request.postDataJSON() as Call;
-    if (/^comma\/agent:(ask|answer|settle|useDraft|stop)$/.test(body.name)) calls.push(body);
+    if (names.test(body.name)) calls.push(body);
   });
   return calls;
+}
+
+type Summary = { _id: string; title: string; state: string; settledAt?: number; seenAt?: number; lastTurnEndedAt?: number };
+async function chatsOf(request: APIRequestContext, conversationId: string): Promise<Summary[]> {
+  const response = await request.post("/__fixture/convex", { data: { name: "comma/agent:chatsFor", args: { conversationId } } });
+  expect(response.ok(), await response.text()).toBe(true);
+  return response.json() as Promise<Summary[]>;
+}
+const titled = (chats: readonly Summary[], title: string) => chats.find((chat) => chat.title === title)!;
+
+async function openPane(page: Page, guid: string) {
+  await page.goto(`/chat/${encodeURIComponent(guid)}`, { waitUntil: "domcontentloaded" });
+  await page.getByPlaceholder("iMessage").click();
+  await page.keyboard.press("Meta+j");
+  const pane = page.getByTestId("agent-pane");
+  await expect(pane).toBeVisible();
+  return { pane, switcher: pane.getByRole("button", { name: /^Agent chat, / }), input: page.getByRole("textbox", { name: "Ask the agent" }) };
 }
 
 /** A paste the way the browser delivers one: a ClipboardEvent carrying a DataTransfer. */
@@ -42,7 +60,7 @@ async function paste(input: Locator, content: { image?: { width: number; height:
   }, content);
 }
 
-test("agent-pane: ⌘J asks, a question card answers, drafts land in the composer or the pane, New chat clears, the strip reports", async ({ desk }) => {
+test("agent-pane: ⌘J asks, a question card answers, drafts land in the composer or the pane, New chat starts another chat, the strip reports", async ({ desk }) => {
   test.setTimeout(90_000);
   const page = desk.page;
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -52,9 +70,10 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
     expect(response.ok(), await response.text()).toBe(true);
     return response.json() as Promise<T>;
   };
+  const chatsFor = () => convex<Array<{ _id: string; state: string; settledAt?: number }>>("comma/agent:chatsFor", { conversationId: desk.chats.needs });
+  /** The newest chat's items. */
   const liveItems = async () => {
-    const chats = await convex<Array<{ _id: string; settledAt?: number }>>("comma/agent:chatsFor", { conversationId: desk.chats.needs });
-    const chat = chats.find((row) => row.settledAt === undefined);
+    const [chat] = await chatsFor();
     return chat ? convex<Array<{ entry: { kind: string; placed?: string; used?: boolean } }>>("comma/agent:listItems", { chatId: chat._id }) : [];
   };
 
@@ -69,8 +88,8 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   const input = page.getByRole("textbox", { name: "Ask the agent" });
   await page.keyboard.press("Meta+j");
   await expect(pane).toBeVisible();
-  await expect(pane.getByRole("heading", { name: "Agent", exact: true })).toBeVisible();
-  await expect(pane.getByTestId("pane-header")).toContainText("Alex Rivera");
+  await expect(pane.getByRole("button", { name: "Agent chat, New chat" })).toBeVisible();
+  await expect(pane.getByText("Ask about Alex Rivera.", { exact: false })).toBeVisible();
   await expect(input).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(composer).toBeFocused();
@@ -134,16 +153,18 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   await pane.getByRole("button", { name: "Close agent" }).click();
   await expect(pane).toHaveCount(0);
   const strip = page.getByTestId("agent-strip");
-  await expect(strip).toContainText("Agent drafted a reply");
-  await page.screenshot({ path: shot("05-strip-drafted") });
-  await strip.click();
+  await expect(page.getByTestId("state-strip")).toBeVisible();
+  await expect(strip, "a turn that ended while the pane showed it is seen, so the strip has nothing to report").toHaveCount(0);
+  await page.screenshot({ path: shot("05-strip-seen") });
+  await page.getByRole("button", { name: "Ask the agent (⌘J)" }).click();
   await expect(pane).toBeVisible();
-  await expect(strip).toHaveCount(0);
+  await expect(pane.getByText("Put a reply in the composer")).toBeVisible();
 
-  await pane.getByRole("button", { name: "New chat" }).click();
+  const [first] = await chatsFor();
+  await pane.getByRole("button", { name: "New chat", exact: true }).click();
   await expect(pane.getByTestId("agent-user-message")).toHaveCount(0);
   await expect(pane.getByText("Ask about Alex Rivera.", { exact: false })).toBeVisible();
-  await expect.poll(liveItems).toEqual([]);
+  expect((await chatsFor()).map((chat) => [chat._id, chat.settledAt]), "New chat leaves the chat open and creates nothing until the first ask").toEqual([[first!._id, undefined]]);
   await page.screenshot({ path: shot("06-new-chat") });
 
   await composer.click();
@@ -154,6 +175,7 @@ test("agent-pane: ⌘J asks, a question card answers, drafts land in the compose
   await input.fill("put both on the guest list");
   await input.press("Enter");
   await expect(question).toContainText("Which list?");
+  expect((await chatsFor()).map((chat) => chat.settledAt), "the first ask of a new chat created a second open chat").toEqual([undefined, undefined]);
   await pane.getByRole("button", { name: "Close agent" }).click();
   await expect(strip).toContainText("Agent is asking you something");
   await page.screenshot({ path: shot("07-strip-asking") });
@@ -365,4 +387,189 @@ test("agent-pane: a runner that goes stale closes the pane for real, so ⌘W clo
   await page.keyboard.press("Meta+w");
   await expect(page.getByTestId("thread-view")).toHaveCount(0);
   await page.screenshot({ path: shot("13-cmd-w-closes-conversation") });
+});
+
+test("agent-pane: Leah's switcher lists two open and two settled chats, switches between them, and New chat leaves a running chat running", async ({ desk }) => {
+  test.setTimeout(60_000);
+  const page = desk.page;
+  const calls = recordCalls(page);
+  const guid = AGENT_CHAT_GUIDS.several;
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const { pane, switcher, input } = await openPane(page, guid);
+  await expect(switcher, "the pane opens on the most urgent open chat").toHaveAccessibleName("Agent chat, Rideshare codes");
+  await switcher.click();
+  const menu = page.getByRole("listbox", { name: "Agent chat" });
+  // Ionicons draw their glyphs as text, so the selected row's check and New chat's plus lead their text.
+  await expect(menu.getByRole("option")).toHaveText([
+    /Rideshare codes(Ready|Open)$/, /Hotel block for the crewOpen$/, /Flyer feedbackYesterday$/, /Leah's birthday dinner\w+day$/, /New chat$/,
+  ]);
+  await expect(menu).toContainText("Leah Kim");
+  await expect(menu).toContainText("Settled");
+  await page.screenshot({ path: shot("20-switcher") });
+  writeFileSync(join(evidence, "aria-switcher.txt"), await menu.ariaSnapshot());
+
+  await menu.getByRole("option", { name: /Hotel block for the crew/ }).click();
+  await expect(switcher).toHaveAccessibleName("Agent chat, Hotel block for the crew");
+  await expect(pane.getByTestId("agent-user-message")).toHaveText("Hold a hotel block for Leah's crew");
+  const hotel = titled(await chatsOf(desk.request, guid), "Hotel block for the crew");
+  await input.fill("take your time and check every hotel nearby");
+  await input.press("Enter");
+  await expect(pane.getByTestId("agent-status")).toContainText(/Working \ds/);
+
+  await pane.getByRole("button", { name: "New chat", exact: true }).click();
+  await expect(switcher).toHaveAccessibleName("Agent chat, New chat");
+  await expect(pane.getByTestId("agent-user-message")).toHaveCount(0);
+  let chats = await chatsOf(desk.request, guid);
+  expect(chats, "New chat creates nothing before the first ask").toHaveLength(4);
+  expect(titled(chats, "Hotel block for the crew")).toMatchObject({ state: "running" });
+  await switcher.click();
+  await expect(menu.getByRole("option", { name: /Hotel block for the crew/ })).toHaveText(/Hotel block for the crew\d+s$/);
+  await page.screenshot({ path: shot("21-switcher-working-elsewhere") });
+  await page.keyboard.press("Escape");
+
+  await input.fill("how long is Leah's set?");
+  await input.press("Enter");
+  await expect(pane.getByTestId("agent-reply")).toContainText("Here is what the thread says.");
+  await expect(switcher, "the pane follows the chat its first ask created").toHaveAccessibleName("Agent chat, how long is Leah's set?");
+  chats = await chatsOf(desk.request, guid);
+  expect(chats).toHaveLength(5);
+  expect(titled(chats, "Hotel block for the crew"), "the other chat kept running").toMatchObject({ state: "running" });
+  const asks = calls.filter((call) => call.name === "comma/agent:ask").map((call) => call.args.chatId);
+  expect(asks, "an ask names its chat; a new chat's first ask names none").toEqual([hotel._id, undefined]);
+  await page.screenshot({ path: shot("22-second-chat") });
+  writeFileSync(join(evidence, "side-effects-switcher.json"), JSON.stringify({ calls, chats }, null, 2));
+});
+
+test("agent-pane: the pane's Settle settles only its chat, a settled chat reads under its bar, and Reopen or an ask reopens it", async ({ desk }) => {
+  test.setTimeout(60_000);
+  const page = desk.page;
+  const calls = recordCalls(page);
+  const outbox = recordCalls(page, /^comma\/outbox:enqueue$/);
+  const guid = AGENT_CHAT_GUIDS.several;
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const { pane, switcher, input } = await openPane(page, guid);
+  await expect(switcher).toHaveAccessibleName("Agent chat, Rideshare codes");
+  const rideshare = titled(await chatsOf(desk.request, guid), "Rideshare codes");
+
+  await pane.getByRole("button", { name: "Settle", exact: true }).click();
+  const bar = pane.getByTestId("agent-settled-bar");
+  await expect(bar, "a chat settled today reads its time, like a read receipt").toContainText(/Settled \d{1,2}:\d\d [AP]M/);
+  await expect(pane.getByRole("button", { name: "Settle", exact: true })).toHaveCount(0);
+  await expect(pane.getByTestId("agent-user-message")).toHaveText("Send Leah the rideshare codes");
+  let chats = await chatsOf(desk.request, guid);
+  expect(titled(chats, "Rideshare codes").settledAt).toBeDefined();
+  expect(titled(chats, "Hotel block for the crew").settledAt, "the conversation's other open chat stays open").toBeUndefined();
+  expect(outbox.filter((call) => (call.args.payload as { kind: string }).kind === "settle"), "the conversation itself is not settled").toEqual([]);
+  expect(calls.filter((call) => call.name === "comma/agent:settle").map((call) => call.args)).toEqual([{ chatId: rideshare._id }]);
+  await page.screenshot({ path: shot("23-settled-from-pane") });
+
+  await bar.getByRole("button", { name: "Reopen" }).click();
+  await expect(bar).toHaveCount(0);
+  await expect(pane.getByRole("button", { name: "Settle", exact: true })).toBeVisible();
+  expect(titled(await chatsOf(desk.request, guid), "Rideshare codes").settledAt).toBeUndefined();
+
+  await switcher.click();
+  await page.getByRole("option", { name: /Leah's birthday dinner/ }).click();
+  await expect(switcher).toHaveAccessibleName("Agent chat, Leah's birthday dinner");
+  await expect(bar).toContainText(/Settled \w+day/);
+  await expect(pane.getByTestId("agent-reply")).toContainText("Three places have a table for eight on the 14th.");
+  await page.screenshot({ path: shot("24-settled-chat") });
+  writeFileSync(join(evidence, "aria-settled.txt"), await pane.ariaSnapshot());
+
+  const dinner = titled(await chatsOf(desk.request, guid), "Leah's birthday dinner");
+  await input.fill("is the table still held?");
+  await input.press("Enter");
+  await expect(bar, "asking in a settled chat reopens it").toHaveCount(0);
+  await expect(pane.getByTestId("agent-reply").last()).toContainText("Here is what the thread says.");
+  chats = await chatsOf(desk.request, guid);
+  expect(titled(chats, "Leah's birthday dinner").settledAt).toBeUndefined();
+  expect(calls.filter((call) => call.name === "comma/agent:ask").map((call) => call.args.chatId)).toEqual([dinner._id]);
+  expect(calls.filter((call) => call.name === "comma/agent:reopen").map((call) => call.args)).toEqual([{ chatId: rideshare._id }]);
+  await page.screenshot({ path: shot("25-asked-in-settled") });
+  writeFileSync(join(evidence, "side-effects-settle.json"), JSON.stringify({ calls, outbox, chats }, null, 2));
+});
+
+test("agent-pane: looking at Riley's ready chat marks it seen, so it reads open and the strip goes quiet", async ({ desk }) => {
+  test.setTimeout(45_000);
+  const page = desk.page;
+  const marks = recordCalls(page, /^comma\/agent:markSeen$/);
+  const guid = AGENT_CHAT_GUIDS.ready;
+  const [before] = await chatsOf(desk.request, guid);
+  expect(before!.lastTurnEndedAt! > (before!.seenAt ?? 0), "Riley's chat starts ready").toBe(true);
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.goto(`/chat/${encodeURIComponent(guid)}`, { waitUntil: "domcontentloaded" });
+  const strip = page.getByTestId("agent-strip");
+  await expect(strip).toContainText("Agent drafted a reply");
+  expect(marks, "nothing is seen while the pane is closed").toEqual([]);
+  await strip.click();
+  const pane = page.getByTestId("agent-pane");
+  await expect(pane.getByRole("button", { name: "Agent chat, Reply about the guest list" })).toBeVisible();
+  await expect(pane.getByTestId("agent-draft")).toContainText("You're on the list for Friday, see you there");
+  await expect.poll(async () => {
+    const [chat] = await chatsOf(desk.request, guid);
+    return (chat!.seenAt ?? 0) >= chat!.lastTurnEndedAt!;
+  }).toBe(true);
+  expect(marks.map((call) => call.args)).toEqual([{ chatId: before!._id }]);
+  await pane.getByRole("button", { name: "Agent chat, Reply about the guest list" }).click();
+  await expect(page.getByRole("option", { name: /Reply about the guest list/ })).toHaveText(/Reply about the guest listOpen$/);
+  await page.keyboard.press("Escape");
+  await page.screenshot({ path: shot("26-seen-in-pane") });
+  await pane.getByRole("button", { name: "Close agent" }).click();
+  await expect(page.getByTestId("thread-view")).toBeVisible();
+  await expect(strip, "a seen chat reads open, which the strip leaves unsaid").toHaveCount(0);
+  await page.screenshot({ path: shot("27-seen-strip-quiet") });
+});
+
+test("agent-pane: the strip chip names the most urgent chat's attention and opens the pane on it", async ({ desk }) => {
+  test.setTimeout(60_000);
+  const page = desk.page;
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const cases = [
+    { guid: AGENT_CHAT_GUIDS.needsYou, chip: "Agent is asking you something", title: "Load-in time for Saturday" },
+    { guid: AGENT_CHAT_GUIDS.working, chip: "Agent is working", title: "Venues Taylor mentioned" },
+    { guid: AGENT_CHAT_GUIDS.ready, chip: "Agent drafted a reply", title: "Reply about the guest list" },
+    { guid: AGENT_CHAT_GUIDS.several, chip: "Agent replied", title: "Rideshare codes" },
+    { guid: AGENT_CHAT_GUIDS.failed, chip: "Agent hit an error", title: "Priya's deposit" },
+  ];
+  for (const [index, { guid, chip, title }] of cases.entries()) {
+    await page.goto(`/chat/${encodeURIComponent(guid)}`, { waitUntil: "domcontentloaded" });
+    const strip = page.getByTestId("agent-strip");
+    await expect(strip).toContainText(chip);
+    await expect(strip).toHaveAccessibleName(`${chip}. Open the agent`);
+    await page.getByTestId("state-strip").screenshot({ path: shot(`30-strip-${index + 1}-${chip.split(" ").slice(-1)[0]}`) });
+    await strip.click();
+    const pane = page.getByTestId("agent-pane");
+    await expect(pane.getByRole("button", { name: `Agent chat, ${title}` }), `${chip} opens the pane on ${title}`).toBeVisible();
+    await expect(strip, "the chip hides while the pane is open").toHaveCount(0);
+    await pane.getByRole("button", { name: "Close agent" }).click();
+  }
+
+  const loaded = page.waitForResponse((response) => response.url().endsWith("/__fixture/convex")
+    && (response.request().postDataJSON() as Call).name === "comma/agent:chatsFor"
+    && (response.request().postDataJSON() as Call).args.conversationId === AGENT_CHAT_GUIDS.open);
+  await page.goto(`/chat/${encodeURIComponent(AGENT_CHAT_GUIDS.open)}`, { waitUntil: "domcontentloaded" });
+  await loaded;
+  await expect(page.getByTestId("thread-view")).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId("agent-strip"), "Marcus's chat is open and seen, so the strip says nothing").toHaveCount(0);
+});
+
+test("agent-pane: on a phone the strip chip opens the agent route with its chat as the route's chat param", async ({ desk }) => {
+  test.setTimeout(45_000);
+  const page = desk.page;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  const guid = AGENT_CHAT_GUIDS.several;
+  const chats = await chatsOf(desk.request, guid);
+  await page.goto(`/chat/${encodeURIComponent(guid)}`, { waitUntil: "domcontentloaded" });
+  const strip = page.getByTestId("agent-strip");
+  await expect(strip).toContainText("Agent replied");
+  await page.screenshot({ path: shot("28-phone-strip") });
+  await strip.click();
+  await expect(page).toHaveURL(new RegExp(`/agent\\?.*chat=${titled(chats, "Rideshare codes")._id}`));
+  const pane = page.getByTestId("agent-pane");
+  await expect(pane.getByRole("button", { name: "Agent chat, Rideshare codes" })).toBeVisible();
+  await expect(pane.getByTestId("agent-user-message")).toHaveText("Send Leah the rideshare codes");
+  await expect(pane.getByRole("button", { name: "New chat", exact: true }), "the phone header leaves New chat to the switcher").toHaveCount(0);
+  await page.screenshot({ path: shot("29-phone-route-chat") });
 });
