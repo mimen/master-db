@@ -233,6 +233,17 @@ describe("chat lists, settle, reopen and seen", () => {
     expect(await chatRow(t, running)).toMatchObject({ state: "running", settledAt: expect.any(Number) });
   });
 
+  test("a title lands without moving the chat's activity; a state change moves it", async () => {
+    const { t, ask } = await setup();
+    const chatId = await ask("k1");
+    const { updatedAt } = (await chatRow(t, chatId))!;
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await t.mutation(internal.comma.agent.agentChat, { chatId, title: "Friday confirmation" });
+    expect(await chatRow(t, chatId)).toMatchObject({ title: "Friday confirmation", updatedAt });
+    await t.mutation(internal.comma.agent.agentChat, { chatId, state: "running" });
+    expect((await chatRow(t, chatId))!.updatedAt).toBeGreaterThan(updatedAt);
+  });
+
   test("a settled chat that asks a question reopens itself", async () => {
     const { t, as, ask } = await setup();
     const chatId = await ask("k1");

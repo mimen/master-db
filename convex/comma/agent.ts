@@ -381,7 +381,9 @@ export const agentChat = internalMutation({
     const chat = await requireChat(ctx, chatId);
     // A settled chat that asks a question wants the user again.
     const reopened = patch.state === "waiting_input" && chat.settledAt !== undefined ? REOPENED : {};
-    await ctx.db.patch(chatId, { ...patch, ...reopened, updatedAt: Date.now() });
+    // A title is not activity: bumping updatedAt would reorder the lists and restart a working chat's timer.
+    const active = Object.keys(patch).some((key) => key !== "title") ? { updatedAt: Date.now() } : {};
+    await ctx.db.patch(chatId, { ...patch, ...reopened, ...active });
     return null;
   },
 });
