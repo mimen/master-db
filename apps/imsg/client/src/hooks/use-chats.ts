@@ -59,13 +59,14 @@ export function ChatDirectoryProvider({ children }: { readonly children: ReactNo
   const drafts = useQuery(commaApi.listDrafts, {});
   const { agentPane } = useAgentSettings();
   const agentChats = useQuery(agentApi.listAgentChats, agentPane ? {} : "skip");
+  // Two memos: withDrafts makes new rows, so rerunning it on an agent list update would cost every drafted row its identity.
+  const drafted = useMemo(() => conversations && drafts ? withDrafts(conversations, drafts) : conversations, [conversations, drafts]);
   const joined = useRef<ChatSummary[]>([]);
   const chats = useMemo(() => {
-    const drafted = conversations && drafts ? withDrafts(conversations, drafts) : conversations;
     if (!drafted || !agentChats) return drafted;
     joined.current = withAgents(drafted, agentChats, joined.current);
     return joined.current;
-  }, [conversations, drafts, agentChats]);
+  }, [drafted, agentChats]);
   const shown = usePendingFlags(chats);
   useEffect(() => publishKnownConversations(chats ?? []), [chats]);
   return createElement(ChatDirectoryContext.Provider, { value: shown }, children);
