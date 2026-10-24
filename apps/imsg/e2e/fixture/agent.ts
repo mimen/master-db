@@ -252,6 +252,14 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
       markChat(chatOf(args)._id, reopened);
       return null;
     },
+    "comma/agent:settleConversationAgents": async (args) => {
+      outbox.settle(String(args.conversationId));
+      return null;
+    },
+    "comma/agent:reopenConversationAgents": async (args) => {
+      outbox.unsettle(String(args.conversationId));
+      return null;
+    },
     "comma/agent:markSeen": async (args) => {
       const chat = chatOf(args);
       if ((chat.lastTurnEndedAt ?? 0) > (chat.seenAt ?? 0)) markChat(chat._id, { seenAt: now() });

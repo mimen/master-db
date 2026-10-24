@@ -415,10 +415,22 @@ export declare const api: {
         { chatId: Id<"comma_agent_chats"> },
         null
       >;
+      reopenConversationAgents: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
+        null
+      >;
       settle: FunctionReference<
         "mutation",
         "public",
         { chatId: Id<"comma_agent_chats"> },
+        null
+      >;
+      settleConversationAgents: FunctionReference<
+        "mutation",
+        "public",
+        { conversationId: Id<"comma_conversations"> },
         null
       >;
       stop: FunctionReference<

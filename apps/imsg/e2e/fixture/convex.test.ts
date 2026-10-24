@@ -120,6 +120,16 @@ test("settle and un-settle carry the conversation's agent chats, and sending a c
   expect((await chat(working)).settledAt).toBeUndefined();
 });
 
+test("a conversation's agent chats settle and reopen without a bridge command", async () => {
+  type Summary = { settledAt?: number };
+  const open = async () => (await call<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.several })).map((chat) => chat.settledAt === undefined);
+  expect(await open()).toEqual([true, true, false, false]);
+  await call("comma/agent:settleConversationAgents", { conversationId: AGENT_CHAT_GUIDS.several });
+  expect(await open()).toEqual([false, false, false, false]);
+  await call("comma/agent:reopenConversationAgents", { conversationId: AGENT_CHAT_GUIDS.several });
+  expect(await open()).toEqual([true, true, false, false]);
+});
+
 test("the seeded agent chats cover every attention, come back on reset, and Leah has two open and two settled", async () => {
   type Summary = AttentionInput & { _id: string; conversationId: string; title: string; preview?: { kind: string } };
   const attentions = async () => {

@@ -256,6 +256,32 @@ export const reopen = mutation({
   },
 });
 
+/**
+ * Settles a conversation in Needs reply only for its agent chats. Its triage flags are already
+ * clear, so there is nothing for the bridge to do, and a bridge un-settle on Undo would bring back
+ * a flag the user cleared.
+ */
+export const settleConversationAgents = mutation({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.null(),
+  handler: async (ctx, { conversationId }) => {
+    await assertAllowed(ctx);
+    await settleConversationChats(ctx, conversationId);
+    return null;
+  },
+});
+
+/** Undo of settleConversationAgents. */
+export const reopenConversationAgents = mutation({
+  args: { conversationId: v.id("comma_conversations") },
+  returns: v.null(),
+  handler: async (ctx, { conversationId }) => {
+    await assertAllowed(ctx);
+    await reopenConversationChats(ctx, conversationId);
+    return null;
+  },
+});
+
 /** The pane calls this while it shows the chat; it writes only when a turn ended since the last look. */
 export const markSeen = mutation({
   args: { chatId: v.id("comma_agent_chats") },

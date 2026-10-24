@@ -319,6 +319,24 @@ describe("agent chats follow the conversation", () => {
     expect(openRow).not.toHaveProperty("settledAt");
   });
 
+  test("a conversation's agent chats settle and reopen on their own, with no bridge command", async () => {
+    const { t, as, c } = await setup();
+    const [own, waiting, idle] = await chats(t, c, [
+      { state: "idle", settledAt: 50, settledWithConversation: false }, { state: "waiting_input" }, { state: "idle", sessionId: "s-idle" },
+    ]);
+    await as.mutation(api.comma.agent.settleConversationAgents, { conversationId: c });
+    expect((await rows(t, [own!, waiting!, idle!])).map((chat) => [chat?.settledAt !== undefined, chat?.settledWithConversation]))
+      .toEqual([[true, false], [true, true], [true, true]]);
+    expect(await commands(t)).toEqual([[waiting, "stop"], [idle, "close"]]);
+    await as.mutation(api.comma.agent.reopenConversationAgents, { conversationId: c });
+    const [ownRow, waitingRow, idleRow] = await rows(t, [own!, waiting!, idle!]);
+    expect(ownRow?.settledAt, "a chat the pane settled stays settled").toBe(50);
+    expect([waitingRow, idleRow].map((chat) => chat?.settledAt)).toEqual([undefined, undefined]);
+    expect(await t.run((ctx) => ctx.db.query("comma_outbox").collect())).toEqual([]);
+    await expect(t.mutation(api.comma.agent.settleConversationAgents, { conversationId: c })).rejects.toThrow("Unauthorized");
+    await expect(t.mutation(api.comma.agent.reopenConversationAgents, { conversationId: c })).rejects.toThrow("Unauthorized");
+  });
+
   test("sending an agent draft settles its chat, after an edit too; clearing the composer or an agent send does not", async () => {
     const { t, as, c } = await setup();
     const [edited, cleared, sentByAgent] = await chats(t, c, [{ state: "idle" }, { state: "idle" }, { state: "idle" }]);
