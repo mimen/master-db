@@ -9,18 +9,23 @@ export function undoLastAction(): boolean {
 }
 
 /**
- * Shows the intent on the directory at once and runs the command through the bridge. Rolls the
- * intent back before rejecting when the enqueue or the bridge fails, so callers only toast.
+ * Shows the intent on the directory at once while `write` runs. Rolls the intent back before
+ * rejecting when the write fails, so callers only toast.
  */
-export async function writeFlags(intent: FlagIntent, payload: CommandPayload, onQueued?: () => void): Promise<void> {
+export async function pendWhile(intent: FlagIntent, write: () => Promise<unknown>): Promise<void> {
   const pending = pendFlags(intent);
   try {
-    await runCommand(intent.chatGuid, payload, { onQueued });
+    await write();
     pending.confirm();
   } catch (error) {
     pending.rollback();
     throw error;
   }
+}
+
+/** pendWhile for a command the bridge runs; a failed enqueue or execution rolls the intent back. */
+export function writeFlags(intent: FlagIntent, payload: CommandPayload, onQueued?: () => void): Promise<void> {
+  return pendWhile(intent, () => runCommand(intent.chatGuid, payload, { onQueued }));
 }
 
 export function pinChat(chat: ChatSummary, pinned: boolean): void {

@@ -1,8 +1,11 @@
 import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
+import type { GenericId } from "convex/values";
 import { useCallback } from "react";
 import { beginUndoAction, commitUndoAction, runLatestUndo } from "@/lib/action-undo";
-import { writeFlags } from "@/lib/chat-actions";
+import { agentApi } from "@/lib/agent-api";
+import { pendWhile, writeFlags } from "@/lib/chat-actions";
+import type { FlagIntent } from "@/lib/pending-flags";
 import { showToast } from "@/lib/toast";
 import { runExclusiveTriageWrite, settleAnchor, type TriageWriteOutcome } from "@/lib/triage-writes";
 
@@ -42,6 +45,13 @@ function unsettle(chat: ChatSummary, onQueued?: () => void): Promise<void> {
   return writeFlags({ change: "unsettle", chatGuid: chat.guid }, { kind: "unsettle" }, onQueued);
 }
 
+/** Settles or reopens the conversation's agent chats alone, through Convex. */
+async function conversationAgents(chat: ChatSummary, ref: typeof agentApi.settleConversationAgents): Promise<void> {
+  if (!chat.conversationId) throw new Error("Conversation is not mirrored yet");
+  const { convexClient } = await import("@/lib/identity");
+  await convexClient.mutation(ref, { conversationId: chat.conversationId as GenericId<"comma_conversations"> });
+}
+
 /**
  * Resolves once the command is queued, as the gesture did before it waited on the bridge, so the
  * exclusion, the undo entry and the toast keep their timing. A failure at any point toasts; the
@@ -62,27 +72,31 @@ function settleFailure(error: unknown): string {
 }
 
 /**
- * Forward triage: clear whichever triage flags the conversation carries.
+ * Forward triage: clear whichever triage flags the conversation carries, and its agent chats.
  *
  * Answers "busy" when this conversation already has a triage write outstanding,
  * so a caller never reports a settle that never happened.
  */
 export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
   return runExclusiveTriageWrite(chat.guid, async () => {
-    const last = chat.lastMessage;
-    if (!last || (!chat.flags.unresponded && !chat.flags.waiting)) return;
+    if (settleActionFor(chat) !== "settle") return;
 
     const undoToken = beginUndoAction();
-    const anchor = settleAnchor(last);
-    const queued = untilQueued((onQueued) => writeFlags({ change: "settle", chatGuid: chat.guid, seen: anchor },
-      { kind: "settle", ...(anchor !== undefined ? { messageGuid: anchor } : {}) }, onQueued), settleFailure);
+    const anchor = settleAnchor(chat.lastMessage);
+    const intent: FlagIntent = { change: "settle", chatGuid: chat.guid, seen: anchor };
+    // In Needs reply only for its agent chats, it settles just those: a bridge settle's Undo would
+    // undismiss both anchors and bring back a flag the user had already cleared.
+    const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting;
+    const queued = untilQueued((onQueued) => agentsOnly
+      ? pendWhile(intent, () => conversationAgents(chat, agentApi.settleConversationAgents)).then(onQueued)
+      : writeFlags(intent, { kind: "settle", ...(anchor !== undefined ? { messageGuid: anchor } : {}) }, onQueued), settleFailure);
     emit(settlingListeners, chat.guid);
     await queued;
     emit(resolvedListeners, chat.guid);
     // The entry runs long after this write released the conversation, and it
     // takes no exclusion of its own. Undo must never be refused as busy.
     commitUndoAction(undoToken, () => {
-      unsettle(chat)
+      (agentsOnly ? conversationAgents(chat, agentApi.reopenConversationAgents) : unsettle(chat))
         .then(() => emit(undoListeners, chat.guid))
         .catch(() => showToast("Couldn't undo the settle. Try again."));
     });
