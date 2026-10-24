@@ -19,7 +19,7 @@ describe("chatTitle", () => {
     expect(url).toBe("http://gateway.test/v1/messages");
     expect(init.headers).toMatchObject({ "x-api-key": "gateway-key", "anthropic-version": "2023-06-01" });
     expect(JSON.parse(String(init.body))).toEqual({
-      model: TITLE_MODEL, max_tokens: 100, system: TITLE_PROMPT,
+      model: TITLE_MODEL, max_tokens: 100, thinking: { type: "disabled" }, system: TITLE_PROMPT,
       messages: [{ role: "user", content: "add Jesse and Rebecca to the guest list for friday" }],
     });
     expect(TITLE_MODEL).toBe("claude-haiku-5-5");
