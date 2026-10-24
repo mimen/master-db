@@ -128,13 +128,14 @@ export function DesktopShellProvider({ children }: { readonly children: ReactNod
   }, [agentHidden]);
   // Opening a conversation whose agent wants the user opens its pane, as does any pick in the Agents
   // lens. The pane then shows the most urgent chat, the one the row's badge names. Focus stays where
-  // the open put it, so j/k keeps walking the list.
+  // the open put it, so j/k keeps walking the list. Any pane already open, Settings or chat info
+  // included, stays put.
   const selectedGuid = state.messages.selection?.guid;
-  const autoOpen = useRef({ wide: false, agentEnabled, rail: messagesRail });
-  autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail };
+  const autoOpen = useRef({ wide: false, agentEnabled, rail: messagesRail, utilityOpen: false });
+  autoOpen.current = { wide: wide && projection !== null, agentEnabled, rail: messagesRail, utilityOpen: state.utility !== null };
   useEffect(() => {
-    const { wide: shellWide, agentEnabled: enabled, rail } = autoOpen.current;
-    if (!shellWide || !enabled || !selectedGuid || agentOpen.current) return;
+    const { wide: shellWide, agentEnabled: enabled, rail, utilityOpen } = autoOpen.current;
+    if (!shellWide || !enabled || !selectedGuid || utilityOpen) return;
     const agent = rail.allChats.find((chat) => chat.guid === selectedGuid)?.agent;
     if (agent && (rail.state === "agents" || WANTS_YOU.has(agent.attention))) {
       dispatch({ type: "utility/toggled", utility: { kind: "agent", workspace: "messages" } });
