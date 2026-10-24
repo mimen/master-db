@@ -23,7 +23,7 @@ export async function pendWhile(intent: FlagIntent, write: () => Promise<unknown
   }
 }
 
-/** pendWhile for a command the bridge runs; a failed enqueue or execution rolls the intent back. */
+/** pendWhile for a command the bridge runs. */
 export function writeFlags(intent: FlagIntent, payload: CommandPayload, onQueued?: () => void): Promise<void> {
   return pendWhile(intent, () => runCommand(intent.chatGuid, payload, { onQueued }));
 }

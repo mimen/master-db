@@ -92,8 +92,7 @@ export type PaletteItem =
   | { kind: "contact"; key: string; contact: Contact }
   | { kind: "agent"; key: string; chat: ChatSummary; agent: PaletteAgentChat };
 
-/** One open agent chat as ⌘K lists it. */
-export type PaletteAgentChat = Pick<NonNullable<ChatSummary["agent"]>, "attention" | "chatId" | "title" | "activityAt">;
+type PaletteAgentChat = Pick<NonNullable<ChatSummary["agent"]>, "attention" | "chatId" | "title" | "activityAt">;
 
 export interface PaletteSection {
   title: string;
