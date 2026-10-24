@@ -468,13 +468,15 @@ export function agentStatusLine(agent: AgentSummary): { word: string | null; tex
 
 /**
  * The chats that just turned needs_you, ready or failed, judged against the attentions the last list
- * showed. `before` is null for the first list, which only sets the baseline.
+ * showed. `before` is null for the first list, which only sets the baseline. `seen` keeps chats that
+ * left the list, so one a settle took away and its Undo brought back unchanged is no arrival.
  */
 export function agentArrivals(
   before: ReadonlyMap<string, AgentAttention> | null,
   summaries: readonly AgentChatSummary[],
 ): { arrivals: { chat: AgentChatSummary; attention: Exclude<AgentAttention, "settled"> }[]; seen: Map<string, AgentAttention> } {
-  const seen = new Map(summaries.map((chat) => [chat._id as string, agentAttention(chat)]));
+  const seen = new Map(before);
+  for (const chat of summaries) seen.set(chat._id, agentAttention(chat));
   if (!before) return { arrivals: [], seen };
   const arrivals = summaries.flatMap((chat) => {
     const attention = seen.get(chat._id)!;

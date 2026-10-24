@@ -388,6 +388,15 @@ describe("agentArrivals", () => {
     expect(agentArrivals(finished.seen, [chat("a", { state: "waiting_input" }), chat("b", { state: "idle", lastTurnEndedAt: 5 })]).arrivals).toEqual([]);
   });
 
+  test("a chat a settle took away that comes back as it left is no arrival; one that comes back asking is", () => {
+    const ready = chat("a", { state: "idle", lastTurnEndedAt: 5 });
+    const first = agentArrivals(null, [ready]);
+    const settled = agentArrivals(first.seen, []);
+    expect(agentArrivals(settled.seen, [ready]).arrivals, "Undo of the settle").toEqual([]);
+    const asking = agentArrivals(settled.seen, [chat("a", { state: "waiting_input", lastTurnEndedAt: 5 })]);
+    expect(asking.arrivals.map(({ attention }) => attention)).toEqual(["needs_you"]);
+  });
+
   test("a new chat that already wants the user arrives; one that is working or seen does not", () => {
     const { arrivals } = agentArrivals(new Map(), [chat("x", { state: "failed", lastTurnEndedAt: 5 }), chat("y"), chat("z", { state: "idle", lastTurnEndedAt: 5, seenAt: 6 })]);
     expect(arrivals.map(({ chat: c, attention }) => `${(c as { _id: string })._id} ${attention}`)).toEqual(["x failed"]);
