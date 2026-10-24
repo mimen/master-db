@@ -1,4 +1,6 @@
+import { agentAttention } from "@shared/agent-attention";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import type { AgentChatSummary } from "@/lib/agent-api";
 import { ATTENTION_ORDER } from "@/lib/inbox-model";
 import { shortcutFor } from "@/lib/keyboard/registry";
 
@@ -88,7 +90,10 @@ export type PaletteItem =
   | { kind: "group"; key: string; chat: ChatSummary; matchedMember: string | null }
   | { kind: "message"; key: string; message: Message }
   | { kind: "contact"; key: string; contact: Contact }
-  | { kind: "agent"; key: string; chat: ChatSummary; agent: NonNullable<ChatSummary["agent"]> };
+  | { kind: "agent"; key: string; chat: ChatSummary; agent: PaletteAgentChat };
+
+/** One open agent chat as ⌘K lists it. */
+export type PaletteAgentChat = Pick<NonNullable<ChatSummary["agent"]>, "attention" | "chatId" | "title" | "activityAt">;
 
 export interface PaletteSection {
   title: string;
@@ -143,6 +148,8 @@ export interface PaletteInput {
   messages: readonly Message[];
   /** Contact-directory hits for the CURRENT query; [] while pending. */
   contacts: readonly Contact[];
+  /** listAgentChats: every open agent chat. */
+  agentChats?: readonly AgentChatSummary[];
   /** Saved filter views; defaults to the stored set. */
   views?: readonly SavedView[];
 }
@@ -156,12 +163,21 @@ export function viewCommands(views: readonly SavedView[]): PaletteCommand[] {
   }));
 }
 
-/** Each conversation's most urgent open agent chat, matched on its title or the person, most urgent first. */
-export function agentChatsSection(chats: readonly ChatSummary[], needle: string): PaletteSection | null {
-  const items = chats
-    .flatMap((chat) => chat.agent && (!needle || matchScore(needle, chat.agent.title) > 0 || matchScore(needle, chat.displayName) > 0)
-      ? [{ kind: "agent", key: `agent-${chat.guid}`, chat, agent: chat.agent } satisfies PaletteItem]
-      : [])
+/**
+ * Every open agent chat, matched on its title or the person, most urgent first. Only conversations
+ * whose row shows an agent take part, so a settle still in flight has already taken its chats out.
+ */
+export function agentChatsSection(chats: readonly ChatSummary[], agentChats: readonly AgentChatSummary[], needle: string): PaletteSection | null {
+  const rows = new Map(chats.flatMap((chat) => chat.agent && chat.conversationId ? [[chat.conversationId, chat] as const] : []));
+  const items = agentChats
+    .flatMap((summary) => {
+      const chat = rows.get(summary.conversationId);
+      const attention = agentAttention(summary);
+      if (!chat || attention === "settled") return [];
+      if (needle && matchScore(needle, summary.title) === 0 && matchScore(needle, chat.displayName) === 0) return [];
+      const agent = { attention, chatId: summary._id, title: summary.title, activityAt: summary.updatedAt };
+      return [{ kind: "agent", key: `agent-${summary._id}`, chat, agent } satisfies PaletteItem];
+    })
     .sort((a, b) => ATTENTION_ORDER.indexOf(a.agent.attention) - ATTENTION_ORDER.indexOf(b.agent.attention) || b.agent.activityAt - a.agent.activityAt)
     .slice(0, CAPS.agents);
   return items.length > 0 ? { title: "Agent chats", items } : null;
@@ -247,7 +263,7 @@ export function buildPaletteSections(input: PaletteInput): PaletteSection[] {
 
   const people = [...conversations, ...groups];
   if (people.length > 0) sections.push({ title: "People", items: people });
-  const agents = agentChatsSection(input.chats, needle);
+  const agents = agentChatsSection(input.chats, input.agentChats ?? [], needle);
   if (agents) sections.push(agents);
   if (input.messages.length > 0) {
     sections.push({

@@ -272,28 +272,41 @@ describe("buildPaletteSections", () => {
 });
 
 describe("agentChatsSection", () => {
-  const agent = (attention: NonNullable<ChatSummary["agent"]>["attention"], title: string, activityAt: number): ChatSummary["agent"] =>
-    ({ attention, chatId: `chat-${title}`, title, openCount: 1, activityAt });
+  type Summary = Parameters<typeof agentChatsSection>[1][number];
+  const summary = (id: string, conversationId: string, title: string, updatedAt: number, over: Partial<Summary> = {}) =>
+    ({ _id: id, conversationId, title, state: "idle", model: "m", effort: "high", createdAt: 1, updatedAt, ...over }) as Summary;
+  const agent = { attention: "open", chatId: "top", title: "Top", openCount: 1, activityAt: 1 } as const;
   const chats = [
-    chat({ guid: "marcus", displayName: "Marcus Reed", agent: agent("open", "Set length", 9) }),
-    chat({ guid: "none", displayName: "Nobody" }),
-    chat({ guid: "riley", displayName: "Riley Chen", agent: agent("ready", "Guest list reply", 5) }),
-    chat({ guid: "diego", displayName: "Diego Santos", agent: agent("needs_you", "Load-in time", 1) }),
+    chat({ guid: "marcus", conversationId: "c-marcus", displayName: "Marcus Reed", agent }),
+    chat({ guid: "none", conversationId: "c-none", displayName: "Nobody" }),
+    chat({ guid: "riley", conversationId: "c-riley", displayName: "Riley Chen", agent }),
+    chat({ guid: "leah", conversationId: "c-leah", displayName: "Leah Kim", agent: { ...agent, openCount: 2 } }),
+    chat({ guid: "diego", conversationId: "c-diego", displayName: "Diego Santos", agent }),
   ];
+  const agentChats = [
+    summary("set", "c-marcus", "Set length", 9),
+    summary("guest", "c-riley", "Guest list reply", 5, { lastTurnEndedAt: 5 }),
+    summary("rides", "c-leah", "Rideshare codes", 4, { lastTurnEndedAt: 4 }),
+    summary("hotel", "c-leah", "Hotel block", 3),
+    summary("load", "c-diego", "Load-in time", 1, { state: "waiting_input" }),
+    summary("stray", "c-none", "A settle still in flight", 8),
+  ];
+  const listed = (section: ReturnType<typeof agentChatsSection>) =>
+    section?.items.map((item) => item.kind === "agent" ? `${item.chat.guid} ${item.agent.chatId} ${item.agent.attention}` : item.kind);
 
-  test("lists every conversation with an open agent chat, most urgent first, by its chat", () => {
-    const section = agentChatsSection(chats, "");
+  test("lists every open agent chat, most urgent first, each opening its own chat", () => {
+    const section = agentChatsSection(chats, agentChats, "");
     expect(section?.title).toBe("Agent chats");
-    expect(section?.items.map((item) => item.kind === "agent" ? `${item.chat.guid} ${item.agent.chatId}` : item.kind)).toEqual([
-      "diego chat-Load-in time", "riley chat-Guest list reply", "marcus chat-Set length",
+    expect(listed(section)).toEqual([
+      "diego load needs_you", "riley guest ready", "leah rides ready", "marcus set open", "leah hotel open",
     ]);
   });
 
-  test("a typed query matches the chat's title or the person, and joins the typed sections", () => {
-    expect(agentChatsSection(chats, "guest")?.items.map((item) => item.key)).toEqual(["agent-riley"]);
-    expect(agentChatsSection(chats, "marcus")?.items.map((item) => item.key)).toEqual(["agent-marcus"]);
-    expect(agentChatsSection(chats, "zzz")).toBeNull();
-    const sections = buildPaletteSections({ query: "load", chats, messages: [], contacts: [] });
-    expect(sections.find((section) => section.title === "Agent chats")?.items.map((item) => item.key)).toEqual(["agent-diego"]);
+  test("a typed query matches a chat's title or the person, and joins the typed sections", () => {
+    expect(listed(agentChatsSection(chats, agentChats, "leah"))).toEqual(["leah rides ready", "leah hotel open"]);
+    expect(listed(agentChatsSection(chats, agentChats, "hotel"))).toEqual(["leah hotel open"]);
+    expect(agentChatsSection(chats, agentChats, "zzz")).toBeNull();
+    const sections = buildPaletteSections({ query: "load", chats, messages: [], contacts: [], agentChats });
+    expect(sections.find((section) => section.title === "Agent chats")?.items.map((item) => item.key)).toEqual(["agent-load"]);
   });
 });

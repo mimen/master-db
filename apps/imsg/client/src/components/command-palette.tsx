@@ -3,6 +3,7 @@ import { requestSavedView } from "@/lib/palette/saved-views";
 import { messagingCommandError } from "@/lib/messaging-api";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ChatSummary, Contact, Message, StateFilter, TypeFilter } from "@shared/types";
+import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
@@ -35,7 +36,9 @@ import { addressesMatch, formatAddress } from "@shared/address";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
 import { useChatDirectory } from "@/hooks/use-chat-directory";
 import { openAgentChat } from "@/hooks/use-agent-toasts";
+import { agentApi, type AgentChatSummary } from "@/lib/agent-api";
 import { AGENT_ATTENTION } from "@/lib/inbox-model";
+import { useAgentSettings } from "@/lib/settings";
 import { localSends, tempMessage } from "@/lib/local-sends";
 import { afterPaint } from "@/lib/open-timing";
 import { AgentBadge } from "./agent-badge";
@@ -47,6 +50,8 @@ import {
   paletteStyles,
   usePaletteCursor,
 } from "./palette/palette-list";
+
+const NO_AGENT_CHATS: readonly AgentChatSummary[] = [];
 
 const COMMAND_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   state: "filter-outline",
@@ -159,17 +164,20 @@ function PaletteRoot({
   }, [searchText]);
 
   const people = useMemo(() => peopleFirstSections(chats, now), [chats, now]);
+  // The directory's own args, so Convex shares its subscription.
+  const { agentPane } = useAgentSettings();
+  const agentChats = useQuery(agentApi.listAgentChats, agentPane ? {} : "skip") ?? NO_AGENT_CHATS;
   const sections = useMemo((): PaletteSection[] => {
     if (commandFilter !== null) {
       // ">" asks for commands only: the engine with no conversations yields just its command list.
       return buildPaletteSections({ query: commandFilter, chats: [], messages: [], contacts: [] });
     }
     if (query.trim() === "") {
-      const agents = agentChatsSection(chats, "");
+      const agents = agentChatsSection(chats, agentChats, "");
       return agents ? [...people.sections, agents] : people.sections;
     }
-    return buildPaletteSections({ query, chats, messages, contacts });
-  }, [commandFilter, query, chats, messages, contacts, people]);
+    return buildPaletteSections({ query, chats, messages, contacts, agentChats });
+  }, [commandFilter, query, chats, messages, contacts, people, agentChats]);
   const flat = useMemo(() => flattenSections(sections), [sections]);
   const flatRef = useRef(flat);
   flatRef.current = flat;
