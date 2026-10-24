@@ -297,7 +297,6 @@ describe("agent chats follow the conversation", () => {
     await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-1", conversationId: c, payload: { kind: "settle", messageGuid: "m" } });
     const settled = await rows(t, [working!, waiting!, idle!]);
     expect(settled.map((chat) => [chat?.state, chat?.settledWithConversation])).toEqual([["running", true], ["waiting_input", true], ["idle", true]]);
-    expect(new Set(settled.map((chat) => chat?.settledAt)).size).toBe(1);
     expect(await commands(t)).toEqual([[waiting, "stop"], [idle, "close"]]);
     expect((await t.run((ctx) => ctx.db.get(question)))?.entry).toMatchObject({ status: "cancelled" });
   });
@@ -317,6 +316,15 @@ describe("agent chats follow the conversation", () => {
     expect(latestRow).not.toHaveProperty("settledAt");
     expect(latestRow).not.toHaveProperty("settledWithConversation");
     expect(openRow).not.toHaveProperty("settledAt");
+  });
+
+  test("undoing a settle that closed no chat leaves an earlier settle's chat settled", async () => {
+    const { t, as, c } = await setup();
+    const [monday] = await chats(t, c, [{ state: "idle" }]);
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-monday", conversationId: c, payload: { kind: "settle" } });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "settle-tuesday", conversationId: c, payload: { kind: "settle" } });
+    await as.mutation(api.comma.outbox.enqueue, { clientKey: "undo-tuesday", conversationId: c, payload: { kind: "unsettle" } });
+    expect((await rows(t, [monday!]))[0]?.settledAt, "Monday's chat stays settled").toEqual(expect.any(Number));
   });
 
   test("a conversation's agent chats settle and reopen on their own, with no bridge command", async () => {

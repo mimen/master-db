@@ -147,8 +147,8 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
     patchChat(chat._id, { state: "interrupted" });
   };
   /** Convex's settleChat with the fake runner's answer folded in: a waiting chat's turn stops at once. */
-  const settleChat = (chat: AgentChat, withConversation: boolean, at = now()) => {
-    markChat(chat._id, { settledAt: at, settledWithConversation: withConversation });
+  const settleChat = (chat: AgentChat, withConversation: boolean) => {
+    markChat(chat._id, { settledAt: now(), settledWithConversation: withConversation });
     if (chat.state === "waiting_input") interrupt(chats.get(chat._id)!);
   };
   const endTurn = (chat: AgentChat, key: string) => {
@@ -280,13 +280,16 @@ export function createAgentFixture(drafts: AgentDraftPort, stepMs = 400, seeds: 
   /** The outbox's side of Convex's enqueue: a conversation settle carries its chats, and sending a chat's draft settles it. */
   const outbox = {
     settle: (conversationId: string) => {
-      const at = now();
-      for (const chat of [...chats.values()]) if (chat.conversationId === conversationId && chat.settledAt === undefined) settleChat(chat, true, at);
+      for (const chat of [...chats.values()]) {
+        if (chat.conversationId !== conversationId) continue;
+        if (chat.settledAt === undefined) settleChat(chat, true);
+        else if (chat.settledWithConversation) markChat(chat._id, { settledWithConversation: false });
+      }
     },
     unsettle: (conversationId: string) => {
-      const closed = [...chats.values()].filter((chat) => chat.conversationId === conversationId && chat.settledWithConversation === true && chat.settledAt !== undefined);
-      const latest = Math.max(...closed.map((chat) => chat.settledAt!));
-      for (const chat of closed) if (chat.settledAt === latest) markChat(chat._id, reopened);
+      for (const chat of [...chats.values()]) {
+        if (chat.conversationId === conversationId && chat.settledWithConversation === true && chat.settledAt !== undefined) markChat(chat._id, reopened);
+      }
     },
     sentDraft: (chatId: string | undefined) => {
       const chat = chatId ? chats.get(chatId) : undefined;

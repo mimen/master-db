@@ -128,6 +128,11 @@ test("a conversation's agent chats settle and reopen without a bridge command", 
   expect(await open()).toEqual([false, false, false, false]);
   await call("comma/agent:reopenConversationAgents", { conversationId: AGENT_CHAT_GUIDS.several });
   expect(await open()).toEqual([true, true, false, false]);
+
+  await command({ kind: "settle" }, AGENT_CHAT_GUIDS.several);
+  await command({ kind: "settle" }, AGENT_CHAT_GUIDS.several);
+  await command({ kind: "unsettle" }, AGENT_CHAT_GUIDS.several);
+  expect(await open(), "undoing a settle that closed nothing reopens nothing").toEqual([false, false, false, false]);
 });
 
 test("the seeded agent chats cover every attention, come back on reset, and Leah has two open and two settled", async () => {

@@ -50,12 +50,10 @@ const REOPENED = { settledAt: undefined, settledWithConversation: undefined };
 
 /**
  * Settles a chat by what it is doing: an open question is dismissed and its turn stopped, a
- * finished chat's session closes, and a running turn carries on until it ends on its own. One
- * conversation settle passes one `now` to every chat so un-settle can find them together.
+ * finished chat's session closes, and a running turn carries on until it ends on its own.
  */
-async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { withConversation, now = Date.now() }: {
-  withConversation: boolean; now?: number;
-}) {
+async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { withConversation }: { withConversation: boolean }) {
+  const now = Date.now();
   await ctx.db.patch(chat._id, { settledAt: now, settledWithConversation: withConversation });
   switch (chat.state) {
     case "waiting_input":
@@ -77,19 +75,22 @@ async function settleChat(ctx: MutationCtx, chat: Doc<"comma_agent_chats">, { wi
   }
 }
 
-/** A conversation settle settles every unsettled chat with one `now`, marked so un-settle can reopen them together. */
+/**
+ * A conversation settle settles every unsettled chat, marked so un-settle reopens them. Only this
+ * settle's chats keep the mark: undoing a settle that closed nothing must not reopen an older one's.
+ */
 export async function settleConversationChats(ctx: MutationCtx, conversationId: Id<"comma_conversations">) {
-  const now = Date.now();
   for (const chat of await chatsOf(ctx, conversationId)) {
-    if (chat.settledAt === undefined) await settleChat(ctx, chat, { withConversation: true, now });
+    if (chat.settledAt === undefined) await settleChat(ctx, chat, { withConversation: true });
+    else if (chat.settledWithConversation) await ctx.db.patch(chat._id, { settledWithConversation: false });
   }
 }
 
-/** Un-settle reopens exactly the chats the latest conversation settle closed. */
+/** Un-settle reopens the chats the latest conversation settle closed, the only ones still marked. */
 export async function reopenConversationChats(ctx: MutationCtx, conversationId: Id<"comma_conversations">) {
-  const closed = (await chatsOf(ctx, conversationId)).filter((chat) => chat.settledWithConversation === true && chat.settledAt !== undefined);
-  const latest = Math.max(...closed.map((chat) => chat.settledAt!));
-  for (const chat of closed) if (chat.settledAt === latest) await ctx.db.patch(chat._id, REOPENED);
+  for (const chat of await chatsOf(ctx, conversationId)) {
+    if (chat.settledWithConversation === true && chat.settledAt !== undefined) await ctx.db.patch(chat._id, REOPENED);
+  }
 }
 
 /** Sending the draft a chat wrote settles that chat, edited or not. */
