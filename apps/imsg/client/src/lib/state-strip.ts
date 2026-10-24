@@ -56,7 +56,7 @@ export function stripCopy({ chat, messages, historyComplete, now, compact }: Str
   const action = settleActionFor(chat);
   if (action === "none") return null;
   if (action === "unsettle") {
-    return { tone: "settled", lead: "Settled", detail: `Back in Needs reply if ${firstName(chat)} texts again`, action };
+    return { tone: "settled", lead: "Settled", detail: `Back in Needs you if ${firstName(chat)} texts again`, action };
   }
   // With no triage flag set, only an open agent chat makes Settle the action; nobody's turn is due.
   if (!chat.flags.unresponded && !chat.flags.waiting) return { tone: "settled", lead: "Agent chat open", detail: null, action };

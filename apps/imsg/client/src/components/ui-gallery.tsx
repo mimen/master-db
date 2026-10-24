@@ -81,7 +81,7 @@ export function UiGallery(): React.JSX.Element | null {
 }
 
 const LENSES = [
-  { key: "needs", label: "Needs reply", count: 41 },
+  { key: "needs", label: "Needs you", count: 41 },
   { key: "unread", label: "Unread", count: 12 },
   { key: "waiting", label: "Waiting", count: 0 },
   { key: "all", label: "All", count: 0 },

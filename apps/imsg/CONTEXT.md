@@ -90,7 +90,7 @@ _Avoid_: assistant (that is one item kind), suggestion
 What an agent chat wants from the user, derived in `shared/agent-attention.ts` from its state,
 `seenAt`, `lastTurnEndedAt` and `settledAt`: needs you (a question waits), failed, ready (a turn
 ended unseen), working, open, or settled. A conversation carries its most urgent unsettled chat as
-`ChatSummary.agent`, drawn as the avatar badge in every lens. Needs reply includes every conversation
+`ChatSummary.agent`, drawn as the avatar badge in every lens. Needs you includes every conversation
 with an unsettled agent chat, and the Agents tab lists them grouped by attention. Settling a
 conversation settles its agent chats and un-settling reopens them; sending the draft a chat wrote
 settles that chat. On wide screens the pane opens itself on a conversation whose chat needs you, is

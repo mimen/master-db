@@ -63,7 +63,7 @@ const LENSES = {
     pick: yourTurnLongest,
     total: (_chats: readonly ChatSummary[], counts: EmptyLensCounts) => counts.unresponded,
     rowTrailing: "age",
-    footer: "Go to Needs reply",
+    footer: "Go to Needs you",
     footerHint: "⌘1",
     footerAction: "onGoToNeedsReply",
   },
@@ -96,7 +96,7 @@ function snippetOf(chat: ChatSummary): string {
   return `${last.isFromMe ? "You: " : ""}${last.text || (last.hasAttachments ? "Attachment" : "")}`;
 }
 
-/** The calm state a Needs reply or Unread lens shows once it is empty: what happened, then the next useful step. */
+/** The calm state a Needs you or Unread lens shows once it is empty: what happened, then the next useful step. */
 export function EmptyLens(props: EmptyLensProps) {
   const { lens, chats, counts, now, onOpenChat } = props;
   const { wide } = useLayoutMode();

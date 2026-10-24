@@ -57,7 +57,7 @@ export function MessagesWorkspace({
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   // The conversation auto-advance opened. Only it slides in; a click cuts as before.
   const [advanced, setAdvanced] = useState<{ guid: string; from: string } | null>(null);
-  // The open conversation stays in Needs reply or Unread after a reply or a read, until it is
+  // The open conversation stays in Needs you or Unread after a reply or a read, until it is
   // left or settled; otherwise the row vanished under the cursor mid-reply.
   const [held, setHeld] = useState<string | null>(null);
   const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide, wide ? held : null);
@@ -228,7 +228,7 @@ export function MessagesWorkspace({
     });
   };
 
-  // Auto-advance (round4 ux.md daily loop): in Needs reply and Unread, a reply or a settle
+  // Auto-advance (round4 ux.md daily loop): in Needs you and Unread, a reply or a settle
   // moves straight on to the next conversation in lens order with the composer focused.
   const order = useMemo(() => queueOrder(chats), [chats]);
   useEffect(() => {
@@ -237,7 +237,7 @@ export function MessagesWorkspace({
     return () => publishQueuePosition(null);
   }, [active, order, selected?.guid, wide]);
   // The neighbor is remembered while the open conversation is still in the lens: by the time
-  // a send's echo or a settle lands, the conversation has already left Needs reply.
+  // a send's echo or a settle lands, the conversation has already left Needs you.
   const nextRef = useRef<ChatSummary | null>(null);
   useEffect(() => {
     if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
@@ -313,7 +313,7 @@ export function MessagesWorkspace({
         const action = settleActionFor(sel);
         traceTriage({ kind: "settle-key", guid: sel.guid, lens: stateRef.current, action, next: nextRef.current?.guid ?? null });
         void toggleSettleChat(sel);
-        // Needs reply and Unread auto-advance on the settle itself (onTriageSettling).
+        // Needs you and Unread auto-advance on the settle itself (onTriageSettling).
         // Elsewhere, glide off the row only when the action drops it out of the lens.
         const advances = action === "settle" && (stateRef.current === "unresponded" || stateRef.current === "unread");
         if (!advances && settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.guid);

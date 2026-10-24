@@ -1,5 +1,5 @@
 /**
- * Presses ⌘E through the Needs reply queue and reports, per press, which conversation was open
+ * Presses ⌘E through the Needs you queue and reports, per press, which conversation was open
  * before and after. Stops at the first press that leaves the thread pane on "Select a conversation".
  * Prints the client's `imsg.triageTrace` at the end.
  *

@@ -67,7 +67,7 @@ describe("inbox filter defaults", () => {
 describe("desktopInboxTitle", () => {
   test("names the lens alone while People is at its default, and adds People otherwise", () => {
     expect(desktopInboxTitle({ state: "all", type: "known" })).toBe("All messages");
-    expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("Needs reply");
+    expect(desktopInboxTitle({ state: "unresponded", type: "known" })).toBe("Needs you");
     expect(desktopInboxTitle({ state: "all", type: "unknown" })).toBe("All messages · Unknown numbers");
     expect(desktopInboxTitle({ state: "settled", type: "dm" })).toBe("Settled · One-to-one");
   });

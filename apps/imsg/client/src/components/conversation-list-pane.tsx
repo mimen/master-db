@@ -306,7 +306,7 @@ export function ConversationListPane({
     ),
     [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state],
   );
-  // Needs reply and Unread show what happened and the next step once they empty; other lenses
+  // Needs you and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
   const emptyLens = !search.query && chips.length === 0 && (filters.state === "unresponded" || filters.state === "unread") ? filters.state : null;
 

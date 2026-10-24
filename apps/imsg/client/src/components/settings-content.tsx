@@ -57,7 +57,7 @@ const NAME_ORDER_OPTIONS: readonly DropdownOption<NameOrder>[] = [
 ];
 
 const OPEN_ON_OPTIONS: readonly DropdownOption<OpenOnLens>[] = [
-  { value: "unresponded", label: "Needs reply" },
+  { value: "unresponded", label: "Needs you" },
   { value: "unread", label: "Unread" },
   { value: "waiting", label: "Waiting" },
   { value: "all", label: "All" },

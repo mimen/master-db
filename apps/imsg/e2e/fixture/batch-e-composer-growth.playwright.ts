@@ -4,7 +4,7 @@ test("the composer grows with the draft up to six lines, then scrolls", async ({
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?growth", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   const composer = page.getByPlaceholder("iMessage");
   const height = async () => (await composer.boundingBox())!.height;

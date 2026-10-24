@@ -9,7 +9,7 @@ async function needsReply(page: Page, scheme: "light" | "dark"): Promise<void> {
   await page.emulateMedia({ colorScheme: scheme });
   await page.goto("/");
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
-  await page.getByRole("tab", { name: /^Needs reply/ }).click();
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await page.waitForTimeout(400);
 }
 
@@ -20,14 +20,14 @@ async function renderedNames(page: Page): Promise<string[]> {
 deskTest("signal-filters: desktop light", async ({ desk }) => {
   const page = desk.page;
   await needsReply(page, "light");
-  for (const name of ["Needs reply", "Unread", "Waiting", "All"]) {
+  for (const name of ["Needs you", "Unread", "Waiting", "All"]) {
     await expect(page.getByRole("tab", { name: new RegExp(`^${name}`) })).toHaveCount(1);
   }
   await expect(page.getByRole("heading", { name: "Today" }).or(page.getByRole("heading", { name: "This week" })).or(page.getByRole("heading", { name: "Older" })).first()).toBeVisible();
 
   // The thread's "N of M" counts the rendered order.
   // The list virtualizes, so the total comes from the lens count; the index from the clicked row.
-  const total = Number((await page.getByRole("tab", { name: /^Needs reply/ }).getAttribute("aria-label"))?.split(", ")[1]);
+  const total = Number((await page.getByRole("tab", { name: /^Needs you/ }).getAttribute("aria-label"))?.split(", ")[1]);
   const names = await renderedNames(page);
   await page.getByTestId("conversation-row").nth(1).click();
   await expect(page.getByTestId("thread-view")).toBeVisible();
@@ -39,14 +39,14 @@ deskTest("signal-filters: desktop light", async ({ desk }) => {
   await page.keyboard.press("Meta+2");
   await expect(page.getByRole("tab", { name: /^Unread/ })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Meta+1");
-  await expect(page.getByRole("tab", { name: /^Needs reply/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /^Needs you/ })).toHaveAttribute("aria-selected", "true");
   await page.waitForTimeout(700);
   await page.screenshot({ path: join(evidence, "desk-main-light.png") });
 
   // Filter popover with live counts; a service dropdown open.
   await page.getByRole("button", { name: /^Filter conversations/ }).click();
   const dialog = page.getByRole("dialog", { name: "Filter conversations" });
-  await expect(dialog.getByText(/^Showing \d+ of \d+ in Needs reply$/)).toBeVisible();
+  await expect(dialog.getByText(/^Showing \d+ of \d+ in Needs you$/)).toBeVisible();
   await dialog.getByRole("checkbox", { name: /^Pinned/ }).click();
   await dialog.getByRole("checkbox", { name: /^Pinned/ }).click();
   await dialog.getByRole("button", { name: /^Service,/ }).click();
@@ -91,7 +91,7 @@ deskTest("signal-filters: phone chips and sheet", async ({ desk }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
-  await page.getByRole("tab", { name: /^Needs reply/ }).click();
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await page.waitForTimeout(400);
   await page.screenshot({ path: join(evidence, "phone-list.png") });
   await page.getByRole("button", { name: /^Filter conversations/ }).click();

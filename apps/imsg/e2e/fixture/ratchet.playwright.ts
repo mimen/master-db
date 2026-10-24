@@ -139,14 +139,14 @@ async function rowMenuItem(page: Page, name: string, item: string) {
   return page.getByRole("dialog").getByText(item, { exact: true });
 }
 
-test("ratchet: settling the open conversation moves the Needs reply count within 50 ms of ⌘E", async ({ desk }) => {
+test("ratchet: settling the open conversation moves the Needs you count within 50 ms of ⌘E", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("conversation-row").filter({ hasText: "Alex Rivera" }).click();
   await page.getByPlaceholder("iMessage").blur();
-  const label = await page.locator('[aria-label^="Needs reply, "]').getAttribute("aria-label");
-  const before = Number(label?.slice("Needs reply, ".length));
-  await timeToFrame(page, "keydown", `() => document.querySelector('[aria-label="Needs reply, ${before - 1}"]') !== null`);
+  const label = await page.locator('[aria-label^="Needs you, "]').getAttribute("aria-label");
+  const before = Number(label?.slice("Needs you, ".length));
+  await timeToFrame(page, "keydown", `() => document.querySelector('[aria-label="Needs you, ${before - 1}"]') !== null`);
   await page.keyboard.press("Meta+e");
   expect(await elapsedToFrame(page)).toBeLessThanOrEqual(50);
 });

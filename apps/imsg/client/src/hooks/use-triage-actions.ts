@@ -84,7 +84,7 @@ export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome>
     const undoToken = beginUndoAction();
     const anchor = settleAnchor(chat.lastMessage);
     const intent: FlagIntent = { change: "settle", chatGuid: chat.guid, seen: anchor };
-    // In Needs reply only for its agent chats, it settles just those: a bridge settle's Undo would
+    // In Needs you only for its agent chats, it settles just those: a bridge settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
     const agentsOnly = !chat.flags.unresponded && !chat.flags.waiting;
     const queued = untilQueued((onQueued) => agentsOnly
@@ -148,7 +148,7 @@ export async function toggleSettleChat(chat: ChatSummary): Promise<void> {
     } else if (action === "settle") {
       showToast(`Settled ${chat.displayName}`, { label: "Undo", hint: "⌘Z", onPress: () => void undoLastTriageAction() });
     } else {
-      showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs Reply");
+      showToast(chat.lastMessage?.isFromMe ? "Un-settled — back in Waiting" : "Un-settled — back in Needs you");
     }
   } catch {
     // The write that failed already surfaced its own toast.

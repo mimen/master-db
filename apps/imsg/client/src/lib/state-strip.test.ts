@@ -60,10 +60,10 @@ describe("stripCopy", () => {
 
   test("settled offers un-settle and says what brings it back", () => {
     const copy = stripCopy({ chat: chat({}, { at: NOW - H, fromMe: false }), messages: [], historyComplete: false, now: NOW, compact: false });
-    expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in Needs reply if Tracy texts again", action: "unsettle" });
+    expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in Needs you if Tracy texts again", action: "unsettle" });
   });
 
-  test("a conversation in Needs reply only for its agent chat says so plainly and offers Settle", () => {
+  test("a conversation in Needs you only for its agent chat says so plainly and offers Settle", () => {
     const agent = { attention: "ready", chatId: "a", title: "Guest list", openCount: 1, activityAt: NOW } as const;
     const settled = { chat: chat({}, { at: NOW - 2 * H, fromMe: false }, { agent }), messages: [msg(NOW - 2 * H, false)], historyComplete: false, now: NOW, compact: false };
     expect(stripCopy(settled)).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle" });

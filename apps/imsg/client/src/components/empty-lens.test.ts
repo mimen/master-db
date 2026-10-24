@@ -23,7 +23,7 @@ beforeAll(async () => {
 
 afterAll(() => rm(bundlePath, { force: true }));
 
-test("Needs reply names today's work only when the counts are known", () => {
+test("Needs you names today's work only when the counts are known", () => {
   expect(emptyLensCopy("unresponded", { unresponded: 0, repliedToday: 18, settledToday: 9 })).toEqual({
     title: "You've replied to everyone",
     line2: "New messages show up here as they arrive. 18 replied and 9 settled today.",
@@ -40,7 +40,7 @@ test("Unread points at what still needs a reply and drops the sentence at zero",
     title: "Nothing unread",
     line2: "You've opened every message. 41 conversations still need a reply.",
     sectionTitle: "Your turn the longest",
-    footer: "Go to Needs reply",
+    footer: "Go to Needs you",
     footerHint: "⌘1",
   });
   expect(emptyLensCopy("unread", { unresponded: 1 }).line2).toBe("You've opened every message. 1 conversation still needs a reply.");

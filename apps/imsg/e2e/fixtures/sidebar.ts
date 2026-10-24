@@ -39,8 +39,8 @@ export const test = base.extend<SidebarFixtures>({
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     const search = page.getByRole("textbox", { name: SEARCH_NAME });
-    const heading = page.getByRole("heading", { name: "Needs reply" });
-    const needs = page.getByRole("button", { name: /^Needs reply, \d+/ });
+    const heading = page.getByRole("heading", { name: "Needs you" });
+    const needs = page.getByRole("button", { name: /^Needs you, \d+/ });
     const waiting = page.getByRole("button", { name: "Waiting" });
     const all = page.getByRole("button", { name: "All messages" });
     const scroll = page.getByTestId("conversation-list-scroll");

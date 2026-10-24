@@ -64,10 +64,10 @@ async function openRowMenu(page: Page, name: string, item: string): Promise<void
   await page.getByRole("dialog").getByText(item, { exact: true }).waitFor();
 }
 
-/** The Needs reply tab's count, read off its accessible name. */
+/** The Needs you tab's count, read off its accessible name. */
 function needsReplyCount(): number | null {
-  const label = [...document.querySelectorAll('[aria-label^="Needs reply, "]')].map((tab) => tab.getAttribute("aria-label")).at(0);
-  return label ? Number(label.slice("Needs reply, ".length)) : null;
+  const label = [...document.querySelectorAll('[aria-label^="Needs you, "]')].map((tab) => tab.getAttribute("aria-label")).at(0);
+  return label ? Number(label.slice("Needs you, ".length)) : null;
 }
 
 
@@ -132,7 +132,7 @@ const CASES: Case[] = [
       .some((element) => element.getAttribute("aria-label") === "You: bench unsend probe"),
   },
   {
-    // Alex's open thread sits in Needs reply; the count must drop by one.
+    // Alex's open thread sits in Needs you; the count must drop by one.
     name: "settle",
     setup: async (page) => {
       await openAlex(page);
@@ -142,8 +142,8 @@ const CASES: Case[] = [
     },
     act: (page) => page.keyboard.press("Meta+e"),
     done: () => {
-      const label = [...document.querySelectorAll('[aria-label^="Needs reply, "]')].map((tab) => tab.getAttribute("aria-label")).at(0);
-      return label !== undefined && Number(label?.slice("Needs reply, ".length)) === (window as unknown as { __needsBefore: number }).__needsBefore - 1;
+      const label = [...document.querySelectorAll('[aria-label^="Needs you, "]')].map((tab) => tab.getAttribute("aria-label")).at(0);
+      return label !== undefined && Number(label?.slice("Needs you, ".length)) === (window as unknown as { __needsBefore: number }).__needsBefore - 1;
     },
   },
   {

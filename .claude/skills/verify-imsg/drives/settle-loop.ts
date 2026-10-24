@@ -23,7 +23,7 @@ async function open(page: Page, width: number, height: number, scheme: "light" |
 }
 
 async function needsCount(page: Page): Promise<number> {
-  const label = await page.getByRole("tab", { name: /^Needs reply, \d+/ }).getAttribute("aria-label");
+  const label = await page.getByRole("tab", { name: /^Needs you, \d+/ }).getAttribute("aria-label");
   return Number(/(\d+)/.exec(label ?? "")?.[1]);
 }
 
@@ -57,7 +57,7 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await page.screenshot({ path: join(evidence, "desk-settled-toast.png") });
   writeFileSync(join(evidence, "aria.txt"), await page.getByTestId("thread-view").ariaSnapshot());
 
-  // ⌘Z outside a text field undoes; the conversation returns to Needs reply.
+  // ⌘Z outside a text field undoes; the conversation returns to Needs you.
   await page.mouse.click(900, 300);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press("Meta+z");
@@ -70,7 +70,7 @@ test("settle-loop: strip, ⌘E settle with toast and undo, auto-advance, positio
   await page.getByRole("button", { name: "Next conversation (J)" }).click();
   await expect(page.getByText(`${at + 1} of ${before}`, { exact: true })).toBeVisible();
 
-  // Send from Needs reply stays on the conversation; only a settle moves on.
+  // Send from Needs you stays on the conversation; only a settle moves on.
   const sender = (await heading(page).textContent())!;
   await page.getByPlaceholder("iMessage").fill("On it");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -89,7 +89,7 @@ test("settle-loop: settled strip offers un-settle (dark)", async ({ desk }) => {
   await expect(strip).toBeVisible();
   if (await strip.getByRole("button", { name: "Settle (⌘E)" }).isVisible()) await page.keyboard.press("Meta+e");
   await expect(strip).toContainText("Settled");
-  await expect(strip).toContainText(/Back in Needs reply if .+ texts again/);
+  await expect(strip).toContainText(/Back in Needs you if .+ texts again/);
   await expect(strip.getByRole("button", { name: "Un-settle (⌘E)" })).toBeVisible();
   await page.waitForTimeout(5600);
   await page.mouse.move(900, 300);

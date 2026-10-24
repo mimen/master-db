@@ -20,7 +20,7 @@ const pending = (...intents: [FlagIntent, boolean?][]): PendingFlags =>
   new Map(intents.map(([intent, confirmed = false], index) => [String(index), { intent, confirmed }]));
 
 describe("applyFlagIntents", () => {
-  test("a settle leaves Needs reply and joins Settled in the counts on the same pass", () => {
+  test("a settle leaves Needs you and joins Settled in the counts on the same pass", () => {
     const before = [chat(), chat({ guid: "c2" })];
     const after = applyFlagIntents(before, pending([{ change: "settle", chatGuid: "c1", seen: "m2" }]));
     expect(computeCounts(before, "all")).toMatchObject({ unresponded: 2, settled: 0 });
@@ -28,7 +28,7 @@ describe("applyFlagIntents", () => {
     expect(after[1]).toBe(before[1]);
   });
 
-  test("a settle takes a row that is in Needs reply only for its agent chat out on the same pass", () => {
+  test("a settle takes a row that is in Needs you only for its agent chat out on the same pass", () => {
     const agent = { attention: "open", chatId: "a1", title: "Set length", openCount: 1, activityAt: 100 } as const;
     const answered = chat({ lastMessage: { ...inbound, isFromMe: true }, unreadCount: 0, flags: { ...chat().flags, unresponded: false, unread: false }, agent });
     const [shown] = applyFlagIntents([answered], pending([{ change: "settle", chatGuid: "c1", seen: "m2" }]));

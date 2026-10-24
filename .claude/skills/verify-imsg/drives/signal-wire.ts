@@ -43,20 +43,20 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
-test("signal-wire empty Needs reply lens", async ({ desk }) => {
+test("signal-wire empty Needs you lens", async ({ desk }) => {
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const rows = page.getByTestId("conversation-row");
   await expect(rows.first()).toBeVisible();
-  // Settle every row in Needs reply; each leaving row collapses out.
+  // Settle every row in Needs you; each leaving row collapses out.
   test.setTimeout(120_000);
   const empty = page.getByRole("heading", { name: "You've replied to everyone" });
-  for (let i = 0; i < 40 && !(await page.getByRole("tab", { name: /^Needs reply, 0$/ }).count()); i++) {
-    const before = await page.getByRole("tab", { name: /^Needs reply/ }).getAttribute("aria-label");
+  for (let i = 0; i < 40 && !(await page.getByRole("tab", { name: /^Needs you, 0$/ }).count()); i++) {
+    const before = await page.getByRole("tab", { name: /^Needs you/ }).getAttribute("aria-label");
     await rows.first().click();
     await page.getByRole("button", { name: /^Settle \(/ }).click();
-    await expect(page.getByRole("tab", { name: /^Needs reply/ })).not.toHaveAttribute("aria-label", before ?? "");
+    await expect(page.getByRole("tab", { name: /^Needs you/ })).not.toHaveAttribute("aria-label", before ?? "");
     await page.waitForTimeout(500);
   }
   await expect(page.getByRole("heading", { name: "You've replied to everyone" })).toBeVisible();

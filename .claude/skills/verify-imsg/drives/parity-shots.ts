@@ -88,7 +88,7 @@ test("parity desk empty", async ({ desk }) => {
   }
   await page.keyboard.press("Escape");
   await shot(page, "desk-empty-unread");
-  await page.getByRole("tab", { name: /^Needs reply/ }).click();
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await shot(page, "desk-empty-needs");
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await shot(page, "desk-empty-dark");

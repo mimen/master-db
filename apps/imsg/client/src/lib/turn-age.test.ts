@@ -25,7 +25,7 @@ test("a your-turn age is late from 48 hours, and never while waiting", () => {
   expect(isLateTurn({ flags: { unresponded: true }, lastMessage: null }, NOW)).toBe(false);
 });
 
-test("your turn the longest ranks Needs reply by the oldest unread, oldest first", () => {
+test("your turn the longest ranks Needs you by the oldest unread, oldest first", () => {
   const chats = [
     chat("recent", { unresponded: true }, NOW - H),
     chat("old-unread", { unresponded: true }, NOW - H, NOW - 50 * H),

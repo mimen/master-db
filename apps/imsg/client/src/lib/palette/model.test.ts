@@ -103,7 +103,7 @@ describe("buildPaletteSections", () => {
     const titles = unre
       .find((s) => s.title === "Commands")!
       .items.map((i) => (i.kind === "command" ? i.command.title : "?"));
-    expect(titles).toEqual(["Unread", "Needs reply"]);
+    expect(titles).toEqual(["Unread", "Needs you"]);
 
     const help = buildPaletteSections({ query: "help", chats: [], messages: [], contacts: [] });
     expect(

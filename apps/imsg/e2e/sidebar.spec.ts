@@ -17,7 +17,7 @@ interface ScrollGeometry {
 }
 
 function lensButton(page: Page, label: "Needs" | "Waiting" | "All"): Locator {
-  const accessibleLabel = label === "Needs" ? "Needs reply" : label === "All" ? "All messages" : "Waiting";
+  const accessibleLabel = label === "Needs" ? "Needs you" : label === "All" ? "All messages" : "Waiting";
   return page.getByRole("button", {
     name: new RegExp(`^${accessibleLabel}, \\d+ conversations$`),
   });

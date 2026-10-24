@@ -82,7 +82,7 @@ The `desk` fixture gives every drive four things:
 | `getByRole("button", { name: "Schedule message" })` | Schedule |
 | `getByRole("button", { name: "Record voice message" })` | Voice |
 | `getByRole("button", { name: "Remove attachment" })` | A staged attachment |
-| `getByRole("heading", { name: "Needs reply" })` | The queue headings |
+| `getByRole("heading", { name: "Needs you" })` | The queue headings |
 
 **Fixture chats** (`desk.chats`):
 

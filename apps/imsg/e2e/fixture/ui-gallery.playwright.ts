@@ -56,7 +56,7 @@ test("settling shows a bottom toast whose Undo restores the conversation", async
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Needs reply" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
   await expect(page.getByTestId("conversation-row").first()).toBeVisible();
   const before = await settledCount(page.getByTestId("conversation-row"));
   await page.getByTestId("conversation-row").first().click();

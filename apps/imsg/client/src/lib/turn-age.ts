@@ -46,7 +46,7 @@ function oldest(chats: readonly ChatSummary[], keep: (chat: ChatSummary) => bool
     .slice(0, limit);
 }
 
-/** Needs reply conversations that have waited longest for the owner. */
+/** Needs you conversations that have waited longest for the owner. */
 export function yourTurnLongest(chats: readonly ChatSummary[], limit: number, now: number): AgedChat[] {
   return oldest(chats, (chat) => chat.flags.unresponded, turnSince, limit, now);
 }

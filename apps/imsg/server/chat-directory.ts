@@ -465,7 +465,7 @@ export class ChatDirectory {
    * last message, which can be a tapback or, for old chats, a stale earlier message: it reads the
    * chat's own newest messages and finds the newest one that is not a tapback or unsent, the same
    * message Convex shows as last and compares the dismissal with. Whose message that is decides
-   * Needs reply or Waiting. With an anchor, a real message after it rejects the settle.
+   * Needs you or Waiting. With an anchor, a real message after it rejects the settle.
    */
   async settle(
     guid: string,

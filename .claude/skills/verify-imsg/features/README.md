@@ -32,10 +32,10 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 ## Features
 
-- [Send a message](./send-text.md) covers typed sends, the Enter and Send entry points, delivery state, and moving out of Needs reply. Its drive is `drives/send-text.ts`.
+- [Send a message](./send-text.md) covers typed sends, the Enter and Send entry points, delivery state, and moving out of Needs you. Its drive is `drives/send-text.ts`.
 - [Receive a message](./receive.md) covers live inbound messages, the sidebar preview, the open thread, peer typing, and mark-read.
 - [Settle a conversation](./settle.md) covers settling from the row, the header and the keyboard, and Undo.
 - [Send attachments](./attachments.md) covers file drops with a caption, voice memos, and an unknown outcome.
 - [Schedule a message](./schedule.md) covers Send later, the date editor, and the Scheduled list.
 - [Agent pane](./agent-pane.md) covers ⌘J, asking, the work log, question cards, composer and pane drafts, New chat, and the state strip. Its drive is `drives/agent-pane.ts`.
-- [Agent chats in the conversation list](./agent-list.md) covers the avatar badges, Needs reply, the Agents tab, settle, the pane opening itself, toasts and the ⌘K group. Its drive is `drives/agent-list.ts`.
+- [Agent chats in the conversation list](./agent-list.md) covers the avatar badges, Needs you, the Agents tab, settle, the pane opening itself, toasts and the ⌘K group. Its drive is `drives/agent-list.ts`.

@@ -71,13 +71,13 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     resetUndoForTests();
   });
 
-  test("a conversation in Needs reply only for its agent chat settles those chats and leaves at once; Undo reopens only them", async () => {
+  test("a conversation in Needs you only for its agent chat settles those chats and leaves at once; Undo reopens only them", async () => {
     const marcus = chat({});
     expect(matchesFilters(marcus, "unresponded", "all")).toBe(true);
     let release = () => {};
     held = new Promise((resolve) => { release = resolve; });
     const settling = toggleSettleChat(marcus);
-    expect(matchesFilters(shown(marcus), "unresponded", "all"), "out of Needs reply before Convex answers").toBe(false);
+    expect(matchesFilters(shown(marcus), "unresponded", "all"), "out of Needs you before Convex answers").toBe(false);
     release();
     await settling;
     expect(toasts).toEqual(["Settled Marcus Reed"]);

@@ -978,7 +978,7 @@ describe("Triage Desk state", () => {
     expect(db.getAll().get(CHAT_A)?.dismissedUnrespondedGuid).toBe("a1");
   });
 
-  test("a stale last message of mine in the chat list still settles Needs reply, and un-settle undoes it", async () => {
+  test("a stale last message of mine in the chat list still settles Needs you, and un-settle undoes it", async () => {
     const mine: BBMessage = { guid: "m0", text: "earlier, mine", dateCreated: 900, isFromMe: true };
     const { bb, db, directory } = await setup([{ ...twoChatSeed()[0]!, messages: [mine, inbound("a1", 1000, "newest, theirs")] }]);
     const query = bb.queryChats.bind(bb);

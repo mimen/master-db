@@ -16,7 +16,7 @@ import {
 const BASE_URL = process.env.IMSG_TAILNET_URL ?? "https://milads-mac-mini.taild31e9a.ts.net:8447";
 const APP = "/Users/mimen/Applications/Comma.app";
 const EXPECTED_BUNDLE_ID = "com.milad.imsg.desktop";
-const EXPECTED_VISUAL_TEXT = process.env.COMMA_VERIFY_EXPECT_TEXT ?? "Needs reply";
+const EXPECTED_VISUAL_TEXT = process.env.COMMA_VERIFY_EXPECT_TEXT ?? "Needs you";
 const STATE_DIR = process.env.IMSG_DEPLOY_STATE_DIR
   ?? join(homedir(), "Library/Application Support/imsg-deploy");
 const CACHE_ROOT = join(homedir(), "Library/Caches/ms-playwright");

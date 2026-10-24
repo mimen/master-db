@@ -19,7 +19,7 @@ A user writes a message and chooses Send later. A menu and then a date editor op
 Preconditions:
 
 - Fixture healthy; doctor passes.
-- A Needs reply conversation is open.
+- A Needs you conversation is open.
 
 - **Open Send later.** `getByPlaceholder("iMessage").fill("Doors at 8")`, then `getByRole("button", { name: "Schedule message" }).click()`. `getByText("Choose Date & Time…", { exact: true })` appears, with its right edge aligned to the Send button and sitting above it.
 - **Editor.** Click that item. `getByText("Choose Date & Time", { exact: true })` and `getByRole("button", { name: "Save schedule" })` appear above Send.

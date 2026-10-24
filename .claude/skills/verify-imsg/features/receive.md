@@ -20,7 +20,7 @@ When the other person sends a message, it appears in the sidebar preview and, if
 Preconditions:
 
 - Fixture healthy; doctor passes.
-- Page loaded at `/` with the sidebar visible (`getByRole("heading", { name: "Needs reply" })`).
+- Page loaded at `/` with the sidebar visible (`getByRole("heading", { name: "Needs you" })`).
 
 - **Inbound to a closed thread.** Call `await desk.receive(desk.chats.needs, "Inbound probe")`. The Alex Rivera row (`getByTestId("conversation-row").filter({ hasText: "Alex Rivera" })`) shows `Inbound probe` as its preview.
 - **Open it.** Click that row. `getByTestId("thread-view")` contains exactly one `Inbound probe`.

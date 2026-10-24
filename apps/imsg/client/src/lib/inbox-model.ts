@@ -35,7 +35,7 @@ export function resetInboxFilters(): InboxFilters {
 export type Lens = "unresponded" | "unread" | "waiting" | "all" | "drafts" | "agents";
 
 export const LENSES: readonly { value: Lens; label: string; count: "turn" | "plain" | null }[] = [
-  { value: "unresponded", label: "Needs reply", count: "turn" },
+  { value: "unresponded", label: "Needs you", count: "turn" },
   { value: "unread", label: "Unread", count: "plain" },
   { value: "waiting", label: "Waiting", count: null },
   { value: "all", label: "All", count: null },
@@ -84,7 +84,7 @@ export const PEOPLE_LABELS: Record<TypeFilter, string> = {
 const LENS_TITLES: Record<StateFilter, string> = {
   all: "All messages",
   unread: "Unread",
-  unresponded: "Needs reply",
+  unresponded: "Needs you",
   waiting: "Waiting",
   drafts: "Drafts",
   agents: "Agents",

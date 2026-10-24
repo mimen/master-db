@@ -57,7 +57,7 @@ function Tab({
 }
 
 /**
- * The phone's floating bubble bar: Messages (with the Needs reply count),
+ * The phone's floating bubble bar: Messages (with the Needs you count),
  * Contacts, Scheduled and Settings. It floats above the home indicator over a
  * fade, and the lists scroll under it.
  */

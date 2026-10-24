@@ -309,7 +309,7 @@ describe("settleActionFor", () => {
 });
 
 describe("settleLeavesLens — whether the row drops out from under the cursor", () => {
-  test("settling clears the flags that define Needs reply and Waiting", () => {
+  test("settling clears the flags that define Needs you and Waiting", () => {
     expect(settleLeavesLens("settle", "unresponded")).toBe(true);
     expect(settleLeavesLens("settle", "waiting")).toBe(true);
   });
@@ -435,7 +435,7 @@ describe("agent chats", () => {
   const quiet = (attention: NonNullable<ChatSummary["agent"]>["attention"]) =>
     makeChat({ guid: `quiet-${attention}`, agent: agent(attention), lastMessage: { ...makeChat().lastMessage!, isFromMe: true } });
 
-  test("an open agent chat puts a conversation with clear flags in Needs reply and Agents, not Settled", () => {
+  test("an open agent chat puts a conversation with clear flags in Needs you and Agents, not Settled", () => {
     const row = quiet("working");
     expect(matchesFilters(row, "unresponded", "all")).toBe(true);
     expect(matchesFilters(row, "agents", "all")).toBe(true);
@@ -451,13 +451,13 @@ describe("agent chats", () => {
     expect(isSettled(row)).toBe(true);
   });
 
-  test("settle is offered when an agent chat is the only reason to be in Needs reply, and it leaves Agents", () => {
+  test("settle is offered when an agent chat is the only reason to be in Needs you, and it leaves Agents", () => {
     expect(settleActionFor(quiet("open"))).toBe("settle");
     expect(settleLeavesLens("settle", "agents")).toBe(true);
     expect(settleLeavesLens("unsettle", "agents")).toBe(false);
   });
 
-  test("Needs reply counts agent rows; Agents counts only the ones that want the user", () => {
+  test("Needs you counts agent rows; Agents counts only the ones that want the user", () => {
     const rows = (["needs_you", "failed", "ready", "working", "open"] as const).map(quiet);
     const counts = computeCounts([...rows, makeChat({ guid: "inbound", flags: makeFlags({ unresponded: true }) })], "all");
     expect(counts.unresponded).toBe(6);
