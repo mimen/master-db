@@ -37,21 +37,26 @@ export type TitleDeps = {
   apiKey: string;
 };
 
-/** The title, trimmed and clipped to 40 characters, or null on any failure. */
+/**
+ * The title, trimmed and clipped to 40 characters, or null when the reply carries none. A failed
+ * request or an unreadable reply rejects with why, in words that name neither the key nor the ask.
+ */
 export async function chatTitle(firstAsk: string, deps: TitleDeps): Promise<string | null> {
+  const response = await deps.fetch(`${deps.baseUrl}/v1/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": deps.apiKey, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({ model: TITLE_MODEL, max_tokens: 100, system: TITLE_PROMPT, messages: [{ role: "user", content: firstAsk.slice(0, 8_000) }] }),
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  let title: unknown;
   try {
-    const response = await deps.fetch(`${deps.baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": deps.apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: TITLE_MODEL, max_tokens: 100, system: TITLE_PROMPT, messages: [{ role: "user", content: firstAsk.slice(0, 8_000) }] }),
-    });
-    if (!response.ok) return null;
     const { content } = await response.json() as { content?: { type: string; text?: string }[] };
     const text = (content ?? []).filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
-    const { title } = JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")) as { title?: unknown };
-    const trimmed = typeof title === "string" ? title.trim() : "";
-    return trimmed ? trimmed.slice(0, TITLE_CHARS).trimEnd() : null;
+    ({ title } = JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")) as { title?: unknown });
   } catch {
-    return null;
+    // A parser's message quotes the reply, which can echo the ask.
+    throw new Error("the reply was not a JSON title");
   }
+  const trimmed = typeof title === "string" ? title.trim() : "";
+  return trimmed ? trimmed.slice(0, TITLE_CHARS).trimEnd() : null;
 }

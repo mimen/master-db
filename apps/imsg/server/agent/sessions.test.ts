@@ -248,6 +248,18 @@ describe("Sessions", () => {
     expect(titles(h)).toEqual([]);
   });
 
+  test("a title request that fails logs why and is asked for again on the next message", async () => {
+    const h = harness();
+    let requests = 0;
+    h.hooks.title = async () => { requests++; throw new Error("HTTP 529"); };
+    await h.ask("a", "first");
+    await settle();
+    expect(h.logs).toContain("comma agent: title for a: Error: HTTP 529");
+    await h.ask("a", "second");
+    await settle();
+    expect(requests).toBe(2);
+  });
+
   test("a message whose dispatch fails ends the chat as failed with the error", async () => {
     const h = harness();
     await h.ask("a", "first");

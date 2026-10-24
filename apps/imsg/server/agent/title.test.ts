@@ -35,15 +35,17 @@ describe("chatTitle", () => {
     expect(title!.length).toBeLessThanOrEqual(40);
   });
 
-  test("returns null for an error status, malformed JSON, a missing or empty title, or a network failure", async () => {
-    const failures: (Response | (() => Promise<Response>))[] = [
-      new Response("busy", { status: 529 }),
-      message("Halloween guest list"),
-      message('{"name": "x"}'),
-      message('{"title": "   "}'),
-      Response.json({ error: "no content" }),
-      async () => { throw new Error("connection refused"); },
-    ];
-    for (const reply of failures) expect(await chatTitle("hi", gateway(reply).deps)).toBeNull();
+  test("rejects with the status, an unreadable reply or the network error, never the key or the ask", async () => {
+    const ask = "add rebecca@example.com to the guest list";
+    const why = (reply: Response | (() => Promise<Response>)) => chatTitle(ask, gateway(reply).deps).then(() => "resolved", String);
+    expect(await why(new Response("busy", { status: 529 }))).toBe("Error: HTTP 529");
+    for (const reply of [message("Halloween guest list"), Response.json({ error: "no content" }), new Response("<html>gateway</html>")]) {
+      expect(await why(reply)).toBe("Error: the reply was not a JSON title");
+    }
+    expect(await why(async () => { throw new Error("connection refused"); })).toBe("Error: connection refused");
+  });
+
+  test("returns null for a missing or empty title", async () => {
+    for (const reply of [message('{"name": "x"}'), message('{"title": "   "}')]) expect(await chatTitle("hi", gateway(reply).deps)).toBeNull();
   });
 });

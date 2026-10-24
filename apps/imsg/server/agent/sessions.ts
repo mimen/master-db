@@ -25,7 +25,7 @@ export type SessionsDeps = {
   /** The chat's working directory; message attachments are saved under it. */
   scratch: (chatId: ChatId) => string;
   fetch: (url: string) => Promise<Response>;
-  /** A title for a chat from its first ask, or null when none came back. */
+  /** A title for a chat from its first ask, or null when none came back; a failure rejects with why. */
   title: (firstAsk: string) => Promise<string | null>;
   log?: (message: string) => void;
 };
