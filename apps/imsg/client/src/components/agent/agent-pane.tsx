@@ -31,8 +31,9 @@ import { useLiveFollow } from "./use-live-follow";
 import { useMarkSeen, usePaneSelection } from "./use-pane-chat";
 import { resolveComposerDispatchMode } from "./vendor/composer-dispatch";
 
-/** A new chat's pending asks carry this until its first ask returns the chat id. */
-const NEW_CHAT = "" as AgentChatId;
+/** Each New chat's pending asks carry its own token until its first ask returns the chat id. */
+let newChats = 0;
+const newChatToken = () => `new-chat-${++newChats}` as AgentChatId;
 
 /** An ask the user just sent, drawn in its chat until the server's copy (same key) arrives. */
 function pendingAsk(chatId: AgentChatId, key: string, text: string, steer: boolean, attachments: AgentAttachmentMeta[], now: number): AgentItem {
@@ -64,13 +65,15 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
   const [pending, setPending] = useState<readonly AgentItem[]>([]);
   // The first ask of a new chat creates it; a second ask sent before that returns waits for its id.
   const creating = useRef<Promise<AgentChatId> | null>(null);
+  const newChat = useRef<AgentChatId | null>(null);
+  newChat.current ??= newChatToken();
   const { scrollProps, follow, disclosure } = useLiveFollow();
   const running = agentIsRunning(chat?.state);
   const keyboardHeight = useKeyboardHeight();
   const { wide } = useLayoutMode();
   // A pick in the input lasts for the shown chat; once sent, the chat carries it.
   const [picked, setPicked] = useState<{ readonly chatId: AgentChatId; readonly choice: AgentModelChoice } | null>(null);
-  const shownId = chatId ?? NEW_CHAT;
+  const shownId = chatId ?? newChat.current;
   const choice = picked?.chatId === shownId ? picked.choice
     : chat ? agentModelChoice(chat.model, chat.effort) : agentModelChoice(settings.agentModel, settings.agentEffort);
   const history = useMemo(() => promptHistory(items), [items]);
@@ -79,10 +82,10 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
   const rows = transcriptRows([...items, ...shownPending]);
   const newestQuestion = rows.findLast((row) => row.kind === "item" && row.item.entry.kind === "question" && row.item.entry.status === "pending")?.key;
 
-  const created = (id: AgentChatId) => {
-    setPending((current) => current.map((ask) => ask.chatId === NEW_CHAT ? { ...ask, chatId: id } : ask));
-    setPicked((current) => current?.chatId === NEW_CHAT ? { ...current, chatId: id } : current);
-    select((current) => current?.kind === "new" ? { kind: "chat", chatId: id } : current);
+  const created = (token: AgentChatId, id: AgentChatId) => {
+    setPending((current) => current.map((ask) => ask.chatId === token ? { ...ask, chatId: id } : ask));
+    setPicked((current) => current?.chatId === token ? { ...current, chatId: id } : current);
+    select((current) => current?.kind === "new" && newChat.current === token ? { kind: "chat", chatId: id } : current);
   };
 
   const send = ({ text, alternate, attachments }: SendIntent) => {
@@ -106,7 +109,7 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
       }));
     if (!target) {
       creating.current = asked;
-      asked.then(created, () => undefined).finally(() => {
+      asked.then((id) => created(shownId, id), () => undefined).finally(() => {
         if (creating.current === asked) creating.current = null;
       });
     }
@@ -128,7 +131,10 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
 
   const settled = chat?.settledAt;
   const choose = (next: PaneSelection) => {
-    if (next.kind === "new") creating.current = null;
+    if (next.kind === "new") {
+      creating.current = null;
+      newChat.current = newChatToken();
+    }
     select(next);
     follow();
   };
