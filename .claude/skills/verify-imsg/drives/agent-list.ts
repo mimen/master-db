@@ -19,7 +19,7 @@ const listOrder = async (page: Page) => (await page.locator('[role="heading"], [
 /** The color the row's age is drawn in: the innermost text that reads like "9w". */
 const ageColor = (row: Locator) => row.getByText(/^\d+[mhdwy]$/).last().evaluate((node) => getComputedStyle(node).color);
 
-test("agent-list: badges in every lens, agent rows in Needs reply, the Agents tab, settle carries the chats, the pane opens itself, toasts and ⌘K", async ({ desk }) => {
+test("agent-list: badges in every lens, agent rows in Needs you, the Agents tab, settle carries the chats, the pane opens itself, toasts and ⌘K", async ({ desk }) => {
   test.setTimeout(150_000);
   const page = desk.page;
   const convex = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
@@ -70,15 +70,15 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await row("Marcus Reed").click();
   await expect(page.getByTestId("thread-view")).toContainText("Marcus Reed");
   await expect(pane, "an open chat does not open the pane").toBeHidden();
-  const needsBefore = await lens(/^Needs reply/).getAttribute("aria-label");
+  const needsBefore = await lens(/^Needs you/).getAttribute("aria-label");
   const composer = page.getByPlaceholder("iMessage");
   await composer.fill("Ninety minutes works");
   await composer.press("Enter");
   await expect(row("Marcus Reed")).toContainText("You: Ninety minutes works");
   await row("Alex Rivera").click();
-  await lens(/^Needs reply/).click();
-  await expect(row("Marcus Reed"), "replied to, still in Needs reply for its agent chat").toBeVisible();
-  await expect(lens(/^Needs reply/)).toHaveAttribute("aria-label", needsBefore!);
+  await lens(/^Needs you/).click();
+  await expect(row("Marcus Reed"), "replied to, still in Needs you for its agent chat").toBeVisible();
+  await expect(lens(/^Needs you/)).toHaveAttribute("aria-label", needsBefore!);
   const marcusAge = await ageColor(row("Marcus Reed"));
   const alexAge = await ageColor(row("Alex Rivera"));
   expect(marcusAge, "a row there only for its agent keeps a gray time").not.toBe(alexAge);
@@ -153,12 +153,12 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await page.keyboard.press("Meta+,");
   await expect(shell).toHaveAttribute("data-utility-kind", "");
 
-  await lens(/^Needs reply/).click();
+  await lens(/^Needs you/).click();
   await row("Diego Santos").click();
   await expect(pane, "a question opens the pane").toBeVisible();
   await page.screenshot({ path: shot("09-before-settle"), clip: SIDEBAR });
   await page.keyboard.press("Meta+e");
-  await expect(row("Diego Santos"), "⌘E takes Diego out of Needs reply").toHaveCount(0);
+  await expect(row("Diego Santos"), "⌘E takes Diego out of Needs you").toHaveCount(0);
   await expect.poll(async () => (await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou }))
     .map((chat) => chat.settledAt !== undefined)).toEqual([true]);
   effects.settled = await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou });
@@ -166,7 +166,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await lens(/^All/).click();
   await row("Diego Santos").hover();
   await page.getByRole("button", { name: "Un-settle Diego Santos" }).click();
-  await lens(/^Needs reply/).click();
+  await lens(/^Needs you/).click();
   await expect(row("Diego Santos"), "Un-settle brings Diego back with his chat").toBeVisible();
   await expect(row("Diego Santos").getByTestId("agent-badge")).toBeVisible();
   await expect.poll(async () => (await convex<Summary[]>("comma/agent:chatsFor", { conversationId: AGENT_CHAT_GUIDS.needsYou }))
@@ -213,8 +213,8 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   // Shut before the turn ends, so the chat finishes unseen and comes back from Undo as ready.
   await closePane();
   await expect.poll(async () => (await alexChats()).map((chat) => chat.state)).toEqual(["idle"]);
-  await lens(/^Needs reply/).click();
-  await expect(row("Alex Rivera"), "his agent chat alone brings Alex back to Needs reply").toBeVisible();
+  await lens(/^Needs you/).click();
+  await expect(row("Alex Rivera"), "his agent chat alone brings Alex back to Needs you").toBeVisible();
   await expect(page.getByTestId("thread-view")).toContainText("Alex Rivera");
   const strip = page.getByTestId("state-strip");
   await expect(strip).toContainText("Agent chat open");
@@ -223,7 +223,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await page.screenshot({ path: shot("18-agent-only-strip") });
   const bridgeBefore = enqueued.length;
   await page.keyboard.press("Meta+e");
-  await expect(row("Alex Rivera"), "⌘E takes Alex out of Needs reply").toHaveCount(0);
+  await expect(row("Alex Rivera"), "⌘E takes Alex out of Needs you").toHaveCount(0);
   await expect.poll(async () => (await alexChats()).map((chat) => chat.settledAt !== undefined)).toEqual([true]);
   await page.screenshot({ path: shot("19-agent-only-settled"), clip: SIDEBAR });
   await page.getByRole("button", { name: "Undo", exact: true }).click();
@@ -245,6 +245,7 @@ test("agent-list: badges in every lens, agent rows in Needs reply, the Agents ta
   await page.keyboard.press("Meta+k");
   const palette = page.getByRole("listbox", { name: "Results" });
   await expect(palette.getByText("Agent chats")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Command palette" }).locator("input"), "typing reaches the palette").toBeFocused();
   await page.screenshot({ path: shot("12-palette") });
   await page.keyboard.type("leah");
   await expect(palette.getByText("Rideshare codes"), "both of Leah's open chats").toBeVisible();
