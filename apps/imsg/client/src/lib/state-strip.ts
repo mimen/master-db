@@ -58,6 +58,8 @@ export function stripCopy({ chat, messages, historyComplete, now, compact }: Str
   if (action === "unsettle") {
     return { tone: "settled", lead: "Settled", detail: `Back in Needs reply if ${firstName(chat)} texts again`, action };
   }
+  // With no triage flag set, only an open agent chat makes Settle the action; nobody's turn is due.
+  if (!chat.flags.unresponded && !chat.flags.waiting) return { tone: "settled", lead: "Agent chat open", detail: null, action };
   const last = chat.lastMessage;
   if (chat.flags.waiting && last) {
     return { tone: "waiting", lead: `Waiting on ${firstName(chat)} ${compactAge(now - last.dateCreated)}`, detail: null, action };

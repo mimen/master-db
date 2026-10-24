@@ -63,6 +63,14 @@ describe("stripCopy", () => {
     expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in Needs reply if Tracy texts again", action: "unsettle" });
   });
 
+  test("a conversation in Needs reply only for its agent chat says so plainly and offers Settle", () => {
+    const agent = { attention: "ready", chatId: "a", title: "Guest list", openCount: 1, activityAt: NOW } as const;
+    const settled = { chat: chat({}, { at: NOW - 2 * H, fromMe: false }, { agent }), messages: [msg(NOW - 2 * H, false)], historyComplete: false, now: NOW, compact: false };
+    expect(stripCopy(settled)).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle" });
+    expect(stripCopy({ ...settled, chat: chat({}, null, { agent }) })).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle" });
+    expect(stripCopy({ ...settled, chat: chat({ unresponded: true }, { at: NOW - 2 * H, fromMe: false }, { agent }) })?.tone, "owing a reply still reads as the user's turn").toBe("turn");
+  });
+
   test("an empty conversation has no strip", () => {
     expect(stripCopy({ chat: chat({}, null), messages: [], historyComplete: true, now: NOW, compact: false })).toBeNull();
   });
