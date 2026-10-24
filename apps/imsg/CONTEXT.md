@@ -85,3 +85,14 @@ composer as an agent Draft; when the user has typed there, it waits in the pane 
 with "Use in composer". The pane exists only while `aiStatus.agent` is true and the Settings toggle
 is on. Plan: `docs/plans/comma-agent-pane.html`.
 _Avoid_: assistant (that is one item kind), suggestion
+
+**Agent attention**:
+What an agent chat wants from the user, derived in `shared/agent-attention.ts` from its state,
+`seenAt`, `lastTurnEndedAt` and `settledAt`: needs you (a question waits), failed, ready (a turn
+ended unseen), working, open, or settled. A conversation carries its most urgent unsettled chat as
+`ChatSummary.agent`, drawn as the avatar badge in every lens. Needs reply includes every conversation
+with an unsettled agent chat, and the Agents tab lists them grouped by attention. Settling a
+conversation settles its agent chats and un-settling reopens them; sending the draft a chat wrote
+settles that chat. On wide screens the pane opens itself on a conversation whose chat needs you, is
+ready or failed. Plan: `docs/plans/comma-agent-threads.html`.
+_Avoid_: status, unread (for agent chats)
