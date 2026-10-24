@@ -26,6 +26,21 @@ export function takeRequestedAgentChat(chatGuid: string): string | undefined {
   return chatId;
 }
 
+/** The chat the mounted pane shows, so a toast never announces the chat the user is watching. */
+let shown: string | undefined;
+
+/** The pane calls this while it shows `chatId`; the returned cleanup clears it. */
+export function showAgentChat(chatId: string): () => void {
+  shown = chatId;
+  return () => {
+    if (shown === chatId) shown = undefined;
+  };
+}
+
+export function shownAgentChat(): string | undefined {
+  return shown;
+}
+
 /**
  * Local previews of what an ask carried, by item key. The stored user entry names its files but
  * holds no URL, so a thumbnail lasts as long as this session; after a reload it reads as a chip.

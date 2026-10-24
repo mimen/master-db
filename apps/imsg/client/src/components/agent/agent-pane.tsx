@@ -2,7 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import AiChat02Icon from "@hugeicons/core-free-icons/AiChat02Icon";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useConvex } from "convex/react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { useTypeRamp } from "@/hooks/use-type";
 import { agentApi, agentItemKey, type AgentAttachmentMeta, type AgentChatId, type AgentItem, type AgentItemId } from "@/lib/agent-api";
 import type { PaneSelection } from "@/lib/agent-chats";
 import { agentModelChoice, type AgentModelChoice } from "@/lib/agent-models";
-import { attachmentPreviews } from "@/lib/agent-pane";
+import { attachmentPreviews, showAgentChat } from "@/lib/agent-pane";
 import { agentIsRunning, liveStatus, promptHistory, transcriptRows } from "@/lib/agent-transcript";
 import { formatReceiptTime } from "@/lib/format";
 import { useAgentSettings } from "@/lib/settings";
@@ -60,6 +60,7 @@ export function AgentPane({ chatGuid, requestedChatId, onClose }: {
   const chat = chats?.find((row) => row._id === chatId);
   const items = useAgentItems(chatId);
   useMarkSeen(chat);
+  useEffect(() => chatId ? showAgentChat(chatId) : undefined, [chatId]);
   const [pending, setPending] = useState<readonly AgentItem[]>([]);
   // The first ask of a new chat creates it; a second ask sent before that returns waits for its id.
   const creating = useRef<Promise<AgentChatId> | null>(null);

@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 
 import { agentApi } from "@/lib/agent-api";
-import { openAgentPane } from "@/lib/agent-pane";
+import { openAgentPane, shownAgentChat } from "@/lib/agent-pane";
 import { AGENT_ATTENTION, agentArrivals } from "@/lib/inbox-model";
 import { selectChat } from "@/lib/selection";
 import { useAgentSettings } from "@/lib/settings";
@@ -22,8 +22,8 @@ export function openAgentChat(chat: Pick<ChatSummary, "guid" | "displayName">, c
 }
 
 /**
- * Web and the desktop shell toast an agent chat that wants the user in a conversation they are not
- * looking at. `lookingAt` is the conversation whose agent pane is open and selected.
+ * Web and the desktop shell toast an agent chat that wants the user, unless it is the chat the open
+ * pane shows. `lookingAt` is the conversation whose agent pane is open and selected.
  */
 export function useAgentToasts(lookingAt: string | null): void {
   const { agentPane } = useAgentSettings();
@@ -44,7 +44,7 @@ export function useAgentToasts(lookingAt: string | null): void {
     before.current = seen;
     for (const { chat, attention } of arrivals) {
       const row = latest.current.directory?.find((c) => c.conversationId === chat.conversationId);
-      if (!row || row.guid === latest.current.lookingAt) continue;
+      if (!row || (row.guid === latest.current.lookingAt && chat._id === shownAgentChat())) continue;
       showToast(`${row.displayName} · ${AGENT_ATTENTION[attention].spoken}`, { label: "Open", onPress: () => openAgentChat(row, chat._id) });
     }
   }, [summaries]);
