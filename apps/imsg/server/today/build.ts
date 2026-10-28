@@ -28,6 +28,11 @@ export const TODAY_MODEL = "claude-opus-5-5";
 const PAGE_SIZE = 100;
 const CONCURRENCY = 12;
 const DEEP_MS = 30 * 86_400_000;
+/**
+ * New card calls stop starting after this, and the rest fall back to raw messages, so a slow card model
+ * cannot spend the worker's 7 minutes. An uncached pass over 194 threads took 47 s on the Mini.
+ */
+const CARD_BUDGET_MS = 120_000;
 
 export const FAILURE_COPY: Record<GatewayFailureKind, string> = {
   timeout: "The gateway timed out",
@@ -122,18 +127,19 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim): Promi
   const openAtSnapshot = candidates.filter((c) => c.state === "needsYou").map((c) => c.conversationId);
   const selection = selectToday(candidates, deps.store.todayReadAt(), now);
   const read = [...selection.recent, ...selection.rotated, ...selection.waiting];
-  const base = { snapshotAt: claim.startedAt, model: TODAY_MODEL, openAtSnapshot, readCount: read.length };
+  const base = { snapshotAt: claim.startedAt, model: TODAY_MODEL, openAtSnapshot, readCount: read.length, candidateCount: candidates.length };
   if (read.length === 0) return { ok: true, queue: { ...base, brief: "Nothing needs you right now.", groups: [], items: [] } };
 
   const cards = emptyCardStats();
   const cardsStarted = performance.now();
+  const cardDeps = { ...deps, expired: () => performance.now() - cardsStarted > CARD_BUDGET_MS };
   const threads: TodayCardedThread[] = await mapLimit(read, CONCURRENCY, async (candidate, index) => {
     const [context, people] = await Promise.all([
       deps.port.post("agentContext", { conversationId: candidate.conversationId, limit: TODAY_LIMITS.messages }),
       deps.port.post("agentPeople", { conversationId: candidate.conversationId }),
     ]);
     const thread = { ref: `c${index + 1}`, candidate, people, messages: context.messages };
-    return { ...thread, card: await cardThread(deps, thread, cards) };
+    return { ...thread, card: await cardThread(cardDeps, thread, cards) };
   });
   const cardMs = Math.round(performance.now() - cardsStarted);
 

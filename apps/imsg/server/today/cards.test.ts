@@ -132,4 +132,16 @@ describe("cardThread", () => {
     expect(h.store.getTodayCard("conv1", 30)).toBeNull();
     expect(h.logs[0]).toContain("card c1 (conv1) at 30 messages failed, timeout: slow");
   });
+
+  test("once the card budget is spent, a cached card still serves and no new call starts", async () => {
+    const h = harness([ok(card)]);
+    await cardThread(h.deps, thread("m1"), emptyCardStats());
+    const late = { ...h.deps, expired: () => true };
+    const stats = emptyCardStats();
+    expect(await cardThread(late, thread("m1"), stats)).toMatchObject({ summary: card.summary });
+    expect(await cardThread(late, thread("m2"), stats)).toBeNull();
+    expect(h.calls).toHaveLength(1);
+    expect(stats).toMatchObject({ reused: 1, failed: 1 });
+    expect(h.logs.at(-1)).toContain("skipped, the card budget is spent");
+  });
 });

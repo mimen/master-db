@@ -649,6 +649,8 @@ export const todayQueue = v.object({
   openAtSnapshot: v.array(v.id("comma_conversations")),
   /** Threads the model read. */
   readCount: v.number(),
+  /** Every candidate at the snapshot, Needs you and Waiting; absent on queues built before it was stored. */
+  candidateCount: v.optional(v.number()),
 });
 const todaySource = v.union(v.literal("schedule"), v.literal("user"));
 export const todayRun = v.union(

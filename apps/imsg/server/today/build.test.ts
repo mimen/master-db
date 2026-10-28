@@ -117,6 +117,7 @@ describe("buildToday", () => {
     const outcome = await buildToday(deps, claim);
     if (!outcome.ok) throw new Error(outcome.error);
     expect(outcome.queue.readCount).toBe(200);
+    expect(outcome.queue.candidateCount).toBe(230);
     expect(outcome.queue.openAtSnapshot).toHaveLength(170);
   });
 

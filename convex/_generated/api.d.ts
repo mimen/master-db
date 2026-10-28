@@ -2260,6 +2260,7 @@ export declare const api: {
           dayStart: number;
           queue: {
             brief: string;
+            candidateCount?: number;
             groups: Array<{ context: string; id: string; title: string }>;
             items: Array<{
               conversationId: Id<"comma_conversations">;
@@ -5592,6 +5593,7 @@ export declare const internal: {
                 ok: true;
                 queue: {
                   brief: string;
+                  candidateCount?: number;
                   groups: Array<{ context: string; id: string; title: string }>;
                   items: Array<{
                     conversationId: Id<"comma_conversations">;

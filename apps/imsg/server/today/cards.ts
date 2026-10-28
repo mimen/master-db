@@ -47,7 +47,7 @@ export function renderCardPrompt(thread: TodayThread, now: number, messageChars:
   const system = [
     "You read one of Milad's iMessage conversations and write a small card about it for the planner that ranks his day.",
     "Return JSON with:",
-    `- summary: what the thread is about now, at most ${SUMMARY_WORDS} words.`,
+    `- summary: one sentence on where the thread stands now, at most ${SUMMARY_WORDS} words.`,
     "- ask: what they want from Milad, in a few words, or an empty string if nothing.",
     "- due: a date or time they named for it, as written, or an empty string.",
     "- stakes: high, medium or low, for Milad.",
@@ -77,6 +77,8 @@ export interface CardDeps {
   store: Pick<OverlayDb, "getTodayCard" | "setTodayCard">;
   now: () => number;
   log?: (line: string) => void;
+  /** True once the build's card budget is spent: cached cards still serve, no new call starts. */
+  expired?: () => boolean;
 }
 
 type CardWindow = (typeof CARD_WINDOWS)[keyof typeof CARD_WINDOWS];
@@ -97,6 +99,10 @@ export async function cardThread(deps: CardDeps, thread: TodayThread, stats: Car
         stats.reused++;
         return cached;
       }
+    }
+    if (deps.expired?.()) {
+      deps.log?.(`today: card ${thread.ref} (${conversationId}) skipped, the card budget is spent`);
+      return null;
     }
     const started = performance.now();
     let card: TodayCard | null = null;
