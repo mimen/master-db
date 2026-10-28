@@ -204,6 +204,15 @@ describe("the claim's session basis", () => {
     expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" })).toMatchObject({ mode: "fresh", basis: null });
   });
 
+  test("a Regenerate whose queue has no session ends the previous day's session", async () => {
+    const { t, as } = setup();
+    const yesterday = todayWindow(dayStart - 1);
+    await build(t, as, { day: yesterday.day, dayStart: yesterday.start }, queue(20, [], { id: "s1", startedAt: 10, updates: 3 }));
+    await build(t, as, { day, dayStart }, queue(30, []), "fresh");
+    await as.mutation(api.comma.today.requestBuild, { day, dayStart, mode: "update" });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" })).toMatchObject({ mode: "update", basis: null });
+  });
+
   test("a run stored before modes claims as fresh, and finishes without one", async () => {
     const { t } = setup();
     await t.run((ctx) => ctx.db.insert("comma_today_queue", { day, dayStart, run: { status: "requested", attempt: 1, source: "user", requestedAt: 1 } }));

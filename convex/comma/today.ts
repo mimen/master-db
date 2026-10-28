@@ -114,10 +114,13 @@ export const todaySchedule = internalMutation({
 /** How far back an Update looks for the session to continue, in day rows. */
 const BASIS_DAYS = 14;
 
-/** The newest queue on or before `day` that came from a model session: today's, else an earlier day's. */
+/**
+ * The session behind the newest queue on or before `day`: today's, else an earlier day's. A newest queue with no
+ * session, such as an empty Regenerate, has nothing to continue, so an older session never outlives it.
+ */
 async function sessionBasis(ctx: QueryCtx, day: string): Promise<{ sessionId: string; snapshotAt: number } | null> {
   const rows = await ctx.db.query("comma_today_queue").withIndex("by_day", (q) => q.lte("day", day)).order("desc").take(BASIS_DAYS);
-  const queue = rows.find((row) => row.queue?.session)?.queue;
+  const queue = rows.find((row) => row.queue)?.queue;
   return queue?.session ? { sessionId: queue.session.id, snapshotAt: queue.snapshotAt } : null;
 }
 
