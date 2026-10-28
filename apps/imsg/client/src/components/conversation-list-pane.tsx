@@ -65,7 +65,7 @@ import {
   type SavedView,
 } from "@/lib/palette/saved-views";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
-import { planToday, todayHeader, type TodaySectionKey } from "@/lib/today";
+import { planToday, settleAllTargets, todayHeader, type TodaySectionKey } from "@/lib/today";
 import { TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
 import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
@@ -231,11 +231,12 @@ export function ConversationListPane({
     if (!next.delete(key)) next.add(key);
     return next;
   }), []);
-  const planRef = useRef(plan);
-  useEffect(() => { planRef.current = plan; });
+  const planRef = useRef({ plan, view: today.view });
+  useEffect(() => { planRef.current = { plan, view: today.view }; });
   const settleSection = useCallback((key: TodaySectionKey) => {
-    const section = planRef.current.sections.find((candidate) => candidate.key === key);
-    if (section) void settleAllChats(section.rows.map((row) => row.chat));
+    const { plan: current, view } = planRef.current;
+    const section = current.sections.find((candidate) => candidate.key === key);
+    if (section) void settleAllChats(settleAllTargets(view, section.rows.map((row) => row.chat)));
   }, []);
   const onToday = filters.state === "today";
   const lensCounts = useMemo(() => (counts ? { ...counts, today: plan.toGo } : null), [counts, plan.toGo]);

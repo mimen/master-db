@@ -43,7 +43,7 @@ function queue(snapshotAt: number, ids: Id<"comma_conversations">[]): TodayQueue
   return {
     snapshotAt, model: "claude-opus-5-5", brief: "Friday first.", readCount: ids.length,
     groups: [{ id: "g1", title: "Friday", context: "Set times close tonight." }],
-    items: ids.map((conversationId, index) => ({ conversationId, rank: index + 1, group: "g1", reason: "Blocks the run of show." })),
+    items: ids.map((conversationId, index) => ({ conversationId, rank: index + 1, group: "g1", reason: "Blocks the run of show.", anchor: `m${index}` })),
     openAtSnapshot: ids,
   };
 }
@@ -116,6 +116,7 @@ describe("claim and finish", () => {
     await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
     const done = { day, attempt: 1, outcome: { ok: true as const, queue: queue(5, [c]) } };
     expect(await t.mutation(internal.comma.today.todayFinish, done)).toBe(true);
+    expect((await as.query(api.comma.today.get, { day }))?.queue?.items[0]?.anchor, "the item keeps the message the build read").toBe("m0");
     expect(await t.mutation(internal.comma.today.todayFinish, done)).toBe(true);
     expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "late" } })).toBe(false);
     expect(await runOf(t)).toMatchObject({ status: "done", attempt: 1 });

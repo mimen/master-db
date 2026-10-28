@@ -15,7 +15,9 @@ const id = (value: string) => value as GenericId<"comma_conversations">;
 
 function seededQueue(): TodayQueue {
   const seeded = TODAY_SEED.groups.flatMap((group) => group.items.map((item) => ({ ...item, group: group.id })));
-  const items = seeded.map((item, index) => ({ conversationId: id(item.conversationId), rank: index + 1, group: item.group, reason: item.reason }));
+  const items = seeded.map((item, index) => ({
+    conversationId: id(item.conversationId), rank: index + 1, group: item.group, reason: item.reason, ...("anchor" in item ? { anchor: item.anchor } : {}),
+  }));
   const open = [...seeded.filter((item) => !item.waiting).map((item) => id(item.conversationId)), ...TODAY_SEED.below.map(id)];
   return {
     snapshotAt: TODAY_SEED.snapshotAt, model: TODAY_SEED.model, brief: TODAY_SEED.brief, readCount: TODAY_SEED.readCount, candidateCount: TODAY_SEED.candidateCount,

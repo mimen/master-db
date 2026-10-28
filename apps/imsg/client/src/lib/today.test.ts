@@ -1,7 +1,7 @@
 import type { ChatSummary } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
-import { classifyToday, planToday, todayHeader, toTodayView, type TodayRun, type TodayView } from "./today";
+import { classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayRun, type TodayView } from "./today";
 
 const SNAPSHOT = 1_000_000;
 const DAY_START = 500_000;
@@ -17,14 +17,14 @@ function chat(id: string, flags: Partial<ChatSummary["flags"]> = {}, extra: Part
   };
 }
 
-type Built = { id: string; group: string; reason?: string };
+type Built = { id: string; group: string; reason?: string; anchor?: string };
 function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, number> = {}, over: Partial<{ snapshotAt: number; run: TodayRun; candidateCount: number }> = {}): TodayView {
   const row = {
     day: "2026-10-27", dayStart: DAY_START, run: over.run ?? done,
     queue: {
       snapshotAt: over.snapshotAt ?? SNAPSHOT, model: "claude-opus-5-5", brief: "Friday first.", readCount: 81,
-      groups: [{ id: "friday", title: "Friday", context: "Set times close tonight." }, { id: "money", title: "Money", context: "" }],
-      items: items.map(({ id, group, reason }, index) => ({ conversationId: id, group, rank: index + 1, reason: reason ?? `reason ${id}` })),
+      groups: [{ id: "friday", title: "Friday", context: "Set times close tonight." }, { id: "money", title: "Money", context: "" }, { id: "settle", title: "Just settle these", context: "" }],
+      items: items.map(({ id, group, reason, anchor }, index) => ({ conversationId: id, group, rank: index + 1, reason: reason ?? `reason ${id}`, ...(anchor === undefined ? {} : { anchor }) })),
       openAtSnapshot,
       ...(over.candidateCount === undefined ? {} : { candidateCount: over.candidateCount }),
     },
@@ -87,6 +87,29 @@ describe("classifyToday: the placement table", () => {
     expect(classifyToday(v, chat("c", {}, { agent }))).toEqual({ at: "out" });
     expect(classifyToday(v, chat("c", needsYou, { known: false }))).toEqual({ at: "out" });
     expect(classifyToday(v, chat("b", needsYou, { isSpam: true }))).toEqual({ at: "out" });
+  });
+});
+
+describe("the settle group against the message the build read", () => {
+  const v = view([{ id: "t", group: "settle", anchor: "m-t" }, { id: "old", group: "settle" }], ["t", "old"]);
+  const urgent = (id: string) => chat(id, needsYou, { lastMessage: { ...chat(id).lastMessage!, guid: `urgent-${id}` } });
+
+  test("an unchanged settle row stays ranked; a new message moves it to New since", () => {
+    expect(classifyToday(v, chat("t", needsYou))).toMatchObject({ at: "ranked", group: "settle" });
+    expect(classifyToday(v, urgent("t"))).toEqual({ at: "new" });
+  });
+
+  test("a settle row stored without an anchor never counts as unchanged", () => {
+    expect(classifyToday(v, chat("old", needsYou))).toEqual({ at: "new" });
+  });
+
+  test("Settle all takes only unchanged ranked settle rows, each with its stored anchor", () => {
+    const handled = view([{ id: "t", group: "settle", anchor: "m-t" }, { id: "h", group: "settle", anchor: "m-h" }], ["t", "h"], { h: SNAPSHOT + 1 });
+    const chats = [chat("t", needsYou), chat("h"), chat("old", needsYou)];
+    expect(planToday(handled, chats, { held: "g-h" }).sections.find((s) => s.key === "group:settle")?.rows.map((r) => r.chat.conversationId),
+      "the held, handled row still displays").toEqual(["t", "h"]);
+    expect(settleAllTargets(handled, chats).map(({ chat: c, anchor }) => [c.conversationId, anchor])).toEqual([["t", "m-t"]]);
+    expect(settleAllTargets(v, [urgent("t"), chat("old", needsYou)])).toEqual([]);
   });
 });
 

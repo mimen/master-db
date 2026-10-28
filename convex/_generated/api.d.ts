@@ -2263,6 +2263,7 @@ export declare const api: {
             candidateCount?: number;
             groups: Array<{ context: string; id: string; title: string }>;
             items: Array<{
+              anchor?: string;
               conversationId: Id<"comma_conversations">;
               group: string;
               rank: number;
@@ -5596,6 +5597,7 @@ export declare const internal: {
                   candidateCount?: number;
                   groups: Array<{ context: string; id: string; title: string }>;
                   items: Array<{
+                    anchor?: string;
                     conversationId: Id<"comma_conversations">;
                     group: string;
                     rank: number;

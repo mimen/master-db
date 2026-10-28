@@ -637,6 +637,8 @@ export const todayItem = v.object({
   rank: v.number(),
   group: v.string(),
   reason: v.string(),
+  /** The newest message guid the build read for this thread; absent on items built before it was stored. */
+  anchor: v.optional(v.string()),
 });
 export const todayQueue = v.object({
   /** When the candidate read began; every "since the build" rule compares to this. */

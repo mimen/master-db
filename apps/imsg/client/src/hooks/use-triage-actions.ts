@@ -73,13 +73,13 @@ function settleFailure(error: unknown): string {
 
 /**
  * Forward triage on one conversation: clear whichever triage flags it carries, and its agent chats. Hands
- * `settled` the write that reverses it once the settle is queued.
+ * `settled` the write that reverses it once the settle is queued. `anchor` overrides the live newest message.
  */
-function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) => void): Promise<TriageWriteOutcome> {
+function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) => void, pinned?: string): Promise<TriageWriteOutcome> {
   return runExclusiveTriageWrite(chat.guid, async () => {
     if (settleActionFor(chat) !== "settle") return;
 
-    const anchor = settleAnchor(chat.lastMessage);
+    const anchor = pinned ?? settleAnchor(chat.lastMessage);
     const intent: FlagIntent = { change: "settle", chatGuid: chat.guid, seen: anchor };
     // In Needs you only for its agent chats, it settles just those: a bridge settle's Undo would
     // undismiss both anchors and bring back a flag the user had already cleared.
@@ -110,11 +110,14 @@ export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome>
   }));
 }
 
-/** Settles every conversation it can as one action: one undo entry reopens all of them. Answers how many settled. */
-export async function settleTriageChats(chats: readonly ChatSummary[]): Promise<number> {
+/**
+ * Settles every conversation it can as one action, each conditional on its `anchor`: one undo entry reopens all
+ * of them. Answers how many settled.
+ */
+export async function settleTriageChats(targets: readonly { chat: ChatSummary; anchor: string }[]): Promise<number> {
   const undoToken = beginUndoAction();
   const reversals: (() => Promise<void>)[] = [];
-  await Promise.allSettled(chats.map((chat) => settleWrite(chat, (reverse) => reversals.push(reverse))));
+  await Promise.allSettled(targets.map(({ chat, anchor }) => settleWrite(chat, (reverse) => reversals.push(reverse), anchor)));
   if (reversals.length > 0) {
     commitUndoAction(undoToken, () => {
       void Promise.allSettled(reversals.map((reverse) => reverse())).then((results) => {
@@ -126,8 +129,8 @@ export async function settleTriageChats(chats: readonly ChatSummary[]): Promise<
 }
 
 /** Today's Settle all: settles the rows and answers with one toast whose Undo reopens them all. */
-export async function settleAllChats(chats: readonly ChatSummary[]): Promise<void> {
-  const settled = await settleTriageChats(chats);
+export async function settleAllChats(targets: readonly { chat: ChatSummary; anchor: string }[]): Promise<void> {
+  const settled = await settleTriageChats(targets);
   if (settled === 0) {
     showToast("Nothing left to settle here");
     return;

@@ -1,6 +1,6 @@
 import type { FunctionReturnType } from "convex/server";
 import { matchesFilters } from "@shared/chat-state";
-import { TODAY_TIME_ZONE } from "@shared/today";
+import { TODAY_SETTLE_GROUP, TODAY_TIME_ZONE } from "@shared/today";
 import type { ChatSummary } from "@shared/types";
 import type { todayApi } from "./convex-api";
 import { queueOrder } from "./inbox-model";
@@ -64,6 +64,7 @@ export type TodayPlace =
  *
  *   queued, Needs you at build:  needsYou && !handled → ranked | needsYou → new | else → done
  *   queued, Waiting at build:    waiting && !handled → ranked  | needsYou → new | else → done
+ *   queued to settle, changed:   where ranked would be → new, so Settle all never dismisses a message the build never read
  *   not queued, needsYou:        Needs you at build && !handled → below | else → new
  *   otherwise:                   cleared today → settled | else → out
  */
@@ -79,12 +80,31 @@ export function classifyToday(view: TodayView | null | undefined, chat: ChatSumm
     const item = queue.items.get(id);
     if (item) {
       const { rank, group, reason } = item;
-      if (!handled && (wasOpen ? needsYou : known && chat.flags.waiting)) return { at: "ranked", rank, group, reason };
+      if (!handled && (wasOpen ? needsYou : known && chat.flags.waiting)) {
+        return group === TODAY_SETTLE_GROUP && !unchangedSinceBuild(item, chat) ? { at: "new" } : { at: "ranked", rank, group, reason };
+      }
       return needsYou ? { at: "new" } : { at: "done", rank, group, reason };
     }
     if (needsYou) return wasOpen && !handled ? { at: "below" } : { at: "new" };
   }
   return known && clearedAt !== undefined ? { at: "settled", clearedAt } : { at: "out" };
+}
+
+/** An item stored before anchors were never counts as unchanged. */
+const unchangedSinceBuild = (item: TodayItem, chat: ChatSummary): boolean => item.anchor !== undefined && chat.lastMessage?.guid === item.anchor;
+
+/**
+ * What Settle all may write: the rows still ranked in the settle group, each with the message the build read. A held
+ * row that is already handled only displays there, and authorizes nothing.
+ */
+export function settleAllTargets(view: TodayView | null | undefined, chats: readonly ChatSummary[]): { chat: ChatSummary; anchor: string }[] {
+  return chats.flatMap((chat) => {
+    const item = chat.conversationId === undefined ? undefined : view?.queue?.items.get(chat.conversationId);
+    const place = classifyToday(view, chat);
+    return item?.anchor !== undefined && place.at === "ranked" && place.group === TODAY_SETTLE_GROUP && unchangedSinceBuild(item, chat)
+      ? [{ chat, anchor: item.anchor }]
+      : [];
+  });
 }
 
 export type TodaySectionKey = "new" | `group:${string}` | "below" | "settled" | "fallback";

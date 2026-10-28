@@ -156,7 +156,12 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim): Promi
   const refs = new Map<string, ConversationId>(threads.map((thread) => [thread.ref, thread.candidate.conversationId]));
   const parsed = parseTodayOutput(answer.value, refs);
   if (!parsed.ok) return parsed;
-  const { dropped, ...draft } = parsed.draft;
+  const { dropped, ...parsedDraft } = parsed.draft;
+  const anchors = new Map(threads.map((thread) => [thread.candidate.conversationId, thread.messages.at(-1)?.guid]));
+  const draft = { ...parsedDraft, items: parsedDraft.items.map((item) => {
+    const anchor = anchors.get(item.conversationId);
+    return anchor === undefined ? item : { ...item, anchor };
+  }) };
   if (dropped > 0) deps.log?.(`today: dropped ${dropped} items the parser rejected`);
   deps.store.markTodayRead(read.map((c) => c.conversationId), claim.startedAt);
 

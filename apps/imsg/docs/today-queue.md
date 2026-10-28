@@ -559,6 +559,10 @@ Where the build differs from the shapes above, and why.
 - The header meta reads "read N of M threads" instead of "queued of read".
 - The fixture seeds a "Just settle these" group (Taylor Morgan, Sofia Martinez) and `candidateCount: 21`. The auto-advance spec now lands on Taylor, who sits above Sofia.
 
+**v2 review fixes**
+- Each `todayItem` stores an optional `anchor`, the newest message guid the build read for that thread. `classifyToday` puts a settle-group item whose live newest guid differs, or that has no anchor, in New since. Settle all sends the stored anchor, so the bridge rejects a settle over a message the build never read.
+- Settle all takes only rows that `settleAllTargets` finds ranked in `group:settle` and unchanged. A held, handled row still displays there but is never written.
+
 **Not verified**
 - No Opus reduce call was made on v2. Whether Opus fills about 50 items with a sensible settle group, and how long it takes over 58k tokens, is the first real v2 build's question.
 

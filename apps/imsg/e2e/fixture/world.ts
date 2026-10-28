@@ -317,6 +317,8 @@ export class FixtureIdentity implements NameSource, IdentityDirectory {
 
 const backlog = (name: string) => `iMessage;-;+161955502${String(backlogNames.indexOf(name)).padStart(2, "0")}`;
 const todayItem = (conversationId: string, reason: string, waiting = false) => ({ conversationId, reason, waiting });
+/** A settle-group item, anchored to the backlog thread's newest message as the build read it. */
+const settleItem = (name: string, reason: string) => ({ ...todayItem(backlog(name), reason), anchor: `backlog-in-${backlogNames.indexOf(name)}` });
 
 /**
  * The morning's Today queue over the fixture world, built two hours before FIXTURE_NOW, so Launch
@@ -346,8 +348,8 @@ export const TODAY_SEED = {
       todayItem(backlog("Owen Foster"), "Yes or no."),
     ] },
     { id: "settle", title: "Just settle these", context: "No reply owed. Settle them in one go.", items: [
-      todayItem(backlog("Taylor Morgan"), "No reply needed: a tapback closed it."),
-      todayItem(backlog("Sofia Martinez"), "No reply needed: she said thanks."),
+      settleItem("Taylor Morgan", "No reply needed: a tapback closed it."),
+      settleItem("Sofia Martinez", "No reply needed: she said thanks."),
     ] },
   ],
   below: [backlog("Noah Blake"), backlog("Mina Patel")],

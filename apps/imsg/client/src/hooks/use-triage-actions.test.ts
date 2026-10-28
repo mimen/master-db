@@ -115,7 +115,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
       flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
     });
     const quiet = chat({ guid: "iMessage;-;+16195550399", agent: undefined, lastMessage: null });
-    await settleAllChats([owed(1), owed(2), quiet]);
+    await settleAllChats([{ chat: owed(1), anchor: "m1" }, { chat: owed(2), anchor: "m2" }, { chat: quiet, anchor: "q" }]);
     expect(toasts).toEqual(["Settled 2 threads"]);
     expect(writes).toEqual([
       ["comma/outbox:enqueue", { kind: "settle", messageGuid: "m1" }],
@@ -129,8 +129,18 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(undoLastTriageAction(), "the batch was one entry").toBe(false);
   });
 
+  test("Settle all conditions each settle on the message the build read, not the live newest one", async () => {
+    const moved = chat({
+      agent: undefined,
+      lastMessage: { guid: "m-urgent", text: "Actually, urgent", dateCreated: 3, isFromMe: false, senderName: null, hasAttachments: false },
+      flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
+    });
+    await settleAllChats([{ chat: moved, anchor: "m-thanks" }]);
+    expect(writes).toEqual([["comma/outbox:enqueue", { kind: "settle", messageGuid: "m-thanks" }]]);
+  });
+
   test("Settle all with nothing open says so and leaves no undo entry", async () => {
-    await settleAllChats([chat({ agent: undefined, lastMessage: null })]);
+    await settleAllChats([{ chat: chat({ agent: undefined, lastMessage: null }), anchor: "q" }]);
     expect(toasts).toEqual(["Nothing left to settle here"]);
     expect(undoLastTriageAction()).toBe(false);
   });

@@ -105,7 +105,7 @@ describe("buildToday", () => {
     expect(reduces[0]?.prompt).toContain("card: Wants an answer. · ask: Answer · stakes: medium");
     if (!outcome.ok) throw new Error(outcome.error);
     expect(outcome.queue).toMatchObject({ snapshotAt: 1_000, model: "claude-opus-5-5", readCount: 2, openAtSnapshot: ["conv1"] });
-    expect(outcome.queue.items).toEqual([{ conversationId: "conv1" as ConversationId, rank: 1, group: "g", reason: "Clock today." }]);
+    expect(outcome.queue.items, "each item stores the newest message the build read").toEqual([{ conversationId: "conv1" as ConversationId, rank: 1, group: "g", reason: "Clock today.", anchor: "conv1-m5" }]);
   });
 
   test("openAtSnapshot keeps every Needs you past the read caps", async () => {
