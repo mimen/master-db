@@ -28,6 +28,14 @@ export interface SuggestionFeedbackRow {
   sent_at: number;
 }
 
+export interface TodayCardRow {
+  conversation_id: string;
+  window_size: number;
+  anchor: string;
+  model: string;
+  payload: string;
+}
+
 export class OverlayDb {
   private db: Database;
   private overlayListeners = new Set<(chatGuid: string) => void>();
@@ -110,6 +118,25 @@ export class OverlayDb {
     // Version 3 invalidates the old string-array cache and removes its private text.
     this.db.exec("DROP TABLE IF EXISTS suggestion_cache;");
     this.pruneSuggestionFeedback();
+    // Today build state, written only by the Today worker: when a conversation was last read, for the
+    // backlog rotation, and each thread's card per message window, valid while its anchor and model match.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS today_read (
+        conversation_id TEXT PRIMARY KEY,
+        read_at INTEGER NOT NULL
+      );
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS today_card_cache (
+        conversation_id TEXT NOT NULL,
+        window_size INTEGER NOT NULL,
+        anchor TEXT NOT NULL,
+        model TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (conversation_id, window_size)
+      );
+    `);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS triage_clear_event (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -328,6 +355,32 @@ export class OverlayDb {
     for (const key of ["suggestion_voice_profile_v1", "suggestion_edit_rules_v1"]) {
       this.db.query("DELETE FROM ai_meta WHERE key = ?").run(key);
     }
+  }
+
+  todayReadAt(): Map<string, number> {
+    const rows = this.db.query<{ id: string; at: number }, []>("SELECT conversation_id AS id, read_at AS at FROM today_read").all();
+    return new Map(rows.map((row) => [row.id, row.at]));
+  }
+
+  markTodayRead(conversationIds: readonly string[], at: number): void {
+    const upsert = this.db.query(`INSERT INTO today_read (conversation_id, read_at) VALUES (?, ?)
+      ON CONFLICT(conversation_id) DO UPDATE SET read_at = excluded.read_at`);
+    this.db.transaction(() => { for (const id of conversationIds) upsert.run(id, at); })();
+  }
+
+  getTodayCard(conversationId: string, windowSize: number): TodayCardRow | null {
+    return this.db.query<TodayCardRow, [string, number]>(
+      `SELECT conversation_id, window_size, anchor, model, payload FROM today_card_cache
+       WHERE conversation_id = ? AND window_size = ?`,
+    ).get(conversationId, windowSize) ?? null;
+  }
+
+  setTodayCard(row: TodayCardRow): void {
+    this.db.query(`INSERT INTO today_card_cache (conversation_id, window_size, anchor, model, payload, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(conversation_id, window_size) DO UPDATE SET
+        anchor = excluded.anchor, model = excluded.model, payload = excluded.payload, created_at = excluded.created_at`)
+      .run(row.conversation_id, row.window_size, row.anchor, row.model, row.payload, Date.now());
   }
 
   setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {
