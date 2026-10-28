@@ -7,8 +7,12 @@ export const SWIPE_OVERSHOOT_CAP = 56;
  * Row offset for a finger offset: 1:1 up to the threshold, then resistance
  * that grows with distance and never passes the cap.
  */
-export function rubberBand(dx: number, threshold = SWIPE_THRESHOLD, cap = SWIPE_OVERSHOOT_CAP): number {
+// No default parameters: a worklet's closure is unpacked in its body, after defaults evaluate,
+// so a default that names a module constant throws ReferenceError on the UI thread.
+export function rubberBand(dx: number, threshold?: number, cap?: number): number {
   "worklet";
+  threshold ??= SWIPE_THRESHOLD;
+  cap ??= SWIPE_OVERSHOOT_CAP;
   const distance = Math.abs(dx);
   if (distance <= threshold) return dx;
   const past = distance - threshold;
