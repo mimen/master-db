@@ -45,10 +45,10 @@ describe("todayCandidateState", () => {
     expect(todayCandidateState({ ...base, flags: flags({ unresponded: true }), lastMessageAt: now - 90 * 86_400_000 }, now)).toBe("needsYou");
   });
 
-  test("Waiting counts only under seven days", () => {
+  test("Waiting counts only under thirty days", () => {
     const waiting = { ...base, flags: flags({ waiting: true }) };
-    expect(todayCandidateState({ ...waiting, lastMessageAt: now - 7 * 86_400_000 + 1 }, now)).toBe("waiting");
-    expect(todayCandidateState({ ...waiting, lastMessageAt: now - 7 * 86_400_000 }, now)).toBeNull();
+    expect(todayCandidateState({ ...waiting, lastMessageAt: now - 30 * 86_400_000 + 1 }, now)).toBe("waiting");
+    expect(todayCandidateState({ ...waiting, lastMessageAt: now - 30 * 86_400_000 }, now)).toBeNull();
   });
 
   test("spam and unknown senders never enter", () => {

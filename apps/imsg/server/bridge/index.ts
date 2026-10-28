@@ -95,7 +95,7 @@ export function startBridge(deps: {
       const client = deps.outboxClient ?? (convexCloudUrl ? new ConvexClient(convexCloudUrl) : undefined);
       outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client, now: deps.now, handlers: { ...deps.handlers, typing: typingHandler(typing, deps.now) } });
       if (deps.today && client && commaBridgeSecret) {
-        const buildDeps = { ...deps.today, port: todayPort(new ConvexIngest(deps.config)), now: deps.now ?? Date.now, log: console.log };
+        const buildDeps = { ...deps.today, store: deps.db, port: todayPort(new ConvexIngest(deps.config)), now: deps.now ?? Date.now, log: console.log };
         today = startTodayWorker({
           subscribe: (receive) => client.onUpdate(pendingBuild, { bridgeKey: commaBridgeSecret }, receive,
             (error) => console.error(`comma bridge today subscription: ${String(error)}`)),

@@ -203,7 +203,7 @@ describe("todayCandidates", () => {
     await t.run(async (ctx) => {
       await ctx.db.insert("comma_conversations", conversation("old-needs", { lastMessageAt: now - 60 * DAY }));
       await ctx.db.insert("comma_conversations", outbound("recent-wait", now - 2 * DAY));
-      await ctx.db.insert("comma_conversations", outbound("stale-wait", now - 8 * DAY));
+      await ctx.db.insert("comma_conversations", outbound("stale-wait", now - 31 * DAY));
       await ctx.db.insert("comma_conversations", conversation("stranger", { participants: [{ address: "+1555", name: null }] }));
       await ctx.db.insert("comma_conversations", conversation("spam", { isSpam: true }));
       await ctx.db.insert("comma_conversations", conversation("fresh", { lastMessageAt: now - 1000 }));
