@@ -68,6 +68,67 @@ test("Settle all settles the settle group as one action, and one Undo brings eve
   await expect(page.getByTestId("today-progress")).toHaveText(`0 settled · ${before} to go`);
 });
 
+const TAYLOR = "iMessage;-;+16195550204";
+const SOFIA = "iMessage;-;+16195550209";
+type ConvexCall = { name?: string; args?: { conversationId?: string; payload?: { kind?: string; messageGuid?: string } } };
+
+function outboxLog(page: Page): { conversationId?: string; kind?: string; messageGuid?: string }[] {
+  const log: { conversationId?: string; kind?: string; messageGuid?: string }[] = [];
+  page.on("request", (req) => {
+    if (!req.url().endsWith("/__fixture/convex")) return;
+    const body = req.postDataJSON() as ConvexCall | null;
+    if (body?.name === "comma/outbox:enqueue") log.push({ conversationId: body.args?.conversationId, ...body.args?.payload });
+  });
+  return log;
+}
+
+test("a settle-group thread that gets a new message after the build moves to New since, and Settle all leaves it alone", async ({ desk }) => {
+  const { page } = desk;
+  const outbox = outboxLog(page);
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  const taylor = rows.filter({ hasText: "Taylor Morgan" });
+  await expect(taylor.getByTestId("today-reason")).toHaveText("No reply needed: a tapback closed it.");
+
+  await desk.receive(TAYLOR, "Actually, can you call me about Friday? It's urgent.");
+  await expect(taylor.getByTestId("today-reason"), "out of the settle group, into New since").toHaveCount(0);
+  await expect(page.getByTestId("today-settle-all")).toHaveAccessibleName("Settle all 1 in Just settle these");
+
+  await page.getByTestId("today-settle-all").click();
+  await expect(page.getByText("Settled 1 thread", { exact: true })).toBeVisible();
+  expect(outbox.filter((call) => call.kind === "settle")).toEqual([{ conversationId: SOFIA, kind: "settle", messageGuid: "backlog-in-9" }]);
+  await expect(rows.filter({ hasText: "Sofia Martinez" })).toHaveCount(0);
+  await expect(taylor).toBeVisible();
+  await expect(taylor).toHaveAttribute("aria-label", /^Taylor Morgan, unread,/);
+});
+
+test("Settle all reports a row the bridge rejected, and its Undo reopens only the rows it settled", async ({ desk }) => {
+  const { page } = desk;
+  const outbox = outboxLog(page);
+  // Sofia's settle reaches the bridge anchored to a message that is no longer her newest, so the bridge rejects it.
+  await page.route("**/__fixture/convex", async (route) => {
+    const body = route.request().postDataJSON() as ConvexCall | null;
+    if (body?.name !== "comma/outbox:enqueue" || body.args?.payload?.kind !== "settle" || body.args.conversationId !== SOFIA) return route.continue();
+    return route.continue({ postData: JSON.stringify({ ...body, args: { ...body.args, payload: { ...body.args.payload, messageGuid: "backlog-out-9" } } }) });
+  });
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  const sofia = rows.filter({ hasText: "Sofia Martinez" });
+  const before = await todayCount(page);
+
+  await page.getByTestId("today-settle-all").click();
+  await expect(page.getByText("Settled 1 thread · 1 couldn't be settled", { exact: true })).toBeVisible();
+  await expect(rows.filter({ hasText: "Taylor Morgan" })).toHaveCount(0);
+  await expect(sofia.getByTestId("today-reason"), "the rejected row is back in its slot").toHaveText("No reply needed: she said thanks.");
+  await expect.poll(() => todayCount(page)).toBe(before - 1);
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(rows.filter({ hasText: "Taylor Morgan" })).toBeVisible();
+  await expect.poll(() => todayCount(page)).toBe(before);
+  expect(outbox.filter((call) => call.kind === "unsettle"), "no un-settle for the rejected row").toEqual([{ conversationId: TAYLOR, kind: "unsettle" }]);
+  await expect(sofia.getByTestId("today-reason")).toHaveText("No reply needed: she said thanks.");
+});
+
 test("auto-advance skips a folded section", async ({ desk }) => {
   const { page } = desk;
   await openToday(page);
