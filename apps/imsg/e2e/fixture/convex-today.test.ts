@@ -47,9 +47,10 @@ test("serves the seeded queue for any day, with a settle in the clear log", asyn
   expect((await get())?.cleared).toEqual([{ conversationId: CHAT_GUIDS.needs, at: FIXTURE_NOW }]);
 });
 
-test("Regenerate is building first, then ranks the open conversations, and a second press is a no-op", async () => {
+test("Regenerate is building first, then ranks the open conversations in a new session, and a second press is a no-op", async () => {
+  expect((await get())?.queue?.session).toMatchObject({ id: "seed", updates: 2 });
   const building = await call<{ status: string; attempt: number }>("comma/today:requestBuild", { day: "2026-10-27", dayStart: 0 });
-  expect(building).toMatchObject({ status: "building", attempt: 2 });
+  expect(building, "no mode means Regenerate").toMatchObject({ status: "building", attempt: 2, mode: "fresh" });
   expect(await call("comma/today:requestBuild", { day: "2026-10-27", dayStart: 0 })).toMatchObject({ status: "building", attempt: 2 });
   expect((await get())?.queue?.snapshotAt).toBe(TODAY_SEED.snapshotAt);
   await Bun.sleep(2_700);
@@ -58,6 +59,16 @@ test("Regenerate is building first, then ranks the open conversations, and a sec
   expect(built?.queue?.snapshotAt).toBeGreaterThan(TODAY_SEED.snapshotAt);
   expect(built?.queue?.items.map((item) => item.conversationId)).toContain(CHAT_GUIDS.unreadGroup);
   expect(built?.queue?.items.map((item) => item.rank)).toEqual(built?.queue?.items.map((_, index) => index + 1));
+  expect(built?.queue?.session).toEqual({ id: "fixture-2", startedAt: built!.queue!.snapshotAt, updates: 0 });
+});
+
+test("an Update continues the queue's session", async () => {
+  const seeded = (await get())!.queue!.session!;
+  expect(await call("comma/today:requestBuild", { day: "2026-10-27", dayStart: 0, mode: "update" })).toMatchObject({ status: "building", mode: "update" });
+  await Bun.sleep(2_700);
+  const built = await get();
+  expect(built?.run).toMatchObject({ status: "done", mode: "update" });
+  expect(built?.queue?.session).toEqual({ ...seeded, updates: 3 });
 });
 
 test("the mode route drives unbuilt and failed, and reset restores the seed", async () => {

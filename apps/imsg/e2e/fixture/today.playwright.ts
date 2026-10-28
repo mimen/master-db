@@ -19,11 +19,11 @@ async function openToday(page: Page): Promise<void> {
 const heading = (page: Page) => page.getByTestId("thread-view").getByRole("heading", { level: 2 });
 const composerFocused = (page: Page) => page.evaluate(() => document.activeElement?.getAttribute("placeholder"));
 
-test("the app opens on Today; a settle leaves a rank gap and moves progress; Regenerate folds New since into the groups", async ({ desk }) => {
+test("the app opens on Today; a settle leaves a rank gap and moves progress; Update folds New since into the groups", async ({ desk }) => {
   const { page } = desk;
   await openToday(page);
   await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("today-meta")).toHaveText("Built 10:30 AM · Opus 5.5 · read 15 of 21 threads");
+  await expect(page.getByTestId("today-meta")).toHaveText("Updated 10:30 AM · session from Aug 19 · Opus 5.5 · read 15 of 21 threads");
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toBeVisible();
   const rows = page.getByTestId("conversation-row");
   const alex = rows.filter({ hasText: "Alex Rivera" });
@@ -39,12 +39,36 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Reg
   await expect(rows.filter({ hasText: "Priya Shah" })).toHaveCount(0);
   expect((await page.getByTestId("today-rank").allTextContents()).slice(0, 3)).toEqual(["", "1", "3"]);
 
-  await page.getByTestId("today-regenerate").click();
-  await expect(page.getByTestId("today-regenerate")).toHaveText("Regenerating");
-  await expect(page.getByTestId("today-regenerate")).toHaveText("Regenerate", { timeout: 10_000 });
+  await page.getByTestId("today-update").click();
+  await expect(page.getByTestId("today-update")).toHaveText("Updating");
+  await expect(page.getByTestId("today-meta")).toHaveText("Checking what changed with Opus 5.5…");
+  await expect(page.getByTestId("today-build-menu")).toBeDisabled();
+  await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Updated \d+:\d\d [AP]M · session from Aug 19 · Opus 5\.5 · read \d+ of \d+ threads$/);
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toHaveCount(0);
   await expect(rows.filter({ hasText: "Launch Crew" }).getByTestId("today-rank")).toHaveText("1");
   await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");
+});
+
+test("Regenerate from scratch is one menu away and starts a new session", async ({ desk }) => {
+  const { page } = desk;
+  const builds: unknown[] = [];
+  page.on("request", (req) => {
+    if (!req.url().endsWith("/__fixture/convex")) return;
+    const body = req.postDataJSON() as { name?: string; args?: { mode?: string } } | null;
+    if (body?.name === "comma/today:requestBuild") builds.push(body.args?.mode);
+  });
+  await openToday(page);
+  await page.getByTestId("today-build-menu").click();
+  const regenerate = page.getByRole("menuitem", { name: "Regenerate from scratch" });
+  await expect(regenerate).toBeVisible();
+  await expect(page.getByText("New session: rereads the inbox and re-ranks everything", { exact: true })).toBeVisible();
+  await regenerate.click();
+  await expect(page.getByTestId("today-update")).toHaveText("Regenerating");
+  await expect(page.getByTestId("today-meta")).toHaveText("Reading threads with Opus 5.5…");
+  await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M · Opus 5\.5 · read \d+ of \d+ threads$/);
+  expect(builds).toEqual(["fresh"]);
 });
 
 test("Settle all settles the settle group as one action, and one Undo brings every row back", async ({ desk }) => {

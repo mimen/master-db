@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 import { expect, test } from "../fixtures/desk";
 import { FIXTURE_NOW } from "./world";
 
@@ -30,21 +30,27 @@ async function todayCount(page: Page): Promise<number> {
 
 const row = (page: Page, name: string) => page.getByTestId("conversation-row").filter({ hasText: name });
 
-test("today-queue: opens on Today, strip rank, settle gap, Regenerate, unbuilt and failed headers", async ({ desk }) => {
+type TodayQueueRead = { queue?: { session?: { id: string; startedAt: number; updates: number } } | null };
+async function call(request: APIRequestContext, name: string, args: Record<string, unknown>): Promise<TodayQueueRead> {
+  const response = await request.post("/__fixture/convex", { data: { name, args } });
+  return (await response.json()) as TodayQueueRead;
+}
+
+test("today-queue: opens on Today, strip rank, settle gap, Update, Regenerate from scratch, unbuilt and failed headers", async ({ desk }) => {
   const { page, request } = desk;
   const enqueued: string[] = [];
   const builds: string[] = [];
   page.on("request", (req) => {
     if (!req.url().includes("/__fixture/convex")) return;
-    const body = req.postDataJSON() as { name?: string; args?: { payload?: { kind?: string } } } | null;
+    const body = req.postDataJSON() as { name?: string; args?: { mode?: string; payload?: { kind?: string } } } | null;
     if (body?.name === "comma/outbox:enqueue" && body.args?.payload?.kind) enqueued.push(body.args.payload.kind);
-    if (body?.name === "comma/today:requestBuild") builds.push(body.name);
+    if (body?.name === "comma/today:requestBuild") builds.push(body.args?.mode ?? "none");
   });
 
   // Lands on Today: header, groups with context, ranks and reasons.
   await open(page, "light");
   await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M · Opus 5\.5 · read 15 of 21 threads$/);
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Updated \d+:\d\d [AP]M · session from Aug 19 · Opus 5\.5 · read 15 of 21 threads$/);
   await expect(page.getByText("Friday at the Observatory", { exact: true })).toBeVisible();
   await expect(page.getByText(/^New since \d+:\d\d [AP]M$/)).toBeVisible();
   await expect(row(page, "Alex Rivera").getByTestId("today-rank")).toHaveText("1");
@@ -116,19 +122,51 @@ test("today-queue: opens on Today, strip rank, settle gap, Regenerate, unbuilt a
   await shot(page, "04-settled-gap");
   writeFileSync(join(evidence, "progress.txt"), `before: ${progressBefore}\nafter: ${progressAfter}\ntab: ${countBefore} -> ${countBefore - 1}\n`);
 
-  // Regenerate: busy first, then New since folds into the ranked groups.
-  await page.getByTestId("today-regenerate").click();
-  await expect(page.getByTestId("today-regenerate")).toHaveText("Regenerating");
-  await shot(page, "05-regenerating");
-  await expect(page.getByTestId("today-regenerate")).toHaveText("Regenerate", { timeout: 10_000 });
+  // The split control: Update, and a chevron for the other way to build.
+  const header = page.getByTestId("today-header");
+  await expect(page.getByTestId("today-update")).toHaveText("Update");
+  await expect(page.getByTestId("today-build-menu")).toHaveAccessibleName("More ways to build today's queue");
+  await page.getByTestId("today-update").hover();
+  await header.screenshot({ path: join(evidence, "05a-split-button.png") });
+  writeFileSync(join(evidence, "aria-split-button.txt"), await header.ariaSnapshot());
+
+  // Update: busy first, then New since folds into the ranked groups and the meta names the session it continued.
+  await page.getByTestId("today-update").click();
+  await expect(page.getByTestId("today-update")).toHaveText("Updating");
+  await expect(page.getByTestId("today-meta")).toHaveText("Checking what changed with Opus 5.5…");
+  await shot(page, "05b-updating");
+  await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
   await expect(page.getByText(/^New since /)).toHaveCount(0);
   await expect(page.getByText("Start here", { exact: true })).toBeVisible();
   await expect(row(page, "Launch Crew").getByTestId("today-rank")).not.toHaveText("");
-  expect(builds).toEqual(["comma/today:requestBuild"]);
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Updated \d+:\d\d [AP]M · session from Aug 19 · Opus 5\.5 · read \d+ of \d+ threads$/);
+  const updated = (await call(request, "comma/today:get", { day: "2026-08-20" })).queue?.session;
+  expect(updated, "the stored queue continues the seeded session").toMatchObject({ id: "seed", updates: 3 });
   await page.mouse.move(900, 300);
   await page.waitForTimeout(400);
-  await shot(page, "06-regenerated");
-  writeFileSync(join(evidence, "aria-regenerated.txt"), await page.getByTestId("today-header").ariaSnapshot());
+  await shot(page, "06a-updated");
+  writeFileSync(join(evidence, "aria-updated.txt"), await header.ariaSnapshot());
+
+  // Regenerate from scratch: the chevron's one action starts a new session.
+  await page.getByTestId("today-build-menu").click();
+  const regenerate = page.getByRole("menuitem", { name: "Regenerate from scratch" });
+  await expect(regenerate).toBeVisible();
+  await page.waitForTimeout(300);
+  await shot(page, "06b-build-menu");
+  await regenerate.click();
+  await expect(page.getByTestId("today-update")).toHaveText("Regenerating");
+  await expect(page.getByTestId("today-meta")).toHaveText("Reading threads with Opus 5.5…");
+  await shot(page, "06c-regenerating");
+  await expect(page.getByTestId("today-update")).toHaveText("Update", { timeout: 10_000 });
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M · Opus 5\.5 · read \d+ of \d+ threads$/);
+  const regenerated = (await call(request, "comma/today:get", { day: "2026-08-20" })).queue?.session;
+  expect(regenerated, "a new session").toMatchObject({ updates: 0 });
+  expect(regenerated?.id).not.toBe("seed");
+  expect(builds).toEqual(["update", "fresh"]);
+  await page.mouse.move(900, 300);
+  await page.waitForTimeout(400);
+  await shot(page, "06d-regenerated");
+  writeFileSync(join(evidence, "builds.txt"), `${builds.join("\n")}\nupdated: ${JSON.stringify(updated)}\nregenerated: ${JSON.stringify(regenerated)}\n`);
 
   // Before the morning build, and a failed build: the header says so and the list falls back to Needs you.
   await request.post("/__fixture/today", { data: { mode: "unbuilt" } });

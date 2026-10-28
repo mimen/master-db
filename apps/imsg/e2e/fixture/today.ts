@@ -1,5 +1,5 @@
 import type { GenericId } from "convex/values";
-import type { TodayQueue, TodayRun, TodayView } from "../../../../convex/schema/comma/validators";
+import type { TodayMode as BuildMode, TodayQueue, TodayRun, TodayView } from "../../../../convex/schema/comma/validators";
 import { matchesFilters } from "../../shared/chat-state";
 import { todayWindow } from "../../shared/today";
 import type { ChatSummary } from "../../shared/types";
@@ -10,6 +10,8 @@ export type TodayMode = "seeded" | "unbuilt" | "failed";
 /** How long a fixture Regenerate stays building: past the client's 500 ms poll, so the busy state is seen. */
 const BUILD_MS = 2_500;
 const FAILED_AT = todayWindow(FIXTURE_NOW).start + 7 * 3_600_000;
+/** The seeded queue is a second Update of a session the previous morning's build began, so the header spans days. */
+const SEED_SESSION = { id: "seed", startedAt: todayWindow(todayWindow(FIXTURE_NOW).start - 1).start + 7 * 3_600_000, updates: 2 };
 
 const id = (value: string) => value as GenericId<"comma_conversations">;
 
@@ -22,7 +24,7 @@ function seededQueue(): TodayQueue {
   return {
     snapshotAt: TODAY_SEED.snapshotAt, model: TODAY_SEED.model, brief: TODAY_SEED.brief, readCount: TODAY_SEED.readCount, candidateCount: TODAY_SEED.candidateCount,
     groups: TODAY_SEED.groups.map(({ id: groupId, title, context }) => ({ id: groupId, title, context })),
-    items, openAtSnapshot: open,
+    items, openAtSnapshot: open, session: SEED_SESSION,
   };
 }
 
@@ -33,7 +35,8 @@ const REGENERATED_GROUPS = [
 
 /**
  * The fixture's comma_today_queue: one row the client reads through comma/today:get, built from
- * TODAY_SEED. A Regenerate ranks the known Needs you conversations newest first into two groups.
+ * TODAY_SEED. A build ranks the known Needs you conversations newest first into two groups. An Update
+ * continues the queue's session; a Regenerate starts a new one.
  */
 export function createTodayFixture(deps: {
   chats: () => Promise<ChatSummary[]>;
@@ -55,17 +58,21 @@ export function createTodayFixture(deps: {
       run = { status: "failed", attempt: 1, source: "schedule", failedAt: FAILED_AT, error: "The gateway timed out" };
       queue = null;
     } else {
-      run = { status: "done", attempt: 1, source: "schedule", finishedAt: TODAY_SEED.snapshotAt + 40_000 };
+      run = { status: "done", attempt: 1, source: "schedule", mode: "update", finishedAt: TODAY_SEED.snapshotAt + 40_000 };
       queue = seededQueue();
     }
   }
   setMode("seeded");
 
-  async function build(attempt: number, snapshotAt: number): Promise<void> {
+  async function build(attempt: number, snapshotAt: number, mode: BuildMode): Promise<void> {
     const open = (await deps.chats())
       .filter((chat) => matchesFilters(chat, "unresponded", "known") && chat.flags.unresponded)
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
     const half = Math.ceil(open.length / 2);
+    const previous = queue?.session;
+    const session = mode === "update" && previous
+      ? { ...previous, updates: previous.updates + 1 }
+      : { id: `fixture-${attempt}`, startedAt: snapshotAt, updates: 0 };
     queue = {
       snapshotAt, model: TODAY_SEED.model, readCount: open.length, candidateCount: open.length,
       brief: "Rebuilt from what is open now. Start with the newest threads.",
@@ -75,8 +82,9 @@ export function createTodayFixture(deps: {
         reason: index < half ? "Newest open thread." : "Open since earlier.",
       })),
       openAtSnapshot: open.map((chat) => id(chat.guid)),
+      session,
     };
-    run = { status: "done", attempt, source: "user", finishedAt: Date.now() };
+    run = { status: "done", attempt, source: "user", mode, finishedAt: Date.now() };
   }
 
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
@@ -93,12 +101,13 @@ export function createTodayFixture(deps: {
         cleared: [...latest].map(([conversationId, at]) => ({ conversationId: id(conversationId), at })),
       };
     },
-    "comma/today:requestBuild": async () => {
+    "comma/today:requestBuild": async (args) => {
       if (run?.status === "requested" || run?.status === "building") return run;
+      const mode: BuildMode = args.mode === "update" ? "update" : "fresh";
       const attempt = (run?.attempt ?? 0) + 1;
       const startedAt = Date.now();
-      run = { status: "building", attempt, source: "user", requestedAt: startedAt, startedAt, claimId: "fixture" };
-      timer = setTimeout(() => { timer = null; void build(attempt, startedAt); }, BUILD_MS);
+      run = { status: "building", attempt, source: "user", mode, requestedAt: startedAt, startedAt, claimId: "fixture" };
+      timer = setTimeout(() => { timer = null; void build(attempt, startedAt, mode); }, BUILD_MS);
       return run;
     },
   };
