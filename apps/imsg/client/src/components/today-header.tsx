@@ -121,7 +121,7 @@ export function TodayHeaderCard({ header, dayStart, onRegenerate }: {
   const built = todayTime(header.builtAt);
   const meta = busy ? BUILDING_META
     : header.cleared ? `${header.settled} settled today${header.newSince ? ` · ${header.newSince} new since ${built}` : ""}`
-    : `Built ${built} · ${header.model} · ${header.queued} of ${header.readCount} threads`;
+    : `Built ${built} · ${header.model} · read ${header.readCount} of ${header.candidateCount} threads`;
   return (
     <View testID="today-header" style={card}>
       <View style={styles.top}>

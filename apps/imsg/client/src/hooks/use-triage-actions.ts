@@ -72,16 +72,13 @@ function settleFailure(error: unknown): string {
 }
 
 /**
- * Forward triage: clear whichever triage flags the conversation carries, and its agent chats.
- *
- * Answers "busy" when this conversation already has a triage write outstanding,
- * so a caller never reports a settle that never happened.
+ * Forward triage on one conversation: clear whichever triage flags it carries, and its agent chats. Hands
+ * `settled` the write that reverses it once the settle is queued.
  */
-export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
+function settleWrite(chat: ChatSummary, settled: (reverse: () => Promise<void>) => void): Promise<TriageWriteOutcome> {
   return runExclusiveTriageWrite(chat.guid, async () => {
     if (settleActionFor(chat) !== "settle") return;
 
-    const undoToken = beginUndoAction();
     const anchor = settleAnchor(chat.lastMessage);
     const intent: FlagIntent = { change: "settle", chatGuid: chat.guid, seen: anchor };
     // In Needs you only for its agent chats, it settles just those: a bridge settle's Undo would
@@ -93,14 +90,49 @@ export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome>
     emit(settlingListeners, chat.guid);
     await queued;
     emit(resolvedListeners, chat.guid);
-    // The entry runs long after this write released the conversation, and it
-    // takes no exclusion of its own. Undo must never be refused as busy.
-    commitUndoAction(undoToken, () => {
-      (agentsOnly ? conversationAgents(chat, agentApi.reopenConversationAgents) : unsettle(chat))
-        .then(() => emit(undoListeners, chat.guid))
-        .catch(() => showToast("Couldn't undo the settle. Try again."));
-    });
+    settled(() => (agentsOnly ? conversationAgents(chat, agentApi.reopenConversationAgents) : unsettle(chat))
+      .then(() => emit(undoListeners, chat.guid)));
   });
+}
+
+/**
+ * Forward triage: clear whichever triage flags the conversation carries, and its agent chats.
+ *
+ * Answers "busy" when this conversation already has a triage write outstanding,
+ * so a caller never reports a settle that never happened.
+ */
+export function settleTriageChat(chat: ChatSummary): Promise<TriageWriteOutcome> {
+  const undoToken = beginUndoAction();
+  // The entry runs long after this write released the conversation, and it
+  // takes no exclusion of its own. Undo must never be refused as busy.
+  return settleWrite(chat, (reverse) => commitUndoAction(undoToken, () => {
+    reverse().catch(() => showToast("Couldn't undo the settle. Try again."));
+  }));
+}
+
+/** Settles every conversation it can as one action: one undo entry reopens all of them. Answers how many settled. */
+export async function settleTriageChats(chats: readonly ChatSummary[]): Promise<number> {
+  const undoToken = beginUndoAction();
+  const reversals: (() => Promise<void>)[] = [];
+  await Promise.allSettled(chats.map((chat) => settleWrite(chat, (reverse) => reversals.push(reverse))));
+  if (reversals.length > 0) {
+    commitUndoAction(undoToken, () => {
+      void Promise.allSettled(reversals.map((reverse) => reverse())).then((results) => {
+        if (results.some((result) => result.status === "rejected")) showToast("Couldn't undo every settle. Try again.");
+      });
+    });
+  }
+  return reversals.length;
+}
+
+/** Today's Settle all: settles the rows and answers with one toast whose Undo reopens them all. */
+export async function settleAllChats(chats: readonly ChatSummary[]): Promise<void> {
+  const settled = await settleTriageChats(chats);
+  if (settled === 0) {
+    showToast("Nothing left to settle here");
+    return;
+  }
+  showToast(`Settled ${settled} ${settled === 1 ? "thread" : "threads"}`, { label: "Undo", hint: "⌘Z", onPress: () => void undoLastTriageAction() });
 }
 
 /**

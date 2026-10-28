@@ -18,7 +18,7 @@ function chat(id: string, flags: Partial<ChatSummary["flags"]> = {}, extra: Part
 }
 
 type Built = { id: string; group: string; reason?: string };
-function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, number> = {}, over: Partial<{ snapshotAt: number; run: TodayRun }> = {}): TodayView {
+function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, number> = {}, over: Partial<{ snapshotAt: number; run: TodayRun; candidateCount: number }> = {}): TodayView {
   const row = {
     day: "2026-10-27", dayStart: DAY_START, run: over.run ?? done,
     queue: {
@@ -26,6 +26,7 @@ function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, 
       groups: [{ id: "friday", title: "Friday", context: "Set times close tonight." }, { id: "money", title: "Money", context: "" }],
       items: items.map(({ id, group, reason }, index) => ({ conversationId: id, group, rank: index + 1, reason: reason ?? `reason ${id}` })),
       openAtSnapshot,
+      ...(over.candidateCount === undefined ? {} : { candidateCount: over.candidateCount }),
     },
     cleared: Object.entries(cleared).map(([conversationId, at]) => ({ conversationId, at })),
   };
@@ -175,6 +176,13 @@ describe("todayHeader", () => {
     expect(todayHeader(building, plan(building))).toMatchObject({ kind: "queue", busy: "building", queued: 1, readCount: 81, model: "Opus 5.5", lastError: null });
     const failed = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "failed", attempt: 2, source: "user", failedAt: 3, error: "The answer didn't parse" } });
     expect(todayHeader(failed, plan(failed))).toMatchObject({ kind: "queue", busy: null, lastError: "The answer didn't parse" });
+  });
+
+  test("the header reads what was read against every candidate, and an older queue against its Needs you", () => {
+    const counted = view([{ id: "a", group: "friday" }], ["a", "b"], {}, { candidateCount: 335 });
+    expect(todayHeader(counted, plan(counted))).toMatchObject({ readCount: 81, candidateCount: 335 });
+    const older = view([{ id: "a", group: "friday" }], ["a", "b"]);
+    expect(todayHeader(older, plan(older))).toMatchObject({ candidateCount: 2 });
   });
 
   test("the queue is cleared once no ranked rows remain, New since still named", () => {

@@ -37,7 +37,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
       watchQuery: () => ({ onUpdate: () => () => undefined, localQueryResult: () => undefined }),
     },
   }));
-  const { toggleSettleChat, undoLastTriageAction } = await import("./use-triage-actions");
+  const { settleAllChats, toggleSettleChat, undoLastTriageAction } = await import("./use-triage-actions");
   const { resetPendingFlagsForTests, usePendingFlags } = await import("@/lib/pending-flags");
   const { resetUndoForTests } = await import("@/lib/action-undo");
 
@@ -106,5 +106,32 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(undoLastTriageAction()).toBe(true);
     await until(() => writes.length > 1);
     expect(writes.slice(1)).toEqual([["comma/outbox:enqueue", { kind: "unsettle" }]]);
+  });
+
+  test("Settle all settles every open row as one action: one toast, and one Undo reopens all of them", async () => {
+    const owed = (n: number) => chat({
+      guid: `iMessage;-;+1619555030${n}`, conversationId: `conv-${n}`, displayName: `Person ${n}`, agent: undefined,
+      lastMessage: { guid: `m${n}`, text: "thanks!", dateCreated: 2, isFromMe: false, senderName: null, hasAttachments: false },
+      flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
+    });
+    const quiet = chat({ guid: "iMessage;-;+16195550399", agent: undefined, lastMessage: null });
+    await settleAllChats([owed(1), owed(2), quiet]);
+    expect(toasts).toEqual(["Settled 2 threads"]);
+    expect(writes).toEqual([
+      ["comma/outbox:enqueue", { kind: "settle", messageGuid: "m1" }],
+      ["comma/outbox:enqueue", { kind: "settle", messageGuid: "m2" }],
+    ]);
+    expect(matchesFilters(shown(owed(1)), "unresponded", "all")).toBe(false);
+
+    expect(undoLastTriageAction()).toBe(true);
+    await until(() => writes.length > 3);
+    expect(writes.slice(2)).toEqual([["comma/outbox:enqueue", { kind: "unsettle" }], ["comma/outbox:enqueue", { kind: "unsettle" }]]);
+    expect(undoLastTriageAction(), "the batch was one entry").toBe(false);
+  });
+
+  test("Settle all with nothing open says so and leaves no undo entry", async () => {
+    await settleAllChats([chat({ agent: undefined, lastMessage: null })]);
+    expect(toasts).toEqual(["Nothing left to settle here"]);
+    expect(undoLastTriageAction()).toBe(false);
   });
 }

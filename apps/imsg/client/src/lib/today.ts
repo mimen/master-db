@@ -22,6 +22,8 @@ export interface TodayView {
     brief: string;
     groups: readonly TodayGroup[];
     readCount: number;
+    /** Every candidate at the snapshot; a queue stored before the count falls back to its Needs you. */
+    candidateCount: number;
     items: ReadonlyMap<string, TodayItem>;
     openAtSnapshot: ReadonlySet<string>;
   };
@@ -37,6 +39,7 @@ export function toTodayView(row: FunctionReturnType<typeof todayApi.get>): Today
     run: row.run,
     queue: queue && {
       snapshotAt: queue.snapshotAt, model: queue.model, brief: queue.brief, groups: queue.groups, readCount: queue.readCount,
+      candidateCount: queue.candidateCount ?? queue.openAtSnapshot.length,
       items: new Map(queue.items.map((item) => [item.conversationId as string, item])),
       openAtSnapshot: new Set(queue.openAtSnapshot),
     },
@@ -212,7 +215,7 @@ export type TodayHeader =
   | { kind: "unbuilt"; busy: TodayBusy | null }
   | { kind: "failed"; error: string; failedAt: number; busy: TodayBusy | null }
   | {
-      kind: "queue"; builtAt: number; model: string; readCount: number; queued: number; brief: string;
+      kind: "queue"; builtAt: number; model: string; readCount: number; candidateCount: number; queued: number; brief: string;
       settled: number; toGo: number; cleared: boolean; newSince: number; busy: TodayBusy | null;
       /** A failed Regenerate over a good queue. */
       lastError: string | null;
@@ -236,7 +239,7 @@ export function todayHeader(view: TodayView | null | undefined, plan: TodayPlan)
       : { kind: "unbuilt", busy };
   }
   return {
-    kind: "queue", builtAt: queue.snapshotAt, model: modelLabel(queue.model), readCount: queue.readCount,
+    kind: "queue", builtAt: queue.snapshotAt, model: modelLabel(queue.model), readCount: queue.readCount, candidateCount: queue.candidateCount,
     queued: queue.items.size, brief: queue.brief, settled: plan.settled, toGo: plan.toGo,
     cleared: plan.toGo - plan.newSince === 0, newSince: plan.newSince, busy,
     lastError: run.status === "failed" ? run.error : null,

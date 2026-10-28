@@ -44,7 +44,7 @@ test("today-queue: opens on Today, strip rank, settle gap, Regenerate, unbuilt a
   // Lands on Today: header, groups with context, ranks and reasons.
   await open(page, "light");
   await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M · Opus 5\.5 · 12 of 15 threads$/);
+  await expect(page.getByTestId("today-meta")).toHaveText(/^Built \d+:\d\d [AP]M · Opus 5\.5 · read 15 of 21 threads$/);
   await expect(page.getByText("Friday at the Observatory", { exact: true })).toBeVisible();
   await expect(page.getByText(/^New since \d+:\d\d [AP]M$/)).toBeVisible();
   await expect(row(page, "Alex Rivera").getByTestId("today-rank")).toHaveText("1");
@@ -66,6 +66,29 @@ test("today-queue: opens on Today, strip rank, settle gap, Regenerate, unbuilt a
   await page.waitForTimeout(300);
   await shot(page, "02b-below-the-line");
   await below.click();
+  await page.getByTestId("conversation-list-scroll").evaluate((element) => element.scrollTo(0, 0));
+
+  // Just settle these: Settle all clears the group as one action, and one Undo brings both back.
+  const settleGroup = page.getByText("Just settle these", { exact: true });
+  await settleGroup.scrollIntoViewIfNeeded();
+  await page.mouse.move(900, 300);
+  await page.waitForTimeout(300);
+  await shot(page, "02c-settle-group");
+  const beforeSettleAll = await todayCount(page);
+  await page.getByTestId("today-settle-all").click();
+  await expect(page.getByText("Settled 2 threads", { exact: true })).toBeVisible();
+  await expect.poll(() => todayCount(page)).toBe(beforeSettleAll - 2);
+  await expect(settleGroup).toHaveCount(0);
+  expect(enqueued.filter((kind) => kind === "settle")).toHaveLength(2);
+  await shot(page, "02d-settled-all-toast");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect.poll(() => todayCount(page)).toBe(beforeSettleAll);
+  await expect(settleGroup).toBeVisible();
+  expect(enqueued.filter((kind) => kind === "unsettle")).toHaveLength(2);
+  await page.mouse.move(900, 300);
+  await page.waitForTimeout(600);
+  await shot(page, "02e-settle-all-undone");
+  enqueued.length = 0;
   await page.getByTestId("conversation-list-scroll").evaluate((element) => element.scrollTo(0, 0));
 
   // A ranked conversation's strip names its place.

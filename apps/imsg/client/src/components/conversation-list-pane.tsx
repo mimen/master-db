@@ -7,6 +7,7 @@ import { FlashList } from "@shopify/flash-list";
 
 
 import { disambiguators } from "@shared/address";
+import { TODAY_SETTLE_GROUP } from "@shared/today";
 import { ChatRow } from "./chat-row";
 import { ConversationFiltersPanel, FilterChipRow, LensTabs } from "./conversation-filters";
 import { EmptyLens } from "./empty-lens";
@@ -29,7 +30,7 @@ import { PHONE_TAB_BAR_CLEARANCE } from "./phone-tab-bar";
 import { TriageGeometry } from "@/constants/triage-theme";
 
 import { publishRenderedOrder } from "@/hooks/use-queue-position";
-import { onTriageResolved, onTriageUndo } from "@/hooks/use-triage-actions";
+import { onTriageResolved, onTriageUndo, settleAllChats } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
 import { useType } from "@/hooks/use-type";
@@ -230,6 +231,12 @@ export function ConversationListPane({
     if (!next.delete(key)) next.add(key);
     return next;
   }), []);
+  const planRef = useRef(plan);
+  useEffect(() => { planRef.current = plan; });
+  const settleSection = useCallback((key: TodaySectionKey) => {
+    const section = planRef.current.sections.find((candidate) => candidate.key === key);
+    if (section) void settleAllChats(section.rows.map((row) => row.chat));
+  }, []);
   const onToday = filters.state === "today";
   const lensCounts = useMemo(() => (counts ? { ...counts, today: plan.toGo } : null), [counts, plan.toGo]);
   // Explicitly memoised: full passes over every conversation, plus a per-chat
@@ -326,9 +333,10 @@ export function ConversationListPane({
         onOpen={openRow}
         agentLens={filters.state === "agents"}
         onToggleFold={toggleFold}
+        onSettleAll={settleSection}
       />
     ),
-    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state, toggleFold],
+    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state, toggleFold, settleSection],
   );
   // Needs you and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -527,7 +535,7 @@ export function ConversationListPane({
  * One list cell. Memoized with primitive props so a click or a lens switch re-renders only the
  * cells whose row, selection or leave state changed, not all ~700 mounted ones.
  */
-const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen, agentLens, onToggleFold }: {
+const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen, agentLens, onToggleFold, onSettleAll }: {
   readonly row: InboxRow;
   readonly gone: boolean;
   readonly onCollapsed: (key: string) => void;
@@ -538,13 +546,14 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
   readonly onOpen: (chat: ChatSummary) => void;
   readonly agentLens: boolean;
   readonly onToggleFold: (key: TodaySectionKey) => void;
+  readonly onSettleAll: (key: TodaySectionKey) => void;
 }) {
   return (
     // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
     <View pointerEvents={gone ? "none" : "auto"}>
       <Collapse collapsed={gone} onCollapsed={() => onCollapsed(row.key)}>
         {row.kind === "section" ? (
-          row.fold || row.detail !== undefined ? <TodaySectionHeader row={row} onToggleFold={onToggleFold} /> : (
+          row.fold || row.detail !== undefined ? <TodaySectionHeader row={row} onToggleFold={onToggleFold} onSettleAll={onSettleAll} /> : (
             <View style={styles.group}>
               <Text accessibilityRole="header" style={[styles.groupLabel, { color: labelColor }]}>{row.label}</Text>
               <Text style={[styles.groupCount, { color: labelColor }]}>{row.count}</Text>
@@ -558,10 +567,13 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
   );
 });
 
-/** A Today section: a group title with its context line, or a fold (Below the line, Settled today). */
-function TodaySectionHeader({ row, onToggleFold }: {
+const SETTLE_SECTION: TodaySectionKey = `group:${TODAY_SETTLE_GROUP}`;
+
+/** A Today section: a group title with its context line, or a fold (Below the line, Settled today). The settle group gets Settle all. */
+function TodaySectionHeader({ row, onToggleFold, onSettleAll }: {
   readonly row: Extract<InboxRow, { kind: "section" }>;
   readonly onToggleFold: (key: TodaySectionKey) => void;
+  readonly onSettleAll: (key: TodaySectionKey) => void;
 }) {
   const theme = useTheme();
   const fold = row.fold;
@@ -594,7 +606,20 @@ function TodaySectionHeader({ row, onToggleFold }: {
           {row.tone === "fresh" ? <View style={[styles.freshDot, { backgroundColor: theme.accent }]} /> : null}
           <Text accessibilityRole="header" style={[styles.todayTitle, { color: theme.text }]}>{row.label}</Text>
         </View>
-        <Text style={[styles.groupCount, { color: theme.textTertiary }]}>{row.count}</Text>
+        <View style={styles.todayActions}>
+          {row.key === `section-today-${SETTLE_SECTION}` ? (
+            <Pressable
+              testID="today-settle-all"
+              accessibilityRole="button"
+              accessibilityLabel={`Settle all ${row.count} in ${row.label}`}
+              onPress={() => onSettleAll(SETTLE_SECTION)}
+              style={({ hovered, pressed }) => [styles.settleAll, { borderColor: theme.chipBorder, backgroundColor: hovered || pressed ? theme.rowHover : theme.chipBg }]}
+            >
+              <Text style={[styles.settleAllText, { color: theme.text }]}>Settle all</Text>
+            </Pressable>
+          ) : null}
+          <Text style={[styles.groupCount, { color: theme.textTertiary }]}>{row.count}</Text>
+        </View>
       </View>
       {detail}
     </View>
@@ -606,6 +631,9 @@ const styles = StyleSheet.create({
   todayTop: { alignItems: "baseline", flexDirection: "row", gap: 8, justifyContent: "space-between" },
   todayTitleRow: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 6 },
   todayTitle: { fontSize: 12, fontWeight: "600" },
+  todayActions: { alignItems: "center", flexDirection: "row", gap: 8 },
+  settleAll: { borderRadius: 6, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2 },
+  settleAllText: { fontSize: 11.5, fontWeight: "600" },
   todayDetail: { fontSize: 11.5, lineHeight: 15, marginTop: 2 },
   freshDot: { borderRadius: 3.5, height: 7, width: 7 },
   fold: { alignItems: "center", borderRadius: 10, flexDirection: "row", justifyContent: "space-between", marginTop: 4, paddingHorizontal: 10, paddingVertical: 9 },

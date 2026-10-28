@@ -23,7 +23,7 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Reg
   const { page } = desk;
   await openToday(page);
   await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByTestId("today-meta")).toHaveText("Built 10:30 AM · Opus 5.5 · 12 of 15 threads");
+  await expect(page.getByTestId("today-meta")).toHaveText("Built 10:30 AM · Opus 5.5 · read 15 of 21 threads");
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toBeVisible();
   const rows = page.getByTestId("conversation-row");
   const alex = rows.filter({ hasText: "Alex Rivera" });
@@ -47,6 +47,27 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Reg
   await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");
 });
 
+test("Settle all settles the settle group as one action, and one Undo brings every row back", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  await expect(page.getByText("Just settle these", { exact: true })).toBeVisible();
+  await expect(rows.filter({ hasText: "Taylor Morgan" }).getByTestId("today-reason")).toHaveText("No reply needed: a tapback closed it.");
+  const before = await todayCount(page);
+  await page.getByTestId("today-settle-all").click();
+  await expect(page.getByText("Settled 2 threads", { exact: true })).toBeVisible();
+  await expect.poll(() => todayCount(page)).toBe(before - 2);
+  await expect(page.getByText("Just settle these", { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId("today-progress")).toHaveText(`2 settled · ${before - 2} to go`);
+
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect.poll(() => todayCount(page)).toBe(before);
+  await expect(page.getByText("Just settle these", { exact: true })).toBeVisible();
+  await expect(rows.filter({ hasText: "Taylor Morgan" })).toBeVisible();
+  await expect(rows.filter({ hasText: "Sofia Martinez" })).toBeVisible();
+  await expect(page.getByTestId("today-progress")).toHaveText(`0 settled · ${before} to go`);
+});
+
 test("auto-advance skips a folded section", async ({ desk }) => {
   const { page } = desk;
   await openToday(page);
@@ -60,7 +81,7 @@ test("auto-advance skips a folded section", async ({ desk }) => {
   await below.click();
   await page.keyboard.press("Meta+e");
   await expect(rows.filter({ hasText: "Noah Blake" })).toHaveCount(0);
-  await expect(heading(page)).toHaveText("Owen Foster");
+  await expect(heading(page)).toHaveText("Taylor Morgan");
 });
 
 test("⌘E on Today advances once and keeps reply intent", async ({ desk }) => {

@@ -18,7 +18,7 @@ function seededQueue(): TodayQueue {
   const items = seeded.map((item, index) => ({ conversationId: id(item.conversationId), rank: index + 1, group: item.group, reason: item.reason }));
   const open = [...seeded.filter((item) => !item.waiting).map((item) => id(item.conversationId)), ...TODAY_SEED.below.map(id)];
   return {
-    snapshotAt: TODAY_SEED.snapshotAt, model: TODAY_SEED.model, brief: TODAY_SEED.brief, readCount: TODAY_SEED.readCount,
+    snapshotAt: TODAY_SEED.snapshotAt, model: TODAY_SEED.model, brief: TODAY_SEED.brief, readCount: TODAY_SEED.readCount, candidateCount: TODAY_SEED.candidateCount,
     groups: TODAY_SEED.groups.map(({ id: groupId, title, context }) => ({ id: groupId, title, context })),
     items, openAtSnapshot: open,
   };
@@ -65,7 +65,7 @@ export function createTodayFixture(deps: {
       .sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
     const half = Math.ceil(open.length / 2);
     queue = {
-      snapshotAt, model: TODAY_SEED.model, readCount: open.length,
+      snapshotAt, model: TODAY_SEED.model, readCount: open.length, candidateCount: open.length,
       brief: "Rebuilt from what is open now. Start with the newest threads.",
       groups: REGENERATED_GROUPS,
       items: open.slice(0, 50).map((chat, index) => ({

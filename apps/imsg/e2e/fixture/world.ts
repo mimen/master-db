@@ -327,6 +327,7 @@ export const TODAY_SEED = {
   model: "claude-opus-5-5",
   brief: "Friday's show is the center of gravity: the arrival time and the guest list both close tonight. Two people are waiting on money from you.",
   readCount: 15,
+  candidateCount: 21,
   groups: [
     { id: "friday", title: "Friday at the Observatory", context: "The arrival time and the guest list both close tonight. Start with Alex.", items: [
       todayItem(CHAT_GUIDS.needs, "The final arrival time unblocks the run of show."),
@@ -342,9 +343,11 @@ export const TODAY_SEED = {
     { id: "people", title: "People you care about", context: "Personal threads that have sat longer than you would want.", items: [
       todayItem(backlog("Avery Brooks"), "Needs a yes or a new day before Thursday."),
       todayItem(backlog("Leah Kim"), "A thank-you owed since Saturday."),
-      todayItem(backlog("Taylor Morgan"), "A tapback closes it."),
       todayItem(backlog("Owen Foster"), "Yes or no."),
-      todayItem(backlog("Sofia Martinez"), "Catch-up, no deadline."),
+    ] },
+    { id: "settle", title: "Just settle these", context: "No reply owed. Settle them in one go.", items: [
+      todayItem(backlog("Taylor Morgan"), "No reply needed: a tapback closed it."),
+      todayItem(backlog("Sofia Martinez"), "No reply needed: she said thanks."),
     ] },
   ],
   below: [backlog("Noah Blake"), backlog("Mina Patel")],
