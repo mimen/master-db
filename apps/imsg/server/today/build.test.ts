@@ -15,7 +15,7 @@ function candidate(n: number, state: TodayCandidate["state"], ageDays = n / 1000
 const card = { summary: "Wants an answer.", ask: "Answer", due: "", stakes: "medium", settle: false, needsMore: false };
 type Answer = (prompt: string, options: StructuredOptions) => GatewayResult<unknown>;
 
-function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?: boolean; card?: Answer; store?: OverlayDb } = {}) {
+function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?: boolean; card?: Answer; store?: OverlayDb; attachments?: number } = {}) {
   const reduces: { prompt: string; options: StructuredOptions }[] = [];
   const cardCalls: string[] = [];
   const posts: string[] = [];
@@ -32,7 +32,8 @@ function fakes(candidates: TodayCandidate[], reduce: Answer, opts: { available?:
       }
       if (route === "agentContext") {
         const { conversationId } = body as TodayRoutes["agentContext"][0];
-        const messages = Array.from({ length: 6 }, (_, n) => ({ guid: `${conversationId}-m${n}`, at: 0, fromMe: false, sender: "P", text: `message ${n}`, attachments: [] }));
+        const attachments = Array.from({ length: opts.attachments ?? 0 }, (_, n) => ({ guid: `a${n}`, name: "f".repeat(120), mime: null }));
+        const messages = Array.from({ length: 6 }, (_, n) => ({ guid: `${conversationId}-m${n}`, at: 0, fromMe: false, sender: "P", text: `message ${n}`, attachments }));
         return { title: "t", participants: [], messages } as TodayRoutes[K][1];
       }
       if (route === "agentPeople") return [] as TodayRoutes[K][1];
@@ -180,6 +181,18 @@ describe("buildToday", () => {
     await expect(buildToday(deps, claim, controller.signal)).rejects.toThrow("The build timed out");
     expect(store.getTodayCard("conv1", 30)).toBeNull();
     expect(reduces).toEqual([]);
+  });
+
+  test("over the reduce cap, rotated Needs you leave first, oldest first, then Waiting, and what left is neither read nor counted", async () => {
+    const list = [candidate(1, "needsYou", 1), candidate(2, "needsYou", 50), candidate(3, "needsYou", 90), candidate(4, "waiting", 2)];
+    const { deps, reduces, logs, store } = fakes(list, firstItem, { attachments: 340 });
+    const built = await buildToday(deps, claim);
+    const persons = [...reduces[0]!.prompt.matchAll(/^Person (\d+)$/gm)].map((match) => Number(match[1]));
+    expect(persons).toEqual([1, 4]);
+    expect(logs).toContain("today: dropped 2 threads to fit the reduce prompt");
+    expect(built.outcome).toMatchObject({ ok: true, queue: { readCount: 2 } });
+    built.accept();
+    expect([...store.todayReadAt().keys()].sort(), "a dropped backlog thread stays first in the rotation").toEqual(["conv1", "conv4"]);
   });
 
   test("a failed reduce records no reads", async () => {

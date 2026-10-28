@@ -152,7 +152,11 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim, signal
   });
   const cardMs = Math.round(performance.now() - cardsStarted);
 
-  const { system, prompt } = renderTodayPrompt({ threads, profile: await deps.profile(), now });
+  const byCandidate = new Map(threads.map((thread) => [thread.candidate, thread]));
+  const oldestFirst = (list: readonly TodayCandidate[]) => [...list].sort((a, b) => a.lastMessageAt - b.lastMessageAt).map((c) => byCandidate.get(c)!);
+  const dropOrder = [...oldestFirst(selection.rotated), ...oldestFirst(selection.waiting), ...oldestFirst(selection.recent)];
+  const { system, prompt, kept } = renderTodayPrompt({ threads, profile: await deps.profile(), now, dropOrder });
+  if (kept.length < threads.length) deps.log?.(`today: dropped ${threads.length - kept.length} threads to fit the reduce prompt`);
   signal.throwIfAborted();
   const reduceStarted = performance.now();
   const answer = await deps.gateway.completeStructured<unknown>(prompt, TODAY_SCHEMA, {
@@ -164,7 +168,7 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim, signal
     deps.log?.(`today: gateway ${answer.error.kind}: ${answer.error.message}`);
     return nothingToAccept({ ok: false, error: FAILURE_COPY[answer.error.kind] });
   }
-  const refs = new Map<string, ConversationId>(threads.map((thread) => [thread.ref, thread.candidate.conversationId]));
+  const refs = new Map<string, ConversationId>(kept.map((thread) => [thread.ref, thread.candidate.conversationId]));
   const parsed = parseTodayOutput(answer.value, refs);
   if (!parsed.ok) return nothingToAccept(parsed);
   const { dropped, ...parsedDraft } = parsed.draft;
@@ -186,9 +190,9 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim, signal
     deep: draft.items.filter((item) => deep.has(item.conversationId)).length,
   }));
   return {
-    outcome: { ok: true, queue: { ...base, ...draft } },
+    outcome: { ok: true, queue: { ...base, readCount: kept.length, ...draft } },
     accept: () => {
-      if (!signal.aborted) deps.store.markTodayRead(read.map((c) => c.conversationId), claim.startedAt);
+      if (!signal.aborted) deps.store.markTodayRead(kept.map((thread) => thread.candidate.conversationId), claim.startedAt);
     },
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseTodayOutput, renderTodayPrompt, threadBlock, type ConversationId, type TodayCardedThread } from "./prompt";
+import { parseTodayOutput, REDUCE_PROMPT_CHARS, renderTodayPrompt, threadBlock, type ConversationId, type TodayCardedThread } from "./prompt";
 
 const id = (n: number) => `conv${n}` as ConversationId;
 const refs = new Map([1, 2, 3, 4].map((n) => [`c${n}`, id(n)]));
@@ -103,6 +103,16 @@ describe("renderTodayPrompt", () => {
     card: { summary: "Alex needs the arrival time.", ask: "Arrival time", due: "Friday 6 PM", stakes: "high", settle: false, needsMore: false },
     messages: Array.from({ length: 8 }, (_, n) => ({ guid: `m${n}`, at: 0, fromMe: false, sender: "Alex Rivera", text: `line ${n} ${"x".repeat(400)}`, attachments: [] })),
   };
+
+  test("over the cap, threads leave in drop order until the prompt fits, and the rest keep their order", () => {
+    const files = Array.from({ length: 1_000 }, (_, n) => ({ guid: `a${n}`, name: "f".repeat(200), mime: null }));
+    const heavy = (n: number): TodayCardedThread => ({ ...thread, ref: `c${n}`, messages: [{ ...thread.messages[0]!, attachments: files }] });
+    const threads = [heavy(1), heavy(2), heavy(3), heavy(4)];
+    const { system, prompt, kept } = renderTodayPrompt({ threads, profile: "", now: 0, dropOrder: [threads[2]!, threads[0]!, threads[1]!, threads[3]!] });
+    expect(system.length + prompt.length).toBeLessThanOrEqual(REDUCE_PROMPT_CHARS);
+    expect(kept.map((t) => t.ref)).toEqual(["c2", "c4"]);
+    expect(renderTodayPrompt({ threads: [heavy(1)], profile: "", now: 0, dropOrder: threads }).kept, "under the cap, nothing leaves").toHaveLength(1);
+  });
 
   test("renders refs, state, CRM and events, never a Convex id", () => {
     const { system, prompt } = renderTodayPrompt({ threads: [thread], profile: "Milad runs AUF.", now: 2 * 86_400_000 });

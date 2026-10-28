@@ -67,6 +67,8 @@ export const TODAY_SCHEMA: Anthropic.Messages.JSONOutputFormat["schema"] = {
 const NOTE_CHARS = 400;
 const ATTACHMENT_CHARS = 120;
 const REDUCE_MESSAGE_CHARS = 300;
+/** The reduce prompt's hard cap, system included. Notes, events and attachment lists are otherwise unbounded. */
+export const REDUCE_PROMPT_CHARS = 400_000;
 /** Raw messages per thread in the reduce: a few beside a card, more when the card failed. */
 const REDUCE_TAIL = { carded: 3, uncarded: 5 } as const;
 
@@ -132,7 +134,13 @@ function reduceBlock(thread: TodayCardedThread, now: number): string {
   return [...threadHead(thread, now), cardLine(thread.card), messageLines(tail, REDUCE_MESSAGE_CHARS), "</thread>"].join("\n");
 }
 
-export function renderTodayPrompt(input: { threads: TodayCardedThread[]; profile: string; now: number; lifeContext?: string }): { system: string; prompt: string } {
+/**
+ * The reduce prompt. Over REDUCE_PROMPT_CHARS, threads leave in `dropOrder` until it fits; `kept` is what the model
+ * reads, in the original order.
+ */
+export function renderTodayPrompt(input: {
+  threads: TodayCardedThread[]; profile: string; now: number; lifeContext?: string; dropOrder?: readonly TodayCardedThread[];
+}): { system: string; prompt: string; kept: TodayCardedThread[] } {
   const at = new Date(input.now).toLocaleString("en-US", { timeZone: TODAY_TIME_ZONE, dateStyle: "full", timeStyle: "short" });
   const lifeContext = input.lifeContext?.trim();
   const system = [
@@ -152,8 +160,17 @@ export function renderTodayPrompt(input: { threads: TodayCardedThread[]; profile
     ...(input.profile ? ["About Milad:", input.profile] : []),
     ...(lifeContext ? ["What is going on in Milad's life:", lifeContext] : []),
   ].join("\n");
-  const prompt = input.threads.map((thread) => reduceBlock(thread, input.now)).join("\n\n");
-  return { system, prompt };
+  const blocks = new Map(input.threads.map((thread) => [thread, reduceBlock(thread, input.now)]));
+  const SEPARATOR = "\n\n";
+  let size = system.length + [...blocks.values()].reduce((total, block) => total + block.length + SEPARATOR.length, 0);
+  for (const thread of input.dropOrder ?? []) {
+    if (size <= REDUCE_PROMPT_CHARS) break;
+    const block = blocks.get(thread);
+    if (block === undefined) continue;
+    blocks.delete(thread);
+    size -= block.length + SEPARATOR.length;
+  }
+  return { system, prompt: [...blocks.values()].join(SEPARATOR), kept: [...blocks.keys()] };
 }
 
 export type TodayDraft = { brief: string; groups: TodayGroup[]; items: TodayItem[]; dropped: number };
