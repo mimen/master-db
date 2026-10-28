@@ -48,6 +48,8 @@ export interface StructuredOptions {
   timeoutMs: number;
   effort?: "low" | "medium" | "high";
   system?: string;
+  /** Earlier turns of the conversation; the prompt is the next user turn. */
+  history?: readonly { role: "user" | "assistant"; content: string }[];
   /** Aborts the call alongside the timeout. */
   signal?: AbortSignal;
 }
@@ -184,8 +186,10 @@ export class Gateway {
           model: options.model,
           max_tokens: options.maxTokens,
           // The gateway marks the last block with a 1h TTL on Claude routes; a
-          // top-level marker with any other TTL on that block is a 400.
-          cache_control: { type: "ephemeral", ttl: "1h" },
+          // top-level marker with any other TTL on that block is a 400. With
+          // history the gateway adds breakpoints of its own and caches the
+          // prefix itself, and a top-level marker is a 400 for a fifth one.
+          ...(options.history?.length ? {} : { cache_control: { type: "ephemeral" as const, ttl: "1h" as const } }),
           ...(options.system ? { system: options.system } : {}),
           ...(THINKING_MODELS.has(options.model)
             ? {
@@ -198,9 +202,11 @@ export class Gateway {
             : structured
               ? { output_config: { format: { type: "json_schema" as const, schema } } }
               : {}),
-          messages: [{ role: "user", content: prompt }],
+          messages: [...(options.history ?? []), { role: "user", content: prompt }],
         },
-        { signal },
+        // An explicit timeout also skips the SDK's streaming-required guard, which refuses a
+        // non-streaming call once max_tokens implies more than ten minutes (32,000 does).
+        { signal, timeout: options.timeoutMs },
       );
       if (response.stop_reason === "refusal") {
         return failure("provider", "model refused the suggestion request", null, null);

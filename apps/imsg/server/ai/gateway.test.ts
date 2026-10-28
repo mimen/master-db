@@ -108,6 +108,30 @@ describe("request shape", () => {
     expect(bodies[0]?.output_config).toMatchObject({ effort: "low" });
   });
 
+  test("a call with history sends the turns in order and leaves caching to the gateway", async () => {
+    const gateway = new Gateway(config);
+    const bodies = capture(gateway);
+    const history = [{ role: "user" as const, content: "first" }, { role: "assistant" as const, content: '{"brief":"b"}' }];
+    await gateway.completeStructured("next", { type: "object" }, { model: "claude-opus-5-5", maxTokens: 10, timeoutMs: 100, system: "rules", history });
+    expect(bodies[0]?.messages).toEqual([...history, { role: "user", content: "next" }]);
+    expect(bodies[0]).not.toHaveProperty("cache_control");
+    expect(bodies[0]?.system).toBe("rules");
+    await gateway.completeStructured("solo", { type: "object" }, { model: "claude-opus-5-5", maxTokens: 10, timeoutMs: 100, history: [] });
+    expect(bodies[1]?.cache_control, "empty history is a single turn").toEqual({ type: "ephemeral", ttl: "1h" });
+  });
+
+  test("a large max_tokens passes the SDK's streaming guard with the call's own timeout", async () => {
+    const gateway = new Gateway(config);
+    const requests: { path: string; timeout: unknown }[] = [];
+    (gateway as unknown as { client: { post: unknown } }).client.post = (path: string, options: { timeout: unknown }) => {
+      requests.push({ path, timeout: options.timeout });
+      return Promise.resolve({ stop_reason: "end_turn", content: [{ type: "text", text: '{"memo":"m"}' }], usage: { input_tokens: 1, output_tokens: 1 } });
+    };
+    const result = await gateway.completeStructured("x", { type: "object" }, { model: "claude-opus-5-5", maxTokens: 32_000, timeoutMs: 600_000 });
+    expect(result.ok).toBe(true);
+    expect(requests).toEqual([{ path: "/v1/messages", timeout: 600_000 }]);
+  });
+
   test("fast completions send no cache marker", async () => {
     const gateway = new Gateway(config);
     const bodies = capture(gateway);
