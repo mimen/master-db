@@ -1,0 +1,18 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production": {
+      "distribution": "internal",
+      "channel": "production",
+      "autoIncrement": true,
+      "ios": { "simulator": false },
+      "env": {
+        "EXPO_PUBLIC_CONVEX_URL": "https://shiny-gerbil-853.convex.cloud",
+        "EXPO_PUBLIC_IMSG_RELEASE_ENVIRONMENT": "production"
+      }
+    }
+  }
+}

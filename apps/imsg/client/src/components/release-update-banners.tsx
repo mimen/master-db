@@ -8,6 +8,7 @@ import { Radii, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { reloadWebClient } from "@/lib/deploy-reload";
 import { restartToStagedShell } from "@/lib/desktop-shell";
+import { useNativeUpdate } from "@/lib/native-update";
 import { releaseStatus } from "@/lib/release-status";
 
 export function ReleaseUpdateBanners(): JSX.Element | null {
@@ -21,9 +22,10 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
   const [failedStagedSha, setFailedStagedSha] = useState<string | null>(null);
   const webReady = webUpdateAvailable(snapshot);
   const shellReady = shellUpdateAvailable(snapshot);
+  const nativeUpdate = useNativeUpdate();
   const restartFailed = shellReady && failedStagedSha === snapshot.shell.stagedSha;
 
-  if (!webReady && !shellReady) return null;
+  if (!webReady && !shellReady && !nativeUpdate.ready) return null;
 
   const surface = {
     backgroundColor: theme.backgroundElement,
@@ -48,6 +50,20 @@ export function ReleaseUpdateBanners(): JSX.Element | null {
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
             {({ hovered, pressed }) => <Text style={[styles.actionText, { color: hovered || pressed ? theme.text : theme.accent }]}>Reload</Text>}
+          </Pressable>
+        </Banner>
+      )}
+      {nativeUpdate.ready && (
+        <Banner style={surface}>
+          <Text style={[styles.message, { color: theme.text }]}>App update ready</Text>
+          <Text style={[styles.separator, { color: theme.textSecondary }]}>—</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reload app update"
+            onPress={nativeUpdate.apply}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          >
+            <Text style={[styles.actionText, { color: theme.accent }]}>Reload</Text>
           </Pressable>
         </Banner>
       )}

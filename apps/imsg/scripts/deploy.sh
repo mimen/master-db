@@ -203,3 +203,7 @@ printf '%s\n' "$DEPLOYED_SHA" >"${LAST_DEPLOYED_SHA_FILE}.tmp.$$"
 mv "${LAST_DEPLOYED_SHA_FILE}.tmp.$$" "$LAST_DEPLOYED_SHA_FILE"
 DEPLOY_SUCCEEDED=1
 printf 'Deploy OK: %s\n' "${DEPLOYED_SHA:0:7}"
+
+# Web is live and stays live; a failed iOS publish fails the run without a rollback.
+printf '== Publishing iOS app update ==\n'
+bun apps/imsg/scripts/publish-ios-update.ts "$DEPLOYED_SHA"
