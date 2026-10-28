@@ -1,7 +1,8 @@
 import type { HandlerMap } from "./commands/types";
 import type { BlueBubbles } from "../bluebubbles";
 import type { ChatCommands } from "../commands";
-import type { ConvexClient } from "convex/browser";
+import { ConvexClient } from "convex/browser";
+import { makeFunctionReference } from "convex/server";
 import type { Config } from "../config";
 import type { OverlayDb } from "../db";
 import type { NameSource } from "../name-resolver";
@@ -20,6 +21,10 @@ import { ScheduledMirror } from "./scheduled-mirror";
 import { BridgeStatePublisher, type BridgeCapabilities } from "./state";
 import { UnreadMirror } from "./unread";
 import { SuggestionsBridge, SUGGESTION_PRECOMPUTE, type SuggestionDeps } from "./suggestions";
+import { buildToday, todayPort, type TodayBuildDeps } from "../today/build";
+import { startTodayWorker, type PendingBuild } from "../today/worker";
+
+const pendingBuild = makeFunctionReference<"query", { bridgeKey: string }, PendingBuild | null>("comma/today:pendingBuild");
 
 export function startBridge(deps: {
   config: Config;
@@ -36,6 +41,7 @@ export function startBridge(deps: {
   capabilities?: () => BridgeCapabilities;
   suggestions?: Pick<SuggestionDeps, "ai" | "getChat">;
   handlers?: Partial<HandlerMap>;
+  today?: Pick<TodayBuildDeps, "gateway" | "profile">;
 }) {
   const enabled = Boolean(deps.config.commaBridgeSecret) && deps.backgroundServices !== false;
   let typing: OutboundTyping | null = null;
@@ -50,7 +56,9 @@ export function startBridge(deps: {
   let photos: PhotoMirror | null = null;
   let groupPhotos: GroupPhotoMirror | null = null;
   let suggestions: SuggestionsBridge | null = null;
+  let today: ReturnType<typeof startTodayWorker> | null = null;
   function stopModules() {
+    today?.stop(); today = null;
     groupPhotos?.stop(); groupPhotos = null;
     typing?.stop(); typing = null;
     state?.stop(); state = null;
@@ -82,7 +90,19 @@ export function startBridge(deps: {
       overlay = new OverlayMirror(writer);
       unread = new UnreadMirror(writer, { chatDbPath: deps.chatDbPath });
       photos = new PhotoMirror(deps.db, ingest, deps.avatarDirectory);
-      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client: deps.outboxClient, now: deps.now, handlers: { ...deps.handlers, typing: typingHandler(typing, deps.now) } });
+      const { convexCloudUrl, commaBridgeSecret } = deps.config;
+      // One subscription client for the outbox and the Today worker; the outbox closes it on stop.
+      const client = deps.outboxClient ?? (convexCloudUrl ? new ConvexClient(convexCloudUrl) : undefined);
+      outbox = new OutboxBridge({ config: deps.config, writer, commands: deps.commands, client, now: deps.now, handlers: { ...deps.handlers, typing: typingHandler(typing, deps.now) } });
+      if (deps.today && client && commaBridgeSecret) {
+        const buildDeps = { ...deps.today, port: todayPort(new ConvexIngest(deps.config)), now: deps.now ?? Date.now, log: console.log };
+        today = startTodayWorker({
+          subscribe: (receive) => client.onUpdate(pendingBuild, { bridgeKey: commaBridgeSecret }, receive,
+            (error) => console.error(`comma bridge today subscription: ${String(error)}`)),
+          port: buildDeps.port,
+          build: (claim) => buildToday(buildDeps, claim),
+        });
+      }
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });
       media = worker;
       writer.onAttachments = (rows, createdAt) => worker.enqueue(rows, createdAt);

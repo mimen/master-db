@@ -92,6 +92,15 @@ describe("request shape", () => {
     expect(bodies[0]?.messages).toEqual([{ role: "user", content: "x" }]);
   });
 
+  test("Opus 5.5 gets adaptive thinking, its effort and a system prompt", async () => {
+    const gateway = new Gateway(config);
+    const bodies = capture(gateway);
+    await gateway.completeStructured("x", { type: "object" }, { model: "claude-opus-5-5", maxTokens: 10, timeoutMs: 100, effort: "medium", system: "rules" });
+    expect(bodies[0]?.thinking).toEqual({ type: "adaptive" });
+    expect(bodies[0]?.output_config).toEqual({ effort: "medium", format: { type: "json_schema", schema: { type: "object" } } });
+    expect(bodies[0]?.system).toBe("rules");
+  });
+
   test("fast completions send no cache marker", async () => {
     const gateway = new Gateway(config);
     const bodies = capture(gateway);

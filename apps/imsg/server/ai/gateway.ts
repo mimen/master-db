@@ -42,7 +42,11 @@ export interface StructuredOptions {
   maxTokens: number;
   timeoutMs: number;
   effort?: "low" | "medium" | "high";
+  system?: string;
 }
+
+/** Models that take adaptive thinking, and so an effort. */
+const THINKING_MODELS: ReadonlySet<string> = new Set(["claude-opus-5", "claude-opus-5-5"]);
 
 /** Concatenates visible text blocks; thinking blocks intentionally drop out. */
 export function extractText(body: GatewayResponse): string {
@@ -174,7 +178,8 @@ export class Gateway {
           // The gateway marks the last block with a 1h TTL on Claude routes; a
           // top-level marker with any other TTL on that block is a 400.
           cache_control: { type: "ephemeral", ttl: "1h" },
-          ...(options.model === "claude-opus-5"
+          ...(options.system ? { system: options.system } : {}),
+          ...(THINKING_MODELS.has(options.model)
             ? {
                 thinking: { type: "adaptive" as const },
                 output_config: {

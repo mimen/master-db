@@ -19,6 +19,7 @@ import { ChatCommands } from "./commands";
 import { WhisperService } from "./whisper";
 import { precompressedStatic } from "./compression";
 import { AiService } from "./ai/service";
+import { loadProfile } from "./ai/context";
 import { Gateway } from "./ai/gateway";
 import { makeVaultSearch } from "./ai/vault";
 import type { NameSource } from "./name-resolver";
@@ -155,7 +156,8 @@ const commaBridge = startBridge({ config, bb, db, names, now, commands,
     const result = await directory.summaries();
     return result.ok ? result.chats.find((chat) => chat.guid === directory.canonicalGuid(chatGuid)) ?? null : null;
   } },
-  handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), now }) });
+  handlers: createAiHandlers({ ai, refreshContacts: () => identity.refresh(), now }),
+  today: { gateway, profile: () => loadProfile(config.ai.vaultPath) } });
 
 // ------------------------------------------------------------------- routes
 
