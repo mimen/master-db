@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Comma · Today queue · mock</title>
+<style>
+:root {
+  --text:#17171A; --t2:#55555C; --t3:#64646B; --bg:#FFFFFF; --thread:#F7F7F8; --icon:#5E5E66;
+  --accent:#007AFF; --turn:#BE3A06; --turnMark:#EC5A1E; --lens:#EC5A1E; --gold:#B07800;
+  --field:rgba(0,0,0,.045); --hover:rgba(0,0,0,.04); --sel:rgba(0,0,0,.075); --el:#F4F4F5;
+  --div:rgba(0,0,0,.075); --divStrong:rgba(0,0,0,.13); --avatar:#ECECEE; --avatarText:#3C3C42;
+  --bubbleTheirs:#FFFFFF; --bubbleBorder:rgba(0,0,0,.07); --chipBg:#FFFFFF; --chipBorder:rgba(0,0,0,.13);
+  --settle:#17171A; --raised:0 1px 2px rgba(0,0,0,.05),0 4px 12px -4px rgba(0,0,0,.10);
+  --page:#E6E6E9; --note:#3A3A40; --destructive:#C4261B;
+  color-scheme: light;
+}
+.dark {
+  --text:#EDEDEF; --t2:#A6A6AD; --t3:#8F8F96; --bg:#141416; --thread:#0F0F11; --icon:#97979E;
+  --accent:#0A84FF; --turn:#FF8A57; --turnMark:#FF6A2B; --lens:#FF6A2B; --gold:#E0B03C;
+  --field:rgba(255,255,255,.06); --hover:rgba(255,255,255,.045); --sel:rgba(255,255,255,.085); --el:#1C1C1F;
+  --div:rgba(255,255,255,.07); --divStrong:rgba(255,255,255,.12); --avatar:#2A2A2E; --avatarText:#D6D6DB;
+  --bubbleTheirs:#232326; --bubbleBorder:rgba(255,255,255,.05); --chipBg:#1C1C1F; --chipBorder:rgba(255,255,255,.12);
+  --settle:#EDEDEF; --raised:0 1px 2px rgba(0,0,0,.4),0 6px 16px -6px rgba(0,0,0,.6);
+  --page:#08080A; --note:#C9C9CF; --destructive:#FF6B5E;
+  color-scheme: dark;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--page); font:13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; color:var(--text); -webkit-font-smoothing:antialiased; }
+button { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+svg { display:block; }
+.page { width:1500px; margin:0 auto; padding:28px 30px 60px; }
+.topbar { display:flex; align-items:baseline; justify-content:space-between; margin:0 0 14px; color:var(--note); }
+.topbar h1 { font-size:15px; font-weight:600; margin:0; }
+.topbar h1 span { font-weight:400; color:var(--t3); margin-left:8px; }
+.toggle { border:1px solid var(--chipBorder); background:var(--chipBg); border-radius:8px; padding:4px 10px; font-size:12px; color:var(--text); }
+
+/* window */
+.win { width:1440px; height:900px; display:flex; background:var(--bg); border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px var(--div), 0 30px 80px -30px rgba(0,0,0,.45); }
+.side { width:351px; flex:none; display:flex; flex-direction:column; border-right:1px solid var(--div); background:var(--bg); }
+.brand { height:47px; display:flex; align-items:center; justify-content:center; gap:22px; padding-right:40px; }
+.brand .name { display:flex; align-items:center; gap:7px; font-weight:700; font-size:16px; letter-spacing:-.01em; }
+.logo { width:18px; height:18px; border-radius:5px; background:var(--text); color:var(--bg); display:grid; place-items:center; font:800 13px/1 Georgia, serif; padding-bottom:3px; }
+.searchrow { display:flex; align-items:center; gap:14px; padding:3px 12px 0; }
+.search { flex:1; height:30px; border-radius:8px; background:var(--field); display:flex; align-items:center; gap:7px; padding:0 9px; color:var(--t2); font-size:13px; }
+.search kbd { margin-left:auto; font:11px -apple-system, system-ui; color:var(--t3); }
+.tabs { display:flex; gap:12px; padding:14px 14px 0; border-bottom:1px solid var(--div); white-space:nowrap; overflow:hidden; }
+.tab { font-weight:600; font-size:14px; color:var(--t2); padding-bottom:12px; position:relative; display:flex; align-items:baseline; gap:5px; }
+.tab small { font-size:11.5px; font-weight:600; color:var(--t3); font-variant-numeric:tabular-nums; }
+.tab.on { color:var(--text); }
+.tab.on small { color:var(--turn); }
+.tab.on::after { content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--lens); border-radius:1px; }
+.list { flex:1; overflow-y:auto; padding:0 8px 12px; scrollbar-width:thin; }
+.footer { height:46px; display:flex; align-items:center; gap:16px; padding:0 16px; color:var(--icon); font-size:12px; }
+.footer .spacer { flex:1; }
+
+/* today header */
+.plan { margin:10px 2px 6px; padding:12px 12px 11px; background:var(--el); border-radius:12px; }
+.plan-top { display:flex; align-items:center; justify-content:space-between; }
+.plan-title { font-weight:600; font-size:13px; }
+.regenerate { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--text); border:1px solid var(--chipBorder); background:var(--chipBg); border-radius:7px; padding:3px 8px 3px 7px; }
+.regenerate:hover { background:var(--hover); }
+.regenerate[disabled] { color:var(--t3); cursor:default; }
+.plan-meta { margin-top:2px; font-size:11.5px; color:var(--t3); font-variant-numeric:tabular-nums; }
+.brief { margin:9px 0 0; font-size:12.5px; line-height:17px; color:var(--t2); }
+.progress { margin-top:10px; display:flex; align-items:center; gap:9px; }
+.bar { flex:1; height:4px; border-radius:2px; background:var(--divStrong); overflow:hidden; position:relative; }
+.bar i { position:absolute; inset:0 auto 0 0; background:var(--settle); border-radius:2px; transition:width .25s ease; }
+.bar.indet i { width:30% !important; animation:slide 1.1s ease-in-out infinite; }
+@keyframes slide { from { left:-30%; } to { left:100%; } }
+.progress span { font-size:11.5px; color:var(--t3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.spin { animation:rot .9s linear infinite; }
+@keyframes rot { to { transform:rotate(360deg); } }
+.building .brief { opacity:.45; }
+
+/* groups */
+.group { padding:14px 10px 5px 10px; }
+.g-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.g-title { font-size:12px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; }
+.g-title .new { width:7px; height:7px; border-radius:50%; background:var(--accent); }
+.g-count { font-size:11.5px; color:var(--t3); font-variant-numeric:tabular-nums; min-width:3ch; text-align:right; }
+.g-ctx { margin-top:2px; font-size:11.5px; line-height:15px; color:var(--t3); }
+.fold { display:flex; align-items:center; justify-content:space-between; padding:9px 10px; margin-top:4px; border-radius:10px; color:var(--t2); font-size:12px; font-weight:600; cursor:pointer; }
+.fold:hover { background:var(--hover); }
+.fold .g-ctx { font-weight:400; }
+.fold .chev { color:var(--t3); display:flex; align-items:center; gap:4px; font-weight:400; font-size:11.5px; }
+
+/* rows */
+.row { position:relative; display:flex; gap:8px; padding:9px 10px 10px 4px; border-radius:10px; margin-bottom:4px; cursor:default; transition:opacity .18s, max-height .22s ease, margin .22s, padding .22s; max-height:120px; overflow:hidden; }
+.row:hover { background:var(--hover); }
+.row.sel { background:var(--sel); }
+.row.gone { opacity:0; max-height:0; padding-top:0; padding-bottom:0; margin:0; }
+.rank { width:16px; flex:none; text-align:right; font-size:11px; color:var(--t3); font-variant-numeric:tabular-nums; padding-top:2px; }
+.av { width:32px; height:32px; flex:none; border-radius:50%; background:var(--avatar); color:var(--avatarText); display:grid; place-items:center; font-size:11.5px; font-weight:600; margin-top:1px; margin-right:4px; }
+.av.grp { background:none; position:relative; }
+.av.grp b { position:absolute; width:19px; height:19px; border-radius:50%; background:var(--avatar); display:grid; place-items:center; font-size:7.5px; border:1.5px solid var(--bg); }
+.av.grp b:first-child { left:-1px; top:0; } .av.grp b:last-child { right:-1px; bottom:0; }
+.body { flex:1; min-width:0; }
+.l1 { display:flex; align-items:baseline; gap:5px; }
+.name { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.star { color:var(--gold); font-size:11px; }
+.age { margin-left:auto; font-size:12px; font-weight:600; color:var(--turn); font-variant-numeric:tabular-nums; padding-left:6px; }
+.waiting .age { color:var(--t3); font-weight:400; }
+.l2 { display:flex; align-items:center; gap:8px; margin-top:1px; }
+.pv { flex:1; min-width:0; color:var(--t2); font-size:12.5px; line-height:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex:none; margin-right:2px; }
+.why { display:flex; align-items:flex-start; gap:5px; margin-top:3px; font-size:11.5px; line-height:15px; color:var(--t3); }
+.why svg { flex:none; margin-top:2px; }
+.settle { position:absolute; right:8px; top:8px; display:none; align-items:center; gap:4px; height:22px; padding:0 7px; border-radius:6px; background:var(--settle); color:var(--bg); font-size:11px; font-weight:600; }
+.row:hover .settle { display:flex; }
+.row:hover .age { visibility:hidden; }
+
+/* thread */
+.main { flex:1; display:flex; flex-direction:column; background:var(--thread); min-width:0; }
+.th-head { height:47px; flex:none; display:flex; align-items:center; padding:0 22px; border-bottom:1px solid var(--div); background:var(--thread); gap:12px; }
+.crumb { font-size:15px; color:var(--t2); }
+.crumb b { color:var(--text); font-weight:600; }
+.crumb .sep { margin:0 7px; color:var(--t3); }
+.nav { margin-left:auto; display:flex; align-items:center; gap:14px; color:var(--icon); font-size:13px; font-variant-numeric:tabular-nums; }
+.nav .vr { width:1px; height:18px; background:var(--div); }
+.th-body { flex:1; display:flex; flex-direction:column; justify-content:flex-end; padding:0 0 10px; }
+.msgs { width:776px; margin:0 auto; display:flex; flex-direction:column; }
+.stamp { align-self:center; font-size:11.5px; color:var(--t2); margin:0 0 14px; }
+.stamp b { font-weight:600; }
+.bubble { max-width:62%; padding:7px 13px; border-radius:18px; font-size:14px; line-height:19px; margin-bottom:6px; }
+.mine { align-self:flex-end; background:var(--accent); color:#fff; }
+.theirs { align-self:flex-start; background:var(--bubbleTheirs); box-shadow:0 0 0 1px var(--bubbleBorder); color:var(--text); }
+.receipt { align-self:flex-end; font-size:11px; color:var(--t2); margin:-2px 4px 18px 0; }
+.since { border-left:2px solid var(--turnMark); padding:2px 0 0 15px; margin-left:-17px; display:flex; flex-direction:column; margin-bottom:24px; }
+.since-head { font-size:11.5px; color:var(--t2); margin-bottom:10px; }
+.since-head b { color:var(--turn); font-weight:600; margin-right:8px; }
+.composer { width:760px; margin:0 auto; }
+.strip { margin:0 14px; display:flex; align-items:center; gap:10px; padding:8px 14px 9px; background:var(--bg); border:1px solid var(--div); border-bottom:0; border-radius:10px 10px 0 0; font-size:12.5px; }
+.strip .turn { color:var(--turn); font-weight:600; display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.strip .today { display:flex; align-items:center; gap:6px; color:var(--t2); min-width:0; }
+.strip .today .pill { flex:none; font-size:11px; font-weight:600; color:var(--text); background:var(--el); border:1px solid var(--div); border-radius:6px; padding:1px 6px; font-variant-numeric:tabular-nums; }
+.strip .today span:last-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.strip .act { margin-left:auto; display:flex; align-items:center; gap:6px; font-weight:600; white-space:nowrap; }
+.strip kbd { font:10.5px -apple-system, system-ui; color:var(--t3); }
+.box { background:var(--bg); border:1px solid var(--div); border-radius:16px; padding:14px 16px 10px; box-shadow:var(--raised); }
+.box .ph { color:var(--t3); font-size:14px; height:34px; }
+.box-row { display:flex; align-items:center; gap:14px; color:var(--t2); font-size:12.5px; }
+.box-row .svc { display:flex; align-items:center; gap:6px; color:var(--text); }
+.box-row .svc i { width:7px; height:7px; border-radius:50%; background:var(--accent); }
+.box-row .vr { width:1px; height:16px; background:var(--div); }
+.mic { margin-left:auto; width:32px; height:32px; border-radius:50%; background:var(--el); display:grid; place-items:center; color:var(--icon); }
+.sugg { display:flex; gap:18px; padding:9px 6px 0; font-size:12.5px; color:var(--t2); }
+.sugg b { color:var(--text); font-weight:600; margin-right:4px; }
+
+/* states + notes */
+.section-title { margin:40px 0 12px; font-size:13px; font-weight:600; color:var(--note); }
+.states { display:grid; grid-template-columns:repeat(4, 1fr); gap:18px; }
+.state { background:var(--bg); border-radius:12px; padding:2px 8px 12px; box-shadow:0 0 0 1px var(--div), 0 14px 40px -24px rgba(0,0,0,.4); }
+.state-label { font-size:11.5px; color:var(--t3); padding:10px 4px 0; }
+.state-note { font-size:12px; color:var(--t2); padding:8px 4px 0; line-height:16px; }
+.btn-solid { font-size:12px; font-weight:600; background:var(--settle); color:var(--bg); border-radius:7px; padding:4px 10px; }
+.notes { display:grid; grid-template-columns:1fr 1fr; gap:40px; color:var(--note); font-size:13px; line-height:19px; }
+.notes h3 { font-size:13px; margin:0 0 8px; }
+.notes ol, .notes ul { margin:0; padding-left:18px; }
+.notes li { margin-bottom:8px; }
+.notes code { font:12px ui-monospace, Menlo, monospace; background:var(--el); padding:1px 4px; border-radius:4px; }
+.notes .rec { color:var(--t3); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <h1>Comma · Today queue<span>mock · desktop, wide layout · hover a row to settle it, press Regenerate</span></h1>
+    <button class="toggle" id="theme">Dark</button>
+  </div>
+
+  <div class="win">
+    <aside class="side">
+      <div class="brand">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--icon)" stroke-width="1.4"><rect x="2" y="3" width="14" height="12" rx="3"/><path d="M7 3v12"/></svg>
+        <div class="name"><div class="logo">,</div>Comma</div>
+      </div>
+      <div class="searchrow">
+        <div class="search">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="6" r="4.5"/><path d="m9.5 9.5 3 3"/></svg>
+          Search<kbd>⌘K</kbd>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--icon)" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--icon)" stroke-width="1.4" stroke-linecap="round"><path d="M8 2.5H4A1.5 1.5 0 0 0 2.5 4v8A1.5 1.5 0 0 0 4 13.5h8a1.5 1.5 0 0 0 1.5-1.5V8"/><path d="m7 9 .4-2 5-5 1.6 1.6-5 5z"/></svg>
+      </div>
+      <nav class="tabs">
+        <div class="tab on">Today <small id="tabCount"></small></div>
+        <div class="tab">Needs you <small>41</small></div>
+        <div class="tab">Unread <small>13</small></div>
+        <div class="tab">Waiting</div>
+        <div class="tab">All</div>
+      </nav>
+      <div class="list" id="list"></div>
+      <div class="footer">
+        <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="6.5" r="3"/><path d="M1.8 15c.6-2.6 2.7-4.2 5.2-4.2s4.6 1.6 5.2 4.2M12.5 3.8a2.7 2.7 0 0 1 0 5.4M14 11.2c1.3.6 2.1 2 2.4 3.8"/></svg>
+        <span style="display:flex;align-items:center;gap:5px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.5V8l2.3 1.5"/></svg>1</span>
+        <span class="spacer"></span>
+        <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="9" cy="9" r="2.4"/><path d="M9 1.8v2M9 14.2v2M1.8 9h2M14.2 9h2M3.9 3.9l1.4 1.4M12.7 12.7l1.4 1.4M3.9 14.1l1.4-1.4M12.7 5.3l1.4-1.4"/></svg>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="th-head">
+        <div class="crumb">Today<span class="sep">/</span><b>Alex Rivera</b></div>
+        <div class="nav">
+          <span id="pos">1 of 31</span>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--t3)" stroke-width="1.5"><path d="m3 9 4-4 4 4"/></svg>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3 5 4 4 4-4"/></svg>
+          <span class="vr"></span>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="4" width="11" height="10" rx="2"/><path d="m12.5 8 4-2.5v7l-4-2.5"/></svg>
+          <svg width="16" height="16" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="4.5"/><path d="m9.5 9.5 3 3"/></svg>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M9 2.5a6.5 6.5 0 1 1-5.6 9.8L2.5 15.5l3.2-.9A6.5 6.5 0 0 1 9 2.5Z"/><text x="5.6" y="11.3" font-size="5.6" font-weight="700" fill="currentColor" stroke="none" font-family="-apple-system,system-ui">AI</text></svg>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="14" height="12" rx="3"/><path d="M11 3v12"/></svg>
+        </div>
+      </div>
+      <div class="th-body">
+        <div class="msgs">
+          <div class="stamp"><b>Sun, Oct 25</b> at 4:10 PM</div>
+          <div class="bubble mine">I'll get set times from Marco by Monday</div>
+          <div class="receipt">Read Sunday</div>
+          <div class="since">
+            <div class="since-head"><b>2 since your reply</b>Mon, Oct 26 at 6:15 PM</div>
+            <div class="bubble theirs">Any word from Marco?</div>
+            <div class="bubble theirs">No rush if he's slammed, I just need set times before Wednesday's advance call</div>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="strip">
+            <span class="turn"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="5.6"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>Your turn for 17h</span>
+            <span class="today"><span class="pill">#1 today</span><span>Marco's times unblock the run of show and the load-in sheet.</span></span>
+            <span class="act"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m2.5 7.5 3 3 6-7"/></svg>Settle <kbd>⌘E</kbd></span>
+          </div>
+          <div class="box">
+            <div class="ph">iMessage</div>
+            <div class="box-row">
+              <svg width="15" height="15" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 2v10M2 7h10"/></svg>
+              <span class="svc"><i></i>iMessage
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m2 4 3 3 3-3"/></svg></span>
+              <span class="vr"></span>
+              <span style="display:flex;align-items:center;gap:6px;color:var(--t3)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.5V8l2.3 1.5"/></svg>Send later</span>
+              <span class="mic"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4.5" y="1.5" width="5" height="7.5" rx="2.5"/><path d="M2.5 7a4.5 4.5 0 0 0 9 0M7 11.5V13"/></svg></span>
+            </div>
+          </div>
+          <div class="sugg"><span><b>⌥1</b>checking with Marco now, you'll have them tonight</span><span><b>⌥2</b>👍 thumbs up</span></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="section-title">Header states</div>
+  <div class="states" id="states"></div>
+
+  <div class="section-title">How it would work</div>
+  <div class="notes">
+    <div>
+      <h3>The build</h3>
+      <ul>
+        <li><b>When.</b> Once a day at 7:00 AM on the Mini, plus on demand from Regenerate (button, or "Regenerate today" in ⌘K).</li>
+        <li><b>Input.</b> Every Needs you conversation, plus Waiting ones whose last message is under 7 days old. Roughly the last 30 messages of each, with the contact's CRM priority, tags and notes. About 80 threads and 100k tokens on a normal day.</li>
+        <li><b>Model.</b> One Opus 5.5 call through the CLIProxyAPI gateway the server already uses for titles. It returns a short brief, up to 6 groups (title plus one line of context), and up to 50 ranked conversations, each with a one-line reason.</li>
+        <li><b>Storage.</b> One row per day in a new Convex table, <code>comma_today_queue</code>: <code>builtAt</code>, <code>brief</code>, <code>groups[]</code>, <code>items[{conversationId, rank, group, reason}]</code>, <code>candidateCount</code>.</li>
+        <li><b>Live.</b> The client joins that row to the live chat summaries. Settling, replying and reading update the lens the way they do today; only the order and the groups come from the build.</li>
+        <li><b>New since.</b> A conversation that turns Needs you after <code>builtAt</code> and is not in the queue goes to the top group, newest first. Regenerate folds it into the ranked groups.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Calls this mock makes, each one a recommendation</h3>
+      <ol>
+        <li><b>Where it lives.</b> A new first tab, Today, that the app opens to. <span class="rec">The other option is a "Prioritize" sort inside Needs you, which keeps the tab row at six but hides the groups.</span></li>
+        <li><b>A ranked thread gets a new message.</b> It stays in its slot and shows the unread dot. <span class="rec">Moving it to New would reshuffle the plan every time someone double-texts.</span></li>
+        <li><b>A reply leaves the queue.</b> Sending a message to a Today thread settles it from Today, and a Waiting thread drops out when they answer. Rank numbers keep their gaps, so you can see what's done.</li>
+        <li><b>Below the line.</b> The Needs you threads left out stay one tap away in a folded group at the bottom, never hidden.</li>
+        <li><b>Regenerate.</b> Rebuilds the whole queue from what's open now. The day's settled count carries over, so progress never resets.</li>
+        <li><b>Out of scope here:</b> the phone layout (same list, the header becomes the first row) and per-group bulk settle.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+const SPARK = '<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M5 0c.3 2.6 1.4 3.7 5 5-3.6 1.3-4.7 2.4-5 5-.3-2.6-1.4-3.7-5-5 3.6-1.3 4.7-2.4 5-5Z"/></svg>';
+const CHECK = '<svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="m2.5 7.5 3 3 6-7"/></svg>';
+const REGENERATE = '<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 7a5 5 0 1 1-1.5-3.6"/><path d="M12 2v3H9"/></svg>';
+const CHEV = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="m3.5 2 3 3-3 3"/></svg>';
+
+const r = (rank, name, preview, why, age, o = {}) => ({ rank, name, preview, why, age, ...o });
+const groups = [
+  { id: "new", fresh: true, title: "New since 7:00 AM", ctx: "Arrived after the queue was built. Newest first, not ranked.", items: [
+    r(null, "Jordan Lee", "are you around saturday? thinking dinner", null, "12m", { unread: true, into: "tonight" }),
+    r(null, "Mom", "Call me when you get a sec, nothing urgent ❤️", null, "41m", { unread: true, into: "people" }),
+    r(null, "Sam Ortiz", "does the artist pass still work for the 2nd show", null, "2h", { into: "friday" }),
+  ]},
+  { id: "friday", title: "Friday at the Observatory", ctx: "Set times and the guest list both close tonight. Start with Alex; two other threads wait on his answer.", items: [
+    r(1, "Alex Rivera", "No rush if he's slammed, I just need set times before Wednesday's advance call", "Marco's times unblock the run of show and the load-in sheet.", "17h", { star: true, sel: true }),
+    r(2, "Launch Crew", "Maya: I added the revised run of show", "Run of show v3 needs your sign-off before it goes to the venue.", "16h", { unread: true, grp: ["MP", "JL"], star: true }),
+    r(3, "Priya Shah", "Any chance I can get +2 on the list?", "Guest list locks at 6 PM.", "1d", { unread: true }),
+    r(5, "Diego Santos", "You: Sending the load-in sheet tonight", "You promised this Sunday and never sent it.", "2d", { waiting: true }),
+  ]},
+  { id: "money", title: "Money", ctx: "One deposit is owed and one invoice is due tomorrow.", items: [
+    r(6, "Nina Park", "Any update on the deposit? Just checking 🙏", "Second time she has asked since Friday.", "1d", { unread: true }),
+    r(7, "Marcus Reed", "Sent over the invoice, lmk if anything looks off", "Due tomorrow. Approve it or flag it.", "2d"),
+    r(8, "Riley Chen", "You: Can you Venmo me for the tickets when you get a chance", "No reply in 5 days. Worth one nudge.", "5d", { waiting: true }),
+  ]},
+  { id: "people", title: "People you care about", ctx: "Personal threads that have sat longer than you would want.", items: [
+    r(9, "Dad", "Did you see the photos from the lake?", "Three days with no reply.", "3d"),
+    r(11, "Leah Kim", "happy birthday!!! hope it was the best one yet", "A thank-you owed since Saturday.", "3d"),
+    r(12, "Avery Brooks", "Are we still on for coffee Thursday?", "Needs a yes or a new day before Thursday.", "1d", { unread: true }),
+    r(13, "Hannah Cole", "ok I finally listened to the mix and wow", "She sent a voice memo too. Worth a real reply.", "2d"),
+  ]},
+  { id: "quick", title: "Quick replies", ctx: "One-line answers. Clear these in a batch.", items: [
+    r(15, "Owen Foster", "Is 7 still good?", "Yes or no.", "4h", { unread: true }),
+    r(16, "Marco Diaz", "Got it, will send times tmrw", "Acknowledge it. Alex is waiting on these.", "8h"),
+    r(18, "Taylor Morgan", "😂😂 ok that is incredible", "A tapback closes it.", "6h"),
+    r(19, "Chris Ng", "Can you send me the wifi password again", "One line, and it's in your notes.", "1d"),
+    r(21, "Ellie Grant", "thanks for last night!!", "A tapback closes it.", "14h"),
+    r(22, "Ben Alvarez", "Which door do we load in from?", "Side door on 3rd. One line.", "1d"),
+    r(24, "Kai Morris", "You coming to the thing Thursday?", "Yes or no.", "1d"),
+    r(25, "Rosa Lin", "Sent you the photos 📸", "A thank-you closes it.", "2d"),
+  ]},
+  { id: "nudge", title: "Gone quiet", ctx: "Threads you started that stalled. One nudge each, or settle them.", items: [
+    r(27, "Venue · Tom", "You: Can you confirm the bar minimum for Friday?", "Friday's budget depends on this answer.", "3d", { waiting: true }),
+    r(28, "Jess Walker", "You: Did you get a chance to look at the contract?", "Four days with no reply.", "4d", { waiting: true }),
+    r(30, "Mike Tran", "You: Let me know if the 14th works", "The 14th is close. Nudge or pick another date.", "6d", { waiting: true }),
+    r(31, "Sophie Hart", "You: Sent the deck, curious what you think", "No reply in a week. Low stakes.", "6d", { waiting: true }),
+  ]},
+  { id: "tonight", title: "Tonight is fine", ctx: "Real threads with no clock on them today.", items: [
+    r(34, "Noah Bell", "random but have you heard the new Floating Points", "Music chat, no ask.", "1d"),
+    r(37, "Grace Kim", "how's the new place??", "Catch-up, no deadline.", "3d"),
+    r(41, "Daniel Park", "Would love to grab a drink when things calm down", "Open invite. Reply when you have a date.", "4d"),
+    r(45, "Lena Fischer", "saw your story, that crowd looked insane", "No ask.", "2d"),
+    r(49, "Theo Grant", "Long shot but do you know anyone who does sound?", "A referral ask. Not urgent.", "5d"),
+  ]},
+];
+
+const state = { settled: 22, built: "7:00 AM", queued: 50, candidates: 81, building: false, below: 31 };
+const initials = (n) => n.replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || n[0];
+const ranked = () => groups.filter((g) => !g.fresh).reduce((n, g) => n + g.items.length, 0);
+const remaining = () => groups.reduce((n, g) => n + g.items.length, 0);
+
+function rowHTML(g, it, i) {
+  const av = it.grp ? `<div class="av grp"><b>${it.grp[0]}</b><b>${it.grp[1]}</b></div>` : `<div class="av">${initials(it.name)}</div>`;
+  return `<div class="row${it.sel ? " sel" : ""}${it.waiting ? " waiting" : ""}" data-g="${g.id}" data-i="${i}">
+    <div class="rank">${it.rank ?? ""}</div>${av}
+    <div class="body">
+      <div class="l1"><span class="name">${it.name}</span>${it.star ? '<span class="star">★</span>' : ""}<span class="age">${it.age}</span></div>
+      <div class="l2"><span class="pv">${it.preview}</span>${it.unread ? '<i class="dot"></i>' : ""}</div>
+      ${it.why ? `<div class="why">${SPARK}<span>${it.why}</span></div>` : ""}
+    </div>
+    <button class="settle" title="Settle (⌘E)">${CHECK}Settle</button>
+  </div>`;
+}
+
+function planHTML() {
+  const done = state.settled, total = done + remaining();
+  const meta = state.building
+    ? `Reading ${state.candidates + 3} threads with Opus 5.5…`
+    : `Built ${state.built} · Opus 5.5 · ${state.queued} of ${state.candidates} threads`;
+  return `<div class="plan${state.building ? " building" : ""}">
+    <div class="plan-top"><span class="plan-title">Tuesday, Oct 27</span>
+      <button class="regenerate" id="regenerate"${state.building ? " disabled" : ""}><span${state.building ? ' class="spin"' : ""}>${REGENERATE}</span>${state.building ? "Regenerating" : "Regenerate"}</button></div>
+    <div class="plan-meta">${meta}</div>
+    <p class="brief">Friday's show is the center of gravity: set times and the guest list both close tonight. Two people are waiting on money from you.</p>
+    <div class="progress"><div class="bar${state.building ? " indet" : ""}"><i style="width:${(done / total) * 100}%"></i></div><span>${done} settled · ${total - done} to go</span></div>
+  </div>`;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = planHTML() + groups.filter((g) => g.items.length).map((g) => `
+    <div class="group"><div class="g-top"><span class="g-title">${g.fresh ? '<i class="new"></i>' : ""}${g.title}</span><span class="g-count">${g.items.length}</span></div>
+      <div class="g-ctx">${g.ctx}</div></div>
+    ${g.items.map((it, i) => rowHTML(g, it, i)).join("")}`).join("") + `
+    <div class="fold"><div><div>Below the line</div><div class="g-ctx">Needs you threads left out today: closed loops, low stakes.</div></div><span class="chev">${state.below}${CHEV}</span></div>
+    <div class="fold"><div><div>Settled today</div></div><span class="chev">${state.settled}${CHEV}</span></div>`;
+  document.getElementById("tabCount").textContent = remaining();
+  document.getElementById("pos").textContent = `1 of ${remaining()}`;
+}
+
+document.getElementById("list").addEventListener("click", (e) => {
+  const btn = e.target.closest(".settle");
+  if (btn) {
+    const row = btn.closest(".row");
+    row.classList.add("gone");
+    setTimeout(() => {
+      groups.find((g) => g.id === row.dataset.g).items.splice(+row.dataset.i, 1);
+      state.settled++;
+      render();
+    }, 230);
+    return;
+  }
+  if (e.target.closest("#regenerate") && !state.building) {
+    state.building = true;
+    render();
+    setTimeout(() => {
+      const fresh = groups[0];
+      for (const it of fresh.items.splice(0)) {
+        const g = groups.find((x) => x.id === it.into);
+        it.why = { tonight: "Weekend plan, answer by tomorrow.", people: "Mom asked for a call. Do it before the evening rush.", friday: "Artist pass question for Friday. Quick, but it blocks his travel." }[it.into];
+        g.items.splice(it.into === "friday" ? 3 : 0, 0, it);
+      }
+      let n = 1;
+      for (const g of groups) for (const it of g.items) it.rank = n++;
+      state.building = false;
+      state.built = "11:26 AM";
+      state.queued = ranked();
+      state.candidates = state.queued + state.below;
+      render();
+    }, 2400);
+  }
+});
+
+document.getElementById("theme").addEventListener("click", (e) => {
+  const dark = document.documentElement.classList.toggle("dark");
+  e.target.textContent = dark ? "Light" : "Dark";
+});
+
+const states = [
+  ["Regenerating", `<div class="plan building"><div class="plan-top"><span class="plan-title">Tuesday, Oct 27</span><button class="regenerate" disabled><span class="spin">${REGENERATE}</span>Regenerating</button></div><div class="plan-meta">Reading 84 threads with Opus 5.5…</div><div class="progress"><div class="bar indet"><i></i></div><span>about 40s</span></div></div>`,
+   "The current queue stays usable underneath and swaps in when the new one lands. Settles made meanwhile carry over."],
+  ["Before the morning build", `<div class="plan"><div class="plan-top"><span class="plan-title">Tuesday, Oct 27</span><button class="btn-solid">Build now</button></div><div class="plan-meta">Today's queue builds at 7:00 AM</div></div>`,
+   "Until then the tab shows Needs you in its usual order, under one group called Needs you."],
+  ["Build failed", `<div class="plan"><div class="plan-top"><span class="plan-title" style="color:var(--destructive)">Couldn't build today's queue</span><button class="regenerate">${REGENERATE}Retry</button></div><div class="plan-meta">The gateway timed out at 7:00 AM</div></div>`,
+   "Falls back to Needs you order. Never shows yesterday's queue as if it were today's."],
+  ["Queue cleared", `<div class="plan"><div class="plan-top"><span class="plan-title">Queue cleared</span><button class="regenerate">${REGENERATE}Regenerate</button></div><div class="plan-meta">50 settled today · 2 new since 7:00 AM</div><div class="progress"><div class="bar"><i style="width:100%"></i></div><span>50 settled · 0 to go</span></div></div>
+   <div class="group"><div class="g-top"><span class="g-title"><i class="new"></i>New since 7:00 AM</span><span class="g-count">2</span></div></div>
+   <div class="row"><div class="rank"></div><div class="av">JL</div><div class="body"><div class="l1"><span class="name">Jordan Lee</span><span class="age">12m</span></div><div class="l2"><span class="pv">are you around saturday? thinking dinner</span><i class="dot"></i></div></div></div>`,
+   "Only the new group remains. Regenerate ranks it if it grows."],
+];
+document.getElementById("states").innerHTML = states.map(([label, html, note]) => `<div><div class="state">${`<div class="state-label">${label}</div>`}${html}</div><div class="state-note">${note}</div></div>`).join("");
+
+render();
+</script>
+</body>
+</html>
