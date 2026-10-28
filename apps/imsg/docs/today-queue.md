@@ -1,6 +1,6 @@
 # Today queue design
 
-The shape in one line: **a day-keyed build row in Convex is the only thing the build owns; every live behavior (slots, gaps, New since, Below the line, progress) is one pure classification over live summaries plus the existing triage-event log.** Regenerate and the 7:00 AM job are both just writes to that row; a worker beside the bridge picks them up. Nothing goes through the outbox.
+The shape in one line: **a day-keyed build row in Convex is the only thing the build owns; every live behavior (slots, gaps, New since, Below the line, progress) is one pure classification over live summaries plus the existing triage-event log.** Update, Regenerate from scratch and the 7:00 AM job are all just writes to that row; a worker beside the bridge picks them up. Nothing goes through the outbox.
 
 ## Problem
 
@@ -22,7 +22,7 @@ One fact found while grounding changes the design: the Overlay already keeps a *
 // Client. Mounted once under ChatDirectoryProvider in app/_layout.tsx.
 <TodayProvider>{children}</TodayProvider>
 
-const today = useToday();          // { day, view, regenerate, busy }
+const today = useToday();          // { day, dayStart, view, request }
 const plan = planToday(today.view, allChats, { held, now });   // sections, toGo, settled
 const header = todayHeader(today.view, plan);                   // discriminated header state
 const place = classifyToday(today.view, chat, now);             // one chat's place, for the strip
@@ -44,7 +44,7 @@ const plan = planToday(today.view, allChats, { held, now });   // also feeds the
 const model = deriveInboxModel(allChats, filters, searchQuery, deepMatchGuids, browseGuids, refine,
   state === "today" ? { plan, openFolds } : undefined);
 // Header slot (same place as offline banner and chips):
-{state === "today" && <TodayHeaderCard header={todayHeader(today.view, plan)} onRegenerate={today.regenerate} />}
+{state === "today" && <TodayHeaderCard header={todayHeader(today.view, plan)} dayStart={today.dayStart} onRequest={(mode) => void today.request(mode)} />}
 // Section rows: <InboxCell row={row} onToggleFold={(key) => setOpenFolds(toggle(openFolds, key))} />
 // Tab count: counts.today = plan.toGo
 ```
@@ -59,15 +59,19 @@ const todayLine = place?.at === "ranked" ? { rank: place.rank, reason: place.rea
 // stripCopy(chat, messages, now, todayLine) renders "#3 today · Guest list locks at 6 PM."
 ```
 
-### Call site 3: Regenerate (header button and ⌘K "Regenerate today")
+### Call site 3: Update and Regenerate from scratch
+
+The header's split pill puts **Update** first and **Regenerate from scratch** behind its chevron. ⌘K has "Update today" and "Regenerate today from scratch".
 
 ```ts
-// client/src/hooks/use-today.tsx
-const request = useMutation(todayApi.requestBuild);
-const regenerate = () => request({ day, dayStart });   // idempotent while a build is queued or running
+// client/src/hooks/use-today.ts
+const request = (mode: "update" | "fresh") => convex.mutation(todayApi.requestBuild, { day, dayStart, mode });
+// Idempotent while a build is queued or running. Build now and Retry are Updates too.
 ```
 
-### Call site 4: the 7:00 AM trigger
+### Call site 4: the 7:00 AM trigger, an Update
+
+`todaySchedule` requests an Update, so each morning continues the session the previous day ended on.
 
 ```ts
 // apps/imsg/server/today/trigger.ts (import.meta.main entry, run by launchd through hub/bin/run)
@@ -99,13 +103,16 @@ export const todayQueue = v.object({
   items: v.array(todayItem),               // ≤ 50
   openAtSnapshot: v.array(v.id("comma_conversations")), // every known Needs you at snapshot, before any cap
   readCount: v.number(),                   // threads the model read ("50 of 81 threads")
+  session: v.optional(v.object({ id: v.string(), startedAt: v.number(), updates: v.number() })), // see "Sessions"
 });
 const source = v.union(v.literal("schedule"), v.literal("user"));
+export const todayMode = v.union(v.literal("update"), v.literal("fresh"));
+const mode = v.optional(todayMode);       // absent on runs stored before modes, which were all fresh
 export const todayRun = v.union(
-  v.object({ status: v.literal("requested"), attempt: v.number(), source, requestedAt: v.number() }),
-  v.object({ status: v.literal("building"), attempt: v.number(), source, requestedAt: v.number(), startedAt: v.number() }),
-  v.object({ status: v.literal("done"), attempt: v.number(), source, finishedAt: v.number() }),
-  v.object({ status: v.literal("failed"), attempt: v.number(), source, failedAt: v.number(), error: v.string() }),
+  v.object({ status: v.literal("requested"), attempt: v.number(), source, mode, requestedAt: v.number() }),
+  v.object({ status: v.literal("building"), attempt: v.number(), source, mode, requestedAt: v.number(), startedAt: v.number() }),
+  v.object({ status: v.literal("done"), attempt: v.number(), source, mode, finishedAt: v.number() }),
+  v.object({ status: v.literal("failed"), attempt: v.number(), source, mode, failedAt: v.number(), error: v.string() }),
 );
 export const todayQueueFields = {
   day: v.string(),           // "2026-10-27", America/Los_Angeles
@@ -121,7 +128,7 @@ export const todayView = v.object({
 
 Load-bearing decisions in the data:
 
-- **`run` and `queue` are separate fields.** A Regenerate in flight leaves `queue` untouched, so "the current queue stays usable underneath" is structural. A failed Regenerate cannot erase a good morning queue. The day key means yesterday's queue is unreachable from today's query, so "never show yesterday's queue as today's" is also structural (per type-system-discipline).
+- **`run` and `queue` are separate fields.** A build in flight leaves `queue` untouched, so "the current queue stays usable underneath" is structural. A failed Update or Regenerate cannot erase a good morning queue. The day key means yesterday's queue is unreachable from today's query, so "never show yesterday's queue as today's" is also structural (per type-system-discipline).
 - **The queue stores what the build decided, never live status.** No per-item `done` flag, no settled counter. Done, gaps, New since and progress are derived on read from live flags and `comma_triage_events` (single source of truth per invariant; derive instead of sync).
 - **Item kind is derived, not stored.** An item is a queued Needs you iff its id is in `openAtSnapshot`; otherwise it was a queued Waiting.
 - **`snapshotAt` is the claim time, not the publish time.** A settle during the 40-second LLM call has `clearedAt > snapshotAt`, so the new queue hides it on arrival ("settles made meanwhile carry over"). A thread that turns Needs you during the call is outside `openAtSnapshot`, so it lands in New since.
@@ -197,8 +204,10 @@ export type TodayHeader =
   | { kind: "failed"; error: string; busy: TodayBusy | null }          // no queue today; Retry; list is the fallback
   | { kind: "queue"; builtAt: number; model: string; readCount: number; queued: number; brief: string;
       settled: number; toGo: number; cleared: boolean; newSince: number;
-      busy: TodayBusy | null; lastError: string | null };              // a failed Regenerate over a good queue
-export type TodayBusy = "queued" | "building";
+      busy: TodayBusy | null;
+      sessionFrom: number | null;                                      // the continued session's start, after an Update
+      lastError: string | null };                                      // "Update failed: …" or "Regenerate failed: …" over a good queue
+export type TodayBusy = { state: "queued" | "building"; mode: "update" | "fresh" };   // the label says Updating or Regenerating
 export function todayHeader(view: TodayView | null | undefined, plan: TodayPlan): TodayHeader {
   throw new Error("not implemented");
 }
@@ -251,19 +260,22 @@ Two public functions for the client, one secret-guarded subscription for the Min
 /** Authed. The day's row with the clear log since dayStart, or null before anything was requested. */
 export const get = query({ args: { day: v.string() }, returns: v.union(todayView, v.null()), handler: notImplemented });
 
-/** Authed. Requests a build. A no-op while requested or building; otherwise attempt+1. Creates the row on first use. */
-export const requestBuild = mutation({ args: { day: v.string(), dayStart: v.number() }, returns: todayRun, handler: notImplemented });
+/** Authed. Requests a build. A no-op while requested or building; otherwise attempt+1. Creates the row on first use.
+ *  No mode means fresh: a client from before Update could only ask for Regenerate. */
+export const requestBuild = mutation({ args: { day: v.string(), dayStart: v.number(), mode: v.optional(todayMode) }, returns: todayRun, handler: notImplemented });
 
 /** bridgeKey-guarded, like pendingOutbox. The newest row's run if it is `requested`, else null. */
 export const pendingBuild = query({ args: { bridgeKey: v.string() },
   returns: v.union(v.object({ day: v.string(), attempt: v.number() }), v.null()), handler: notImplemented });
 
 // Ingest routes (bridge secret). Mutations only because ingest dispatches mutations.
-/** 7:00 AM. Requests only when the day has no row yet; every call returns the current run. Poll-safe. */
+/** 7:00 AM. Requests an Update only when the day has no row yet; every call returns the current run. Poll-safe. */
 export const todaySchedule = internalMutation({ args: { day: v.string(), dayStart: v.number() }, returns: todayRun, handler: notImplemented });
-/** requested(attempt) → building. Returns startedAt (the snapshot time) or null if fenced out. Schedules expiry. */
+/** requested(attempt) → building. Returns startedAt (the snapshot time), the mode and an Update's session basis, or
+ *  null if fenced out. Schedules expiry. */
 export const todayClaim = internalMutation({ args: { day: v.string(), attempt: v.number() },
-  returns: v.union(v.object({ startedAt: v.number() }), v.null()), handler: notImplemented });
+  returns: v.union(v.object({ startedAt: v.number(), mode: todayMode,
+    basis: v.union(v.object({ sessionId: v.string(), snapshotAt: v.number() }), v.null()) }), v.null()), handler: notImplemented });
 /** One page of candidates by lastMessageAt desc, projected with withConversationState and todayCandidateState. */
 export const todayCandidates = internalMutation({ args: { cursor: v.union(v.string(), v.null()), numItems: v.number() },
   returns: v.object({ page: v.array(todayCandidate), continueCursor: v.string(), isDone: v.boolean() }), handler: notImplemented });
@@ -312,7 +324,8 @@ export function startTodayWorker(deps: {
 }): { stop(): void } { throw new Error("not implemented"); }
 
 // build.ts
-export type TodayClaim = { day: string; attempt: number; startedAt: number };
+export type TodayClaim = { day: string; attempt: number; startedAt: number; mode: "update" | "fresh";
+  basis: { sessionId: string; snapshotAt: number } | null };
 export type TodayOutcome = { ok: true; queue: TodayQueueInput } | { ok: false; error: string };
 export interface TodayBuildDeps {
   port: TodayReadPort;                      // todayCandidates + agentContext + agentPeople, over ConvexIngest.request
@@ -376,16 +389,16 @@ Everything from a correspondent goes through `neutralize()` (`server/ai/context.
 | `apps/imsg/shared/types.ts` | `StateFilter` gains `"today"`; `StateCounts` follows. |
 | `apps/imsg/shared/chat-state.ts` | `matchesFilters` `case "today": return false` with a one-line note that Today membership is a plan over the directory, not a per-chat predicate. `knownParticipants` lives here. |
 | `client/src/lib/today.ts` | `toTodayView`, `classifyToday`, `planToday`, `todayHeader`. Pure. |
-| `client/src/hooks/use-today.tsx` | `TodayProvider`: LA day clock with midnight timeout, `useQuery(todayApi.get, { day })` memoized through `toTodayView`, `regenerate` via `useMutation(todayApi.requestBuild)`. Mounted in `app/_layout.tsx` inside `ChatDirectoryProvider`. |
+| `client/src/hooks/use-today.tsx` | `TodayProvider`: LA day clock with midnight timeout, `useQuery(todayApi.get, { day })` memoized through `toTodayView`, `request(mode)` via `todayApi.requestBuild`. Mounted in `app/_layout.tsx` inside `ChatDirectoryProvider`. |
 | `client/src/lib/convex-api.ts` | `todayApi` typed `anyApi` refs for `comma/today:get` and `comma/today:requestBuild`. |
 | `client/src/lib/inbox-model.ts` | `Lens` and `LENSES` get `{ value: "today", label: "Today", count: "turn" }` first. Title registry gets "Today". `InboxRow` section gains `detail`, `tone`, `fold: "open" \| "closed" \| null`; chat rows gain `today?: { rank; reason }`. `deriveInboxModel` gains a trailing `today?: { plan; openFolds }`: with no search it flattens `plan.sections`, emitting a folded section's header without its chats, so `navigationEntries` skips them. No `queueOrder`/`groupByAge` touches ranked rows (constraint 6). |
-| `client/src/components/today-header.tsx` | Renders `TodayHeader`: date, Regenerate (or Build now / Retry; disabled with "Regenerating" while busy), meta line, brief, "N settled · M to go". |
+| `client/src/components/today-header.tsx` | Renders `TodayHeader`: date, the Update split pill with Regenerate from scratch behind its chevron (or Build now / Retry, both Updates; disabled with "Updating" or "Regenerating" while busy), meta line, brief, "N settled · M to go". |
 | `client/src/components/conversation-list-pane.tsx` | Plan, fold state, header slot, Today tab count from `plan.toGo`. No People chip on Today; it is Known by definition. |
 | `client/src/components/chat-row.tsx` | Leading rank number and a sparkle reason line when `today` is set; live avatar, unread, settle unchanged. |
 | `client/src/lib/state-strip.ts`, `components/state-strip.tsx` | An optional `today` line ("#3 today" plus reason) from `classifyToday`, shown in any lens. |
 | `client/src/components/messages-workspace.tsx` | Starts on `"today"`. The hold applies to the selected chat on Today; auto-advance on settle includes Today. |
 | `client/src/lib/desktop-coordinator/reducer.ts` | Initial state `"today"`. |
-| `client/src/lib/palette/model.ts` | Lens command "Today" (the exhaustive `Record<StateFilter,…>` forces it) and an action "Regenerate today". ⌘1 becomes Today; others shift by one (array-indexed already). |
+| `client/src/lib/palette/model.ts` | Lens command "Today" (the exhaustive `Record<StateFilter,…>` forces it) and the actions "Update today" and "Regenerate today from scratch". ⌘1 becomes Today; others shift by one (array-indexed already). |
 
 The join is by `conversationId` inside `classifyToday`; every row it emits is the live `ChatSummary`, so selection, holds and keyboard keep using `guid` (constraint 5). Agent-only Needs you conversations never enter ranked, new or below because `needsYou` is message-based (constraint 7). The fallback mode is literally the Needs you lens in `queueOrder`, agents included, under one section.
 
@@ -403,7 +416,7 @@ The join is by `conversationId` inside `classifyToday`; every row it emits is th
 - `apps/imsg/server/today/worker.test.ts`: single flight; a fenced-out claim skips; a thrown build posts failed. `trigger.test.ts`: done gives 0, failed gives 1, timeout gives 1, with an injected sleep.
 - `client/src/lib/today.test.ts`: the placement table above row by row, plus fallback, held-done keeps its slot, and progress unchanged by a newer `snapshotAt`.
 - `client/src/lib/inbox-model.test.ts`: the Today branch preserves rank order against pins and CRM priority, folded sections absent from navigation, search supersedes.
-- `apps/imsg/e2e/fixture/convex-today.test.ts` and `today.playwright.ts`: opens on Today, settle leaves a gap and bumps progress, Regenerate shows Regenerating then folds New since into groups.
+- `apps/imsg/e2e/fixture/convex-today.test.ts` and `today.playwright.ts`: opens on Today, settle leaves a gap and bumps progress, Update shows Updating then folds New since into groups and names the session, and the chevron's Regenerate from scratch shows Regenerating then "Built …".
 
 ## Cards, rotation and settle
 
@@ -477,6 +490,46 @@ The measurement ran from `/tmp` with this branch's server code against the live 
 
 **Deadlines.** The first live build took 40 s from snapshot to finish: 120 threads, an Opus reduce of roughly 35 s. Projected for v2: about 5 s of candidate reads, 45 to 48 s of cards and an estimated 40 to 90 s reduce over 58k tokens with about 50 items out. That comes to about 2 minutes uncached and about 1 to 1.5 minutes cached. The worker's 7-minute deadline, Convex's 8-minute building expiry, the trigger's 15 minutes and the hub wrapper's 1,200 s all hold in that order, so none was raised. The card budget (120 s, plus at most one 60 s call in flight) and the reduce timeout (300 s) can together exceed 7 minutes only when both are at their limits. The worker then fails the build with "The build timed out", as it did before.
 
+## Sessions, Update and compaction
+
+The Opus reduce is one long-running conversation, not a fresh call each time. **Update** continues it, so the model keeps everything it has read and the next turn carries only what changed. The 7:00 AM build is an Update, so a new day is a new day's queue built by continuing the same session. **Regenerate from scratch** starts a new session with today's full read, and later Updates and mornings continue that one. A fresh session is otherwise only a fallback.
+
+**The session record.** The Overlay table `today_session (id, payload, updated_at)` holds one JSON `TodaySession` per session (`server/today/session.ts`), and a write drops any session untouched for 7 days. A session holds:
+
+- `id`, minted by each fresh build, and `startedAt`, that build's snapshot;
+- `snapshotAt` and `day`, the latest accepted turn's snapshot and LA day; `snapshotAt` equals the Convex queue's;
+- `system`, frozen at the fresh build so the cached prefix survives, and `turns`, each user prompt and the raw model answer as JSON, refs intact;
+- `tokens`, the latest accepted call's input plus output tokens, which is the session's size;
+- `threads`, every open thread the session has read, by `conversationId`, with its ref, `lastMessageAt`, state and anchor;
+- `items`, the latest queue's conversations, plus `updates`, `compactions` and `nextRef`.
+
+The Convex queue carries `session: { id, startedAt, updates }`. `todayClaim` gives an Update its `basis`: the session id and snapshot of the newest queue on or before the day that has a session, scanning at most 14 day rows. That is today's queue after the morning build, and the previous day's for the morning build itself.
+
+**What an Update reads** (`planUpdate`, pure):
+
+- **fresh:** a known thread whose `lastMessageAt` grew or whose state changed, and an unknown thread newer than the session's snapshot. Newest first, at most 100. News past the cap is still news next time.
+- **gone:** the refs of known threads that are no longer candidates: settled, replied to, aged out, or cleared. They leave `threads` when the turn is accepted, and one that comes back later is new, with a new ref.
+- **open:** the latest queue's items still among the candidates. **room** is 50 minus open.
+- **deeper:** unknown Needs you threads that are not fresh, in the fresh build's rotation order (least recently read first, then newest). There are 3 per slot of room, at least 30 on a new day, and at most 90. The new-day floor keeps the backlog rotating every morning even when nothing was cleared.
+
+**The turn** (`renderUpdateTurn`) states the full LA date and time, since the system prompt is frozen. On a new day it asks for today's queue from everything the model knows and names the previous queue's date; otherwise it names the time of the queue it updates. It lists the gone refs, states open and room, and carries the fresh and deeper threads as the same cleaned and fenced blocks a fresh read uses. A known thread keeps its ref, and a new one gets `c<nextRef>`. It ends by asking for the complete queue of about 50 items, re-ranked against the new information and the date, with group ids and titles stable unless the news changes what matters. The model is called even when nothing changed, since time passing changes what is due. The parser accepts every current session ref plus the new ones; a gone ref in the answer drops. An item's anchor is this turn's newest message for a thread read now, and the session's stored anchor otherwise. Only the threads read this turn get a read time.
+
+**Fallbacks.** An Update continues only when the claim has a basis, the session exists, its `snapshotAt` equals the basis's, and the session plus the rendered turn (characters divided by 4) is at most 900,000 tokens. Otherwise it builds fresh and logs `today: update fell back to fresh: no basis`, `no session`, `session mismatch` or `session too large`. A queue with no session still shows Update; the worker builds fresh.
+
+**Compaction.** After `todayFinish` accepts a build and its session is saved, a session at 400,000 tokens or more (40% of Opus 5.5's 1M window, a few days of Updates) is compacted before the worker takes its next job. One gateway call on the session, at low effort with 32,000 max tokens and a 10-minute timeout, asks for a plain-text memo under a `{ memo }` schema. The memo keeps what Milad is focused on, the patterns learned this session, and one line per open thread by ref (who, what they want, any date, the current judgment), and nothing about closed threads. The turns then become the memo and the last answer, kept verbatim, under the same id and snapshot, and the save happens only if the stored session still has both. Compaction is best effort. A new pending build or a worker stop aborts it, so a pressed Update never waits, and an abort or failure leaves the session as it was and logs `today: compaction <reason>`. It runs again after the next accepted build. Assistant turns are text only and thinking is never replayed, so the memo plus the last answer raises no preserved-thinking question.
+
+**Measured on the Mini's gateway** (CLIProxyAPI at 127.0.0.1:8317, Opus 5.5):
+
+- A multi-turn structured call works with adaptive thinking, `output_config.format` json_schema and plain-string assistant turns, but only without the top-level `cache_control` marker. With it and history, the gateway answers 400, "A maximum of 4 blocks with cache_control may be provided. Found 5". `Gateway.completeStructured` sends the marker only without history.
+- The gateway caches the prefix itself. Without the marker, turn 1 wrote 21,963 tokens to cache, and a continued turn read 21,948 from cache and wrote 55.
+- The API's on-demand compaction cannot be used: a top-level `compaction` param fails with "compaction and context_management cannot be used in the same request", since the gateway injects its own `context_management`. Threshold compaction (`compact_20260112`) runs, but its summary is forced into the request's json_schema format, which garbles it. So compaction is client-side.
+- The json_schema format rejects `maxItems`.
+- A full fresh build measured 59,461 input tokens on 2026-10-27, out of 377 candidates with 200 read.
+
+The installed `@anthropic-ai/sdk` (0.120.0) refuses a non-streaming call whose `max_tokens` implies more than ten minutes (about 21,000 tokens) unless the request sets a timeout, so every structured call passes its own timeout.
+
+The build log line gains `mode=fresh|update`; an Update's reads `read fresh= deeper= gone= room=` and ends with `tokens=`.
+
 ## Synthesis decision
 
 Four candidates were sketched in parallel (Opus 5.5, GPT-6 Astra, Grok 4.6, and the orchestrator's own). All four kept the build off the outbox and ran it in a worker inside `comma:server`. This design (the Opus candidate) is the base.
@@ -495,7 +548,7 @@ Four candidates were sketched in parallel (Opus 5.5, GPT-6 Astra, Grok 4.6, and 
 - We accept that "handled since build" relies on the Overlay's triage log, which records `reply` only when an open Needs you existed. A reply to a queued Waiting thread records nothing and correctly keeps it ranked.
 - We accept that "N settled" counts every known conversation cleared today, not only queued ones, in exchange for a number that is pure derivation and survives any Regenerate.
 - We accept that the day rolls at LA midnight, so 0:00 to 7:00 shows the fallback, in exchange for never showing yesterday's plan.
-- We accept that a failed Regenerate over a good queue keeps that queue with an inline error rather than falling back. The mock's fallback rule is read as applying when today has no queue.
+- We accept that a failed build over a good queue keeps that queue with an inline error rather than falling back. The mock's fallback rule is read as applying when today has no queue.
 - We accept that the schema-unsupported retry inside `completeStructured` could, in a degenerate gateway state, make a second request, in exchange for not forking the gateway helper.
 - `matchesFilters(chat, "today")` returning `false` looks like a bug and is not. Today is not a per-chat predicate.
 
@@ -535,9 +588,9 @@ Where the build differs from the shapes above, and why.
 - `TodayHeader` carries no `dayStart`; the card takes the date from the view, else the provider's day. `failed` adds `failedAt` for "at 7:00 AM".
 - Settled today lists conversations cleared today that carry no flag now; the settled count still counts every known conversation cleared today, per the decision below.
 - `InboxRow` section `fold` is `{ key, open } | null`, because the toggle needs the section key.
-- `use-today` is `use-today.ts` with `createElement`, as `use-ai.ts` is, since oxlint flags a `.tsx` that exports a hook. Regenerate calls `useConvex().mutation`, the agent pane's pattern; the fixture's `convex/react` has no `useMutation`.
+- `use-today` is `use-today.ts` with `createElement`, as `use-ai.ts` is, since oxlint flags a `.tsx` that exports a hook. `request` calls `useConvex().mutation`, the agent pane's pattern; the fixture's `convex/react` has no `useMutation`.
 - `stripCopy` keeps its object input; `today` is an optional field and `StripCopy` carries it.
-- While building, the meta line reads "Reading threads with Opus 5.5…" and the brief dims. A failed Regenerate over a good queue adds a "Regenerate failed: …" line.
+- While an Update builds, the meta line reads "Checking what changed with Opus 5.5…"; while a Regenerate builds, "Reading threads with Opus 5.5…". The brief dims. A failed build over a good queue adds an "Update failed: …" or "Regenerate failed: …" line.
 - The settings `openOn` parser was left alone; it is still stored-only.
 - `planToday` takes `heldSection`, the section the list pane saw the held row in when the hold began. A held conversation from New since or Below the line that a reply would classify as settled or out stays in that section and never counts toward `toGo`. In fallback, `toGo` counts only open Needs you rows, not the held one.
 - The workspace takes Today's membership, hold eligibility and advance order from the list's published rendered order (`useRenderedOrder`), so the fallback holds and advances too. `matchesFilters(…, "today")` still returns false.
@@ -545,7 +598,7 @@ Where the build differs from the shapes above, and why.
 - Today, Needs you and Unread share one `ADVANCING` set in the workspace, so ⌘E on Today advances once with reply intent instead of a second preview selection.
 
 **Fixture and ops**
-- A fixture Regenerate stays `building` for 2.5 s, not 300 ms: the fixture client polls every 500 ms and would never show "Regenerating". It ranks into "Start here" and "Everything else".
+- A fixture build stays `building` for 2.5 s, not 300 ms: the fixture client polls every 500 ms and would never show "Updating" or "Regenerating". It ranks into "Start here" and "Everything else". An Update keeps the queue's session id and start and counts one more update; a Regenerate mints a session. The seeded queue is the second Update of a session from the previous day's 7:00 AM.
 - `todayMode` is a route, `POST /__fixture/today {"mode": "seeded" | "unbuilt" | "failed"}`, so a drive can switch the header mid-run.
 - The plist runs `unset PROCID PROCID_REF PROCID_OFF` and the absolute bun path, as the other templates do. The installer bootstraps the calendar job without `kickstart` (a kickstart would build at install time) and checks it with `launchctl print`.
 
@@ -574,12 +627,12 @@ Where the build differs from the shapes above, and why.
 
 ## Decisions on the runners' open questions
 
-- A failed Regenerate over a good queue keeps that queue and shows the error inline. The fallback to Needs you order applies only when today has no queue.
+- A failed Update or Regenerate over a good queue keeps that queue and shows the error inline. The fallback to Needs you order applies only when today has no queue.
 - Today is fixed to Known contacts with no People chips.
 - "N settled" counts every known conversation cleared since LA midnight.
 - "M to go" is ranked plus New since. "Queue cleared" means no ranked rows remain; the header still names New since when it has rows.
 - The Mini's system time zone is America/Los_Angeles (checked 2026-10-27), so `StartCalendarInterval` 07:00 and the LA day key agree.
-- The building header says "Regenerating", with no thread count.
+- The building header says "Updating" or "Regenerating", by the run's mode, with no thread count.
 
 ## Risks
 
