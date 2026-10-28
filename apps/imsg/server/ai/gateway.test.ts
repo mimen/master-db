@@ -76,18 +76,18 @@ describe("request shape", () => {
       messages: {
         create: async (body: Record<string, unknown>) => {
           bodies.push(body);
-          return { stop_reason: "end_turn", content: [{ type: "text", text: '{"ok":true}' }] };
+          return { stop_reason: "end_turn", content: [{ type: "text", text: '{"ok":true}' }], usage: { input_tokens: 3, cache_read_input_tokens: 4, output_tokens: 2 } };
         },
       },
     };
     return bodies;
   }
 
-  test("structured requests cache with the gateway's 1h TTL", async () => {
+  test("structured requests cache with the gateway's 1h TTL and report input tokens with cache reads", async () => {
     const gateway = new Gateway(config);
     const bodies = capture(gateway);
     const result = await gateway.completeStructured("x", {}, { model: "claude-opus-5", maxTokens: 10, timeoutMs: 100 });
-    expect(result).toEqual({ ok: true, value: { ok: true } });
+    expect(result).toEqual({ ok: true, value: { ok: true }, usage: { input: 7, output: 2 } });
     expect(bodies[0]?.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     expect(bodies[0]?.messages).toEqual([{ role: "user", content: "x" }]);
   });
@@ -99,6 +99,13 @@ describe("request shape", () => {
     expect(bodies[0]?.thinking).toEqual({ type: "adaptive" });
     expect(bodies[0]?.output_config).toEqual({ effort: "medium", format: { type: "json_schema", schema: { type: "object" } } });
     expect(bodies[0]?.system).toBe("rules");
+  });
+
+  test("Haiku 5.5 takes an effort too", async () => {
+    const gateway = new Gateway(config);
+    const bodies = capture(gateway);
+    await gateway.completeStructured("x", { type: "object" }, { model: "claude-haiku-5-5", maxTokens: 10, timeoutMs: 100, effort: "low" });
+    expect(bodies[0]?.output_config).toMatchObject({ effort: "low" });
   });
 
   test("fast completions send no cache marker", async () => {

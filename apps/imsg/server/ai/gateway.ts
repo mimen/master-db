@@ -33,8 +33,13 @@ export interface GatewayFailure {
   retryAfterMs: number | null;
 }
 
+export interface GatewayUsage {
+  input: number;
+  output: number;
+}
+
 export type GatewayResult<T> =
-  | { ok: true; value: T }
+  | { ok: true; value: T; usage?: GatewayUsage }
   | { ok: false; error: GatewayFailure };
 
 export interface StructuredOptions {
@@ -46,7 +51,7 @@ export interface StructuredOptions {
 }
 
 /** Models that take adaptive thinking, and so an effort. */
-const THINKING_MODELS: ReadonlySet<string> = new Set(["claude-opus-5", "claude-opus-5-5"]);
+const THINKING_MODELS: ReadonlySet<string> = new Set(["claude-opus-5", "claude-opus-5-5", "claude-haiku-5-5"]);
 
 /** Concatenates visible text blocks; thinking blocks intentionally drop out. */
 export function extractText(body: GatewayResponse): string {
@@ -201,7 +206,8 @@ export class Gateway {
       if (!text) return failure("invalid-output", "empty completion", null, null);
       const parsed = parseJsonBlock<T>(text);
       if (!parsed.ok) return failure("invalid-output", parsed.error, null, null);
-      return parsed;
+      const { usage } = response;
+      return { ...parsed, usage: { input: usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0), output: usage.output_tokens } };
     } catch (error) {
       const parsed = failureFrom(error);
       if (
