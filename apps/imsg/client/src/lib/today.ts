@@ -81,7 +81,7 @@ export function classifyToday(view: TodayView | null | undefined, chat: ChatSumm
     }
     if (needsYou) return wasOpen && !handled ? { at: "below" } : { at: "new" };
   }
-  return known && clearedAt !== undefined && !chat.flags.unresponded && !chat.flags.waiting ? { at: "settled", clearedAt } : { at: "out" };
+  return known && clearedAt !== undefined ? { at: "settled", clearedAt } : { at: "out" };
 }
 
 export type TodaySectionKey = "new" | `group:${string}` | "below" | "settled" | "fallback";

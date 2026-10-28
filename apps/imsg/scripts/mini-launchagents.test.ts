@@ -47,6 +47,7 @@ describe("Mini LaunchAgent installation", () => {
     const today = readFileSync(join(install, "com.milad.imsg-today.plist"), "utf8");
     expect(today).toContain(`<string>${home}/Programming/Repos/hub/bin/run</string>`);
     expect(today).toContain("<string>mini.launchd.com.milad.imsg-today</string>");
+    expect(today).toContain("<string>--timeout</string>\n    <string>1200</string>");
     expect(today).toContain(`cd ${repo}/apps/imsg &amp;&amp; exec -a comma:today ${home}/.bun/bin/bun server/today/trigger.ts`);
     expect(today).toContain("<key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer>");
     expect(today).not.toContain("KeepAlive");

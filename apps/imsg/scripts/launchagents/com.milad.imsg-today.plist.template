@@ -8,6 +8,8 @@
     <string>/bin/zsh</string>
     <string>__HOME__/Programming/Repos/hub/bin/run</string>
     <string>mini.launchd.com.milad.imsg-today</string>
+    <string>--timeout</string>
+    <string>1200</string>
     <string>--</string>
     <string>/bin/zsh</string>
     <string>-lc</string>

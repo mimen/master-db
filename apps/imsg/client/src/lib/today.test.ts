@@ -75,8 +75,9 @@ describe("classifyToday: the placement table", () => {
     expect(classifyToday(view([{ id: "a", group: "friday" }], ["a"], { a: SNAPSHOT - 1 }), chat("a", needsYou))).toMatchObject({ at: "ranked" });
   });
 
-  test("a conversation cleared today and quiet since is settled; anything else is out", () => {
+  test("a conversation cleared today and not back in Needs you is settled, so the list matches the settled count", () => {
     expect(classifyToday(view([], [], { s: DAY_START + 1 }), chat("s"))).toEqual({ at: "settled", clearedAt: DAY_START + 1 });
+    expect(classifyToday(view([], [], { s: DAY_START + 1 }), chat("s", { waiting: true }))).toEqual({ at: "settled", clearedAt: DAY_START + 1 });
     expect(classifyToday(v, chat("z"))).toEqual({ at: "out" });
   });
 
