@@ -69,6 +69,8 @@ The Mini authenticates with `~/.config/comma/expo-token` (account `mimen1994`). 
 
 A new device or an expired profile needs an interactive credentials pass with the App Store Connect key (`op://AUF/AUF App Store Connect API Key`, team `458KZD965T`): register the device with `bunx eas-cli device:create`, then run `bunx eas-cli build -p ios --profile production` with `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID` and `EXPO_ASC_ISSUER_ID` set. The note's `.p8` sits below a prose header, so write only the `BEGIN`/`END` block to the key file.
 
+A native change that adds an iOS capability (Push came with `expo-notifications`) fails the Mini's build with a provisioning error. EAS's own capability sync is rejected by Apple when it authenticates with the API key, so enable the capability on App ID `ZNKCRW8L2V` with a direct App Store Connect API `POST /v1/bundleIdCapabilities`, then run the interactive build with `EXPO_NO_CAPABILITY_SYNC=1` to regenerate the profile. If EAS offers to set up Push Notifications, answer No: creating an APNs key needs an Apple ID login and 2FA, which only Milad can complete. Once credentials exist, `--non-interactive` builds skip that question.
+
 Production deploy status is visible in the GitHub Actions summary and through:
 
 ```bash
