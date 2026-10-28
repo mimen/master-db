@@ -1,6 +1,6 @@
 # imsg — agent operating notes
 
-Universal Messages client (Expo Router; **iOS via Expo Go** + **web**) + Bun/Hono server
+Universal Messages client (Expo Router; **installed iOS app with EAS OTA** + **web**; Expo Go for development) + Bun/Hono server
 fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/vocabulary.
 
 ## Repo layout (important)
@@ -30,7 +30,8 @@ fronting the Mac Mini's BlueBubbles. Read `CONTEXT.md` for the domain model/voca
    Tailscale Serve exposes it at HTTPS port 8447. Updated by shipping a fresh `dist/`.
 2. **Native / Expo Go** (`com.milad.imsg-expo`, port 8081): the Expo dev server bundles
    from the **`client/src` source tree on the Mini**. Updated only by **`git pull` on the
-   Mini** — an rsync of `dist/` does NOT touch it.
+   Mini** — an rsync of `dist/` does NOT touch it. The installed iOS app reads neither: it runs
+   the EAS update that `deploy.sh` publishes (see DEPLOY.md, "iOS app").
 
 ⚠️ **The #1 deploy footgun:** rsyncing `dist/` updates the web app but NOT Expo Go. If a
 fix "isn't landing on the phone," the Mini's source is stale — you forgot the `git pull`.

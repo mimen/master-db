@@ -19,7 +19,8 @@ Git commit → web and shell artifacts → Mini / laptop → running client → 
 | Surface | Destination | Identity |
 | --- | --- | --- |
 | Production web/API | Mini, `127.0.0.1:8377`, exposed at `https://milads-mac-mini.taild31e9a.ts.net:8447` | `/api/deploy/status` |
-| Expo Go | Mini Metro server, `exp://milads-mac-mini.taild31e9a.ts.net:8081` | pulled source revision on the Mini |
+| iOS app | `Comma` (`com.milad.comma`), EAS internal build on channel `production` | EAS update message = source SHA; Settings shows `webSha` |
+| Expo Go (development) | Mini Metro server, `exp://milads-mac-mini.taild31e9a.ts.net:8081` | pulled source revision on the Mini |
 | Production desktop | `/Users/mimen/Applications/Comma.app` | bundle ID `com.milad.imsg.desktop`, embedded `CommaSourceSHA` |
 | Branch preview | Branch-specific Mini port and tailnet URL | preview release at `/api/deploy/status`; branch manifest at `/__comma/manifest` |
 | Branch desktop | `Comma Dev — <branch>` | branch-derived bundle ID, title, icon, URL, and SHA |
@@ -55,6 +56,18 @@ Production deploys automatically when `main` changes under `apps/imsg/**` or the
 6. `bun run deploy:install-laptop-agents` copies the stager and cleanup launchers into `~/Library/Application Support/Comma/Deployment` and installs LaunchAgents that depend on that stable path, never a worktree or stale primary checkout. The stager downloads and verifies size, checksum, ad-hoc signature, bundle ID, architecture, semver, and embedded SHA. It stages beside the canonical app without replacing the running bundle.
 7. Comma shows Reload and Restart banners when deployed identity differs from running identity.
 8. Restart uses a detached activator. It waits for Comma to exit, swaps atomically, retains `Comma.app.previous` for seven days, relaunches, and rolls back automatically if the new app does not verify.
+
+## iOS app
+
+The phone runs an installed internal build, not Expo Go. After the web release is live, `deploy.sh` runs `scripts/publish-ios-update.ts`, which compares the native fingerprint of the deployed SHA against EAS builds of profile `production`:
+
+- A finished build has the fingerprint: `eas update --channel production` publishes OTA. The app downloads it on launch and on every foreground, then shows **App update ready** with Reload.
+- A build for the fingerprint is in flight: nothing is published; the next deploy publishes.
+- No build has it (a native dependency, plugin or `app.json` change): an EAS build starts and the log prints its link. Install it on the phone from that link. Until then the installed app keeps its last compatible update.
+
+The Mini authenticates with `~/.config/comma/expo-token` (account `mimen1994`). A failed publish fails the run but leaves the web release live. Rollback is `cd client && bunx eas-cli update:republish --group <prior-group-id> --channel production`, or merging a revert.
+
+A new device or an expired profile needs an interactive credentials pass with the App Store Connect key (`op://AUF/AUF App Store Connect API Key`, team `458KZD965T`): register the device with `bunx eas-cli device:create`, then run `bunx eas-cli build -p ios --profile production` with `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID` and `EXPO_ASC_ISSUER_ID` set. The note's `.p8` sits below a prose header, so write only the `BEGIN`/`END` block to the key file.
 
 Production deploy status is visible in the GitHub Actions summary and through:
 
