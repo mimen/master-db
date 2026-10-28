@@ -77,6 +77,9 @@ export function clean(text: string, max: number): string {
   return neutralize(text).replace(/<\/?thread[^>]*>/gi, (tag) => tag.replace(/[<>]/g, "‹")).slice(0, max);
 }
 
+/** The full LA date and time, as the prompts state it. */
+export const todayAt = (at: number): string => new Date(at).toLocaleString("en-US", { timeZone: TODAY_TIME_ZONE, dateStyle: "full", timeStyle: "short" });
+
 function age(ms: number): string {
   const minutes = Math.max(0, Math.round(ms / 60_000));
   if (minutes < 60) return `${minutes}m`;
@@ -141,7 +144,7 @@ function reduceBlock(thread: TodayCardedThread, now: number): string {
 export function renderTodayPrompt(input: {
   threads: TodayCardedThread[]; profile: string; now: number; lifeContext?: string; dropOrder?: readonly TodayCardedThread[];
 }): { system: string; prompt: string; kept: TodayCardedThread[] } {
-  const at = new Date(input.now).toLocaleString("en-US", { timeZone: TODAY_TIME_ZONE, dateStyle: "full", timeStyle: "short" });
+  const at = todayAt(input.now);
   const lifeContext = input.lifeContext?.trim();
   const system = [
     "You plan Milad's messaging day so that every day makes a dent toward inbox zero. You read his open iMessage conversations and write a ranked queue for today.",
@@ -171,6 +174,36 @@ export function renderTodayPrompt(input: {
     size -= block.length + SEPARATOR.length;
   }
   return { system, prompt: [...blocks.values()].join(SEPARATOR), kept: [...blocks.keys()] };
+}
+
+const UPDATE_ASK = [
+  `Return the complete queue in the same JSON shape: about ${TODAY_LIMITS.items} items, across every open thread you know.`,
+  "Re-rank with the new information, and with the date, since what was due yesterday may be overdue.",
+  "Keep group ids and titles stable unless the news changes what matters. Keep reasons current.",
+  "Fill the room from the new threads and from threads you passed over before.",
+  "The brief describes the queue as it stands now. Keep the settle group rules.",
+].join(" ");
+
+/**
+ * The next user turn of a continued session. The system prompt is frozen at the fresh build, so the turn states the
+ * time itself. `since` is the snapshot of the queue it updates.
+ */
+export function renderUpdateTurn(input: {
+  threads: readonly TodayCardedThread[]; gone: readonly string[]; open: number; room: number; now: number; since: number; newDay: boolean;
+}): string {
+  const since = new Date(input.since);
+  const head = [
+    `It is now ${todayAt(input.now)} (${TODAY_TIME_ZONE}).`,
+    input.newDay
+      ? `This is a new day. Build today's queue from everything you know. Your last queue was for ${since.toLocaleDateString("en-US", { timeZone: TODAY_TIME_ZONE, weekday: "long", month: "long", day: "numeric" })}.`
+      : `This updates your queue from ${since.toLocaleTimeString("en-US", { timeZone: TODAY_TIME_ZONE, hour: "numeric", minute: "2-digit" })}.`,
+    ...(input.gone.length ? [`These threads are no longer open, so leave them out: ${input.gone.join(", ")}.`] : []),
+    `${input.open} of your picks are still open, so there is room for ${input.room} more.`,
+    input.threads.length
+      ? "The threads with new messages since you read them, and threads new to you, follow. A thread you already know keeps its ref, and this reading replaces the old one."
+      : "No thread has new messages since you read them.",
+  ].join("\n");
+  return [head, ...input.threads.map((thread) => reduceBlock(thread, input.now)), UPDATE_ASK].join("\n\n");
 }
 
 export type TodayDraft = { brief: string; groups: TodayGroup[]; items: TodayItem[]; dropped: number };

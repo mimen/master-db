@@ -8,13 +8,16 @@ export const TODAY_TIME_ZONE = "America/Los_Angeles";
 const DAY_MS = 86_400_000;
 
 /**
- * A build reads up to `needsYou` Needs you threads: the newest `recent` under `recentMaxAgeMs`, then the rest of the
- * backlog least recently read first, so the deep inbox rotates through. Plus the newest `waiting` Waiting threads.
+ * A fresh build reads up to `needsYou` Needs you threads: the newest `recent` under `recentMaxAgeMs`, then the rest of
+ * the backlog least recently read first, so the deep inbox rotates through. Plus the newest `waiting` Waiting threads.
+ * An Update reads up to `update.fresh` threads with news, and `update.perOpenSlot` unread Needs you per open slot,
+ * at least `update.newDay` on a new day and at most `update.deeper`.
  */
 export const TODAY_LIMITS = {
   groups: 6, items: 50, messages: 30,
   needsYou: 150, recent: 100, recentMaxAgeMs: 30 * DAY_MS,
   waiting: 50, waitingMaxAgeMs: 30 * DAY_MS,
+  update: { fresh: 100, perOpenSlot: 3, newDay: 30, deeper: 90 },
 } as const;
 
 /** The reduce's reserved group for threads that need no reply. The client gives it Settle all. */

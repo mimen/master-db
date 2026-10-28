@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import type { ChatState } from "../shared/chat-state";
+import type { TodaySession } from "./today/session";
 
 export interface SuggestionCacheRow {
   chat_guid: string;
@@ -36,6 +37,8 @@ export interface TodayCardRow {
   model: string;
   payload: string;
 }
+
+const TODAY_SESSION_TTL_MS = 7 * 86_400_000;
 
 export class OverlayDb {
   private db: Database;
@@ -120,7 +123,8 @@ export class OverlayDb {
     this.db.exec("DROP TABLE IF EXISTS suggestion_cache;");
     this.pruneSuggestionFeedback();
     // Today build state, written only by the Today worker: when a conversation was last read, for the
-    // backlog rotation, and each thread's card per message window, valid while its anchor and model match.
+    // backlog rotation, each thread's card per message window, valid while its input hash matches, and the
+    // model sessions that Updates continue.
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS today_read (
         conversation_id TEXT PRIMARY KEY,
@@ -136,6 +140,13 @@ export class OverlayDb {
         payload TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         PRIMARY KEY (conversation_id, window_size)
+      );
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS today_session (
+        id TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
       );
     `);
     this.db.exec(`
@@ -382,6 +393,26 @@ export class OverlayDb {
       ON CONFLICT(conversation_id, window_size) DO UPDATE SET
         input_hash = excluded.input_hash, model = excluded.model, payload = excluded.payload, created_at = excluded.created_at`)
       .run(row.conversation_id, row.window_size, row.input_hash, row.model, row.payload, Date.now());
+  }
+
+  getTodaySession(id: string): TodaySession | null {
+    const row = this.db.query<{ payload: string }, [string]>("SELECT payload FROM today_session WHERE id = ?").get(id);
+    if (!row) return null;
+    try {
+      return JSON.parse(row.payload) as TodaySession;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Upserts the session and drops any untouched for a week; an Update only ever continues the newest. */
+  setTodaySession(session: TodaySession): void {
+    const now = Date.now();
+    this.db.transaction(() => {
+      this.db.query(`INSERT INTO today_session (id, payload, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`).run(session.id, JSON.stringify(session), now);
+      this.db.query("DELETE FROM today_session WHERE updated_at < ?").run(now - TODAY_SESSION_TTL_MS);
+    })();
   }
 
   setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {
