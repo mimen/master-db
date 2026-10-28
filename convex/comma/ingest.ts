@@ -43,6 +43,10 @@ const ROUTES = {
   agentPeople: internal.comma.agentContext.agentPeople,
   agentAttachment: internal.comma.agentContext.agentAttachment,
   agentRecordUpload: internal.comma.drafts.recordUpload,
+  todaySchedule: internal.comma.today.todaySchedule,
+  todayClaim: internal.comma.today.todayClaim,
+  todayCandidates: internal.comma.today.todayCandidates,
+  todayFinish: internal.comma.today.todayFinish,
 } as const;
 
 export type IngestKind = keyof typeof ROUTES;

@@ -2246,6 +2246,96 @@ export declare const api: {
         } | null
       >;
     };
+    today: {
+      get: FunctionReference<
+        "query",
+        "public",
+        { day: string },
+        {
+          cleared: Array<{ at: number; conversationId: Id<"comma_conversations"> }>;
+          day: string;
+          dayStart: number;
+          queue: {
+            brief: string;
+            groups: Array<{ context: string; id: string; title: string }>;
+            items: Array<{
+              conversationId: Id<"comma_conversations">;
+              group: string;
+              rank: number;
+              reason: string;
+            }>;
+            model: string;
+            openAtSnapshot: Array<Id<"comma_conversations">>;
+            readCount: number;
+            snapshotAt: number;
+          } | null;
+          run:
+            | {
+                attempt: number;
+                requestedAt: number;
+                source: "schedule" | "user";
+                status: "requested";
+              }
+            | {
+                attempt: number;
+                requestedAt: number;
+                source: "schedule" | "user";
+                startedAt: number;
+                status: "building";
+              }
+            | {
+                attempt: number;
+                finishedAt: number;
+                source: "schedule" | "user";
+                status: "done";
+              }
+            | {
+                attempt: number;
+                error: string;
+                failedAt: number;
+                source: "schedule" | "user";
+                status: "failed";
+              };
+        } | null
+      >;
+      pendingBuild: FunctionReference<
+        "query",
+        "public",
+        { bridgeKey: string },
+        { attempt: number; day: string } | null
+      >;
+      requestBuild: FunctionReference<
+        "mutation",
+        "public",
+        { day: string; dayStart: number },
+        | {
+            attempt: number;
+            requestedAt: number;
+            source: "schedule" | "user";
+            status: "requested";
+          }
+        | {
+            attempt: number;
+            requestedAt: number;
+            source: "schedule" | "user";
+            startedAt: number;
+            status: "building";
+          }
+        | {
+            attempt: number;
+            finishedAt: number;
+            source: "schedule" | "user";
+            status: "done";
+          }
+        | {
+            attempt: number;
+            error: string;
+            failedAt: number;
+            source: "schedule" | "user";
+            status: "failed";
+          }
+      >;
+    };
     uploads: {
       finalizeUpload: FunctionReference<
         "mutation",
@@ -5449,6 +5539,97 @@ export declare const internal: {
             | { clearedAt: number; clientKey: string; kind: "clear" };
         },
         boolean
+      >;
+    };
+    today: {
+      expireRun: FunctionReference<
+        "mutation",
+        "internal",
+        { attempt: number; day: string; status: "requested" | "building" },
+        null
+      >;
+      todayCandidates: FunctionReference<
+        "mutation",
+        "internal",
+        { cursor: string | null; numItems: number },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            conversationId: Id<"comma_conversations">;
+            crm?: { is_favorite?: boolean; priority?: number; tags?: Array<string> };
+            isGroup: boolean;
+            lastMessageAt: number;
+            state: "needsYou" | "waiting";
+            title: string;
+            unreadCount: number;
+          }>;
+        }
+      >;
+      todayClaim: FunctionReference<
+        "mutation",
+        "internal",
+        { attempt: number; day: string },
+        { startedAt: number } | null
+      >;
+      todayFinish: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          attempt: number;
+          day: string;
+          outcome:
+            | {
+                ok: true;
+                queue: {
+                  brief: string;
+                  groups: Array<{ context: string; id: string; title: string }>;
+                  items: Array<{
+                    conversationId: Id<"comma_conversations">;
+                    group: string;
+                    rank: number;
+                    reason: string;
+                  }>;
+                  model: string;
+                  openAtSnapshot: Array<Id<"comma_conversations">>;
+                  readCount: number;
+                  snapshotAt: number;
+                };
+              }
+            | { error: string; ok: false };
+        },
+        boolean
+      >;
+      todaySchedule: FunctionReference<
+        "mutation",
+        "internal",
+        { day: string; dayStart: number },
+        | {
+            attempt: number;
+            requestedAt: number;
+            source: "schedule" | "user";
+            status: "requested";
+          }
+        | {
+            attempt: number;
+            requestedAt: number;
+            source: "schedule" | "user";
+            startedAt: number;
+            status: "building";
+          }
+        | {
+            attempt: number;
+            finishedAt: number;
+            source: "schedule" | "user";
+            status: "done";
+          }
+        | {
+            attempt: number;
+            error: string;
+            failedAt: number;
+            source: "schedule" | "user";
+            status: "failed";
+          }
       >;
     };
   };

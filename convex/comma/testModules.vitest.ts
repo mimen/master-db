@@ -12,4 +12,5 @@ export const commaModules: Record<string, () => Promise<unknown>> = {
   "../../comma/groupPhotos.ts": () => import("./groupPhotos"),
   "../../comma/internal.ts": () => import("./internal"),
   "../../comma/queries.ts": () => import("./queries"),
+  "../../comma/today.ts": () => import("./today"),
 };

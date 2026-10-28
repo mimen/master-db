@@ -621,3 +621,72 @@ export type AgentItemDoc = Infer<typeof agentItemDoc>;
 export type PendingAgentCommand = Infer<typeof pendingAgentCommand>;
 export type AgentPreview = Infer<typeof agentPreview>;
 export type AgentChatSummary = Infer<typeof agentChatSummary>;
+
+/** The private CRM layer: a group's own row, a DM's person. Absent when nothing is set. */
+export const conversationCrmView = v.object({
+  is_favorite: v.optional(v.boolean()),
+  priority: v.optional(v.number()),
+  tags: v.optional(v.array(v.string())),
+});
+
+/** One row per America/Los_Angeles day in comma_today_queue. See apps/imsg/docs/today-queue.md. */
+export const todayGroup = v.object({ id: v.string(), title: v.string(), context: v.string() });
+export const todayItem = v.object({
+  conversationId: v.id("comma_conversations"),
+  /** 1..n, dense in display order at build time; gaps appear only live. */
+  rank: v.number(),
+  group: v.string(),
+  reason: v.string(),
+});
+export const todayQueue = v.object({
+  /** When the candidate read began; every "since the build" rule compares to this. */
+  snapshotAt: v.number(),
+  model: v.string(),
+  brief: v.string(),
+  groups: v.array(todayGroup),
+  items: v.array(todayItem),
+  /** Every known Needs you conversation at the snapshot, before any cap. */
+  openAtSnapshot: v.array(v.id("comma_conversations")),
+  /** Threads the model read. */
+  readCount: v.number(),
+});
+const todaySource = v.union(v.literal("schedule"), v.literal("user"));
+export const todayRun = v.union(
+  v.object({ status: v.literal("requested"), attempt: v.number(), source: todaySource, requestedAt: v.number() }),
+  v.object({ status: v.literal("building"), attempt: v.number(), source: todaySource, requestedAt: v.number(), startedAt: v.number() }),
+  v.object({ status: v.literal("done"), attempt: v.number(), source: todaySource, finishedAt: v.number() }),
+  v.object({ status: v.literal("failed"), attempt: v.number(), source: todaySource, failedAt: v.number(), error: v.string() }),
+);
+export const todayQueueFields = {
+  day: v.string(),
+  /** That day's local midnight, epoch ms; the progress window. */
+  dayStart: v.number(),
+  /** The latest attempt. */
+  run: todayRun,
+  /** The latest successful build for this day. */
+  queue: v.optional(todayQueue),
+};
+export const todayView = v.object({
+  day: v.string(),
+  dayStart: v.number(),
+  run: todayRun,
+  queue: v.union(todayQueue, v.null()),
+  /** The latest clear per conversation since dayStart. */
+  cleared: v.array(v.object({ conversationId: v.id("comma_conversations"), at: v.number() })),
+});
+export const todayCandidate = v.object({
+  conversationId: v.id("comma_conversations"),
+  title: v.string(),
+  isGroup: v.boolean(),
+  state: v.union(v.literal("needsYou"), v.literal("waiting")),
+  lastMessageAt: v.number(),
+  unreadCount: v.number(),
+  crm: v.optional(conversationCrmView),
+});
+
+export type TodayGroup = Infer<typeof todayGroup>;
+export type TodayItem = Infer<typeof todayItem>;
+export type TodayQueue = Infer<typeof todayQueue>;
+export type TodayRun = Infer<typeof todayRun>;
+export type TodayView = Infer<typeof todayView>;
+export type TodayCandidate = Infer<typeof todayCandidate>;

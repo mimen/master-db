@@ -49,6 +49,10 @@ export function computeFlags(
   };
 }
 
+/** A conversation is known when any participant matched a contact. Convex computes `known` with this too. */
+export const knownParticipants = (participants: readonly { name: string | null }[]): boolean =>
+  participants.some((p) => p.name !== null);
+
 /**
  * A screened conversation is junk, or from someone no contact matches.
  * Contact failures fail open instead of making the whole inbox disappear.

@@ -19,6 +19,7 @@ import {
   scheduledFields,
   suggestionFields,
   syncStateFields,
+  todayQueueFields,
   triageEventFields,
   triageOpenFields,
 } from "./validators";
@@ -88,3 +89,5 @@ export const comma_agent_items = defineTable(agentItemFields)
   .index("by_chat_key", ["chatId", "key"])
   .index("by_key", ["key"]);
 export const comma_agent_commands = defineTable(agentCommandFields).index("by_status_createdAt", ["status", "createdAt"]);
+
+export const comma_today_queue = defineTable(todayQueueFields).index("by_day", ["day"]);

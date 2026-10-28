@@ -7,6 +7,7 @@ import { query, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
 import {
   attachmentDoc,
+  conversationCrmView,
   conversationDoc,
   draftListItem,
   draftView,
@@ -33,12 +34,7 @@ const conversationView = v.object({
   }),
   unreadCount: v.number(),
   groupPhotoUrl: v.union(v.string(), v.null()),
-  /** The private CRM layer: a group's own row, a DM's person. Absent when nothing is set. */
-  crm: v.optional(v.object({
-    is_favorite: v.optional(v.boolean()),
-    priority: v.optional(v.number()),
-    tags: v.optional(v.array(v.string())),
-  })),
+  crm: v.optional(conversationCrmView),
 });
 
 /** Reads the same CRM ChatSummary.crm carries: groups own theirs, a DM inherits its person's. */
@@ -88,7 +84,7 @@ function memo<K, V>(load: (key: K) => Promise<V>) {
 // Shares in-flight lookups within one query execution, never across reactive executions.
 // Keys are what the read depends on: a "+1… (smsfp)" sender and a "+1…" participant share
 // one identity lookup, and a person reached by phone and by email is read once.
-function listReader(ctx: QueryCtx) {
+export function listReader(ctx: QueryCtx) {
   const getPerson = memo((id: Id<"people">) => ctx.db.get(id));
   const personByNormalized = memo((normalized: string) => personForNormalized(ctx, normalized, getPerson));
   return {
@@ -99,7 +95,7 @@ function listReader(ctx: QueryCtx) {
 }
 type ListReader = ReturnType<typeof listReader>;
 
-async function withConversationState(
+export async function withConversationState(
   ctx: QueryCtx,
   conversation: CommaConversationDoc,
   read = listReader(ctx),
