@@ -88,67 +88,80 @@ const CARD_TIMEOUT_MS = 60_000;
 type CardWindow = (typeof CARD_WINDOWS)[keyof typeof CARD_WINDOWS];
 
 /**
- * The thread's card, reused from the Overlay when its newest message and the model still match. A card that
- * asked for more is read once more at the wide window. Null only when no card could be had; never throws.
+ * The cache key: the model, the window, and the thread block the card reads. The block's `ref` is a position in this
+ * build and `since` is rendered against the thread's own last message, so the key moves when a message is edited or
+ * retracted, not when the read order or the clock does.
+ */
+export function cardKey(read: TodayThread, window: CardWindow): string {
+  const block = threadBlock({ ...read, ref: "" }, read.candidate.lastMessageAt, window.chars);
+  return Bun.hash([CARD_MODEL, window.messages, window.chars, block].join("\n")).toString(36);
+}
+
+/**
+ * The thread's card, reused from the Overlay while its exact input is unchanged. A card that asked for more is read
+ * once more at the wide window. Null only when no card could be had; never throws.
  */
 export async function cardThread(deps: CardDeps, thread: TodayThread, stats: CardStats): Promise<TodayCard | null> {
   const conversationId = thread.candidate.conversationId;
-  const anchor = thread.messages.at(-1)?.guid ?? "";
-
   const budgetLeft = () => deps.budgetLeftMs?.() ?? CARD_TIMEOUT_MS;
-  const at = async (window: CardWindow, load: () => Promise<TodayThread>): Promise<TodayCard | null> => {
+  const skipped = (): boolean => {
+    const why = deps.signal?.aborted ? "the build was cancelled" : budgetLeft() <= 0 ? "the card budget is spent" : null;
+    if (why) deps.log?.(`today: card ${thread.ref} (${conversationId}) skipped, ${why}`);
+    return why !== null;
+  };
+
+  const at = async (window: CardWindow, read: TodayThread): Promise<TodayCard | null> => {
+    const key = cardKey(read, window);
     const row = deps.store.getTodayCard(conversationId, window.messages);
-    if (row && row.anchor === anchor && row.model === CARD_MODEL) {
+    if (row?.input_hash === key) {
       const cached = parseCard(safeJson(row.payload));
       if (cached) {
         stats.reused++;
         return cached;
       }
     }
-    const skipped = (): boolean => {
-      const why = deps.signal?.aborted ? "the build was cancelled" : budgetLeft() <= 0 ? "the card budget is spent" : null;
-      if (why) deps.log?.(`today: card ${thread.ref} (${conversationId}) skipped, ${why}`);
-      return why !== null;
-    };
     if (skipped()) return null;
     let card: TodayCard | null = null;
     let why = "";
+    const started = performance.now();
     try {
-      const read = await load();
-      // The wide read can take a while; the budget is checked again before the call it feeds.
-      if (skipped()) return null;
       const { system, prompt } = renderCardPrompt(read, deps.now(), window.chars);
-      const started = performance.now();
       const answer = await deps.gateway.completeStructured<unknown>(prompt, CARD_SCHEMA, {
         model: CARD_MODEL, system, maxTokens: 1_024, timeoutMs: Math.min(CARD_TIMEOUT_MS, budgetLeft()), effort: "low",
         ...(deps.signal ? { signal: deps.signal } : {}),
-      }).finally(() => stats.callMs.push(Math.round(performance.now() - started)));
+      });
       card = answer.ok ? parseCard(answer.value) : null;
       why = answer.ok ? "unusable card" : `${answer.error.kind}: ${answer.error.message}`;
     } catch (error) {
       why = String(error);
     }
+    stats.callMs.push(Math.round(performance.now() - started));
     if (!card) {
       deps.log?.(`today: card ${thread.ref} (${conversationId}) at ${window.messages} messages failed, ${why}`);
       return null;
     }
     stats.computed++;
     if (deps.signal?.aborted) return card;
-    deps.store.setTodayCard({ conversation_id: conversationId, window_size: window.messages, anchor, model: CARD_MODEL, payload: JSON.stringify(card) });
+    deps.store.setTodayCard({ conversation_id: conversationId, window_size: window.messages, input_hash: key, model: CARD_MODEL, payload: JSON.stringify(card) });
     return card;
   };
 
-  const base = await at(CARD_WINDOWS.base, async () => thread);
+  const base = await at(CARD_WINDOWS.base, thread);
   if (!base) {
     stats.failed++;
     return null;
   }
   if (!base.needsMore) return base;
   stats.escalated++;
-  const wide = await at(CARD_WINDOWS.wide, async () => {
+  // The wide read is itself the cache key, so it happens before the cache check; the budget is checked again after it.
+  if (skipped()) return base;
+  let wide: TodayCard | null = null;
+  try {
     const context = await deps.port.post("agentContext", { conversationId, limit: CARD_WINDOWS.wide.messages });
-    return { ...thread, messages: context.messages };
-  });
+    wide = await at(CARD_WINDOWS.wide, { ...thread, messages: context.messages });
+  } catch (error) {
+    deps.log?.(`today: card ${thread.ref} (${conversationId}) at ${CARD_WINDOWS.wide.messages} messages failed, ${String(error)}`);
+  }
   return wide ?? base;
 }
 

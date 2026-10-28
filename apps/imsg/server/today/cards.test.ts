@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { GatewayResult, StructuredOptions } from "../ai/gateway";
 import { OverlayDb } from "../db";
 import type { TodayRoutes } from "./build";
-import { CARD_MODEL, cardThread, emptyCardStats, parseCard, type CardDeps } from "./cards";
+import { CARD_MODEL, CARD_WINDOWS, cardKey, cardThread, emptyCardStats, parseCard, type CardDeps } from "./cards";
 import type { ConversationId, TodayThread } from "./prompt";
 
 const card = { summary: "Alex needs the arrival time.", ask: "Arrival time", due: "Friday 6 PM", stakes: "high", settle: false, needsMore: false };
@@ -30,11 +30,11 @@ describe("parseCard", () => {
   });
 });
 
-const thread = (guid = "m1"): TodayThread => ({
+const thread = (guid = "m1", text = "what time?"): TodayThread => ({
   ref: "c1",
   candidate: { conversationId: "conv1" as ConversationId, title: "Alex", isGroup: false, state: "needsYou", lastMessageAt: 0, unreadCount: 1 },
   people: [],
-  messages: [{ guid, at: 0, fromMe: false, sender: "Alex", text: "what time?", attachments: [] }],
+  messages: [{ guid, at: 0, fromMe: false, sender: "Alex", text, attachments: [] }],
 });
 
 function harness(answers: ((options: StructuredOptions, prompt: string) => GatewayResult<unknown>)[]) {
@@ -96,30 +96,37 @@ describe("cardThread", () => {
     expect(stats.failed).toBe(0);
   });
 
-  test("reuses a cached card while the newest message and the model match, and recomputes when either changes", async () => {
+  test("reuses a cached card while its exact input matches, and recomputes when a message or the model changes", async () => {
     const h = harness([ok(card)]);
     const stats = emptyCardStats();
     await cardThread(h.deps, thread("m1"), stats);
-    await cardThread(h.deps, thread("m1"), stats);
-    expect(h.calls).toHaveLength(1);
+    await cardThread({ ...h.deps, now: () => 9 * 86_400_000 }, thread("m1"), stats);
+    expect(h.calls, "the clock moving is not a new input").toHaveLength(1);
     expect(stats).toMatchObject({ computed: 1, reused: 1 });
 
-    await cardThread(h.deps, thread("m2"), stats);
-    expect(h.calls).toHaveLength(2);
+    await cardThread(h.deps, thread("m1", "what time? Actually, never mind"), stats);
+    expect(h.calls, "an edit inside the window, newest guid unchanged").toHaveLength(2);
+    await cardThread(h.deps, { ...thread("m1"), messages: [] }, stats);
+    expect(h.calls, "a retraction").toHaveLength(3);
 
-    h.store.setTodayCard({ conversation_id: "conv1", window_size: 30, anchor: "m2", model: "claude-haiku-4-5", payload: JSON.stringify(card) });
-    await cardThread(h.deps, thread("m2"), stats);
-    expect(h.calls).toHaveLength(3);
-    expect(h.store.getTodayCard("conv1", 30)?.model).toBe(CARD_MODEL);
+    await cardThread(h.deps, thread("m2", "and the parking?"), stats);
+    expect(h.calls, "a new message").toHaveLength(4);
+    await cardThread(h.deps, { ...thread("m2", "and the parking?"), ref: "c40" }, stats);
+    expect(h.calls, "the read order is not an input").toHaveLength(4);
+
+    h.store.setTodayCard({ conversation_id: "conv1", window_size: 30, input_hash: "written-by-another-model", model: "claude-haiku-4-5", payload: JSON.stringify(card) });
+    await cardThread(h.deps, thread("m2", "and the parking?"), stats);
+    expect(h.calls).toHaveLength(5);
+    expect(h.store.getTodayCard("conv1", 30)).toMatchObject({ model: CARD_MODEL, input_hash: cardKey(thread("m2", "and the parking?"), CARD_WINDOWS.base) });
   });
 
-  test("an escalated card is cached at its own window, so the next build makes no call", async () => {
+  test("an escalated card is cached at its own window, so the next build reads the window again but makes no call", async () => {
     const h = harness([ok({ ...card, needsMore: true })]);
     await cardThread(h.deps, thread(), emptyCardStats());
     const stats = emptyCardStats();
     await cardThread(h.deps, thread(), stats);
     expect(h.calls).toHaveLength(2);
-    expect(h.contexts).toEqual([150]);
+    expect(h.contexts).toEqual([150, 150]);
     expect(stats).toMatchObject({ reused: 2, computed: 0, escalated: 1 });
   });
 
@@ -139,7 +146,7 @@ describe("cardThread", () => {
     const late = { ...h.deps, budgetLeftMs: () => 0 };
     const stats = emptyCardStats();
     expect(await cardThread(late, thread("m1"), stats)).toMatchObject({ summary: card.summary });
-    expect(await cardThread(late, thread("m2"), stats)).toBeNull();
+    expect(await cardThread(late, thread("m2", "a new question"), stats)).toBeNull();
     expect(h.calls).toHaveLength(1);
     expect(stats).toMatchObject({ reused: 1, failed: 1 });
     expect(h.logs.at(-1)).toContain("skipped, the card budget is spent");

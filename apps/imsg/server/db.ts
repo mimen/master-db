@@ -31,7 +31,8 @@ export interface SuggestionFeedbackRow {
 export interface TodayCardRow {
   conversation_id: string;
   window_size: number;
-  anchor: string;
+  /** Hash of the card's exact input; see cardKey. */
+  input_hash: string;
   model: string;
   payload: string;
 }
@@ -130,7 +131,7 @@ export class OverlayDb {
       CREATE TABLE IF NOT EXISTS today_card_cache (
         conversation_id TEXT NOT NULL,
         window_size INTEGER NOT NULL,
-        anchor TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
         model TEXT NOT NULL,
         payload TEXT NOT NULL,
         created_at INTEGER NOT NULL,
@@ -370,17 +371,17 @@ export class OverlayDb {
 
   getTodayCard(conversationId: string, windowSize: number): TodayCardRow | null {
     return this.db.query<TodayCardRow, [string, number]>(
-      `SELECT conversation_id, window_size, anchor, model, payload FROM today_card_cache
+      `SELECT conversation_id, window_size, input_hash, model, payload FROM today_card_cache
        WHERE conversation_id = ? AND window_size = ?`,
     ).get(conversationId, windowSize) ?? null;
   }
 
   setTodayCard(row: TodayCardRow): void {
-    this.db.query(`INSERT INTO today_card_cache (conversation_id, window_size, anchor, model, payload, created_at)
+    this.db.query(`INSERT INTO today_card_cache (conversation_id, window_size, input_hash, model, payload, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(conversation_id, window_size) DO UPDATE SET
-        anchor = excluded.anchor, model = excluded.model, payload = excluded.payload, created_at = excluded.created_at`)
-      .run(row.conversation_id, row.window_size, row.anchor, row.model, row.payload, Date.now());
+        input_hash = excluded.input_hash, model = excluded.model, payload = excluded.payload, created_at = excluded.created_at`)
+      .run(row.conversation_id, row.window_size, row.input_hash, row.model, row.payload, Date.now());
   }
 
   setOpenTriageItem(chatGuid: string, messageGuid: string, openedAt: number): void {
