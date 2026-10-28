@@ -2252,7 +2252,10 @@ export declare const api: {
         "public",
         { day: string },
         {
-          cleared: Array<{ at: number; conversationId: Id<"comma_conversations"> }>;
+          cleared: Array<{
+            at: number;
+            conversationId: Id<"comma_conversations">;
+          }>;
           day: string;
           dayStart: number;
           queue: {
@@ -5559,7 +5562,11 @@ export declare const internal: {
           isDone: boolean;
           page: Array<{
             conversationId: Id<"comma_conversations">;
-            crm?: { is_favorite?: boolean; priority?: number; tags?: Array<string> };
+            crm?: {
+              is_favorite?: boolean;
+              priority?: number;
+              tags?: Array<string>;
+            };
             isGroup: boolean;
             lastMessageAt: number;
             state: "needsYou" | "waiting";
