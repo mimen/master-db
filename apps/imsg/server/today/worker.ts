@@ -7,7 +7,9 @@ const BUILD_TIMEOUT_MS = 7 * 60_000;
 /**
  * Builds the Today queue whenever Convex shows a requested run. One build at a time, beside the outbox
  * executor rather than inside it, so a minute-long build never holds up a send. A request seen
- * mid-build is read again once the build ends; the claim fences out anything stale.
+ * mid-build is read again once the build ends; the claim fences out anything stale. After an accepted
+ * build that grew its session past the threshold, the session is compacted before the next job; a new
+ * request or stop aborts that, so a pressed Update never waits on it.
  */
 export function startTodayWorker(deps: {
   subscribe: (receive: (pending: PendingBuild | null) => void) => () => void;
@@ -24,6 +26,20 @@ export function startTodayWorker(deps: {
   let stopped = false;
   let running: Promise<void> | null = null;
   let current: AbortController | null = null;
+  let compaction: AbortController | null = null;
+
+  async function compact(run: NonNullable<TodayBuild["compact"]>): Promise<void> {
+    const controller = new AbortController();
+    compaction = controller;
+    if (latest || stopped) controller.abort();
+    try {
+      await run(controller.signal);
+    } catch (error) {
+      log(`today: compaction failed, ${String(error)}`);
+    } finally {
+      compaction = null;
+    }
+  }
 
   async function runOne({ day, attempt }: PendingBuild): Promise<void> {
     const claim = await deps.port.post("todayClaim", { day, attempt, claimId: crypto.randomUUID() });
@@ -42,7 +58,7 @@ export function startTodayWorker(deps: {
       }, buildTimeoutMs);
     });
     try {
-      result = await Promise.race([deps.build({ day, attempt, startedAt: claim.startedAt }, controller.signal), deadline]);
+      result = await Promise.race([deps.build({ day, attempt, ...claim }, controller.signal), deadline]);
     } catch (error) {
       result = { outcome: { ok: false, error: error instanceof Error ? error.message : String(error) }, accept: () => undefined };
     } finally {
@@ -51,8 +67,10 @@ export function startTodayWorker(deps: {
     }
     const { outcome } = result;
     const accepted = await deps.port.post("todayFinish", { day, attempt, outcome });
-    if (accepted && !controller.signal.aborted) result.accept();
-    log(`today: ${day} attempt ${attempt} ${outcome.ok ? `built, ${outcome.queue.items.length} items` : `failed: ${outcome.error}`}`);
+    log(`today: ${day} attempt ${attempt} ${claim.mode} ${outcome.ok ? `built, ${outcome.queue.items.length} items` : `failed: ${outcome.error}`}`);
+    if (!accepted || controller.signal.aborted) return;
+    result.accept();
+    if (result.compact) await compact(result.compact);
   }
 
   async function drain(): Promise<void> {
@@ -66,6 +84,7 @@ export function startTodayWorker(deps: {
 
   const unsubscribe = deps.subscribe((pending) => {
     latest = pending;
+    if (pending) compaction?.abort();
     if (pending && !running && !stopped) running = drain();
   });
 
@@ -73,6 +92,7 @@ export function startTodayWorker(deps: {
     stop() {
       stopped = true;
       current?.abort(new Error("The Today worker stopped"));
+      compaction?.abort();
       unsubscribe();
     },
     idle: async () => { await running; },

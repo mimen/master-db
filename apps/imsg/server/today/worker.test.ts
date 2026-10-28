@@ -19,7 +19,7 @@ function harness(
         claimed.push(attempt);
         claimIds.push(claimId);
         const startedAt = claims[attempt] ?? null;
-        return (startedAt === null ? null : { startedAt }) as TodayRoutes[K][1];
+        return (startedAt === null ? null : { startedAt, mode: "update", basis: null }) as TodayRoutes[K][1];
       }
       const finish = body as TodayRoutes["todayFinish"][0];
       finished.push(finish);
@@ -123,6 +123,60 @@ describe("startTodayWorker", () => {
     h.emit({ day: "d", attempt: 2 });
     await h.worker.idle();
     expect(accepted).toEqual([2]);
+  });
+
+  test("after an accepted build, the session is compacted before the next job", async () => {
+    const order: string[] = [];
+    const h = harness({ 1: 10, 2: 20 }, async (claim) => ({
+      outcome: { ok: true, queue },
+      accept: () => order.push(`accept ${claim.attempt}`),
+      compact: async (signal) => { order.push(`compact ${claim.attempt} ${signal.aborted ? "aborted" : "ran"}`); },
+    }), undefined, { finish: (attempt) => attempt === 1 });
+    h.emit({ day: "d", attempt: 1 });
+    await h.worker.idle();
+    h.emit({ day: "d", attempt: 2 });
+    await h.worker.idle();
+    expect(order, "a rejected finish neither saves nor compacts").toEqual(["accept 1", "compact 1 ran"]);
+  });
+
+  test("a new request aborts a running compaction, and is built right after", async () => {
+    let compaction: AbortSignal | null = null;
+    let started: () => void = () => undefined;
+    const running = new Promise<void>((resolve) => { started = resolve; });
+    const h = harness({ 1: 10, 2: 20 }, async (claim) => ({
+      outcome: { ok: true, queue: { ...queue, snapshotAt: claim.startedAt } },
+      accept: () => undefined,
+      ...(claim.attempt === 1 ? {
+        compact: (signal: AbortSignal) => new Promise<void>((resolve) => {
+          compaction = signal;
+          started();
+          signal.addEventListener("abort", () => resolve());
+        }),
+      } : {}),
+    }));
+    h.emit({ day: "d", attempt: 1 });
+    await running;
+    expect(compaction!.aborted).toBe(false);
+    h.emit({ day: "d", attempt: 2 });
+    await h.worker.idle();
+    expect(compaction!.aborted).toBe(true);
+    expect(h.finished.map((f) => f.attempt)).toEqual([1, 2]);
+  });
+
+  test("a request already waiting when the build lands skips the compaction", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const signals: boolean[] = [];
+    const h = harness({ 1: 10, 2: 20 }, async (claim) => {
+      if (claim.attempt === 1) await gate;
+      return { outcome: { ok: true, queue }, accept: () => undefined, compact: async (signal) => { signals.push(signal.aborted); } };
+    });
+    h.emit({ day: "d", attempt: 1 });
+    await Bun.sleep(0);
+    h.emit({ day: "d", attempt: 2 });
+    release();
+    await h.worker.idle();
+    expect(signals).toEqual([true, false]);
   });
 
   test("stop unsubscribes", async () => {
