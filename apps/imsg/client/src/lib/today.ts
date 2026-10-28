@@ -1,6 +1,6 @@
 import type { FunctionReturnType } from "convex/server";
 import { matchesFilters } from "@shared/chat-state";
-import { TODAY_SETTLE_GROUP, TODAY_TIME_ZONE } from "@shared/today";
+import { TODAY_SETTLE_GROUP, TODAY_TIME_ZONE, todayWindow } from "@shared/today";
 import type { ChatSummary } from "@shared/types";
 import type { todayApi } from "./convex-api";
 import { queueOrder } from "./inbox-model";
@@ -8,6 +8,8 @@ import { queueOrder } from "./inbox-model";
 type TodayRow = NonNullable<FunctionReturnType<typeof todayApi.get>>;
 type TodayQueueRow = NonNullable<TodayRow["queue"]>;
 export type TodayRun = TodayRow["run"];
+/** update continues the model session; fresh is Regenerate from scratch. */
+export type TodayMode = NonNullable<TodayRun["mode"]>;
 export type TodayGroup = TodayQueueRow["groups"][number];
 export type TodayItem = TodayQueueRow["items"][number];
 
@@ -26,6 +28,8 @@ export interface TodayView {
     candidateCount: number;
     items: ReadonlyMap<string, TodayItem>;
     openAtSnapshot: ReadonlySet<string>;
+    /** The model session the queue came from; null on a queue built before sessions. */
+    session: TodayQueueRow["session"] | null;
   };
   cleared: ReadonlyMap<string, number>;
 }
@@ -42,6 +46,7 @@ export function toTodayView(row: FunctionReturnType<typeof todayApi.get>): Today
       candidateCount: queue.candidateCount ?? queue.openAtSnapshot.length,
       items: new Map(queue.items.map((item) => [item.conversationId as string, item])),
       openAtSnapshot: new Set(queue.openAtSnapshot),
+      session: queue.session ?? null,
     },
     cleared: new Map(row.cleared.map(({ conversationId, at }) => [conversationId as string, at])),
   };
@@ -228,7 +233,8 @@ export function planToday(
   return { mode: "queue", sections, toGo: rankedCount + fresh.length - heldFresh, newSince: fresh.length - heldFresh, settled };
 }
 
-export type TodayBusy = "queued" | "building";
+/** A build in flight, and which kind, so the header can say Updating or Regenerating. */
+export type TodayBusy = { state: "queued" | "building"; mode: TodayMode };
 
 export type TodayHeader =
   | { kind: "loading" }
@@ -237,15 +243,39 @@ export type TodayHeader =
   | {
       kind: "queue"; builtAt: number; model: string; readCount: number; candidateCount: number; queued: number; brief: string;
       settled: number; toGo: number; cleared: boolean; newSince: number; busy: TodayBusy | null;
-      /** A failed Regenerate over a good queue. */
+      /** When the session this Update continued began; null after a fresh build. */
+      sessionFrom: number | null;
+      /** A failed Update or Regenerate over a good queue, as the header shows it. */
       lastError: string | null;
     };
 
 const MODEL_LABELS: Record<string, string> = { "claude-opus-5-5": "Opus 5.5" };
 export const modelLabel = (model: string): string => MODEL_LABELS[model] ?? model;
 
+const modeOf = (run: TodayRun): TodayMode => run.mode ?? "fresh";
+
 function busyOf(run: TodayRun): TodayBusy | null {
-  return run.status === "requested" ? "queued" : run.status === "building" ? "building" : null;
+  if (run.status !== "requested" && run.status !== "building") return null;
+  return { state: run.status === "requested" ? "queued" : "building", mode: modeOf(run) };
+}
+
+const BUSY_COPY: Record<TodayMode, { label: string; meta: string }> = {
+  update: { label: "Updating", meta: "Checking what changed with Opus 5.5…" },
+  fresh: { label: "Regenerating", meta: "Reading threads with Opus 5.5…" },
+};
+
+/** The header's button label and meta line while a build runs. */
+export const busyCopy = (busy: TodayBusy): { label: string; meta: string } => BUSY_COPY[busy.mode];
+
+const shortDate = (at: number): string => new Date(at).toLocaleDateString("en-US", { timeZone: TODAY_TIME_ZONE, month: "short", day: "numeric" });
+
+/** The idle meta line: when the queue was built or updated, the session an Update continued, and what was read. */
+export function builtLine(header: Extract<TodayHeader, { kind: "queue" }>): string {
+  const built = todayTime(header.builtAt);
+  const { sessionFrom } = header;
+  const when = sessionFrom === null ? `Built ${built}`
+    : `Updated ${built} · session from ${todayWindow(sessionFrom).day === todayWindow(header.builtAt).day ? todayTime(sessionFrom) : shortDate(sessionFrom)}`;
+  return `${when} · ${header.model} · read ${header.readCount} of ${header.candidateCount} threads`;
 }
 
 export function todayHeader(view: TodayView | null | undefined, plan: TodayPlan): TodayHeader {
@@ -262,6 +292,7 @@ export function todayHeader(view: TodayView | null | undefined, plan: TodayPlan)
     kind: "queue", builtAt: queue.snapshotAt, model: modelLabel(queue.model), readCount: queue.readCount, candidateCount: queue.candidateCount,
     queued: queue.items.size, brief: queue.brief, settled: plan.settled, toGo: plan.toGo,
     cleared: plan.toGo - plan.newSince === 0, newSince: plan.newSince, busy,
-    lastError: run.status === "failed" ? run.error : null,
+    sessionFrom: queue.session && queue.session.updates > 0 ? queue.session.startedAt : null,
+    lastError: run.status === "failed" ? `${modeOf(run) === "update" ? "Update" : "Regenerate"} failed: ${run.error}` : null,
   };
 }

@@ -212,8 +212,8 @@ function PaletteRoot({
           if (openSettingsPane()) return;
           return void router.push("/settings");
         }
-        if (id.value === "regenerate-today") {
-          void today.regenerate();
+        if (id.value === "update-today" || id.value === "regenerate-today") {
+          void today.request(id.value === "update-today" ? "update" : "fresh");
           return onApplyState("today");
         }
         return onShowHelp();

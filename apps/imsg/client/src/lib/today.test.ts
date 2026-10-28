@@ -1,7 +1,7 @@
 import type { ChatSummary } from "@shared/types";
 import { describe, expect, test } from "bun:test";
 
-import { classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayRun, type TodayView } from "./today";
+import { builtLine, busyCopy, classifyToday, planToday, settleAllTargets, todayHeader, toTodayView, type TodayHeader, type TodayRun, type TodayView } from "./today";
 
 const SNAPSHOT = 1_000_000;
 const DAY_START = 500_000;
@@ -18,7 +18,8 @@ function chat(id: string, flags: Partial<ChatSummary["flags"]> = {}, extra: Part
 }
 
 type Built = { id: string; group: string; reason?: string; anchor?: string };
-function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, number> = {}, over: Partial<{ snapshotAt: number; run: TodayRun; candidateCount: number }> = {}): TodayView {
+type Session = { id: string; startedAt: number; updates: number };
+function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, number> = {}, over: Partial<{ snapshotAt: number; run: TodayRun; candidateCount: number; session: Session }> = {}): TodayView {
   const row = {
     day: "2026-10-27", dayStart: DAY_START, run: over.run ?? done,
     queue: {
@@ -27,6 +28,7 @@ function view(items: Built[], openAtSnapshot: string[], cleared: Record<string, 
       items: items.map(({ id, group, reason, anchor }, index) => ({ conversationId: id, group, rank: index + 1, reason: reason ?? `reason ${id}`, ...(anchor === undefined ? {} : { anchor }) })),
       openAtSnapshot,
       ...(over.candidateCount === undefined ? {} : { candidateCount: over.candidateCount }),
+      ...(over.session === undefined ? {} : { session: over.session }),
     },
     cleared: Object.entries(cleared).map(([conversationId, at]) => ({ conversationId, at })),
   };
@@ -196,9 +198,36 @@ describe("todayHeader", () => {
 
   test("a Regenerate in flight keeps the queue and reports busy; a failed one keeps it with the error", () => {
     const building = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "building", attempt: 2, source: "user", requestedAt: 1, startedAt: 2, claimId: "w1" } });
-    expect(todayHeader(building, plan(building))).toMatchObject({ kind: "queue", busy: "building", queued: 1, readCount: 81, model: "Opus 5.5", lastError: null });
+    expect(todayHeader(building, plan(building))).toMatchObject({ kind: "queue", busy: { state: "building", mode: "fresh" }, queued: 1, readCount: 81, model: "Opus 5.5", lastError: null });
     const failed = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "failed", attempt: 2, source: "user", failedAt: 3, error: "The answer didn't parse" } });
-    expect(todayHeader(failed, plan(failed))).toMatchObject({ kind: "queue", busy: null, lastError: "The answer didn't parse" });
+    expect(todayHeader(failed, plan(failed))).toMatchObject({ kind: "queue", busy: null, lastError: "Regenerate failed: The answer didn't parse" });
+  });
+
+  test("a failed build over a good queue names what failed", () => {
+    const failed = (mode: "update" | "fresh") => view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "failed", attempt: 2, source: "user", mode, failedAt: 3, error: "The gateway timed out" } });
+    expect(todayHeader(failed("update"), plan(failed("update")))).toMatchObject({ lastError: "Update failed: The gateway timed out" });
+    expect(todayHeader(failed("fresh"), plan(failed("fresh")))).toMatchObject({ lastError: "Regenerate failed: The gateway timed out" });
+  });
+
+  test("the busy copy says Updating or Regenerating by the run's mode", () => {
+    const queued = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "requested", attempt: 2, source: "schedule", mode: "update", requestedAt: 1 } });
+    const header = todayHeader(queued, plan(queued));
+    expect(header).toMatchObject({ busy: { state: "queued", mode: "update" } });
+    expect(busyCopy({ state: "queued", mode: "update" })).toEqual({ label: "Updating", meta: "Checking what changed with Opus 5.5…" });
+    expect(busyCopy({ state: "building", mode: "fresh" })).toEqual({ label: "Regenerating", meta: "Reading threads with Opus 5.5…" });
+  });
+
+  test("after an Update the meta names the session it continued, by time on the same day and by date across days", () => {
+    // 11:52 AM on Oct 27 in Los Angeles; the session began at 7:01 AM that day, or on Oct 26.
+    const updatedAt = Date.parse("2026-10-27T18:52:00Z");
+    const meta = (session?: Session) => {
+      const v = view([{ id: "a", group: "friday" }], ["a"], {}, { snapshotAt: updatedAt, candidateCount: 380, ...(session ? { session } : {}) });
+      return builtLine(todayHeader(v, plan(v)) as Extract<TodayHeader, { kind: "queue" }>);
+    };
+    expect(meta({ id: "s", startedAt: Date.parse("2026-10-27T14:01:00Z"), updates: 3 })).toBe("Updated 11:52 AM · session from 7:01 AM · Opus 5.5 · read 81 of 380 threads");
+    expect(meta({ id: "s", startedAt: Date.parse("2026-10-26T14:01:00Z"), updates: 6 })).toBe("Updated 11:52 AM · session from Oct 26 · Opus 5.5 · read 81 of 380 threads");
+    expect(meta({ id: "s", startedAt: updatedAt, updates: 0 }), "a fresh build").toBe("Built 11:52 AM · Opus 5.5 · read 81 of 380 threads");
+    expect(meta(), "a queue from before sessions").toBe("Built 11:52 AM · Opus 5.5 · read 81 of 380 threads");
   });
 
   test("the header reads what was read against every candidate, and an older queue against its Needs you", () => {
@@ -206,6 +235,18 @@ describe("todayHeader", () => {
     expect(todayHeader(counted, plan(counted))).toMatchObject({ readCount: 81, candidateCount: 335 });
     const older = view([{ id: "a", group: "friday" }], ["a", "b"]);
     expect(todayHeader(older, plan(older))).toMatchObject({ candidateCount: 2 });
+  });
+
+  test("an Update moves the snapshot, so what arrived since the last build folds into the ranking", () => {
+    const before = view([{ id: "a", group: "friday" }], ["a"]);
+    const chats = [chat("a", needsYou), chat("n", needsYou)];
+    expect(planToday(before, chats, { held: null }).sections.map((section) => section.key)).toEqual(["new", "group:friday"]);
+    const updated = view([{ id: "n", group: "friday" }, { id: "a", group: "friday" }], ["a", "n"], {}, { snapshotAt: SNAPSHOT + 3_600_000, session: { id: "s", startedAt: SNAPSHOT, updates: 1 } });
+    const after = planToday(updated, chats, { held: null });
+    expect(after.sections.map((section) => section.key)).toEqual(["group:friday"]);
+    expect(after.sections[0]?.rows.map((row) => [row.chat.conversationId, row.rank])).toEqual([["n", 1], ["a", 2]]);
+    expect(planToday(updated, [...chats, chat("late", needsYou)], { held: null }).sections[0]?.label, "New since names the Update's snapshot")
+      .toBe(`New since ${new Date(SNAPSHOT + 3_600_000).toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" })}`);
   });
 
   test("the queue is cleared once no ranked rows remain, New since still named", () => {

@@ -473,7 +473,7 @@ export function ConversationListPane({
                 <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>
               ) : null}
               {onToday && !search.active ? (
-                <TodayHeaderCard header={todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRegenerate={() => void today.regenerate()} />
+                <TodayHeaderCard header={todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRequest={(mode) => void today.request(mode)} />
               ) : null}
               {!search.active && !onToday ? (
                 <FilterChipRow

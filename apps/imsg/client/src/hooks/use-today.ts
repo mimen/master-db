@@ -2,14 +2,15 @@ import { useConvex, useQuery } from "convex/react";
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { todayWindow } from "@shared/today";
 import { todayApi } from "@/lib/convex-api";
-import { toTodayView, type TodayView } from "@/lib/today";
+import { toTodayView, type TodayMode, type TodayView } from "@/lib/today";
 
 interface TodayContextValue {
   day: string;
   dayStart: number;
   /** undefined while loading; null before today's first build was requested. */
   view: TodayView | null | undefined;
-  regenerate: () => Promise<void>;
+  /** Update continues the model session; fresh starts a new one. */
+  request: (mode: TodayMode) => Promise<void>;
 }
 
 const TodayContext = createContext<TodayContextValue | null>(null);
@@ -32,12 +33,12 @@ export function TodayProvider({ children }: { readonly children: ReactNode }) {
   const view = useMemo(() => (row === undefined ? undefined : toTodayView(row)), [row]);
   const convex = useConvex();
   // Idempotent while a build is queued or running, so a double press is harmless.
-  const regenerate = useCallback(async () => { await convex.mutation(todayApi.requestBuild, { day, dayStart: start }); }, [convex, day, start]);
-  const value = useMemo(() => ({ day, dayStart: start, view, regenerate }), [day, start, view, regenerate]);
+  const request = useCallback(async (mode: TodayMode) => { await convex.mutation(todayApi.requestBuild, { day, dayStart: start, mode }); }, [convex, day, start]);
+  const value = useMemo(() => ({ day, dayStart: start, view, request }), [day, start, view, request]);
   return createElement(TodayContext.Provider, { value }, children);
 }
 
-const OUTSIDE: TodayContextValue = { day: "", dayStart: 0, view: undefined, regenerate: async () => undefined };
+const OUTSIDE: TodayContextValue = { day: "", dayStart: 0, view: undefined, request: async () => undefined };
 
 export function useToday(): TodayContextValue {
   return useContext(TodayContext) ?? OUTSIDE;

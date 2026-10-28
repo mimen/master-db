@@ -17,7 +17,7 @@ export type PaletteCommandId =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter }
   | { kind: "tab"; value: "messages" | "contacts" }
-  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "regenerate-today" }
+  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "update-today" | "regenerate-today" }
   | { kind: "view"; value: string };
 
 export interface PaletteCommand {
@@ -83,7 +83,8 @@ export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   { id: { kind: "action", value: "scheduled" }, title: "Scheduled messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
   { id: { kind: "action", value: "shortcuts" }, title: "Keyboard shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
   { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"] },
-  { id: { kind: "action", value: "regenerate-today" }, title: "Regenerate today", keywords: ["today", "queue", "rebuild", "rank", "plan"] },
+  { id: { kind: "action", value: "update-today" }, title: "Update today", keywords: ["today", "queue", "refresh", "update", "rank"] },
+  { id: { kind: "action", value: "regenerate-today" }, title: "Regenerate today from scratch", keywords: ["today", "queue", "rebuild", "fresh", "regenerate"] },
 ] as const;
 
 export type PaletteItem =
