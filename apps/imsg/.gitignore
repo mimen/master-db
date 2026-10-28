@@ -28,6 +28,7 @@ dist-ssr
 *.db-*
 .cache/
 client/dist
+client/dist-ios-update
 client/.dist-staging-*
 client/web-releases/
 client/node_modules

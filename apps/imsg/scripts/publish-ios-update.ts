@@ -60,7 +60,8 @@ function main(sourceSha: string): void {
   const plan = planIosRelease(hash, builds);
 
   if (plan.kind === "publish") {
-    eas(["update", "--channel", PROFILE, "--environment", PROFILE, "--platform", "ios", "--message", sourceSha.slice(0, 7)], env);
+    // eas update exports to client/dist by default, which is the live web release the Mini serves.
+    eas(["update", "--channel", PROFILE, "--environment", PROFILE, "--platform", "ios", "--input-dir", "dist-ios-update", "--message", sourceSha.slice(0, 7)], env);
     console.log(`iOS OTA published for ${sourceSha.slice(0, 7)} on runtime ${hash.slice(0, 12)}`);
     return;
   }
