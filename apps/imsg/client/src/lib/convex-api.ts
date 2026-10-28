@@ -4,6 +4,8 @@ import { anyApi } from "convex/server";
 const queries = anyApi.comma.queries as unknown as typeof api.comma.queries;
 export const commaDraftsApi = anyApi.comma.drafts as unknown as typeof api.comma.drafts;
 export const commaOutbox = anyApi.comma.outbox as unknown as typeof api.comma.outbox;
+const today = anyApi.comma.today as unknown as typeof api.comma.today;
+export const todayApi = { get: today.get, requestBuild: today.requestBuild };
 
 /** Include public foundation functions whose module differs from comma/queries. */
 export const commaApi = {

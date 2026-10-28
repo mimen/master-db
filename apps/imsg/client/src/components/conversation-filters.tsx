@@ -43,7 +43,7 @@ function formatCount(count: number): string {
 
 /**
  * The lens tab row, the app's only segmented control. Needs you carries a turn-colored count,
- * Unread and Agents gray ones. The row scrolls sideways when the sidebar is too narrow for all six;
+ * Unread and Agents gray ones. The row scrolls sideways when the sidebar is too narrow for all seven;
  * on the phone the tabs are the page title, without the bar.
  */
 export function LensTabs({
@@ -59,7 +59,7 @@ export function LensTabs({
 }) {
   const theme = useTheme();
   const scroller = useRef<ScrollView>(null);
-  // The tab picked, by click or ⌘1-6, is scrolled into view: Agents sits past the right edge when it overflows.
+  // The tab picked, by click or ⌘1-7, is scrolled into view: Agents sits past the right edge when it overflows.
   // The phone's row is far wider than the screen and keeps the user's own scroll.
   useEffect(() => {
     if (phone) return;

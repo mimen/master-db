@@ -94,6 +94,9 @@ function matchesTypeLens(chat: ChatSummary, type: TypeFilter): boolean {
 export function matchesFilters(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {
   if (!matchesTypeLens(chat, type)) return false;
   switch (state) {
+    case "today":
+      // Today is a plan over the whole directory (client/src/lib/today.ts), not a per-chat predicate.
+      return false;
     case "all":
       return true;
     case "unread":
@@ -152,6 +155,7 @@ export function settleLeavesLens(action: SettleAction, state: StateFilter): bool
     case "unread":
     case "drafts":
       return false;
+    case "today":
     case "unresponded":
     case "waiting":
     case "agents":
@@ -161,7 +165,7 @@ export function settleLeavesLens(action: SettleAction, state: StateFilter): bool
   }
 }
 
-const STATES: StateFilter[] = ["all", "unread", "unresponded", "waiting", "drafts", "agents", "settled"];
+const STATES: StateFilter[] = ["today", "all", "unread", "unresponded", "waiting", "drafts", "agents", "settled"];
 
 /** The Agents count is only the chats that want the user; a working or open one shows in the lens without counting. */
 function counts(chat: ChatSummary, state: StateFilter, type: TypeFilter): boolean {

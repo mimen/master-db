@@ -2,6 +2,7 @@ import { agentAttention, WANTS_YOU, type AgentAttention } from "@shared/agent-at
 import { isSettled, matchesFilters } from "@shared/chat-state";
 import { liveThoughtLine } from "@/components/agent/vendor/live-thought-line";
 import type { AgentChatSummary } from "./agent-api";
+import type { TodayPlan, TodaySectionKey } from "./today";
 import type { ChatSummary, StateFilter, TypeFilter } from "@shared/types";
 
 /** The two lenses the workspace owns: which queue, and whose conversations. */
@@ -32,9 +33,10 @@ export function resetInboxFilters(): InboxFilters {
 }
 
 /** The tab row. Settled is reached through "Also include", not a tab. */
-export type Lens = "unresponded" | "unread" | "waiting" | "all" | "drafts" | "agents";
+export type Lens = "today" | "unresponded" | "unread" | "waiting" | "all" | "drafts" | "agents";
 
 export const LENSES: readonly { value: Lens; label: string; count: "turn" | "plain" | null }[] = [
+  { value: "today", label: "Today", count: "turn" },
   { value: "unresponded", label: "Needs you", count: "turn" },
   { value: "unread", label: "Unread", count: "plain" },
   { value: "waiting", label: "Waiting", count: null },
@@ -82,6 +84,7 @@ export const PEOPLE_LABELS: Record<TypeFilter, string> = {
   dm: "One-to-one",
 };
 const LENS_TITLES: Record<StateFilter, string> = {
+  today: "Today",
   all: "All messages",
   unread: "Unread",
   unresponded: "Needs you",
@@ -242,8 +245,15 @@ export function tagsInUse(chats: readonly ChatSummary[]): string[] {
 }
 
 export type InboxRow =
-  | { kind: "section"; key: string; label: string; count: number }
-  | { kind: "chat"; key: string; chat: ChatSummary };
+  | {
+      kind: "section"; key: string; label: string; count: number;
+      /** Today's group context line. */
+      detail?: string | null;
+      tone?: "fresh" | null;
+      /** A foldable Today section; a closed one renders without its chats. */
+      fold?: { key: TodaySectionKey; open: boolean } | null;
+    }
+  | { kind: "chat"; key: string; chat: ChatSummary; today?: { rank: number | null; reason: string | null } };
 
 export interface InboxNavigationEntry {
   chat: ChatSummary;
@@ -388,6 +398,22 @@ function groupByAttention(chats: readonly ChatSummary[], now: number, oldestFirs
   return [...groups, ...groupByAge(chats.filter((chat) => chat.agent === undefined), now, oldestFirst)];
 }
 
+/** Today keeps the build's order: no queueOrder or age grouping touches a ranked row. */
+function todayRows(plan: TodayPlan, openFolds: ReadonlySet<TodaySectionKey>): InboxRow[] {
+  return plan.sections.flatMap((section): InboxRow[] => {
+    const open = !section.foldable || openFolds.has(section.key);
+    return [
+      {
+        kind: "section", key: `section-today-${section.key}`, label: section.label, count: section.rows.length,
+        detail: section.detail, tone: section.tone, fold: section.foldable ? { key: section.key, open } : null,
+      },
+      ...(open ? section.rows.map(({ chat, rank, reason }): InboxRow => ({
+        kind: "chat", key: chat.conversationId ?? chat.guid, chat, today: { rank, reason },
+      })) : []),
+    ];
+  });
+}
+
 /** The complete presentation model: filtering, age grouping, and keyboard order in one pure pass. */
 export function deriveInboxModel(
   chats: readonly ChatSummary[],
@@ -396,11 +422,14 @@ export function deriveInboxModel(
   deepMatchGuids?: ReadonlySet<string>,
   browseGuids?: ReadonlySet<string>,
   refine?: RefineContext,
+  today?: { plan: TodayPlan; openFolds: ReadonlySet<TodaySectionKey> },
 ): InboxModel {
   const now = refine?.now ?? Date.now();
-  const filtered = filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine);
+  const searching = searchQuery.trim().length > 0;
+  const filtered = !searching && filters.state === "today" ? [] : filterInbox(chats, filters, searchQuery, deepMatchGuids, browseGuids, refine);
   const oldestFirst = refine?.refinements.oldestFirst;
-  const rows = searchQuery.trim() ? groupBySearchMatch(filtered, searchQuery, deepMatchGuids)
+  const rows = searching ? groupBySearchMatch(filtered, searchQuery, deepMatchGuids)
+    : filters.state === "today" ? (today ? todayRows(today.plan, today.openFolds) : [])
     // Drafts read as one queue of prepared replies, ordered by when the draft was written, not by message age.
     : filters.state === "drafts" ? [...filtered].sort((a, b) => (oldestFirst ? -1 : 1) * ((b.draft?.updatedAt ?? 0) - (a.draft?.updatedAt ?? 0)))
       .map((chat): InboxRow => ({ kind: "chat", key: chat.conversationId ?? chat.guid, chat }))

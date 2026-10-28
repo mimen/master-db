@@ -31,6 +31,7 @@ import { openSettingsPane } from "@/lib/settings-pane";
 import { selectChat } from "@/lib/selection";
 import { showToast } from "@/lib/toast";
 import { useTheme } from "@/hooks/use-theme";
+import { useToday } from "@/hooks/use-today";
 
 import { addressesMatch, formatAddress } from "@shared/address";
 import { composeSections, type ComposeRow } from "@/lib/palette/compose-rows";
@@ -186,6 +187,7 @@ function PaletteRoot({
   const { reset } = cursor;
   useEffect(() => reset(), [query, reset]);
 
+  const today = useToday();
   const executeCommand = (command: PaletteCommand): void => {
     const id = command.id;
     switch (id.kind) {
@@ -209,6 +211,10 @@ function PaletteRoot({
         if (id.value === "settings") {
           if (openSettingsPane()) return;
           return void router.push("/settings");
+        }
+        if (id.value === "regenerate-today") {
+          void today.regenerate();
+          return onApplyState("today");
         }
         return onShowHelp();
     }

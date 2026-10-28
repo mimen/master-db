@@ -17,7 +17,7 @@ export type PaletteCommandId =
   | { kind: "state"; value: StateFilter }
   | { kind: "type"; value: TypeFilter }
   | { kind: "tab"; value: "messages" | "contacts" }
-  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" }
+  | { kind: "action"; value: "new-message" | "shortcuts" | "scheduled" | "settings" | "regenerate-today" }
   | { kind: "view"; value: string };
 
 export interface PaletteCommand {
@@ -45,6 +45,7 @@ interface LensCommand {
  * each miss meant a lens with no way to ask for it.
  */
 const STATE_COMMANDS: Record<StateFilter, LensCommand> = {
+  today: { title: "Today", keywords: ["view", "filter", "queue", "plan", "ranked"] },
   all: { title: "All conversations", keywords: ["view", "filter", "inbox"] },
   unread: { title: "Unread", keywords: ["view", "filter"] },
   unresponded: { title: "Needs you", keywords: ["view", "filter", "your turn", "unresponded"] },
@@ -82,6 +83,7 @@ export const PALETTE_COMMANDS: readonly PaletteCommand[] = [
   { id: { kind: "action", value: "scheduled" }, title: "Scheduled messages", keywords: ["schedule", "later", "send later", "queue", "pending"] },
   { id: { kind: "action", value: "shortcuts" }, title: "Keyboard shortcuts", keywords: ["help", "keys"], shortcut: shortcutFor("help.open") },
   { id: { kind: "action", value: "settings" }, title: "Settings", keywords: ["preferences", "options", "config"] },
+  { id: { kind: "action", value: "regenerate-today" }, title: "Regenerate today", keywords: ["today", "queue", "rebuild", "rank", "plan"] },
 ] as const;
 
 export type PaletteItem =

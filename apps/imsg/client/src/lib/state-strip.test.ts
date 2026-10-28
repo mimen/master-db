@@ -24,7 +24,17 @@ describe("stripCopy", () => {
       messages: [msg(friday - H, false), msg(friday, true), msg(NOW - 5 * H, false), msg(NOW - H, false)],
       historyComplete: false, now: NOW, compact: false,
     });
-    expect(copy).toEqual({ tone: "turn", lead: "Your turn for 5h", detail: "You last replied yesterday", action: "settle" });
+    expect(copy).toEqual({ tone: "turn", lead: "Your turn for 5h", detail: "You last replied yesterday", action: "settle", today: null });
+  });
+
+  test("a ranked Today conversation carries its rank and reason in place of the reply line", () => {
+    const copy = stripCopy({
+      chat: chat({ unresponded: true }, { at: NOW - H, fromMe: false }),
+      messages: [], historyComplete: false, now: NOW, compact: false,
+      today: { rank: 3, reason: "Guest list locks at 6 PM." },
+    });
+    expect(copy?.today).toEqual({ rank: 3, reason: "Guest list locks at 6 PM." });
+    expect(copy?.lead).toBe("Your turn for 1h");
   });
 
   test("phone wording and a weekday older than yesterday", () => {
@@ -60,14 +70,14 @@ describe("stripCopy", () => {
 
   test("settled offers un-settle and says what brings it back", () => {
     const copy = stripCopy({ chat: chat({}, { at: NOW - H, fromMe: false }), messages: [], historyComplete: false, now: NOW, compact: false });
-    expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in Needs you if Tracy texts again", action: "unsettle" });
+    expect(copy).toEqual({ tone: "settled", lead: "Settled", detail: "Back in Needs you if Tracy texts again", action: "unsettle", today: null });
   });
 
   test("a conversation in Needs you only for its agent chat says so plainly and offers Settle", () => {
     const agent = { attention: "ready", chatId: "a", title: "Guest list", openCount: 1, activityAt: NOW } as const;
     const settled = { chat: chat({}, { at: NOW - 2 * H, fromMe: false }, { agent }), messages: [msg(NOW - 2 * H, false)], historyComplete: false, now: NOW, compact: false };
-    expect(stripCopy(settled)).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle" });
-    expect(stripCopy({ ...settled, chat: chat({}, null, { agent }) })).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle" });
+    expect(stripCopy(settled)).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle", today: null });
+    expect(stripCopy({ ...settled, chat: chat({}, null, { agent }) })).toEqual({ tone: "settled", lead: "Agent chat open", detail: null, action: "settle", today: null });
     expect(stripCopy({ ...settled, chat: chat({ unresponded: true }, { at: NOW - 2 * H, fromMe: false }, { agent }) })?.tone, "owing a reply still reads as the user's turn").toBe("turn");
   });
 

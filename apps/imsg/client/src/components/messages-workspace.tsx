@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useChats } from "@/hooks/use-chats";
+import { useToday } from "@/hooks/use-today";
 import { type JumpTarget } from "@/hooks/use-messages";
 import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
@@ -24,6 +25,7 @@ import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { openAgentPane } from "@/lib/agent-pane";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
+import { classifyToday, type TodayPlace } from "@/lib/today";
 import {
   getListAdapter,
   isListMode,
@@ -37,6 +39,8 @@ import { useReceiveSound } from "@/hooks/use-receive-sound";
 import { openThreadSearch } from "@/lib/thread-search";
 import { showToast } from "@/lib/toast";
 
+const TODAY_SHOWN: ReadonlySet<TodayPlace["at"]> = new Set(["ranked", "new", "below"]);
+
 export function MessagesWorkspace({
   active,
   wide,
@@ -48,8 +52,8 @@ export function MessagesWorkspace({
   const visual = useTriageTheme();
   const shell = useDesktopShellContext();
   const utilityOpen = shell.state.utility?.workspace === "messages";
-  // Unresponded is the working view — the inbox opens on what needs a reply.
-  const [state, setState] = useState<StateFilter>("unresponded");
+  // Today is the working view: the inbox opens on the day's ranked queue.
+  const [state, setState] = useState<StateFilter>("today");
   const [type, setType] = useState<TypeFilter>(DEFAULT_INBOX_FILTERS.type);
   const [selected, setSelected] = useState<ChatSummary | null>(null);
   // "reply" focuses the composer and marks read; "preview" (glide j/k) does neither.
@@ -57,7 +61,7 @@ export function MessagesWorkspace({
   const [jumpTarget, setJumpTarget] = useState<JumpTarget | null>(null);
   // The conversation auto-advance opened. Only it slides in; a click cuts as before.
   const [advanced, setAdvanced] = useState<{ guid: string; from: string } | null>(null);
-  // The open conversation stays in Needs you or Unread after a reply or a read, until it is
+  // The open conversation stays in Today, Needs you or Unread after a reply or a read, until it is
   // left or settled; otherwise the row vanished under the cursor mid-reply.
   const [held, setHeld] = useState<string | null>(null);
   const { chats, allChats, counts, loading, error, refresh } = useChats(state, type, !wide, wide ? held : null);
@@ -243,7 +247,7 @@ export function MessagesWorkspace({
     if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
   }, [order, selected]);
   const advanceFrom = useCallback((guid: string): void => {
-    if (!wide || (stateRef.current !== "unresponded" && stateRef.current !== "unread")) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
+    if (!wide || (stateRef.current !== "today" && stateRef.current !== "unresponded" && stateRef.current !== "unread")) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
     if (selectedRef.current?.guid !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: `selected ${selectedRef.current?.guid.slice(-6) ?? "none"}` });
     const next = nextRef.current;
     if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
@@ -254,10 +258,16 @@ export function MessagesWorkspace({
   useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
   const allChatsRef = useRef(allChats);
   useEffect(() => { allChatsRef.current = allChats; });
+  const todayView = useToday().view;
+  const todayRef = useRef(todayView);
+  useEffect(() => { todayRef.current = todayView; });
   const selectedGuid = selected?.guid;
   useEffect(() => {
     const chat = selectedGuid ? allChatsRef.current.find((c) => c.guid === selectedGuid) : undefined;
-    setHeld(chat && (state === "unresponded" || state === "unread") && matchesFilters(chat, state, type) ? chat.guid : null);
+    const shown = !chat ? false
+      : state === "today" ? TODAY_SHOWN.has(classifyToday(todayRef.current, chat).at)
+      : (state === "unresponded" || state === "unread") && matchesFilters(chat, state, type);
+    setHeld(chat && shown ? chat.guid : null);
   }, [selectedGuid, state, type]);
   useEffect(() => onTriageSettling((guid) => setHeld((current) => (current === guid ? null : current))), []);
   /** Glide-mode j/k: show the thread, keep list focus, don't mark read. */
@@ -395,6 +405,7 @@ export function MessagesWorkspace({
       offline={error !== null}
       wide={wide}
       selectedGuid={wide ? selected?.guid : undefined}
+      held={wide ? held : null}
       onFiltersChange={(filters) => {
         setState(filters.state);
         setType(filters.type);

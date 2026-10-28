@@ -13,6 +13,8 @@ export interface StripCopy {
   readonly lead: string;
   readonly detail: string | null;
   readonly action: "settle" | "unsettle" | null;
+  /** The open conversation's place in Today's queue, while it is ranked there. */
+  readonly today: { readonly rank: number; readonly reason: string } | null;
 }
 
 type StripMessage = Pick<Message, "isFromMe" | "isGroupEvent" | "dateCreated">;
@@ -26,6 +28,7 @@ export interface StripInput {
   readonly now: number;
   /** Phone width: "Replied Friday" instead of "You last replied Friday". */
   readonly compact: boolean;
+  readonly today?: StripCopy["today"];
 }
 
 /** "today", "yesterday", a weekday inside the last week, else "Mar 3". */
@@ -52,17 +55,17 @@ function lastIndex(messages: readonly StripMessage[], fromMe: boolean): number {
   return -1;
 }
 
-export function stripCopy({ chat, messages, historyComplete, now, compact }: StripInput): StripCopy | null {
+export function stripCopy({ chat, messages, historyComplete, now, compact, today = null }: StripInput): StripCopy | null {
   const action = settleActionFor(chat);
   if (action === "none") return null;
   if (action === "unsettle") {
-    return { tone: "settled", lead: "Settled", detail: `Back in Needs you if ${firstName(chat)} texts again`, action };
+    return { tone: "settled", lead: "Settled", detail: `Back in Needs you if ${firstName(chat)} texts again`, action, today: null };
   }
   // With no triage flag set, only an open agent chat makes Settle the action; nobody's turn is due.
-  if (!chat.flags.unresponded && !chat.flags.waiting) return { tone: "settled", lead: "Agent chat open", detail: null, action };
+  if (!chat.flags.unresponded && !chat.flags.waiting) return { tone: "settled", lead: "Agent chat open", detail: null, action, today };
   const last = chat.lastMessage;
   if (chat.flags.waiting && last) {
-    return { tone: "waiting", lead: `Waiting on ${firstName(chat)} ${compactAge(now - last.dateCreated)}`, detail: null, action };
+    return { tone: "waiting", lead: `Waiting on ${firstName(chat)} ${compactAge(now - last.dateCreated)}`, detail: null, action, today };
   }
 
   // Your turn began with the first inbound message after your newest reply.
@@ -74,5 +77,5 @@ export function stripCopy({ chat, messages, historyComplete, now, compact }: Str
     : historyComplete && messages.length > 0
       ? "You haven't replied yet"
       : null;
-  return { tone: "turn", lead: `Your turn for ${compactAge(now - since)}`, detail: replied, action };
+  return { tone: "turn", lead: `Your turn for ${compactAge(now - since)}`, detail: replied, action, today };
 }

@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import Svg, { Path } from "react-native-svg";
 import { settleActionFor } from "@shared/chat-state";
 import type { ChatSummary } from "@shared/types";
 import { memo, useEffect, useState } from "react";
@@ -107,6 +108,7 @@ function ChatRowInner({
   keyboardFocused = false,
   onOpen,
   agentLens = false,
+  today,
 }: {
   chat: ChatSummary;
   /** The handle that separates this row from another with the same name. */
@@ -117,6 +119,8 @@ function ChatRowInner({
   onOpen: (chat: ChatSummary) => void;
   /** The Agents lens: the row also shows the agent chat's title and status, and its time is the agent's. */
   agentLens?: boolean;
+  /** The Today lens: a rank column (empty for New since) and the build's one-line reason. */
+  today?: { rank: number | null; reason: string | null };
 }) {
   const theme = useTheme();
   const { wide: compact } = useLayoutMode();
@@ -145,6 +149,8 @@ function ChatRowInner({
   const chats = agent && agent.openCount > 1 ? ` · ${agent.openCount} chats` : "";
   const spoken = agent && status ? [`${agent.title}${chats}`, status.word ? `${status.word}, ${status.text}` : status.text]
     : [snippet, last ? formatListTimestamp(last.dateCreated) : null];
+  if (today?.rank != null) spoken.unshift(`number ${today.rank} today`);
+  if (today?.reason) spoken.push(today.reason);
 
   const contextRef = useWebContextMenu<typeof Pressable>((anchor) => openMenu(chat, anchor));
 
@@ -205,12 +211,16 @@ function ChatRowInner({
       style={({ pressed }) => [
         styles.row,
         compact ? styles.rowWide : styles.rowPhone,
+        today && compact ? styles.rowToday : null,
         { backgroundColor: pressed && !selected ? theme.rowSelected : fill },
         // Drawn inside the pill so the neighbor never clips it, and no content shifts.
         keyboardFocused && ({ outlineColor: theme.focusRing, outlineStyle: "solid", outlineWidth: 2, outlineOffset: -2 } as object),
       ]}
     >
-      <View>
+      {today ? (
+        <Text testID="today-rank" style={[styles.rank, { color: theme.textTertiary, paddingTop: compact ? 2 : 0 }]}>{today.rank ?? ""}</Text>
+      ) : null}
+      <View style={today && compact ? styles.todayAvatar : null}>
         <ChatAvatar chat={chat} size={compact ? 32 : 44} />
         {chat.agent ? <AgentBadge attention={chat.agent.attention} size={compact ? 16 : 19} /> : null}
       </View>
@@ -312,6 +322,14 @@ function ChatRowInner({
             </View>
           )}
         </View>
+        {today?.reason ? (
+          <View testID="today-reason" style={styles.reason}>
+            <Svg width={10} height={10} viewBox="0 0 10 10" style={styles.spark} aria-hidden>
+              <Path fill={theme.textTertiary} d="M5 0c.3 2.6 1.4 3.7 5 5-3.6 1.3-4.7 2.4-5 5-.3-2.6-1.4-3.7-5-5 3.6-1.3 4.7-2.4 5-5Z" />
+            </Svg>
+            <Text numberOfLines={2} style={[styles.reasonText, { color: theme.textTertiary, fontSize: compact ? 11.5 : 14, lineHeight: compact ? 15 : 19 }]}>{today.reason}</Text>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -368,6 +386,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingTop: 9,
   },
+  // The rank column takes the left padding, as in the Today mock.
+  rowToday: { gap: 8, paddingLeft: 4 },
+  todayAvatar: { marginRight: 4 },
   rowPhone: {
     alignItems: "center",
     borderRadius: TriageGeometry.rowRadiusMobile,
@@ -425,6 +446,20 @@ const styles = StyleSheet.create({
     gap: 7,
     marginTop: 1,
   },
+  rank: {
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    textAlign: "right",
+    width: 16,
+  },
+  reason: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 5,
+    marginTop: 3,
+  },
+  spark: { flexShrink: 0, marginTop: 2.5 },
+  reasonText: { flex: 1, minWidth: 0 },
   messageSignal: {
     alignSelf: "flex-start",
   },

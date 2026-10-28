@@ -12,6 +12,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { DesktopShellProvider } from "@/components/desktop-shell-provider";
 import { AiStatusProvider } from "@/hooks/use-ai";
 import { ChatDirectoryProvider } from "@/hooks/use-chats";
+import { TodayProvider } from "@/hooks/use-today";
 import { ReleaseUpdateBanners } from "@/components/release-update-banners";
 import { ActionSheetProvider } from "@/lib/action-sheet";
 import { AppErrorBoundary } from "@/lib/app-error-boundary";
@@ -63,6 +64,7 @@ export default function RootLayout() {
     <GestureRoot style={{ flex: 1 }}>
       <ClientAuthProvider>
       <ChatDirectoryProvider>
+      <TodayProvider>
       <AiStatusProvider>
         <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
           <ActionSheetProvider>
@@ -102,6 +104,7 @@ export default function RootLayout() {
           </ActionSheetProvider>
         </ThemeProvider>
       </AiStatusProvider>
+      </TodayProvider>
       </ChatDirectoryProvider>
       </ClientAuthProvider>
     </GestureRoot>

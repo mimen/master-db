@@ -8,7 +8,7 @@ import type {
 } from "./types";
 
 const DEFAULT_FILTERS = {
-  state: "unresponded",
+  state: "today",
   type: DEFAULT_INBOX_FILTERS.type,
 } as const;
 

@@ -1,7 +1,7 @@
 import type { ChatSummary, StateCounts } from "@shared/types";
 import { useQuery } from "convex/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Platform, StyleSheet, Text, View } from "react-native";
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { FlashList } from "@shopify/flash-list";
 
@@ -31,6 +31,7 @@ import { TriageGeometry } from "@/constants/triage-theme";
 import { publishRenderedOrder } from "@/hooks/use-queue-position";
 import { onTriageResolved, onTriageUndo } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
+import { useToday } from "@/hooks/use-today";
 import { useType } from "@/hooks/use-type";
 import { commaApi } from "@/lib/convex-api";
 import { usePendingScheduled } from "@/lib/pending-scheduled";
@@ -63,6 +64,8 @@ import {
   type SavedView,
 } from "@/lib/palette/saved-views";
 import { SIDEBAR_TITLE_HEIGHT } from "@/lib/sidebar-metrics";
+import { planToday, todayHeader, type TodaySectionKey } from "@/lib/today";
+import { TodayHeaderCard } from "./today-header";
 import { isListMode, requestFocus, subscribeListMode } from "@/lib/keyboard/controller";
 import { nextLeaving, withLeaving, type LeavingRow } from "@/lib/leaving-rows";
 import { useSyncExternalStore } from "react";
@@ -95,6 +98,8 @@ interface ConversationListPaneProps {
   offline: boolean;
   wide: boolean;
   selectedGuid?: string;
+  /** The open conversation the workspace keeps in its slot after it is handled (desktop). */
+  held?: string | null;
   onFiltersChange: (filters: InboxFilters) => void;
   onOpenChat: (chat: ChatSummary) => void;
   /** Glide-mode j/k selection: show the thread without focusing or marking
@@ -113,6 +118,7 @@ export function ConversationListPane({
   offline,
   wide,
   selectedGuid,
+  held = null,
   onFiltersChange,
   onOpenChat,
   onPreviewChat,
@@ -151,7 +157,7 @@ export function ConversationListPane({
       if (view) openView(view);
     }
   }, [store.pending, openView]);
-  // ⌘1..⌘6 switch lenses. Editable-safe: a chord never types.
+  // ⌘1..⌘7 switch lenses. Editable-safe: a chord never types.
   useEffect(() => {
     if (Platform.OS !== "web" || !wide) return;
     const onKey = (event: KeyboardEvent) => {
@@ -209,11 +215,22 @@ export function ConversationListPane({
   // Minute resolution: ages and the Today / This week boundary move with it.
   const now = useMinuteClock();
   const refine = useMemo(() => ({ refinements, scheduled, now }), [refinements, scheduled, now]);
+  // Today's plan runs on every lens: it is also the Today tab's count.
+  const today = useToday();
+  const plan = useMemo(() => planToday(today.view, allChats, { held }), [today.view, allChats, held]);
+  const [openFolds, setOpenFolds] = useState<ReadonlySet<TodaySectionKey>>(() => new Set());
+  const toggleFold = useCallback((key: TodaySectionKey) => setOpenFolds((current) => {
+    const next = new Set(current);
+    if (!next.delete(key)) next.add(key);
+    return next;
+  }), []);
+  const onToday = filters.state === "today";
+  const lensCounts = useMemo(() => (counts ? { ...counts, today: plan.toGo } : null), [counts, plan.toGo]);
   // Explicitly memoised: full passes over every conversation, plus a per-chat
   // participant scan while searching.
   const deskModel = useMemo(
-    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids, refine),
-    [allChats, filters, search.query, search.deepMatches, browseGuids, refine],
+    () => deriveInboxModel(allChats, filters, search.query, search.deepMatches, browseGuids, refine, onToday ? { plan, openFolds } : undefined),
+    [allChats, filters, search.query, search.deepMatches, browseGuids, refine, onToday, plan, openFolds],
   );
   const lensTotal = useMemo(() => filterInbox(allChats, filters, "", undefined, browseGuids).length, [allChats, filters, browseGuids]);
   const toggleCounts = useMemo(() => checkboxCounts(allChats, filters, browseGuids, refine), [allChats, filters, browseGuids, refine]);
@@ -302,9 +319,10 @@ export function ConversationListPane({
         keyboardFocused={row.kind === "chat" && wide && glide && selectedGuid === row.chat.guid}
         onOpen={openRow}
         agentLens={filters.state === "agents"}
+        onToggleFold={toggleFold}
       />
     ),
-    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state],
+    [theme.textTertiary, leaving, dropLeaving, handles, wide, glide, selectedGuid, openRow, filters.state, toggleFold],
   );
   // Needs you and Unread show what happened and the next step once they empty; other lenses
   // and searches keep the plain line.
@@ -347,7 +365,7 @@ export function ConversationListPane({
     </View>
   );
   const lensTabs = (
-    <LensTabs state={filters.state} counts={counts} onSelect={(lens: Lens) => selectLens(lens)} phone={!wide} />
+    <LensTabs state={filters.state} counts={lensCounts} onSelect={(lens: Lens) => selectLens(lens)} phone={!wide} />
   );
   const newButton = <ChromeIconButton hugeIcon={PencilEdit02Icon} accessibilityLabel="New message" onPress={onNewMessage} />;
   const chrome = wide ? (
@@ -437,7 +455,10 @@ export function ConversationListPane({
                             {lensOf(filters.state) === null && !search.active ? (
                 <Text style={[styles.lensNote, { color: theme.textSecondary, fontSize: type.secondary }]}>Settled</Text>
               ) : null}
-              {!search.active ? (
+              {onToday && !search.active ? (
+                <TodayHeaderCard header={todayHeader(today.view, plan)} dayStart={today.view?.dayStart ?? today.dayStart} onRegenerate={() => void today.regenerate()} />
+              ) : null}
+              {!search.active && !onToday ? (
                 <FilterChipRow
                   chips={chips}
                   views={store.views}
@@ -500,7 +521,7 @@ export function ConversationListPane({
  * One list cell. Memoized with primitive props so a click or a lens switch re-renders only the
  * cells whose row, selection or leave state changed, not all ~700 mounted ones.
  */
-const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen, agentLens }: {
+const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, handle, selected, keyboardFocused, onOpen, agentLens, onToggleFold }: {
   readonly row: InboxRow;
   readonly gone: boolean;
   readonly onCollapsed: (key: string) => void;
@@ -510,25 +531,81 @@ const InboxCell = memo(function InboxCell({ row, gone, onCollapsed, labelColor, 
   readonly keyboardFocused: boolean;
   readonly onOpen: (chat: ChatSummary) => void;
   readonly agentLens: boolean;
+  readonly onToggleFold: (key: TodaySectionKey) => void;
 }) {
   return (
     // A leaving row ignores input, so a click mid-fold never reopens what was just settled.
     <View pointerEvents={gone ? "none" : "auto"}>
       <Collapse collapsed={gone} onCollapsed={() => onCollapsed(row.key)}>
         {row.kind === "section" ? (
-          <View style={styles.group}>
-            <Text accessibilityRole="header" style={[styles.groupLabel, { color: labelColor }]}>{row.label}</Text>
-            <Text style={[styles.groupCount, { color: labelColor }]}>{row.count}</Text>
-          </View>
+          row.fold || row.detail !== undefined ? <TodaySectionHeader row={row} onToggleFold={onToggleFold} /> : (
+            <View style={styles.group}>
+              <Text accessibilityRole="header" style={[styles.groupLabel, { color: labelColor }]}>{row.label}</Text>
+              <Text style={[styles.groupCount, { color: labelColor }]}>{row.count}</Text>
+            </View>
+          )
         ) : (
-          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} />
+          <ChatRow chat={row.chat} handle={handle} selected={selected} keyboardFocused={keyboardFocused} onOpen={onOpen} agentLens={agentLens} today={row.today} />
         )}
       </Collapse>
     </View>
   );
 });
 
+/** A Today section: a group title with its context line, or a fold (Below the line, Settled today). */
+function TodaySectionHeader({ row, onToggleFold }: {
+  readonly row: Extract<InboxRow, { kind: "section" }>;
+  readonly onToggleFold: (key: TodaySectionKey) => void;
+}) {
+  const theme = useTheme();
+  const fold = row.fold;
+  const detail = row.detail ? <Text style={[styles.todayDetail, { color: theme.textTertiary }]}>{row.detail}</Text> : null;
+  if (fold) {
+    return (
+      <Pressable
+        testID="today-fold"
+        accessibilityRole="button"
+        accessibilityLabel={`${row.label}, ${row.count}`}
+        aria-expanded={fold.open}
+        onPress={() => onToggleFold(fold.key)}
+        style={({ hovered }) => [styles.fold, hovered && { backgroundColor: theme.rowHover }]}
+      >
+        <View style={styles.foldText}>
+          <Text accessibilityRole="header" style={[styles.foldLabel, { color: theme.textSecondary }]}>{row.label}</Text>
+          {detail}
+        </View>
+        <View style={styles.chev}>
+          <Text style={[styles.groupCount, { color: theme.textTertiary }]}>{row.count}</Text>
+          <Ionicons aria-hidden name={fold.open ? "chevron-down" : "chevron-forward"} size={11} color={theme.textTertiary} />
+        </View>
+      </Pressable>
+    );
+  }
+  return (
+    <View testID="today-group" style={styles.todayGroup}>
+      <View style={styles.todayTop}>
+        <View style={styles.todayTitleRow}>
+          {row.tone === "fresh" ? <View style={[styles.freshDot, { backgroundColor: theme.accent }]} /> : null}
+          <Text accessibilityRole="header" style={[styles.todayTitle, { color: theme.text }]}>{row.label}</Text>
+        </View>
+        <Text style={[styles.groupCount, { color: theme.textTertiary }]}>{row.count}</Text>
+      </View>
+      {detail}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  todayGroup: { paddingBottom: 5, paddingHorizontal: 10, paddingTop: 14 },
+  todayTop: { alignItems: "baseline", flexDirection: "row", gap: 8, justifyContent: "space-between" },
+  todayTitleRow: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 6 },
+  todayTitle: { fontSize: 12, fontWeight: "600" },
+  todayDetail: { fontSize: 11.5, lineHeight: 15, marginTop: 2 },
+  freshDot: { borderRadius: 3.5, height: 7, width: 7 },
+  fold: { alignItems: "center", borderRadius: 10, flexDirection: "row", justifyContent: "space-between", marginTop: 4, paddingHorizontal: 10, paddingVertical: 9 },
+  foldText: { flex: 1, minWidth: 0 },
+  foldLabel: { fontSize: 12, fontWeight: "600" },
+  chev: { alignItems: "center", flexDirection: "row", gap: 4 },
   visuallyHidden: { height: 1, overflow: "hidden", position: "absolute", width: 1, opacity: 0 },
   offlineBar: { alignItems: "center", borderRadius: 8, flexDirection: "row", gap: 6, marginHorizontal: 4, marginVertical: 6, paddingHorizontal: 10, paddingVertical: 5 },
   offlineText: { flex: 1, fontSize: 12, minWidth: 0 },

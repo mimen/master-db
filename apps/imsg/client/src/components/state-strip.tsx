@@ -10,10 +10,12 @@ import { useAgentChats, useAgentEnabled } from "@/hooks/use-agent";
 import { useChatDirectory, useConversationRef } from "@/hooks/use-chat-directory";
 import { useLayoutMode } from "@/hooks/use-layout-mode";
 import { useTheme } from "@/hooks/use-theme";
+import { useToday } from "@/hooks/use-today";
 import { toggleSettleChat } from "@/hooks/use-triage-actions";
 import { openAgentPane } from "@/lib/agent-pane";
 import { agentStripState, type AgentStripState } from "@/lib/agent-strip";
 import { stripCopy, type StripTone } from "@/lib/state-strip";
+import { classifyToday } from "@/lib/today";
 
 import { BlurSwap } from "./motion/blur-swap";
 
@@ -98,8 +100,11 @@ export function StateStrip({
   const now = useMinuteClock();
   const [actionHovered, setActionHovered] = useState(false);
   const agent = useAgentStrip(chatGuid);
+  const { view } = useToday();
   if (!chat) return null;
-  const copy = stripCopy({ chat, messages, historyComplete, now, compact: !wide });
+  const place = classifyToday(view, chat);
+  const today = place.at === "ranked" ? { rank: place.rank, reason: place.reason } : null;
+  const copy = stripCopy({ chat, messages, historyComplete, now, compact: !wide, today });
   if (!copy && !agent) return null;
   const agentChip = agent ? <AgentChip chatGuid={chatGuid} agent={agent} colors={colors} /> : null;
   if (!copy) {
@@ -121,9 +126,16 @@ export function StateStrip({
           <Text numberOfLines={1} style={[styles.lead, { color: copy.tone === "turn" ? colors.turn : colors.text }]}>
             {copy.lead}
           </Text>
-          {copy.detail && (
+          {copy.today ? (
+            <View testID="strip-today" style={styles.today}>
+              <View style={[styles.pill, { backgroundColor: colors.backgroundElement, borderColor: colors.divider }]}>
+                <Text style={[styles.pillText, { color: colors.text }]}>#{copy.today.rank} today</Text>
+              </View>
+              <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{copy.today.reason}</Text>
+            </View>
+          ) : copy.detail ? (
             <Text numberOfLines={1} style={[styles.detail, { color: colors.textSecondary }]}>{copy.detail}</Text>
-          )}
+          ) : null}
         </View>
       </BlurSwap>
       {agentChip}
@@ -172,6 +184,9 @@ const styles = StyleSheet.create({
   },
   lead: { flexShrink: 0, fontSize: 12.5, fontWeight: "600" },
   detail: { flexShrink: 1, fontSize: 12.5 },
+  today: { alignItems: "center", flexDirection: "row", flexShrink: 1, gap: 6, minWidth: 0 },
+  pill: { borderRadius: 6, borderWidth: 1, flexShrink: 0, paddingHorizontal: 6, paddingVertical: 1 },
+  pillText: { fontSize: 11, fontVariant: ["tabular-nums"], fontWeight: "600" },
   action: {
     alignItems: "center",
     borderRadius: 7,

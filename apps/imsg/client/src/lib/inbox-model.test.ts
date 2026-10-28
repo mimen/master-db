@@ -19,6 +19,7 @@ import {
   type RefineContext,
   type Refinements,
 } from "./inbox-model";
+import type { TodayPlan } from "./today";
 
 const NOW = new Date(2026, 9, 4, 15, 0).getTime();
 const HOUR = 3_600_000;
@@ -400,5 +401,39 @@ describe("agentArrivals", () => {
   test("a new chat that already wants the user arrives; one that is working or seen does not", () => {
     const { arrivals } = agentArrivals(new Map(), [chat("x", { state: "failed", lastTurnEndedAt: 5 }), chat("y"), chat("z", { state: "idle", lastTurnEndedAt: 5, seenAt: 6 })]);
     expect(arrivals.map(({ chat: c, attention }) => `${(c as { _id: string })._id} ${attention}`)).toEqual(["x failed"]);
+  });
+});
+
+describe("Today lens", () => {
+  const refine: RefineContext = { refinements: DEFAULT_REFINEMENTS, scheduled: new Set(), now: NOW };
+  const row = (chat: ChatSummary, rank: number | null) => ({ chat, rank, reason: rank === null ? null : `why ${chat.guid}` });
+  const low = makeChat({ guid: "low", displayName: "Low", flags: { ...makeChat().flags, unresponded: true } });
+  // Pinned and P1 would lead queueOrder; Today keeps the build's ranks instead.
+  const pinned = makeChat({ guid: "pinned", displayName: "Pinned", flags: { ...makeChat().flags, unresponded: true, pinned: true }, crm: { priority: 1 } });
+  const plan: TodayPlan = {
+    mode: "queue", toGo: 2, newSince: 0, settled: 0,
+    sections: [
+      { key: "group:friday", label: "Friday", detail: "Tonight.", tone: null, foldable: false, rows: [row(low, 1), row(pinned, 2)] },
+      { key: "below", label: "Below the line", detail: "Left out.", tone: null, foldable: true, rows: [row(makeChat({ guid: "folded" }), null)] },
+    ],
+  };
+
+  test("keeps rank order against pins and CRM priority", () => {
+    const model = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan, openFolds: new Set() });
+    expect(model.rows.map((r) => (r.kind === "chat" ? `${r.chat.guid}#${r.today?.rank}` : r.label))).toEqual(["Friday", "low#1", "pinned#2", "Below the line"]);
+    expect(model.rows[0]).toMatchObject({ detail: "Tonight.", fold: null });
+  });
+
+  test("a folded section renders its header without its chats, so navigation skips them", () => {
+    const closed = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan, openFolds: new Set() });
+    expect(closed.rows.at(-1)).toMatchObject({ kind: "section", count: 1, fold: { key: "below", open: false } });
+    expect(closed.navigationEntries.map((e) => e.chat.guid)).toEqual(["low", "pinned"]);
+    const open = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "", undefined, undefined, refine, { plan, openFolds: new Set(["below"]) });
+    expect(open.navigationEntries.map((e) => e.chat.guid)).toEqual(["low", "pinned", "folded"]);
+  });
+
+  test("search supersedes the plan", () => {
+    const model = deriveInboxModel([pinned, low], { state: "today", type: "known" }, "low", undefined, undefined, refine, { plan, openFolds: new Set() });
+    expect(model.rows.map((r) => (r.kind === "chat" ? r.chat.guid : r.label))).toEqual(["Conversations", "low"]);
   });
 });
