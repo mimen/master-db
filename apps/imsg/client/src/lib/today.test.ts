@@ -123,6 +123,21 @@ describe("planToday", () => {
     expect(plan.toGo).toBe(4);
   });
 
+  test("a conversation held from New since or Below the line stays in that section after a reply, without counting as to go", () => {
+    const replied = chats.map((c) => (c.conversationId === "n2" ? { ...c, flags: chat("n2", waiting).flags } : c.conversationId === "low" ? chat("low", waiting) : c));
+    const v = view(items, ["a", "b", "m", "low"], { n2: SNAPSHOT + 9, low: SNAPSHOT + 9 });
+    const rows = (p: ReturnType<typeof planToday>, key: string) => p.sections.find((s) => s.key === key)?.rows.map((r) => r.chat.conversationId);
+    const fromNew = planToday(v, replied, { held: "g-n2", heldSection: "new" });
+    expect(rows(fromNew, "new")).toEqual(["n2", "n1"]);
+    expect(rows(fromNew, "settled")).toEqual(["low"]);
+    expect(fromNew).toMatchObject({ toGo: 4, newSince: 1 });
+    const fromBelow = planToday(v, replied, { held: "g-low", heldSection: "below" });
+    expect(rows(fromBelow, "below")).toEqual(["low"]);
+    expect(rows(fromBelow, "settled")).toEqual(["n2"]);
+    expect(fromBelow.toGo).toBe(4);
+    expect(rows(planToday(v, replied, { held: null }), "settled")).toEqual(["n2", "low"]);
+  });
+
   test("progress carries across a Regenerate: a newer snapshot changes the plan, not the settled count", () => {
     const cleared = { s: DAY_START + 3, a: SNAPSHOT + 1 };
     const before = planToday(view(items, ["a", "b", "m", "low"], cleared), chats, { held: null });
@@ -136,6 +151,12 @@ describe("planToday", () => {
     expect(plan.mode).toBe("fallback");
     expect(plan.sections.map((s) => [s.label, s.rows.map((r) => r.chat.conversationId)])).toEqual([["Needs you", ["p", "x"]]]);
     expect(plan.toGo).toBe(2);
+  });
+
+  test("without a queue today, the held conversation stays after a reply without counting as to go", () => {
+    const plan = planToday(null, [chat("x", needsYou), chat("h", waiting)], { held: "g-h" });
+    expect(plan.sections[0]?.rows.map((r) => r.chat.conversationId)).toEqual(["x", "h"]);
+    expect(plan.toGo).toBe(1);
   });
 });
 

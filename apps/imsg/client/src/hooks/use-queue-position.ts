@@ -44,10 +44,34 @@ export function publishQueuePosition(next: QueuePosition | null): void {
   recompute();
 }
 
-/** The list's rendered conversation order, or null when no list is mounted. */
+/** The list's rendered conversation order, without folded rows, or null when no list is mounted. */
 export function publishRenderedOrder(order: readonly ChatSummary[] | null): void {
   rendered = order;
+  // The list re-derives its rows on every parent render; only a changed sequence is news to subscribers.
+  if (!sameGuids(order, renderedSnapshot)) {
+    renderedSnapshot = order;
+    for (const listener of orderListeners) listener();
+  }
   recompute();
+}
+
+let renderedSnapshot: readonly ChatSummary[] | null = null;
+const orderListeners = new Set<() => void>();
+
+function sameGuids(a: readonly ChatSummary[] | null, b: readonly ChatSummary[] | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((chat, index) => chat.guid === b[index]?.guid);
+}
+
+function subscribeOrder(listener: () => void): () => void {
+  orderListeners.add(listener);
+  return () => void orderListeners.delete(listener);
+}
+
+/** The published rendered order, so auto-advance re-aims when a fold or reorder changes what is on screen. */
+export function useRenderedOrder(): readonly ChatSummary[] | null {
+  return useSyncExternalStore(subscribeOrder, () => renderedSnapshot, () => null);
 }
 
 function subscribe(listener: () => void): () => void {

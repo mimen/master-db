@@ -127,15 +127,23 @@ const BELOW_DETAIL = "Needs you threads left out today: closed loops, low stakes
 const entry = (chat: ChatSummary): TodayRowEntry => ({ chat, rank: null, reason: null });
 const newestFirst = (a: ChatSummary, b: ChatSummary) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0);
 
-/** Buckets classifyToday over the directory. A held conversation that was handled keeps its slot (the desktop hold). */
-export function planToday(view: TodayView | null | undefined, chats: readonly ChatSummary[], opts: { held: string | null }): TodayPlan {
+/**
+ * Buckets classifyToday over the directory. A held conversation that was handled keeps its slot (the desktop hold):
+ * a ranked one stays at its rank, and one held from New since or Below the line stays in `heldSection`. A held row
+ * that is no longer open never counts toward toGo.
+ */
+export function planToday(
+  view: TodayView | null | undefined,
+  chats: readonly ChatSummary[],
+  opts: { held: string | null; heldSection?: TodaySectionKey },
+): TodayPlan {
   const settled = view ? chats.filter((chat) => chat.conversationId !== undefined && view.cleared.has(chat.conversationId) && matchesFilters(chat, "all", "known")).length : 0;
   const queue = view?.queue;
   if (!queue) {
-    const open = chats.filter((chat) => chat.guid === opts.held || matchesFilters(chat, "unresponded", "known"));
-    const rows = queueOrder(open).map(entry);
+    const open = new Set(chats.filter((chat) => matchesFilters(chat, "unresponded", "known")));
+    const rows = queueOrder(chats.filter((chat) => chat.guid === opts.held || open.has(chat))).map(entry);
     const sections: TodaySection[] = rows.length ? [{ key: "fallback", label: "Needs you", detail: null, tone: null, foldable: false, rows }] : [];
-    return { mode: "fallback", sections, toGo: rows.length, newSince: 0, settled };
+    return { mode: "fallback", sections, toGo: open.size, newSince: 0, settled };
   }
 
   const ranked = new Map<string, TodayRowEntry[]>();
@@ -143,8 +151,20 @@ export function planToday(view: TodayView | null | undefined, chats: readonly Ch
   const below: ChatSummary[] = [];
   const done: { chat: ChatSummary; clearedAt: number }[] = [];
   let rankedCount = 0;
+  let heldFresh = 0;
   for (const chat of chats) {
     const place = classifyToday(view, chat);
+    if ((place.at === "settled" || place.at === "out") && chat.guid === opts.held) {
+      if (opts.heldSection === "new") {
+        fresh.push(chat);
+        heldFresh++;
+        continue;
+      }
+      if (opts.heldSection === "below") {
+        below.push(chat);
+        continue;
+      }
+    }
     switch (place.at) {
       case "done":
         if (chat.guid !== opts.held) break;
@@ -182,7 +202,7 @@ export function planToday(view: TodayView | null | undefined, chats: readonly Ch
   if (done.length) {
     sections.push({ key: "settled", label: "Settled today", detail: null, tone: null, foldable: true, rows: done.sort((a, b) => b.clearedAt - a.clearedAt).map(({ chat }) => entry(chat)) });
   }
-  return { mode: "queue", sections, toGo: rankedCount + fresh.length, newSince: fresh.length, settled };
+  return { mode: "queue", sections, toGo: rankedCount + fresh.length - heldFresh, newSince: fresh.length - heldFresh, settled };
 }
 
 export type TodayBusy = "queued" | "building";

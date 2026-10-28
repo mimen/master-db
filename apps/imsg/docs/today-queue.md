@@ -462,6 +462,10 @@ Where the build differs from the shapes above, and why.
 - `stripCopy` keeps its object input; `today` is an optional field and `StripCopy` carries it.
 - While building, the meta line reads "Reading threads with Opus 5.5…" and the brief dims. A failed Regenerate over a good queue adds a "Regenerate failed: …" line.
 - The settings `openOn` parser was left alone; it is still stored-only.
+- `planToday` takes `heldSection`, the section the list pane saw the held row in when the hold began. A held conversation from New since or Below the line that a reply would classify as settled or out stays in that section and never counts toward `toGo`. In fallback, `toGo` counts only open Needs you rows, not the held one.
+- The workspace takes Today's membership, hold eligibility and advance order from the list's published rendered order (`useRenderedOrder`), so the fallback holds and advances too. `matchesFilters(…, "today")` still returns false.
+- The advance target is recomputed whenever the rendered order changes, and folded rows are never in it, so folding Below the line re-aims auto-advance. The rendered-order store notifies only when the guid sequence changes, since the pane re-derives its rows on every parent render.
+- Today, Needs you and Unread share one `ADVANCING` set in the workspace, so ⌘E on Today advances once with reply intent instead of a second preview selection.
 
 **Fixture and ops**
 - A fixture Regenerate stays `building` for 2.5 s, not 300 ms: the fixture client polls every 500 ms and would never show "Regenerating". It ranks into "Start here" and "Everything else".

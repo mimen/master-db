@@ -7,14 +7,21 @@ async function todayCount(page: Page): Promise<number> {
   return Number(/(\d+)/.exec(label ?? "")?.[1]);
 }
 
-test("the app opens on Today; a settle leaves a rank gap and moves progress; Regenerate folds New since into the groups", async ({ desk }) => {
-  const { page } = desk;
+async function openToday(page: Page): Promise<void> {
   await page.addInitScript((fixtureNow) => {
     const realNow = Date.now.bind(Date);
     const offset = fixtureNow - realNow();
     Date.now = () => realNow() + offset;
   }, FIXTURE_NOW);
   await page.goto("/", { waitUntil: "domcontentloaded" });
+}
+
+const heading = (page: Page) => page.getByTestId("thread-view").getByRole("heading", { level: 2 });
+const composerFocused = (page: Page) => page.evaluate(() => document.activeElement?.getAttribute("placeholder"));
+
+test("the app opens on Today; a settle leaves a rank gap and moves progress; Regenerate folds New since into the groups", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
   await expect(page.getByRole("tab", { name: /^Today, \d+/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("today-meta")).toHaveText("Built 10:30 AM · Opus 5.5 · 12 of 15 threads");
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toBeVisible();
@@ -38,4 +45,60 @@ test("the app opens on Today; a settle leaves a rank gap and moves progress; Reg
   await expect(page.getByText("New since 10:30 AM", { exact: true })).toHaveCount(0);
   await expect(rows.filter({ hasText: "Launch Crew" }).getByTestId("today-rank")).toHaveText("1");
   await expect(page.getByTestId("today-progress")).toHaveText("1 settled · 13 to go");
+});
+
+test("auto-advance skips a folded section", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  const below = page.getByTestId("today-fold").filter({ hasText: "Below the line" });
+  await below.click();
+  await expect(rows.filter({ hasText: "Noah Blake" })).toBeVisible();
+  await rows.filter({ hasText: "Sofia Martinez" }).click();
+  await expect(heading(page)).toHaveText("Sofia Martinez");
+  // Settle right after folding, before any directory update could re-aim the advance by accident.
+  await below.click();
+  await page.keyboard.press("Meta+e");
+  await expect(rows.filter({ hasText: "Noah Blake" })).toHaveCount(0);
+  await expect(heading(page)).toHaveText("Owen Foster");
+});
+
+test("⌘E on Today advances once and keeps reply intent", async ({ desk }) => {
+  const { page } = desk;
+  await openToday(page);
+  const rows = page.getByTestId("conversation-row");
+  const diego = rows.filter({ hasText: "Diego Santos" });
+  await expect(diego).toHaveAttribute("aria-label", /^Diego Santos, unread,/);
+  await rows.filter({ hasText: "Jordan Lee" }).click();
+  await expect(heading(page)).toHaveText("Jordan Lee");
+  await page.getByPlaceholder("iMessage").click();
+  await page.keyboard.press("Meta+e");
+  await expect(heading(page)).toHaveText("Diego Santos");
+  await expect.poll(() => composerFocused(page)).toBe("iMessage");
+  // A second, preview selection would leave Diego unread; the reply intent marks it read.
+  await expect(diego).toHaveAttribute("aria-label", /^Diego Santos, (?!unread)/);
+  await expect(heading(page)).toHaveText("Diego Santos");
+});
+
+test("fallback Today holds the open row after a reply and advances on settle", async ({ desk }) => {
+  const { page, request } = desk;
+  await openToday(page);
+  await request.post("/__fixture/today", { data: { mode: "unbuilt" } });
+  await expect(page.getByText("Today's queue builds at 7:00 AM")).toBeVisible();
+  const rows = page.getByTestId("conversation-row");
+  const alex = rows.filter({ hasText: "Alex Rivera" });
+  await alex.click();
+  await expect(heading(page)).toHaveText("Alex Rivera");
+  const count = await todayCount(page);
+  await page.getByPlaceholder("iMessage").fill("On it");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => todayCount(page)).toBe(count - 1);
+  await page.waitForTimeout(600);
+  await expect(alex).toHaveCount(1);
+  await expect(heading(page)).toHaveText("Alex Rivera");
+  await expect(page.getByText(/^1 of \d+$/)).toBeVisible();
+  await page.getByPlaceholder("iMessage").click();
+  await page.keyboard.press("Meta+e");
+  await expect(heading(page)).toHaveText("Launch Crew");
+  await expect(alex).toHaveCount(0);
 });

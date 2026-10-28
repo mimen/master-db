@@ -14,18 +14,16 @@ import { EmptyState } from "@/components/empty-state";
 import { ThreadView } from "@/components/lazy-surfaces";
 import { useAgentEnabled } from "@/hooks/use-agent";
 import { useChats } from "@/hooks/use-chats";
-import { useToday } from "@/hooks/use-today";
 import { type JumpTarget } from "@/hooks/use-messages";
 import { Springs } from "@/constants/springs";
 import { useTheme } from "@/hooks/use-theme";
 import { onTriageSettling, toggleSettleChat } from "@/hooks/use-triage-actions";
-import { advanceTarget, publishQueuePosition, queueOrder, queuePosition } from "@/hooks/use-queue-position";
+import { advanceTarget, publishQueuePosition, queueOrder, queuePosition, useRenderedOrder } from "@/hooks/use-queue-position";
 import { traceTriage } from "@/lib/triage-trace";
 import { useTriageTheme } from "@/hooks/use-triage-theme";
 import { openAgentPane } from "@/lib/agent-pane";
 import { markChatUnread, undoLastAction } from "@/lib/chat-actions";
 import { DEFAULT_INBOX_FILTERS, desktopInboxTitle } from "@/lib/inbox-model";
-import { classifyToday, type TodayPlace } from "@/lib/today";
 import {
   getListAdapter,
   isListMode,
@@ -39,7 +37,8 @@ import { useReceiveSound } from "@/hooks/use-receive-sound";
 import { openThreadSearch } from "@/lib/thread-search";
 import { showToast } from "@/lib/toast";
 
-const TODAY_SHOWN: ReadonlySet<TodayPlace["at"]> = new Set(["ranked", "new", "below"]);
+/** The lenses where a reply or a settle moves straight on to the next conversation. */
+const ADVANCING: ReadonlySet<StateFilter> = new Set(["today", "unresponded", "unread"]);
 
 export function MessagesWorkspace({
   active,
@@ -232,9 +231,11 @@ export function MessagesWorkspace({
     });
   };
 
-  // Auto-advance (round4 ux.md daily loop): in Needs you and Unread, a reply or a settle
+  // Auto-advance (round4 ux.md daily loop): in Today, Needs you and Unread, a reply or a settle
   // moves straight on to the next conversation in lens order with the composer focused.
-  const order = useMemo(() => queueOrder(chats), [chats]);
+  // Today's membership is the plan the list renders, fallback included, so it comes from the list.
+  const rendered = useRenderedOrder();
+  const order = useMemo(() => (state === "today" ? rendered ?? [] : queueOrder(chats)), [chats, rendered, state]);
   useEffect(() => {
     if (!wide || !active) return;
     publishQueuePosition(queuePosition(order, selected?.guid));
@@ -243,11 +244,12 @@ export function MessagesWorkspace({
   // The neighbor is remembered while the open conversation is still in the lens: by the time
   // a send's echo or a settle lands, the conversation has already left Needs you.
   const nextRef = useRef<ChatSummary | null>(null);
+  // Rerun on the rendered order too: folding a section changes what the next conversation is.
   useEffect(() => {
     if (selected && order.some((chat) => chat.guid === selected.guid)) nextRef.current = advanceTarget(order, selected.guid);
-  }, [order, selected]);
+  }, [order, rendered, selected]);
   const advanceFrom = useCallback((guid: string): void => {
-    if (!wide || (stateRef.current !== "today" && stateRef.current !== "unresponded" && stateRef.current !== "unread")) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
+    if (!wide || !ADVANCING.has(stateRef.current)) return traceTriage({ kind: "advance", from: guid, to: null, reason: `lens ${stateRef.current}` });
     if (selectedRef.current?.guid !== guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: `selected ${selectedRef.current?.guid.slice(-6) ?? "none"}` });
     const next = nextRef.current;
     if (!next || next.guid === guid) return traceTriage({ kind: "advance", from: guid, to: null, reason: next ? "next is self" : "no next" });
@@ -257,16 +259,17 @@ export function MessagesWorkspace({
   }, [wide]);
   useEffect(() => onTriageSettling(advanceFrom), [advanceFrom]);
   const allChatsRef = useRef(allChats);
-  useEffect(() => { allChatsRef.current = allChats; });
-  const todayView = useToday().view;
-  const todayRef = useRef(todayView);
-  useEffect(() => { todayRef.current = todayView; });
+  const renderedRef = useRef(rendered);
+  useEffect(() => {
+    allChatsRef.current = allChats;
+    renderedRef.current = rendered;
+  });
   const selectedGuid = selected?.guid;
   useEffect(() => {
     const chat = selectedGuid ? allChatsRef.current.find((c) => c.guid === selectedGuid) : undefined;
-    const shown = !chat ? false
-      : state === "today" ? TODAY_SHOWN.has(classifyToday(todayRef.current, chat).at)
-      : (state === "unresponded" || state === "unread") && matchesFilters(chat, state, type);
+    const shown = !chat || !ADVANCING.has(state) ? false
+      : state === "today" ? renderedRef.current?.some((c) => c.guid === chat.guid) === true
+      : matchesFilters(chat, state, type);
     setHeld(chat && shown ? chat.guid : null);
   }, [selectedGuid, state, type]);
   useEffect(() => onTriageSettling((guid) => setHeld((current) => (current === guid ? null : current))), []);
@@ -323,9 +326,9 @@ export function MessagesWorkspace({
         const action = settleActionFor(sel);
         traceTriage({ kind: "settle-key", guid: sel.guid, lens: stateRef.current, action, next: nextRef.current?.guid ?? null });
         void toggleSettleChat(sel);
-        // Needs you and Unread auto-advance on the settle itself (onTriageSettling).
+        // Today, Needs you and Unread auto-advance on the settle itself (onTriageSettling).
         // Elsewhere, glide off the row only when the action drops it out of the lens.
-        const advances = action === "settle" && (stateRef.current === "unresponded" || stateRef.current === "unread");
+        const advances = action === "settle" && ADVANCING.has(stateRef.current);
         if (!advances && settleLeavesLens(action, stateRef.current)) getListAdapter()?.selectNeighborOf(sel.guid);
       },
       markUnreadSelected: () => {

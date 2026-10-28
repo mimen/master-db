@@ -217,7 +217,13 @@ export function ConversationListPane({
   const refine = useMemo(() => ({ refinements, scheduled, now }), [refinements, scheduled, now]);
   // Today's plan runs on every lens: it is also the Today tab's count.
   const today = useToday();
-  const plan = useMemo(() => planToday(today.view, allChats, { held }), [today.view, allChats, held]);
+  // The section the held row sat in when the hold began, so a reply cannot drop it out of New since or Below the line.
+  const [heldAt, setHeldAt] = useState<{ guid: string; section: TodaySectionKey | undefined } | null>(null);
+  const heldSection = heldAt?.guid === held ? heldAt.section : undefined;
+  const plan = useMemo(() => planToday(today.view, allChats, { held, heldSection }), [today.view, allChats, held, heldSection]);
+  if ((heldAt?.guid ?? null) !== held) {
+    setHeldAt(held === null ? null : { guid: held, section: plan.sections.find((section) => section.rows.some((row) => row.chat.guid === held))?.key });
+  }
   const [openFolds, setOpenFolds] = useState<ReadonlySet<TodaySectionKey>>(() => new Set());
   const toggleFold = useCallback((key: TodaySectionKey) => setOpenFolds((current) => {
     const next = new Set(current);
