@@ -13,7 +13,7 @@ function candidate(n: number, state: TodayCandidate["state"], lastMessageAt: num
 
 function session(over: Partial<TodaySession> = {}): TodaySession {
   return {
-    id: "s1", startedAt: SNAPSHOT - 1_000, snapshotAt: SNAPSHOT, day: "2026-10-27", updates: 1, system: "rules",
+    id: "s1", startedAt: SNAPSHOT - 1_000, snapshotAt: SNAPSHOT, arrivalsSince: SNAPSHOT, day: "2026-10-27", updates: 1, system: "rules",
     turns: [{ role: "user", content: "read these" }, { role: "assistant", content: '{"brief":"b","groups":[],"items":[{"ref":"c1"}]}' }],
     tokens: 60_000, compactions: 0, nextRef: 10, threads: {}, items: [], ...over,
   };
@@ -41,12 +41,29 @@ describe("planUpdate", () => {
     expect(ids(plan.deeper), "an unknown thread from before the snapshot is backlog, not news").toEqual(["conv5"] as ConversationId[]);
   });
 
-  test("fresh stops at 100", () => {
+  test("fresh stops at 100 and says it was cut", () => {
     const list = Array.from({ length: 120 }, (_, n) => candidate(n, "needsYou", SNAPSHOT + 1 + n));
     const plan = planUpdate(session(), list, new Map(), false);
     expect(plan.fresh).toHaveLength(100);
     expect(plan.fresh[0]?.conversationId).toBe("conv119" as ConversationId);
-    expect(plan.deeper, "news past the cap waits for the next Update").toEqual([]);
+    expect(plan.freshCut).toBe(true);
+    expect(plan.deeper, "news past the cap is not backlog").toEqual([]);
+    expect(planUpdate(session(), list.slice(0, 100), new Map(), false).freshCut).toBe(false);
+  });
+
+  test("an unknown thread is an arrival by arrivalsSince, not the snapshot", () => {
+    const plan = planUpdate(session({ arrivalsSince: SNAPSHOT - 100 }), [candidate(1, "waiting", SNAPSHOT - 50)], new Map(), false);
+    expect(ids(plan.fresh)).toEqual(["conv1"] as ConversationId[]);
+  });
+
+  test("a pick Milad replied to is no longer open, so its slot is room", () => {
+    const s = session({
+      items: ["conv1", "conv2"],
+      threads: { conv1: { ref: "c1", lastMessageAt: 1, state: "needsYou" }, conv2: { ref: "c2", lastMessageAt: 1, state: "needsYou" } },
+    });
+    const plan = planUpdate(s, [candidate(1, "waiting", 2), candidate(2, "needsYou", 1)], new Map(), false);
+    expect(plan.open).toBe(1);
+    expect(plan.room).toBe(49);
   });
 
   test("gone names known threads that left the candidates; open counts the picks still there, and room is the rest of 50", () => {

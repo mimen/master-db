@@ -33,6 +33,11 @@ export interface TodaySession {
   startedAt: number;
   /** The latest accepted turn's snapshot; equals the Convex queue's snapshotAt. */
   snapshotAt: number;
+  /**
+   * Unknown threads newer than this are arrivals. It follows snapshotAt, except that it holds still while arrivals
+   * wait past the fresh cap, since they would otherwise fall behind the snapshot unread.
+   */
+  arrivalsSince: number;
   /** The LA day of the latest accepted turn. */
   day: string;
   updates: number;
@@ -50,13 +55,15 @@ export interface TodaySession {
 }
 
 export interface TodayUpdatePlan {
-  /** Threads with something new since the session read them, and threads new to it since its snapshot. */
+  /** Threads with something new since the session read them, and threads new to it since `arrivalsSince`. */
   fresh: TodayCandidate[];
+  /** More threads had news than the cap; the next Update reads the rest. */
+  freshCut: boolean;
   /** Needs you threads the session never read, to fill the room. */
   deeper: TodayCandidate[];
   /** Refs of known threads that are no longer candidates. */
   gone: string[];
-  /** The latest queue's items still among the candidates. */
+  /** The latest queue's items still in the state they were picked in, as the client's ranked rows are. */
   open: number;
   room: number;
 }
@@ -71,15 +78,18 @@ export function planUpdate(session: TodaySession, candidates: readonly TodayCand
   const known = (c: TodayCandidate): TodaySessionThread | undefined => session.threads[c.conversationId];
   const hasNews = (c: TodayCandidate): boolean => {
     const thread = known(c);
-    return thread ? c.lastMessageAt > thread.lastMessageAt || c.state !== thread.state : c.lastMessageAt > session.snapshotAt;
+    return thread ? c.lastMessageAt > thread.lastMessageAt || c.state !== thread.state : c.lastMessageAt > session.arrivalsSince;
   };
-  const current = new Set<string>(candidates.map((c) => c.conversationId));
-  const open = session.items.filter((id) => current.has(id)).length;
+  const current = new Map<string, TodayCandidate>(candidates.map((c) => [c.conversationId, c]));
+  // A pick Milad replied to is a Waiting candidate now, and done in the client, so it frees its slot.
+  const open = session.items.filter((id) => current.get(id)?.state === session.threads[id]?.state).length;
   const room = Math.max(0, TODAY_LIMITS.items - open);
   const { fresh: freshCap, perOpenSlot, newDay: floor, deeper: deeperCap } = TODAY_LIMITS.update;
   const readAt = (c: TodayCandidate) => lastRead.get(c.conversationId) ?? 0;
+  const news = candidates.filter(hasNews).sort(newestFirst);
   return {
-    fresh: candidates.filter(hasNews).sort(newestFirst).slice(0, freshCap),
+    fresh: news.slice(0, freshCap),
+    freshCut: news.length > freshCap,
     deeper: candidates.filter((c) => c.state === "needsYou" && !known(c) && !hasNews(c))
       .sort((a, b) => readAt(a) - readAt(b) || newestFirst(a, b))
       .slice(0, Math.min(Math.max(room * perOpenSlot, newDay ? floor : 0), deeperCap)),

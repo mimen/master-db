@@ -282,7 +282,7 @@ describe("buildToday as an Update", () => {
   const update = { ...claim, attempt: 2, startedAt: NOW, mode: "update" as const, basis: { sessionId: "s1", snapshotAt: SNAP } };
   function stored(over: Partial<TodaySession> = {}): TodaySession {
     return {
-      id: "s1", startedAt: SNAP - DAY, snapshotAt: SNAP, day: claim.day, updates: 1, system: "frozen rules",
+      id: "s1", startedAt: SNAP - DAY, snapshotAt: SNAP, arrivalsSince: SNAP, day: claim.day, updates: 1, system: "frozen rules",
       turns: [{ role: "user", content: "the first read" }, { role: "assistant", content: '{"brief":"b"}' }],
       tokens: 60_000, compactions: 0, nextRef: 4, items: ["conv1", "conv2", "conv3"],
       threads: {
@@ -348,6 +348,19 @@ describe("buildToday as an Update", () => {
     });
     expect([...store.todayReadAt().keys()].sort()).toEqual(["conv1", "conv5", "conv6"]);
     expect(built.compact, "under the threshold, no compaction").toBeUndefined();
+  });
+
+  test("arrivals past the fresh cap are read by the next Update", async () => {
+    const arrivals = Array.from({ length: 120 }, (_, n) => ({ ...candidate(100 + n, "waiting"), lastMessageAt: at(1.5) + n }));
+    const store = new OverlayDb(":memory:");
+    store.setTodaySession(stored());
+    const unread = () => arrivals.filter((c) => !store.todayReadAt().has(c.conversationId)).length;
+    (await buildToday(fakes([...list, ...arrivals], answer, { store }).deps, update)).accept();
+    expect(unread()).toBeGreaterThan(0);
+    const next = { ...update, attempt: 3, startedAt: NOW + 1, basis: { sessionId: "s1", snapshotAt: NOW } };
+    (await buildToday(fakes([...list, ...arrivals], answer, { store }).deps, next)).accept();
+    expect(unread()).toBe(0);
+    expect(store.getTodaySession("s1")?.arrivalsSince, "the watermark moves once nothing is left").toBe(NOW + 1);
   });
 
   test("on a new day, the turn says so and the session moves to the new day", async () => {

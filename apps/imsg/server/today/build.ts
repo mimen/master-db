@@ -238,7 +238,7 @@ async function buildFresh(deps: TodayBuildDeps, claim: TodayClaim, signal: Abort
 
   const reply = JSON.stringify(answer.value);
   const session: TodaySession = {
-    id: crypto.randomUUID(), startedAt: claim.startedAt, snapshotAt: claim.startedAt, day: claim.day, updates: 0, system,
+    id: crypto.randomUUID(), startedAt: claim.startedAt, snapshotAt: claim.startedAt, arrivalsSince: claim.startedAt, day: claim.day, updates: 0, system,
     turns: [{ role: "user", content: prompt }, { role: "assistant", content: reply }],
     tokens: sizeAfter(answer, () => estimateTokens(system + prompt + reply)), compactions: 0, nextRef: read.length + 1,
     threads: Object.fromEntries(kept.map((thread) => [thread.candidate.conversationId, sessionThread(thread)])),
@@ -291,7 +291,8 @@ async function buildUpdate(deps: TodayBuildDeps, claim: TodayClaim, signal: Abor
 
   const reply = JSON.stringify(answer.value);
   const next: TodaySession = {
-    ...session, snapshotAt: claim.startedAt, day: claim.day, updates: session.updates + 1,
+    ...session, snapshotAt: claim.startedAt, arrivalsSince: plan.freshCut ? session.arrivalsSince : claim.startedAt, day: claim.day,
+    updates: session.updates + 1,
     turns: [...session.turns, { role: "user", content: turn }, { role: "assistant", content: reply }],
     tokens: sizeAfter(answer, () => session.tokens + estimateTokens(turn + reply)), nextRef, threads: threadsNow,
     items: draft.items.map((item) => item.conversationId),
