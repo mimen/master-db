@@ -6,7 +6,7 @@ import { todayCandidateState, todayWindow } from "../../apps/imsg/shared/today";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { assertAllowed } from "../_lib/authed";
-import { todayCandidate, todayQueue, todayRun, todayView, type TodayCandidate, type TodayRun } from "../schema/comma/validators";
+import { todayCandidate, todayMode, todayQueue, todayRun, todayView, type TodayCandidate, type TodayMode, type TodayRun } from "../schema/comma/validators";
 
 import { sameSecret } from "./bridgeAuth";
 import { listReader, withConversationState } from "./queries";
@@ -35,10 +35,10 @@ function assertDay(day: string, dayStart: number) {
 }
 
 /** Starts a new attempt unless one is already queued or running. Creates the day's row on first use. */
-async function request(ctx: MutationCtx, day: string, dayStart: number, source: TodayRun["source"]): Promise<TodayRun> {
+async function request(ctx: MutationCtx, day: string, dayStart: number, source: TodayRun["source"], mode: TodayMode): Promise<TodayRun> {
   const row = await rowFor(ctx, day);
   if (row && (row.run.status === "requested" || row.run.status === "building")) return row.run;
-  const run: TodayRun = { status: "requested", attempt: (row?.run.attempt ?? 0) + 1, source, requestedAt: Date.now() };
+  const run: TodayRun = { status: "requested", attempt: (row?.run.attempt ?? 0) + 1, source, mode, requestedAt: Date.now() };
   if (row) await ctx.db.patch(row._id, { run });
   else await ctx.db.insert("comma_today_queue", { day, dayStart, run });
   await ctx.scheduler.runAfter(REQUEST_EXPIRY_MS, expireRunRef, { day, attempt: run.attempt, status: "requested" });
@@ -65,14 +65,17 @@ export const get = query({
   },
 });
 
-/** Regenerate. A no-op while a build is queued or running; otherwise the next attempt. */
+/**
+ * Update or Regenerate. A no-op while a build is queued or running; otherwise the next attempt.
+ * No mode means Regenerate, which is all a client from before Update could ask for.
+ */
 export const requestBuild = mutation({
-  args: { day: v.string(), dayStart: v.number() },
+  args: { day: v.string(), dayStart: v.number(), mode: v.optional(todayMode) },
   returns: todayRun,
-  handler: async (ctx, { day, dayStart }) => {
+  handler: async (ctx, { day, dayStart, mode = "fresh" }) => {
     await assertAllowed(ctx);
     assertDay(day, dayStart);
-    return await request(ctx, day, dayStart, "user");
+    return await request(ctx, day, dayStart, "user", mode);
   },
 });
 
@@ -97,33 +100,50 @@ function builtOvernight(run: TodayRun, dayStart: number): boolean {
   return run.source === "user" && endedAt < dayStart + MORNING_MS;
 }
 
-/** The 7:00 AM trigger. Requests when the day has no build yet, or only an overnight one; every call returns the current run. */
+/** The 7:00 AM trigger, an Update. Requests when the day has no build yet, or only an overnight one; every call returns the current run. */
 export const todaySchedule = internalMutation({
   args: { day: v.string(), dayStart: v.number() },
   returns: todayRun,
   handler: async (ctx, { day, dayStart }) => {
     assertDay(day, dayStart);
     const row = await rowFor(ctx, day);
-    return row && !builtOvernight(row.run, dayStart) ? row.run : await request(ctx, day, dayStart, "schedule");
+    return row && !builtOvernight(row.run, dayStart) ? row.run : await request(ctx, day, dayStart, "schedule", "update");
   },
 });
 
+/** How far back an Update looks for the session to continue, in day rows. */
+const BASIS_DAYS = 14;
+
+/** The newest queue on or before `day` that came from a model session: today's, else an earlier day's. */
+async function sessionBasis(ctx: QueryCtx, day: string): Promise<{ sessionId: string; snapshotAt: number } | null> {
+  const rows = await ctx.db.query("comma_today_queue").withIndex("by_day", (q) => q.lte("day", day)).order("desc").take(BASIS_DAYS);
+  const queue = rows.find((row) => row.queue?.session)?.queue;
+  return queue?.session ? { sessionId: queue.session.id, snapshotAt: queue.snapshotAt } : null;
+}
+
 /**
- * requested(attempt) → building. startedAt is the snapshot time; null means another claim owns the day.
+ * requested(attempt) → building. startedAt is the snapshot time; null means another claim owns the day. An Update
+ * also gets the session to continue, or a null basis when there is none, and then builds fresh.
  * A retry carrying the same claimId gets its startedAt back, so a lost response cannot fence out its own worker.
  */
 export const todayClaim = internalMutation({
   args: { day: v.string(), attempt: v.number(), claimId: v.string() },
-  returns: v.union(v.object({ startedAt: v.number() }), v.null()),
+  returns: v.union(v.object({
+    startedAt: v.number(),
+    mode: todayMode,
+    basis: v.union(v.object({ sessionId: v.string(), snapshotAt: v.number() }), v.null()),
+  }), v.null()),
   handler: async (ctx, { day, attempt, claimId }) => {
     const row = await rowFor(ctx, day);
     if (!row || row.run.attempt !== attempt) return null;
-    if (row.run.status === "building") return row.run.claimId === claimId ? { startedAt: row.run.startedAt } : null;
+    const mode = row.run.mode ?? "fresh";
+    const claimed = async (startedAt: number) => ({ startedAt, mode, basis: mode === "update" ? await sessionBasis(ctx, day) : null });
+    if (row.run.status === "building") return row.run.claimId === claimId ? await claimed(row.run.startedAt) : null;
     if (row.run.status !== "requested") return null;
     const startedAt = Date.now();
     await ctx.db.patch(row._id, { run: { ...row.run, status: "building", startedAt, claimId } });
     await ctx.scheduler.runAfter(BUILD_EXPIRY_MS, expireRunRef, { day, attempt, status: "building" });
-    return { startedAt };
+    return await claimed(startedAt);
   },
 });
 
@@ -168,11 +188,11 @@ export const todayFinish = internalMutation({
     if (run.status === "done") return outcome.ok;
     if (run.status === "failed") return !outcome.ok;
     if (run.status !== "building") return false;
-    const { source } = run;
+    const { source, mode } = run;
     if (outcome.ok) {
-      await ctx.db.patch(row._id, { run: { status: "done", attempt, source, finishedAt: Date.now() }, queue: outcome.queue });
+      await ctx.db.patch(row._id, { run: { status: "done", attempt, source, mode, finishedAt: Date.now() }, queue: outcome.queue });
     } else {
-      await ctx.db.patch(row._id, { run: { status: "failed", attempt, source, failedAt: Date.now(), error: outcome.error } });
+      await ctx.db.patch(row._id, { run: { status: "failed", attempt, source, mode, failedAt: Date.now(), error: outcome.error } });
     }
     return true;
   },
@@ -186,7 +206,7 @@ export const expireRun = internalMutation({
     const row = await rowFor(ctx, day);
     if (!row || row.run.status !== status || row.run.attempt !== attempt) return null;
     await ctx.db.patch(row._id, {
-      run: { status: "failed", attempt, source: row.run.source, failedAt: Date.now(), error: EXPIRED[status] },
+      run: { status: "failed", attempt, source: row.run.source, mode: row.run.mode, failedAt: Date.now(), error: EXPIRED[status] },
     });
     return null;
   },

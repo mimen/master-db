@@ -653,13 +653,22 @@ export const todayQueue = v.object({
   readCount: v.number(),
   /** Every candidate at the snapshot, Needs you and Waiting; absent on queues built before it was stored. */
   candidateCount: v.optional(v.number()),
+  /**
+   * The model session this queue came from. startedAt is its fresh build's snapshot, possibly on an earlier day, and
+   * updates counts the Updates since then. Absent on queues built before sessions.
+   */
+  session: v.optional(v.object({ id: v.string(), startedAt: v.number(), updates: v.number() })),
 });
+/** update continues the model session; fresh starts a new one. */
+export const todayMode = v.union(v.literal("update"), v.literal("fresh"));
 const todaySource = v.union(v.literal("schedule"), v.literal("user"));
+/** Absent on runs stored before modes, which were all fresh. */
+const mode = v.optional(todayMode);
 export const todayRun = v.union(
-  v.object({ status: v.literal("requested"), attempt: v.number(), source: todaySource, requestedAt: v.number() }),
-  v.object({ status: v.literal("building"), attempt: v.number(), source: todaySource, requestedAt: v.number(), startedAt: v.number(), claimId: v.string() }),
-  v.object({ status: v.literal("done"), attempt: v.number(), source: todaySource, finishedAt: v.number() }),
-  v.object({ status: v.literal("failed"), attempt: v.number(), source: todaySource, failedAt: v.number(), error: v.string() }),
+  v.object({ status: v.literal("requested"), attempt: v.number(), source: todaySource, mode, requestedAt: v.number() }),
+  v.object({ status: v.literal("building"), attempt: v.number(), source: todaySource, mode, requestedAt: v.number(), startedAt: v.number(), claimId: v.string() }),
+  v.object({ status: v.literal("done"), attempt: v.number(), source: todaySource, mode, finishedAt: v.number() }),
+  v.object({ status: v.literal("failed"), attempt: v.number(), source: todaySource, mode, failedAt: v.number(), error: v.string() }),
 );
 export const todayQueueFields = {
   day: v.string(),
@@ -692,5 +701,6 @@ export type TodayGroup = Infer<typeof todayGroup>;
 export type TodayItem = Infer<typeof todayItem>;
 export type TodayQueue = Infer<typeof todayQueue>;
 export type TodayRun = Infer<typeof todayRun>;
+export type TodayMode = Infer<typeof todayMode>;
 export type TodayView = Infer<typeof todayView>;
 export type TodayCandidate = Infer<typeof todayCandidate>;

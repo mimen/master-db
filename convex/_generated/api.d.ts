@@ -2272,11 +2272,13 @@ export declare const api: {
             model: string;
             openAtSnapshot: Array<Id<"comma_conversations">>;
             readCount: number;
+            session?: { id: string; startedAt: number; updates: number };
             snapshotAt: number;
           } | null;
           run:
             | {
                 attempt: number;
+                mode?: "update" | "fresh";
                 requestedAt: number;
                 source: "schedule" | "user";
                 status: "requested";
@@ -2284,6 +2286,7 @@ export declare const api: {
             | {
                 attempt: number;
                 claimId: string;
+                mode?: "update" | "fresh";
                 requestedAt: number;
                 source: "schedule" | "user";
                 startedAt: number;
@@ -2292,6 +2295,7 @@ export declare const api: {
             | {
                 attempt: number;
                 finishedAt: number;
+                mode?: "update" | "fresh";
                 source: "schedule" | "user";
                 status: "done";
               }
@@ -2299,6 +2303,7 @@ export declare const api: {
                 attempt: number;
                 error: string;
                 failedAt: number;
+                mode?: "update" | "fresh";
                 source: "schedule" | "user";
                 status: "failed";
               };
@@ -2313,9 +2318,10 @@ export declare const api: {
       requestBuild: FunctionReference<
         "mutation",
         "public",
-        { day: string; dayStart: number },
+        { day: string; dayStart: number; mode?: "update" | "fresh" },
         | {
             attempt: number;
+            mode?: "update" | "fresh";
             requestedAt: number;
             source: "schedule" | "user";
             status: "requested";
@@ -2323,6 +2329,7 @@ export declare const api: {
         | {
             attempt: number;
             claimId: string;
+            mode?: "update" | "fresh";
             requestedAt: number;
             source: "schedule" | "user";
             startedAt: number;
@@ -2331,6 +2338,7 @@ export declare const api: {
         | {
             attempt: number;
             finishedAt: number;
+            mode?: "update" | "fresh";
             source: "schedule" | "user";
             status: "done";
           }
@@ -2338,6 +2346,7 @@ export declare const api: {
             attempt: number;
             error: string;
             failedAt: number;
+            mode?: "update" | "fresh";
             source: "schedule" | "user";
             status: "failed";
           }
@@ -5581,7 +5590,11 @@ export declare const internal: {
         "mutation",
         "internal",
         { attempt: number; claimId: string; day: string },
-        { startedAt: number } | null
+        {
+          basis: { sessionId: string; snapshotAt: number } | null;
+          mode: "update" | "fresh";
+          startedAt: number;
+        } | null
       >;
       todayFinish: FunctionReference<
         "mutation",
@@ -5606,6 +5619,7 @@ export declare const internal: {
                   model: string;
                   openAtSnapshot: Array<Id<"comma_conversations">>;
                   readCount: number;
+                  session?: { id: string; startedAt: number; updates: number };
                   snapshotAt: number;
                 };
               }
@@ -5619,6 +5633,7 @@ export declare const internal: {
         { day: string; dayStart: number },
         | {
             attempt: number;
+            mode?: "update" | "fresh";
             requestedAt: number;
             source: "schedule" | "user";
             status: "requested";
@@ -5626,6 +5641,7 @@ export declare const internal: {
         | {
             attempt: number;
             claimId: string;
+            mode?: "update" | "fresh";
             requestedAt: number;
             source: "schedule" | "user";
             startedAt: number;
@@ -5634,6 +5650,7 @@ export declare const internal: {
         | {
             attempt: number;
             finishedAt: number;
+            mode?: "update" | "fresh";
             source: "schedule" | "user";
             status: "done";
           }
@@ -5641,6 +5658,7 @@ export declare const internal: {
             attempt: number;
             error: string;
             failedAt: number;
+            mode?: "update" | "fresh";
             source: "schedule" | "user";
             status: "failed";
           }

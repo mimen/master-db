@@ -39,12 +39,13 @@ function conversation(key: string, over: Partial<Doc<"comma_conversations">> = {
   };
 }
 
-function queue(snapshotAt: number, ids: Id<"comma_conversations">[]): TodayQueue {
+function queue(snapshotAt: number, ids: Id<"comma_conversations">[], session?: TodayQueue["session"]): TodayQueue {
   return {
     snapshotAt, model: "claude-opus-5-5", brief: "Friday first.", readCount: ids.length,
     groups: [{ id: "g1", title: "Friday", context: "Set times close tonight." }],
     items: ids.map((conversationId, index) => ({ conversationId, rank: index + 1, group: "g1", reason: "Blocks the run of show.", anchor: `m${index}` })),
     openAtSnapshot: ids,
+    ...(session ? { session } : {}),
   };
 }
 
@@ -66,6 +67,17 @@ describe("requestBuild", () => {
     expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "requested", attempt: 3 });
   });
 
+  test("stores the mode, and a request without one is a Regenerate", async () => {
+    const { t, as } = setup();
+    expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "requested", mode: "fresh" });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
+    await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: true, queue: queue(1, []) } });
+    expect(await runOf(t), "finish carries the mode through").toMatchObject({ status: "done", mode: "fresh" });
+    expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart, mode: "update" })).toMatchObject({ status: "requested", attempt: 2, mode: "update" });
+    await t.mutation(internal.comma.today.expireRun, { day, attempt: 2, status: "requested" });
+    expect(await runOf(t), "expiry carries the mode through").toMatchObject({ status: "failed", mode: "update" });
+  });
+
   test("rejects a dayStart that is not that day's midnight", async () => {
     const { as } = setup();
     await expect(as.mutation(api.comma.today.requestBuild, { day, dayStart: dayStart + 1 })).rejects.toThrow("disagree");
@@ -81,7 +93,7 @@ describe("requestBuild", () => {
 describe("todaySchedule", () => {
   test("requests only for a day without a row and answers the current run on every poll", async () => {
     const { t } = setup();
-    expect(await t.mutation(internal.comma.today.todaySchedule, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1, source: "schedule" });
+    expect(await t.mutation(internal.comma.today.todaySchedule, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1, source: "schedule", mode: "update" });
     expect(await t.mutation(internal.comma.today.todaySchedule, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1 });
     await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
     await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "The AI gateway is down" } });
@@ -109,7 +121,7 @@ describe("claim and finish", () => {
     const { t, as } = setup();
     await as.mutation(api.comma.today.requestBuild, { day, dayStart });
     expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" })).toBeNull();
-    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toEqual({ startedAt: expect.any(Number) });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toEqual({ startedAt: expect.any(Number), mode: "fresh", basis: null });
     expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "other" })).toBeNull();
     expect(await runOf(t)).toMatchObject({ status: "building", attempt: 1, claimId: "w1" });
   });
@@ -150,6 +162,54 @@ describe("claim and finish", () => {
     expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "The build timed out" } })).toBe(true);
     expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: true, queue: queue(5, []) } })).toBe(false);
     expect((await as.query(api.comma.today.get, { day }))?.queue).toBeNull();
+  });
+});
+
+describe("the claim's session basis", () => {
+  async function build(t: ReturnType<typeof setup>["t"], as: ReturnType<typeof setup>["as"], at: { day: string; dayStart: number }, q: TodayQueue, mode: "update" | "fresh" = "update") {
+    const run = await as.mutation(api.comma.today.requestBuild, { ...at, mode });
+    await t.mutation(internal.comma.today.todayClaim, { day: at.day, attempt: run.attempt, claimId: `w${run.attempt}` });
+    await t.mutation(internal.comma.today.todayFinish, { day: at.day, attempt: run.attempt, outcome: { ok: true, queue: q } });
+  }
+
+  test("an Update gets this day's session, and a retried claim gets the same answer", async () => {
+    const { t, as } = setup();
+    await build(t, as, { day, dayStart }, queue(50, [], { id: "s1", startedAt: 40, updates: 1 }));
+    await as.mutation(api.comma.today.requestBuild, { day, dayStart, mode: "update" });
+    const claim = await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" });
+    expect(claim).toEqual({ startedAt: expect.any(Number), mode: "update", basis: { sessionId: "s1", snapshotAt: 50 } });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" })).toEqual(claim);
+  });
+
+  test("with no queue today yet, the morning Update continues the previous day's session", async () => {
+    const { t, as } = setup();
+    const yesterday = todayWindow(dayStart - 1);
+    const earlier = todayWindow(yesterday.start - 1);
+    await build(t, as, { day: earlier.day, dayStart: earlier.start }, queue(10, [], { id: "old", startedAt: 10, updates: 0 }));
+    await build(t, as, { day: yesterday.day, dayStart: yesterday.start }, queue(20, [], { id: "s1", startedAt: 10, updates: 3 }));
+    await build(t, as, { day: tomorrow.day, dayStart: tomorrow.start }, queue(90, [], { id: "later", startedAt: 90, updates: 0 }));
+    await t.mutation(internal.comma.today.todaySchedule, { day, dayStart });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" }))
+      .toMatchObject({ mode: "update", basis: { sessionId: "s1", snapshotAt: 20 } });
+  });
+
+  test("the basis is null for a Regenerate, and when no queue has a session", async () => {
+    const { t, as } = setup();
+    const yesterday = todayWindow(dayStart - 1);
+    await build(t, as, { day: yesterday.day, dayStart: yesterday.start }, queue(20, []));
+    await as.mutation(api.comma.today.requestBuild, { day, dayStart, mode: "update" });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toMatchObject({ mode: "update", basis: null });
+    await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: true, queue: queue(30, [], { id: "s1", startedAt: 30, updates: 0 }) } });
+    await as.mutation(api.comma.today.requestBuild, { day, dayStart, mode: "fresh" });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" })).toMatchObject({ mode: "fresh", basis: null });
+  });
+
+  test("a run stored before modes claims as fresh, and finishes without one", async () => {
+    const { t } = setup();
+    await t.run((ctx) => ctx.db.insert("comma_today_queue", { day, dayStart, run: { status: "requested", attempt: 1, source: "user", requestedAt: 1 } }));
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toMatchObject({ mode: "fresh", basis: null });
+    await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "x" } });
+    expect(await runOf(t)).toEqual({ status: "failed", attempt: 1, source: "user", failedAt: expect.any(Number), error: "x" });
   });
 });
 
