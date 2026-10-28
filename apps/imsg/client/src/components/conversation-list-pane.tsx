@@ -33,6 +33,7 @@ import { publishRenderedOrder } from "@/hooks/use-queue-position";
 import { onTriageResolved, onTriageUndo, settleAllChats } from "@/hooks/use-triage-actions";
 import { useTheme } from "@/hooks/use-theme";
 import { useToday } from "@/hooks/use-today";
+import { useAppBadge } from "@/lib/app-badge";
 import { useType } from "@/hooks/use-type";
 import { commaApi } from "@/lib/convex-api";
 import { usePendingScheduled } from "@/lib/pending-scheduled";
@@ -240,6 +241,7 @@ export function ConversationListPane({
   }, []);
   const onToday = filters.state === "today";
   const lensCounts = useMemo(() => (counts ? { ...counts, today: plan.toGo } : null), [counts, plan.toGo]);
+  useAppBadge(today.view === undefined ? undefined : plan.toGo);
   // Explicitly memoised: full passes over every conversation, plus a per-chat
   // participant scan while searching.
   const deskModel = useMemo(
