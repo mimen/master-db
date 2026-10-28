@@ -32,6 +32,7 @@ async function resetAndOpen(
   await desk.page.setViewportSize({ width, height: 820 });
   await desk.page.emulateMedia({ colorScheme: scheme, reducedMotion });
   await desk.page.goto(`/?visual=${scheme}-${width}`, { waitUntil: "domcontentloaded" });
+  await desk.page.getByRole("tab", { name: /^Needs you/ }).click();
   await expect(desk.page.getByRole("heading", { name: "Needs you" })).toBeVisible();
   await expect(desk.page.getByTestId("conversation-row").first()).toBeVisible();
 }
@@ -442,7 +443,7 @@ test("wide cold routes project into the persistent desktop shell", async ({ desk
   await expect(page.getByText("Settings", { exact: true }).last()).toBeVisible();
 
   await page.goto("/scheduled?workspace=messages", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: /Needs you|Waiting|All messages/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Today|Needs you|Waiting|All messages/ }).first()).toBeVisible();
   await expect(page.getByText("Scheduled", { exact: true }).last()).toBeVisible();
 
   await page.goto("/person?address=%2B16195550102&name=Jordan%20Lee", { waitUntil: "domcontentloaded" });

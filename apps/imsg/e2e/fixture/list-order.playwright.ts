@@ -25,6 +25,7 @@ test("⌘↓ and ⌘↑ step conversations from the composer without settling", 
 test("Sort: Oldest first reverses the list and shows a chip that flips it back", async ({ desk }) => {
   const page = desk.page;
   await page.goto("/");
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await settledCount(page.getByTestId("conversation-row"));
   const newest = await rowNames(page);
   await page.getByRole("button", { name: /^Filter conversations/ }).click();

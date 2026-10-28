@@ -28,6 +28,7 @@ test("web mic: click toggles, short take and Esc send nothing, explicit send upl
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?voice", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   const mic = page.getByRole("button", { name: "Record voice message" });

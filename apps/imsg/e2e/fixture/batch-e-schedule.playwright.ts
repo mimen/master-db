@@ -4,6 +4,7 @@ test("Send later menu opens above its toolbar control and the date editor above 
   const page = desk.page;
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?schedule", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await expect(page.getByRole("heading", { name: "Needs you" })).toBeVisible();
   await page.getByTestId("conversation-row").first().click();
   await page.getByPlaceholder("iMessage").fill("Doors at 8");

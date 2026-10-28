@@ -14,6 +14,7 @@ import { WhisperService } from "../../server/whisper";
 import type { OverlayDb } from "../../server/db";
 import type { ChatSummary, Contact, ReplySuggestions, TranscriptState } from "../../shared/types";
 import { createAgentFixture } from "./agent";
+import { createTodayFixture, type TodayMode } from "./today";
 import type { FixtureBlueBubbles } from "./fake-bluebubbles";
 import { AGENT_SEED, fixtureSeed, FIXTURE_NOW, type FixtureIdentity } from "./world";
 
@@ -342,7 +343,20 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
     const upload = uploads.get(c.req.param("guid"));
     return upload ? new Response(upload.bytes) : bb.downloadAttachment(c.req.param("guid"));
   });
+  const today = createTodayFixture({
+    chats: chatSummaries,
+    clears: () => db.overlaySnapshot().triageEvents,
+    canonical: (chatGuid) => controls.directory.canonicalGuid(chatGuid),
+  });
+  // Drives switch the header between the seeded queue, before the morning build, and a failed build.
+  app.post("/__fixture/today", async (c) => {
+    const { mode } = await c.req.json<{ mode: TodayMode }>();
+    if (mode !== "seeded" && mode !== "unbuilt" && mode !== "failed") return c.json({ error: "mode must be seeded, unbuilt or failed" }, 400);
+    today.setMode(mode);
+    return c.json({ ok: true });
+  });
   const handlers: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    ...today.handlers,
     "comma/linkPreview:fetchLinkPreview": async (args) => {
       const url = typeof args.url === "string" ? parsePublicPreviewUrl(args.url) : null;
       return url ? extractLinkPreview('<title>Fixture link preview</title><meta name="description" content="A deterministic preview for fixture messages.">', url) : null;
@@ -531,6 +545,6 @@ export function registerConvexFixture(app: Hono, controls: FixtureRouteControls,
       return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: error instanceof FixtureError ? error.status : 400 });
     }
   });
-  return () => { agent.reset(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
+  return () => { agent.reset(); today.reset(); drafts.clear(); receipts.clear(); inFlight.clear(); temps.clear(); shelves.clear(); peerTyping.clear(); deletedChats.clear(); uploads.clear(); transcripts.clear();
     for (const timer of typingTimers.values()) clearTimeout(timer); typingTimers.clear(); };
 }

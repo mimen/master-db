@@ -314,3 +314,38 @@ export class FixtureIdentity implements NameSource, IdentityDirectory {
   start(): void {}
   stop(): void {}
 }
+
+const backlog = (name: string) => `iMessage;-;+161955502${String(backlogNames.indexOf(name)).padStart(2, "0")}`;
+const todayItem = (conversationId: string, reason: string, waiting = false) => ({ conversationId, reason, waiting });
+
+/**
+ * The morning's Today queue over the fixture world, built two hours before FIXTURE_NOW, so Launch
+ * Crew's later inbound lands in New since. Jordan is the queued Waiting; Noah and Mina sit below the line.
+ */
+export const TODAY_SEED = {
+  snapshotAt: FIXTURE_NOW - 2 * 3_600_000,
+  model: "claude-opus-5-5",
+  brief: "Friday's show is the center of gravity: the arrival time and the guest list both close tonight. Two people are waiting on money from you.",
+  readCount: 15,
+  groups: [
+    { id: "friday", title: "Friday at the Observatory", context: "The arrival time and the guest list both close tonight. Start with Alex.", items: [
+      todayItem(CHAT_GUIDS.needs, "The final arrival time unblocks the run of show."),
+      todayItem(backlog("Priya Shah"), "Guest list locks at 6 PM."),
+      todayItem(CHAT_GUIDS.waiting, "Production's answer decides the load-in.", true),
+      todayItem(backlog("Diego Santos"), "He needs a load-in time before soundcheck."),
+    ] },
+    { id: "money", title: "Money", context: "One deposit is owed and one invoice is due tomorrow.", items: [
+      todayItem(backlog("Nina Park"), "Second time she has asked since Friday."),
+      todayItem(backlog("Marcus Reed"), "Due tomorrow. Approve it or flag it."),
+      todayItem(backlog("Riley Chen"), "No reply in 5 days. Worth one nudge."),
+    ] },
+    { id: "people", title: "People you care about", context: "Personal threads that have sat longer than you would want.", items: [
+      todayItem(backlog("Avery Brooks"), "Needs a yes or a new day before Thursday."),
+      todayItem(backlog("Leah Kim"), "A thank-you owed since Saturday."),
+      todayItem(backlog("Taylor Morgan"), "A tapback closes it."),
+      todayItem(backlog("Owen Foster"), "Yes or no."),
+      todayItem(backlog("Sofia Martinez"), "Catch-up, no deadline."),
+    ] },
+  ],
+  below: [backlog("Noah Blake"), backlog("Mina Patel")],
+} as const;

@@ -148,6 +148,7 @@ test("sending in Needs you stays on the conversation; only ⌘E moves on", async
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await page.getByTestId("conversation-row").first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
   const name = (await heading.textContent())?.trim();
@@ -189,6 +190,7 @@ test("leaving a replied conversation drops it from Needs you", async ({ desk }) 
   const page = desk.page;
   await page.setViewportSize({ width: 1300, height: 820 });
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   const rows = page.getByTestId("conversation-row");
   await rows.first().click();
   const heading = page.getByTestId("thread-view").getByRole("heading", { level: 2 });
