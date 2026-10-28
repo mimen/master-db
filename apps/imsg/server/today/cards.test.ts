@@ -136,12 +136,45 @@ describe("cardThread", () => {
   test("once the card budget is spent, a cached card still serves and no new call starts", async () => {
     const h = harness([ok(card)]);
     await cardThread(h.deps, thread("m1"), emptyCardStats());
-    const late = { ...h.deps, expired: () => true };
+    const late = { ...h.deps, budgetLeftMs: () => 0 };
     const stats = emptyCardStats();
     expect(await cardThread(late, thread("m1"), stats)).toMatchObject({ summary: card.summary });
     expect(await cardThread(late, thread("m2"), stats)).toBeNull();
     expect(h.calls).toHaveLength(1);
     expect(stats).toMatchObject({ reused: 1, failed: 1 });
     expect(h.logs.at(-1)).toContain("skipped, the card budget is spent");
+  });
+
+  test("a budget that runs out during the wide read starts no call, and keeps the first card", async () => {
+    const h = harness([ok({ ...card, needsMore: true })]);
+    let left = 30_000;
+    const post = h.deps.port.post;
+    const deps: CardDeps = { ...h.deps, budgetLeftMs: () => left, port: { post: async (route, body) => { left = 0; return post(route, body); } } };
+    expect(await cardThread(deps, thread(), emptyCardStats())).toMatchObject({ needsMore: true });
+    expect(h.contexts).toEqual([150]);
+    expect(h.calls).toHaveLength(1);
+  });
+
+  test("a card call never outlives the budget", async () => {
+    const h = harness([ok(card)]);
+    await cardThread({ ...h.deps, budgetLeftMs: () => 4_000 }, thread(), emptyCardStats());
+    expect(h.calls[0]?.options.timeoutMs).toBeLessThanOrEqual(4_000);
+  });
+
+  test("a cancelled build starts no call, and a card that lands after cancellation is not cached", async () => {
+    const cancelled = new AbortController();
+    cancelled.abort();
+    const h = harness([ok(card)]);
+    expect(await cardThread({ ...h.deps, signal: cancelled.signal }, thread(), emptyCardStats())).toBeNull();
+    expect(h.calls).toEqual([]);
+
+    const controller = new AbortController();
+    const late = harness([(options) => {
+      expect(options.signal).toBe(controller.signal);
+      controller.abort();
+      return { ok: true, value: card };
+    }]);
+    await cardThread({ ...late.deps, signal: controller.signal }, thread(), emptyCardStats());
+    expect(late.store.getTodayCard("conv1", 30)).toBeNull();
   });
 });

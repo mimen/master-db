@@ -23,6 +23,8 @@ export function todayPort(ingest: Pick<ConvexIngest, "request">): TodayPort {
 export type TodayClaim = { day: string; attempt: number; startedAt: number };
 export type TodayOutcome = TodayRoutes["todayFinish"][0]["outcome"];
 export type TodayQueueInput = Extract<TodayOutcome, { ok: true }>["queue"];
+/** A build's outcome, and what to persist once todayFinish accepts it: the rotation's read times. */
+export type TodayBuild = { outcome: TodayOutcome; accept: () => void };
 
 export const TODAY_MODEL = "claude-opus-5-5";
 const PAGE_SIZE = 100;
@@ -52,10 +54,11 @@ export interface TodayBuildDeps {
   log?: (line: string) => void;
 }
 
-async function readCandidates(port: TodayBuildDeps["port"]): Promise<TodayCandidate[]> {
+async function readCandidates(port: TodayBuildDeps["port"], signal: AbortSignal): Promise<TodayCandidate[]> {
   const all: TodayCandidate[] = [];
   let cursor: string | null = null;
   for (;;) {
+    signal.throwIfAborted();
     const result: TodayRoutes["todayCandidates"][1] = await port.post("todayCandidates", { cursor, numItems: PAGE_SIZE });
     all.push(...result.page);
     if (result.isDone) return all;
@@ -119,21 +122,27 @@ export function buildLogLine(stats: TodayBuildStats): string {
     + ` · items=${stats.items} settle=${stats.settle} deep=${stats.deep}`;
 }
 
-/** Reads every candidate, cards a bounded rotating selection with Haiku, reduces the cards with one Opus 5.5 call, and returns the day's queue. */
-export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim): Promise<TodayOutcome> {
-  if (!deps.gateway.available) return { ok: false, error: "AI gateway not configured" };
-  const candidates = await readCandidates(deps.port);
+const nothingToAccept = (outcome: TodayOutcome): TodayBuild => ({ outcome, accept: () => undefined });
+
+/**
+ * Reads every candidate, cards a bounded rotating selection with Haiku, reduces the cards with one Opus 5.5 call, and
+ * returns the day's queue. Once `signal` aborts, no new call starts and nothing is written; it throws instead.
+ */
+export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim, signal: AbortSignal = new AbortController().signal): Promise<TodayBuild> {
+  if (!deps.gateway.available) return nothingToAccept({ ok: false, error: "AI gateway not configured" });
+  const candidates = await readCandidates(deps.port, signal);
   const now = deps.now();
   const openAtSnapshot = candidates.filter((c) => c.state === "needsYou").map((c) => c.conversationId);
   const selection = selectToday(candidates, deps.store.todayReadAt(), now);
   const read = [...selection.recent, ...selection.rotated, ...selection.waiting];
   const base = { snapshotAt: claim.startedAt, model: TODAY_MODEL, openAtSnapshot, readCount: read.length, candidateCount: candidates.length };
-  if (read.length === 0) return { ok: true, queue: { ...base, brief: "Nothing needs you right now.", groups: [], items: [] } };
+  if (read.length === 0) return nothingToAccept({ ok: true, queue: { ...base, brief: "Nothing needs you right now.", groups: [], items: [] } });
 
   const cards = emptyCardStats();
   const cardsStarted = performance.now();
-  const cardDeps = { ...deps, expired: () => performance.now() - cardsStarted > CARD_BUDGET_MS };
+  const cardDeps = { ...deps, signal, budgetLeftMs: () => cardsStarted + CARD_BUDGET_MS - performance.now() };
   const threads: TodayCardedThread[] = await mapLimit(read, CONCURRENCY, async (candidate, index) => {
+    signal.throwIfAborted();
     const [context, people] = await Promise.all([
       deps.port.post("agentContext", { conversationId: candidate.conversationId, limit: TODAY_LIMITS.messages }),
       deps.port.post("agentPeople", { conversationId: candidate.conversationId }),
@@ -144,18 +153,20 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim): Promi
   const cardMs = Math.round(performance.now() - cardsStarted);
 
   const { system, prompt } = renderTodayPrompt({ threads, profile: await deps.profile(), now });
+  signal.throwIfAborted();
   const reduceStarted = performance.now();
   const answer = await deps.gateway.completeStructured<unknown>(prompt, TODAY_SCHEMA, {
-    model: TODAY_MODEL, system, maxTokens: 16_000, timeoutMs: 300_000, effort: "medium",
+    model: TODAY_MODEL, system, maxTokens: 16_000, timeoutMs: 300_000, effort: "medium", signal,
   });
+  signal.throwIfAborted();
   const reduceMs = Math.round(performance.now() - reduceStarted);
   if (!answer.ok) {
     deps.log?.(`today: gateway ${answer.error.kind}: ${answer.error.message}`);
-    return { ok: false, error: FAILURE_COPY[answer.error.kind] };
+    return nothingToAccept({ ok: false, error: FAILURE_COPY[answer.error.kind] });
   }
   const refs = new Map<string, ConversationId>(threads.map((thread) => [thread.ref, thread.candidate.conversationId]));
   const parsed = parseTodayOutput(answer.value, refs);
-  if (!parsed.ok) return parsed;
+  if (!parsed.ok) return nothingToAccept(parsed);
   const { dropped, ...parsedDraft } = parsed.draft;
   const anchors = new Map(threads.map((thread) => [thread.candidate.conversationId, thread.messages.at(-1)?.guid]));
   const draft = { ...parsedDraft, items: parsedDraft.items.map((item) => {
@@ -163,7 +174,6 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim): Promi
     return anchor === undefined ? item : { ...item, anchor };
   }) };
   if (dropped > 0) deps.log?.(`today: dropped ${dropped} items the parser rejected`);
-  deps.store.markTodayRead(read.map((c) => c.conversationId), claim.startedAt);
 
   const deep = new Set(read.filter((c) => now - c.lastMessageAt > DEEP_MS).map((c) => c.conversationId));
   deps.log?.(buildLogLine({
@@ -175,5 +185,10 @@ export async function buildToday(deps: TodayBuildDeps, claim: TodayClaim): Promi
     settle: draft.items.filter((item) => item.group === TODAY_SETTLE_GROUP).length,
     deep: draft.items.filter((item) => deep.has(item.conversationId)).length,
   }));
-  return { ok: true, queue: { ...base, ...draft } };
+  return {
+    outcome: { ok: true, queue: { ...base, ...draft } },
+    accept: () => {
+      if (!signal.aborted) deps.store.markTodayRead(read.map((c) => c.conversationId), claim.startedAt);
+    },
+  };
 }

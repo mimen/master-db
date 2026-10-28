@@ -48,6 +48,8 @@ export interface StructuredOptions {
   timeoutMs: number;
   effort?: "low" | "medium" | "high";
   system?: string;
+  /** Aborts the call alongside the timeout. */
+  signal?: AbortSignal;
 }
 
 /** Models that take adaptive thinking, and so an effort. */
@@ -174,7 +176,8 @@ export class Gateway {
     structured: boolean,
   ): Promise<GatewayResult<T>> {
     if (!this.client) return failure("shared", "AI gateway key not configured", null, null);
-    const signal = AbortSignal.timeout(options.timeoutMs);
+    const timeout = AbortSignal.timeout(options.timeoutMs);
+    const signal = options.signal ? AbortSignal.any([timeout, options.signal]) : timeout;
     try {
       const response = await this.client.messages.create(
         {

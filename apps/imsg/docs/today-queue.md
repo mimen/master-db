@@ -564,6 +564,8 @@ Where the build differs from the shapes above, and why.
 - Settle all takes only rows that `settleAllTargets` finds ranked in `group:settle` and unchanged. A held, handled row still displays there but is never written.
 - The Settle all toast's Undo calls `runUndo(token)` with the batch's own reserved token, so a settle committed while the batch ran is never the one reversed. ⌘Z keeps the global stack order.
 - Settle all keeps the immediate pending flags but counts a row, and keeps its reversal, only once its command reaches a successful terminal receipt. Rejected rows roll back, are reported in the toast ("Settled 2 threads · 1 couldn't be settled"), and Undo leaves them alone. The toast waits for every outcome.
+- `buildToday` returns `{ outcome, accept }`. The worker calls `accept`, which writes the rotation's read times, only after `todayFinish` returns true for that attempt. The worker passes each attempt an `AbortSignal` that the deadline and `stop()` abort. An aborted build throws at its next checkpoint, starts no new ingest read or model call, and writes no card or read time.
+- The card budget is a time left, not an expired flag. It is checked again after the wide context read, before the Haiku call, and each card call's timeout is clamped to it. `StructuredOptions` gained an optional `signal` that the gateway combines with its timeout, so the build's cancellation aborts card and reduce calls in flight. `ConvexIngest.request` takes no signal, so the build checks the signal before each post instead.
 
 **Not verified**
 - No Opus reduce call was made on v2. Whether Opus fills about 50 items with a sensible settle group, and how long it takes over 58k tokens, is the first real v2 build's question.

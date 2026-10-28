@@ -100,7 +100,7 @@ export function startBridge(deps: {
           subscribe: (receive) => client.onUpdate(pendingBuild, { bridgeKey: commaBridgeSecret }, receive,
             (error) => console.error(`comma bridge today subscription: ${String(error)}`)),
           port: buildDeps.port,
-          build: (claim) => buildToday(buildDeps, claim),
+          build: (claim, signal) => buildToday(buildDeps, claim, signal),
         });
       }
       const worker = new MediaWorker({ bb: deps.bb, db: deps.db, ingest, isBusy: () => (live?.pending ?? 0) > 0 });

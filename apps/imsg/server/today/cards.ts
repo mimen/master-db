@@ -77,9 +77,13 @@ export interface CardDeps {
   store: Pick<OverlayDb, "getTodayCard" | "setTodayCard">;
   now: () => number;
   log?: (line: string) => void;
-  /** True once the build's card budget is spent: cached cards still serve, no new call starts. */
-  expired?: () => boolean;
+  /** What is left of the build's card budget: cached cards still serve once it is spent, no new call starts, and a call never outlives it. */
+  budgetLeftMs?: () => number;
+  /** The build's cancellation: once aborted, no new call starts and nothing is cached. */
+  signal?: AbortSignal;
 }
+
+const CARD_TIMEOUT_MS = 60_000;
 
 type CardWindow = (typeof CARD_WINDOWS)[keyof typeof CARD_WINDOWS];
 
@@ -91,7 +95,8 @@ export async function cardThread(deps: CardDeps, thread: TodayThread, stats: Car
   const conversationId = thread.candidate.conversationId;
   const anchor = thread.messages.at(-1)?.guid ?? "";
 
-  const at = async (window: CardWindow, read: () => Promise<TodayThread>): Promise<TodayCard | null> => {
+  const budgetLeft = () => deps.budgetLeftMs?.() ?? CARD_TIMEOUT_MS;
+  const at = async (window: CardWindow, load: () => Promise<TodayThread>): Promise<TodayCard | null> => {
     const row = deps.store.getTodayCard(conversationId, window.messages);
     if (row && row.anchor === anchor && row.model === CARD_MODEL) {
       const cached = parseCard(safeJson(row.payload));
@@ -100,29 +105,35 @@ export async function cardThread(deps: CardDeps, thread: TodayThread, stats: Car
         return cached;
       }
     }
-    if (deps.expired?.()) {
-      deps.log?.(`today: card ${thread.ref} (${conversationId}) skipped, the card budget is spent`);
-      return null;
-    }
-    const started = performance.now();
+    const skipped = (): boolean => {
+      const why = deps.signal?.aborted ? "the build was cancelled" : budgetLeft() <= 0 ? "the card budget is spent" : null;
+      if (why) deps.log?.(`today: card ${thread.ref} (${conversationId}) skipped, ${why}`);
+      return why !== null;
+    };
+    if (skipped()) return null;
     let card: TodayCard | null = null;
     let why = "";
     try {
-      const { system, prompt } = renderCardPrompt(await read(), deps.now(), window.chars);
+      const read = await load();
+      // The wide read can take a while; the budget is checked again before the call it feeds.
+      if (skipped()) return null;
+      const { system, prompt } = renderCardPrompt(read, deps.now(), window.chars);
+      const started = performance.now();
       const answer = await deps.gateway.completeStructured<unknown>(prompt, CARD_SCHEMA, {
-        model: CARD_MODEL, system, maxTokens: 1_024, timeoutMs: 60_000, effort: "low",
-      });
+        model: CARD_MODEL, system, maxTokens: 1_024, timeoutMs: Math.min(CARD_TIMEOUT_MS, budgetLeft()), effort: "low",
+        ...(deps.signal ? { signal: deps.signal } : {}),
+      }).finally(() => stats.callMs.push(Math.round(performance.now() - started)));
       card = answer.ok ? parseCard(answer.value) : null;
       why = answer.ok ? "unusable card" : `${answer.error.kind}: ${answer.error.message}`;
     } catch (error) {
       why = String(error);
     }
-    stats.callMs.push(Math.round(performance.now() - started));
     if (!card) {
       deps.log?.(`today: card ${thread.ref} (${conversationId}) at ${window.messages} messages failed, ${why}`);
       return null;
     }
     stats.computed++;
+    if (deps.signal?.aborted) return card;
     deps.store.setTodayCard({ conversation_id: conversationId, window_size: window.messages, anchor, model: CARD_MODEL, payload: JSON.stringify(card) });
     return card;
   };

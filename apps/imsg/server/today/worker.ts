@@ -1,4 +1,4 @@
-import type { TodayClaim, TodayOutcome, TodayPort } from "./build";
+import type { TodayBuild, TodayClaim, TodayPort } from "./build";
 
 export type PendingBuild = { day: string; attempt: number };
 
@@ -12,7 +12,8 @@ const BUILD_TIMEOUT_MS = 7 * 60_000;
 export function startTodayWorker(deps: {
   subscribe: (receive: (pending: PendingBuild | null) => void) => () => void;
   port: Pick<TodayPort, "post">;
-  build: (claim: TodayClaim) => Promise<TodayOutcome>;
+  /** Aborted when the deadline abandons the attempt or the worker stops; an aborted build writes nothing. */
+  build: (claim: TodayClaim, signal: AbortSignal) => Promise<TodayBuild>;
   log?: (line: string) => void;
   /** Under Convex's 8-minute building expiry, so a Regenerate after it is claimed instead of waiting on a stuck build. */
   buildTimeoutMs?: number;
@@ -22,6 +23,7 @@ export function startTodayWorker(deps: {
   let latest: PendingBuild | null = null;
   let stopped = false;
   let running: Promise<void> | null = null;
+  let current: AbortController | null = null;
 
   async function runOne({ day, attempt }: PendingBuild): Promise<void> {
     const claim = await deps.port.post("todayClaim", { day, attempt, claimId: crypto.randomUUID() });
@@ -29,19 +31,27 @@ export function startTodayWorker(deps: {
       log(`today: ${day} attempt ${attempt} belongs to another worker`);
       return;
     }
-    let outcome: TodayOutcome;
+    const controller = new AbortController();
+    current = controller;
+    let result: TodayBuild;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<TodayOutcome>((resolve) => {
-      timer = setTimeout(() => resolve({ ok: false, error: "The build timed out" }), buildTimeoutMs);
+    const deadline = new Promise<TodayBuild>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort(new Error("The build timed out"));
+        resolve({ outcome: { ok: false, error: "The build timed out" }, accept: () => undefined });
+      }, buildTimeoutMs);
     });
     try {
-      outcome = await Promise.race([deps.build({ day, attempt, startedAt: claim.startedAt }), deadline]);
+      result = await Promise.race([deps.build({ day, attempt, startedAt: claim.startedAt }, controller.signal), deadline]);
     } catch (error) {
-      outcome = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      result = { outcome: { ok: false, error: error instanceof Error ? error.message : String(error) }, accept: () => undefined };
     } finally {
       clearTimeout(timer);
+      current = null;
     }
-    await deps.port.post("todayFinish", { day, attempt, outcome });
+    const { outcome } = result;
+    const accepted = await deps.port.post("todayFinish", { day, attempt, outcome });
+    if (accepted && !controller.signal.aborted) result.accept();
     log(`today: ${day} attempt ${attempt} ${outcome.ok ? `built, ${outcome.queue.items.length} items` : `failed: ${outcome.error}`}`);
   }
 
@@ -62,6 +72,7 @@ export function startTodayWorker(deps: {
   return {
     stop() {
       stopped = true;
+      current?.abort(new Error("The Today worker stopped"));
       unsubscribe();
     },
     idle: async () => { await running; },

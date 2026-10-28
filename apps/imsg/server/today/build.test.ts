@@ -97,7 +97,7 @@ describe("selectToday", () => {
 describe("buildToday", () => {
   test("cards each read thread with Haiku, then makes exactly one Opus 5.5 reduce stamped with the claim time", async () => {
     const { deps, reduces, cardCalls } = fakes([candidate(1, "needsYou"), candidate(2, "waiting")], firstItem);
-    const outcome = await buildToday(deps, claim);
+    const { outcome } = await buildToday(deps, claim);
     expect(cardCalls).toHaveLength(2);
     expect(reduces).toHaveLength(1);
     expect(reduces[0]?.options).toMatchObject({ model: "claude-opus-5-5", effort: "medium", maxTokens: 16_000, timeoutMs: 300_000 });
@@ -114,7 +114,7 @@ describe("buildToday", () => {
       ...Array.from({ length: 170 }, (_, n) => candidate(100 + n, "needsYou", 40)),
     ];
     const { deps } = fakes(list, firstItem);
-    const outcome = await buildToday(deps, claim);
+    const { outcome } = await buildToday(deps, claim);
     if (!outcome.ok) throw new Error(outcome.error);
     expect(outcome.queue.readCount).toBe(200);
     expect(outcome.queue.candidateCount).toBe(230);
@@ -125,7 +125,7 @@ describe("buildToday", () => {
     const { deps, reduces, logs } = fakes([candidate(1, "needsYou"), candidate(2, "needsYou")], firstItem, {
       card: (prompt) => prompt.includes('ref="c2"') ? { ok: false, error: { kind: "timeout", message: "slow", status: null, retryAfterMs: null } } : { ok: true, value: card },
     });
-    const outcome = await buildToday(deps, claim);
+    const { outcome } = await buildToday(deps, claim);
     expect(outcome.ok).toBe(true);
     const [first, second] = reduces[0]!.prompt.split("\n\n");
     expect(first).toContain("card: Wants an answer.");
@@ -142,11 +142,13 @@ describe("buildToday", () => {
     const store = new OverlayDb(":memory:");
     const old = Array.from({ length: 200 }, (_, n) => candidate(n, "needsYou", 60 + n));
     const first = fakes(old, firstItem, { store });
-    await buildToday(first.deps, claim);
+    const built = await buildToday(first.deps, claim);
+    expect(store.todayReadAt().size, "nothing is recorded until todayFinish accepts the queue").toBe(0);
+    built.accept();
     expect(store.todayReadAt().size).toBe(150);
     expect(store.todayReadAt().get("conv0")).toBe(claim.startedAt);
     const second = fakes(old, firstItem, { store });
-    await buildToday(second.deps, { ...claim, attempt: 2, startedAt: 2_000 });
+    (await buildToday(second.deps, { ...claim, attempt: 2, startedAt: 2_000 })).accept();
     const persons = [...second.reduces[0]!.prompt.matchAll(/^Person (\d+)$/gm)].map((match) => Number(match[1])).sort((a, b) => a - b);
     // The 50 never read come first, then the 100 newest of those read last time.
     expect(persons).toEqual([...Array.from({ length: 100 }, (_, n) => n), ...Array.from({ length: 50 }, (_, n) => 150 + n)]);
@@ -154,9 +156,35 @@ describe("buildToday", () => {
     expect(store.todayReadAt().get("conv150")).toBe(2_000);
   });
 
+  test("a build abandoned mid-reduce starts nothing new and writes no reads or cards, even if accepted", async () => {
+    const controller = new AbortController();
+    const { deps, store, reduces } = fakes([candidate(1, "needsYou")], (_prompt, options) => {
+      expect(options.signal?.aborted, "the reduce carries the build's cancellation").toBe(false);
+      controller.abort(new Error("The build timed out"));
+      return firstItem(_prompt, options);
+    });
+    const built = buildToday(deps, claim, controller.signal);
+    await expect(built).rejects.toThrow("The build timed out");
+    expect(reduces).toHaveLength(1);
+    expect(store.todayReadAt().size).toBe(0);
+  });
+
+  test("an aborted build caches no card and makes no reduce", async () => {
+    const controller = new AbortController();
+    const { deps, store, reduces } = fakes([candidate(1, "needsYou")], firstItem, {
+      card: () => {
+        controller.abort(new Error("The build timed out"));
+        return { ok: true, value: card };
+      },
+    });
+    await expect(buildToday(deps, claim, controller.signal)).rejects.toThrow("The build timed out");
+    expect(store.getTodayCard("conv1", 30)).toBeNull();
+    expect(reduces).toEqual([]);
+  });
+
   test("a failed reduce records no reads", async () => {
     const { deps, store } = fakes([candidate(1, "needsYou")], () => ({ ok: false, error: { kind: "provider", message: "x", status: null, retryAfterMs: null } }));
-    expect(await buildToday(deps, claim)).toEqual({ ok: false, error: "Opus 5.5 was unavailable" });
+    expect((await buildToday(deps, claim)).outcome).toEqual({ ok: false, error: "Opus 5.5 was unavailable" });
     expect(store.todayReadAt().size).toBe(0);
   });
 
@@ -182,19 +210,19 @@ describe("buildToday", () => {
 
   test("maps a gateway failure to header copy", async () => {
     const { deps } = fakes([candidate(1, "needsYou")], () => ({ ok: false, error: { kind: "timeout", message: "x", status: null, retryAfterMs: null } }));
-    expect(await buildToday(deps, claim)).toEqual({ ok: false, error: "The gateway timed out" });
+    expect((await buildToday(deps, claim)).outcome).toEqual({ ok: false, error: "The gateway timed out" });
   });
 
   test("fails fast without a gateway key, before reading anything", async () => {
     const { deps, posts, reduces } = fakes([candidate(1, "needsYou")], firstItem, { available: false });
-    expect(await buildToday(deps, claim)).toEqual({ ok: false, error: "AI gateway not configured" });
+    expect((await buildToday(deps, claim)).outcome).toEqual({ ok: false, error: "AI gateway not configured" });
     expect(posts).toEqual([]);
     expect(reduces).toEqual([]);
   });
 
   test("an empty day builds an empty queue without calling a model", async () => {
     const { deps, reduces, cardCalls } = fakes([], firstItem);
-    const outcome = await buildToday(deps, claim);
+    const { outcome } = await buildToday(deps, claim);
     expect(outcome).toMatchObject({ ok: true, queue: { items: [], groups: [], readCount: 0 } });
     expect(reduces).toEqual([]);
     expect(cardCalls).toEqual([]);
