@@ -21,23 +21,39 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   const { matchesFilters } = await import("@shared/chat-state");
 
   const writes: [string, unknown][] = [];
-  const toasts: string[] = [];
+  const toasts: { message: string; onPress?: () => void }[] = [];
   let held: Promise<void> = Promise.resolve();
-  mock.module("@/lib/toast", () => ({ showToast: (message: string) => toasts.push(message) }));
+  type Payload = { kind: string; messageGuid?: string };
+  /** What the bridge answers for a queued command; undefined leaves it pending. */
+  let bridge: (payload: Payload) => "sent" | "failed" | undefined = () => undefined;
+  const commands = new Map<string, Payload>();
+  mock.module("@/lib/toast", () => ({
+    showToast: (message: string, action?: { onPress: () => void }) => toasts.push({ message, ...(action ? { onPress: action.onPress } : {}) }),
+  }));
   mock.module("@/lib/identity", () => ({
     convexClient: {
       query: async () => ({ _id: "conv-resolved" }),
-      mutation: async (ref: Parameters<typeof getFunctionName>[0], args: { payload?: unknown }) => {
+      mutation: async (ref: Parameters<typeof getFunctionName>[0], args: { payload?: Payload }) => {
         const name = getFunctionName(ref);
         writes.push([name, name === "comma/outbox:enqueue" ? args.payload : args]);
+        const commandId = `outbox-${writes.length}`;
+        if (args.payload) commands.set(commandId, args.payload);
         await held;
-        return "outbox-1";
+        return commandId;
       },
-      // The bridge never answers, so a bridge write stays pending once queued.
-      watchQuery: () => ({ onUpdate: () => () => undefined, localQueryResult: () => undefined }),
+      watchQuery: (_ref: unknown, { commandId }: { commandId: string }) => ({
+        onUpdate: () => () => undefined,
+        localQueryResult: () => {
+          const payload = commands.get(commandId);
+          const status = payload && bridge(payload);
+          if (!status) return undefined;
+          return { commandId, clientKey: "k", status, updatedAt: 1, ...(status === "sent" ? { result: { kind: payload.kind, ok: true } } : { error: "latest message changed" }) };
+        },
+      }),
     },
   }));
   const { settleAllChats, toggleSettleChat, undoLastTriageAction } = await import("./use-triage-actions");
+  const { beginUndoAction, commitUndoAction } = await import("@/lib/action-undo");
   const { resetPendingFlagsForTests, usePendingFlags } = await import("@/lib/pending-flags");
   const { resetUndoForTests } = await import("@/lib/action-undo");
 
@@ -66,6 +82,8 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   beforeEach(() => {
     writes.length = 0;
     toasts.length = 0;
+    commands.clear();
+    bridge = () => undefined;
     held = Promise.resolve();
     resetPendingFlagsForTests();
     resetUndoForTests();
@@ -80,7 +98,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(matchesFilters(shown(marcus), "unresponded", "all"), "out of Needs you before Convex answers").toBe(false);
     release();
     await settling;
-    expect(toasts).toEqual(["Settled Marcus Reed"]);
+    expect(toasts.map((t) => t.message)).toEqual(["Settled Marcus Reed"]);
     expect(writes).toEqual([["comma/agent:settleConversationAgents", { conversationId: "conv-marcus" }]]);
 
     expect(undoLastTriageAction()).toBe(true);
@@ -92,7 +110,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
 
   test("a conversation with an agent chat and no messages settles its chats", async () => {
     await toggleSettleChat(chat({ lastMessage: null }));
-    expect(toasts).toEqual(["Settled Marcus Reed"]);
+    expect(toasts.map((t) => t.message)).toEqual(["Settled Marcus Reed"]);
     expect(writes).toEqual([["comma/agent:settleConversationAgents", { conversationId: "conv-marcus" }]]);
   });
 
@@ -108,15 +126,18 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(writes.slice(1)).toEqual([["comma/outbox:enqueue", { kind: "unsettle" }]]);
   });
 
+  const owed = (n: number) => chat({
+    guid: `iMessage;-;+1619555030${n}`, conversationId: `conv-${n}`, displayName: `Person ${n}`, agent: undefined,
+    lastMessage: { guid: `m${n}`, text: "thanks!", dateCreated: 2, isFromMe: false, senderName: null, hasAttachments: false },
+    flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
+  });
+  const target = (n: number) => ({ chat: owed(n), anchor: `m${n}` });
+
   test("Settle all settles every open row as one action: one toast, and one Undo reopens all of them", async () => {
-    const owed = (n: number) => chat({
-      guid: `iMessage;-;+1619555030${n}`, conversationId: `conv-${n}`, displayName: `Person ${n}`, agent: undefined,
-      lastMessage: { guid: `m${n}`, text: "thanks!", dateCreated: 2, isFromMe: false, senderName: null, hasAttachments: false },
-      flags: { unresponded: true, waiting: false, unread: false, mutedUnresponded: false, pinned: false },
-    });
+    bridge = () => "sent";
     const quiet = chat({ guid: "iMessage;-;+16195550399", agent: undefined, lastMessage: null });
-    await settleAllChats([{ chat: owed(1), anchor: "m1" }, { chat: owed(2), anchor: "m2" }, { chat: quiet, anchor: "q" }]);
-    expect(toasts).toEqual(["Settled 2 threads"]);
+    await settleAllChats([target(1), target(2), { chat: quiet, anchor: "q" }]);
+    expect(toasts.map((t) => t.message)).toEqual(["Settled 2 threads"]);
     expect(writes).toEqual([
       ["comma/outbox:enqueue", { kind: "settle", messageGuid: "m1" }],
       ["comma/outbox:enqueue", { kind: "settle", messageGuid: "m2" }],
@@ -130,6 +151,7 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
   });
 
   test("Settle all conditions each settle on the message the build read, not the live newest one", async () => {
+    bridge = () => "sent";
     const moved = chat({
       agent: undefined,
       lastMessage: { guid: "m-urgent", text: "Actually, urgent", dateCreated: 3, isFromMe: false, senderName: null, hasAttachments: false },
@@ -139,9 +161,35 @@ if (process.env.COMMA_TRIAGE_ACTIONS_CHILD !== "1") {
     expect(writes).toEqual([["comma/outbox:enqueue", { kind: "settle", messageGuid: "m-thanks" }]]);
   });
 
+  test("Settle all counts only settles the bridge confirmed, reports the rest, and Undo leaves a rejected row alone", async () => {
+    bridge = (payload) => (payload.messageGuid === "m2" ? "failed" : "sent");
+    await settleAllChats([target(1), target(2), target(3)]);
+    expect(toasts.map((t) => t.message)).toEqual(["Settled 2 threads · 1 couldn't be settled"]);
+    expect(matchesFilters(shown(owed(2)), "unresponded", "all"), "the rejected row's pending settle rolled back").toBe(true);
+
+    toasts[0]!.onPress!();
+    await until(() => writes.length > 4);
+    expect(writes.slice(3), "two un-settles, none for the rejected row").toEqual([
+      ["comma/outbox:enqueue", { kind: "unsettle" }], ["comma/outbox:enqueue", { kind: "unsettle" }],
+    ]);
+  });
+
+  test("the batch toast's Undo reverses that batch even after a newer action committed", async () => {
+    bridge = () => "sent";
+    await settleAllChats([target(1)]);
+    const later: string[] = [];
+    commitUndoAction(beginUndoAction(), () => later.push("newer settle undone"));
+    toasts[0]!.onPress!();
+    await until(() => writes.length > 1);
+    expect(writes.slice(1)).toEqual([["comma/outbox:enqueue", { kind: "unsettle" }]]);
+    expect(later).toEqual([]);
+    expect(undoLastTriageAction(), "keyboard Undo still takes the newest entry").toBe(true);
+    expect(later).toEqual(["newer settle undone"]);
+  });
+
   test("Settle all with nothing open says so and leaves no undo entry", async () => {
     await settleAllChats([{ chat: chat({ agent: undefined, lastMessage: null }), anchor: "q" }]);
-    expect(toasts).toEqual(["Nothing left to settle here"]);
+    expect(toasts.map((t) => t.message)).toEqual(["Nothing left to settle here"]);
     expect(undoLastTriageAction()).toBe(false);
   });
 }

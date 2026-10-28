@@ -562,6 +562,8 @@ Where the build differs from the shapes above, and why.
 **v2 review fixes**
 - Each `todayItem` stores an optional `anchor`, the newest message guid the build read for that thread. `classifyToday` puts a settle-group item whose live newest guid differs, or that has no anchor, in New since. Settle all sends the stored anchor, so the bridge rejects a settle over a message the build never read.
 - Settle all takes only rows that `settleAllTargets` finds ranked in `group:settle` and unchanged. A held, handled row still displays there but is never written.
+- The Settle all toast's Undo calls `runUndo(token)` with the batch's own reserved token, so a settle committed while the batch ran is never the one reversed. ⌘Z keeps the global stack order.
+- Settle all keeps the immediate pending flags but counts a row, and keeps its reversal, only once its command reaches a successful terminal receipt. Rejected rows roll back, are reported in the toast ("Settled 2 threads · 1 couldn't be settled"), and Undo leaves them alone. The toast waits for every outcome.
 
 **Not verified**
 - No Opus reduce call was made on v2. Whether Opus fills about 50 items with a sensible settle group, and how long it takes over 58k tokens, is the first real v2 build's question.

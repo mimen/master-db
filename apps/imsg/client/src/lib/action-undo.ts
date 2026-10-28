@@ -70,6 +70,18 @@ export function runLatestUndo(): boolean {
   return true;
 }
 
+/**
+ * Run the undo a specific action committed, wherever it sits on the stack. A toast's Undo uses this, so an action
+ * committed while the toast was up is never the one reversed. False when that entry is gone.
+ */
+export function runUndo(token: number): boolean {
+  const at = stack.findIndex((entry) => entry.token === token);
+  if (at < 0) return false;
+  const [entry] = stack.splice(at, 1);
+  entry!.undo();
+  return true;
+}
+
 export function resetUndoForTests(): void {
   nextToken = 0;
   stack.length = 0;

@@ -4,11 +4,26 @@ import {
   commitUndoAction,
   resetUndoForTests,
   runLatestUndo,
+  runUndo,
   undoDepth,
 } from "./action-undo";
 
 describe("action undo ordering", () => {
   beforeEach(() => resetUndoForTests());
+
+  test("undoing by token reverses that action even when a newer one committed since", () => {
+    const events: string[] = [];
+    const batch = beginUndoAction();
+    const single = beginUndoAction();
+    commitUndoAction(single, () => events.push("single"));
+    commitUndoAction(batch, () => events.push("batch"));
+
+    expect(runUndo(batch)).toBe(true);
+    expect(events).toEqual(["batch"]);
+    expect(runUndo(batch), "an entry undoes once").toBe(false);
+    expect(runLatestUndo()).toBe(true);
+    expect(events).toEqual(["batch", "single"]);
+  });
 
   test("a slow older action cannot replace a newer committed undo", () => {
     const events: string[] = [];
