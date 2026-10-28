@@ -498,18 +498,19 @@ The Opus reduce is one long-running conversation, not a fresh call each time. **
 
 - `id`, minted by each fresh build, and `startedAt`, that build's snapshot;
 - `snapshotAt` and `day`, the latest accepted turn's snapshot and LA day; `snapshotAt` equals the Convex queue's;
+- `arrivalsSince`, the watermark for threads new to the session (see fresh below);
 - `system`, frozen at the fresh build so the cached prefix survives, and `turns`, each user prompt and the raw model answer as JSON, refs intact;
 - `tokens`, the latest accepted call's input plus output tokens, which is the session's size;
 - `threads`, every open thread the session has read, by `conversationId`, with its ref, `lastMessageAt`, state and anchor;
 - `items`, the latest queue's conversations, plus `updates`, `compactions` and `nextRef`.
 
-The Convex queue carries `session: { id, startedAt, updates }`. `todayClaim` gives an Update its `basis`: the session id and snapshot of the newest queue on or before the day that has a session, scanning at most 14 day rows. That is today's queue after the morning build, and the previous day's for the morning build itself.
+The Convex queue carries `session: { id, startedAt, updates }`. `todayClaim` gives an Update its `basis`: the session id and snapshot of the newest queue on or before the day, scanning at most 14 day rows. That is today's queue after the morning build, and the previous day's for the morning build itself. When that newest queue has no session, as after an empty Regenerate, the basis is null and the Update builds fresh, so an older session never outlives the queue that replaced it.
 
 **What an Update reads** (`planUpdate`, pure):
 
-- **fresh:** a known thread whose `lastMessageAt` grew or whose state changed, and an unknown thread newer than the session's snapshot. Newest first, at most 100. News past the cap is still news next time.
+- **fresh:** a known thread whose `lastMessageAt` grew or whose state changed, and an unknown thread newer than the session's `arrivalsSince`. Newest first, at most 100. `arrivalsSince` follows the snapshot, but holds still after an Update that cut fresh at the cap, so arrivals past the cap are still arrivals next time instead of falling behind the snapshot unread.
 - **gone:** the refs of known threads that are no longer candidates: settled, replied to, aged out, or cleared. They leave `threads` when the turn is accepted, and one that comes back later is new, with a new ref.
-- **open:** the latest queue's items still among the candidates. **room** is 50 minus open.
+- **open:** the latest queue's items still in the state they were picked in, which is when the client still ranks them. A pick Milad replied to is a Waiting candidate now and frees its slot. **room** is 50 minus open.
 - **deeper:** unknown Needs you threads that are not fresh, in the fresh build's rotation order (least recently read first, then newest). There are 3 per slot of room, at least 30 on a new day, and at most 90. The new-day floor keeps the backlog rotating every morning even when nothing was cleared.
 
 **The turn** (`renderUpdateTurn`) states the full LA date and time, since the system prompt is frozen. On a new day it asks for today's queue from everything the model knows and names the previous queue's date; otherwise it names the time of the queue it updates. It lists the gone refs, states open and room, and carries the fresh and deeper threads as the same cleaned and fenced blocks a fresh read uses. A known thread keeps its ref, and a new one gets `c<nextRef>`. It ends by asking for the complete queue of about 50 items, re-ranked against the new information and the date, with group ids and titles stable unless the news changes what matters. The model is called even when nothing changed, since time passing changes what is due. The parser accepts every current session ref plus the new ones; a gone ref in the answer drops. An item's anchor is this turn's newest message for a thread read now, and the session's stored anchor otherwise. Only the threads read this turn get a read time.
