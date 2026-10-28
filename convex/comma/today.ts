@@ -89,13 +89,22 @@ export const pendingBuild = query({
 
 // Ingest routes. They are mutations because the ingest route runs mutations.
 
-/** The 7:00 AM trigger. Requests only when the day has no row yet; every call returns the current run. */
+const MORNING_MS = 7 * 3_600_000;
+
+/** A build Milad ran before 7:00 AM is overnight work, so the morning build still runs, once. */
+function builtOvernight(run: TodayRun, dayStart: number): boolean {
+  const endedAt = run.status === "done" ? run.finishedAt : run.status === "failed" ? run.failedAt : Infinity;
+  return run.source === "user" && endedAt < dayStart + MORNING_MS;
+}
+
+/** The 7:00 AM trigger. Requests when the day has no build yet, or only an overnight one; every call returns the current run. */
 export const todaySchedule = internalMutation({
   args: { day: v.string(), dayStart: v.number() },
   returns: todayRun,
   handler: async (ctx, { day, dayStart }) => {
     assertDay(day, dayStart);
-    return (await rowFor(ctx, day))?.run ?? await request(ctx, day, dayStart, "schedule");
+    const row = await rowFor(ctx, day);
+    return row && !builtOvernight(row.run, dayStart) ? row.run : await request(ctx, day, dayStart, "schedule");
   },
 });
 

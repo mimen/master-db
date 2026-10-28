@@ -90,6 +90,20 @@ describe("todaySchedule", () => {
   });
 });
 
+describe("todaySchedule after an overnight build", () => {
+  test("a build Milad ran before 7:00 AM still gets the morning build, once", async () => {
+    const { t, as } = setup();
+    // Two days ahead of the real clock, so the build always ends before that day's 7:00 AM.
+    const ahead = todayWindow(Date.now() + 2 * DAY);
+    const next = { day: ahead.day, dayStart: ahead.start };
+    await as.mutation(api.comma.today.requestBuild, next);
+    await t.mutation(internal.comma.today.todayClaim, { day: ahead.day, attempt: 1, claimId: "w1" });
+    await t.mutation(internal.comma.today.todayFinish, { day: ahead.day, attempt: 1, outcome: { ok: false, error: "x" } });
+    expect(await t.mutation(internal.comma.today.todaySchedule, next)).toMatchObject({ status: "requested", attempt: 2, source: "schedule" });
+    expect(await t.mutation(internal.comma.today.todaySchedule, next)).toMatchObject({ status: "requested", attempt: 2 });
+  });
+});
+
 describe("claim and finish", () => {
   test("claim is fenced by attempt and status", async () => {
     const { t, as } = setup();

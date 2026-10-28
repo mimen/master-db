@@ -590,3 +590,5 @@ Where the build differs from the shapes above, and why.
 ## Next implementation step
 
 Write `client/src/lib/today.ts` `classifyToday` and `planToday` against the placement table, with `today.test.ts` covering each row, since every surface (list, count, header, strip, fixture) reads through it.
+
+- **Overnight builds no longer cancel the morning build.** `todaySchedule` requests the 7:00 AM build when the day has no build or only one Milad ran before 7:00 AM. A run the schedule started never re-requests, so a failed morning build is not retried in a loop.
