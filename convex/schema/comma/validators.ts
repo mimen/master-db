@@ -653,7 +653,7 @@ export const todayQueue = v.object({
 const todaySource = v.union(v.literal("schedule"), v.literal("user"));
 export const todayRun = v.union(
   v.object({ status: v.literal("requested"), attempt: v.number(), source: todaySource, requestedAt: v.number() }),
-  v.object({ status: v.literal("building"), attempt: v.number(), source: todaySource, requestedAt: v.number(), startedAt: v.number() }),
+  v.object({ status: v.literal("building"), attempt: v.number(), source: todaySource, requestedAt: v.number(), startedAt: v.number(), claimId: v.string() }),
   v.object({ status: v.literal("done"), attempt: v.number(), source: todaySource, finishedAt: v.number() }),
   v.object({ status: v.literal("failed"), attempt: v.number(), source: todaySource, failedAt: v.number(), error: v.string() }),
 );

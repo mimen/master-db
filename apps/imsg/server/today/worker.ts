@@ -19,7 +19,7 @@ export function startTodayWorker(deps: {
   let running: Promise<void> | null = null;
 
   async function runOne({ day, attempt }: PendingBuild): Promise<void> {
-    const claim = await deps.port.post("todayClaim", { day, attempt });
+    const claim = await deps.port.post("todayClaim", { day, attempt, claimId: crypto.randomUUID() });
     if (!claim) {
       log(`today: ${day} attempt ${attempt} belongs to another worker`);
       return;

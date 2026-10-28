@@ -435,6 +435,7 @@ Where the build differs from the shapes above, and why.
 
 **Convex**
 - `requestBuild` and `todaySchedule` reject a `dayStart` that is not `todayWindow(dayStart)`'s midnight for `day`. Cheap, and the client is the only caller that could get it wrong.
+- `todayClaim` takes a `claimId` the worker generates per attempt, and the building run stores it. A claim with the same `claimId` on a building run of the same attempt gets the stored `startedAt` back, so an ingest retry after a lost response cannot fence out its own worker.
 - `todayFinish` answers `true` to a replay of the outcome that already landed (done then ok, failed then not ok) and `false` to anything else, so the worker's ingest retries never log a false failure.
 - Expiry errors are "The Mini didn't pick it up" (requested) and "The build timed out" (building). The header appends "at 7:00 AM".
 - The CRM view moved into `validators.ts` as `conversationCrmView`; `listConversations` uses it unchanged.

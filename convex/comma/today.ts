@@ -99,15 +99,20 @@ export const todaySchedule = internalMutation({
   },
 });
 
-/** requested(attempt) → building. startedAt is the snapshot time; null means another attempt owns the day. */
+/**
+ * requested(attempt) → building. startedAt is the snapshot time; null means another claim owns the day.
+ * A retry carrying the same claimId gets its startedAt back, so a lost response cannot fence out its own worker.
+ */
 export const todayClaim = internalMutation({
-  args: { day: v.string(), attempt: v.number() },
+  args: { day: v.string(), attempt: v.number(), claimId: v.string() },
   returns: v.union(v.object({ startedAt: v.number() }), v.null()),
-  handler: async (ctx, { day, attempt }) => {
+  handler: async (ctx, { day, attempt, claimId }) => {
     const row = await rowFor(ctx, day);
-    if (!row || row.run.status !== "requested" || row.run.attempt !== attempt) return null;
+    if (!row || row.run.attempt !== attempt) return null;
+    if (row.run.status === "building") return row.run.claimId === claimId ? { startedAt: row.run.startedAt } : null;
+    if (row.run.status !== "requested") return null;
     const startedAt = Date.now();
-    await ctx.db.patch(row._id, { run: { ...row.run, status: "building", startedAt } });
+    await ctx.db.patch(row._id, { run: { ...row.run, status: "building", startedAt, claimId } });
     await ctx.scheduler.runAfter(BUILD_EXPIRY_MS, expireRunRef, { day, attempt, status: "building" });
     return { startedAt };
   },

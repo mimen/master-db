@@ -57,11 +57,11 @@ describe("requestBuild", () => {
     const { t, as } = setup();
     expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1, source: "user" });
     expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1 });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
     expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "building", attempt: 1 });
     await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "The gateway timed out" } });
     expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "requested", attempt: 2 });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" });
     await t.mutation(internal.comma.today.todayFinish, { day, attempt: 2, outcome: { ok: true, queue: queue(1, []) } });
     expect(await as.mutation(api.comma.today.requestBuild, { day, dayStart })).toMatchObject({ status: "requested", attempt: 3 });
   });
@@ -83,7 +83,7 @@ describe("todaySchedule", () => {
     const { t } = setup();
     expect(await t.mutation(internal.comma.today.todaySchedule, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1, source: "schedule" });
     expect(await t.mutation(internal.comma.today.todaySchedule, { day, dayStart })).toMatchObject({ status: "requested", attempt: 1 });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
     await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "The AI gateway is down" } });
     expect(await t.mutation(internal.comma.today.todaySchedule, { day, dayStart })).toMatchObject({ status: "failed", attempt: 1 });
     expect(await t.mutation(internal.comma.today.todaySchedule, { day: tomorrow.day, dayStart: tomorrow.start })).toMatchObject({ status: "requested", attempt: 1 });
@@ -94,17 +94,26 @@ describe("claim and finish", () => {
   test("claim is fenced by attempt and status", async () => {
     const { t, as } = setup();
     await as.mutation(api.comma.today.requestBuild, { day, dayStart });
-    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2 })).toBeNull();
-    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1 })).toEqual({ startedAt: expect.any(Number) });
-    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1 })).toBeNull();
-    expect(await runOf(t)).toMatchObject({ status: "building", attempt: 1 });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" })).toBeNull();
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toEqual({ startedAt: expect.any(Number) });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "other" })).toBeNull();
+    expect(await runOf(t)).toMatchObject({ status: "building", attempt: 1, claimId: "w1" });
+  });
+
+  test("a retried claim with the same claimId gets its startedAt back", async () => {
+    const { t, as } = setup();
+    await as.mutation(api.comma.today.requestBuild, { day, dayStart });
+    const first = await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toEqual(first);
+    await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "x" } });
+    expect(await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" })).toBeNull();
   });
 
   test("finish lands once, replays as a no-op, and a stale attempt cannot overwrite", async () => {
     const { t, as } = setup();
     const c = await t.run((ctx) => ctx.db.insert("comma_conversations", conversation("alex")));
     await as.mutation(api.comma.today.requestBuild, { day, dayStart });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
     const done = { day, attempt: 1, outcome: { ok: true as const, queue: queue(5, [c]) } };
     expect(await t.mutation(internal.comma.today.todayFinish, done)).toBe(true);
     expect(await t.mutation(internal.comma.today.todayFinish, done)).toBe(true);
@@ -112,7 +121,7 @@ describe("claim and finish", () => {
     expect(await runOf(t)).toMatchObject({ status: "done", attempt: 1 });
 
     await as.mutation(api.comma.today.requestBuild, { day, dayStart });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" });
     expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: true, queue: queue(9, []) } })).toBe(false);
     expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 2, outcome: { ok: false, error: "The answer didn't parse" } })).toBe(true);
     const view = await as.query(api.comma.today.get, { day });
@@ -132,7 +141,7 @@ describe("expireRun", () => {
     expect(await runOf(t)).toMatchObject({ status: "failed", error: "The Mini didn't pick it up" });
 
     await as.mutation(api.comma.today.requestBuild, { day, dayStart });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 2, claimId: "w2" });
     await t.mutation(internal.comma.today.expireRun, { day, attempt: 2, status: "building" });
     expect(await runOf(t)).toMatchObject({ status: "failed", attempt: 2, error: "The build timed out" });
   });
@@ -171,7 +180,7 @@ describe("pendingBuild", () => {
     expect(await t.query(api.comma.today.pendingBuild, { bridgeKey: SECRET })).toBeNull();
     await as.mutation(api.comma.today.requestBuild, { day, dayStart });
     expect(await t.query(api.comma.today.pendingBuild, { bridgeKey: SECRET })).toEqual({ day, attempt: 1 });
-    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1 });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
     expect(await t.query(api.comma.today.pendingBuild, { bridgeKey: SECRET })).toBeNull();
   });
 });

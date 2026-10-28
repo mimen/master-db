@@ -95,7 +95,7 @@ export function createTodayFixture(deps: {
       if (run?.status === "requested" || run?.status === "building") return run;
       const attempt = (run?.attempt ?? 0) + 1;
       const startedAt = Date.now();
-      run = { status: "building", attempt, source: "user", requestedAt: startedAt, startedAt };
+      run = { status: "building", attempt, source: "user", requestedAt: startedAt, startedAt, claimId: "fixture" };
       timer = setTimeout(() => { timer = null; void build(attempt, startedAt); }, BUILD_MS);
       return run;
     },

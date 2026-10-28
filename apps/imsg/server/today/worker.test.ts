@@ -6,11 +6,13 @@ function harness(claims: Record<number, number | null>, build: (claim: TodayClai
   let receive: (pending: PendingBuild | null) => void = () => undefined;
   const finished: TodayRoutes["todayFinish"][0][] = [];
   const claimed: number[] = [];
+  const claimIds: string[] = [];
   const port: Pick<TodayPort, "post"> = {
     post: async <K extends keyof TodayRoutes>(route: K, body: TodayRoutes[K][0]) => {
       if (route === "todayClaim") {
-        const { attempt } = body as TodayRoutes["todayClaim"][0];
+        const { attempt, claimId } = body as TodayRoutes["todayClaim"][0];
         claimed.push(attempt);
+        claimIds.push(claimId);
         const startedAt = claims[attempt] ?? null;
         return (startedAt === null ? null : { startedAt }) as TodayRoutes[K][1];
       }
@@ -19,7 +21,7 @@ function harness(claims: Record<number, number | null>, build: (claim: TodayClai
     },
   };
   const worker = startTodayWorker({ subscribe: (r) => { receive = r; return () => { receive = () => undefined; }; }, port, build, log: () => undefined });
-  return { worker, finished, claimed, emit: (pending: PendingBuild | null) => receive(pending) };
+  return { worker, finished, claimed, claimIds, emit: (pending: PendingBuild | null) => receive(pending) };
 }
 
 const queue = { snapshotAt: 0, model: "m", brief: "b", groups: [], items: [], openAtSnapshot: [], readCount: 0 };
@@ -44,6 +46,7 @@ describe("startTodayWorker", () => {
     await h.worker.idle();
     expect(peak).toBe(1);
     expect(h.claimed).toEqual([1, 2]);
+    expect(new Set(h.claimIds).size).toBe(2);
     expect(h.finished.map((f) => [f.attempt, f.outcome.ok && f.outcome.queue.snapshotAt])).toEqual([[1, 10], [2, 20]]);
   });
 

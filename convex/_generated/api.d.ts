@@ -2278,6 +2278,7 @@ export declare const api: {
               }
             | {
                 attempt: number;
+                claimId: string;
                 requestedAt: number;
                 source: "schedule" | "user";
                 startedAt: number;
@@ -2316,6 +2317,7 @@ export declare const api: {
           }
         | {
             attempt: number;
+            claimId: string;
             requestedAt: number;
             source: "schedule" | "user";
             startedAt: number;
@@ -5569,7 +5571,7 @@ export declare const internal: {
       todayClaim: FunctionReference<
         "mutation",
         "internal",
-        { attempt: number; day: string },
+        { attempt: number; claimId: string; day: string },
         { startedAt: number } | null
       >;
       todayFinish: FunctionReference<
@@ -5612,6 +5614,7 @@ export declare const internal: {
           }
         | {
             attempt: number;
+            claimId: string;
             requestedAt: number;
             source: "schedule" | "user";
             startedAt: number;

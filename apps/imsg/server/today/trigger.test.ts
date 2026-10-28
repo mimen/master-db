@@ -5,7 +5,7 @@ import { awaitScheduledBuild } from "./trigger";
 type Run = TodayRoutes["todaySchedule"][1];
 const day = { day: "2026-10-27", dayStart: 0 };
 const requested: Run = { status: "requested", attempt: 1, source: "schedule", requestedAt: 0 };
-const building: Run = { status: "building", attempt: 1, source: "schedule", requestedAt: 0, startedAt: 1 };
+const building: Run = { status: "building", attempt: 1, source: "schedule", requestedAt: 0, startedAt: 1, claimId: "w1" };
 
 function port(runs: (Run | Error)[]): Pick<TodayPort, "post"> & { polls: number } {
   const p = {

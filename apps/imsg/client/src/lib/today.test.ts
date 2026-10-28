@@ -150,7 +150,7 @@ describe("todayHeader", () => {
   });
 
   test("a Regenerate in flight keeps the queue and reports busy; a failed one keeps it with the error", () => {
-    const building = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "building", attempt: 2, source: "user", requestedAt: 1, startedAt: 2 } });
+    const building = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "building", attempt: 2, source: "user", requestedAt: 1, startedAt: 2, claimId: "w1" } });
     expect(todayHeader(building, plan(building))).toMatchObject({ kind: "queue", busy: "building", queued: 1, readCount: 81, model: "Opus 5.5", lastError: null });
     const failed = view([{ id: "a", group: "friday" }], ["a"], {}, { run: { status: "failed", attempt: 2, source: "user", failedAt: 3, error: "The answer didn't parse" } });
     expect(todayHeader(failed, plan(failed))).toMatchObject({ kind: "queue", busy: null, lastError: "The answer didn't parse" });
