@@ -36,7 +36,7 @@ svg { display:block; }
 
 /* window */
 .win { width:1440px; height:900px; display:flex; background:var(--bg); border-radius:12px; overflow:hidden; box-shadow:0 0 0 1px var(--div), 0 30px 80px -30px rgba(0,0,0,.45); }
-.side { width:351px; flex:none; display:flex; flex-direction:column; border-right:1px solid var(--div); background:var(--bg); }
+.side { position:relative; width:351px; flex:none; display:flex; flex-direction:column; border-right:1px solid var(--div); background:var(--bg); }
 .brand { height:47px; display:flex; align-items:center; justify-content:center; gap:22px; padding-right:40px; }
 .brand .name { display:flex; align-items:center; gap:7px; font-weight:700; font-size:16px; letter-spacing:-.01em; }
 .logo { width:18px; height:18px; border-radius:5px; background:var(--text); color:var(--bg); display:grid; place-items:center; font:800 13px/1 Georgia, serif; padding-bottom:3px; }
@@ -78,6 +78,12 @@ svg { display:block; }
 .g-title { font-size:12px; font-weight:600; color:var(--text); display:flex; align-items:center; gap:6px; }
 .g-title .new { width:7px; height:7px; border-radius:50%; background:var(--accent); }
 .g-count { font-size:11.5px; color:var(--t3); font-variant-numeric:tabular-nums; min-width:3ch; text-align:right; }
+.g-side { display:flex; align-items:center; gap:8px; }
+.settle-all { font-size:11.5px; font-weight:600; color:var(--text); border:1px solid var(--div); background:var(--bg); border-radius:6px; padding:1px 7px; cursor:pointer; }
+.settle-all:hover { background:var(--el); }
+.toast { position:absolute; left:50%; bottom:56px; transform:translateX(-50%); white-space:nowrap; display:none; align-items:center; gap:14px; padding:8px 14px; border-radius:10px; background:#1C1C1F; color:#fff; font-size:12.5px; box-shadow:0 8px 24px -8px rgba(0,0,0,.5); }
+.toast.on { display:flex; }
+.toast button { color:#FF9F6B; font-weight:600; font-size:12.5px; background:none; border:0; cursor:pointer; }
 .g-ctx { margin-top:2px; font-size:11.5px; line-height:15px; color:var(--t3); }
 .fold { display:flex; align-items:center; justify-content:space-between; padding:9px 10px; margin-top:4px; border-radius:10px; color:var(--t2); font-size:12px; font-weight:600; cursor:pointer; }
 .fold:hover { background:var(--hover); }
@@ -164,7 +170,7 @@ svg { display:block; }
 <body>
 <div class="page">
   <div class="topbar">
-    <h1>Comma · Today queue<span>mock · desktop, wide layout · hover a row to settle it, press Regenerate</span></h1>
+    <h1>Comma · Today queue<span>mock · desktop, wide layout · hover a row to settle it, Settle all on "Just settle these", press Regenerate</span></h1>
     <button class="toggle" id="theme">Dark</button>
   </div>
 
@@ -190,6 +196,7 @@ svg { display:block; }
         <div class="tab">All</div>
       </nav>
       <div class="list" id="list"></div>
+      <div class="toast" id="toast"><span id="toastText"></span><button id="undo">Undo ⌘Z</button></div>
       <div class="footer">
         <svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="6.5" r="3"/><path d="M1.8 15c.6-2.6 2.7-4.2 5.2-4.2s4.6 1.6 5.2 4.2M12.5 3.8a2.7 2.7 0 0 1 0 5.4M14 11.2c1.3.6 2.1 2 2.4 3.8"/></svg>
         <span style="display:flex;align-items:center;gap:5px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.5V8l2.3 1.5"/></svg>1</span>
@@ -256,7 +263,8 @@ svg { display:block; }
       <ul>
         <li><b>When.</b> Once a day at 7:00 AM on the Mini, plus on demand from Regenerate (button, or "Regenerate today" in ⌘K).</li>
         <li><b>Input.</b> Every Needs you conversation, plus Waiting ones whose last message is under 7 days old. Roughly the last 30 messages of each, with the contact's CRM priority, tags and notes. About 80 threads and 100k tokens on a normal day.</li>
-        <li><b>Model.</b> One Opus 5.5 call through the CLIProxyAPI gateway the server already uses for titles. It returns a short brief, up to 6 groups (title plus one line of context), and up to 50 ranked conversations, each with a one-line reason.</li>
+        <li><b>Model.</b> Haiku 5.5 writes a small card per thread for up to 150 Needs you and 50 Waiting, then one Opus 5.5 call reads the cards beside each thread's last messages. It returns a short brief, up to 6 groups (title plus one line of context), and about 50 ranked conversations, each with a one-line reason.</li>
+        <li><b>Just settle these.</b> Threads that owe no reply (a thanks, a tapback, an FYI) land in a reserved last group. Settle all clears the group in one action, and one Undo brings every row back.</li>
         <li><b>Storage.</b> One row per day in a new Convex table, <code>comma_today_queue</code>: <code>builtAt</code>, <code>brief</code>, <code>groups[]</code>, <code>items[{conversationId, rank, group, reason}]</code>, <code>candidateCount</code>.</li>
         <li><b>Live.</b> The client joins that row to the live chat summaries. Settling, replying and reading update the lens the way they do today; only the order and the groups come from the build.</li>
         <li><b>New since.</b> A conversation that turns Needs you after <code>builtAt</code> and is not in the queue goes to the top group, newest first. Regenerate folds it into the ranked groups.</li>
@@ -270,7 +278,7 @@ svg { display:block; }
         <li><b>A reply leaves the queue.</b> Sending a message to a Today thread settles it from Today, and a Waiting thread drops out when they answer. Rank numbers keep their gaps, so you can see what's done.</li>
         <li><b>Below the line.</b> The Needs you threads left out stay one tap away in a folded group at the bottom, never hidden.</li>
         <li><b>Regenerate.</b> Rebuilds the whole queue from what's open now. The day's settled count carries over, so progress never resets.</li>
-        <li><b>Out of scope here:</b> the phone layout (same list, the header becomes the first row) and per-group bulk settle.</li>
+        <li><b>Out of scope here:</b> the phone layout (same list, the header becomes the first row) and bulk settle on any group other than Just settle these.</li>
       </ol>
     </div>
   </div>
@@ -309,12 +317,9 @@ const groups = [
   { id: "quick", title: "Quick replies", ctx: "One-line answers. Clear these in a batch.", items: [
     r(15, "Owen Foster", "Is 7 still good?", "Yes or no.", "4h", { unread: true }),
     r(16, "Marco Diaz", "Got it, will send times tmrw", "Acknowledge it. Alex is waiting on these.", "8h"),
-    r(18, "Taylor Morgan", "😂😂 ok that is incredible", "A tapback closes it.", "6h"),
     r(19, "Chris Ng", "Can you send me the wifi password again", "One line, and it's in your notes.", "1d"),
-    r(21, "Ellie Grant", "thanks for last night!!", "A tapback closes it.", "14h"),
     r(22, "Ben Alvarez", "Which door do we load in from?", "Side door on 3rd. One line.", "1d"),
     r(24, "Kai Morris", "You coming to the thing Thursday?", "Yes or no.", "1d"),
-    r(25, "Rosa Lin", "Sent you the photos 📸", "A thank-you closes it.", "2d"),
   ]},
   { id: "nudge", title: "Gone quiet", ctx: "Threads you started that stalled. One nudge each, or settle them.", items: [
     r(27, "Venue · Tom", "You: Can you confirm the bar minimum for Friday?", "Friday's budget depends on this answer.", "3d", { waiting: true }),
@@ -328,10 +333,18 @@ const groups = [
     r(41, "Daniel Park", "Would love to grab a drink when things calm down", "Open invite. Reply when you have a date.", "4d"),
     r(45, "Lena Fischer", "saw your story, that crowd looked insane", "No ask.", "2d"),
     r(49, "Theo Grant", "Long shot but do you know anyone who does sound?", "A referral ask. Not urgent.", "5d"),
+    r(50, "Sam Rivera", "You: Still keen to do the warehouse show?", "Seven weeks without an answer. Worth one line.", "49d", { waiting: true }),
+  ]},
+  { id: "settle", title: "Just settle these", ctx: "No reply owed. Settle them in one go.", items: [
+    r(51, "Taylor Morgan", "😂😂 ok that is incredible", "No reply needed: a laugh closed it.", "6h"),
+    r(52, "Ellie Grant", "thanks for last night!!", "No reply needed: she said thanks.", "14h"),
+    r(53, "Rosa Lin", "Sent you the photos 📸", "No reply needed: an FYI.", "2d"),
+    r(54, "Ana Ruiz", "❤️ Loved \"see you there\"", "No reply needed: a tapback on yours.", "36d"),
   ]},
 ];
 
-const state = { settled: 22, built: "7:00 AM", queued: 50, candidates: 81, building: false, below: 31 };
+const state = { settled: 22, built: "7:00 AM", read: 194, candidates: 335, building: false, below: 31 };
+let undoSettleAll = null;
 const initials = (n) => n.replace(/[^A-Za-z ]/g, "").split(" ").filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || n[0];
 const ranked = () => groups.filter((g) => !g.fresh).reduce((n, g) => n + g.items.length, 0);
 const remaining = () => groups.reduce((n, g) => n + g.items.length, 0);
@@ -352,8 +365,8 @@ function rowHTML(g, it, i) {
 function planHTML() {
   const done = state.settled, total = done + remaining();
   const meta = state.building
-    ? `Reading ${state.candidates + 3} threads with Opus 5.5…`
-    : `Built ${state.built} · Opus 5.5 · ${state.queued} of ${state.candidates} threads`;
+    ? "Reading threads with Opus 5.5…"
+    : `Built ${state.built} · Opus 5.5 · read ${state.read} of ${state.candidates} threads`;
   return `<div class="plan${state.building ? " building" : ""}">
     <div class="plan-top"><span class="plan-title">Tuesday, Oct 27</span>
       <button class="regenerate" id="regenerate"${state.building ? " disabled" : ""}><span${state.building ? ' class="spin"' : ""}>${REGENERATE}</span>${state.building ? "Regenerating" : "Regenerate"}</button></div>
@@ -366,7 +379,7 @@ function planHTML() {
 function render() {
   const list = document.getElementById("list");
   list.innerHTML = planHTML() + groups.filter((g) => g.items.length).map((g) => `
-    <div class="group"><div class="g-top"><span class="g-title">${g.fresh ? '<i class="new"></i>' : ""}${g.title}</span><span class="g-count">${g.items.length}</span></div>
+    <div class="group"><div class="g-top"><span class="g-title">${g.fresh ? '<i class="new"></i>' : ""}${g.title}</span><span class="g-side">${g.id === "settle" ? '<button class="settle-all" id="settleAll">Settle all</button>' : ""}<span class="g-count">${g.items.length}</span></span></div>
       <div class="g-ctx">${g.ctx}</div></div>
     ${g.items.map((it, i) => rowHTML(g, it, i)).join("")}`).join("") + `
     <div class="fold"><div><div>Below the line</div><div class="g-ctx">Needs you threads left out today: closed loops, low stakes.</div></div><span class="chev">${state.below}${CHEV}</span></div>
@@ -375,7 +388,34 @@ function render() {
   document.getElementById("pos").textContent = `1 of ${remaining()}`;
 }
 
+function toast(text, undo) {
+  const el = document.getElementById("toast");
+  document.getElementById("toastText").textContent = text;
+  undoSettleAll = undo;
+  el.classList.add("on");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { el.classList.remove("on"); undoSettleAll = null; }, 5000);
+}
+
+document.getElementById("undo").addEventListener("click", () => {
+  undoSettleAll?.();
+  undoSettleAll = null;
+  document.getElementById("toast").classList.remove("on");
+});
+
 document.getElementById("list").addEventListener("click", (e) => {
+  if (e.target.closest("#settleAll")) {
+    const group = groups.find((g) => g.id === "settle");
+    const cleared = group.items.splice(0);
+    state.settled += cleared.length;
+    render();
+    toast(`Settled ${cleared.length} threads`, () => {
+      group.items.push(...cleared);
+      state.settled -= cleared.length;
+      render();
+    });
+    return;
+  }
   const btn = e.target.closest(".settle");
   if (btn) {
     const row = btn.closest(".row");
@@ -401,8 +441,7 @@ document.getElementById("list").addEventListener("click", (e) => {
       for (const g of groups) for (const it of g.items) it.rank = n++;
       state.building = false;
       state.built = "11:26 AM";
-      state.queued = ranked();
-      state.candidates = state.queued + state.below;
+      state.read = ranked() + state.below;
       render();
     }, 2400);
   }

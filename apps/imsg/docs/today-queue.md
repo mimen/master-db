@@ -223,12 +223,17 @@ export function toTodayView(row: FunctionReturnType<typeof todayApi.get>): Today
 // apps/imsg/shared/today.ts — imported by Convex, the Mini and the client
 export type DayKey = string & { readonly __brand: "DayKey" };
 export const TODAY_TIME_ZONE = "America/Los_Angeles";
-export const TODAY_LIMITS = { groups: 6, items: 50, waitingMaxAgeMs: 7 * 86_400_000, messages: 30, read: 120 } as const;
+export const TODAY_LIMITS = {
+  groups: 6, items: 50, messages: 30,
+  needsYou: 150, recent: 100, recentMaxAgeMs: 30 * DAY_MS,   // the rotating read; see "Cards, rotation and settle"
+  waiting: 50, waitingMaxAgeMs: 30 * DAY_MS,
+} as const;
+export const TODAY_SETTLE_GROUP = "settle";   // the reduce's reserved group; the client gives it Settle all
 
 /** The LA calendar day containing `now` and its local midnight. Pure Intl; DST-correct. */
 export function todayWindow(now: number): { day: DayKey; start: number } { throw new Error("not implemented"); }
 
-/** Build-input rule: known, not spam, message-based. Needs you at any age; Waiting under 7 days. */
+/** Build-input rule: known, not spam, message-based. Needs you at any age; Waiting under 30 days. */
 export function todayCandidateState(
   c: { flags: ChatFlags; known: boolean; isSpam: boolean; lastMessageAt: number }, now: number,
 ): "needsYou" | "waiting" | null { throw new Error("not implemented"); }
@@ -391,7 +396,7 @@ The join is by `conversationId` inside `classifyToday`; every row it emits is th
 
 ### Tests (one per module, behavior not implementation)
 
-- `apps/imsg/shared/today.test.ts`: `todayWindow` across both DST transitions and at 23:59/00:00 LA; `todayCandidateState` at the 7-day boundary, for spam, for unknown, and for agent-only.
+- `apps/imsg/shared/today.test.ts`: `todayWindow` across both DST transitions and at 23:59/00:00 LA; `todayCandidateState` at the 30-day boundary, for spam, for unknown, and for agent-only.
 - `convex/comma/today.test.ts` (convex-test): `requestBuild` no-op while requested or building and attempt+1 after done or failed; `todaySchedule` requests only for a new day and is poll-safe; claim and finish are fenced by attempt and replay-safe; `expireRun` fails only a matching stuck run; `get` returns `cleared` since `dayStart`, latest per conversation, and drops an undone clear; unauthenticated `get`/`requestBuild` and a bad `bridgeKey` are rejected; `todayCandidates` pages and applies the rule.
 - `apps/imsg/server/today/prompt.test.ts`: every drop rule, dense ranks in display order, zero-items failure, a fence-breaking message neutralized.
 - `apps/imsg/server/today/build.test.ts`: fake port and gateway; exactly one gateway call with `claude-opus-5-5`; cap keeps every needsYou id in `openAtSnapshot`; gateway failure maps to copy.
@@ -399,6 +404,78 @@ The join is by `conversationId` inside `classifyToday`; every row it emits is th
 - `client/src/lib/today.test.ts`: the placement table above row by row, plus fallback, held-done keeps its slot, and progress unchanged by a newer `snapshotAt`.
 - `client/src/lib/inbox-model.test.ts`: the Today branch preserves rank order against pins and CRM priority, folded sections absent from navigation, search supersedes.
 - `apps/imsg/e2e/fixture/convex-today.test.ts` and `today.playwright.ts`: opens on Today, settle leaves a gap and bumps progress, Regenerate shows Regenerating then folds New since into groups.
+
+## Cards, rotation and settle
+
+The first live build read only the newest 120 of 335 candidates and returned 23 items. The rule for v2 is that every day should make a dent toward inbox zero. So a build reads a bounded but rotating set, a cheap model cards each thread, and the Opus reduce works from the cards and aims for 50 items, with a group of threads that can simply be settled.
+
+**Selection** (`selectToday` in `server/today/build.ts`, pure). A build reads up to 150 Needs you and 50 Waiting:
+
+1. The newest Needs you under 30 days, up to 100.
+2. The rest of the 150 from the remaining Needs you, least recently read first. A thread never read counts as oldest, and ties go newest first. Any recent overflow past 100 rotates the same way.
+3. The newest 50 Waiting. Waiting now counts for 30 days instead of 7 (`todayCandidateState`).
+
+`openAtSnapshot` is still every Needs you, so Below the line is unchanged. The queue also stores `candidateCount`, every candidate seen, so the header reads "read 194 of 335 threads". The field is optional; a queue stored before it existed falls back to its Needs you count.
+
+**Read tracking.** The Overlay table `today_read (conversation_id, read_at)` records `claim.startedAt` for every read thread once a build succeeds. A failed reduce records nothing, so a failed day does not skip threads. Only the Today worker writes it.
+
+**Cards** (`server/today/cards.ts`). One `claude-haiku-5-5` call per read thread, at low effort, a 60 s timeout and concurrency 12, through `Gateway.completeStructured`. Haiku 5.5 joins `THINKING_MODELS`, so its effort is forwarded. The card model reads the same thread block the reduce used to read: 30 messages with each text clipped to 400 characters, cleaned, with the CRM and notes lines. It returns a card:
+
+```ts
+{ summary: string;            // one sentence, clipped to 25 words
+  ask: string | null;         // what they want from Milad
+  due: string | null;         // a date or time they named
+  stakes: "high" | "medium" | "low";
+  settle: boolean;            // no reply owed: a thanks, a reaction, an FYI, a closed loop, spam
+  needsMore: boolean }        // the window shown was not enough to judge
+```
+
+`parseCard` is the trust boundary. A card with no summary, unknown stakes, or that is not an object drops. Everything else clips: the summary to 25 words, ask to 160 characters, due to 60. An empty ask or due becomes null, and a non-boolean flag reads as false. The schema sends empty strings rather than nullable types, since nullable support in structured output is uncertain.
+
+**Escalation.** A card with `needsMore` triggers one refetch at 150 messages (`agentContext` limit) and a 2,000-character clip, then one more card. That happens once per thread per build. If the wide card fails, the first card stands.
+
+**Cache.** `today_card_cache` stores one row per conversation and window (30 or 150 messages). It holds the newest message's guid as the anchor, the card model and the card JSON. A build reuses a row whose anchor and model match and recomputes the rest. A new message or a model change invalidates the row. An escalated card is cached at its own window, so a cached build makes no call for it either.
+
+**Failure.** A failed, unusable or timed-out card never fails the build. It is logged (`today: card c12 (<id>) at 30 messages failed, timeout: …`) and is not cached, and the reduce gets that thread's last 5 raw messages instead of 3. The card step also has a 120 s budget. After 120 s no new card call starts: cached cards still serve, and the rest fall back to raw messages. A slow card model therefore cannot use up the worker's 7 minutes.
+
+**Reduce.** One `claude-opus-5-5` call, as before (medium effort, 16,000 max tokens, 300 s timeout). Each read thread gets one compact block: ref, state, age, unread, kind, the CRM and notes lines, the card fields (cleaned, since they are a model's reading of untrusted text), and the last 3 raw messages clipped to 300 characters. The system prompt:
+
+- says the cards are a smaller model's summaries and the raw messages are ground truth;
+- asks for about 50 items whenever the threads allow, and not to stop early;
+- reserves the group id `settle`, titled "Just settle these" and placed last, for threads that owe no reply, each with a short reason such as "No reply needed: they said thanks";
+- deliberately elevates threads older than 30 days that still deserve an answer, with the age in the reason;
+- frames the brief as progress toward inbox zero;
+- keeps 6 groups at most, counting `settle`.
+
+`parseTodayOutput` treats `settle` like any other group. `renderTodayPrompt` takes an optional `lifeContext` and renders it under "What is going on in Milad's life:" when it is non-blank. Nothing fills it yet.
+
+**Settle all.** In the Today list, the `settle` group's header has a Settle all button. `settleAllChats` settles every open row in the group through the same write as a single settle, `settleWrite` in `use-triage-actions.ts`. It then pushes one entry onto the shared undo stack, which unsettles all of them, and shows one "Settled N threads" toast with Undo. Single-row settle is unchanged.
+
+**Measurement.** Each successful build logs one line:
+
+```
+today: build candidates needsYou=291 waiting=44 · read recent=88 rotated=62 waiting=44 · cards reused=0 computed=194 escalated=0 failed=0 ms=44667 · reduce in=57586 out=… ms=… · items=… settle=… deep=…
+```
+
+The reduce's input and output tokens come from the new optional `usage` on `completeStructured` results. Input counts cache reads and cache writes.
+
+### Measured on the Mini (2026-10-27, read-only)
+
+The measurement ran from `/tmp` with this branch's server code against the live Convex data and the loopback gateway. It used an in-memory Overlay, made no Opus call and wrote nothing. The deployed `todayCandidates` still applies the 7-day Waiting window, so the Waiting counts below are the 7-day numbers.
+
+| | |
+|---|---|
+| Candidates | 335: 291 Needs you, 44 Waiting |
+| Needs you by age | 52 under 7 days, 36 at 7 to 30, 116 at 30 to 90, 87 at 90 to 365 |
+| Selection | 194 read: 88 recent, 62 rotated (all 30 to 90 days on a first run with no read history), 44 Waiting |
+| Uncached card pass | 44.7 to 48.0 s wall for 194 threads over three runs (context fetch included), 0 failed |
+| Card call latency | p50 2.4 to 2.5 s, p95 3.9 to 4.3 s, max 5.4 s |
+| Escalation | 1 of 582 cards over three runs asked for more. Twenty forced 150-message cards all parsed, at 1.3 to 4.4 s |
+| Cached card pass | 2.2 to 2.7 s, all 194 reused |
+| Settle cards | 127 to 131 of 194 say no reply is owed; about 40 of them are Waiting. The reduce still decides from the raw messages |
+| Reduce prompt | 57,586 to 58,374 input tokens by `count_tokens` (about 118,000 characters, plus a 3,748-character system prompt) |
+
+**Deadlines.** The first live build took 40 s from snapshot to finish: 120 threads, an Opus reduce of roughly 35 s. Projected for v2: about 5 s of candidate reads, 45 to 48 s of cards and an estimated 40 to 90 s reduce over 58k tokens with about 50 items out. That comes to about 2 minutes uncached and about 1 to 1.5 minutes cached. The worker's 7-minute deadline, Convex's 8-minute building expiry, the trigger's 15 minutes and the hub wrapper's 1,200 s all hold in that order, so none was raised. The card budget (120 s, plus at most one 60 s call in flight) and the reduce timeout (300 s) can together exceed 7 minutes only when both are at their limits. The worker then fails the build with "The build timed out", as it did before.
 
 ## Synthesis decision
 
@@ -472,8 +549,18 @@ Where the build differs from the shapes above, and why.
 - `todayMode` is a route, `POST /__fixture/today {"mode": "seeded" | "unbuilt" | "failed"}`, so a drive can switch the header mid-run.
 - The plist runs `unset PROCID PROCID_REF PROCID_OFF` and the absolute bun path, as the other templates do. The installer bootstraps the calendar job without `kickstart` (a kickstart would build at install time) and checks it with `launchctl print`.
 
+**v2: cards, rotation and settle**
+- `todayQueue` gained an optional `candidateCount`; Milad approved the schema change. `convex/_generated/api.d.ts` was edited by hand in codegen's shape. Convex must deploy before the Mini code: until then `todayFinish` rejects the field, and the 30-day Waiting window needs the same deploy.
+- `TODAY_LIMITS.read` is gone, replaced by `needsYou`, `recent`, `recentMaxAgeMs` and `waiting`. Context and cards run at concurrency 12, up from 8.
+- `buildToday` takes a `store` (the Overlay's Today methods). `startBridge` passes its `OverlayDb`.
+- The card schema uses empty strings for "none" instead of nullable types.
+- The card step has a 120 s budget the brief did not ask for. It keeps a slow card model from consuming the worker deadline.
+- `settleTriageChat` and the new `settleTriageChats` share one `settleWrite`. A single settle now reserves its undo token before checking the conversation's state, and an unused token is harmless.
+- The header meta reads "read N of M threads" instead of "queued of read".
+- The fixture seeds a "Just settle these" group (Taylor Morgan, Sofia Martinez) and `candidateCount: 21`. The auto-advance spec now lands on Taylor, who sits above Sofia.
+
 **Not verified**
-- No real gateway call was made. Whether the gateway accepts `claude-opus-5-5` structured output at 120 threads inside 300 s is still the first real build's question.
+- No Opus reduce call was made on v2. Whether Opus fills about 50 items with a sensible settle group, and how long it takes over 58k tokens, is the first real v2 build's question.
 
 ## Decisions on the runners' open questions
 
@@ -486,7 +573,8 @@ Where the build differs from the shapes above, and why.
 
 ## Risks
 
-- Does `TODAY_LIMITS.read = 120` threads at 30 clipped messages fit Opus 5.5 through the gateway within 300 seconds? The first real build answers it; lower `read` if not.
+- Does the v2 reduce (58k tokens, about 50 items) finish inside 300 seconds? The first real v2 build answers it. The log line carries the reduce time.
+- Haiku marks about two thirds of the read threads as settle. If the reduce trusts that too much, raw messages still let it overrule a card; watch the settle group's size in the log line.
 - Does the fixture expose its OverlayDb triage events to `convex.ts`? If not, add a small accessor.
 
 ## Next implementation step
