@@ -448,6 +448,7 @@ Where the build differs from the shapes above, and why.
 - `buildToday` with no candidates writes an empty queue ("Nothing needs you right now.") without a model call.
 - The gateway forwards `system` for every structured call, not only thinking models.
 - The prompt neutralizes `<thread>` tags as well as the existing fence tags, puts notes per person, and lists events collected from the conversation's people.
+- Attachment names and MIME types go through the same cleaning as message text, capped at 120 characters, since a file name is correspondent-controlled.
 - The parser orders groups by their first accepted item, so rank 1 always heads the first group. `dropped` counts rejected items and items past 50.
 - `awaitScheduledBuild` takes a `TodayPort`, keeps polling through a failed poll until the timeout, and measures the timeout against an absolute deadline from an injectable `now()`, checked before each poll, so time spent inside a slow poll counts.
 - The worker races each build against a 7-minute deadline (injectable), under Convex's 8-minute building expiry. On timeout it posts `todayFinish` failed with "The build timed out" and keeps draining. The abandoned build's result is dropped, and a failed run rejects a later ok outcome anyway.

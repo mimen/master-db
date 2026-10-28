@@ -48,6 +48,7 @@ export const TODAY_SCHEMA: Anthropic.Messages.JSONOutputFormat["schema"] = {
 
 const NOTE_CHARS = 400;
 const MESSAGE_CHARS = 400;
+const ATTACHMENT_CHARS = 120;
 
 /** Correspondent text can carry our own fence tags; it goes through neutralize, and so does `<thread>`. */
 function clean(text: string, max: number): string {
@@ -80,6 +81,9 @@ function threadBlock(thread: TodayThread, now: number): string {
     .map((person) => `notes${thread.people.length > 1 ? ` on ${clean(person.name, 60)}` : ""}: ${clean(person.notes ?? "", NOTE_CHARS)}`);
   const messages = formatMessages(thread.messages.map((message) => ({
     ...message, sender: clean(message.sender, 60), text: clean(message.text, MESSAGE_CHARS),
+    attachments: message.attachments.map((file) => ({
+      ...file, name: file.name === null ? null : clean(file.name, ATTACHMENT_CHARS), mime: file.mime === null ? null : clean(file.mime, ATTACHMENT_CHARS),
+    })),
   })), TODAY_TIME_ZONE);
   return [`<thread ${attrs}>`, crmLine(thread), ...notes, messages, "</thread>"].join("\n");
 }
