@@ -2,6 +2,8 @@ import type { TodayClaim, TodayOutcome, TodayPort } from "./build";
 
 export type PendingBuild = { day: string; attempt: number };
 
+const BUILD_TIMEOUT_MS = 7 * 60_000;
+
 /**
  * Builds the Today queue whenever Convex shows a requested run. One build at a time, beside the outbox
  * executor rather than inside it, so a minute-long build never holds up a send. A request seen
@@ -12,8 +14,11 @@ export function startTodayWorker(deps: {
   port: Pick<TodayPort, "post">;
   build: (claim: TodayClaim) => Promise<TodayOutcome>;
   log?: (line: string) => void;
+  /** Under Convex's 8-minute building expiry, so a Regenerate after it is claimed instead of waiting on a stuck build. */
+  buildTimeoutMs?: number;
 }): { stop(): void; idle(): Promise<void> } {
   const log = deps.log ?? ((line: string) => console.log(line));
+  const buildTimeoutMs = deps.buildTimeoutMs ?? BUILD_TIMEOUT_MS;
   let latest: PendingBuild | null = null;
   let stopped = false;
   let running: Promise<void> | null = null;
@@ -25,10 +30,16 @@ export function startTodayWorker(deps: {
       return;
     }
     let outcome: TodayOutcome;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<TodayOutcome>((resolve) => {
+      timer = setTimeout(() => resolve({ ok: false, error: "The build timed out" }), buildTimeoutMs);
+    });
     try {
-      outcome = await deps.build({ day, attempt, startedAt: claim.startedAt });
+      outcome = await Promise.race([deps.build({ day, attempt, startedAt: claim.startedAt }), deadline]);
     } catch (error) {
       outcome = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      clearTimeout(timer);
     }
     await deps.port.post("todayFinish", { day, attempt, outcome });
     log(`today: ${day} attempt ${attempt} ${outcome.ok ? `built, ${outcome.queue.items.length} items` : `failed: ${outcome.error}`}`);

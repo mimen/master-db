@@ -128,6 +128,14 @@ describe("claim and finish", () => {
     expect(view?.run).toMatchObject({ status: "failed", attempt: 2, error: "The answer didn't parse" });
     expect(view?.queue?.snapshotAt).toBe(5);
   });
+  test("a build abandoned after it failed cannot land its queue later", async () => {
+    const { t, as } = setup();
+    await as.mutation(api.comma.today.requestBuild, { day, dayStart });
+    await t.mutation(internal.comma.today.todayClaim, { day, attempt: 1, claimId: "w1" });
+    expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: false, error: "The build timed out" } })).toBe(true);
+    expect(await t.mutation(internal.comma.today.todayFinish, { day, attempt: 1, outcome: { ok: true, queue: queue(5, []) } })).toBe(false);
+    expect((await as.query(api.comma.today.get, { day }))?.queue).toBeNull();
+  });
 });
 
 describe("expireRun", () => {

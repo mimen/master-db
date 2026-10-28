@@ -10,11 +10,17 @@ import { todayPort, type TodayPort } from "./build";
 export async function awaitScheduledBuild(
   port: Pick<TodayPort, "post">,
   day: { day: string; dayStart: number },
-  opts: { pollMs: number; timeoutMs: number; sleep?: (ms: number) => Promise<void>; log?: (line: string) => void },
+  opts: { pollMs: number; timeoutMs: number; sleep?: (ms: number) => Promise<void>; now?: () => number; log?: (line: string) => void },
 ): Promise<"done" | "failed"> {
   const sleep = opts.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const now = opts.now ?? Date.now;
   const log = opts.log ?? ((line: string) => console.log(line));
-  for (let waited = 0; ; waited += opts.pollMs) {
+  const deadline = now() + opts.timeoutMs;
+  for (;;) {
+    if (now() > deadline) {
+      log(`today: ${day.day} still not built after ${Math.round(opts.timeoutMs / 60_000)} minutes`);
+      return "failed";
+    }
     try {
       const run = await port.post("todaySchedule", day);
       if (run.status === "done") return "done";
@@ -24,10 +30,6 @@ export async function awaitScheduledBuild(
       }
     } catch (error) {
       log(`today: ${day.day} poll failed: ${String(error)}`);
-    }
-    if (waited >= opts.timeoutMs) {
-      log(`today: ${day.day} still not built after ${Math.round(opts.timeoutMs / 60_000)} minutes`);
-      return "failed";
     }
     await sleep(opts.pollMs);
   }
