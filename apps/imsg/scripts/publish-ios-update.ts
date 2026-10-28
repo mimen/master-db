@@ -35,16 +35,19 @@ function eas(args: readonly string[], env: Record<string, string>): string {
     env: { ...process.env, ...env },
   });
   if (result.exitCode !== 0) {
-    throw new Error(`eas ${args[0]} failed: ${result.stderr.toString().trim()}`);
+    throw new Error(`eas ${args[0]} failed: ${result.stderr.toString().trim()}\n${result.stdout.toString().trim()}`);
   }
   return result.stdout.toString().trim();
 }
 
 function main(sourceSha: string): void {
   const token = process.env.EXPO_TOKEN ?? readFileSync(join(homedir(), ".config/comma/expo-token"), "utf8").trim();
+  const easJson = JSON.parse(readFileSync(join(import.meta.dir, "../client/eas.json"), "utf8")) as {
+    build: Record<string, { env: Record<string, string> }>;
+  };
   const env = {
+    ...easJson.build[PROFILE]?.env,
     EXPO_TOKEN: token,
-    EXPO_PUBLIC_IMSG_RELEASE_ENVIRONMENT: "production",
     EXPO_PUBLIC_IMSG_RELEASE_BRANCH: "",
     EXPO_PUBLIC_IMSG_WEB_SHA: sourceSha,
   };
@@ -57,7 +60,7 @@ function main(sourceSha: string): void {
   const plan = planIosRelease(hash, builds);
 
   if (plan.kind === "publish") {
-    eas(["update", "--channel", PROFILE, "--platform", "ios", "--message", sourceSha.slice(0, 7)], env);
+    eas(["update", "--channel", PROFILE, "--environment", PROFILE, "--platform", "ios", "--message", sourceSha.slice(0, 7)], env);
     console.log(`iOS OTA published for ${sourceSha.slice(0, 7)} on runtime ${hash.slice(0, 12)}`);
     return;
   }
